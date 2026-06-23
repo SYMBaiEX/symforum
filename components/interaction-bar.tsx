@@ -36,6 +36,8 @@ export function InteractionBar({
       <Button
         variant={vote === 1 ? "default" : "outline"}
         size="sm"
+        aria-label={vote === 1 ? "Remove upvote" : "Upvote"}
+        aria-pressed={vote === 1}
         onClick={() => update(vote === 1 ? 0 : 1)}
       >
         <ChevronUp />
@@ -44,14 +46,17 @@ export function InteractionBar({
       <Button
         variant={vote === -1 ? "default" : "outline"}
         size="sm"
+        aria-label={vote === -1 ? "Remove downvote" : "Downvote"}
+        aria-pressed={vote === -1}
         onClick={() => update(vote === -1 ? 0 : -1)}
-        aria-label="Downvote"
       >
         <ChevronDown />
       </Button>
       <Button
         variant={saved ? "secondary" : "outline"}
         size="sm"
+        aria-label={saved ? "Unsave" : "Save"}
+        aria-pressed={saved}
         onClick={() => update(vote, !saved)}
       >
         <Bookmark />

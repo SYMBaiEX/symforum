@@ -33,7 +33,7 @@ export default function ConvexClientProvider({
   }
 
   return (
-    <Suspense fallback={children}>
+    <Suspense fallback={null}>
       <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>
     </Suspense>
   );
