@@ -6,11 +6,11 @@ export function AsciiSection() {
   const asciiTextRef = useAsciiText({
     animationCharacters: "░▒▓█◆◇",
     animationCharacterSpacing: 0,
-    animationDelay: 180,
+    animationDelay: 260,
     animationDirection: "horizontal",
-    animationInterval: 1050,
+    animationInterval: 1750,
     animationLoop: true,
-    animationSpeed: 18,
+    animationSpeed: 34,
     font: small,
     text: ["SYMBiEX", "AUSTIN", "AI WEB"],
   });
