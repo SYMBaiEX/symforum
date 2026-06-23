@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { compactNumber, formatDate } from "@/lib/format";
 import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
 import { newsStorySlug, parseNewsStoryParam } from "@/lib/news-slugs";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Bookmark, MessageSquare } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -48,6 +48,11 @@ export default async function NewsStoryPage({ params }: PageProps) {
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
   const body = stripHnHtml(story.text);
   const entityId = String(story.hnItemId);
+  const stats = story.platformStats ?? {
+    comments: 0,
+    score: 0,
+    saves: 0,
+  };
 
   return (
     <SiteShell>
@@ -63,10 +68,15 @@ export default async function NewsStoryPage({ params }: PageProps) {
               <span>{story.host ?? "news.ycombinator.com"}</span>
               <div className="flex flex-wrap gap-1.5 pt-2">
                 <Badge variant="outline" className="font-mono uppercase">
-                  {compactNumber(story.score)} pts
+                  {compactNumber(stats.score)} pts
                 </Badge>
-                <Badge variant="secondary" className="font-mono uppercase">
-                  {compactNumber(story.descendants)} HN comments
+                <Badge variant="secondary" className="gap-1 font-mono uppercase">
+                  <MessageSquare />
+                  {compactNumber(stats.comments)} comments
+                </Badge>
+                <Badge variant="outline" className="gap-1 font-mono uppercase">
+                  <Bookmark />
+                  {compactNumber(stats.saves)}
                 </Badge>
               </div>
             </div>

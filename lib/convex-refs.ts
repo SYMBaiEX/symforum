@@ -57,6 +57,11 @@ export const convexRefs = {
           by?: string;
           score?: number;
           descendants?: number;
+          platformStats: {
+            comments: number;
+            score: number;
+            saves: number;
+          };
         }>;
       }
     >("news:latest"),
@@ -76,6 +81,11 @@ export const convexRefs = {
         descendants?: number;
         timePosted?: number;
         fetchedAt: number;
+        platformStats: {
+          comments: number;
+          score: number;
+          saves: number;
+        };
       } | null
     >("news:getStory"),
   },

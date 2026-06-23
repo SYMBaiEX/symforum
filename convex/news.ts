@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { action, internalMutation, query } from "./_generated/server";
 import { makeFunctionReference } from "convex/server";
+import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 
 const HN_TOP_STORIES_URL =
   "https://hacker-news.firebaseio.com/v0/topstories.json";
@@ -49,6 +51,38 @@ function hostname(url: string | undefined) {
   }
 }
 
+async function getPlatformStats(ctx: QueryCtx, hnItemId: number) {
+  const entityId = String(hnItemId);
+  const comments = await ctx.db
+    .query("comments")
+    .withIndex("by_entityType_and_entityId_and_createdAt", (q) =>
+      q.eq("entityType", "hnStory").eq("entityId", entityId),
+    )
+    .take(1000);
+  const interactions = await ctx.db
+    .query("interactions")
+    .withIndex("by_entityType_and_entityId", (q) =>
+      q.eq("entityType", "hnStory").eq("entityId", entityId),
+    )
+    .take(1000);
+
+  return {
+    comments: comments.length,
+    score: interactions.reduce((total, row) => total + row.vote, 0),
+    saves: interactions.filter((row) => row.saved).length,
+  };
+}
+
+async function withPlatformStats(
+  ctx: QueryCtx,
+  story: Doc<"hnStories">,
+) {
+  return {
+    ...story,
+    platformStats: await getPlatformStats(ctx, story.hnItemId),
+  };
+}
+
 export const latest = query({
   args: {},
   handler: async (ctx) => {
@@ -68,7 +102,12 @@ export const latest = query({
       )
       .order("asc")
       .take(30);
-    return { snapshot, stories };
+    return {
+      snapshot,
+      stories: await Promise.all(
+        stories.map((story) => withPlatformStats(ctx, story)),
+      ),
+    };
   },
 });
 
@@ -80,11 +119,12 @@ export const getStory = query({
     const rows = await ctx.db
       .query("hnStories")
       .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
-      .collect();
+      .take(50);
     if (rows.length === 0) {
       return null;
     }
-    return rows.sort((left, right) => right.fetchedAt - left.fetchedAt)[0];
+    const story = rows.sort((left, right) => right.fetchedAt - left.fetchedAt)[0];
+    return await withPlatformStats(ctx, story);
   },
 });
 

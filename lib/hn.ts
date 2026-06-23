@@ -10,6 +10,11 @@ export type HnStory = {
   timePosted?: number;
   text?: string;
   fetchedAt?: number;
+  platformStats?: {
+    comments: number;
+    score: number;
+    saves: number;
+  };
 };
 
 const HN_TOP_STORIES_URL =

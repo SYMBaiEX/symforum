@@ -4,13 +4,13 @@ import { useAsciiText, small } from "react-ascii-text";
 
 export function AsciiSection() {
   const asciiTextRef = useAsciiText({
-    animationCharacters: "░▒▓█",
-    animationCharacterSpacing: 1,
-    animationDelay: 500,
+    animationCharacters: "░▒▓█◆◇",
+    animationCharacterSpacing: 0,
+    animationDelay: 180,
     animationDirection: "horizontal",
-    animationInterval: 2200,
+    animationInterval: 1050,
     animationLoop: true,
-    animationSpeed: 28,
+    animationSpeed: 18,
     font: small,
     text: ["SYMBiEX", "AUSTIN", "AI WEB"],
   });
@@ -28,17 +28,11 @@ export function AsciiSection() {
           </p>
         </div>
         <div className="md:col-span-9">
-          <div className="border border-row-border bg-background/70 p-4 md:p-6">
-            <div className="mb-8 grid grid-cols-4 gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-              <span>signal</span>
-              <span className="accent-magenta">magenta</span>
-              <span className="accent-cyan">cyan</span>
-              <span className="accent-canary">canary</span>
-            </div>
+          <div className="flex min-h-[18rem] items-center justify-center border border-row-border bg-background/70 p-4 md:min-h-[24rem] md:p-6">
             <pre
               ref={asciiTextRef}
               aria-label="SYMBiEX animated ASCII signature"
-              className="min-h-36 overflow-hidden whitespace-pre font-mono text-[11px] leading-[0.95] text-foreground md:text-sm"
+              className="ascii-gradient overflow-hidden whitespace-pre text-center font-mono text-base font-bold leading-[0.9] md:text-3xl"
             />
           </div>
         </div>

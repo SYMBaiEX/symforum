@@ -131,6 +131,21 @@
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
+
+  .ascii-gradient {
+    color: transparent;
+    background:
+      linear-gradient(
+        90deg,
+        var(--accent-magenta) 0%,
+        var(--accent-cyan) 42%,
+        var(--accent-canary) 72%,
+        hsl(var(--foreground)) 100%
+      );
+    background-clip: text;
+    -webkit-background-clip: text;
+    filter: drop-shadow(0 0 14px hsl(var(--primary) / 0.16));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
