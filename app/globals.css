@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3%;
+    --primary: 319 100% 49%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 3%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 35%;
+    --accent: 174 54% 67%;
+    --accent-foreground: 0 0% 3%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 86%;
+    --input: 0 0% 86%;
+    --ring: 174 54% 46%;
+    --chart-1: 319 100% 49%;
+    --chart-2: 174 54% 55%;
+    --chart-3: 52 100% 56%;
+    --chart-4: 0 0% 3%;
+    --chart-5: 0 0% 55%;
+    --radius: 0.125rem;
+    --accent-magenta: #fa00a8;
+    --accent-cyan: #81d8d0;
+    --accent-canary: #ffe14d;
+    --row-border: 0 0% 78%;
+    --vignette-color: 0 0% 0%;
+    --vignette-opacity: 0.08;
+    --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .dark {
+    --background: 0 0% 3%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 319 100% 61%;
+    --primary-foreground: 0 0% 3%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 68%;
+    --accent: 174 54% 67%;
+    --accent-foreground: 0 0% 3%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 174 54% 67%;
+    --chart-1: 319 100% 61%;
+    --chart-2: 174 54% 67%;
+    --chart-3: 52 100% 56%;
+    --chart-4: 0 0% 98%;
+    --chart-5: 0 0% 65%;
+    --row-border: 0 0% 22%;
+    --vignette-opacity: 0.46;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv01", "cv11", "tnum";
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 46%,
+        hsl(var(--vignette-color) / var(--vignette-opacity)) 100%
+      ),
+      linear-gradient(
+        90deg,
+        hsl(var(--vignette-color) / calc(var(--vignette-opacity) * 0.45)),
+        transparent 14%,
+        transparent 86%,
+        hsl(var(--vignette-color) / calc(var(--vignette-opacity) * 0.45))
+      );
+  }
+
+  ::selection {
+    background: var(--accent-canary);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer utilities {
+  .swiss-grid {
+    background-image: linear-gradient(
+        hsl(var(--border) / 0.4) 1px,
+        transparent 1px
+      ),
+      linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .accent-cyan {
+    color: var(--accent-cyan);
+  }
+
+  .accent-canary {
+    color: var(--accent-canary);
+  }
+
+  .accent-magenta {
+    color: var(--accent-magenta);
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
