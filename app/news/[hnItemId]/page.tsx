@@ -4,12 +4,13 @@ import { InteractionBar } from "@/components/interaction-bar";
 import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
 import { compactNumber, formatDate } from "@/lib/format";
+import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
+import { newsStorySlug, parseNewsStoryParam } from "@/lib/news-slugs";
 import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 type PageProps = {
   params: Promise<{ hnItemId: string }>;
@@ -19,7 +20,8 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { hnItemId } = await params;
-  const story = await getIndexedStory(Number(hnItemId));
+  const storyId = parseNewsStoryParam(hnItemId);
+  const story = storyId === null ? null : await getIndexedStory(storyId);
   return {
     title: story?.title ?? "Indexed story",
     description: story?.host
@@ -30,13 +32,17 @@ export async function generateMetadata({
 
 export default async function NewsStoryPage({ params }: PageProps) {
   const { hnItemId } = await params;
-  const storyId = Number(hnItemId);
-  if (!Number.isInteger(storyId)) {
+  const storyId = parseNewsStoryParam(hnItemId);
+  if (storyId === null || !Number.isInteger(storyId)) {
     notFound();
   }
   const story = await getIndexedStory(storyId);
   if (!story) {
     notFound();
+  }
+  const canonicalSlug = newsStorySlug(story);
+  if (hnItemId !== canonicalSlug) {
+    permanentRedirect(`/news/${canonicalSlug}`);
   }
 
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
@@ -45,17 +51,17 @@ export default async function NewsStoryPage({ params }: PageProps) {
 
   return (
     <SiteShell>
-      <article className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
-        <div className="grid gap-10 md:grid-cols-12">
-          <aside className="font-mono text-xs uppercase text-muted-foreground md:col-span-3">
-            <div className="sticky top-24 flex flex-col gap-3">
+      <article className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
+        <div className="grid gap-7 md:grid-cols-12">
+          <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
+            <div className="sticky top-24 flex flex-col gap-2 border-y border-row-border py-3">
               <span>HN #{story.hnItemId}</span>
               {story.rank ? <span>Rank {story.rank}</span> : null}
               {story.timePosted ? (
                 <span>{formatDate(story.timePosted * 1000)}</span>
               ) : null}
               <span>{story.host ?? "news.ycombinator.com"}</span>
-              <div className="flex flex-wrap gap-2 pt-4">
+              <div className="flex flex-wrap gap-1.5 pt-2">
                 <Badge variant="outline" className="font-mono uppercase">
                   {compactNumber(story.score)} pts
                 </Badge>
@@ -66,27 +72,27 @@ export default async function NewsStoryPage({ params }: PageProps) {
             </div>
           </aside>
           <div className="md:col-span-8">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase text-muted-foreground">
               Indexed article
             </p>
-            <h1 className="mt-5 break-words text-5xl font-bold leading-[0.92] text-balance md:text-7xl">
+            <h1 className="mt-3 break-words text-3xl font-bold leading-tight text-balance md:text-5xl">
               {story.title}
             </h1>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-2">
               {story.url ? (
-                <Button asChild>
+                <Button asChild size="sm">
                   <Link href={story.url} target="_blank">
                     Read source
                     <ArrowUpRight />
                   </Link>
                 </Button>
               ) : null}
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" size="sm">
                 <Link href="/news">Back to index</Link>
               </Button>
             </div>
 
-            <div className="mt-10 border-y border-row-border py-5">
+            <div className="mt-6 border-y border-row-border py-3">
               {convexEnabled ? (
                 <ConvexClientProvider>
                   <InteractionBar entityType="hnStory" entityId={entityId} />
@@ -98,17 +104,17 @@ export default async function NewsStoryPage({ params }: PageProps) {
               )}
             </div>
 
-            <section className="mt-10 border border-row-border bg-card/55 p-5">
+            <section className="mt-6 border border-row-border bg-card/55 p-4">
               {body ? (
-                <div className="flex flex-col gap-5">
+                <div className="flex flex-col gap-4">
                   {body.split(/\n{2,}/).map((paragraph) => (
-                    <p key={paragraph} className="leading-8">
+                    <p key={paragraph} className="text-sm leading-7 md:text-base">
                       {paragraph}
                     </p>
                   ))}
                 </div>
               ) : (
-                <p className="leading-8 text-muted-foreground">
+                <p className="text-sm leading-7 text-muted-foreground md:text-base">
                   This indexed story points to an external source article. Read
                   the source, then come back here for the SYMBiEX discussion
                   layer.
@@ -116,8 +122,8 @@ export default async function NewsStoryPage({ params }: PageProps) {
               )}
             </section>
 
-            <section className="mt-14">
-              <h2 className="mb-5 font-mono text-sm uppercase">Comments</h2>
+            <section className="mt-9">
+              <h2 className="mb-3 font-mono text-xs uppercase">Comments</h2>
               {convexEnabled ? (
                 <ConvexClientProvider>
                   <CommentsPanel

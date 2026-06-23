@@ -32,10 +32,11 @@ export function InteractionBar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 font-mono text-xs uppercase">
+    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase">
       <Button
         variant={vote === 1 ? "default" : "outline"}
         size="sm"
+        className="h-7 px-2"
         aria-label={vote === 1 ? "Remove upvote" : "Upvote"}
         aria-pressed={vote === 1}
         onClick={() => update(vote === 1 ? 0 : 1)}
@@ -46,6 +47,7 @@ export function InteractionBar({
       <Button
         variant={vote === -1 ? "default" : "outline"}
         size="sm"
+        className="h-7 px-2"
         aria-label={vote === -1 ? "Remove downvote" : "Downvote"}
         aria-pressed={vote === -1}
         onClick={() => update(vote === -1 ? 0 : -1)}
@@ -55,6 +57,7 @@ export function InteractionBar({
       <Button
         variant={saved ? "secondary" : "outline"}
         size="sm"
+        className="h-7 px-2"
         aria-label={saved ? "Unsave" : "Save"}
         aria-pressed={saved}
         onClick={() => update(vote, !saved)}

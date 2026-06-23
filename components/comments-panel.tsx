@@ -19,7 +19,7 @@ export function CommentsPanel({
 }) {
   if (!enabled) {
     return (
-      <div className="border border-row-border p-4 text-sm text-muted-foreground">
+      <div className="border border-row-border p-3 text-sm text-muted-foreground">
         Connect Convex locally to enable comments and interactions.
       </div>
     );
@@ -55,24 +55,28 @@ function LiveComments({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
         <Textarea
           value={body}
           onChange={(event) => setBody(event.target.value)}
           placeholder="Leave a sharp note..."
-          rows={4}
+          rows={3}
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Sign in with a SYM handle to comment.
           </p>
-          <Button type="submit" disabled={pending || body.trim().length < 2}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={pending || body.trim().length < 2}
+          >
             Post comment
           </Button>
         </div>
         {error ? (
-          <p className="border border-row-border p-3 text-sm text-muted-foreground">
+          <p className="border border-row-border p-2.5 text-sm text-muted-foreground">
             {error}{" "}
             <Link href="/signin" className="underline">
               Sign in
@@ -82,19 +86,19 @@ function LiveComments({
       </form>
       <div className="border-t border-row-border">
         {comments === undefined ? (
-          <p className="py-5 font-mono text-xs uppercase text-muted-foreground">
+          <p className="py-4 font-mono text-[11px] uppercase text-muted-foreground">
             Loading comments
           </p>
         ) : comments.length === 0 ? (
-          <p className="py-5 text-sm text-muted-foreground">No comments yet.</p>
+          <p className="py-4 text-sm text-muted-foreground">No comments yet.</p>
         ) : (
           comments.map((comment) => (
-            <div key={comment._id} className="border-b border-row-border py-5">
-              <div className="mb-2 flex flex-wrap items-center gap-3 font-mono text-xs uppercase text-muted-foreground">
+            <div key={comment._id} className="border-b border-row-border py-4">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase text-muted-foreground">
                 <span>{comment.author}</span>
                 <span>{formatDate(comment.createdAt)}</span>
               </div>
-              <p className="leading-7">{comment.body}</p>
+              <p className="text-sm leading-6 md:text-base">{comment.body}</p>
             </div>
           ))
         )}
