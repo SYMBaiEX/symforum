@@ -76,7 +76,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
                 </Badge>
                 <Badge variant="outline" className="gap-1 font-mono uppercase">
                   <Bookmark />
-                  {compactNumber(stats.saves)}
+                  {compactNumber(stats.saves)} saves
                 </Badge>
               </div>
             </div>
