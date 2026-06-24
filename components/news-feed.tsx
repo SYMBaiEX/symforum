@@ -22,6 +22,7 @@ import {
   convexRefs,
   type InteractionSummaryRecord,
   type NewsSnapshotRecord,
+  type NewsTimelineRecord,
 } from "@/lib/convex-refs";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
@@ -36,33 +37,34 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { Component, useMemo, useState, type ReactNode } from "react";
+import {
+  Component,
+  useMemo,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 
 export function NewsFeed({
   enabled,
   initialStories,
+  initialTimeline,
 }: {
   enabled: boolean;
   initialStories: HnStory[];
+  initialTimeline?: NewsTimelineRecord | null;
 }) {
   if (!enabled) {
-    return (
-      <NewsRows
-        interactive={false}
-        stories={initialStories}
-      />
-    );
+    return <NewsRows interactive={false} stories={initialStories} />;
   }
   return (
     <NewsFeedErrorBoundary
-      fallback={
-        <NewsRows
-          interactive={false}
-          stories={initialStories}
-        />
-      }
+      fallback={<NewsRows interactive={false} stories={initialStories} />}
     >
-      <LiveNewsFeed initialStories={initialStories} />
+      <LiveNewsFeed
+        initialStories={initialStories}
+        initialTimeline={initialTimeline ?? null}
+      />
     </NewsFeedErrorBoundary>
   );
 }
@@ -82,39 +84,58 @@ class NewsFeedErrorBoundary extends Component<
   }
 }
 
-function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
+function LiveNewsFeed({
+  initialStories,
+  initialTimeline,
+}: {
+  initialStories: HnStory[];
+  initialTimeline: NewsTimelineRecord | null;
+}) {
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [, startTransition] = useTransition();
   const data = useQuery(
     convexRefs.news.timeline,
     selectedDate ? { snapshotDate: selectedDate } : {},
   );
+  const visibleData =
+    data ?? (selectedDate ? undefined : (initialTimeline ?? undefined));
 
-  if (data === undefined) {
-    return (
-      <div className="flex flex-col gap-2.5">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-16 w-full bg-muted" />
-        ))}
-      </div>
-    );
+  function onSnapshotChange(snapshotDate: string) {
+    startTransition(() => {
+      setSelectedDate(snapshotDate);
+    });
   }
 
-  if (data.snapshot === null && data.snapshots.length === 0) {
-    return (
-      <NewsRows
-        interactive
-        stories={initialStories}
-      />
-    );
+  if (visibleData === undefined) {
+    return <NewsRowsLoading />;
+  }
+
+  if (visibleData.snapshot === null && visibleData.snapshots.length === 0) {
+    return <NewsRows interactive stories={initialStories} />;
   }
   return (
     <NewsRows
       interactive
-      onSnapshotChange={setSelectedDate}
-      selectedSnapshotDate={data.snapshot?.snapshotDate ?? selectedDate}
-      snapshots={data.snapshots}
-      stories={data.stories}
+      onSnapshotChange={onSnapshotChange}
+      selectedSnapshotDate={visibleData.snapshot?.snapshotDate ?? selectedDate}
+      snapshots={visibleData.snapshots}
+      stories={visibleData.stories}
     />
+  );
+}
+
+function NewsRowsLoading() {
+  return (
+    <div>
+      <NewsFilterBar>
+        <DisabledSnapshotControl label="Loading days" />
+      </NewsFilterBar>
+      <div className="flex flex-col gap-2.5">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-14 w-full bg-muted" />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -210,24 +231,23 @@ function NewsRowsView({
   stories: HnStory[];
   summaries: Record<string, InteractionSummaryRecord> | null | undefined;
 }) {
-  const showSnapshotSelect = snapshots.length > 0 && onSnapshotChange;
+  const showSnapshotControl = Boolean(onSnapshotChange);
 
   return (
     <div>
-      {showSnapshotSelect ? (
-        <div className="mb-3 flex justify-end">
-          <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-            <span className="sr-only" id="news-snapshot-filter-label">
-              Filter news by indexed day
-            </span>
+      {showSnapshotControl ? (
+        <NewsFilterBar>
+          {snapshots.length > 0 && onSnapshotChange ? (
             <SnapshotSelect
               ariaLabelledBy="news-snapshot-filter-label"
               onValueChange={onSnapshotChange}
               snapshots={snapshots}
               value={selectedSnapshotDate}
             />
-          </div>
-        </div>
+          ) : (
+            <DisabledSnapshotControl label="No indexed days" />
+          )}
+        </NewsFilterBar>
       ) : null}
       <div className="grid gap-0.5">
         {stories.length === 0 ? (
@@ -316,6 +336,28 @@ function NewsRowsView({
   );
 }
 
+function NewsFilterBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+      <span id="news-snapshot-filter-label">Day</span>
+      {children}
+    </div>
+  );
+}
+
+function DisabledSnapshotControl({ label }: { label: string }) {
+  return (
+    <button
+      aria-labelledby="news-snapshot-filter-label"
+      className="h-7 w-[11.5rem] border border-row-border bg-background px-2 text-left font-mono text-[10px] uppercase text-muted-foreground"
+      disabled
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
 function SnapshotSelect({
   ariaLabelledBy,
   onValueChange,
@@ -330,9 +372,8 @@ function SnapshotSelect({
   return (
     <Select onValueChange={onValueChange} value={value}>
       <SelectTrigger
-        aria-label="Select news snapshot date"
         aria-labelledby={ariaLabelledBy}
-        className="h-7 w-[10.5rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
+        className="h-7 w-[11.5rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
       >
         <SelectValue placeholder="Select date" />
       </SelectTrigger>

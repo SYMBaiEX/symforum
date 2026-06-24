@@ -163,11 +163,17 @@ export type NewsStoryRecord = {
   descendants?: number;
   timePosted?: number;
   fetchedAt?: number;
-  platformStats: {
+  platformStats?: {
     comments: number;
     score: number;
     saves: number;
   };
+};
+
+export type NewsTimelineRecord = {
+  snapshots: NewsSnapshotRecord[];
+  snapshot: NewsSnapshotRecord | null;
+  stories: NewsStoryRecord[];
 };
 
 export const convexRefs = {
@@ -410,11 +416,7 @@ export const convexRefs = {
     timeline: makeFunctionReference<
       "query",
       { snapshotDate?: string },
-      {
-        snapshots: NewsSnapshotRecord[];
-        snapshot: NewsSnapshotRecord | null;
-        stories: NewsStoryRecord[];
-      }
+      NewsTimelineRecord
     >("news:timeline"),
     getStory: makeFunctionReference<
       "query",

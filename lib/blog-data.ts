@@ -1,11 +1,10 @@
 import { blogPosts, getPost, type BlogPost } from "@/lib/content";
 import { convexRefs, type ConvexPostRecord } from "@/lib/convex-refs";
-import { ConvexHttpClient } from "convex/browser";
+import { readThroughServerCache } from "@/lib/server-cache";
+import { getServerConvexClient } from "@/lib/server-convex";
+import { cache } from "react";
 
-function client() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  return url ? new ConvexHttpClient(url) : null;
-}
+const BLOG_DATA_TTL_MS = 30 * 1000;
 
 function toBlogPost(post: ConvexPostRecord): BlogPost {
   return {
@@ -23,51 +22,67 @@ function toBlogPost(post: ConvexPostRecord): BlogPost {
   };
 }
 
-export async function getPublishedPosts() {
-  const convex = client();
+export const getPublishedPosts = cache(async function getPublishedPosts() {
+  const convex = getServerConvexClient();
   if (convex === null) {
     return blogPosts;
   }
 
   try {
-    const posts = await convex.query(convexRefs.posts.listPublished, {});
+    const posts = await readThroughServerCache(
+      "posts:published",
+      BLOG_DATA_TTL_MS,
+      () => convex.query(convexRefs.posts.listPublished, {}),
+    );
     return posts.map(toBlogPost);
   } catch (error) {
     console.warn("Falling back to static posts", error);
     return blogPosts;
   }
-}
+});
 
-export async function getFeaturedPost() {
-  const convex = client();
+export const getFeaturedPost = cache(async function getFeaturedPost() {
+  const convex = getServerConvexClient();
   if (convex === null) {
     return blogPosts.find((post) => post.featured) ?? blogPosts[0] ?? null;
   }
 
   try {
-    const post = await convex.query(convexRefs.posts.featured, {});
+    const post = await readThroughServerCache(
+      "posts:featured",
+      BLOG_DATA_TTL_MS,
+      () => convex.query(convexRefs.posts.featured, {}),
+    );
     if (post !== null) {
       return toBlogPost(post);
     }
-    const posts = await convex.query(convexRefs.posts.listPublished, {});
+    const posts = await readThroughServerCache(
+      "posts:published",
+      BLOG_DATA_TTL_MS,
+      () => convex.query(convexRefs.posts.listPublished, {}),
+    );
     return posts[0] ? toBlogPost(posts[0]) : null;
   } catch (error) {
     console.warn("Falling back to static featured post", error);
     return blogPosts.find((post) => post.featured) ?? blogPosts[0] ?? null;
   }
-}
+});
 
-export async function getBlogPost(slug: string) {
-  const convex = client();
+export const getBlogPost = cache(async function getBlogPost(slug: string) {
+  const convex = getServerConvexClient();
   if (convex === null) {
     return getPost(slug);
   }
 
   try {
-    const post = await convex.query(convexRefs.posts.getBySlug, { slug });
+    const post = await readThroughServerCache(
+      `posts:slug:${slug}`,
+      BLOG_DATA_TTL_MS,
+      () => convex.query(convexRefs.posts.getBySlug, { slug }),
+    );
     return post === null ? null : toBlogPost(post);
   } catch (error) {
     console.warn("Falling back to static post lookup", error);
     return getPost(slug);
   }
-}
+});

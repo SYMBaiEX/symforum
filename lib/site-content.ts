@@ -5,46 +5,50 @@ import {
   type PortfolioProjectRecord,
   type SitePageRecord,
 } from "@/lib/site-content-defaults";
-import { ConvexHttpClient } from "convex/browser";
+import { readThroughServerCache } from "@/lib/server-cache";
+import { getServerConvexClient } from "@/lib/server-convex";
+import { cache } from "react";
 
-function client() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  return url ? new ConvexHttpClient(url) : null;
-}
+const SITE_CONTENT_TTL_MS = 30 * 1000;
 
-export async function getSitePage(
+export const getSitePage = cache(async function getSitePage(
   slug: string,
 ): Promise<SitePageRecord | null> {
-  const convex = client();
+  const convex = getServerConvexClient();
   if (convex === null) {
     return fallbackSitePage(slug);
   }
 
   try {
-    const page = await convex.query(convexRefs.siteContent.getPage, { slug });
+    const page = await readThroughServerCache(
+      `site-page:${slug}`,
+      SITE_CONTENT_TTL_MS,
+      () => convex.query(convexRefs.siteContent.getPage, { slug }),
+    );
     return page ?? fallbackSitePage(slug);
   } catch (error) {
     console.warn("Falling back to static site page", error);
     return fallbackSitePage(slug);
   }
-}
+});
 
-export async function getPortfolioProjects(): Promise<
-  PortfolioProjectRecord[]
-> {
-  const convex = client();
-  if (convex === null) {
-    return defaultPortfolioProjects;
-  }
+export const getPortfolioProjects = cache(
+  async function getPortfolioProjects(): Promise<PortfolioProjectRecord[]> {
+    const convex = getServerConvexClient();
+    if (convex === null) {
+      return defaultPortfolioProjects;
+    }
 
-  try {
-    const projects = await convex.query(
-      convexRefs.siteContent.listPortfolioProjects,
-      {},
-    );
-    return projects.length > 0 ? projects : defaultPortfolioProjects;
-  } catch (error) {
-    console.warn("Falling back to static portfolio projects", error);
-    return defaultPortfolioProjects;
-  }
-}
+    try {
+      const projects = await readThroughServerCache(
+        "portfolio-projects",
+        SITE_CONTENT_TTL_MS,
+        () => convex.query(convexRefs.siteContent.listPortfolioProjects, {}),
+      );
+      return projects.length > 0 ? projects : defaultPortfolioProjects;
+    } catch (error) {
+      console.warn("Falling back to static portfolio projects", error);
+      return defaultPortfolioProjects;
+    }
+  },
+);
