@@ -49,7 +49,6 @@ export function NewsFeed({
     return (
       <NewsRows
         interactive={false}
-        snapshotDate="Live HN fallback"
         stories={initialStories}
       />
     );
@@ -59,7 +58,6 @@ export function NewsFeed({
       fallback={
         <NewsRows
           interactive={false}
-          snapshotDate="Live HN fallback"
           stories={initialStories}
         />
       }
@@ -105,7 +103,6 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
     return (
       <NewsRows
         interactive
-        snapshotDate="Live HN fallback"
         stories={initialStories}
       />
     );
@@ -115,7 +112,6 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
       interactive
       onSnapshotChange={setSelectedDate}
       selectedSnapshotDate={data.snapshot?.snapshotDate ?? selectedDate}
-      snapshotDate={data.snapshot?.snapshotDate ?? "No snapshot"}
       snapshots={data.snapshots}
       stories={data.stories}
     />
@@ -126,14 +122,12 @@ function NewsRows({
   interactive,
   onSnapshotChange,
   selectedSnapshotDate,
-  snapshotDate,
   snapshots = [],
   stories,
 }: {
   interactive: boolean;
   onSnapshotChange?: (snapshotDate: string) => void;
   selectedSnapshotDate?: string;
-  snapshotDate: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
 }) {
@@ -142,7 +136,6 @@ function NewsRows({
       <InteractiveNewsRows
         onSnapshotChange={onSnapshotChange}
         selectedSnapshotDate={selectedSnapshotDate}
-        snapshotDate={snapshotDate}
         snapshots={snapshots}
         stories={stories}
       />
@@ -156,7 +149,6 @@ function NewsRows({
       isAuthenticated={false}
       onSnapshotChange={onSnapshotChange}
       selectedSnapshotDate={selectedSnapshotDate}
-      snapshotDate={snapshotDate}
       snapshots={snapshots}
       stories={stories}
       summaries={null}
@@ -167,13 +159,11 @@ function NewsRows({
 function InteractiveNewsRows({
   onSnapshotChange,
   selectedSnapshotDate,
-  snapshotDate,
   snapshots = [],
   stories,
 }: {
   onSnapshotChange?: (snapshotDate: string) => void;
   selectedSnapshotDate?: string;
-  snapshotDate: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
 }) {
@@ -194,7 +184,6 @@ function InteractiveNewsRows({
       isAuthenticated={isAuthenticated}
       onSnapshotChange={onSnapshotChange}
       selectedSnapshotDate={selectedSnapshotDate}
-      snapshotDate={snapshotDate}
       snapshots={snapshots}
       stories={stories}
       summaries={summaries}
@@ -208,7 +197,6 @@ function NewsRowsView({
   isAuthenticated,
   onSnapshotChange,
   selectedSnapshotDate,
-  snapshotDate,
   snapshots = [],
   stories,
   summaries,
@@ -218,26 +206,29 @@ function NewsRowsView({
   isAuthenticated: boolean;
   onSnapshotChange?: (snapshotDate: string) => void;
   selectedSnapshotDate?: string;
-  snapshotDate: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
   summaries: Record<string, InteractionSummaryRecord> | null | undefined;
 }) {
+  const showSnapshotSelect = snapshots.length > 0 && onSnapshotChange;
+
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
-        <span>Snapshot / {snapshotDate}</span>
-        <div className="flex flex-wrap items-center gap-2 md:justify-end">
-          <span>Daily refresh via Vercel Cron</span>
-          {snapshots.length > 0 && onSnapshotChange ? (
+      {showSnapshotSelect ? (
+        <div className="mb-3 flex justify-end">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+            <span className="sr-only" id="news-snapshot-filter-label">
+              Filter news by indexed day
+            </span>
             <SnapshotSelect
+              ariaLabelledBy="news-snapshot-filter-label"
               onValueChange={onSnapshotChange}
               snapshots={snapshots}
               value={selectedSnapshotDate}
             />
-          ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div className="grid gap-0.5">
         {stories.length === 0 ? (
           <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
@@ -326,10 +317,12 @@ function NewsRowsView({
 }
 
 function SnapshotSelect({
+  ariaLabelledBy,
   onValueChange,
   snapshots,
   value,
 }: {
+  ariaLabelledBy?: string;
   onValueChange: (snapshotDate: string) => void;
   snapshots: NewsSnapshotRecord[];
   value?: string;
@@ -338,6 +331,7 @@ function SnapshotSelect({
     <Select onValueChange={onValueChange} value={value}>
       <SelectTrigger
         aria-label="Select news snapshot date"
+        aria-labelledby={ariaLabelledBy}
         className="h-7 w-[10.5rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
       >
         <SelectValue placeholder="Select date" />
