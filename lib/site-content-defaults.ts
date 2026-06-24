@@ -321,6 +321,69 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     imageAlt: "SYMBaiEX GitHub avatar",
     repoUrl: "https://github.com/SYMBaiEX/sumi",
   },
+  {
+    slug: "symphony",
+    name: "Symphony",
+    type: "Autonomous implementation runs",
+    role: "Creator / agent systems engineer",
+    timeframe: "2026",
+    summary:
+      "A project-work orchestration surface for isolated, autonomous implementation runs and clearer human review loops.",
+    problem:
+      "Agentic engineering becomes noisy when work, review, context, and execution state are not cleanly separated.",
+    approach:
+      "Shape project work into isolated implementation runs so teams can manage outcomes while agents handle bounded execution.",
+    outcome:
+      "A public agentic workflow experiment around delegation, traceability, and practical engineering throughput.",
+    status: "published",
+    order: 12,
+    tags: ["agents", "workflow", "automation", "typescript"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/symphony",
+  },
+  {
+    slug: "odysseus",
+    name: "Odysseus",
+    type: "Self-hosted AI workspace",
+    role: "Creator / product systems engineer",
+    timeframe: "2026",
+    summary:
+      "A self-hosted AI workspace exploring durable context, local ownership, and practical interfaces for agent-assisted work.",
+    problem:
+      "AI workspaces can become disposable chat surfaces when they do not preserve user-owned context and durable operating state.",
+    approach:
+      "Explore a self-hosted workspace model where AI assistance is paired with inspectable, owned, and repeatable workflows.",
+    outcome:
+      "A focused public experiment in personal AI infrastructure and operator-centered system design.",
+    status: "published",
+    order: 13,
+    tags: ["ai", "workspace", "self-hosted", "agents"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/odysseus",
+  },
+  {
+    slug: "comppoly",
+    name: "CompPoly",
+    type: "Lean mathematics tooling",
+    role: "Open-source proof engineer",
+    timeframe: "2026",
+    summary:
+      "Computable polynomials in Lean, adjacent to formal verification work on proof systems and mechanically checked math.",
+    problem:
+      "Formal systems need small, reliable mathematical building blocks before larger proof infrastructure can remain trustworthy.",
+    approach:
+      "Work through Lean-native structures for computable polynomial reasoning with attention to maintainable proof paths.",
+    outcome:
+      "A compact public proof-engineering artifact that supports deeper formal verification work.",
+    status: "published",
+    order: 14,
+    tags: ["lean", "formal verification", "math"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/CompPoly",
+  },
 ];
 
 export function fallbackSitePage(slug: string) {

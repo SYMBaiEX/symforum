@@ -9,7 +9,7 @@ import {
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { getPortfolioProjects, getSitePage } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
-import { ArrowUpRight, ExternalLink, Github } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -98,9 +98,11 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
           </div>
         ))}
       </div>
-      <p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-5 text-muted-foreground">
-        {primaryMetric.detail}
-      </p>
+      {primaryMetric.detail ? (
+        <p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-5 text-muted-foreground">
+          {primaryMetric.detail}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -113,22 +115,15 @@ function ProjectListRow({
   metric: GithubPortfolioProjectMetric | null;
 }) {
   const imageUrl = safeImageUrl(project.imageUrl);
-  const repoLabel = metric
-    ? [
-        metric.fullName,
-        metric.prsAuthored ? `${metric.prsAuthored} PRs` : null,
-        metric.stars !== undefined ? `${formatCount(metric.stars)} stars` : null,
-      ]
-        .filter(Boolean)
-        .join(" / ")
-    : repoPathLabel(project.repoUrl) ?? project.type;
+  const projectHref = `/portfolio/${project.slug}`;
+  const repoLabel = projectMetricLabel(project, metric);
 
   return (
     <article
-      className="group grid gap-2 py-2 transition-colors hover:bg-muted/25 sm:grid-cols-[2.25rem_minmax(0,1fr)] sm:items-center sm:gap-3 md:grid-cols-[2.25rem_minmax(9rem,0.72fr)_minmax(0,1.45fr)_minmax(12rem,0.8fr)_auto] md:px-2"
+      className="group grid gap-2 py-1 transition-colors hover:bg-muted/25 sm:grid-cols-[2rem_minmax(0,1fr)] sm:items-center sm:gap-3 md:grid-cols-[2rem_minmax(8rem,0.65fr)_minmax(0,1.65fr)_minmax(10rem,0.7fr)_2rem] md:px-2"
       data-portfolio-project-row
     >
-      <div className="flex items-center justify-between gap-3 sm:block">
+      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-start sm:gap-1">
         <div className="font-mono text-[10px] uppercase text-muted-foreground">
           {String(project.order).padStart(2, "0")}
         </div>
@@ -140,8 +135,8 @@ function ProjectListRow({
       </div>
       <div className="min-w-0">
         <Link
-          href={`/portfolio/${project.slug}`}
-          className="focus-ring inline-flex max-w-full text-base font-semibold leading-tight hover:text-primary md:text-lg"
+          href={projectHref}
+          className="focus-ring inline-flex max-w-full text-[0.95rem] font-semibold leading-tight hover:text-primary md:text-base"
         >
           <span className="truncate">{project.name}</span>
         </Link>
@@ -149,67 +144,26 @@ function ProjectListRow({
           {project.type} / {project.timeframe}
         </p>
       </div>
-      <p className="min-w-0 text-sm leading-5 text-muted-foreground md:line-clamp-2">
+      <p className="min-w-0 text-[0.8125rem] leading-5 text-muted-foreground md:line-clamp-1">
         {project.summary}
       </p>
       <div className="min-w-0 font-mono text-[10px] uppercase text-muted-foreground">
         <p className="truncate">{project.role}</p>
         <p className="mt-1 truncate">{repoLabel}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/portfolio/${project.slug}`}>
-            Details
-            <ArrowUpRight data-icon="inline-end" />
+      <div className="flex items-center justify-end">
+        <Button
+          asChild
+          className="size-6 rounded-none border-row-border bg-transparent p-0 text-muted-foreground shadow-none group-hover:border-foreground group-hover:text-foreground"
+          size="icon"
+          variant="outline"
+        >
+          <Link href={projectHref} aria-label={`Open ${project.name}`}>
+            <ArrowUpRight aria-hidden="true" />
           </Link>
         </Button>
-        <div className="hidden lg:block">
-          <ProjectLinks project={project} />
-        </div>
       </div>
     </article>
-  );
-}
-
-function ProjectLinks({
-  project,
-  className,
-}: {
-  project: PortfolioProjectRecord;
-  className?: string;
-}) {
-  const links = [
-    {
-      href: safeExternalUrl(project.homepageUrl),
-      label: "Site",
-      Icon: ExternalLink,
-    },
-    { href: safeExternalUrl(project.repoUrl), label: "Repo", Icon: Github },
-    {
-      href: safeExternalUrl(project.writeupUrl),
-      label: "Writeup",
-      Icon: ArrowUpRight,
-    },
-  ].filter(
-    (link): link is { href: string; label: string; Icon: typeof Github } =>
-      Boolean(link.href),
-  );
-
-  if (links.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className={`flex flex-wrap gap-1.5 ${className ?? ""}`}>
-      {links.map(({ href, label, Icon }) => (
-        <Button key={`${label}-${href}`} asChild size="sm" variant="outline">
-          <Link href={href} target="_blank" rel="noopener noreferrer">
-            <Icon data-icon="inline-start" />
-            {label}
-          </Link>
-        </Button>
-      ))}
-    </div>
   );
 }
 
@@ -254,18 +208,35 @@ function metricForProject(
   metrics: GithubPortfolioMetrics,
 ) {
   const slug = project.slug.toLowerCase();
-  const key =
-    slug === "playhyperia"
-      ? "hyperia"
-      : slug === "elizaos" ||
-          slug === "babylon" ||
-          slug === "opencontroller" ||
-          slug === "hyperia"
-        ? slug
-        : null;
-  return key
-    ? (metrics.projects.find((metric) => metric.key === key) ?? null)
-    : null;
+  const key = slug === "playhyperia" ? "hyperia" : slug;
+  const projectRepoPath = repoPathLabel(project.repoUrl)?.toLowerCase();
+
+  return (
+    metrics.projects.find((metric) => {
+      const metricRepoPath = repoPathLabel(metric.repoUrl)?.toLowerCase();
+      return (
+        metric.key === key ||
+        (projectRepoPath !== undefined && metricRepoPath === projectRepoPath)
+      );
+    }) ?? null
+  );
+}
+
+function projectMetricLabel(
+  project: PortfolioProjectRecord,
+  metric: GithubPortfolioProjectMetric | null,
+) {
+  const parts = metric
+    ? [
+        metric.fullName,
+        metric.language,
+        metric.prsAuthored ? `${metric.prsAuthored} PRs` : null,
+        metric.stars !== undefined ? `${formatCount(metric.stars)} stars` : null,
+        metric.forks ? `${formatCount(metric.forks)} forks` : null,
+      ]
+    : [repoPathLabel(project.repoUrl) ?? project.type];
+
+  return parts.filter(Boolean).join(" / ");
 }
 
 function formatCount(value: number) {

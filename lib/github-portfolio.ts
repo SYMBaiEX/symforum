@@ -71,11 +71,15 @@ type GraphqlContributionResponse = {
 };
 
 export type GithubPortfolioProjectMetric = {
-  key: "elizaos" | "babylon" | "hyperia" | "opencontroller";
+  key: string;
   label: string;
   fullName: string;
   repoUrl: string;
   avatarUrl: string;
+  description?: string;
+  forks?: number;
+  language?: string;
+  pushedAt?: string;
   stars?: number;
   prsAuthored?: number;
 };
@@ -174,6 +178,58 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
       avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
       stars: 2,
     },
+    {
+      key: "gitshipt",
+      label: "GitShipt",
+      fullName: "SYMBaiEX/GitShipt",
+      repoUrl: "https://github.com/SYMBaiEX/GitShipt",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+      language: "TypeScript",
+      stars: 4,
+    },
+    {
+      key: "symindx",
+      label: "SYMindX",
+      fullName: "SYMBaiEX/SYMindX",
+      repoUrl: "https://github.com/SYMBaiEX/SYMindX",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+      language: "TypeScript",
+      stars: 9,
+    },
+    {
+      key: "arklib",
+      label: "ArkLib",
+      fullName: "lalalune/ArkLib",
+      repoUrl: "https://github.com/lalalune/ArkLib",
+      avatarUrl: "https://avatars.githubusercontent.com/u/18633264?v=4",
+      language: "Lean",
+      stars: 5,
+    },
+    {
+      key: "symphony",
+      label: "Symphony",
+      fullName: "SYMBaiEX/symphony",
+      repoUrl: "https://github.com/SYMBaiEX/symphony",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+      stars: 0,
+    },
+    {
+      key: "odysseus",
+      label: "Odysseus",
+      fullName: "SYMBaiEX/odysseus",
+      repoUrl: "https://github.com/SYMBaiEX/odysseus",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+      stars: 0,
+    },
+    {
+      key: "comppoly",
+      label: "CompPoly",
+      fullName: "SYMBaiEX/CompPoly",
+      repoUrl: "https://github.com/SYMBaiEX/CompPoly",
+      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+      language: "Lean",
+      stars: 0,
+    },
   ],
 };
 
@@ -192,6 +248,7 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
       babylonRepo,
       hyperiaRepo,
       openControllerRepo,
+      arkLibRepo,
     ] = await Promise.all([
       githubJson<GithubUser>(`https://api.github.com/users/${GITHUB_USER}`),
       githubJson<GithubRepo[]>(
@@ -223,6 +280,9 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
       ),
       githubJson<GithubRepo>(
         "https://api.github.com/repos/SYMBaiEX/OpenController",
+      ),
+      githubJson<GithubRepo>("https://api.github.com/repos/lalalune/ArkLib").catch(
+        () => null,
       ),
     ]);
 
@@ -272,7 +332,12 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
           hyperiaPrs.total_count,
         ),
         projectMetric("opencontroller", "OpenController", openControllerRepo),
-      ],
+        ...ownedProjectMetrics(repos),
+        ...(arkLibRepo ? [projectMetric("arklib", "ArkLib", arkLibRepo)] : []),
+      ].filter(
+        (metric, index, allMetrics) =>
+          allMetrics.findIndex((item) => item.key === metric.key) === index,
+      ),
     };
   } catch (error) {
     console.warn("Falling back to static GitHub portfolio metrics", error);
@@ -413,7 +478,7 @@ async function getPublicContributionActivity(): Promise<ContributionActivityMetr
     value,
     label: "Contribution activity",
     detail:
-      "",
+      "Live public GitHub contribution graph.",
     source: "github-contribution-graph",
     live: true,
   };
@@ -440,10 +505,36 @@ function projectMetric(
   return {
     key,
     label,
+    description: repo.description ?? undefined,
+    forks: repo.forks_count,
     fullName: repo.full_name,
+    language: repo.language ?? undefined,
+    pushedAt: repo.pushed_at ?? undefined,
     repoUrl: repo.html_url,
     avatarUrl: repo.owner.avatar_url,
     stars: repo.stargazers_count,
     prsAuthored,
   };
+}
+
+function ownedProjectMetrics(repos: GithubRepo[]) {
+  const projectRepos = [
+    ["gitshipt", "GitShipt", "SYMBaiEX/GitShipt"],
+    ["symindx", "SYMindX", "SYMBaiEX/SYMindX"],
+    ["doolittle", "doolittle", "SYMBaiEX/doolittle"],
+    ["symlog", "SYMLog", "SYMBaiEX/SYMLog"],
+    ["pod-protocol", "PoD Protocol", "SYMBaiEX/PoD-Protocol"],
+    ["sumi", "Sumi", "SYMBaiEX/sumi"],
+    ["symphony", "Symphony", "SYMBaiEX/symphony"],
+    ["odysseus", "Odysseus", "SYMBaiEX/odysseus"],
+    ["comppoly", "CompPoly", "SYMBaiEX/CompPoly"],
+  ] as const;
+  const reposByFullName = new Map(
+    repos.map((repo) => [repo.full_name.toLowerCase(), repo]),
+  );
+
+  return projectRepos.flatMap(([key, label, fullName]) => {
+    const repo = reposByFullName.get(fullName.toLowerCase());
+    return repo ? [projectMetric(key, label, repo)] : [];
+  });
 }
