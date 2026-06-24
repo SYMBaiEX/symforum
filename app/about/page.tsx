@@ -21,10 +21,10 @@ export default async function AboutPage() {
 
   return (
     <SiteShell>
-      <article className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
-        <section className="grid gap-8 border-y border-row-border py-6 md:grid-cols-12 md:items-start md:py-9">
+      <article className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
+        <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
           <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            <div className="sticky top-24 grid gap-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 md:sticky md:top-24 md:grid md:gap-3">
               <span>About / Austin Hamilton</span>
               <span>Alabama</span>
               <span>Self-taught engineer</span>
@@ -33,13 +33,13 @@ export default async function AboutPage() {
           </aside>
 
           <div className="md:col-span-6">
-            <h1 className="break-words text-5xl font-bold leading-[0.9] text-balance md:text-7xl lg:text-8xl">
+            <h1 className="break-words text-4xl font-bold leading-[0.92] text-balance sm:text-5xl md:text-7xl lg:text-8xl">
               {page?.heroHeading ?? "About"}
             </h1>
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
               {page?.heroBody}
             </p>
-            <div className="mt-7 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap gap-2 md:mt-6">
               <Button asChild>
                 <Link href="/portfolio">View portfolio</Link>
               </Button>
@@ -70,7 +70,7 @@ export default async function AboutPage() {
           </figure>
         </section>
 
-        <section className="grid gap-8 py-12 md:grid-cols-12 md:py-16">
+        <section className="grid gap-6 py-8 md:grid-cols-12 md:gap-8 md:py-12">
           <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
             Biography / philosophy
           </div>

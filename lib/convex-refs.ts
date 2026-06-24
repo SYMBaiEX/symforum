@@ -65,6 +65,42 @@ export type AdminUserRecord = {
   contactEmail?: string;
 };
 
+export type ViewerUserRecord = {
+  _id: string;
+  _creationTime: number;
+  name?: string;
+  email?: string;
+  username?: string;
+  usernameNormalized?: string;
+  usernameSource?: "auto" | "chosen";
+  role?: "owner" | "reader";
+  contactEmail?: string;
+  bio?: string;
+  onboardedAt?: number;
+};
+
+export type PublicProfileCommentRecord = {
+  _id: string;
+  entityType: "post" | "hnStory";
+  entityId: string;
+  body: string;
+  createdAt: number;
+};
+
+export type PublicProfileRecord = {
+  user: {
+    _creationTime: number;
+    username: string;
+    usernameNormalized: string;
+    bio?: string;
+    role?: "owner" | "reader";
+    usernameSource?: "auto" | "chosen";
+    onboardedAt?: number;
+  };
+  isCurrentUser: boolean;
+  recentComments: PublicProfileCommentRecord[];
+};
+
 export type AdminCommentRecord = {
   _id: string;
   userId: string;
@@ -291,6 +327,18 @@ export const convexRefs = {
       { entityType: "post" | "hnStory"; entityId: string; body: string },
       null
     >("comments:add"),
+  },
+  users: {
+    maybeViewer: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ViewerUserRecord | null
+    >("users:maybeViewer"),
+    publicProfile: makeFunctionReference<
+      "query",
+      { username: string },
+      PublicProfileRecord | null
+    >("users:publicProfile"),
   },
   interactions: {
     summary: makeFunctionReference<

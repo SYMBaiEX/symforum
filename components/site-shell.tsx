@@ -1,15 +1,12 @@
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { HeaderNav } from "@/components/header-nav";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
 import { ReactNode } from "react";
 
-const navItems = [
+const leftNavItems = [
   { href: "/about", label: "About" },
   { href: "/portfolio", label: "Portfolio" },
-  { href: "/blog", label: "Blog" },
-  { href: "/news", label: "News" },
-  { href: "/signin", label: "Sign in" },
 ];
 
 const socialItems = [
@@ -29,21 +26,23 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="relative z-10 min-h-screen bg-background/92 text-foreground">
       <header className="sticky top-0 z-40 bg-background/92 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-8">
-          <Link
-            href="/"
-            className="focus-ring font-mono text-sm font-semibold uppercase"
-          >
-            SYMBaiEX
-          </Link>
-          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
-            {navItems.map((item) => (
+        <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <Link
+              href="/"
+              className="focus-ring mr-1 font-mono text-sm font-semibold uppercase"
+            >
+              SYMBaiEX
+            </Link>
+            {leftNavItems.map((item) => (
               <Button key={item.href} asChild variant="ghost" size="sm">
-                <Link href={item.href}>{item.label}</Link>
+                <Link className="h-10 px-3 sm:h-7 sm:px-2.5" href={item.href}>
+                  {item.label}
+                </Link>
               </Button>
             ))}
-            <ThemeToggle />
-          </nav>
+          </div>
+          <HeaderNav />
         </div>
       </header>
       <main>{children}</main>

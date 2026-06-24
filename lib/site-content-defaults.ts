@@ -84,9 +84,9 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     name: "ElizaOS",
     type: "Open-source AI agent ecosystem",
     role: "Contributor / integrator / reliability-focused systems engineer",
-    timeframe: "Active contribution",
+    timeframe: "13 public PRs",
     summary:
-      "Agent-oriented ecosystem work focused on making extensible AI software easier to reason about, operate, and extend.",
+      "Open-source agentic operating system contribution work around practical extensibility, integrations, and production-minded AI agent patterns.",
     problem:
       "Agent systems move quickly, but the best work needs patterns that remain understandable after the first demo.",
     approach:
@@ -96,15 +96,19 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     status: "published",
     order: 1,
     tags: ["ai agents", "open-source", "integrations", "systems"],
+    imageUrl: "https://avatars.githubusercontent.com/u/186240462?v=4",
+    imageAlt: "ElizaOS GitHub organization avatar",
+    homepageUrl: "https://elizaos.ai/",
+    repoUrl: "https://github.com/elizaOS/eliza",
   },
   {
     slug: "babylon",
     name: "Babylon",
-    type: "Protocol and applied systems work",
+    type: "Social protocol product engineering",
     role: "Engineering contributor",
-    timeframe: "Selected contribution",
+    timeframe: "159 public PRs",
     summary:
-      "Systems contribution work around ambitious protocol and product surfaces where operational clarity matters.",
+      "High-volume contribution work on BabylonSocial, connecting product velocity with maintainable implementation details.",
     problem:
       "Protocol-facing products need engineering that bridges bold direction with stable, legible behavior.",
     approach:
@@ -113,16 +117,20 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
       "A sharper contribution record in infrastructure-shaped product engineering.",
     status: "published",
     order: 2,
-    tags: ["protocols", "infrastructure", "engineering"],
+    tags: ["social", "product", "engineering"],
+    imageUrl: "https://avatars.githubusercontent.com/u/246782978?v=4",
+    imageAlt: "BabylonSocial GitHub organization avatar",
+    homepageUrl: "https://babylon.market",
+    repoUrl: "https://github.com/BabylonSocial/babylon",
   },
   {
     slug: "playhyperia",
-    name: "Playhyperia",
+    name: "Hyperia",
     type: "Interactive product and AI tooling",
     role: "Product systems contributor",
-    timeframe: "Selected contribution",
+    timeframe: "42 public PRs",
     summary:
-      "Work at the intersection of AI behavior, interaction design, and product systems that need to feel responsive.",
+      "AI-native MMORPG work through PlayHyperia/HyperForge, where agent behavior and player-facing systems meet.",
     problem:
       "AI-driven interaction can become hard to trust when the system does not make its behavior legible.",
     approach:
@@ -132,6 +140,10 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     status: "published",
     order: 3,
     tags: ["ai", "interaction", "product"],
+    imageUrl: "https://avatars.githubusercontent.com/u/236725603?v=4",
+    imageAlt: "PlayHyperia GitHub organization avatar",
+    homepageUrl: "https://hyperscapeai.github.io/hyperforge/",
+    repoUrl: "https://github.com/PlayHyperia/hyperforge",
   },
   {
     slug: "opencontroller",
@@ -150,6 +162,10 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     status: "published",
     order: 4,
     tags: ["controllers", "orchestration", "open-source"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    homepageUrl: "https://github.com/SYMBaiEX/OpenController",
+    repoUrl: "https://github.com/SYMBaiEX/OpenController",
   },
 ];
 
