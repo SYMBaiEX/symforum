@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   },
   description:
     "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default async function RootLayout({
@@ -37,7 +43,7 @@ export default async function RootLayout({
     // class attribute on it */
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <ThemeProvider attribute="class" nonce={nonce}>
           {children}
