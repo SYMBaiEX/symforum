@@ -35,9 +35,6 @@ export default async function PortfolioPage() {
       <article className="mx-auto max-w-7xl px-4 py-7 md:px-8 md:py-10">
         <section className="grid gap-7 md:grid-cols-[minmax(0,0.95fr)_minmax(20rem,0.55fr)] md:items-end">
           <div className="max-w-3xl">
-            <p className="mb-3 font-mono text-[10px] uppercase text-muted-foreground">
-              Selected work / public systems
-            </p>
             <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
