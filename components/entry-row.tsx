@@ -7,13 +7,22 @@ import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
-export function EntryRow({ post }: { post: BlogPost }) {
+export function EntryRow({
+  post,
+  divided = true,
+}: {
+  post: BlogPost;
+  divided?: boolean;
+}) {
   const imageUrl = safeImageUrl(post.imageUrl);
 
   return (
     <Link
       href={`/blog/${post.slug}`}
-      className="focus-ring group grid gap-4 border-t border-row-border py-7 transition-colors hover:bg-muted/45 md:grid-cols-12 md:px-3"
+      className={cn(
+        "focus-ring group grid gap-4 py-7 transition-colors hover:bg-muted/45 md:grid-cols-12 md:px-3",
+        divided ? "border-t border-row-border" : null,
+      )}
     >
       <div className="font-mono text-xs uppercase text-muted-foreground md:col-span-2">
         {formatDate(post.publishedAt)}
