@@ -21,32 +21,35 @@ export function EntryRow({
     <Link
       href={`/blog/${post.slug}`}
       className={cn(
-        "focus-ring group grid gap-4 transition-colors hover:bg-muted/45 md:grid-cols-12 md:px-3",
-        compact ? "py-4 md:py-5" : "py-7",
+        "focus-ring group grid gap-3 transition-colors hover:bg-muted/45 md:items-center md:px-3",
+        imageUrl
+          ? "md:grid-cols-[8.25rem_7.5rem_minmax(0,1fr)_4.5rem]"
+          : "md:grid-cols-[8.25rem_minmax(0,1fr)_4.5rem]",
+        compact ? "py-4 md:py-4" : "py-7",
         divided ? "border-t border-row-border" : null,
       )}
     >
       <div
         className={cn(
-          "font-mono uppercase text-muted-foreground md:col-span-2",
+          "font-mono uppercase text-muted-foreground",
           compact ? "text-[11px]" : "text-xs",
         )}
       >
         {formatDate(post.publishedAt)}
       </div>
       {imageUrl ? (
-        <div className="md:col-span-2">
+        <div className="w-full max-w-[7.5rem]">
           <img
             src={imageUrl}
             alt={post.imageAlt ?? post.title}
-            className="aspect-[4/3] w-full border border-row-border object-cover"
+            className="h-[5.5rem] w-full border border-row-border object-cover"
           />
         </div>
       ) : null}
-      <div className={cn(imageUrl ? "md:col-span-5" : "md:col-span-7")}>
+      <div className="min-w-0">
         <h3
           className={cn(
-            "font-semibold leading-tight text-balance",
+            "font-semibold leading-tight",
             compact ? "text-lg md:text-xl" : "text-xl md:text-2xl",
           )}
         >
@@ -55,7 +58,7 @@ export function EntryRow({
       </div>
       <div
         className={cn(
-          "flex items-start md:col-span-3 md:justify-end",
+          "flex items-start md:justify-end",
           compact ? "gap-1.5" : "gap-2",
         )}
       >
