@@ -28,10 +28,10 @@ export default async function HomePage() {
       <section>
         <div className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
           <h1 className="grid gap-6 break-words md:grid-cols-12 md:items-start">
-            <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-9 md:col-start-4 md:-translate-x-28 md:text-6xl lg:-translate-x-40 lg:text-7xl">
+            <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-12 md:text-6xl lg:text-7xl">
               Hi, I&apos;m
             </span>
-            <span className="max-w-5xl text-5xl font-bold leading-[0.88] text-balance md:col-span-9 md:col-start-4 md:-translate-x-10 md:text-7xl lg:-translate-x-12 lg:text-8xl">
+            <span className="max-w-5xl text-5xl font-bold leading-[0.88] text-balance md:col-span-10 md:col-start-2 md:text-7xl lg:text-8xl">
               <span className="block">Austin</span>
               <span className="block pl-8 md:pl-20">Hamilton</span>
             </span>
@@ -39,11 +39,11 @@ export default async function HomePage() {
 
           <div className="mt-6 grid gap-5 md:grid-cols-12 md:items-end">
             <div
-              className="overflow-x-auto text-sm text-foreground md:col-span-9 md:col-start-4 md:-translate-x-10 md:whitespace-nowrap md:text-lg lg:-translate-x-12"
+              className="overflow-x-auto text-sm text-foreground md:col-span-10 md:col-start-2 md:whitespace-nowrap md:text-lg"
               aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
               dangerouslySetInnerHTML={{ __html: identityEquation }}
             />
-            <div className="flex flex-wrap gap-2 md:col-span-9 md:col-start-4 md:justify-end">
+            <div className="flex flex-wrap gap-2 md:col-span-10 md:col-start-2 md:justify-end">
               <Button asChild>
                 <Link href="/blog">Read blog</Link>
               </Button>
