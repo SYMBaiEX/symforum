@@ -1,11 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
-import { Button } from "@/components/ui/button";
 import { getSitePage } from "@/lib/site-content";
 import { AUSTIN_GITHUB_AVATAR_URL } from "@/lib/site-content-defaults";
 import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getSitePage("about");
@@ -37,29 +35,27 @@ export default async function AboutPage() {
               systems, AI agents, protocol work, and the long-term lens of
               fatherhood.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2 md:mt-6">
-              <Button asChild>
-                <Link href="/portfolio">View portfolio</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/blog">Read notes</Link>
-              </Button>
-            </div>
           </div>
 
           <figure className="md:col-span-4">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
-                className="aspect-[16/10] w-full border border-row-border object-cover md:aspect-[4/5]"
-              />
-            ) : (
+            <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div
+                  aria-hidden="true"
+                  className="h-full w-full bg-[linear-gradient(135deg,hsl(var(--foreground))_0_1px,transparent_1px),linear-gradient(45deg,var(--accent-magenta),var(--accent-cyan),var(--accent-canary))] bg-[length:18px_18px,100%_100%] opacity-80"
+                />
+              )}
               <div
                 aria-hidden="true"
-                className="aspect-[16/10] border border-row-border bg-[linear-gradient(135deg,hsl(var(--foreground))_0_1px,transparent_1px),linear-gradient(45deg,var(--accent-magenta),var(--accent-cyan),var(--accent-canary))] bg-[length:18px_18px,100%_100%] opacity-80 md:aspect-[4/5]"
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"
               />
-            )}
+            </div>
             {page?.imageCredit ? (
               <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
                 {page.imageCredit}
@@ -75,12 +71,9 @@ export default async function AboutPage() {
                 {storySections.map((section, index) => (
                   <article
                     key={`${section.title}-${index}`}
-                    className="grid gap-2 md:grid-cols-[3.5rem_minmax(0,1fr)] md:gap-8"
+                    className="max-w-4xl"
                     data-about-story-row
                   >
-                    <div className="font-mono text-[11px] uppercase text-muted-foreground md:pt-1">
-                      {String(index + 1).padStart(2, "0")}
-                    </div>
                     <div className="max-w-4xl" data-about-story-content>
                       <h2 className="text-lg font-semibold leading-snug text-balance md:text-2xl">
                         {section.title}
