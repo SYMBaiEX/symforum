@@ -75,14 +75,14 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="group grid gap-3 py-3.5 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)] md:gap-4 md:px-2"
+              className="group grid gap-3 py-3.5 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_13rem] md:gap-4 md:px-2"
             >
               <div className="pt-1 font-mono text-[10px] uppercase text-muted-foreground md:text-right">
                 #{story.rank.toString().padStart(2, "0")}
               </div>
               <div className="min-w-0 border-l border-row-border pl-4 transition-colors group-hover:border-primary">
                 <div className="min-w-0">
-                  <h2 className="max-w-3xl font-sans text-base font-semibold leading-snug text-balance md:text-lg">
+                  <h2 className="font-sans text-base font-semibold leading-snug text-balance md:text-lg">
                     <Link
                       href={newsStoryPath(story)}
                       className="focus-ring inline-flex max-w-full items-baseline gap-2 transition-colors hover:text-primary"
@@ -90,35 +90,37 @@ function NewsRows({
                       <span>{story.title}</span>
                     </Link>
                   </h2>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
-                    <span>{story.host ?? "news.ycombinator.com"}</span>
-                    {story.by ? <span>by {story.by}</span> : null}
+                </div>
+              </div>
+              <div className="border-l border-transparent pl-4 font-mono text-[10px] uppercase text-muted-foreground md:border-0 md:pl-0 md:pt-1 md:text-right">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-col md:items-end md:gap-1">
+                  <span>{story.host ?? "news.ycombinator.com"}</span>
+                  {story.by ? <span>by {story.by}</span> : null}
+                  <span className="inline-flex items-center gap-1">
+                    <MessageSquare className="size-3" />
+                    {compactNumber(stats.comments)} comments
+                  </span>
+                  {stats.score > 0 ? (
+                    <span>{compactNumber(stats.score)} pts</span>
+                  ) : null}
+                  {stats.saves > 0 ? (
                     <span className="inline-flex items-center gap-1">
-                      <MessageSquare className="size-3" />
-                      {compactNumber(stats.comments)} comments
+                      <Bookmark className="size-3" />
+                      {compactNumber(stats.saves)} saves
                     </span>
-                    {stats.score > 0 ? (
-                      <span>{compactNumber(stats.score)} pts</span>
-                    ) : null}
-                    {stats.saves > 0 ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Bookmark className="size-3" />
-                        {compactNumber(stats.saves)} saves
-                      </span>
-                    ) : null}
-                    {sourceUrl ? (
-                      <Link
-                        href={sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="focus-ring inline-flex items-center gap-1 transition-colors hover:text-foreground"
-                        aria-label={`Open source article for ${story.title}`}
-                      >
-                        source
-                        <ArrowUpRight className="size-3" />
-                      </Link>
-                    ) : null}
-                  </div>
+                  ) : null}
+                  {sourceUrl ? (
+                    <Link
+                      href={sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="focus-ring inline-flex items-center gap-1 transition-colors hover:text-foreground"
+                      aria-label={`Open source article for ${story.title}`}
+                    >
+                      source
+                      <ArrowUpRight className="size-3" />
+                    </Link>
+                  ) : null}
                 </div>
               </div>
             </article>
