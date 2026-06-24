@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element */
-import { Badge } from "@/components/ui/badge";
 import { BlogPost } from "@/lib/content";
 import { formatDate } from "@/lib/format";
 import { safeImageUrl } from "@/lib/safe-url";
@@ -56,22 +55,10 @@ export function EntryRow({
       </div>
       <div
         className={cn(
-          "flex flex-wrap items-start md:col-span-3 md:justify-end",
+          "flex items-start md:col-span-3 md:justify-end",
           compact ? "gap-1.5" : "gap-2",
         )}
       >
-        {post.tags.map((tag) => (
-          <Badge
-            key={tag}
-            variant="outline"
-            className={cn(
-              "font-mono uppercase",
-              compact ? "px-1.5 py-0 text-[10px]" : null,
-            )}
-          >
-            {tag}
-          </Badge>
-        ))}
         <span
           className={cn(
             "inline-flex items-center gap-1 font-mono uppercase text-muted-foreground transition-colors group-hover:text-foreground",
