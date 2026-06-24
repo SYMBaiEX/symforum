@@ -171,6 +171,15 @@
     margin-top: 0.85rem;
   }
 
+  .markdown-body.about-story-copy {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .markdown-body.about-story-copy > * + * {
+    margin-top: 0.75rem;
+  }
+
   .markdown-body h2,
   .markdown-body h3,
   .markdown-body h4 {

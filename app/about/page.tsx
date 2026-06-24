@@ -3,6 +3,7 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { getSitePage } from "@/lib/site-content";
+import { AUSTIN_GITHUB_AVATAR_URL } from "@/lib/site-content-defaults";
 import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -17,7 +18,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AboutPage() {
   const page = await getSitePage("about");
-  const imageUrl = safeImageUrl(page?.imageUrl);
+  const imageUrl =
+    safeImageUrl(page?.imageUrl) ?? safeImageUrl(AUSTIN_GITHUB_AVATAR_URL);
   const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
@@ -50,13 +52,13 @@ export default async function AboutPage() {
             {imageUrl ? (
               <img
                 src={imageUrl}
-                alt={page?.imageAlt ?? "Austin Hamilton"}
-                className="aspect-[4/5] w-full border border-row-border object-cover"
+                alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                className="aspect-[16/10] w-full border border-row-border object-cover md:aspect-[4/5]"
               />
             ) : (
               <div
                 aria-hidden="true"
-                className="aspect-[4/5] border border-row-border bg-[linear-gradient(135deg,hsl(var(--foreground))_0_1px,transparent_1px),linear-gradient(45deg,var(--accent-magenta),var(--accent-cyan),var(--accent-canary))] bg-[length:18px_18px,100%_100%] opacity-80"
+                className="aspect-[16/10] border border-row-border bg-[linear-gradient(135deg,hsl(var(--foreground))_0_1px,transparent_1px),linear-gradient(45deg,var(--accent-magenta),var(--accent-cyan),var(--accent-canary))] bg-[length:18px_18px,100%_100%] opacity-80 md:aspect-[4/5]"
               />
             )}
             {page?.imageCredit ? (
@@ -67,36 +69,37 @@ export default async function AboutPage() {
           </figure>
         </section>
 
-        <section className="py-8 md:py-12">
-          <div className="grid gap-5 md:grid-cols-12">
+        <section className="py-7 md:py-10">
+          <div className="mx-auto max-w-5xl">
             {storySections.length > 0 ? (
-              storySections.map((section, index) => (
-                <article
-                  key={`${section.title}-${index}`}
-                  className={`grid gap-3 md:col-span-10 md:grid-cols-10 md:gap-6 ${
-                    index % 2 === 0 ? "md:col-start-2" : "md:col-start-3"
-                  }`}
-                >
-                  <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-2">
-                    {String(index + 1).padStart(2, "0")}
-                  </div>
-                  <div className="md:col-span-8">
-                    <h2 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
-                      {section.title}
-                    </h2>
-                    <div className="mt-3">
-                      <MarkdownContent
-                        className="markdown-compact"
-                        content={section.body}
-                      />
+              <div className="grid gap-6 md:gap-8">
+                {storySections.map((section, index) => (
+                  <article
+                    key={`${section.title}-${index}`}
+                    className="grid gap-2 md:grid-cols-[3.5rem_minmax(0,1fr)] md:gap-8"
+                    data-about-story-row
+                  >
+                    <div className="font-mono text-[11px] uppercase text-muted-foreground md:pt-1">
+                      {String(index + 1).padStart(2, "0")}
                     </div>
-                  </div>
-                </article>
-              ))
+                    <div className="max-w-4xl" data-about-story-content>
+                      <h2 className="text-lg font-semibold leading-snug text-balance md:text-2xl">
+                        {section.title}
+                      </h2>
+                      <div className="mt-2 md:mt-3">
+                        <MarkdownContent
+                          className="markdown-compact about-story-copy"
+                          content={section.body}
+                        />
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
             ) : (
-              <div className="md:col-span-8 md:col-start-3">
+              <div className="mx-auto max-w-4xl">
                 <MarkdownContent
-                  className="markdown-compact"
+                  className="markdown-compact about-story-copy"
                   content={page?.body ?? ""}
                 />
               </div>
