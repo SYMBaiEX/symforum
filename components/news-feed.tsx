@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { convexRefs } from "@/lib/convex-refs";
 import { compactNumber } from "@/lib/format";
@@ -8,12 +7,7 @@ import type { HnStory } from "@/lib/hn";
 import { newsStoryPath } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
 import { useQuery } from "convex/react";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Bookmark,
-  MessageSquare,
-} from "lucide-react";
+import { ArrowUpRight, Bookmark, MessageSquare } from "lucide-react";
 import Link from "next/link";
 
 export function NewsFeed({
@@ -35,9 +29,9 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
   const data = useQuery(convexRefs.news.latest);
   if (data === undefined) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2.5">
         {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-11 w-full" />
+          <Skeleton key={index} className="h-16 w-full bg-muted" />
         ))}
       </div>
     );
@@ -65,11 +59,11 @@ function NewsRows({
 }) {
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
         <span>Snapshot / {snapshotDate}</span>
         <span>Daily refresh via Vercel Cron</span>
       </div>
-      <div>
+      <div className="grid gap-2">
         {stories.map((story) => {
           const sourceUrl = safeExternalUrl(story.url);
           const stats = story.platformStats ?? {
@@ -81,53 +75,51 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="grid gap-1 py-1.5 transition-colors hover:bg-muted/35 md:grid-cols-[2.25rem_minmax(0,1fr)_7.25rem] md:items-center md:gap-2 md:px-1.5"
+              className="group grid gap-3 py-3.5 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)] md:gap-4 md:px-2"
             >
-              <div className="font-mono text-[9px] uppercase text-muted-foreground">
+              <div className="pt-1 font-mono text-[10px] uppercase text-muted-foreground md:text-right">
                 #{story.rank.toString().padStart(2, "0")}
               </div>
-              <div className="min-w-0">
-                <h2 className="truncate text-[13px] font-semibold leading-snug md:text-[15px]">
-                  <Link
-                    href={newsStoryPath(story)}
-                    className="focus-ring inline-flex max-w-full items-center gap-1.5 transition-colors hover:text-primary"
-                  >
-                    <span className="truncate">{story.title}</span>
-                    <ArrowRight className="size-3 shrink-0" />
-                  </Link>
-                </h2>
-                <div className="mt-px flex flex-wrap gap-1.5 font-mono text-[9px] uppercase text-muted-foreground">
-                  {story.host ? <span>{story.host}</span> : null}
-                  {story.by ? <span>by {story.by}</span> : null}
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-muted-foreground md:justify-end">
-                <span>{compactNumber(stats.score)}p</span>
-                <span className="inline-flex items-center gap-1 text-foreground">
-                  <MessageSquare className="size-2.5" />
-                  {compactNumber(stats.comments)}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Bookmark className="size-2.5" />
-                  {compactNumber(stats.saves)}
-                </span>
-                {sourceUrl ? (
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                  >
+              <div className="min-w-0 border-l border-row-border pl-4 transition-colors group-hover:border-primary">
+                <div className="min-w-0">
+                  <h2 className="max-w-3xl font-sans text-base font-semibold leading-snug text-balance md:text-lg">
                     <Link
-                      href={sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open source article for ${story.title}`}
+                      href={newsStoryPath(story)}
+                      className="focus-ring inline-flex max-w-full items-baseline gap-2 transition-colors hover:text-primary"
                     >
-                      <ArrowUpRight />
+                      <span>{story.title}</span>
                     </Link>
-                  </Button>
-                ) : null}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+                    <span>{story.host ?? "news.ycombinator.com"}</span>
+                    {story.by ? <span>by {story.by}</span> : null}
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquare className="size-3" />
+                      {compactNumber(stats.comments)} comments
+                    </span>
+                    {stats.score > 0 ? (
+                      <span>{compactNumber(stats.score)} pts</span>
+                    ) : null}
+                    {stats.saves > 0 ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Bookmark className="size-3" />
+                        {compactNumber(stats.saves)} saves
+                      </span>
+                    ) : null}
+                    {sourceUrl ? (
+                      <Link
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="focus-ring inline-flex items-center gap-1 transition-colors hover:text-foreground"
+                        aria-label={`Open source article for ${story.title}`}
+                      >
+                        source
+                        <ArrowUpRight className="size-3" />
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </article>
           );
