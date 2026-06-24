@@ -4,13 +4,17 @@ export function SectionHeader({
   kicker,
   title,
   children,
+  divided = true,
 }: {
   kicker: string;
   title: string;
   children?: ReactNode;
+  divided?: boolean;
 }) {
   return (
-    <div className="grid gap-3 border-t border-row-border pt-4 md:grid-cols-12">
+    <div
+      className={`grid gap-3 md:grid-cols-12 ${divided ? "border-t border-row-border pt-4" : ""}`}
+    >
       <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
         {kicker}
       </div>
