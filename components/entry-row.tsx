@@ -10,9 +10,11 @@ import Link from "next/link";
 export function EntryRow({
   post,
   divided = true,
+  compact = false,
 }: {
   post: BlogPost;
   divided?: boolean;
+  compact?: boolean;
 }) {
   const imageUrl = safeImageUrl(post.imageUrl);
 
@@ -20,11 +22,17 @@ export function EntryRow({
     <Link
       href={`/blog/${post.slug}`}
       className={cn(
-        "focus-ring group grid gap-4 py-7 transition-colors hover:bg-muted/45 md:grid-cols-12 md:px-3",
+        "focus-ring group grid gap-4 transition-colors hover:bg-muted/45 md:grid-cols-12 md:px-3",
+        compact ? "py-4 md:py-5" : "py-7",
         divided ? "border-t border-row-border" : null,
       )}
     >
-      <div className="font-mono text-xs uppercase text-muted-foreground md:col-span-2">
+      <div
+        className={cn(
+          "font-mono uppercase text-muted-foreground md:col-span-2",
+          compact ? "text-[11px]" : "text-xs",
+        )}
+      >
         {formatDate(post.publishedAt)}
       </div>
       {imageUrl ? (
@@ -37,20 +45,47 @@ export function EntryRow({
         </div>
       ) : null}
       <div className={cn(imageUrl ? "md:col-span-5" : "md:col-span-7")}>
-        <h3 className="text-2xl font-semibold leading-tight text-balance">
+        <h3
+          className={cn(
+            "font-semibold leading-tight text-balance",
+            compact ? "text-xl md:text-2xl" : "text-2xl",
+          )}
+        >
           {post.title}
         </h3>
-        <p className="mt-3 max-w-2xl leading-7 text-muted-foreground">
+        <p
+          className={cn(
+            "max-w-2xl text-muted-foreground",
+            compact ? "mt-2 text-sm leading-6" : "mt-3 leading-7",
+          )}
+        >
           {post.excerpt}
         </p>
       </div>
-      <div className="flex flex-wrap items-start gap-2 md:col-span-3 md:justify-end">
+      <div
+        className={cn(
+          "flex flex-wrap items-start md:col-span-3 md:justify-end",
+          compact ? "gap-1.5" : "gap-2",
+        )}
+      >
         {post.tags.map((tag) => (
-          <Badge key={tag} variant="outline" className="font-mono uppercase">
+          <Badge
+            key={tag}
+            variant="outline"
+            className={cn(
+              "font-mono uppercase",
+              compact ? "px-1.5 py-0 text-[10px]" : null,
+            )}
+          >
             {tag}
           </Badge>
         ))}
-        <span className="inline-flex items-center gap-1 font-mono text-xs uppercase text-muted-foreground transition-colors group-hover:text-foreground">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 font-mono uppercase text-muted-foreground transition-colors group-hover:text-foreground",
+            compact ? "text-[11px]" : "text-xs",
+          )}
+        >
           {post.readingMinutes} min <ArrowUpRight />
         </span>
       </div>

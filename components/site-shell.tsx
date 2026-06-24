@@ -15,7 +15,7 @@ const navItems = [
 export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="relative z-10 min-h-screen bg-background/92 text-foreground">
-      <header className="sticky top-0 z-40 border-b border-row-border bg-background/92 backdrop-blur">
+      <header className="sticky top-0 z-40 bg-background/92 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-8">
           <Link
             href="/"
@@ -34,7 +34,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main>{children}</main>
-      <footer className="border-t border-row-border">
+      <footer>
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 text-sm md:grid-cols-12 md:px-8">
           <div className="md:col-span-5">
             <p className="font-mono uppercase">Austin Hamilton / SYMBiEX</p>
