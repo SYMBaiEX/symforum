@@ -14,15 +14,13 @@ export default async function BlogPage() {
   return (
     <SiteShell>
       <section className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
-        <SectionHeader kicker="Archive" title="All posts">
-          Sorted by date. Minimal chrome, high signal, no card pile.
-        </SectionHeader>
-        <div className="mt-10">
+        <SectionHeader title="All posts" divided={false} />
+        <div className="mt-8">
           {posts.map((post) => (
-            <EntryRow key={post.slug} post={post} />
+            <EntryRow key={post.slug} post={post} divided={false} compact />
           ))}
           {posts.length === 0 ? (
-            <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
+            <div className="py-6 font-mono text-xs uppercase text-muted-foreground">
               No published posts yet.
             </div>
           ) : null}

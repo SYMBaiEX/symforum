@@ -8,7 +8,6 @@ import { ReactNode } from "react";
 const navItems = [
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
-  { href: "/admin", label: "Admin" },
   { href: "/signin", label: "Sign in" },
 ];
 
