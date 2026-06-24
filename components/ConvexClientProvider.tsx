@@ -1,20 +1,8 @@
 "use client";
 
+import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
 import { ConvexReactClient } from "convex/react";
-import { ComponentType, lazy, ReactNode, Suspense, useMemo } from "react";
-
-type ConvexAuthProviderProps = {
-  client: ConvexReactClient;
-  children: ReactNode;
-};
-
-const ConvexAuthProvider = lazy(async () => {
-  const authModule = await import("@convex-dev/auth/nextjs");
-  return {
-    default:
-      authModule.ConvexAuthNextjsProvider as ComponentType<ConvexAuthProviderProps>,
-  };
-});
+import { ReactNode, useMemo } from "react";
 
 export default function ConvexClientProvider({
   children,
@@ -33,8 +21,8 @@ export default function ConvexClientProvider({
   }
 
   return (
-    <Suspense fallback={null}>
-      <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>
-    </Suspense>
+    <ConvexAuthNextjsProvider client={convex}>
+      {children}
+    </ConvexAuthNextjsProvider>
   );
 }

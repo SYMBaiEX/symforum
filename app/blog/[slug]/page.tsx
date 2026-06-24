@@ -1,9 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
-import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { MarkdownContent } from "@/components/markdown-content";
-import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
@@ -38,7 +36,7 @@ export default async function BlogPostPage({
   const imageUrl = safeImageUrl(post.imageUrl);
 
   return (
-    <SiteShell>
+    <>
       <article className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
         <div className="grid gap-10 md:grid-cols-12">
           <aside className="font-mono text-xs uppercase text-muted-foreground md:col-span-3">
@@ -77,9 +75,7 @@ export default async function BlogPostPage({
             ) : null}
             <div className="mt-10 border-y border-row-border py-5">
               {convexEnabled ? (
-                <ConvexClientProvider>
-                  <InteractionBar entityType="post" entityId={post.slug} />
-                </ConvexClientProvider>
+                <InteractionBar entityType="post" entityId={post.slug} />
               ) : (
                 <p className="font-mono text-xs uppercase text-muted-foreground">
                   Interactions enable after Convex is connected.
@@ -90,13 +86,11 @@ export default async function BlogPostPage({
             <section className="mt-14">
               <h2 className="mb-5 font-mono text-sm uppercase">Comments</h2>
               {convexEnabled ? (
-                <ConvexClientProvider>
-                  <CommentsPanel
-                    entityType="post"
-                    entityId={post.slug}
-                    enabled={convexEnabled}
-                  />
-                </ConvexClientProvider>
+                <CommentsPanel
+                  entityType="post"
+                  entityId={post.slug}
+                  enabled={convexEnabled}
+                />
               ) : (
                 <CommentsPanel
                   entityType="post"
@@ -108,6 +102,6 @@ export default async function BlogPostPage({
           </div>
         </div>
       </article>
-    </SiteShell>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
 import { type PublicProfileCommentRecord, convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
 import { useQuery } from "convex/react";
@@ -10,13 +11,7 @@ export function PublicProfilePanel({ username }: { username: string }) {
   const profile = useQuery(convexRefs.users.publicProfile, { username });
 
   if (profile === undefined) {
-    return (
-      <div>
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          Loading profile
-        </p>
-      </div>
-    );
+    return <ProfilePanelSkeleton />;
   }
 
   if (profile === null) {

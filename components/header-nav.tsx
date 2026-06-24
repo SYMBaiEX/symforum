@@ -1,10 +1,8 @@
 "use client";
 
-import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { convexRefs } from "@/lib/convex-refs";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import Link from "next/link";
 
 const navItems = [
@@ -19,22 +17,17 @@ export function HeaderNav() {
     return <NavRow authHref="/signin" authLabel="Sign in" />;
   }
 
-  return (
-    <ConvexClientProvider>
-      <LiveHeaderNav />
-    </ConvexClientProvider>
-  );
+  return <LiveHeaderNav />;
 }
 
 function LiveHeaderNav() {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const viewer = useQuery(convexRefs.users.maybeViewer, {});
 
-  if (isLoading || viewer === undefined) {
-    return <NavRow />;
+  if (isLoading) {
+    return <NavRow authPending />;
   }
 
-  if (isAuthenticated && viewer?.usernameNormalized) {
+  if (isAuthenticated) {
     return <NavRow authHref="/profile" authLabel="Profile" />;
   }
 
@@ -44,9 +37,11 @@ function LiveHeaderNav() {
 function NavRow({
   authHref,
   authLabel,
+  authPending = false,
 }: {
   authHref?: string;
   authLabel?: string;
+  authPending?: boolean;
 }) {
   return (
     <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
@@ -57,13 +52,22 @@ function NavRow({
           </Link>
         </Button>
       ))}
-      {authHref && authLabel ? (
-        <Button asChild variant="ghost" size="sm">
-          <Link className="h-10 px-3 sm:h-7 sm:px-2.5" href={authHref}>
-            {authLabel}
-          </Link>
-        </Button>
-      ) : null}
+      <span className="inline-flex w-[4.75rem] shrink-0 justify-center">
+        {authPending ? (
+          <span
+            aria-hidden="true"
+            className="inline-flex h-10 w-full items-center justify-center border border-transparent px-3 font-mono text-[10px] uppercase text-muted-foreground sm:h-7 sm:px-2.5"
+          >
+            Auth
+          </span>
+        ) : authHref && authLabel ? (
+          <Button asChild variant="ghost" size="sm">
+            <Link className="h-10 w-full px-3 sm:h-7 sm:px-2.5" href={authHref}>
+              {authLabel}
+            </Link>
+          </Button>
+        ) : null}
+      </span>
       <ThemeToggle />
     </nav>
   );

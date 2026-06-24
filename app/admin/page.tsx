@@ -1,6 +1,4 @@
 import { AdminDashboard } from "@/components/admin-dashboard";
-import ConvexClientProvider from "@/components/ConvexClientProvider";
-import { SiteShell } from "@/components/site-shell";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -11,7 +9,7 @@ export default function AdminPage() {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <SiteShell>
+    <>
       <section className="mx-auto max-w-7xl px-4 py-12 md:px-8 md:py-16">
         <div className="mb-8 border-y border-row-border py-5">
           <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -22,15 +20,13 @@ export default function AdminPage() {
           </h1>
         </div>
         {configured ? (
-          <ConvexClientProvider>
-            <AdminDashboard />
-          </ConvexClientProvider>
+          <AdminDashboard />
         ) : (
           <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
             Convex is not connected locally.
           </div>
         )}
       </section>
-    </SiteShell>
+    </>
   );
 }

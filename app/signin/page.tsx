@@ -1,7 +1,5 @@
 "use client";
 
-import ConvexClientProvider from "@/components/ConvexClientProvider";
-import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -13,7 +11,7 @@ export default function SignInPage() {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <SiteShell>
+    <>
       <section className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-12 md:px-8 md:py-24">
         <div className="md:col-span-5">
           <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -29,11 +27,9 @@ export default function SignInPage() {
         </div>
         <div className="md:col-span-5 md:col-start-8">
           {configured ? (
-            <ConvexClientProvider>
-              <Suspense fallback={null}>
-                <PasswordPanel />
-              </Suspense>
-            </ConvexClientProvider>
+            <Suspense fallback={<PasswordPanelSkeleton />}>
+              <PasswordPanel />
+            </Suspense>
           ) : (
             <div className="border border-row-border p-5">
               <h2 className="text-xl font-semibold">
@@ -48,7 +44,36 @@ export default function SignInPage() {
           )}
         </div>
       </section>
-    </SiteShell>
+    </>
+  );
+}
+
+function PasswordPanelSkeleton() {
+  return (
+    <div className="border border-row-border bg-card p-5" aria-busy="true">
+      <div className="mb-6 flex gap-2" aria-hidden="true">
+        <div className="h-8 w-20 border border-row-border bg-muted/45" />
+        <div className="h-8 w-20 border border-row-border bg-muted/25" />
+      </div>
+      <div className="flex flex-col gap-4" aria-hidden="true">
+        <div className="flex flex-col gap-2">
+          <div className="h-3 w-20 bg-muted" />
+          <div className="flex gap-2">
+            <div className="h-9 min-w-0 flex-1 border border-row-border bg-background/65" />
+            <div className="h-9 w-24 border border-row-border bg-background/65" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-3 w-28 bg-muted" />
+          <div className="h-9 border border-row-border bg-background/65" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-3 w-16 bg-muted" />
+          <div className="h-9 border border-row-border bg-background/65" />
+        </div>
+        <div className="h-9 border border-row-border bg-primary/40" />
+      </div>
+    </div>
   );
 }
 

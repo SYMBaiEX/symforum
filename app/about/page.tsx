@@ -1,6 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
-import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { getSitePage } from "@/lib/site-content";
 import { AUSTIN_GITHUB_AVATAR_URL } from "@/lib/site-content-defaults";
@@ -23,7 +22,7 @@ export default async function AboutPage() {
   const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
-    <SiteShell>
+    <>
       <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
         <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
           <div className="md:col-span-6 md:col-start-2">
@@ -107,7 +106,7 @@ export default async function AboutPage() {
           </div>
         </section>
       </article>
-    </SiteShell>
+    </>
   );
 }
 

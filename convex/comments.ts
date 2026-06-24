@@ -17,16 +17,21 @@ export const list = query({
       )
       .order("asc")
       .take(100);
-
-    return await Promise.all(
-      rows.map(async (comment) => {
-        const user = await ctx.db.get(comment.userId);
-        return {
-          ...comment,
-          author: user?.username ?? user?.name ?? "SYM-UNKNOWN",
-        };
-      }),
+    const usersById = new Map(
+      await Promise.all(
+        [...new Set(rows.map((comment) => comment.userId))].map(
+          async (userId) => [userId, await ctx.db.get(userId)] as const,
+        ),
+      ),
     );
+
+    return rows.map((comment) => {
+      const user = usersById.get(comment.userId);
+      return {
+        ...comment,
+        author: user?.username ?? user?.name ?? "SYM-UNKNOWN",
+      };
+    });
   },
 });
 

@@ -142,15 +142,11 @@ async function snapshotForDate(ctx: QueryCtx, date: string) {
 }
 
 async function storiesForSnapshot(ctx: QueryCtx, date: string) {
-  const stories = await ctx.db
+  return await ctx.db
     .query("hnStories")
     .withIndex("by_snapshotDate_and_rank", (q) => q.eq("snapshotDate", date))
     .order("asc")
     .take(30);
-
-  return await Promise.all(
-    stories.map((story) => withPlatformStats(ctx, story)),
-  );
 }
 
 export const latest = query({

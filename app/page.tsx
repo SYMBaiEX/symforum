@@ -2,7 +2,6 @@ import { AsciiSection } from "@/components/ascii-section";
 import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
 import { SectionHeader } from "@/components/section-header";
-import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
@@ -24,7 +23,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <SiteShell>
+    <>
       <section>
         <div className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-10">
           <h1 className="grid gap-4 break-words md:grid-cols-12 md:items-start">
@@ -73,6 +72,6 @@ export default async function HomePage() {
           </Button>
         </div>
       </section>
-    </SiteShell>
+    </>
   );
 }

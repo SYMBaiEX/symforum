@@ -1,6 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
-import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +30,7 @@ export default async function PortfolioPage() {
   ]);
 
   return (
-    <SiteShell>
+    <>
       <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
         <section>
           <div className="max-w-3xl">
@@ -63,7 +62,7 @@ export default async function PortfolioPage() {
           </div>
         </section>
       </article>
-    </SiteShell>
+    </>
   );
 }
 

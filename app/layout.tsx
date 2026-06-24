@@ -3,6 +3,8 @@ import { ThemeProvider } from "next-themes";
 import { Geist, Geist_Mono } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { SiteShell } from "@/components/site-shell";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
@@ -45,8 +47,14 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <ThemeProvider attribute="class" nonce={nonce}>
-          {children}
+        <ThemeProvider
+          attribute="class"
+          disableTransitionOnChange
+          nonce={nonce}
+        >
+          <ConvexClientProvider>
+            <SiteShell>{children}</SiteShell>
+          </ConvexClientProvider>
         </ThemeProvider>
       </body>
     </html>

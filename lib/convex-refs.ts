@@ -101,6 +101,13 @@ export type PublicProfileRecord = {
   recentComments: PublicProfileCommentRecord[];
 };
 
+export type InteractionSummaryRecord = {
+  comments: number;
+  score: number;
+  saves: number;
+  viewer: { vote: number; saved: boolean } | null;
+};
+
 export type AdminCommentRecord = {
   _id: string;
   userId: string;
@@ -344,12 +351,13 @@ export const convexRefs = {
     summary: makeFunctionReference<
       "query",
       { entityType: "post" | "hnStory"; entityId: string },
-      {
-        score: number;
-        saves: number;
-        viewer: { vote: number; saved: boolean } | null;
-      }
+      InteractionSummaryRecord
     >("interactions:summary"),
+    summaries: makeFunctionReference<
+      "query",
+      { entityType: "post" | "hnStory"; entityIds: string[] },
+      Record<string, InteractionSummaryRecord>
+    >("interactions:summaries"),
     set: makeFunctionReference<
       "mutation",
       {

@@ -1,6 +1,4 @@
-import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { CurrentProfilePanel } from "@/components/current-profile-panel";
-import { SiteShell } from "@/components/site-shell";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -11,7 +9,7 @@ export default function ProfilePage() {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <SiteShell>
+    <>
       <section className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
         <div className="mb-7">
           <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -22,9 +20,7 @@ export default function ProfilePage() {
           </h1>
         </div>
         {configured ? (
-          <ConvexClientProvider>
-            <CurrentProfilePanel />
-          </ConvexClientProvider>
+          <CurrentProfilePanel />
         ) : (
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -37,6 +33,6 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
-    </SiteShell>
+    </>
   );
 }

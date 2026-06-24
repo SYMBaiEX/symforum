@@ -1,7 +1,5 @@
 import { CommentsPanel } from "@/components/comments-panel";
-import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { InteractionBar } from "@/components/interaction-bar";
-import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { compactNumber, formatDate } from "@/lib/format";
@@ -57,7 +55,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
   };
 
   return (
-    <SiteShell>
+    <>
       <article className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
         <div className="grid gap-7 md:grid-cols-12">
           <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
@@ -113,9 +111,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
 
             <div className="mt-6 border-y border-row-border py-3">
               {convexEnabled ? (
-                <ConvexClientProvider>
-                  <InteractionBar entityType="hnStory" entityId={entityId} />
-                </ConvexClientProvider>
+                <InteractionBar entityType="hnStory" entityId={entityId} />
               ) : (
                 <p className="font-mono text-xs uppercase text-muted-foreground">
                   Connect Convex to enable voting and saves.
@@ -147,13 +143,11 @@ export default async function NewsStoryPage({ params }: PageProps) {
             <section className="mt-9">
               <h2 className="mb-3 font-mono text-xs uppercase">Comments</h2>
               {convexEnabled ? (
-                <ConvexClientProvider>
-                  <CommentsPanel
-                    entityType="hnStory"
-                    entityId={entityId}
-                    enabled={convexEnabled}
-                  />
-                </ConvexClientProvider>
+                <CommentsPanel
+                  entityType="hnStory"
+                  entityId={entityId}
+                  enabled={convexEnabled}
+                />
               ) : (
                 <CommentsPanel
                   entityType="hnStory"
@@ -165,6 +159,6 @@ export default async function NewsStoryPage({ params }: PageProps) {
           </div>
         </div>
       </article>
-    </SiteShell>
+    </>
   );
 }

@@ -16,13 +16,64 @@ export const summary = query({
         q.eq("entityType", args.entityType).eq("entityId", args.entityId),
       )
       .take(1000);
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_entityType_and_entityId_and_createdAt", (q) =>
+        q.eq("entityType", args.entityType).eq("entityId", args.entityId),
+      )
+      .take(1000);
     const viewerId = await getAuthUserId(ctx);
     const viewer = rows.find((row) => row.userId === viewerId) ?? null;
     return {
+      comments: comments.length,
       score: rows.reduce((total, row) => total + row.vote, 0),
       saves: rows.filter((row) => row.saved).length,
       viewer,
     };
+  },
+});
+
+export const summaries = query({
+  args: {
+    entityType,
+    entityIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
+    const entityIds = [...new Set(args.entityIds)].slice(0, 50);
+    const summariesByEntityId: Record<
+      string,
+      {
+        comments: number;
+        score: number;
+        saves: number;
+        viewer: { vote: number; saved: boolean } | null;
+      }
+    > = {};
+
+    for (const entityId of entityIds) {
+      const rows = await ctx.db
+        .query("interactions")
+        .withIndex("by_entityType_and_entityId", (q) =>
+          q.eq("entityType", args.entityType).eq("entityId", entityId),
+        )
+        .take(1000);
+      const comments = await ctx.db
+        .query("comments")
+        .withIndex("by_entityType_and_entityId_and_createdAt", (q) =>
+          q.eq("entityType", args.entityType).eq("entityId", entityId),
+        )
+        .take(1000);
+      const viewer = rows.find((row) => row.userId === viewerId) ?? null;
+      summariesByEntityId[entityId] = {
+        comments: comments.length,
+        score: rows.reduce((total, row) => total + row.vote, 0),
+        saves: rows.filter((row) => row.saved).length,
+        viewer,
+      };
+    }
+
+    return summariesByEntityId;
   },
 });
 

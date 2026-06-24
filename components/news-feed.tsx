@@ -18,7 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { convexRefs, type NewsSnapshotRecord } from "@/lib/convex-refs";
+import {
+  convexRefs,
+  type InteractionSummaryRecord,
+  type NewsSnapshotRecord,
+} from "@/lib/convex-refs";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
 import { newsStoryPath } from "@/lib/news-slugs";
@@ -32,7 +36,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { Component, useState, type ReactNode } from "react";
+import { Component, useMemo, useState, type ReactNode } from "react";
 
 export function NewsFeed({
   enabled,
@@ -133,6 +137,92 @@ function NewsRows({
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
 }) {
+  if (interactive) {
+    return (
+      <InteractiveNewsRows
+        onSnapshotChange={onSnapshotChange}
+        selectedSnapshotDate={selectedSnapshotDate}
+        snapshotDate={snapshotDate}
+        snapshots={snapshots}
+        stories={stories}
+      />
+    );
+  }
+
+  return (
+    <NewsRowsView
+      authLoading={false}
+      interactive={false}
+      isAuthenticated={false}
+      onSnapshotChange={onSnapshotChange}
+      selectedSnapshotDate={selectedSnapshotDate}
+      snapshotDate={snapshotDate}
+      snapshots={snapshots}
+      stories={stories}
+      summaries={null}
+    />
+  );
+}
+
+function InteractiveNewsRows({
+  onSnapshotChange,
+  selectedSnapshotDate,
+  snapshotDate,
+  snapshots = [],
+  stories,
+}: {
+  onSnapshotChange?: (snapshotDate: string) => void;
+  selectedSnapshotDate?: string;
+  snapshotDate: string;
+  snapshots?: NewsSnapshotRecord[];
+  stories: HnStory[];
+}) {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const entityIds = useMemo(
+    () => stories.map((story) => String(story.hnItemId)),
+    [stories],
+  );
+  const summaries = useQuery(
+    convexRefs.interactions.summaries,
+    entityIds.length > 0 ? { entityType: "hnStory", entityIds } : "skip",
+  );
+
+  return (
+    <NewsRowsView
+      authLoading={isLoading}
+      interactive
+      isAuthenticated={isAuthenticated}
+      onSnapshotChange={onSnapshotChange}
+      selectedSnapshotDate={selectedSnapshotDate}
+      snapshotDate={snapshotDate}
+      snapshots={snapshots}
+      stories={stories}
+      summaries={summaries}
+    />
+  );
+}
+
+function NewsRowsView({
+  authLoading,
+  interactive,
+  isAuthenticated,
+  onSnapshotChange,
+  selectedSnapshotDate,
+  snapshotDate,
+  snapshots = [],
+  stories,
+  summaries,
+}: {
+  authLoading: boolean;
+  interactive: boolean;
+  isAuthenticated: boolean;
+  onSnapshotChange?: (snapshotDate: string) => void;
+  selectedSnapshotDate?: string;
+  snapshotDate: string;
+  snapshots?: NewsSnapshotRecord[];
+  stories: HnStory[];
+  summaries: Record<string, InteractionSummaryRecord> | null | undefined;
+}) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
@@ -156,11 +246,14 @@ function NewsRows({
         ) : null}
         {stories.map((story) => {
           const sourceUrl = safeExternalUrl(story.url);
-          const stats = story.platformStats ?? {
-            comments: 0,
-            score: 0,
-            saves: 0,
-          };
+          const entityId = String(story.hnItemId);
+          const summary = summaries?.[entityId];
+          const stats = summary ??
+            story.platformStats ?? {
+              comments: 0,
+              score: 0,
+              saves: 0,
+            };
 
           return (
             <article
@@ -174,8 +267,11 @@ function NewsRows({
                 <div className="flex min-w-0 items-center gap-2.5">
                   {interactive ? (
                     <NewsVoteControl
-                      entityId={String(story.hnItemId)}
+                      authLoading={authLoading}
+                      entityId={entityId}
                       initialScore={stats.score}
+                      isAuthenticated={isAuthenticated}
+                      summary={summary}
                       title={story.title}
                     />
                   ) : null}
@@ -284,19 +380,20 @@ function formatSnapshotLabel(snapshot: NewsSnapshotRecord) {
 }
 
 function NewsVoteControl({
+  authLoading,
   entityId,
   initialScore,
+  isAuthenticated,
+  summary,
   title,
 }: {
+  authLoading: boolean;
   entityId: string;
   initialScore: number;
+  isAuthenticated: boolean;
+  summary?: InteractionSummaryRecord;
   title: string;
 }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const summary = useQuery(convexRefs.interactions.summary, {
-    entityType: "hnStory",
-    entityId,
-  });
   const setInteraction = useMutation(convexRefs.interactions.set);
   const [authOpen, setAuthOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -304,7 +401,7 @@ function NewsVoteControl({
   const vote: -1 | 0 | 1 =
     viewer?.vote === 1 ? 1 : viewer?.vote === -1 ? -1 : 0;
   const score = summary?.score ?? initialScore;
-  const voteDisabled = isLoading || (isAuthenticated && !summary) || pending;
+  const voteDisabled = authLoading || (isAuthenticated && !summary) || pending;
 
   async function onVote(nextVote: -1 | 1) {
     if (!isAuthenticated) {

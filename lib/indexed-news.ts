@@ -1,8 +1,9 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { fetchHnStory, type HnStory } from "@/lib/hn";
 import { ConvexHttpClient } from "convex/browser";
+import { cache } from "react";
 
-export async function getIndexedStory(
+export const getIndexedStory = cache(async function getIndexedStory(
   hnItemId: number,
 ): Promise<HnStory | null> {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -18,7 +19,7 @@ export async function getIndexedStory(
     }
   }
   return await fetchHnStory(hnItemId);
-}
+});
 
 export function stripHnHtml(text: string | undefined) {
   return (text ?? "")

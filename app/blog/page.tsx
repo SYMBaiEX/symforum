@@ -1,6 +1,5 @@
 import { EntryRow } from "@/components/entry-row";
 import { SectionHeader } from "@/components/section-header";
-import { SiteShell } from "@/components/site-shell";
 import { getPublishedPosts } from "@/lib/blog-data";
 import type { Metadata } from "next";
 
@@ -12,7 +11,7 @@ export default async function BlogPage() {
   const posts = await getPublishedPosts();
 
   return (
-    <SiteShell>
+    <>
       <section className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
         <SectionHeader title="All posts" divided={false} />
         <div className="mt-8">
@@ -26,6 +25,6 @@ export default async function BlogPage() {
           ) : null}
         </div>
       </section>
-    </SiteShell>
+    </>
   );
 }
