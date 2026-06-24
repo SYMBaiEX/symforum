@@ -19,13 +19,13 @@ const socialItems = [
 
 export function SiteShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:6.25rem] [--site-header-offset:6.75rem] sm:[--site-footer-offset:4.5rem] sm:[--site-header-offset:3.75rem]">
+    <div className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:6.25rem] [--site-header-offset:4rem] sm:[--site-footer-offset:4.5rem] sm:[--site-header-offset:3.75rem]">
       <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
-        <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
           <div className="flex min-w-0 items-center">
             <Link
               href="/"
-              className="focus-ring font-mono text-sm font-semibold uppercase"
+              className="focus-ring truncate font-mono text-sm font-semibold uppercase"
             >
               SYMBaiEX
             </Link>
