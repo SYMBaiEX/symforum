@@ -86,11 +86,11 @@ function NewsRows({
 }) {
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
         <span>Snapshot / {snapshotDate}</span>
         <span>Daily refresh via Vercel Cron</span>
       </div>
-      <div className="grid gap-2">
+      <div className="grid gap-0.5">
         {stories.map((story) => {
           const sourceUrl = safeExternalUrl(story.url);
           const stats = story.platformStats ?? {
@@ -102,13 +102,13 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="group grid gap-2.5 py-3 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:items-center md:gap-4 md:px-2"
+              className="group grid items-center gap-2 py-2 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:gap-4 md:px-2"
             >
-              <div className="font-mono text-[10px] uppercase text-muted-foreground md:text-right">
+              <div className="flex items-center font-mono text-[10px] uppercase text-muted-foreground md:justify-end md:text-right">
                 #{story.rank.toString().padStart(2, "0")}
               </div>
-              <div className="min-w-0 border-l border-row-border pl-4 transition-colors group-hover:border-primary md:min-h-9">
-                <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 items-center border-l border-row-border pl-4 transition-colors group-hover:border-primary md:min-h-8">
+                <div className="flex min-w-0 items-center gap-2.5">
                   {interactive ? (
                     <NewsVoteControl
                       entityId={String(story.hnItemId)}
@@ -126,7 +126,7 @@ function NewsRows({
                   </h2>
                 </div>
               </div>
-              <div className="border-l border-transparent pl-4 font-mono text-[10px] uppercase text-muted-foreground md:border-0 md:pl-0 md:text-right">
+              <div className="flex items-center border-l border-transparent pl-4 font-mono text-[10px] uppercase text-muted-foreground md:justify-end md:border-0 md:pl-0 md:text-right">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap md:justify-end md:whitespace-nowrap">
                   <span>{story.host ?? "news.ycombinator.com"}</span>
                   {story.by ? <span>by {story.by}</span> : null}
