@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   convexRefs,
   type InteractionSummaryRecord,
@@ -39,6 +38,7 @@ import {
 import Link from "next/link";
 import {
   Component,
+  useEffect,
   useMemo,
   useState,
   useTransition,
@@ -92,13 +92,20 @@ function LiveNewsFeed({
   initialTimeline: NewsTimelineRecord | null;
 }) {
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [visibleData, setVisibleData] = useState<NewsTimelineRecord | null>(
+    initialTimeline,
+  );
   const [, startTransition] = useTransition();
   const data = useQuery(
     convexRefs.news.timeline,
     selectedDate ? { snapshotDate: selectedDate } : {},
   );
-  const visibleData =
-    data ?? (selectedDate ? undefined : (initialTimeline ?? undefined));
+
+  useEffect(() => {
+    if (data !== undefined) {
+      setVisibleData(data);
+    }
+  }, [data]);
 
   function onSnapshotChange(snapshotDate: string) {
     startTransition(() => {
@@ -106,36 +113,21 @@ function LiveNewsFeed({
     });
   }
 
-  if (visibleData === undefined) {
-    return <NewsRowsLoading />;
-  }
-
-  if (visibleData.snapshot === null && visibleData.snapshots.length === 0) {
+  if (visibleData === null) {
     return <NewsRows interactive stories={initialStories} />;
   }
+
+  const selectedSnapshotDate =
+    selectedDate ?? visibleData.snapshot?.snapshotDate;
+
   return (
     <NewsRows
       interactive
       onSnapshotChange={onSnapshotChange}
-      selectedSnapshotDate={visibleData.snapshot?.snapshotDate ?? selectedDate}
+      selectedSnapshotDate={selectedSnapshotDate}
       snapshots={visibleData.snapshots}
       stories={visibleData.stories}
     />
-  );
-}
-
-function NewsRowsLoading() {
-  return (
-    <div>
-      <NewsFilterBar>
-        <DisabledSnapshotControl label="Loading days" />
-      </NewsFilterBar>
-      <div className="flex flex-col gap-2.5">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-14 w-full bg-muted" />
-        ))}
-      </div>
-    </div>
   );
 }
 
