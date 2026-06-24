@@ -33,6 +33,16 @@ export const adminApiRefs = {
     { tokenHash: string },
     ConvexPostRecord[]
   >("adminApi:listPosts"),
+  generateUploadUrl: makeFunctionReference<
+    "mutation",
+    { tokenHash: string },
+    string
+  >("adminApi:generateUploadUrl"),
+  resolveStorageUrl: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; storageId: string },
+    string | null
+  >("adminApi:resolveStorageUrl"),
   getPost: makeFunctionReference<
     "mutation",
     { tokenHash: string; slug: string },

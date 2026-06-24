@@ -91,6 +91,24 @@ export const deletePost = mutation({
   },
 });
 
+// Image upload (Convex file storage). The admin route generates an upload URL,
+// POSTs the bytes to it, then resolves the public URL from the storage id.
+export const generateUploadUrl = mutation({
+  args: { tokenHash: v.string() },
+  handler: async (ctx, args) => {
+    await authorize(ctx, args.tokenHash);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const resolveStorageUrl = mutation({
+  args: { tokenHash: v.string(), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    await authorize(ctx, args.tokenHash);
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
 export const listComments = mutation({
   args: {
     tokenHash: v.string(),
