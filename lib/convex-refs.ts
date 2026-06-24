@@ -59,6 +59,36 @@ export type AdminApiKeyRecord = {
   revokedAt?: number;
 };
 
+export type NewsSnapshotRecord = {
+  _id: string;
+  _creationTime: number;
+  snapshotDate: string;
+  status: "running" | "complete" | "failed";
+  startedAt: number;
+  completedAt?: number;
+  storyCount: number;
+  errorMessage?: string;
+};
+
+export type NewsStoryRecord = {
+  hnItemId: number;
+  snapshotDate?: string;
+  rank: number;
+  title: string;
+  url?: string;
+  host?: string;
+  by?: string;
+  score?: number;
+  descendants?: number;
+  timePosted?: number;
+  fetchedAt?: number;
+  platformStats: {
+    comments: number;
+    score: number;
+    saves: number;
+  };
+};
+
 export const convexRefs = {
   admin: {
     viewer: makeFunctionReference<
@@ -204,24 +234,19 @@ export const convexRefs = {
       "query",
       Record<string, never>,
       {
-        snapshot: { snapshotDate: string } | null;
-        stories: Array<{
-          hnItemId: number;
-          rank: number;
-          title: string;
-          url?: string;
-          host?: string;
-          by?: string;
-          score?: number;
-          descendants?: number;
-          platformStats: {
-            comments: number;
-            score: number;
-            saves: number;
-          };
-        }>;
+        snapshot: NewsSnapshotRecord | null;
+        stories: NewsStoryRecord[];
       }
     >("news:latest"),
+    timeline: makeFunctionReference<
+      "query",
+      { snapshotDate?: string },
+      {
+        snapshots: NewsSnapshotRecord[];
+        snapshot: NewsSnapshotRecord | null;
+        stories: NewsStoryRecord[];
+      }
+    >("news:timeline"),
     getStory: makeFunctionReference<
       "query",
       { hnItemId: number },

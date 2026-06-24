@@ -9,10 +9,6 @@ const refreshTopStoriesRef = makeFunctionReference<
   unknown
 >("news:refreshTopStories");
 
-crons.daily(
-  "refresh Hacker News snapshot",
-  { hourUTC: 11, minuteUTC: 0 },
-  refreshTopStoriesRef,
-);
+crons.cron("refresh Hacker News snapshot", "0 11 * * *", refreshTopStoriesRef);
 
 export default crons;

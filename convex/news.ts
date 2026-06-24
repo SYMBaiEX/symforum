@@ -31,6 +31,25 @@ const storeSnapshotRef = makeFunctionReference<
   null
 >("news:storeSnapshot");
 
+const markSnapshotStartedRef = makeFunctionReference<
+  "mutation",
+  {
+    snapshotDate: string;
+    startedAt: number;
+  },
+  null
+>("news:markSnapshotStarted");
+
+const markSnapshotFailedRef = makeFunctionReference<
+  "mutation",
+  {
+    snapshotDate: string;
+    startedAt: number;
+    errorMessage: string;
+  },
+  null
+>("news:markSnapshotFailed");
+
 function snapshotDate(timestamp = Date.now()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
@@ -95,30 +114,82 @@ async function withPlatformStats(ctx: QueryCtx, story: Doc<"hnStories">) {
   };
 }
 
+async function recentSnapshots(ctx: QueryCtx) {
+  return await ctx.db
+    .query("newsSnapshots")
+    .withIndex("by_snapshotDate")
+    .order("desc")
+    .take(60);
+}
+
+async function latestIndexedSnapshot(ctx: QueryCtx) {
+  const snapshots = await recentSnapshots(ctx);
+  return (
+    snapshots.find(
+      (snapshot) => snapshot.status === "complete" && snapshot.storyCount > 0,
+    ) ??
+    snapshots[0] ??
+    null
+  );
+}
+
+async function snapshotForDate(ctx: QueryCtx, date: string) {
+  const rows = await ctx.db
+    .query("newsSnapshots")
+    .withIndex("by_snapshotDate", (q) => q.eq("snapshotDate", date))
+    .take(1);
+  return rows[0] ?? null;
+}
+
+async function storiesForSnapshot(ctx: QueryCtx, date: string) {
+  const stories = await ctx.db
+    .query("hnStories")
+    .withIndex("by_snapshotDate_and_rank", (q) => q.eq("snapshotDate", date))
+    .order("asc")
+    .take(30);
+
+  return await Promise.all(
+    stories.map((story) => withPlatformStats(ctx, story)),
+  );
+}
+
 export const latest = query({
   args: {},
   handler: async (ctx) => {
-    const snapshots = await ctx.db
-      .query("newsSnapshots")
-      .withIndex("by_snapshotDate")
-      .order("desc")
-      .take(1);
-    const snapshot = snapshots[0] ?? null;
+    const snapshot = await latestIndexedSnapshot(ctx);
     if (snapshot === null) {
       return { snapshot: null, stories: [] };
     }
-    const stories = await ctx.db
-      .query("hnStories")
-      .withIndex("by_snapshotDate_and_rank", (q) =>
-        q.eq("snapshotDate", snapshot.snapshotDate),
-      )
-      .order("asc")
-      .take(30);
+
     return {
       snapshot,
-      stories: await Promise.all(
-        stories.map((story) => withPlatformStats(ctx, story)),
-      ),
+      stories: await storiesForSnapshot(ctx, snapshot.snapshotDate),
+    };
+  },
+});
+
+export const timeline = query({
+  args: {
+    snapshotDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const snapshots = await recentSnapshots(ctx);
+    const snapshot = args.snapshotDate
+      ? await snapshotForDate(ctx, args.snapshotDate)
+      : (snapshots.find(
+          (row) => row.status === "complete" && row.storyCount > 0,
+        ) ??
+        snapshots[0] ??
+        null);
+
+    if (snapshot === null) {
+      return { snapshots, snapshot: null, stories: [] };
+    }
+
+    return {
+      snapshots,
+      snapshot,
+      stories: await storiesForSnapshot(ctx, snapshot.snapshotDate),
     };
   },
 });
@@ -147,58 +218,144 @@ export const refreshTopStories = action({
   handler: async (ctx) => {
     const date = snapshotDate();
     const startedAt = Date.now();
-    const topResponse = await fetch(HN_TOP_STORIES_URL);
-    if (!topResponse.ok) {
-      throw new Error(`HN topstories failed: ${topResponse.status}`);
-    }
-    const ids = (await topResponse.json()) as number[];
-    const topIds = ids.slice(0, 30);
-    const stories = await Promise.all(
-      topIds.map(async (id, index) => {
-        const response = await fetch(`${HN_ITEM_URL}${id}.json`);
-        if (!response.ok) {
-          return null;
-        }
-        const item = (await response.json()) as {
-          id: number;
-          title?: string;
-          url?: string;
-          by?: string;
-          text?: string;
-          score?: number;
-          descendants?: number;
-          time?: number;
-          deleted?: boolean;
-          dead?: boolean;
-        } | null;
-        if (!item || item.deleted || item.dead || !item.title) {
-          return null;
-        }
-        const url = safeExternalUrl(item.url);
-        return {
-          hnItemId: item.id,
-          snapshotDate: date,
-          rank: index + 1,
-          title: item.title,
-          url,
-          host: hostname(url),
-          by: item.by,
-          text: item.text,
-          score: item.score,
-          descendants: item.descendants,
-          timePosted: item.time,
-          fetchedAt: Date.now(),
-        };
-      }),
-    );
-
-    const cleanStories = stories.filter((story) => story !== null);
-    await ctx.runMutation(storeSnapshotRef, {
+    await ctx.runMutation(markSnapshotStartedRef, {
       snapshotDate: date,
       startedAt,
-      stories: cleanStories,
     });
-    return { snapshotDate: date, storyCount: cleanStories.length };
+
+    try {
+      const topResponse = await fetch(HN_TOP_STORIES_URL);
+      if (!topResponse.ok) {
+        throw new Error(`HN topstories failed: ${topResponse.status}`);
+      }
+      const ids = (await topResponse.json()) as number[];
+      const topIds = ids.slice(0, 30);
+      const stories = await Promise.all(
+        topIds.map(async (id, index) => {
+          const response = await fetch(`${HN_ITEM_URL}${id}.json`);
+          if (!response.ok) {
+            return null;
+          }
+          const item = (await response.json()) as {
+            id: number;
+            title?: string;
+            url?: string;
+            by?: string;
+            text?: string;
+            score?: number;
+            descendants?: number;
+            time?: number;
+            deleted?: boolean;
+            dead?: boolean;
+          } | null;
+          if (!item || item.deleted || item.dead || !item.title) {
+            return null;
+          }
+          const url = safeExternalUrl(item.url);
+          return {
+            hnItemId: item.id,
+            snapshotDate: date,
+            rank: index + 1,
+            title: item.title,
+            url,
+            host: hostname(url),
+            by: item.by,
+            text: item.text,
+            score: item.score,
+            descendants: item.descendants,
+            timePosted: item.time,
+            fetchedAt: Date.now(),
+          };
+        }),
+      );
+
+      const cleanStories = stories.filter((story) => story !== null);
+      await ctx.runMutation(storeSnapshotRef, {
+        snapshotDate: date,
+        startedAt,
+        stories: cleanStories,
+      });
+      return { snapshotDate: date, storyCount: cleanStories.length };
+    } catch (error) {
+      await ctx.runMutation(markSnapshotFailedRef, {
+        snapshotDate: date,
+        startedAt,
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown news refresh error",
+      });
+      throw error;
+    }
+  },
+});
+
+export const markSnapshotStarted = internalMutation({
+  args: {
+    snapshotDate: v.string(),
+    startedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("newsSnapshots")
+      .withIndex("by_snapshotDate", (q) =>
+        q.eq("snapshotDate", args.snapshotDate),
+      )
+      .take(1);
+    const existingSnapshot = existing[0] ?? null;
+
+    if (existingSnapshot === null) {
+      await ctx.db.insert("newsSnapshots", {
+        snapshotDate: args.snapshotDate,
+        status: "running",
+        startedAt: args.startedAt,
+        storyCount: 0,
+      });
+      return null;
+    }
+
+    await ctx.db.patch(existingSnapshot._id, {
+      status: "running",
+      startedAt: args.startedAt,
+      errorMessage: undefined,
+    });
+    return null;
+  },
+});
+
+export const markSnapshotFailed = internalMutation({
+  args: {
+    snapshotDate: v.string(),
+    startedAt: v.number(),
+    errorMessage: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("newsSnapshots")
+      .withIndex("by_snapshotDate", (q) =>
+        q.eq("snapshotDate", args.snapshotDate),
+      )
+      .take(1);
+    const existingSnapshot = existing[0] ?? null;
+    const errorMessage = args.errorMessage.slice(0, 1000);
+
+    if (existingSnapshot === null) {
+      await ctx.db.insert("newsSnapshots", {
+        snapshotDate: args.snapshotDate,
+        status: "failed",
+        startedAt: args.startedAt,
+        completedAt: Date.now(),
+        storyCount: 0,
+        errorMessage,
+      });
+      return null;
+    }
+
+    await ctx.db.patch(existingSnapshot._id, {
+      status: "failed",
+      startedAt: args.startedAt,
+      completedAt: Date.now(),
+      errorMessage,
+    });
+    return null;
   },
 });
 
@@ -224,12 +381,13 @@ export const storeSnapshot = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    const existingSnapshot = await ctx.db
+    const existing = await ctx.db
       .query("newsSnapshots")
       .withIndex("by_snapshotDate", (q) =>
         q.eq("snapshotDate", args.snapshotDate),
       )
-      .unique();
+      .take(1);
+    const existingSnapshot = existing[0] ?? null;
 
     if (existingSnapshot === null) {
       await ctx.db.insert("newsSnapshots", {

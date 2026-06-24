@@ -9,8 +9,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { convexRefs } from "@/lib/convex-refs";
+import { convexRefs, type NewsSnapshotRecord } from "@/lib/convex-refs";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
 import { newsStoryPath } from "@/lib/news-slugs";
@@ -46,7 +54,12 @@ export function NewsFeed({
 }
 
 function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
-  const data = useQuery(convexRefs.news.latest);
+  const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const data = useQuery(
+    convexRefs.news.timeline,
+    selectedDate ? { snapshotDate: selectedDate } : {},
+  );
+
   if (data === undefined) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -57,7 +70,7 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
     );
   }
 
-  if (data.stories.length === 0) {
+  if (data.snapshot === null && data.snapshots.length === 0) {
     return (
       <NewsRows
         interactive
@@ -69,7 +82,10 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
   return (
     <NewsRows
       interactive
-      snapshotDate={data.snapshot?.snapshotDate ?? "Latest"}
+      onSnapshotChange={setSelectedDate}
+      selectedSnapshotDate={data.snapshot?.snapshotDate ?? selectedDate}
+      snapshotDate={data.snapshot?.snapshotDate ?? "No snapshot"}
+      snapshots={data.snapshots}
       stories={data.stories}
     />
   );
@@ -77,20 +93,40 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
 
 function NewsRows({
   interactive,
+  onSnapshotChange,
+  selectedSnapshotDate,
   snapshotDate,
+  snapshots = [],
   stories,
 }: {
   interactive: boolean;
+  onSnapshotChange?: (snapshotDate: string) => void;
+  selectedSnapshotDate?: string;
   snapshotDate: string;
+  snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
 }) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
         <span>Snapshot / {snapshotDate}</span>
-        <span>Daily refresh via Vercel Cron</span>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <span>Daily refresh via Vercel Cron</span>
+          {snapshots.length > 0 && onSnapshotChange ? (
+            <SnapshotSelect
+              onValueChange={onSnapshotChange}
+              snapshots={snapshots}
+              value={selectedSnapshotDate}
+            />
+          ) : null}
+        </div>
       </div>
       <div className="grid gap-0.5">
+        {stories.length === 0 ? (
+          <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
+            No indexed stories for this snapshot yet.
+          </div>
+        ) : null}
         {stories.map((story) => {
           const sourceUrl = safeExternalUrl(story.url);
           const stats = story.platformStats ?? {
@@ -163,6 +199,60 @@ function NewsRows({
       </div>
     </div>
   );
+}
+
+function SnapshotSelect({
+  onValueChange,
+  snapshots,
+  value,
+}: {
+  onValueChange: (snapshotDate: string) => void;
+  snapshots: NewsSnapshotRecord[];
+  value?: string;
+}) {
+  return (
+    <Select onValueChange={onValueChange} value={value}>
+      <SelectTrigger
+        aria-label="Select news snapshot date"
+        className="h-7 w-[10.5rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
+      >
+        <SelectValue placeholder="Select date" />
+      </SelectTrigger>
+      <SelectContent align="end" className="rounded-none">
+        <SelectGroup>
+          {snapshots.map((snapshot) => {
+            const disabled =
+              snapshot.status !== "complete" || snapshot.storyCount === 0;
+            return (
+              <SelectItem
+                key={snapshot.snapshotDate}
+                className="font-mono text-[10px] uppercase"
+                disabled={disabled}
+                value={snapshot.snapshotDate}
+              >
+                {formatSnapshotLabel(snapshot)}
+              </SelectItem>
+            );
+          })}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function formatSnapshotLabel(snapshot: NewsSnapshotRecord) {
+  const date = new Date(`${snapshot.snapshotDate}T12:00:00`);
+  const label = Number.isNaN(date.valueOf())
+    ? snapshot.snapshotDate
+    : new Intl.DateTimeFormat("en", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date);
+  const status = snapshot.status === "complete" ? "" : ` / ${snapshot.status}`;
+  const count = snapshot.storyCount > 0 ? ` / ${snapshot.storyCount}` : "";
+
+  return `${label}${status}${count}`;
 }
 
 function NewsVoteControl({
