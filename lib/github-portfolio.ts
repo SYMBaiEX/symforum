@@ -413,7 +413,7 @@ async function getPublicContributionActivity(): Promise<ContributionActivityMetr
     value,
     label: "Contribution activity",
     detail:
-      "Live public GitHub contribution graph, including visible private activity.",
+      "",
     source: "github-contribution-graph",
     live: true,
   };
