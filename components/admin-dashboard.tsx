@@ -257,7 +257,7 @@ function OwnerDashboard() {
                 required
               />
             </Field>
-            <Field label="Body">
+            <Field label="Markdown body">
               <Textarea
                 value={form.body}
                 onChange={(event) =>

@@ -2,6 +2,7 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { MarkdownContent } from "@/components/markdown-content";
 import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { getBlogPost } from "@/lib/blog-data";
@@ -85,13 +86,7 @@ export default async function BlogPostPage({
                 </p>
               )}
             </div>
-            <div className="mt-10 flex max-w-none flex-col gap-7">
-              {post.body.map((paragraph) => (
-                <p key={paragraph} className="text-lg leading-8">
-                  {paragraph}
-                </p>
-              ))}
-            </div>
+            <MarkdownContent content={post.body} />
             <section className="mt-14">
               <h2 className="mb-5 font-mono text-sm uppercase">Comments</h2>
               {convexEnabled ? (

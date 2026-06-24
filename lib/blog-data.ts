@@ -19,10 +19,7 @@ function toBlogPost(post: ConvexPostRecord): BlogPost {
     imageUrl: post.imageUrl,
     imageAlt: post.imageAlt,
     imageCredit: post.imageCredit,
-    body: post.body
-      .split(/\n{2,}/)
-      .map((paragraph) => paragraph.trim())
-      .filter(Boolean),
+    body: post.body,
   };
 }
 

@@ -37,7 +37,7 @@ function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
     return (
       <div className="flex flex-col gap-2">
         {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-14 w-full" />
+          <Skeleton key={index} className="h-11 w-full" />
         ))}
       </div>
     );
@@ -65,7 +65,7 @@ function NewsRows({
 }) {
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-y border-row-border py-2 font-mono text-[11px] uppercase text-muted-foreground">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-y border-row-border py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
         <span>Snapshot / {snapshotDate}</span>
         <span>Daily refresh via Vercel Cron</span>
       </div>
@@ -81,13 +81,13 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="grid gap-1 border-b border-row-border py-2 transition-colors hover:bg-muted/35 md:grid-cols-[2.75rem_minmax(0,1fr)_8.5rem] md:items-center md:gap-3 md:px-2"
+              className="grid gap-1 border-b border-row-border py-1.5 transition-colors hover:bg-muted/35 md:grid-cols-[2.25rem_minmax(0,1fr)_7.25rem] md:items-center md:gap-2 md:px-1.5"
             >
-              <div className="font-mono text-[10px] uppercase text-muted-foreground">
+              <div className="font-mono text-[9px] uppercase text-muted-foreground">
                 #{story.rank.toString().padStart(2, "0")}
               </div>
               <div className="min-w-0">
-                <h2 className="truncate text-sm font-semibold leading-snug md:text-base">
+                <h2 className="truncate text-[13px] font-semibold leading-snug md:text-[15px]">
                   <Link
                     href={newsStoryPath(story)}
                     className="focus-ring inline-flex max-w-full items-center gap-1.5 transition-colors hover:text-primary"
@@ -96,19 +96,19 @@ function NewsRows({
                     <ArrowRight className="size-3 shrink-0" />
                   </Link>
                 </h2>
-                <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+                <div className="mt-px flex flex-wrap gap-1.5 font-mono text-[9px] uppercase text-muted-foreground">
                   {story.host ? <span>{story.host}</span> : null}
                   {story.by ? <span>by {story.by}</span> : null}
                 </div>
               </div>
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground md:justify-end">
-                <span>{compactNumber(stats.score)} pts</span>
+              <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-muted-foreground md:justify-end">
+                <span>{compactNumber(stats.score)}p</span>
                 <span className="inline-flex items-center gap-1 text-foreground">
-                  <MessageSquare className="size-3" />
+                  <MessageSquare className="size-2.5" />
                   {compactNumber(stats.comments)}
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Bookmark className="size-3" />
+                  <Bookmark className="size-2.5" />
                   {compactNumber(stats.saves)}
                 </span>
                 {sourceUrl ? (
@@ -116,7 +116,7 @@ function NewsRows({
                     asChild
                     variant="ghost"
                     size="icon"
-                    className="size-7"
+                    className="size-6"
                   >
                     <Link
                       href={sourceUrl}

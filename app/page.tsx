@@ -32,11 +32,6 @@ export default async function HomePage() {
                 <Link href="/news">Latest news</Link>
               </Button>
             </div>
-            <div className="mt-12 grid max-w-2xl grid-cols-3 border-y border-row-border py-4 font-mono text-xs uppercase text-muted-foreground">
-              <span>Convex state</span>
-              <span>Vercel deploy</span>
-              <span>Geist type</span>
-            </div>
           </div>
         </div>
       </section>
