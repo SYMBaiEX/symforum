@@ -1,6 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   getGithubPortfolioMetrics,
@@ -50,8 +49,8 @@ export default async function PortfolioPage() {
           <GithubMetricStrip metrics={githubMetrics} />
         </section>
 
-        <section className="pt-7 md:pt-10">
-          <div className="grid gap-5">
+        <section className="pt-6 md:pt-8">
+          <div className="grid gap-1.5">
             {projects.map((project) => (
               <ProjectListRow
                 key={project.slug}
@@ -114,53 +113,59 @@ function ProjectListRow({
   metric: GithubPortfolioProjectMetric | null;
 }) {
   const imageUrl = safeImageUrl(project.imageUrl);
+  const repoLabel = metric
+    ? [
+        metric.fullName,
+        metric.prsAuthored ? `${metric.prsAuthored} PRs` : null,
+        metric.stars !== undefined ? `${formatCount(metric.stars)} stars` : null,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : repoPathLabel(project.repoUrl) ?? project.type;
+
   return (
     <article
-      className="grid gap-4 py-3 transition-colors hover:bg-muted/20 md:grid-cols-12 md:items-start md:gap-6 md:py-4"
+      className="group grid gap-2 py-2 transition-colors hover:bg-muted/25 sm:grid-cols-[2.25rem_minmax(0,1fr)] sm:items-center sm:gap-3 md:grid-cols-[2.25rem_minmax(9rem,0.72fr)_minmax(0,1.45fr)_minmax(12rem,0.8fr)_auto] md:px-2"
       data-portfolio-project-row
     >
-      <div className="flex items-start gap-3 md:col-span-3">
+      <div className="flex items-center justify-between gap-3 sm:block">
+        <div className="font-mono text-[10px] uppercase text-muted-foreground">
+          {String(project.order).padStart(2, "0")}
+        </div>
         <ProjectMark
           name={project.name}
           imageUrl={imageUrl ?? metric?.avatarUrl}
           imageAlt={project.imageAlt ?? `${project.name} project asset`}
         />
-        <div className="font-mono text-[11px] uppercase text-muted-foreground">
-          <div>{String(project.order).padStart(2, "0")}</div>
-          <div>{project.timeframe}</div>
-        </div>
       </div>
-      <div className="md:col-span-4">
-        <h3 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
-          {project.name}
-        </h3>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          {project.summary}
+      <div className="min-w-0">
+        <Link
+          href={`/portfolio/${project.slug}`}
+          className="focus-ring inline-flex max-w-full text-base font-semibold leading-tight hover:text-primary md:text-lg"
+        >
+          <span className="truncate">{project.name}</span>
+        </Link>
+        <p className="mt-1 truncate font-mono text-[10px] uppercase text-muted-foreground">
+          {project.type} / {project.timeframe}
         </p>
       </div>
-      <div className="md:col-span-3">
-        <p className="font-mono text-[11px] uppercase text-muted-foreground">
-          {project.role}
-        </p>
-        {metric ? (
-          <p className="mt-4 font-mono text-[11px] uppercase text-muted-foreground">
-            {metric.fullName}
-            {metric.prsAuthored ? ` / ${metric.prsAuthored} PRs` : ""}
-            {metric.stars !== undefined
-              ? ` / ${formatCount(metric.stars)} stars`
-              : ""}
-          </p>
-        ) : null}
-        <div className="mt-3 flex flex-wrap gap-1">
-          {project.tags.map((tag) => (
-            <Badge key={tag} variant="outline">
-              {tag}
-            </Badge>
-          ))}
-        </div>
+      <p className="min-w-0 text-sm leading-5 text-muted-foreground md:line-clamp-2">
+        {project.summary}
+      </p>
+      <div className="min-w-0 font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="truncate">{project.role}</p>
+        <p className="mt-1 truncate">{repoLabel}</p>
       </div>
-      <div className="md:col-span-2 md:justify-self-end">
-        <ProjectLinks project={project} />
+      <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/portfolio/${project.slug}`}>
+            Details
+            <ArrowUpRight data-icon="inline-end" />
+          </Link>
+        </Button>
+        <div className="hidden lg:block">
+          <ProjectLinks project={project} />
+        </div>
       </div>
     </article>
   );
@@ -195,7 +200,7 @@ function ProjectLinks({
   }
 
   return (
-    <div className={`flex flex-wrap gap-2 ${className ?? ""}`}>
+    <div className={`flex flex-wrap gap-1.5 ${className ?? ""}`}>
       {links.map(({ href, label, Icon }) => (
         <Button key={`${label}-${href}`} asChild size="sm" variant="outline">
           <Link href={href} target="_blank" rel="noopener noreferrer">
@@ -219,11 +224,11 @@ function ProjectMark({
 }) {
   if (imageUrl) {
     return (
-      <div className="grid size-11 shrink-0 place-items-center">
+      <div className="grid size-8 shrink-0 place-items-center">
         <img
           src={imageUrl}
           alt={imageAlt ?? name}
-          className="size-8 object-contain"
+          className="size-6 object-contain"
         />
       </div>
     );
@@ -232,7 +237,7 @@ function ProjectMark({
   return (
     <div
       aria-label={`${name} visual placeholder`}
-      className="grid size-11 shrink-0 font-mono text-[11px] uppercase text-muted-foreground"
+      className="grid size-8 shrink-0 font-mono text-[11px] uppercase text-muted-foreground"
     >
       <div className="grid h-full grid-cols-4">
         <span className="bg-[var(--accent-magenta)]" />
@@ -268,4 +273,13 @@ function formatCount(value: number) {
     notation: value >= 1000 ? "compact" : "standard",
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+function repoPathLabel(value: string | undefined) {
+  const safeUrl = safeExternalUrl(value);
+  if (!safeUrl) {
+    return null;
+  }
+
+  return new URL(safeUrl).pathname.replace(/^\//, "");
 }

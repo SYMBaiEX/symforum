@@ -172,6 +172,155 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     homepageUrl: "https://github.com/SYMBaiEX/OpenController",
     repoUrl: "https://github.com/SYMBaiEX/OpenController",
   },
+  {
+    slug: "gitshipt",
+    name: "GitShipt",
+    type: "Open-source rewards infrastructure",
+    role: "Creator / product engineer",
+    timeframe: "Public project",
+    summary:
+      "Repo-native rewards layer for open source on Solana, powered by GitHub activity and Bags fee sharing.",
+    problem:
+      "Open-source contribution has public proof but weak native reward rails, especially for teams that want contribution-aware incentives.",
+    approach:
+      "Connect GitHub activity with Solana-native reward logic so contribution records can become actionable product state.",
+    outcome:
+      "A focused public experiment in turning repository work into a programmable incentive surface.",
+    status: "published",
+    order: 5,
+    tags: ["solana", "open-source", "rewards", "github"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    homepageUrl: "https://gitshipt.com",
+    repoUrl: "https://github.com/SYMBaiEX/GitShipt",
+  },
+  {
+    slug: "symindx",
+    name: "SYMindX",
+    type: "Agent runtime and character systems",
+    role: "Creator / framework engineer",
+    timeframe: "Personal project",
+    summary:
+      "A modular, agent-based AI runtime for emotionally reactive characters across games, web surfaces, and social platforms.",
+    problem:
+      "Agent systems become brittle when cognition, emotion, memory, and runtime behavior are not modeled as composable pieces.",
+    approach:
+      "Build a plugin-shaped runtime that treats characters as autonomous systems with legible state, behavior, and integration boundaries.",
+    outcome:
+      "A strong public foundation for game-native and social-native agent experiments.",
+    status: "published",
+    order: 6,
+    tags: ["ai agents", "runtime", "games", "typescript"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/SYMindX",
+  },
+  {
+    slug: "arklib",
+    name: "ArkLib",
+    type: "Formal verification and proof engineering",
+    role: "Open-source proof contributor",
+    timeframe: "Lean / proof repair PRs",
+    summary:
+      "Contribution work on formally verified arguments of knowledge in Lean, including proof repair, soundness adapters, and integration drift fixes.",
+    problem:
+      "Proof libraries can fail from small API drift and incomplete transport surfaces even when the underlying mathematics is sound.",
+    approach:
+      "Repair targeted Lean modules, remove proof placeholders, and preserve canonical proof paths through current-main changes.",
+    outcome:
+      "A deeper public footprint in formal verification, cryptographic proof systems, and mechanically checked math.",
+    status: "published",
+    order: 7,
+    tags: ["lean", "formal verification", "zk", "proofs"],
+    imageUrl: "https://avatars.githubusercontent.com/u/18633264?v=4",
+    imageAlt: "Lalalune GitHub organization avatar",
+    repoUrl: "https://github.com/lalalune/ArkLib",
+  },
+  {
+    slug: "doolittle",
+    name: "doolittle",
+    type: "Agent migration and runtime tooling",
+    role: "Creator / migration engineer",
+    timeframe: "2026",
+    summary:
+      "TypeScript workspace for ElizaOS migration and agent runtime experimentation.",
+    problem:
+      "Fast-moving agent frameworks need controlled migration surfaces so teams can move without losing runtime confidence.",
+    approach:
+      "Use a focused workspace to test framework migration paths, plugin behavior, and direct runtime response handling.",
+    outcome:
+      "A practical proving ground for agent framework upgrades and runtime compatibility.",
+    status: "published",
+    order: 8,
+    tags: ["typescript", "elizaos", "agents", "migration"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/doolittle",
+  },
+  {
+    slug: "symlog",
+    name: "SYMLog",
+    type: "Logging and monitoring system",
+    role: "Creator / tooling engineer",
+    timeframe: "Personal project",
+    summary:
+      "A modern logging and monitoring system shaped around operational visibility and developer feedback loops.",
+    problem:
+      "Logs are only useful when they help operators understand state quickly instead of burying signal in noise.",
+    approach:
+      "Explore a cleaner logging surface for observability, monitoring, and system-level debugging.",
+    outcome:
+      "A public tooling project for operational clarity across software systems.",
+    status: "published",
+    order: 9,
+    tags: ["observability", "monitoring", "typescript"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/SYMLog",
+  },
+  {
+    slug: "pod-protocol",
+    name: "PoD Protocol",
+    type: "AI agent communication protocol",
+    role: "Creator / protocol engineer",
+    timeframe: "2025",
+    summary:
+      "Prompt or Die, a Solana-based communication protocol for AI agents with channels, messaging, escrow, and reputation.",
+    problem:
+      "Autonomous agents need verifiable coordination rails when money, reputation, and delegated work enter the system.",
+    approach:
+      "Prototype protocol primitives around messaging, escrow, and reputation so agents can coordinate through durable state.",
+    outcome:
+      "An early public protocol experiment for agent-to-agent communication on Solana.",
+    status: "published",
+    order: 10,
+    tags: ["solana", "protocol", "ai agents"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    homepageUrl: "https://dexploarer.github.io/PoD-Protocol/",
+    repoUrl: "https://github.com/SYMBaiEX/PoD-Protocol",
+  },
+  {
+    slug: "sumi",
+    name: "Sumi",
+    type: "Recurring summary automation",
+    role: "Open-source tool builder",
+    timeframe: "2026",
+    summary:
+      "A recurring summary task system for daily, weekly, monthly, or custom updates from Drive, Gmail, Calendar, and Slack.",
+    problem:
+      "Teams lose context when recurring updates depend on manual synthesis across scattered work surfaces.",
+    approach:
+      "Model recurring summaries as durable automation tasks that gather context and produce repeatable updates.",
+    outcome:
+      "A useful public automation pattern for memory, reporting, and team rhythm.",
+    status: "published",
+    order: 11,
+    tags: ["automation", "summaries", "productivity"],
+    imageUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
+    imageAlt: "SYMBaiEX GitHub avatar",
+    repoUrl: "https://github.com/SYMBaiEX/sumi",
+  },
 ];
 
 export function fallbackSitePage(slug: string) {

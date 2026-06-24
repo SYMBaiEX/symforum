@@ -45,10 +45,33 @@ export const getPortfolioProjects = cache(
         SITE_CONTENT_TTL_MS,
         () => convex.query(convexRefs.siteContent.listPortfolioProjects, {}),
       );
-      return projects.length > 0 ? projects : defaultPortfolioProjects;
+      return projects.length > 0
+        ? mergePortfolioProjects(projects)
+        : defaultPortfolioProjects;
     } catch (error) {
       console.warn("Falling back to static portfolio projects", error);
       return defaultPortfolioProjects;
     }
   },
 );
+
+export const getPortfolioProject = cache(async function getPortfolioProject(
+  slug: string,
+): Promise<PortfolioProjectRecord | null> {
+  const projects = await getPortfolioProjects();
+  return projects.find((project) => project.slug === slug) ?? null;
+});
+
+function mergePortfolioProjects(projects: PortfolioProjectRecord[]) {
+  const merged = new Map<string, PortfolioProjectRecord>();
+  defaultPortfolioProjects.forEach((project) => {
+    merged.set(project.slug, project);
+  });
+  projects.forEach((project) => {
+    merged.set(project.slug, project);
+  });
+
+  return Array.from(merged.values()).sort(
+    (left, right) => left.order - right.order || left.name.localeCompare(right.name),
+  );
+}
