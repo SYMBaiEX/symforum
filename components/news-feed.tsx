@@ -32,7 +32,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { Component, useState, type ReactNode } from "react";
 
 export function NewsFeed({
   enabled,
@@ -50,7 +50,34 @@ export function NewsFeed({
       />
     );
   }
-  return <LiveNewsFeed initialStories={initialStories} />;
+  return (
+    <NewsFeedErrorBoundary
+      fallback={
+        <NewsRows
+          interactive={false}
+          snapshotDate="Live HN fallback"
+          stories={initialStories}
+        />
+      }
+    >
+      <LiveNewsFeed initialStories={initialStories} />
+    </NewsFeedErrorBoundary>
+  );
+}
+
+class NewsFeedErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
 }
 
 function LiveNewsFeed({ initialStories }: { initialStories: HnStory[] }) {
