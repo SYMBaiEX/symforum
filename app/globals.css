@@ -103,46 +103,6 @@
 }
 
 @layer utilities {
-  .ascii-band {
-    position: relative;
-    isolation: isolate;
-    overflow: visible;
-  }
-
-  .ascii-band::before,
-  .ascii-band::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    z-index: 0;
-    height: 7rem;
-    pointer-events: none;
-  }
-
-  .ascii-band > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .ascii-band::before {
-    top: -7rem;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      hsl(var(--card) / 0.55)
-    );
-  }
-
-  .ascii-band::after {
-    bottom: -7rem;
-    background: linear-gradient(
-      to bottom,
-      hsl(var(--card) / 0.55),
-      transparent
-    );
-  }
-
   .text-balance {
     text-wrap: balance;
   }

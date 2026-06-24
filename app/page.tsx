@@ -39,18 +39,10 @@ export default async function HomePage() {
 
           <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
             <div
-              className="overflow-x-auto text-base font-normal leading-none text-foreground md:col-span-10 md:col-start-2 md:whitespace-nowrap md:text-xl"
+              className="overflow-x-auto whitespace-nowrap text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl"
               aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
               dangerouslySetInnerHTML={{ __html: identityEquation }}
             />
-            <div className="flex flex-wrap gap-2 md:col-span-10 md:col-start-2 md:justify-end">
-              <Button asChild>
-                <Link href="/blog">Read blog</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/news">Latest news</Link>
-              </Button>
-            </div>
           </div>
         </div>
       </section>
