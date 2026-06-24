@@ -33,8 +33,8 @@ export default async function PortfolioPage() {
   return (
     <SiteShell>
       <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
-        <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
-          <div className="md:col-span-5">
+        <section>
+          <div className="max-w-3xl">
             <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
@@ -51,10 +51,10 @@ export default async function PortfolioPage() {
           <GithubMetricStrip metrics={githubMetrics} />
         </section>
 
-        <section className="pt-6 md:pt-8">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="pt-7 md:pt-10">
+          <div className="grid gap-5">
             {projects.map((project) => (
-              <ProjectSignalCard
+              <ProjectListRow
                 key={project.slug}
                 project={project}
                 metric={metricForProject(project, githubMetrics)}
@@ -68,58 +68,51 @@ export default async function PortfolioPage() {
 }
 
 function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
+  const primaryMetric =
+    metrics.commitMetric.includesPrivate || !metrics.contributionActivity
+      ? metrics.commitMetric
+      : metrics.contributionActivity;
   const metricItems = [
     {
-      detail: metrics.commitMetric.detail,
-      label: metrics.commitMetric.label,
-      value: formatCount(metrics.commitMetric.value),
+      detail:
+        primaryMetric === metrics.contributionActivity
+          ? "Live visible GitHub contribution graph."
+          : metrics.commitMetric.detail,
+      label: primaryMetric.label,
+      value: formatCount(primaryMetric.value),
     },
-    metrics.contributionActivity
-      ? {
-          detail: metrics.contributionActivity.detail,
-          label: metrics.contributionActivity.label,
-          value: formatCount(metrics.contributionActivity.value),
-        }
-      : null,
     { label: "Authored PRs", value: formatCount(metrics.totals.authoredPrs) },
     { label: "Public repos", value: formatCount(metrics.totals.publicRepos) },
     { label: "Followers", value: formatCount(metrics.totals.followers) },
-  ].filter(
-    (item): item is { detail?: string; label: string; value: string } =>
-      item !== null,
-  );
+  ];
 
   return (
-    <section className="md:col-span-7">
-      <div className="mb-3 flex items-center justify-between gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+    <section className="mx-auto mt-8 max-w-4xl md:mt-10">
+      <div className="mb-3 flex items-center justify-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
         <span>Live GitHub / {metrics.profile.login}</span>
+        <span>/</span>
         <span>{new Date(metrics.updatedAt).toLocaleDateString("en")}</span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-4 gap-2 text-center md:gap-4">
         {metricItems.map((item) => (
-          <div
-            key={item.label}
-            className="min-h-28 border border-row-border bg-card/45 p-3"
-          >
-            <div className="text-2xl font-semibold leading-none">
+          <div key={item.label} className="min-w-0" data-portfolio-metric>
+            <div className="text-xl font-semibold leading-none md:text-2xl">
               {item.value}
             </div>
             <div className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
               {item.label}
             </div>
-            {item.detail ? (
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                {item.detail}
-              </p>
-            ) : null}
           </div>
         ))}
       </div>
+      <p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-5 text-muted-foreground">
+        {primaryMetric.detail}
+      </p>
     </section>
   );
 }
 
-function ProjectSignalCard({
+function ProjectListRow({
   project,
   metric,
 }: {
@@ -128,24 +121,32 @@ function ProjectSignalCard({
 }) {
   const imageUrl = safeImageUrl(project.imageUrl);
   return (
-    <article className="group flex min-h-[22rem] flex-col justify-between border border-row-border bg-card/35 p-4 transition-colors hover:bg-muted/35">
-      <div>
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <ProjectMark
-            name={project.name}
-            imageUrl={imageUrl ?? metric?.avatarUrl}
-            imageAlt={project.imageAlt ?? `${project.name} project asset`}
-          />
-          <div className="text-right font-mono text-[11px] uppercase text-muted-foreground">
-            <div>{String(project.order).padStart(2, "0")}</div>
-            <div>{project.timeframe}</div>
-          </div>
+    <article
+      className="grid gap-4 py-3 transition-colors hover:bg-muted/20 md:grid-cols-12 md:items-start md:gap-6 md:py-4"
+      data-portfolio-project-row
+    >
+      <div className="flex items-start gap-3 md:col-span-3">
+        <ProjectMark
+          name={project.name}
+          imageUrl={imageUrl ?? metric?.avatarUrl}
+          imageAlt={project.imageAlt ?? `${project.name} project asset`}
+        />
+        <div className="font-mono text-[11px] uppercase text-muted-foreground">
+          <div>{String(project.order).padStart(2, "0")}</div>
+          <div>{project.timeframe}</div>
         </div>
+      </div>
+      <div className="md:col-span-4">
         <h3 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
           {project.name}
         </h3>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {project.summary}
+        </p>
+      </div>
+      <div className="md:col-span-3">
+        <p className="font-mono text-[11px] uppercase text-muted-foreground">
+          {project.role}
         </p>
         {metric ? (
           <p className="mt-4 font-mono text-[11px] uppercase text-muted-foreground">
@@ -156,18 +157,15 @@ function ProjectSignalCard({
               : ""}
           </p>
         ) : null}
-      </div>
-      <div className="mt-5">
-        <p className="mb-3 font-mono text-[11px] uppercase text-muted-foreground">
-          {project.role}
-        </p>
-        <div className="mb-4 flex flex-wrap gap-1">
+        <div className="mt-3 flex flex-wrap gap-1">
           {project.tags.map((tag) => (
             <Badge key={tag} variant="outline">
               {tag}
             </Badge>
           ))}
         </div>
+      </div>
+      <div className="md:col-span-2 md:justify-self-end">
         <ProjectLinks project={project} />
       </div>
     </article>
@@ -227,7 +225,7 @@ function ProjectMark({
 }) {
   if (imageUrl) {
     return (
-      <div className="grid size-14 shrink-0 place-items-center border border-row-border bg-background/70">
+      <div className="grid size-11 shrink-0 place-items-center">
         <img
           src={imageUrl}
           alt={imageAlt ?? name}
@@ -240,7 +238,7 @@ function ProjectMark({
   return (
     <div
       aria-label={`${name} visual placeholder`}
-      className="grid size-14 shrink-0 border border-row-border bg-muted/40 font-mono text-[11px] uppercase text-muted-foreground"
+      className="grid size-11 shrink-0 font-mono text-[11px] uppercase text-muted-foreground"
     >
       <div className="grid h-full grid-cols-4">
         <span className="bg-[var(--accent-magenta)]" />
