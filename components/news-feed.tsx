@@ -179,12 +179,13 @@ function NewsRows({
                       title={story.title}
                     />
                   ) : null}
-                  <h2 className="font-sans text-[15px] font-semibold leading-snug text-balance md:text-base">
+                  <h2 className="min-w-0 flex-1 font-sans text-[13px] font-semibold leading-none md:text-sm">
                     <Link
                       href={newsStoryPath(story)}
-                      className="focus-ring inline-flex max-w-full items-baseline gap-2 transition-colors hover:text-primary"
+                      title={story.title}
+                      className="focus-ring block max-w-full truncate transition-colors hover:text-primary"
                     >
-                      <span>{story.title}</span>
+                      {story.title}
                     </Link>
                   </h2>
                 </div>
