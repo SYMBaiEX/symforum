@@ -29,68 +29,37 @@ export default async function PortfolioPage() {
     getPortfolioProjects(),
     getGithubPortfolioMetrics(),
   ]);
-  const [featured, ...remainingProjects] = projects;
 
   return (
     <SiteShell>
-      <article className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
-        <section className="grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
-          <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 md:block">
-              <span>Portfolio / selected work</span>
-            </div>
-          </aside>
-          <div className="md:col-span-7">
+      <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
+        <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
+          <div className="md:col-span-5">
             <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
               {page?.heroBody}
             </p>
-          </div>
-        </section>
-
-        <GithubMetricStrip metrics={githubMetrics} />
-
-        <section className="grid gap-6 py-8 md:grid-cols-12 md:gap-8 md:py-12">
-          <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            Overview
-          </div>
-          <div className="md:col-span-7">
-            <MarkdownContent content={page?.body ?? ""} />
-          </div>
-        </section>
-
-        {featured ? (
-          <FeaturedProject
-            project={featured}
-            metric={metricForProject(featured, githubMetrics)}
-          />
-        ) : null}
-
-        <section className="pt-8 md:pt-12">
-          <div className="mb-4 grid gap-2 md:mb-5 md:grid-cols-12 md:gap-3">
-            <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-              Index
+            <div className="mt-5">
+              <MarkdownContent
+                className="markdown-compact"
+                content={page?.body ?? ""}
+              />
             </div>
-            <h2 className="text-2xl font-semibold md:col-span-9 md:text-3xl">
-              Contributions and projects
-            </h2>
           </div>
-          <div>
-            {remainingProjects.map((project) => (
-              <ProjectRow
+          <GithubMetricStrip metrics={githubMetrics} />
+        </section>
+
+        <section className="pt-6 md:pt-8">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {projects.map((project) => (
+              <ProjectSignalCard
                 key={project.slug}
                 project={project}
                 metric={metricForProject(project, githubMetrics)}
               />
             ))}
-            {remainingProjects.length === 0 && featured ? (
-              <ProjectRow
-                project={featured}
-                metric={metricForProject(featured, githubMetrics)}
-              />
-            ) : null}
           </div>
         </section>
       </article>
@@ -101,29 +70,48 @@ export default async function PortfolioPage() {
 function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
   const metricItems = [
     {
-      label: "Indexed commits",
-      value: formatCount(metrics.totals.indexedCommits),
+      detail: metrics.commitMetric.detail,
+      label: metrics.commitMetric.label,
+      value: formatCount(metrics.commitMetric.value),
     },
+    metrics.contributionActivity
+      ? {
+          detail: metrics.contributionActivity.detail,
+          label: metrics.contributionActivity.label,
+          value: formatCount(metrics.contributionActivity.value),
+        }
+      : null,
     { label: "Authored PRs", value: formatCount(metrics.totals.authoredPrs) },
     { label: "Public repos", value: formatCount(metrics.totals.publicRepos) },
-    { label: "Non-forks", value: formatCount(metrics.totals.nonForkRepos) },
     { label: "Followers", value: formatCount(metrics.totals.followers) },
-  ];
+  ].filter(
+    (item): item is { detail?: string; label: string; value: string } =>
+      item !== null,
+  );
 
   return (
-    <section className="grid gap-4 py-7 md:grid-cols-12 md:gap-8 md:py-9">
-      <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-        Live GitHub / {metrics.profile.login}
+    <section className="md:col-span-7">
+      <div className="mb-3 flex items-center justify-between gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+        <span>Live GitHub / {metrics.profile.login}</span>
+        <span>{new Date(metrics.updatedAt).toLocaleDateString("en")}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3 md:col-span-9 lg:grid-cols-5">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {metricItems.map((item) => (
-          <div key={item.label} className="min-w-0">
-            <div className="text-2xl font-semibold leading-none md:text-3xl">
+          <div
+            key={item.label}
+            className="min-h-28 border border-row-border bg-card/45 p-3"
+          >
+            <div className="text-2xl font-semibold leading-none">
               {item.value}
             </div>
             <div className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
               {item.label}
             </div>
+            {item.detail ? (
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {item.detail}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>
@@ -131,7 +119,7 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
   );
 }
 
-function FeaturedProject({
+function ProjectSignalCard({
   project,
   metric,
 }: {
@@ -140,73 +128,27 @@ function FeaturedProject({
 }) {
   const imageUrl = safeImageUrl(project.imageUrl);
   return (
-    <section className="grid gap-6 py-8 md:grid-cols-12 md:items-center md:gap-8 md:py-10">
-      <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-        Featured / {project.type}
-      </div>
-      <div className="md:col-span-5">
-        <h2 className="text-2xl font-bold leading-none text-balance sm:text-3xl md:text-4xl">
-          {project.name}
-        </h2>
-        <p className="mt-3 text-base leading-7 text-muted-foreground md:mt-4 md:text-lg md:leading-8">
-          {project.summary}
-        </p>
-        <ProjectLinks project={project} className="mt-5 md:mt-6" />
-      </div>
-      <figure className="md:col-span-4">
-        <ProjectVisual
-          name={project.name}
-          imageUrl={imageUrl ?? metric?.avatarUrl}
-          imageAlt={project.imageAlt ?? `${project.name} project asset`}
-        />
-        {metric ? (
-          <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
-            {metric.fullName}
-            {metric.prsAuthored ? ` / ${metric.prsAuthored} PRs` : ""}
-            {metric.stars !== undefined
-              ? ` / ${formatCount(metric.stars)} stars`
-              : ""}
-          </figcaption>
-        ) : null}
-      </figure>
-    </section>
-  );
-}
-
-function ProjectRow({
-  project,
-  metric,
-}: {
-  project: PortfolioProjectRecord;
-  metric: GithubPortfolioProjectMetric | null;
-}) {
-  const imageUrl = safeImageUrl(project.imageUrl);
-  return (
-    <div className="grid gap-3 py-4 transition-colors hover:bg-muted/35 md:grid-cols-12 md:items-center md:gap-6 md:py-5">
-      <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-2">
-        <div>{String(project.order).padStart(2, "0")}</div>
-        <div className="mt-1">{project.timeframe}</div>
-      </div>
-      <div className="md:col-span-2">
-        <ProjectVisual
-          name={project.name}
-          imageUrl={imageUrl ?? metric?.avatarUrl}
-          imageAlt={project.imageAlt ?? `${project.name} project asset`}
-          compact
-        />
-      </div>
-      <div className="min-w-0 md:col-span-5">
+    <article className="group flex min-h-[22rem] flex-col justify-between border border-row-border bg-card/35 p-4 transition-colors hover:bg-muted/35">
+      <div>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <ProjectMark
+            name={project.name}
+            imageUrl={imageUrl ?? metric?.avatarUrl}
+            imageAlt={project.imageAlt ?? `${project.name} project asset`}
+          />
+          <div className="text-right font-mono text-[11px] uppercase text-muted-foreground">
+            <div>{String(project.order).padStart(2, "0")}</div>
+            <div>{project.timeframe}</div>
+          </div>
+        </div>
         <h3 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
           {project.name}
         </h3>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground md:text-base">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {project.summary}
         </p>
-        <p className="mt-3 font-mono text-[11px] uppercase text-muted-foreground">
-          {project.role}
-        </p>
         {metric ? (
-          <p className="mt-1 font-mono text-[11px] uppercase text-muted-foreground">
+          <p className="mt-4 font-mono text-[11px] uppercase text-muted-foreground">
             {metric.fullName}
             {metric.prsAuthored ? ` / ${metric.prsAuthored} PRs` : ""}
             {metric.stars !== undefined
@@ -215,8 +157,11 @@ function ProjectRow({
           </p>
         ) : null}
       </div>
-      <div className="flex flex-col gap-3 md:col-span-3 md:items-end">
-        <div className="flex flex-wrap gap-1 md:justify-end">
+      <div className="mt-5">
+        <p className="mb-3 font-mono text-[11px] uppercase text-muted-foreground">
+          {project.role}
+        </p>
+        <div className="mb-4 flex flex-wrap gap-1">
           {project.tags.map((tag) => (
             <Badge key={tag} variant="outline">
               {tag}
@@ -225,7 +170,7 @@ function ProjectRow({
         </div>
         <ProjectLinks project={project} />
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -271,28 +216,22 @@ function ProjectLinks({
   );
 }
 
-function ProjectVisual({
+function ProjectMark({
   name,
   imageUrl,
   imageAlt,
-  compact = false,
 }: {
   name: string;
   imageUrl?: string;
   imageAlt?: string;
-  compact?: boolean;
 }) {
   if (imageUrl) {
     return (
-      <div
-        className={`grid place-items-center border border-row-border bg-card/50 ${
-          compact ? "aspect-[16/10]" : "aspect-[16/10]"
-        }`}
-      >
+      <div className="grid size-14 shrink-0 place-items-center border border-row-border bg-background/70">
         <img
           src={imageUrl}
           alt={imageAlt ?? name}
-          className="size-[58%] object-contain"
+          className="size-8 object-contain"
         />
       </div>
     );
@@ -301,9 +240,7 @@ function ProjectVisual({
   return (
     <div
       aria-label={`${name} visual placeholder`}
-      className={`grid border border-row-border bg-muted/40 font-mono text-[11px] uppercase text-muted-foreground ${
-        compact ? "aspect-[16/10]" : "aspect-[16/10]"
-      }`}
+      className="grid size-14 shrink-0 border border-row-border bg-muted/40 font-mono text-[11px] uppercase text-muted-foreground"
     >
       <div className="grid h-full grid-cols-4">
         <span className="bg-[var(--accent-magenta)]" />

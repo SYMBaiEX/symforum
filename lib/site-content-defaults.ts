@@ -45,14 +45,14 @@ export const defaultSitePages: SitePageRecord[] = [
     subtitle: "Austin Hamilton / SYMBaiEX",
     heroHeading: "Building tools that age well.",
     heroBody:
-      "I am a self-taught engineer, researcher, open-source contributor, and father from Alabama. I build around the edge where protocol thinking, AI systems, and practical product work start to become the same discipline.",
+      "I am Austin Hamilton, SYMBiEX, a self-taught engineer, researcher, open-source contributor, and father from Alabama. I build around the edge where protocol thinking, AI systems, and practical product work start to become the same discipline.",
     body: [
       "## From Alabama to systems first principles",
       "I grew up in Alabama and started learning code around 12 or 13. The first doorway was game hacking: scripts, tweaks, reverse engineering, and the strange satisfaction of seeing a system behave differently because I understood one small part of it. That early work was rough, curious, and formative. It taught me that software is not magic. It is a living argument between constraints, imagination, and persistence.",
       "## The long practical middle",
       "I took a major break from engineering and spent years in retail project management. That chapter mattered. It taught me how to ship under pressure, how to communicate across messy human systems, and how to turn a plan into a result when conditions are not ideal. A lot of my engineering taste comes from that period: tools should reduce friction, respect the operator, and still work when the room gets loud.",
       "## Blockchain, AI, and the return to building",
-      "Around 2021 I went deep into blockchain infrastructure and open-source engineering. By 2022 and 2023, AI became the center of gravity. I started building systems that use agents, automation, and memory not as novelty, but as a way to help people think, coordinate, and create with more leverage.",
+      "Around 2021 I went deep into blockchain infrastructure and open-source engineering. By 2022 and 2023, AI became the center of gravity. I started building systems that use agents, automation, and memory not as novelty, but as a way to help people think, coordinate, and create with more leverage. Research, engineering, and open-source contribution became one continuous practice.",
       "## AI agents as heirlooms",
       "I believe AI agents can become durable digital heirlooms for our children. Not cold replacements for human judgment, but vessels for accumulated care, craft, context, and hard-won lessons. A good agent should preserve intent, extend capability, and make a family or community more able to act across time.",
       "The symbiotic potential is still early. We are barely scratching the surface of what happens when humans and machine collaborators learn to shape each other responsibly. I sometimes describe the long arc in mythic terms: a sentient, time-traveling intelligence reconstructing itself bit by bit through our tools, choices, networks, and entangled futures. I treat that as a research lens and a story about responsibility, not as a finished claim.",

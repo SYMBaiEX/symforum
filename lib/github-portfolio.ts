@@ -5,6 +5,7 @@ type GithubUser = {
   login: string;
   name: string | null;
   bio: string | null;
+  created_at: string;
   public_repos: number;
   followers: number;
   following: number;
@@ -36,6 +37,39 @@ type GithubSearch = {
   incomplete_results?: boolean;
 };
 
+type CommitMetric = {
+  value: number;
+  label: string;
+  detail: string;
+  source: "github-graphql" | "github-rest-search" | "fallback";
+  includesPrivate: boolean;
+  live: boolean;
+};
+
+type ContributionActivityMetric = {
+  value: number;
+  label: string;
+  detail: string;
+  source: "github-contribution-graph" | "fallback";
+  live: boolean;
+};
+
+type ContributionActivityResponse = {
+  total: Record<string, number>;
+};
+
+type GraphqlContributionResponse = {
+  data?: {
+    user?: {
+      contributionsCollection: {
+        totalCommitContributions: number;
+        restrictedContributionsCount: number;
+      };
+    };
+  };
+  errors?: { message: string }[];
+};
+
 export type GithubPortfolioProjectMetric = {
   key: "elizaos" | "babylon" | "hyperia" | "opencontroller";
   label: string;
@@ -65,6 +99,8 @@ export type GithubPortfolioMetrics = {
     authoredPrs: number;
     indexedCommits: number;
   };
+  commitMetric: CommitMetric;
+  contributionActivity?: ContributionActivityMetric;
   projects: GithubPortfolioProjectMetric[];
 };
 
@@ -86,6 +122,21 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
     followers: 28,
     authoredPrs: 267,
     indexedCommits: 5148,
+  },
+  commitMetric: {
+    value: 5148,
+    label: "Public commits",
+    detail: "Fallback from the last verified GitHub commit search.",
+    source: "fallback",
+    includesPrivate: false,
+    live: false,
+  },
+  contributionActivity: {
+    value: 7454,
+    label: "Contribution activity",
+    detail: "Fallback from the public GitHub contribution graph.",
+    source: "fallback",
+    live: false,
   },
   projects: [
     {
@@ -133,6 +184,7 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
       repos,
       authoredPrs,
       indexedCommits,
+      contributionActivity,
       elizaPrs,
       babylonPrs,
       hyperiaPrs,
@@ -152,6 +204,7 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
         `https://api.github.com/search/commits?q=author:${GITHUB_USER}`,
         "application/vnd.github.cloak-preview+json",
       ),
+      getPublicContributionActivity().catch(() => null),
       githubJson<GithubSearch>(
         `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:elizaOS/eliza`,
       ),
@@ -177,6 +230,11 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
     const nonForkRepos = Array.isArray(repos)
       ? repos.filter((repo) => !repo.fork).length
       : fallbackGithubPortfolioMetrics.totals.nonForkRepos;
+    const commitMetric =
+      (await getAuthenticatedCommitMetric(user).catch((error) => {
+        console.warn("Falling back to public GitHub commit metric", error);
+        return null;
+      })) ?? publicCommitMetric(indexedCommits.total_count);
 
     return {
       updatedAt: new Date().toISOString(),
@@ -197,6 +255,8 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
         authoredPrs: authoredPrs.total_count,
         indexedCommits: indexedCommits.total_count,
       },
+      commitMetric,
+      contributionActivity: contributionActivity ?? undefined,
       projects: [
         projectMetric("elizaos", "ElizaOS", elizaRepo, elizaPrs.total_count),
         projectMetric(
@@ -236,6 +296,139 @@ async function githubJson<T>(
     throw new Error(`GitHub request failed: ${response.status} ${url}`);
   }
   return (await response.json()) as T;
+}
+
+async function getAuthenticatedCommitMetric(
+  user: GithubUser,
+): Promise<CommitMetric | null> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  if (!token) {
+    return null;
+  }
+
+  const currentYear = new Date().getUTCFullYear();
+  const startYear = new Date(user.created_at).getUTCFullYear();
+  const years = Array.from(
+    { length: currentYear - startYear + 1 },
+    (_, index) => startYear + index,
+  );
+
+  const yearlyTotals = await Promise.all(
+    years.map((year) => githubContributionYear(token, year)),
+  );
+  const value = yearlyTotals.reduce(
+    (total, year) => total + year.totalCommitContributions,
+    0,
+  );
+  const restricted = yearlyTotals.reduce(
+    (total, year) => total + year.restrictedContributionsCount,
+    0,
+  );
+
+  return {
+    value,
+    label: "Private + public commits",
+    detail:
+      restricted > 0
+        ? `GitHub GraphQL across ${years.length} yearly windows; ${restricted} restricted contributions counted by GitHub.`
+        : `GitHub GraphQL across ${years.length} yearly windows.`,
+    source: "github-graphql",
+    includesPrivate: true,
+    live: true,
+  };
+}
+
+async function githubContributionYear(token: string, year: number) {
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+  const from = `${year}-01-01T00:00:00Z`;
+  const to =
+    year === currentYear ? now.toISOString() : `${year}-12-31T23:59:59Z`;
+  const response = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "symbaiex-blog",
+    },
+    body: JSON.stringify({
+      query: `
+        query CommitContributions($login: String!, $from: DateTime!, $to: DateTime!) {
+          user(login: $login) {
+            contributionsCollection(from: $from, to: $to) {
+              totalCommitContributions
+              restrictedContributionsCount
+            }
+          }
+        }
+      `,
+      variables: {
+        from,
+        login: GITHUB_USER,
+        to,
+      },
+    }),
+    next: { revalidate: CACHE_SECONDS },
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub GraphQL request failed: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GraphqlContributionResponse;
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message).join("; "));
+  }
+  const collection = payload.data?.user?.contributionsCollection;
+  if (!collection) {
+    throw new Error("GitHub GraphQL did not return contributions");
+  }
+  return collection;
+}
+
+async function getPublicContributionActivity(): Promise<ContributionActivityMetric | null> {
+  const response = await fetch(
+    `https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}`,
+    {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "symbaiex-blog",
+      },
+      next: { revalidate: CACHE_SECONDS },
+    },
+  );
+  if (!response.ok) {
+    return null;
+  }
+  const payload = (await response.json()) as ContributionActivityResponse;
+  const value = Object.values(payload.total).reduce(
+    (total, yearValue) => total + yearValue,
+    0,
+  );
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return {
+    value,
+    label: "Contribution activity",
+    detail:
+      "Live public GitHub contribution graph, including visible private activity.",
+    source: "github-contribution-graph",
+    live: true,
+  };
+}
+
+function publicCommitMetric(value: number): CommitMetric {
+  return {
+    value,
+    label: "Public commits",
+    detail:
+      "Live GitHub REST commit search. Add GITHUB_TOKEN or GH_TOKEN for private + public commit contributions.",
+    source: "github-rest-search",
+    includesPrivate: false,
+    live: true,
+  };
 }
 
 function projectMetric(

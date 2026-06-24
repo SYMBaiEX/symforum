@@ -4,11 +4,6 @@ import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
 import { ReactNode } from "react";
 
-const leftNavItems = [
-  { href: "/about", label: "About" },
-  { href: "/portfolio", label: "Portfolio" },
-];
-
 const socialItems = [
   {
     href: "https://github.com/symbaiex",
@@ -27,20 +22,13 @@ export function SiteShell({ children }: { children: ReactNode }) {
     <div className="relative z-10 min-h-screen bg-background/92 text-foreground">
       <header className="sticky top-0 z-40 bg-background/92 backdrop-blur">
         <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <div className="flex min-w-0 items-center">
             <Link
               href="/"
-              className="focus-ring mr-1 font-mono text-sm font-semibold uppercase"
+              className="focus-ring font-mono text-sm font-semibold uppercase"
             >
               SYMBaiEX
             </Link>
-            {leftNavItems.map((item) => (
-              <Button key={item.href} asChild variant="ghost" size="sm">
-                <Link className="h-10 px-3 sm:h-7 sm:px-2.5" href={item.href}>
-                  {item.label}
-                </Link>
-              </Button>
-            ))}
           </div>
           <HeaderNav />
         </div>

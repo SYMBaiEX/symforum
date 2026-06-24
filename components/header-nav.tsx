@@ -8,8 +8,10 @@ import { useConvexAuth, useQuery } from "convex/react";
 import Link from "next/link";
 
 const navItems = [
+  { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
+  { href: "/portfolio", label: "Portfolio" },
 ];
 
 export function HeaderNav() {

@@ -1,4 +1,5 @@
 import { safeExternalUrl } from "@/lib/safe-url";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -6,9 +7,15 @@ import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-export function MarkdownContent({ content }: { content: string }) {
+export function MarkdownContent({
+  className,
+  content,
+}: {
+  className?: string;
+  content: string;
+}) {
   return (
-    <div className="markdown-body">
+    <div className={cn("markdown-body", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeSlug, rehypeKatex]}

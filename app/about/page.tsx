@@ -18,26 +18,23 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AboutPage() {
   const page = await getSitePage("about");
   const imageUrl = safeImageUrl(page?.imageUrl);
+  const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
     <SiteShell>
-      <article className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
+      <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
         <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
-          <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 md:sticky md:top-24 md:grid md:gap-3">
-              <span>About / Austin Hamilton</span>
-              <span>Alabama</span>
-              <span>Self-taught engineer</span>
-              <span>Researcher / father / OSS</span>
-            </div>
-          </aside>
-
-          <div className="md:col-span-6">
+          <div className="md:col-span-6 md:col-start-2">
             <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "About"}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
               {page?.heroBody}
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
+              The path runs from early game-hacking curiosity into open-source
+              systems, AI agents, protocol work, and the long-term lens of
+              fatherhood.
             </p>
             <div className="mt-5 flex flex-wrap gap-2 md:mt-6">
               <Button asChild>
@@ -49,7 +46,7 @@ export default async function AboutPage() {
             </div>
           </div>
 
-          <figure className="md:col-span-3">
+          <figure className="md:col-span-4">
             {imageUrl ? (
               <img
                 src={imageUrl}
@@ -70,15 +67,74 @@ export default async function AboutPage() {
           </figure>
         </section>
 
-        <section className="grid gap-6 py-8 md:grid-cols-12 md:gap-8 md:py-12">
-          <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            Biography / philosophy
-          </div>
-          <div className="md:col-span-7">
-            <MarkdownContent content={page?.body ?? ""} />
+        <section className="py-8 md:py-12">
+          <div className="grid gap-5 md:grid-cols-12">
+            {storySections.length > 0 ? (
+              storySections.map((section, index) => (
+                <article
+                  key={`${section.title}-${index}`}
+                  className={`grid gap-3 md:col-span-10 md:grid-cols-10 md:gap-6 ${
+                    index % 2 === 0 ? "md:col-start-2" : "md:col-start-3"
+                  }`}
+                >
+                  <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-2">
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
+                  <div className="md:col-span-8">
+                    <h2 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
+                      {section.title}
+                    </h2>
+                    <div className="mt-3">
+                      <MarkdownContent
+                        className="markdown-compact"
+                        content={section.body}
+                      />
+                    </div>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="md:col-span-8 md:col-start-3">
+                <MarkdownContent
+                  className="markdown-compact"
+                  content={page?.body ?? ""}
+                />
+              </div>
+            )}
           </div>
         </section>
       </article>
     </SiteShell>
   );
+}
+
+function splitMarkdownSections(content: string) {
+  const sections: { title: string; body: string }[] = [];
+  const lines = content.split("\n");
+  let currentTitle = "";
+  let currentBody: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      if (currentTitle) {
+        sections.push({
+          title: currentTitle,
+          body: currentBody.join("\n").trim(),
+        });
+      }
+      currentTitle = line.replace(/^##\s+/, "").trim();
+      currentBody = [];
+    } else {
+      currentBody.push(line);
+    }
+  }
+
+  if (currentTitle) {
+    sections.push({
+      title: currentTitle,
+      body: currentBody.join("\n").trim(),
+    });
+  }
+
+  return sections;
 }
