@@ -75,7 +75,7 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="group grid gap-3 py-3.5 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_13rem] md:gap-4 md:px-2"
+              className="group grid gap-3 py-3.5 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:gap-4 md:px-2"
             >
               <div className="pt-1 font-mono text-[10px] uppercase text-muted-foreground md:text-right">
                 #{story.rank.toString().padStart(2, "0")}
@@ -93,7 +93,7 @@ function NewsRows({
                 </div>
               </div>
               <div className="border-l border-transparent pl-4 font-mono text-[10px] uppercase text-muted-foreground md:border-0 md:pl-0 md:pt-1 md:text-right">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-col md:items-end md:gap-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap md:justify-end md:whitespace-nowrap">
                   <span>{story.host ?? "news.ycombinator.com"}</span>
                   {story.by ? <span>by {story.by}</span> : null}
                   <span className="inline-flex items-center gap-1">
