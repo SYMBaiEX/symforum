@@ -88,11 +88,6 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
 
   return (
     <section className="mx-auto mt-8 max-w-4xl md:mt-10">
-      <div className="mb-3 flex items-center justify-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
-        <span>Live GitHub / {metrics.profile.login}</span>
-        <span>/</span>
-        <span>{new Date(metrics.updatedAt).toLocaleDateString("en")}</span>
-      </div>
       <div className="grid grid-cols-4 gap-2 text-center md:gap-4">
         {metricItems.map((item) => (
           <div key={item.label} className="min-w-0" data-portfolio-metric>
