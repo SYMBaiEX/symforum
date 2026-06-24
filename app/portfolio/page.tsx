@@ -163,9 +163,6 @@ function ProjectListRow({
         >
           <span className="truncate">{project.name}</span>
         </Link>
-        <p className="mt-1 truncate font-mono text-[10px] uppercase text-muted-foreground">
-          {project.type} / {project.timeframe}
-        </p>
       </div>
       <p className="col-span-2 col-start-2 min-w-0 line-clamp-2 text-[0.8125rem] leading-5 text-muted-foreground md:col-auto md:line-clamp-1">
         {project.summary}
