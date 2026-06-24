@@ -205,31 +205,6 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
       language: "Lean",
       stars: 5,
     },
-    {
-      key: "symphony",
-      label: "Symphony",
-      fullName: "SYMBaiEX/symphony",
-      repoUrl: "https://github.com/SYMBaiEX/symphony",
-      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
-      stars: 0,
-    },
-    {
-      key: "odysseus",
-      label: "Odysseus",
-      fullName: "SYMBaiEX/odysseus",
-      repoUrl: "https://github.com/SYMBaiEX/odysseus",
-      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
-      stars: 0,
-    },
-    {
-      key: "comppoly",
-      label: "CompPoly",
-      fullName: "SYMBaiEX/CompPoly",
-      repoUrl: "https://github.com/SYMBaiEX/CompPoly",
-      avatarUrl: "https://avatars.githubusercontent.com/u/192078165?v=4",
-      language: "Lean",
-      stars: 0,
-    },
   ],
 };
 
@@ -524,10 +499,6 @@ function ownedProjectMetrics(repos: GithubRepo[]) {
     ["doolittle", "doolittle", "SYMBaiEX/doolittle"],
     ["symlog", "SYMLog", "SYMBaiEX/SYMLog"],
     ["pod-protocol", "PoD Protocol", "SYMBaiEX/PoD-Protocol"],
-    ["sumi", "Sumi", "SYMBaiEX/sumi"],
-    ["symphony", "Symphony", "SYMBaiEX/symphony"],
-    ["odysseus", "Odysseus", "SYMBaiEX/odysseus"],
-    ["comppoly", "CompPoly", "SYMBaiEX/CompPoly"],
   ] as const;
   const reposByFullName = new Map(
     repos.map((repo) => [repo.full_name.toLowerCase(), repo]),
