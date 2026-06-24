@@ -15,12 +15,9 @@ export default async function NewsPage() {
 
   return (
     <SiteShell>
-      <section className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
-        <SectionHeader kicker="HN / YC" title="Daily Hacker News">
-          Hacker News supplies the daily index. Clicking a story stays on this
-          site first, where signed-in readers can vote, save, and comment.
-        </SectionHeader>
-        <div className="mt-6">
+      <section className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
+        <SectionHeader title="Daily news" divided={false} />
+        <div className="mt-8">
           {convexEnabled ? (
             <ConvexClientProvider>
               <NewsFeed

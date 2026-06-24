@@ -1,7 +1,6 @@
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { ArrowUpRight } from "lucide-react";
+import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
 import { ReactNode } from "react";
 
@@ -9,6 +8,19 @@ const navItems = [
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
   { href: "/signin", label: "Sign in" },
+];
+
+const socialItems = [
+  {
+    href: "https://github.com/symbaiex",
+    label: "GitHub",
+    Icon: Github,
+  },
+  {
+    href: "https://twitter.com/symbiex",
+    label: "Twitter",
+    Icon: Twitter,
+  },
 ];
 
 export function SiteShell({ children }: { children: ReactNode }) {
@@ -41,16 +53,21 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="text-muted-foreground md:col-span-4 md:whitespace-nowrap">
             Software, AI systems, and design notes.
           </div>
-          <div className="flex items-end justify-start md:col-span-3 md:justify-end">
-            <Link
-              href="https://news.ycombinator.com/"
-              className={cn(
-                "focus-ring inline-flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground",
-                "transition-colors hover:text-foreground",
-              )}
-            >
-              HN source <ArrowUpRight />
-            </Link>
+          <div className="flex flex-wrap items-end justify-start gap-1 md:col-span-3 md:justify-end">
+            {socialItems.map(({ href, label, Icon }) => (
+              <Button
+                key={href}
+                asChild
+                className="font-mono uppercase text-muted-foreground"
+                size="sm"
+                variant="ghost"
+              >
+                <Link href={href} target="_blank" rel="noopener noreferrer">
+                  <Icon data-icon="inline-start" />
+                  {label}
+                </Link>
+              </Button>
+            ))}
           </div>
         </div>
       </footer>

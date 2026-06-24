@@ -65,7 +65,7 @@ function NewsRows({
 }) {
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-y border-row-border py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">
         <span>Snapshot / {snapshotDate}</span>
         <span>Daily refresh via Vercel Cron</span>
       </div>
@@ -81,7 +81,7 @@ function NewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="grid gap-1 border-b border-row-border py-1.5 transition-colors hover:bg-muted/35 md:grid-cols-[2.25rem_minmax(0,1fr)_7.25rem] md:items-center md:gap-2 md:px-1.5"
+              className="grid gap-1 py-1.5 transition-colors hover:bg-muted/35 md:grid-cols-[2.25rem_minmax(0,1fr)_7.25rem] md:items-center md:gap-2 md:px-1.5"
             >
               <div className="font-mono text-[9px] uppercase text-muted-foreground">
                 #{story.rank.toString().padStart(2, "0")}
