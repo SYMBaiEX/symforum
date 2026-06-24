@@ -73,10 +73,10 @@ export const defaultSitePages: SitePageRecord[] = [
     title: "Portfolio",
     subtitle: "Selected contributions, systems, and open-source work",
     heroHeading: "Work that leaves an interface behind.",
-    heroBody: "",
+    heroBody:
+      "Open-source systems, agent runtimes, proof tooling, and protocol-shaped product work.",
     body: [
-      "I build in public through open-source and applied product systems. The work below is organized around the role I played and the constraints I care about: protocol clarity, reliability, developer ergonomics, and interfaces that stay understandable as they scale.",
-      "Some entries are full public footprints. Some are still placeholders for deeper case studies. The point is to keep the record alive instead of pretending a portfolio is ever finished.",
+      "A compact index of public contributions and personal projects, backed by live GitHub signals where they are available. Each row favors role, footprint, and the system problem over portfolio ceremony.",
     ].join("\n\n"),
     status: "published",
     updatedAt: UPDATED_AT,

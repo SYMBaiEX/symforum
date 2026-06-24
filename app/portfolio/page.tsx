@@ -13,6 +13,8 @@ import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+const PERSONAL_GITHUB_AVATAR_TOKEN = "/u/192078165";
+
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getSitePage("portfolio");
   return {
@@ -30,15 +32,20 @@ export default async function PortfolioPage() {
 
   return (
     <>
-      <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
-        <section>
+      <article className="mx-auto max-w-7xl px-4 py-7 md:px-8 md:py-10">
+        <section className="grid gap-7 md:grid-cols-[minmax(0,0.95fr)_minmax(20rem,0.55fr)] md:items-end">
           <div className="max-w-3xl">
+            <p className="mb-3 font-mono text-[10px] uppercase text-muted-foreground">
+              Selected work / public systems
+            </p>
             <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-              {page?.heroBody}
-            </p>
+            {page?.heroBody ? (
+              <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+                {page.heroBody}
+              </p>
+            ) : null}
             <div className="mt-5">
               <MarkdownContent
                 className="markdown-compact"
@@ -49,8 +56,9 @@ export default async function PortfolioPage() {
           <GithubMetricStrip metrics={githubMetrics} />
         </section>
 
-        <section className="pt-6 md:pt-8">
-          <div className="grid gap-1.5">
+        <section className="pt-7 md:pt-9">
+          <ProjectIndexHeader count={projects.length} />
+          <div className="grid gap-0.5">
             {projects.map((project) => (
               <ProjectListRow
                 key={project.slug}
@@ -76,34 +84,48 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
         primaryMetric === metrics.contributionActivity
           ? "Live visible GitHub contribution graph."
           : metrics.commitMetric.detail,
-      label: primaryMetric.label,
+      label:
+        primaryMetric === metrics.contributionActivity ? "Activity" : "Commits",
       value: formatCount(primaryMetric.value),
     },
-    { label: "Authored PRs", value: formatCount(metrics.totals.authoredPrs) },
-    { label: "Public repos", value: formatCount(metrics.totals.publicRepos) },
+    { label: "PRs", value: formatCount(metrics.totals.authoredPrs) },
+    { label: "Repos", value: formatCount(metrics.totals.publicRepos) },
     { label: "Followers", value: formatCount(metrics.totals.followers) },
   ];
 
   return (
-    <section className="mx-auto mt-8 max-w-4xl md:mt-10">
-      <div className="grid grid-cols-4 gap-2 text-center md:gap-4">
+    <section className="w-full max-w-xl md:ml-auto">
+      <div className="grid grid-cols-4 gap-2 md:gap-4">
         {metricItems.map((item) => (
           <div key={item.label} className="min-w-0" data-portfolio-metric>
-            <div className="text-xl font-semibold leading-none md:text-2xl">
+            <div className="text-lg font-semibold leading-none sm:text-xl md:text-2xl">
               {item.value}
             </div>
-            <div className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
+            <div className="mt-2 truncate font-mono text-[10px] uppercase text-muted-foreground md:text-[11px]">
               {item.label}
             </div>
           </div>
         ))}
       </div>
       {primaryMetric.detail ? (
-        <p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-5 text-muted-foreground">
+        <p className="mt-4 max-w-md font-mono text-[10px] uppercase leading-5 text-muted-foreground md:ml-auto md:text-right">
           {primaryMetric.detail}
         </p>
       ) : null}
     </section>
+  );
+}
+
+function ProjectIndexHeader({ count }: { count: number }) {
+  return (
+    <div className="mb-2 grid gap-2 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-[2.25rem_minmax(9.5rem,0.72fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:px-2">
+      <div className="md:hidden">Work index / {count} projects</div>
+      <div className="hidden md:block">No.</div>
+      <div className="hidden md:block">Project</div>
+      <div className="hidden md:block">Focus</div>
+      <div className="hidden md:block md:text-right">Proof</div>
+      <div className="hidden md:block" />
+    </div>
   );
 }
 
@@ -120,10 +142,10 @@ function ProjectListRow({
 
   return (
     <article
-      className="group grid gap-2 py-1 transition-colors hover:bg-muted/25 sm:grid-cols-[2rem_minmax(0,1fr)] sm:items-center sm:gap-3 md:grid-cols-[2rem_minmax(8rem,0.65fr)_minmax(0,1.65fr)_minmax(10rem,0.7fr)_2rem] md:px-2"
+      className="group relative grid grid-cols-[2rem_minmax(0,1fr)_1.75rem] gap-x-2 gap-y-1 py-2 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-px before:bg-transparent hover:bg-muted/25 hover:before:bg-[var(--accent-magenta)] md:grid-cols-[2.25rem_minmax(9.5rem,0.72fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:items-center md:gap-2 md:px-2 md:py-1.5"
       data-portfolio-project-row
     >
-      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-start sm:gap-1">
+      <div className="row-span-2 flex flex-col items-start gap-1.5 md:row-auto md:gap-1">
         <div className="font-mono text-[10px] uppercase text-muted-foreground">
           {String(project.order).padStart(2, "0")}
         </div>
@@ -131,9 +153,10 @@ function ProjectListRow({
           name={project.name}
           imageUrl={imageUrl ?? metric?.avatarUrl}
           imageAlt={project.imageAlt ?? `${project.name} project asset`}
+          order={project.order}
         />
       </div>
-      <div className="min-w-0">
+      <div className="col-start-2 min-w-0 md:col-auto">
         <Link
           href={projectHref}
           className="focus-ring inline-flex max-w-full text-[0.95rem] font-semibold leading-tight hover:text-primary md:text-base"
@@ -144,19 +167,19 @@ function ProjectListRow({
           {project.type} / {project.timeframe}
         </p>
       </div>
-      <p className="min-w-0 text-[0.8125rem] leading-5 text-muted-foreground md:line-clamp-1">
+      <p className="col-span-2 col-start-2 min-w-0 line-clamp-2 text-[0.8125rem] leading-5 text-muted-foreground md:col-auto md:line-clamp-1">
         {project.summary}
       </p>
-      <div className="min-w-0 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="hidden min-w-0 font-mono text-[10px] uppercase text-muted-foreground md:col-auto md:block md:text-right">
         <p className="truncate">{project.role}</p>
         <p className="mt-1 truncate">{repoLabel}</p>
       </div>
-      <div className="flex items-center justify-end">
+      <div className="col-start-3 row-start-1 flex items-center justify-end md:col-auto md:row-auto">
         <Button
           asChild
-          className="size-6 rounded-none border-row-border bg-transparent p-0 text-muted-foreground shadow-none group-hover:border-foreground group-hover:text-foreground"
+          className="size-7 rounded-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted/40 group-hover:text-foreground"
           size="icon"
-          variant="outline"
+          variant="ghost"
         >
           <Link href={projectHref} aria-label={`Open ${project.name}`}>
             <ArrowUpRight aria-hidden="true" />
@@ -171,12 +194,14 @@ function ProjectMark({
   name,
   imageUrl,
   imageAlt,
+  order,
 }: {
   name: string;
   imageUrl?: string;
   imageAlt?: string;
+  order: number;
 }) {
-  if (imageUrl) {
+  if (imageUrl && !isPersonalProjectAvatar(imageUrl)) {
     return (
       <div className="grid size-8 shrink-0 place-items-center">
         <img
@@ -190,15 +215,20 @@ function ProjectMark({
 
   return (
     <div
-      aria-label={`${name} visual placeholder`}
-      className="grid size-8 shrink-0 font-mono text-[11px] uppercase text-muted-foreground"
+      aria-label={`${name} project mark`}
+      className="relative grid size-8 shrink-0 place-items-center overflow-hidden bg-foreground font-mono text-[10px] font-semibold uppercase text-background"
     >
-      <div className="grid h-full grid-cols-4">
-        <span className="bg-[var(--accent-magenta)]" />
-        <span className="bg-foreground" />
-        <span className="bg-[var(--accent-cyan)]" />
-        <span className="bg-[var(--accent-canary)]" />
-      </div>
+      <span className="relative z-10">{projectInitials(name)}</span>
+      <span className="absolute inset-x-0 bottom-0 h-1 bg-[var(--accent-magenta)]" />
+      <span
+        className={`absolute right-0 top-0 h-full w-1 ${
+          order % 3 === 0
+            ? "bg-[var(--accent-canary)]"
+            : order % 2 === 0
+              ? "bg-[var(--accent-cyan)]"
+              : "bg-[var(--accent-magenta)]"
+        }`}
+      />
     </div>
   );
 }
@@ -253,4 +283,19 @@ function repoPathLabel(value: string | undefined) {
   }
 
   return new URL(safeUrl).pathname.replace(/^\//, "");
+}
+
+function isPersonalProjectAvatar(value: string) {
+  return value.includes(PERSONAL_GITHUB_AVATAR_TOKEN);
+}
+
+function projectInitials(name: string) {
+  const compact = name.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length <= 2) {
+    return compact.toUpperCase();
+  }
+  const capitals = compact.match(/[A-Z0-9]/g)?.join("");
+  return (capitals && capitals.length >= 2 ? capitals : compact)
+    .slice(0, 2)
+    .toUpperCase();
 }

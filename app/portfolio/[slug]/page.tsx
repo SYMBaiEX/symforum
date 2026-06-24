@@ -18,6 +18,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+const PERSONAL_GITHUB_AVATAR_TOKEN = "/u/192078165";
+
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
@@ -95,6 +97,7 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
             name={project.name}
             imageUrl={safeImageUrl(project.imageUrl)}
             imageAlt={project.imageAlt}
+            order={project.order}
           />
           <dl className="mt-5 grid gap-4 font-mono text-[11px] uppercase">
             <div>
@@ -255,12 +258,14 @@ function ProjectMark({
   name,
   imageUrl,
   imageAlt,
+  order,
 }: {
   name: string;
   imageUrl?: string;
   imageAlt?: string;
+  order: number;
 }) {
-  if (imageUrl) {
+  if (imageUrl && !isPersonalProjectAvatar(imageUrl)) {
     return (
       <div className="grid size-20 place-items-center">
         <img
@@ -274,15 +279,20 @@ function ProjectMark({
 
   return (
     <div
-      aria-label={`${name} visual placeholder`}
-      className="grid size-20 font-mono text-[11px] uppercase text-muted-foreground"
+      aria-label={`${name} project mark`}
+      className="relative grid size-20 place-items-center overflow-hidden bg-foreground font-mono text-lg font-semibold uppercase text-background"
     >
-      <div className="grid h-full grid-cols-4">
-        <span className="bg-[var(--accent-magenta)]" />
-        <span className="bg-foreground" />
-        <span className="bg-[var(--accent-cyan)]" />
-        <span className="bg-[var(--accent-canary)]" />
-      </div>
+      <span className="relative z-10">{projectInitials(name)}</span>
+      <span className="absolute inset-x-0 bottom-0 h-2 bg-[var(--accent-magenta)]" />
+      <span
+        className={`absolute right-0 top-0 h-full w-2 ${
+          order % 3 === 0
+            ? "bg-[var(--accent-canary)]"
+            : order % 2 === 0
+              ? "bg-[var(--accent-cyan)]"
+              : "bg-[var(--accent-magenta)]"
+        }`}
+      />
     </div>
   );
 }
@@ -294,4 +304,19 @@ function repoPathLabel(value: string | undefined) {
   }
 
   return new URL(safeUrl).pathname.replace(/^\//, "");
+}
+
+function isPersonalProjectAvatar(value: string) {
+  return value.includes(PERSONAL_GITHUB_AVATAR_TOKEN);
+}
+
+function projectInitials(name: string) {
+  const compact = name.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length <= 2) {
+    return compact.toUpperCase();
+  }
+  const capitals = compact.match(/[A-Z0-9]/g)?.join("");
+  return (capitals && capitals.length >= 2 ? capitals : compact)
+    .slice(0, 2)
+    .toUpperCase();
 }
