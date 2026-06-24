@@ -200,6 +200,13 @@
     text-decoration: none;
   }
 
+  .markdown-body h2 a,
+  .markdown-body h3 a,
+  .markdown-body h4 a {
+    color: inherit;
+    text-decoration: none;
+  }
+
   .markdown-body strong {
     font-weight: 700;
   }

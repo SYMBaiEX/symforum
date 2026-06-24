@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ReactNode } from "react";
 
 const navItems = [
+  { href: "/about", label: "About" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
   { href: "/signin", label: "Sign in" },
@@ -34,7 +36,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           >
             SYMBaiEX
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
             {navItems.map((item) => (
               <Button key={item.href} asChild variant="ghost" size="sm">
                 <Link href={item.href}>{item.label}</Link>

@@ -44,6 +44,47 @@ export default defineSchema({
     .index("by_publishedAt", ["publishedAt"])
     .index("by_status_and_publishedAt", ["status", "publishedAt"])
     .index("by_featured_and_publishedAt", ["featured", "publishedAt"]),
+  sitePages: defineTable({
+    slug: v.string(),
+    title: v.string(),
+    subtitle: v.string(),
+    heroHeading: v.string(),
+    heroBody: v.string(),
+    body: v.string(),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    updatedAt: v.number(),
+    imageUrl: v.optional(v.string()),
+    imageAlt: v.optional(v.string()),
+    imageCredit: v.optional(v.string()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_status_and_slug", ["status", "slug"]),
+  portfolioProjects: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    type: v.string(),
+    role: v.string(),
+    timeframe: v.string(),
+    summary: v.string(),
+    problem: v.string(),
+    approach: v.string(),
+    outcome: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("archived"),
+    ),
+    order: v.number(),
+    tags: v.array(v.string()),
+    imageUrl: v.optional(v.string()),
+    imageAlt: v.optional(v.string()),
+    homepageUrl: v.optional(v.string()),
+    repoUrl: v.optional(v.string()),
+    writeupUrl: v.optional(v.string()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_order", ["order"])
+    .index("by_status_and_order", ["status", "order"]),
   newsSnapshots: defineTable({
     snapshotDate: v.string(),
     status: v.union(

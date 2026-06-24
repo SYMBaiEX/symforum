@@ -8,6 +8,12 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { normalizePostInput, postInputValidator } from "./postModel";
+import {
+  normalizePortfolioProjectInput,
+  normalizeSitePageInput,
+  portfolioProjectInputValidator,
+  sitePageInputValidator,
+} from "./siteContentModel";
 
 const entityTypeValidator = v.union(v.literal("post"), v.literal("hnStory"));
 
@@ -177,6 +183,102 @@ export const deletePost = mutation({
     await requireOwner(ctx);
     const existing = await ctx.db
       .query("posts")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .unique();
+    if (existing === null) {
+      return { deleted: false };
+    }
+    await ctx.db.delete(existing._id);
+    return { deleted: true };
+  },
+});
+
+export const listSitePages = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    return await ctx.db
+      .query("sitePages")
+      .withIndex("by_slug")
+      .order("asc")
+      .take(50);
+  },
+});
+
+export const upsertSitePage = mutation({
+  args: { page: sitePageInputValidator },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    const page = normalizeSitePageInput(args.page);
+    const existing = await ctx.db
+      .query("sitePages")
+      .withIndex("by_slug", (q) => q.eq("slug", page.slug))
+      .unique();
+
+    if (existing === null) {
+      const id = await ctx.db.insert("sitePages", page);
+      return await ctx.db.get(id);
+    }
+
+    await ctx.db.patch(existing._id, page);
+    return await ctx.db.get(existing._id);
+  },
+});
+
+export const deleteSitePage = mutation({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    const existing = await ctx.db
+      .query("sitePages")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .unique();
+    if (existing === null) {
+      return { deleted: false };
+    }
+    await ctx.db.delete(existing._id);
+    return { deleted: true };
+  },
+});
+
+export const listPortfolioProjects = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    return await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_order")
+      .order("asc")
+      .take(100);
+  },
+});
+
+export const upsertPortfolioProject = mutation({
+  args: { project: portfolioProjectInputValidator },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    const project = normalizePortfolioProjectInput(args.project);
+    const existing = await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_slug", (q) => q.eq("slug", project.slug))
+      .unique();
+
+    if (existing === null) {
+      const id = await ctx.db.insert("portfolioProjects", project);
+      return await ctx.db.get(id);
+    }
+
+    await ctx.db.patch(existing._id, project);
+    return await ctx.db.get(existing._id);
+  },
+});
+
+export const deletePortfolioProject = mutation({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    const existing = await ctx.db
+      .query("portfolioProjects")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .unique();
     if (existing === null) {

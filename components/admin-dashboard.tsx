@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminSiteContent } from "@/components/admin-site-content";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -161,324 +162,328 @@ function OwnerDashboard() {
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-12">
-      <section className="lg:col-span-4">
-        <div className="flex items-center justify-between border-y border-row-border py-3">
-          <div>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Posts
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {overview?.totals.publishedPosts ?? 0} published /{" "}
-              {overview?.totals.posts ?? sortedPosts.length} total
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setForm(blankPost)}
-          >
-            <Plus />
-            New
-          </Button>
-        </div>
-        <div className="divide-y divide-row-border">
-          {sortedPosts.map((post) => (
-            <PostListItem
-              key={post._id}
-              post={post}
-              active={post.slug === selectedSlug}
-              onSelect={() => setForm(postToForm(post))}
-              onDelete={() => removePost(post.slug)}
-            />
-          ))}
-          {posts === undefined ? (
-            <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-              Loading posts
+    <>
+      <div className="grid gap-8 lg:grid-cols-12">
+        <section className="lg:col-span-4">
+          <div className="flex items-center justify-between border-y border-row-border py-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Posts
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {overview?.totals.publishedPosts ?? 0} published /{" "}
+                {overview?.totals.posts ?? sortedPosts.length} total
+              </p>
             </div>
-          ) : null}
-          {posts?.length === 0 ? (
-            <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-              No posts yet
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="lg:col-span-5">
-        <form onSubmit={savePost} className="border-y border-row-border py-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Editor
-            </p>
-            <Button type="submit" size="sm">
-              <Save />
-              Save
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setForm(blankPost)}
+            >
+              <Plus />
+              New
             </Button>
           </div>
-          <div className="mt-5 grid gap-3">
-            <Field label="Title">
-              <Input
-                value={form.title}
-                onChange={(event) =>
-                  setForm({ ...form, title: event.target.value })
-                }
-                required
+          <div className="divide-y divide-row-border">
+            {sortedPosts.map((post) => (
+              <PostListItem
+                key={post._id}
+                post={post}
+                active={post.slug === selectedSlug}
+                onSelect={() => setForm(postToForm(post))}
+                onDelete={() => removePost(post.slug)}
               />
-            </Field>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Slug">
+            ))}
+            {posts === undefined ? (
+              <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                Loading posts
+              </div>
+            ) : null}
+            {posts?.length === 0 ? (
+              <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                No posts yet
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="lg:col-span-5">
+          <form onSubmit={savePost} className="border-y border-row-border py-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Editor
+              </p>
+              <Button type="submit" size="sm">
+                <Save />
+                Save
+              </Button>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <Field label="Title">
                 <Input
-                  value={form.slug}
-                  placeholder="auto-from-title"
+                  value={form.title}
                   onChange={(event) =>
-                    setForm({ ...form, slug: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Date">
-                <Input
-                  type="date"
-                  value={form.publishedAt}
-                  onChange={(event) =>
-                    setForm({ ...form, publishedAt: event.target.value })
+                    setForm({ ...form, title: event.target.value })
                   }
                   required
                 />
               </Field>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Slug">
+                  <Input
+                    value={form.slug}
+                    placeholder="auto-from-title"
+                    onChange={(event) =>
+                      setForm({ ...form, slug: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Date">
+                  <Input
+                    type="date"
+                    value={form.publishedAt}
+                    onChange={(event) =>
+                      setForm({ ...form, publishedAt: event.target.value })
+                    }
+                    required
+                  />
+                </Field>
+              </div>
+              <Field label="Excerpt">
+                <Textarea
+                  value={form.excerpt}
+                  onChange={(event) =>
+                    setForm({ ...form, excerpt: event.target.value })
+                  }
+                  rows={3}
+                  required
+                />
+              </Field>
+              <Field label="Markdown body">
+                <Textarea
+                  value={form.body}
+                  onChange={(event) =>
+                    setForm({ ...form, body: event.target.value })
+                  }
+                  rows={12}
+                  required
+                />
+              </Field>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Tags">
+                  <Input
+                    value={form.tags}
+                    placeholder="ai, design"
+                    onChange={(event) =>
+                      setForm({ ...form, tags: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Minutes">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={form.readingMinutes}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        readingMinutes: Number(event.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Status">
+                  <select
+                    className="h-10 border border-input bg-background px-3 text-sm"
+                    value={form.status}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        status: event.target.value as "draft" | "published",
+                      })
+                    }
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Image URL">
+                  <Input
+                    value={form.imageUrl}
+                    onChange={(event) =>
+                      setForm({ ...form, imageUrl: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Image alt">
+                  <Input
+                    value={form.imageAlt}
+                    onChange={(event) =>
+                      setForm({ ...form, imageAlt: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Credit">
+                  <Input
+                    value={form.imageCredit}
+                    onChange={(event) =>
+                      setForm({ ...form, imageCredit: event.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+              <label className="flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={form.featured}
+                  onChange={(event) =>
+                    setForm({ ...form, featured: event.target.checked })
+                  }
+                />
+                Featured
+              </label>
             </div>
-            <Field label="Excerpt">
-              <Textarea
-                value={form.excerpt}
-                onChange={(event) =>
-                  setForm({ ...form, excerpt: event.target.value })
-                }
-                rows={3}
-                required
-              />
-            </Field>
-            <Field label="Markdown body">
-              <Textarea
-                value={form.body}
-                onChange={(event) =>
-                  setForm({ ...form, body: event.target.value })
-                }
-                rows={12}
-                required
-              />
-            </Field>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Tags">
-                <Input
-                  value={form.tags}
-                  placeholder="ai, design"
-                  onChange={(event) =>
-                    setForm({ ...form, tags: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Minutes">
-                <Input
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={form.readingMinutes}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      readingMinutes: Number(event.target.value),
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Status">
-                <select
-                  className="h-10 border border-input bg-background px-3 text-sm"
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      status: event.target.value as "draft" | "published",
-                    })
-                  }
-                >
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                </select>
-              </Field>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Image URL">
-                <Input
-                  value={form.imageUrl}
-                  onChange={(event) =>
-                    setForm({ ...form, imageUrl: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Image alt">
-                <Input
-                  value={form.imageAlt}
-                  onChange={(event) =>
-                    setForm({ ...form, imageAlt: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Credit">
-                <Input
-                  value={form.imageCredit}
-                  onChange={(event) =>
-                    setForm({ ...form, imageCredit: event.target.value })
-                  }
-                />
-              </Field>
-            </div>
-            <label className="flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={form.featured}
-                onChange={(event) =>
-                  setForm({ ...form, featured: event.target.checked })
-                }
-              />
-              Featured
-            </label>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
 
-      <aside className="flex flex-col gap-8 lg:col-span-3">
-        <section className="border-y border-row-border py-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              API keys
-            </p>
-            <KeyRound className="size-4 text-muted-foreground" />
-          </div>
-          <div className="mt-4 flex gap-2">
-            <Input
-              value={apiKeyName}
-              onChange={(event) => setApiKeyName(event.target.value)}
-            />
-            <Button type="button" variant="outline" onClick={issueApiKey}>
-              Issue
-            </Button>
-          </div>
-          {createdToken ? (
-            <div className="mt-3 border border-row-border p-3">
-              <p className="break-all font-mono text-xs">{createdToken}</p>
-              <Button
-                className="mt-3"
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(createdToken);
-                  toast.success("Token copied");
-                }}
-              >
-                <Copy />
-                Copy token
+        <aside className="flex flex-col gap-8 lg:col-span-3">
+          <section className="border-y border-row-border py-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                API keys
+              </p>
+              <KeyRound className="size-4 text-muted-foreground" />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Input
+                value={apiKeyName}
+                onChange={(event) => setApiKeyName(event.target.value)}
+              />
+              <Button type="button" variant="outline" onClick={issueApiKey}>
+                Issue
               </Button>
             </div>
-          ) : null}
-          <ApiKeyList
-            apiKeys={apiKeys}
-            onRevoke={async (keyId) => {
-              try {
-                await revokeApiKey({ keyId });
-                toast.success("API key revoked");
-              } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not revoke key",
-                );
-              }
-            }}
-          />
-        </section>
+            {createdToken ? (
+              <div className="mt-3 border border-row-border p-3">
+                <p className="break-all font-mono text-xs">{createdToken}</p>
+                <Button
+                  className="mt-3"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(createdToken);
+                    toast.success("Token copied");
+                  }}
+                >
+                  <Copy />
+                  Copy token
+                </Button>
+              </div>
+            ) : null}
+            <ApiKeyList
+              apiKeys={apiKeys}
+              onRevoke={async (keyId) => {
+                try {
+                  await revokeApiKey({ keyId });
+                  toast.success("API key revoked");
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not revoke key",
+                  );
+                }
+              }}
+            />
+          </section>
 
-        <section className="border-y border-row-border py-4">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            Integration
-          </p>
-          <div className="mt-4 space-y-2 font-mono text-[11px] uppercase text-muted-foreground">
-            <p>GET /api/admin/posts</p>
-            <p>POST /api/admin/posts</p>
-            <p>GET /api/admin/posts/[slug]</p>
-            <p>PATCH /api/admin/posts/[slug]</p>
-            <p>DELETE /api/admin/posts/[slug]</p>
-            <p>GET /api/admin/interactions</p>
-          </div>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            Send <code className="font-mono">Authorization: Bearer token</code>{" "}
-            from your writing software.
-          </p>
-        </section>
+          <section className="border-y border-row-border py-4">
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Integration
+            </p>
+            <div className="mt-4 space-y-2 font-mono text-[11px] uppercase text-muted-foreground">
+              <p>GET /api/admin/posts</p>
+              <p>POST /api/admin/posts</p>
+              <p>GET /api/admin/posts/[slug]</p>
+              <p>PATCH /api/admin/posts/[slug]</p>
+              <p>DELETE /api/admin/posts/[slug]</p>
+              <p>GET /api/admin/interactions</p>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              Send{" "}
+              <code className="font-mono">Authorization: Bearer token</code>{" "}
+              from your writing software.
+            </p>
+          </section>
 
-        <section className="border-y border-row-border py-4">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            Recent comments
-          </p>
-          <div className="mt-3 divide-y divide-row-border">
-            {comments.map((comment) => (
-              <div key={comment._id} className="py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-mono text-[11px] uppercase text-muted-foreground">
-                    {comment.author} / {comment.entityType}
+          <section className="border-y border-row-border py-4">
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Recent comments
+            </p>
+            <div className="mt-3 divide-y divide-row-border">
+              {comments.map((comment) => (
+                <div key={comment._id} className="py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-mono text-[11px] uppercase text-muted-foreground">
+                      {comment.author} / {comment.entityType}
+                    </p>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={async () => {
+                        await deleteComment({ commentId: comment._id });
+                        toast.success("Comment deleted");
+                      }}
+                      aria-label="Delete comment"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <p className="mt-1 line-clamp-3 text-sm leading-6">
+                    {comment.body}
                   </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="border-y border-row-border py-4">
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Recent interactions
+            </p>
+            <div className="mt-3 divide-y divide-row-border">
+              {activity.map((item) => (
+                <div key={item._id} className="flex items-center gap-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{item.entityId}</p>
+                    <p className="font-mono text-[11px] uppercase text-muted-foreground">
+                      {item.author} / vote {item.vote} /{" "}
+                      {item.saved ? "saved" : "not saved"}
+                    </p>
+                  </div>
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={async () => {
-                      await deleteComment({ commentId: comment._id });
-                      toast.success("Comment deleted");
+                      await deleteInteraction({ interactionId: item._id });
+                      toast.success("Interaction deleted");
                     }}
-                    aria-label="Delete comment"
+                    aria-label="Delete interaction"
                   >
                     <Trash2 />
                   </Button>
                 </div>
-                <p className="mt-1 line-clamp-3 text-sm leading-6">
-                  {comment.body}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="border-y border-row-border py-4">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            Recent interactions
-          </p>
-          <div className="mt-3 divide-y divide-row-border">
-            {activity.map((item) => (
-              <div key={item._id} className="flex items-center gap-2 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{item.entityId}</p>
-                  <p className="font-mono text-[11px] uppercase text-muted-foreground">
-                    {item.author} / vote {item.vote} /{" "}
-                    {item.saved ? "saved" : "not saved"}
-                  </p>
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={async () => {
-                    await deleteInteraction({ interactionId: item._id });
-                    toast.success("Interaction deleted");
-                  }}
-                  aria-label="Delete interaction"
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-      </aside>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+      <AdminSiteContent />
       <Toaster />
-    </div>
+    </>
   );
 }
 

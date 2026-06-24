@@ -17,6 +17,44 @@ export type ConvexPostRecord = {
   imageCredit?: string;
 };
 
+export type SitePageRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  title: string;
+  subtitle: string;
+  heroHeading: string;
+  heroBody: string;
+  body: string;
+  status: "draft" | "published";
+  updatedAt: number;
+  imageUrl?: string;
+  imageAlt?: string;
+  imageCredit?: string;
+};
+
+export type PortfolioProjectRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  name: string;
+  type: string;
+  role: string;
+  timeframe: string;
+  summary: string;
+  problem: string;
+  approach: string;
+  outcome: string;
+  status: "draft" | "published" | "archived";
+  order: number;
+  tags: string[];
+  imageUrl?: string;
+  imageAlt?: string;
+  homepageUrl?: string;
+  repoUrl?: string;
+  writeupUrl?: string;
+};
+
 export type AdminUserRecord = {
   _id: string;
   name?: string;
@@ -145,6 +183,69 @@ export const convexRefs = {
       { slug: string },
       { deleted: boolean }
     >("admin:deletePost"),
+    listSitePages: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      SitePageRecord[]
+    >("admin:listSitePages"),
+    upsertSitePage: makeFunctionReference<
+      "mutation",
+      {
+        page: {
+          slug?: string;
+          title: string;
+          subtitle: string;
+          heroHeading: string;
+          heroBody: string;
+          body: string;
+          status: "draft" | "published";
+          imageUrl?: string;
+          imageAlt?: string;
+          imageCredit?: string;
+        };
+      },
+      SitePageRecord | null
+    >("admin:upsertSitePage"),
+    deleteSitePage: makeFunctionReference<
+      "mutation",
+      { slug: string },
+      { deleted: boolean }
+    >("admin:deleteSitePage"),
+    listPortfolioProjects: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      PortfolioProjectRecord[]
+    >("admin:listPortfolioProjects"),
+    upsertPortfolioProject: makeFunctionReference<
+      "mutation",
+      {
+        project: {
+          slug?: string;
+          name: string;
+          type: string;
+          role: string;
+          timeframe: string;
+          summary: string;
+          problem: string;
+          approach: string;
+          outcome: string;
+          status: "draft" | "published" | "archived";
+          order: number;
+          tags: string[];
+          imageUrl?: string;
+          imageAlt?: string;
+          homepageUrl?: string;
+          repoUrl?: string;
+          writeupUrl?: string;
+        };
+      },
+      PortfolioProjectRecord | null
+    >("admin:upsertPortfolioProject"),
+    deletePortfolioProject: makeFunctionReference<
+      "mutation",
+      { slug: string },
+      { deleted: boolean }
+    >("admin:deletePortfolioProject"),
     deleteComment: makeFunctionReference<
       "mutation",
       { commentId: string },
@@ -228,6 +329,18 @@ export const convexRefs = {
       { slug: string },
       ConvexPostRecord | null
     >("posts:getBySlug"),
+  },
+  siteContent: {
+    getPage: makeFunctionReference<
+      "query",
+      { slug: string },
+      SitePageRecord | null
+    >("siteContent:getPage"),
+    listPortfolioProjects: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      PortfolioProjectRecord[]
+    >("siteContent:listPortfolioProjects"),
   },
   news: {
     latest: makeFunctionReference<

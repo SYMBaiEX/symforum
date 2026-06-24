@@ -18,6 +18,8 @@ import type * as interactions from "../interactions.js";
 import type * as news from "../news.js";
 import type * as postModel from "../postModel.js";
 import type * as posts from "../posts.js";
+import type * as siteContent from "../siteContent.js";
+import type * as siteContentModel from "../siteContentModel.js";
 import type * as users from "../users.js";
 
 import type {
@@ -37,6 +39,8 @@ declare const fullApi: ApiFromModules<{
   news: typeof news;
   postModel: typeof postModel;
   posts: typeof posts;
+  siteContent: typeof siteContent;
+  siteContentModel: typeof siteContentModel;
   users: typeof users;
 }>;
 
