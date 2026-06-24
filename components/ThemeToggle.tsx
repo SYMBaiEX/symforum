@@ -28,7 +28,7 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
-  const currentTheme = isThemePreference(theme) ? theme : "system";
+  const currentTheme = mounted && isThemePreference(theme) ? theme : "system";
   const nextTheme =
     themeSequence[
       (themeSequence.indexOf(currentTheme) + 1) % themeSequence.length
