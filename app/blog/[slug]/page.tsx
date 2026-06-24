@@ -55,10 +55,10 @@ export default async function BlogPostPage({
             </div>
           </aside>
           <div className="md:col-span-7">
-            <h1 className="break-words text-5xl font-bold leading-[0.92] text-balance md:text-7xl lg:text-8xl">
+            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {post.title}
             </h1>
-            <p className="mt-7 text-xl leading-8 text-muted-foreground">
+            <p className="mt-5 text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
               {post.excerpt}
             </p>
             {imageUrl ? (

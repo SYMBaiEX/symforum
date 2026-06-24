@@ -33,7 +33,7 @@ export default async function AboutPage() {
           </aside>
 
           <div className="md:col-span-6">
-            <h1 className="break-words text-4xl font-bold leading-[0.92] text-balance sm:text-5xl md:text-7xl lg:text-8xl">
+            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "About"}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">

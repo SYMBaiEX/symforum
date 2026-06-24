@@ -41,7 +41,7 @@ export default async function PortfolioPage() {
             </div>
           </aside>
           <div className="md:col-span-7">
-            <h1 className="break-words text-4xl font-bold leading-[0.92] text-balance sm:text-5xl md:text-7xl lg:text-8xl">
+            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
@@ -73,7 +73,7 @@ export default async function PortfolioPage() {
             <div className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
               Index
             </div>
-            <h2 className="text-3xl font-semibold md:col-span-9 md:text-5xl">
+            <h2 className="text-2xl font-semibold md:col-span-9 md:text-3xl">
               Contributions and projects
             </h2>
           </div>
@@ -118,7 +118,7 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
       <div className="grid gap-3 sm:grid-cols-3 md:col-span-9 lg:grid-cols-5">
         {metricItems.map((item) => (
           <div key={item.label} className="min-w-0">
-            <div className="text-3xl font-semibold leading-none md:text-4xl">
+            <div className="text-2xl font-semibold leading-none md:text-3xl">
               {item.value}
             </div>
             <div className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
@@ -145,7 +145,7 @@ function FeaturedProject({
         Featured / {project.type}
       </div>
       <div className="md:col-span-5">
-        <h2 className="text-3xl font-bold leading-none text-balance sm:text-4xl md:text-6xl">
+        <h2 className="text-2xl font-bold leading-none text-balance sm:text-3xl md:text-4xl">
           {project.name}
         </h2>
         <p className="mt-3 text-base leading-7 text-muted-foreground md:mt-4 md:text-lg md:leading-8">
@@ -196,7 +196,7 @@ function ProjectRow({
         />
       </div>
       <div className="min-w-0 md:col-span-5">
-        <h3 className="text-2xl font-semibold leading-tight text-balance">
+        <h3 className="text-xl font-semibold leading-tight text-balance md:text-2xl">
           {project.name}
         </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground md:text-base">

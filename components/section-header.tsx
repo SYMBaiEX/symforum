@@ -21,7 +21,7 @@ export function SectionHeader({
         </div>
       ) : null}
       <div className={kicker ? "md:col-span-9" : "md:col-span-12"}>
-        <h2 className="text-2xl font-semibold md:text-4xl">{title}</h2>
+        <h2 className="text-2xl font-semibold md:text-3xl">{title}</h2>
         {children ? (
           <div className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
             {children}

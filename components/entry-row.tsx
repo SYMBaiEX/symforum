@@ -48,7 +48,7 @@ export function EntryRow({
         <h3
           className={cn(
             "font-semibold leading-tight text-balance",
-            compact ? "text-xl md:text-2xl" : "text-2xl",
+            compact ? "text-lg md:text-xl" : "text-xl md:text-2xl",
           )}
         >
           {post.title}

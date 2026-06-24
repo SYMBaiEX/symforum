@@ -1,7 +1,6 @@
 import { safeExternalUrl } from "@/lib/safe-url";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
@@ -12,19 +11,7 @@ export function MarkdownContent({ content }: { content: string }) {
     <div className="markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[
-          rehypeSlug,
-          [
-            rehypeAutolinkHeadings,
-            {
-              behavior: "wrap",
-              properties: {
-                className: ["heading-anchor"],
-              },
-            },
-          ],
-          rehypeKatex,
-        ]}
+        rehypePlugins={[rehypeSlug, rehypeKatex]}
         components={{
           a({ href, children }) {
             const cleanHref = normalizeMarkdownHref(href);
