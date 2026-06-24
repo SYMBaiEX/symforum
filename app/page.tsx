@@ -1,13 +1,18 @@
 import { AsciiSection } from "@/components/ascii-section";
+import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
 import { SectionHeader } from "@/components/section-header";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
+import { getDailyNews } from "@/lib/news-data";
 import Link from "next/link";
 
 export default async function HomePage() {
-  const featured = await getFeaturedPost();
+  const [featured, dailyNews] = await Promise.all([
+    getFeaturedPost(),
+    getDailyNews(5),
+  ]);
 
   return (
     <SiteShell>
@@ -52,8 +57,11 @@ export default async function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8 md:pb-24">
-        <SectionHeader title="Indexed news layer" divided={false} />
-        <div className="mt-8">
+        <SectionHeader title="daily news" divided={false} />
+        <div className="mt-6">
+          <DailyNewsList stories={dailyNews} />
+        </div>
+        <div className="mt-5">
           <Button asChild variant="outline">
             <Link href="/news">Open today&apos;s index</Link>
           </Button>

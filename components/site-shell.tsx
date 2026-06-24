@@ -35,15 +35,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
       </header>
       <main>{children}</main>
       <footer>
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 text-sm md:grid-cols-12 md:px-8">
+        <div className="mx-auto grid max-w-7xl items-end gap-8 px-4 py-10 text-sm md:grid-cols-12 md:px-8">
           <div className="md:col-span-5">
             <p className="font-mono uppercase">Austin Hamilton / SYMBiEX</p>
           </div>
-          <div className="text-muted-foreground md:col-span-4">
-            Personal notes on software, AI systems, design, and the web as a
-            programmable medium.
+          <div className="text-muted-foreground md:col-span-4 md:whitespace-nowrap">
+            Software, AI systems, and design notes.
           </div>
-          <div className="flex items-start justify-start md:col-span-3 md:justify-end">
+          <div className="flex items-end justify-start md:col-span-3 md:justify-end">
             <Link
               href="https://news.ycombinator.com/"
               className={cn(
