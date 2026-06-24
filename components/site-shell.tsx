@@ -19,9 +19,9 @@ const socialItems = [
 
 export function SiteShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative z-10 min-h-screen bg-background/92 text-foreground">
-      <header className="sticky top-0 z-40 bg-background/92 backdrop-blur">
-        <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
+    <div className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:6.25rem] [--site-header-offset:6.75rem] sm:[--site-footer-offset:4.5rem] sm:[--site-header-offset:3.75rem]">
+      <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
+        <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
           <div className="flex min-w-0 items-center">
             <Link
               href="/"
@@ -33,13 +33,15 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <HeaderNav />
         </div>
       </header>
-      <main>{children}</main>
-      <footer>
-        <div className="mx-auto grid max-w-7xl items-end gap-8 px-4 py-10 text-sm md:grid-cols-12 md:px-8">
-          <div className="md:col-span-5">
+      <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
+        {children}
+      </main>
+      <footer className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl items-end gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:grid-cols-12 md:px-8">
+          <div className="md:col-span-4">
             <p className="font-mono uppercase">SYMBaiEX</p>
           </div>
-          <div className="text-muted-foreground md:col-span-4 md:whitespace-nowrap">
+          <div className="text-muted-foreground md:col-span-5 md:whitespace-nowrap">
             Software, AI systems, and design notes.
           </div>
           <div className="flex flex-wrap items-end justify-start gap-1 md:col-span-3 md:justify-end">
