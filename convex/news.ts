@@ -41,11 +41,26 @@ function snapshotDate(timestamp = Date.now()) {
 }
 
 function hostname(url: string | undefined) {
-  if (!url) {
+  const safeUrl = safeExternalUrl(url);
+  if (!safeUrl) {
     return undefined;
   }
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    return new URL(safeUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function safeExternalUrl(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : undefined;
   } catch {
     return undefined;
   }
@@ -73,10 +88,7 @@ async function getPlatformStats(ctx: QueryCtx, hnItemId: number) {
   };
 }
 
-async function withPlatformStats(
-  ctx: QueryCtx,
-  story: Doc<"hnStories">,
-) {
+async function withPlatformStats(ctx: QueryCtx, story: Doc<"hnStories">) {
   return {
     ...story,
     platformStats: await getPlatformStats(ctx, story.hnItemId),
@@ -123,7 +135,9 @@ export const getStory = query({
     if (rows.length === 0) {
       return null;
     }
-    const story = rows.sort((left, right) => right.fetchedAt - left.fetchedAt)[0];
+    const story = rows.sort(
+      (left, right) => right.fetchedAt - left.fetchedAt,
+    )[0];
     return await withPlatformStats(ctx, story);
   },
 });
@@ -160,13 +174,14 @@ export const refreshTopStories = action({
         if (!item || item.deleted || item.dead || !item.title) {
           return null;
         }
+        const url = safeExternalUrl(item.url);
         return {
           hnItemId: item.id,
           snapshotDate: date,
           rank: index + 1,
           title: item.title,
-          url: item.url,
-          host: hostname(item.url),
+          url,
+          host: hostname(url),
           by: item.by,
           text: item.text,
           score: item.score,

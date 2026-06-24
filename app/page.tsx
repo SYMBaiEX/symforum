@@ -3,15 +3,15 @@ import { EntryRow } from "@/components/entry-row";
 import { SectionHeader } from "@/components/section-header";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
-import { blogPosts } from "@/lib/content";
+import { getFeaturedPost } from "@/lib/blog-data";
 import Link from "next/link";
 
-export default function HomePage() {
-  const featured = blogPosts.find((post) => post.featured) ?? blogPosts[0];
+export default async function HomePage() {
+  const featured = await getFeaturedPost();
 
   return (
     <SiteShell>
-      <section className="swiss-grid border-b border-row-border">
+      <section>
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-12 md:px-8 md:py-24">
           <div className="md:col-span-10">
             <p className="mb-6 font-mono text-xs uppercase text-muted-foreground">
@@ -49,7 +49,13 @@ export default function HomePage() {
           experiments.
         </SectionHeader>
         <div className="mt-8">
-          <EntryRow post={featured} />
+          {featured ? (
+            <EntryRow post={featured} />
+          ) : (
+            <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
+              No published posts yet.
+            </div>
+          )}
         </div>
       </section>
 

@@ -1,3 +1,5 @@
+import { safeExternalUrl } from "@/lib/safe-url";
+
 export type HnStory = {
   hnItemId: number;
   rank: number;
@@ -22,11 +24,12 @@ const HN_TOP_STORIES_URL =
 const HN_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/";
 
 export function storyHost(url: string | undefined) {
-  if (!url) {
+  const safeUrl = safeExternalUrl(url);
+  if (!safeUrl) {
     return undefined;
   }
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    return new URL(safeUrl).hostname.replace(/^www\./, "");
   } catch {
     return undefined;
   }
@@ -76,12 +79,13 @@ export async function fetchHnStory(
   if (!item || item.deleted || item.dead || !item.title) {
     return null;
   }
+  const url = safeExternalUrl(item.url);
   return {
     hnItemId: item.id,
     rank,
     title: item.title,
-    url: item.url,
-    host: storyHost(item.url),
+    url,
+    host: storyHost(url),
     by: item.by,
     score: item.score,
     descendants: item.descendants,

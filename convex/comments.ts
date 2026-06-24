@@ -45,6 +45,14 @@ export const add = mutation({
     if (body.length < 2 || body.length > 1200) {
       throw new Error("Comment must be between 2 and 1200 characters");
     }
+    const recent = await ctx.db
+      .query("comments")
+      .withIndex("by_userId_and_createdAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(1);
+    if (recent[0] !== undefined && Date.now() - recent[0].createdAt < 10_000) {
+      throw new Error("Please wait a few seconds before commenting again");
+    }
     await ctx.db.insert("comments", {
       userId,
       entityType: args.entityType,

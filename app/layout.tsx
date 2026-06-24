@@ -3,6 +3,7 @@ import { ThemeProvider } from "next-themes";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+import { headers } from "next/headers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +24,12 @@ export const metadata: Metadata = {
     "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -36,7 +38,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider attribute="class">{children}</ThemeProvider>
+        <ThemeProvider attribute="class" nonce={nonce}>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

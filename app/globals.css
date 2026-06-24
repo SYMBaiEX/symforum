@@ -103,13 +103,44 @@
 }
 
 @layer utilities {
-  .swiss-grid {
-    background-image: linear-gradient(
-        hsl(var(--border) / 0.4) 1px,
-        transparent 1px
-      ),
-      linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
-    background-size: 32px 32px;
+  .ascii-band {
+    position: relative;
+    isolation: isolate;
+    overflow: visible;
+  }
+
+  .ascii-band::before,
+  .ascii-band::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 0;
+    height: 7rem;
+    pointer-events: none;
+  }
+
+  .ascii-band > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .ascii-band::before {
+    top: -7rem;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      hsl(var(--card) / 0.55)
+    );
+  }
+
+  .ascii-band::after {
+    bottom: -7rem;
+    background: linear-gradient(
+      to bottom,
+      hsl(var(--card) / 0.55),
+      transparent
+    );
   }
 
   .text-balance {
@@ -134,14 +165,13 @@
 
   .ascii-gradient {
     color: transparent;
-    background:
-      linear-gradient(
-        90deg,
-        var(--accent-magenta) 0%,
-        var(--accent-cyan) 42%,
-        var(--accent-canary) 72%,
-        hsl(var(--foreground)) 100%
-      );
+    background: linear-gradient(
+      90deg,
+      var(--accent-magenta) 0%,
+      var(--accent-cyan) 42%,
+      var(--accent-canary) 72%,
+      hsl(var(--foreground)) 100%
+    );
     background-clip: text;
     -webkit-background-clip: text;
     filter: drop-shadow(0 0 14px hsl(var(--primary) / 0.16));

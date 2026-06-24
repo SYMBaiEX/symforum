@@ -1,16 +1,14 @@
+/* eslint-disable @next/next/no-img-element */
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SiteShell } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
-import { getPost, blogPosts } from "@/lib/content";
+import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
+import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-
-export function generateStaticParams() {
-  return blogPosts.map((post) => ({ slug: post.slug }));
-}
 
 export async function generateMetadata({
   params,
@@ -18,7 +16,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getBlogPost(slug);
   return {
     title: post?.title ?? "Post",
     description: post?.excerpt,
@@ -31,11 +29,12 @@ export default async function BlogPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getBlogPost(slug);
   if (!post) {
     notFound();
   }
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+  const imageUrl = safeImageUrl(post.imageUrl);
 
   return (
     <SiteShell>
@@ -61,6 +60,20 @@ export default async function BlogPostPage({
             <p className="mt-7 text-xl leading-8 text-muted-foreground">
               {post.excerpt}
             </p>
+            {imageUrl ? (
+              <figure className="mt-9 border-y border-row-border py-4">
+                <img
+                  src={imageUrl}
+                  alt={post.imageAlt ?? post.title}
+                  className="aspect-[16/9] w-full object-cover"
+                />
+                {post.imageCredit ? (
+                  <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
+                    {post.imageCredit}
+                  </figcaption>
+                ) : null}
+              </figure>
+            ) : null}
             <div className="mt-10 border-y border-row-border py-5">
               {convexEnabled ? (
                 <ConvexClientProvider>

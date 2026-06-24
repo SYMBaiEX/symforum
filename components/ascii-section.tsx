@@ -16,7 +16,7 @@ export function AsciiSection() {
   });
 
   return (
-    <section className="border-b border-row-border bg-card/55">
+    <section className="ascii-band bg-card/55">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 md:grid-cols-12 md:px-8 md:py-14">
         <div className="md:col-span-3">
           <p className="font-mono text-xs uppercase text-muted-foreground">

@@ -5,8 +5,8 @@ import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { toast, Toaster } from "sonner";
 
 export default function SignInPage() {
@@ -30,7 +30,9 @@ export default function SignInPage() {
         <div className="md:col-span-5 md:col-start-8">
           {configured ? (
             <ConvexClientProvider>
-              <PasswordPanel />
+              <Suspense fallback={null}>
+                <PasswordPanel />
+              </Suspense>
             </ConvexClientProvider>
           ) : (
             <div className="border border-row-border p-5">
@@ -51,7 +53,11 @@ export default function SignInPage() {
 }
 
 function PasswordPanel() {
-  const [mode, setMode] = useState<"signIn" | "signUp">("signUp");
+  const searchParams = useSearchParams();
+  const redirectTo = cleanRedirect(searchParams.get("redirectTo"));
+  const initialMode =
+    searchParams.get("mode") === "signIn" ? "signIn" : "signUp";
+  const [mode, setMode] = useState<"signIn" | "signUp">(initialMode);
   const [username, setUsername] = useState(() => randomSymHandle());
   const [pending, setPending] = useState(false);
   const { signIn } = useAuthActions();
@@ -61,11 +67,12 @@ function PasswordPanel() {
     setPending(true);
     formData.set("flow", mode);
     formData.set("username", username);
-    formData.set("redirectTo", "/news");
+    formData.set("email", usernameCredential(username));
+    formData.set("redirectTo", redirectTo);
     try {
       await signIn("password", formData);
       toast.success(mode === "signUp" ? "Account created" : "Signed in");
-      router.push("/news");
+      router.push(redirectTo);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not authenticate",
@@ -152,4 +159,15 @@ function randomSymHandle() {
   return `SYM-${Math.floor(Math.random() * 100_000_000)
     .toString()
     .padStart(8, "0")}`;
+}
+
+function usernameCredential(username: string) {
+  return `${username.trim().toLowerCase()}@users.symbaiex.local`;
+}
+
+function cleanRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/news";
+  }
+  return value;
 }

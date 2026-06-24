@@ -50,7 +50,8 @@ If `CRON_SECRET` is set, `/api/cron/news` requires
 
 - Editorial landing page with Geist, high-contrast light/dark themes, and
   animated ASCII art.
-- Blog index and static blog post pages sorted by publish date.
+- Convex-backed blog index and post pages sorted by publish date, with optional
+  post image URL, alt text, and image credit fields.
 - Hacker News daily snapshot page backed by Convex, with live HN API fallback
   before Convex is connected.
 - Internal indexed article routes at `/news/{hnItemId}` for voting, saves, and
@@ -58,6 +59,29 @@ If `CRON_SECRET` is set, `/api/cron/news` requires
 - Convex Auth username/password flow with starter `SYM-########` handles.
 - Comments and simple interactions for signed-in readers.
 - Vercel cron configuration in `vercel.ts`.
+- Owner dashboard at `/admin` for posts, image metadata, comments,
+  interactions, and admin API keys.
+
+## Admin API
+
+Create an API key in `/admin`, then send it as
+`Authorization: Bearer <token>`.
+
+```text
+GET    /api/admin/posts
+POST   /api/admin/posts
+GET    /api/admin/posts/[slug]
+PATCH  /api/admin/posts/[slug]
+PUT    /api/admin/posts/[slug]
+DELETE /api/admin/posts/[slug]
+GET    /api/admin/interactions
+DELETE /api/admin/comments/[commentId]
+DELETE /api/admin/interactions/[interactionId]
+```
+
+Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
+`publishedAt`, `readingMinutes`, `featured`, `imageUrl`, `imageAlt`, and
+`imageCredit`. If `slug` is omitted, it is generated from the article title.
 
 ## Deployment Notes
 

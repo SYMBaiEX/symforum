@@ -6,6 +6,9 @@ export type BlogPost = {
   readingMinutes: number;
   tags: string[];
   featured?: boolean;
+  imageUrl?: string;
+  imageAlt?: string;
+  imageCredit?: string;
   body: string[];
 };
 

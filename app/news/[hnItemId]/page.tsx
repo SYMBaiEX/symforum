@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { compactNumber, formatDate } from "@/lib/format";
 import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
 import { newsStorySlug, parseNewsStoryParam } from "@/lib/news-slugs";
+import { safeExternalUrl } from "@/lib/safe-url";
 import { ArrowUpRight, Bookmark, MessageSquare } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -48,6 +49,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
   const body = stripHnHtml(story.text);
   const entityId = String(story.hnItemId);
+  const sourceUrl = safeExternalUrl(story.url);
   const stats = story.platformStats ?? {
     comments: 0,
     score: 0,
@@ -70,7 +72,10 @@ export default async function NewsStoryPage({ params }: PageProps) {
                 <Badge variant="outline" className="font-mono uppercase">
                   {compactNumber(stats.score)} pts
                 </Badge>
-                <Badge variant="secondary" className="gap-1 font-mono uppercase">
+                <Badge
+                  variant="secondary"
+                  className="gap-1 font-mono uppercase"
+                >
                   <MessageSquare />
                   {compactNumber(stats.comments)} comments
                 </Badge>
@@ -89,9 +94,13 @@ export default async function NewsStoryPage({ params }: PageProps) {
               {story.title}
             </h1>
             <div className="mt-5 flex flex-wrap gap-2">
-              {story.url ? (
+              {sourceUrl ? (
                 <Button asChild size="sm">
-                  <Link href={story.url} target="_blank">
+                  <Link
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Read source
                     <ArrowUpRight />
                   </Link>
@@ -118,7 +127,10 @@ export default async function NewsStoryPage({ params }: PageProps) {
               {body ? (
                 <div className="flex flex-col gap-4">
                   {body.split(/\n{2,}/).map((paragraph) => (
-                    <p key={paragraph} className="text-sm leading-7 md:text-base">
+                    <p
+                      key={paragraph}
+                      className="text-sm leading-7 md:text-base"
+                    >
                       {paragraph}
                     </p>
                   ))}

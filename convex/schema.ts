@@ -36,8 +36,12 @@ export default defineSchema({
     publishedAt: v.number(),
     readingMinutes: v.number(),
     featured: v.boolean(),
+    imageUrl: v.optional(v.string()),
+    imageAlt: v.optional(v.string()),
+    imageCredit: v.optional(v.string()),
   })
     .index("by_slug", ["slug"])
+    .index("by_publishedAt", ["publishedAt"])
     .index("by_status_and_publishedAt", ["status", "publishedAt"])
     .index("by_featured_and_publishedAt", ["featured", "publishedAt"]),
   newsSnapshots: defineTable({
@@ -75,6 +79,7 @@ export default defineSchema({
     body: v.string(),
     createdAt: v.number(),
   })
+    .index("by_createdAt", ["createdAt"])
     .index("by_entityType_and_entityId_and_createdAt", [
       "entityType",
       "entityId",
@@ -94,5 +99,17 @@ export default defineSchema({
       "entityType",
       "entityId",
     ])
-    .index("by_entityType_and_entityId", ["entityType", "entityId"]),
+    .index("by_entityType_and_entityId", ["entityType", "entityId"])
+    .index("by_updatedAt", ["updatedAt"]),
+  apiKeys: defineTable({
+    name: v.string(),
+    tokenHash: v.string(),
+    tokenPreview: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_createdAt", ["createdAt"]),
 });
