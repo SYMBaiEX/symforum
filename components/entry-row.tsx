@@ -53,14 +53,6 @@ export function EntryRow({
         >
           {post.title}
         </h3>
-        <p
-          className={cn(
-            "max-w-2xl text-muted-foreground",
-            compact ? "mt-2 text-sm leading-6" : "mt-3 leading-7",
-          )}
-        >
-          {post.excerpt}
-        </p>
       </div>
       <div
         className={cn(
