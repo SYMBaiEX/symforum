@@ -39,10 +39,7 @@ export default async function HomePage() {
       <AsciiSection />
 
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8 md:py-24">
-        <SectionHeader kicker="Featured" title="Latest essay" divided={false}>
-          A working archive for design systems, AI engineering, and personal web
-          experiments.
-        </SectionHeader>
+        <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
           {featured ? (
             <EntryRow post={featured} divided={false} compact />
@@ -55,14 +52,7 @@ export default async function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8 md:pb-24">
-        <SectionHeader
-          kicker="Dispatch"
-          title="Indexed news layer"
-          divided={false}
-        >
-          Hacker News supplies the daily source list; this site owns the reader
-          route, voting, saves, and comments.
-        </SectionHeader>
+        <SectionHeader title="Indexed news layer" divided={false} />
         <div className="mt-8">
           <Button asChild variant="outline">
             <Link href="/news">Open today&apos;s index</Link>
