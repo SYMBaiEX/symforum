@@ -6,7 +6,16 @@ import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
+import katex from "katex";
 import Link from "next/link";
+
+const identityEquation = katex.renderToString(
+  '\\left(\\text{"}\\mathrm{SYMBiEX}\\text{"}\\right)\\;\\equiv\\;\\mathrm{Symbiosis}+\\mathrm{AI}+\\mathrm{Experiment}\\;\\rightarrow\\;\\mathrm{SYMBaiEX}',
+  {
+    throwOnError: false,
+    output: "html",
+  },
+);
 
 export default async function HomePage() {
   const [featured, dailyNews] = await Promise.all([
@@ -17,23 +26,28 @@ export default async function HomePage() {
   return (
     <SiteShell>
       <section>
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-12 md:px-8 md:py-24">
-          <div className="md:col-span-10">
-            <p className="mb-6 font-mono text-xs uppercase text-muted-foreground">
-              Software / AI systems / internet craft
-            </p>
-            <h1 className="max-w-5xl break-words text-6xl font-bold leading-[0.9] text-balance md:text-8xl lg:text-9xl">
-              Hi, I&apos;m Austin Hamilton (&quot;SYMBiEX&quot;)
-            </h1>
-            <p className="mt-8 max-w-2xl text-xl leading-8 text-muted-foreground">
-              I build sharp software, agentic systems, and public notebooks for
-              the strange edges where engineering, taste, and automation meet.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild size="lg">
+        <div className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
+          <h1 className="grid gap-6 break-words md:grid-cols-12 md:items-start">
+            <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-9 md:col-start-4 md:-translate-x-28 md:text-6xl lg:-translate-x-40 lg:text-7xl">
+              Hi, I&apos;m
+            </span>
+            <span className="max-w-5xl text-5xl font-bold leading-[0.88] text-balance md:col-span-9 md:col-start-4 md:-translate-x-10 md:text-7xl lg:-translate-x-12 lg:text-8xl">
+              <span className="block">Austin</span>
+              <span className="block pl-8 md:pl-20">Hamilton</span>
+            </span>
+          </h1>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-12 md:items-end">
+            <div
+              className="overflow-x-auto text-sm text-foreground md:col-span-9 md:col-start-4 md:-translate-x-10 md:whitespace-nowrap md:text-lg lg:-translate-x-12"
+              aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
+              dangerouslySetInnerHTML={{ __html: identityEquation }}
+            />
+            <div className="flex flex-wrap gap-2 md:col-span-9 md:col-start-4 md:justify-end">
+              <Button asChild>
                 <Link href="/blog">Read blog</Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild variant="outline">
                 <Link href="/news">Latest news</Link>
               </Button>
             </div>
