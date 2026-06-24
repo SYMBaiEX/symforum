@@ -12,7 +12,7 @@ export function AsciiSection() {
     animationLoop: true,
     animationSpeed: 22,
     font: small,
-    text: ["SYMBiEX", "AUSTIN", "AI WEB"],
+    text: ["SYMBiEX", "AUSTIN", "AI BLOG"],
   });
 
   return (
