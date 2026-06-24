@@ -57,7 +57,7 @@ export default async function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8 md:pb-24">
-        <SectionHeader title="daily news" divided={false} />
+        <SectionHeader title="Daily news" divided={false} />
         <div className="mt-6">
           <DailyNewsList stories={dailyNews} />
         </div>
