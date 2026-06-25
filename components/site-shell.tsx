@@ -1,4 +1,5 @@
 import { HeaderNav } from "@/components/header-nav";
+import { NewsletterSignup } from "@/components/newsletter-signup";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
@@ -41,8 +42,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="md:col-span-4">
             <p className="font-mono uppercase">SYMBaiEX</p>
           </div>
-          <div className="text-muted-foreground md:col-span-5 md:whitespace-nowrap">
-            Software, AI systems, and design notes.
+          <div className="md:col-span-5">
+            <NewsletterSignup source="footer" variant="footer" />
           </div>
           <div className="flex flex-wrap items-end justify-start gap-1 md:col-span-3 md:justify-end">
             {socialItems.map(({ href, label, Icon }) => (

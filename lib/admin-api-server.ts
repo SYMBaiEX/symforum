@@ -2,6 +2,8 @@ import {
   type AdminCommentRecord,
   type AdminInteractionRecord,
   type ConvexPostRecord,
+  type NewsletterIssueRecord,
+  type NewsletterSubscriberRecord,
 } from "@/lib/convex-refs";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
@@ -25,6 +27,16 @@ export type ApiPostInput = {
   imageUrl?: string;
   imageAlt?: string;
   imageCredit?: string;
+};
+
+export type ApiNewsletterIssueInput = {
+  slug?: string;
+  subject: string;
+  previewText: string;
+  body: string;
+  status?: "draft" | "scheduled" | "sent" | "cancelled" | "failed";
+  linkedPostSlug?: string;
+  scheduledAt?: number;
 };
 
 export const adminApiRefs = {
@@ -86,6 +98,41 @@ export const adminApiRefs = {
     { tokenHash: string; interactionId: string },
     { deleted: boolean }
   >("adminApi:deleteInteraction"),
+  listNewsletterSubscribers: makeFunctionReference<
+    "mutation",
+    { tokenHash: string },
+    NewsletterSubscriberRecord[]
+  >("adminApi:listNewsletterSubscribers"),
+  listNewsletterIssues: makeFunctionReference<
+    "mutation",
+    { tokenHash: string },
+    NewsletterIssueRecord[]
+  >("adminApi:listNewsletterIssues"),
+  getNewsletterIssue: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; slug: string },
+    NewsletterIssueRecord | null
+  >("adminApi:getNewsletterIssue"),
+  upsertNewsletterIssue: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; issue: ApiNewsletterIssueInput },
+    NewsletterIssueRecord | null
+  >("adminApi:upsertNewsletterIssue"),
+  sendNewsletterIssueTest: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; slug: string; to: string },
+    { queued: boolean }
+  >("adminApi:sendNewsletterIssueTest"),
+  scheduleNewsletterIssue: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; slug: string; scheduledAt: number },
+    { scheduled: boolean }
+  >("adminApi:scheduleNewsletterIssue"),
+  sendNewsletterIssueNow: makeFunctionReference<
+    "mutation",
+    { tokenHash: string; slug: string },
+    { queued: boolean }
+  >("adminApi:sendNewsletterIssueNow"),
 };
 
 export class AdminApiError extends Error {
@@ -252,11 +299,54 @@ export function normalizeApiPostPayload(
   return post;
 }
 
+export function normalizeApiNewsletterIssuePayload(
+  payload: unknown,
+  fallback?: NewsletterIssueRecord,
+): ApiNewsletterIssueInput {
+  const source = unwrapNewsletterPayload(payload);
+  const subject = stringField(source.subject, fallback?.subject);
+  const body = bodyField(source.body, fallback?.body);
+  const previewText = stringField(
+    source.previewText,
+    fallback?.previewText ?? body.slice(0, 180),
+  );
+  const issue: ApiNewsletterIssueInput = {
+    subject,
+    previewText,
+    body,
+    status: newsletterIssueStatusField(source.status, fallback?.status),
+  };
+  const slug = optionalString(source.slug, fallback?.slug);
+  const linkedPostSlug = optionalString(
+    source.linkedPostSlug,
+    fallback?.linkedPostSlug,
+  );
+  const scheduledAt = optionalDateField(source.scheduledAt, fallback?.scheduledAt);
+  if (slug) {
+    issue.slug = slug;
+  }
+  if (linkedPostSlug) {
+    issue.linkedPostSlug = linkedPostSlug;
+  }
+  if (scheduledAt !== undefined) {
+    issue.scheduledAt = scheduledAt;
+  }
+  return issue;
+}
+
 function unwrapPostPayload(payload: unknown) {
   if (!isRecord(payload)) {
     throw new AdminApiError(400, "Body must be a JSON object");
   }
   const nested = payload.post;
+  return isRecord(nested) ? nested : payload;
+}
+
+function unwrapNewsletterPayload(payload: unknown) {
+  if (!isRecord(payload)) {
+    throw new AdminApiError(400, "Body must be a JSON object");
+  }
+  const nested = payload.issue;
   return isRecord(nested) ? nested : payload;
 }
 
@@ -312,6 +402,19 @@ function dateField(value: unknown, fallback?: number) {
   return fallback ?? Date.now();
 }
 
+function optionalDateField(value: unknown, fallback?: number) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
 function numberField(value: unknown, fallback: number) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -327,6 +430,19 @@ function numberField(value: unknown, fallback: number) {
 
 function booleanField(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function newsletterIssueStatusField(
+  value: unknown,
+  fallback?: ApiNewsletterIssueInput["status"],
+) {
+  return value === "draft" ||
+    value === "scheduled" ||
+    value === "sent" ||
+    value === "cancelled" ||
+    value === "failed"
+    ? value
+    : (fallback ?? "draft");
 }
 
 function estimateReadingMinutes(body: string) {

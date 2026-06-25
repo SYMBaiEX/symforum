@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
+import { ProfileNewsletterPreferences } from "@/components/profile-newsletter-preferences";
 import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
 import { useQuery } from "convex/react";
@@ -98,6 +99,7 @@ export function CurrentProfilePanel() {
             value={viewer.bio?.trim() || "No bio saved for this account yet."}
           />
         </dl>
+        <ProfileNewsletterPreferences />
       </aside>
     </div>
   );

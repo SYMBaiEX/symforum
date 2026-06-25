@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminSiteContent } from "@/components/admin-site-content";
+import { AdminNewsletter } from "@/components/admin-newsletter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -411,6 +412,12 @@ function OwnerDashboard() {
               <p>PATCH /api/admin/posts/[slug]</p>
               <p>DELETE /api/admin/posts/[slug]</p>
               <p>GET /api/admin/interactions</p>
+              <p>GET /api/admin/newsletter/subscribers</p>
+              <p>GET /api/admin/newsletter/issues</p>
+              <p>POST /api/admin/newsletter/issues</p>
+              <p>POST /api/admin/newsletter/issues/[slug]/test</p>
+              <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
+              <p>POST /api/admin/newsletter/issues/[slug]/send</p>
             </div>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
               Send{" "}
@@ -481,6 +488,7 @@ function OwnerDashboard() {
           </section>
         </aside>
       </div>
+      <AdminNewsletter />
       <AdminSiteContent />
       <Toaster />
     </>

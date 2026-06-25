@@ -160,4 +160,79 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_createdAt", ["createdAt"]),
+  newsletterSubscribers: defineTable({
+    email: v.string(),
+    emailNormalized: v.string(),
+    userId: v.optional(v.id("users")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("unsubscribed"),
+      v.literal("bounced"),
+    ),
+    source: v.string(),
+    tokenHash: v.string(),
+    resendContactId: v.optional(v.string()),
+    resendSyncStatus: v.union(
+      v.literal("idle"),
+      v.literal("synced"),
+      v.literal("failed"),
+      v.literal("not_configured"),
+    ),
+    resendSyncedAt: v.optional(v.number()),
+    resendError: v.optional(v.string()),
+    createdAt: v.number(),
+    confirmedAt: v.optional(v.number()),
+    unsubscribedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_emailNormalized", ["emailNormalized"])
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_userId_and_createdAt", ["userId", "createdAt"]),
+  newsletterIssues: defineTable({
+    slug: v.string(),
+    subject: v.string(),
+    previewText: v.string(),
+    body: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("sent"),
+      v.literal("cancelled"),
+      v.literal("failed"),
+    ),
+    linkedPostSlug: v.optional(v.string()),
+    scheduledAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    resendBroadcastId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_resendBroadcastId", ["resendBroadcastId"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_scheduledAt", ["scheduledAt"]),
+  newsletterEvents: defineTable({
+    provider: v.literal("resend"),
+    eventId: v.string(),
+    eventType: v.string(),
+    email: v.optional(v.string()),
+    subscriberId: v.optional(v.id("newsletterSubscribers")),
+    issueId: v.optional(v.id("newsletterIssues")),
+    resendEmailId: v.optional(v.string()),
+    metadataJson: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_receivedAt", ["receivedAt"])
+    .index("by_subscriberId_and_receivedAt", ["subscriberId", "receivedAt"]),
+  newsletterSettings: defineTable({
+    key: v.string(),
+    value: v.string(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });

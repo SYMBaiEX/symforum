@@ -16,8 +16,12 @@ import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as news from "../news.js";
+import type * as newsletter from "../newsletter.js";
+import type * as newsletterEmails from "../newsletterEmails.js";
+import type * as newsletterModel from "../newsletterModel.js";
 import type * as postModel from "../postModel.js";
 import type * as posts from "../posts.js";
+import type * as resendClient from "../resendClient.js";
 import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
 import type * as users from "../users.js";
@@ -37,8 +41,12 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactions: typeof interactions;
   news: typeof news;
+  newsletter: typeof newsletter;
+  newsletterEmails: typeof newsletterEmails;
+  newsletterModel: typeof newsletterModel;
   postModel: typeof postModel;
   posts: typeof posts;
+  resendClient: typeof resendClient;
   siteContent: typeof siteContent;
   siteContentModel: typeof siteContentModel;
   users: typeof users;
@@ -70,4 +78,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+};

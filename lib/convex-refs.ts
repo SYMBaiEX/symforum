@@ -141,6 +141,39 @@ export type AdminApiKeyRecord = {
   revokedAt?: number;
 };
 
+export type NewsletterSubscriberRecord = {
+  _id: string;
+  _creationTime: number;
+  email: string;
+  status: "pending" | "confirmed" | "unsubscribed" | "bounced";
+  source: string;
+  resendContactId?: string;
+  resendSyncStatus: "idle" | "synced" | "failed" | "not_configured";
+  resendSyncedAt?: number;
+  resendError?: string;
+  createdAt: number;
+  confirmedAt?: number;
+  unsubscribedAt?: number;
+  updatedAt: number;
+};
+
+export type NewsletterIssueRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  subject: string;
+  previewText: string;
+  body: string;
+  status: "draft" | "scheduled" | "sent" | "cancelled" | "failed";
+  linkedPostSlug?: string;
+  scheduledAt?: number;
+  sentAt?: number;
+  resendBroadcastId?: string;
+  errorMessage?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type NewsSnapshotRecord = {
   _id: string;
   _creationTime: number;
@@ -321,6 +354,51 @@ export const convexRefs = {
       { keyId: string },
       { revoked: boolean }
     >("admin:revokeApiKey"),
+    listNewsletterSubscribers: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      NewsletterSubscriberRecord[]
+    >("newsletter:listAdminSubscribers"),
+    listNewsletterIssues: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      NewsletterIssueRecord[]
+    >("newsletter:listAdminIssues"),
+    upsertNewsletterIssue: makeFunctionReference<
+      "mutation",
+      {
+        issue: {
+          slug?: string;
+          subject: string;
+          previewText: string;
+          body: string;
+          status?: NewsletterIssueRecord["status"];
+          linkedPostSlug?: string;
+          scheduledAt?: number;
+        };
+      },
+      NewsletterIssueRecord | null
+    >("newsletter:upsertAdminIssue"),
+    sendNewsletterIssueTest: makeFunctionReference<
+      "mutation",
+      { slug: string; to?: string },
+      { queued: boolean }
+    >("newsletter:sendAdminIssueTest"),
+    sendNewsletterIssueNow: makeFunctionReference<
+      "mutation",
+      { slug: string },
+      { queued: boolean }
+    >("newsletter:sendAdminIssueNow"),
+    scheduleNewsletterIssue: makeFunctionReference<
+      "mutation",
+      { slug: string; scheduledAt: number },
+      { scheduled: boolean }
+    >("newsletter:scheduleAdminIssue"),
+    cancelNewsletterIssue: makeFunctionReference<
+      "mutation",
+      { slug: string },
+      { cancelled: boolean }
+    >("newsletter:cancelAdminIssue"),
   },
   comments: {
     list: makeFunctionReference<
@@ -359,6 +437,53 @@ export const convexRefs = {
       { username: string },
       PublicProfileRecord | null
     >("users:publicProfile"),
+  },
+  newsletter: {
+    subscribe: makeFunctionReference<
+      "mutation",
+      {
+        email: string;
+        source?: string;
+        token: string;
+        tokenHash: string;
+        siteUrl?: string;
+      },
+      NewsletterSubscriberRecord
+    >("newsletter:subscribe"),
+    viewerPreferences: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      {
+        userEmail: string | null;
+        subscriptions: NewsletterSubscriberRecord[];
+      } | null
+    >("newsletter:viewerPreferences"),
+    requestViewerSubscription: makeFunctionReference<
+      "mutation",
+      {
+        email: string;
+        source?: string;
+        token: string;
+        tokenHash: string;
+        siteUrl?: string;
+      },
+      NewsletterSubscriberRecord
+    >("newsletter:requestViewerSubscription"),
+    getByToken: makeFunctionReference<
+      "query",
+      { tokenHash: string },
+      NewsletterSubscriberRecord | null
+    >("newsletter:getByToken"),
+    confirm: makeFunctionReference<
+      "mutation",
+      { tokenHash: string; siteUrl?: string },
+      { ok: boolean; subscriber: NewsletterSubscriberRecord | null }
+    >("newsletter:confirm"),
+    unsubscribe: makeFunctionReference<
+      "mutation",
+      { tokenHash: string },
+      { ok: boolean; subscriber: NewsletterSubscriberRecord | null }
+    >("newsletter:unsubscribe"),
   },
   interactions: {
     summary: makeFunctionReference<
