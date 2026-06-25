@@ -45,7 +45,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="md:col-span-5">
             <NewsletterSignup source="footer" variant="footer" />
           </div>
-          <div className="flex flex-wrap items-end justify-start gap-1 md:col-span-3 md:justify-end">
+          <div className="flex flex-wrap items-end justify-end gap-1 md:col-span-3">
             {socialItems.map(({ href, label, Icon }) => (
               <Button
                 key={href}

@@ -21,7 +21,7 @@ export function EntryRow({
     <Link
       href={`/blog/${post.slug}`}
       className={cn(
-        "focus-ring group grid gap-3 transition-colors hover:bg-muted/45 md:items-center md:px-3",
+        "focus-ring group grid grid-cols-[minmax(0,1fr)_auto] gap-3 transition-colors hover:bg-muted/45 md:items-center md:px-3",
         imageUrl
           ? "md:grid-cols-[8.25rem_7.5rem_minmax(0,1fr)_4.5rem]"
           : "md:grid-cols-[8.25rem_minmax(0,1fr)_4.5rem]",
@@ -31,14 +31,14 @@ export function EntryRow({
     >
       <div
         className={cn(
-          "font-mono uppercase text-muted-foreground",
+          "col-start-1 row-start-1 font-mono uppercase text-muted-foreground md:col-start-auto md:row-start-auto",
           compact ? "text-[11px]" : "text-xs",
         )}
       >
         {formatDate(post.publishedAt)}
       </div>
       {imageUrl ? (
-        <div className="w-full max-w-[7.5rem]">
+        <div className="col-span-2 w-full max-w-[7.5rem] md:col-span-1">
           <img
             src={imageUrl}
             alt={post.imageAlt ?? post.title}
@@ -46,7 +46,7 @@ export function EntryRow({
           />
         </div>
       ) : null}
-      <div className="min-w-0">
+      <div className="col-span-2 min-w-0 md:col-span-1">
         <h3
           className={cn(
             "font-semibold leading-tight",
@@ -58,7 +58,7 @@ export function EntryRow({
       </div>
       <div
         className={cn(
-          "flex items-start md:justify-end",
+          "col-start-2 row-start-1 flex items-start justify-end md:col-start-auto md:row-start-auto",
           compact ? "gap-1.5" : "gap-2",
         )}
       >
