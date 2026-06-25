@@ -810,10 +810,8 @@ function AdminTabChrome({
   onChange: (tab: AdminTabId) => void;
   tabs: AdminTab[];
 }) {
-  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
-
   return (
-    <div className="mb-8">
+    <div className="mb-7">
       <div className="md:hidden">
         <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
           Admin section
@@ -823,14 +821,12 @@ function AdminTabChrome({
           onValueChange={(value) => onChange(value as AdminTabId)}
         >
           <SelectTrigger className="h-12 rounded-none font-mono text-xs uppercase">
-            <SelectValue>
-              {active.label} / {active.note}
-            </SelectValue>
+            <SelectValue />
           </SelectTrigger>
           <SelectContent align="start" className="rounded-none">
             {tabs.map((tab) => (
               <SelectItem key={tab.id} value={tab.id}>
-                {tab.label} / {tab.note}
+                {tab.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -839,51 +835,27 @@ function AdminTabChrome({
 
       <div
         aria-label="Admin sections"
-        className="hidden gap-1 md:grid md:grid-cols-5 xl:grid-cols-10"
+        className="hidden flex-wrap items-center gap-1 md:flex"
         role="tablist"
       >
         {tabs.map((tab) => {
-          const Icon = tab.icon;
           const selected = activeTab === tab.id;
           return (
             <button
               aria-selected={selected}
               className={cn(
-                "group min-h-20 border border-row-border px-3 py-3 text-left transition-colors",
+                "px-3 py-2 text-sm font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 selected
                   ? "bg-foreground text-background"
-                  : "bg-transparent text-foreground hover:bg-muted/40",
+                  : "text-muted-foreground hover:text-foreground",
               )}
               key={tab.id}
               onClick={() => onChange(tab.id)}
               role="tab"
               type="button"
             >
-              <span className="flex items-center justify-between gap-2">
-                <Icon className="size-4" />
-                <span
-                  className={cn(
-                    "font-mono text-[10px] uppercase",
-                    selected
-                      ? "text-background/75"
-                      : "text-muted-foreground group-hover:text-foreground",
-                  )}
-                >
-                  {compactNumber(tab.count ?? 0)}
-                </span>
-              </span>
-              <span className="mt-3 block text-sm font-semibold leading-none">
-                {tab.label}
-              </span>
-              <span
-                className={cn(
-                  "mt-1 block truncate font-mono text-[10px] uppercase",
-                  selected ? "text-background/70" : "text-muted-foreground",
-                )}
-              >
-                {tab.note}
-              </span>
+              {tab.label}
             </button>
           );
         })}
