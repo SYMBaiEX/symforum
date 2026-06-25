@@ -1,6 +1,7 @@
 "use client";
 
 import { reportAppError } from "@/components/app-error-surface";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,8 +23,27 @@ type IssueForm = {
   previewText: string;
   body: string;
   linkedPostSlug: string;
-  scheduledAt: string;
 };
+
+type IssueFilter = "all" | NewsletterIssueRecord["status"];
+type SubscriberFilter = "all" | NewsletterSubscriberRecord["status"];
+
+const ISSUE_FILTERS: IssueFilter[] = [
+  "all",
+  "draft",
+  "scheduled",
+  "sent",
+  "failed",
+  "cancelled",
+];
+
+const SUBSCRIBER_FILTERS: SubscriberFilter[] = [
+  "all",
+  "confirmed",
+  "pending",
+  "unsubscribed",
+  "bounced",
+];
 
 const blankIssue: IssueForm = {
   slug: "",
@@ -31,7 +51,6 @@ const blankIssue: IssueForm = {
   previewText: "",
   body: "",
   linkedPostSlug: "",
-  scheduledAt: "",
 };
 
 export function AdminNewsletter() {
@@ -41,19 +60,83 @@ export function AdminNewsletter() {
   const sendTest = useMutation(convexRefs.admin.sendNewsletterIssueTest);
   const sendNow = useMutation(convexRefs.admin.sendNewsletterIssueNow);
   const scheduleIssue = useMutation(convexRefs.admin.scheduleNewsletterIssue);
+  const cancelIssue = useMutation(convexRefs.admin.cancelNewsletterIssue);
   const [form, setForm] = useState<IssueForm>(blankIssue);
+  const [scheduleAt, setScheduleAt] = useState("");
   const [testEmail, setTestEmail] = useState("solsymbaiex@gmail.com");
+  const [issueFilter, setIssueFilter] = useState<IssueFilter>("all");
+  const [subscriberFilter, setSubscriberFilter] =
+    useState<SubscriberFilter>("all");
 
   const subscriberRows = useMemo(() => subscribers ?? [], [subscribers]);
   const issueRows = useMemo(() => issues ?? [], [issues]);
   const selectedSlug = form.slug.trim();
+  const selectedIssue = useMemo(
+    () => issueRows.find((issue) => issue.slug === selectedSlug) ?? null,
+    [issueRows, selectedSlug],
+  );
+  const confirmedSubscribers = subscriberRows.filter(
+    (row) => row.status === "confirmed",
+  ).length;
+  const filteredIssues = useMemo(
+    () =>
+      issueRows.filter((issue) =>
+        issueFilter === "all" ? true : issue.status === issueFilter,
+      ),
+    [issueFilter, issueRows],
+  );
+  const filteredSubscribers = useMemo(
+    () =>
+      subscriberRows.filter((subscriber) =>
+        subscriberFilter === "all"
+          ? true
+          : subscriber.status === subscriberFilter,
+      ),
+    [subscriberFilter, subscriberRows],
+  );
+  const issueCounts = useMemo(
+    () => countIssuesByStatus(issueRows),
+    [issueRows],
+  );
+  const subscriberCounts = useMemo(
+    () => countSubscribersByStatus(subscriberRows),
+    [subscriberRows],
+  );
+  const syncCounts = useMemo(
+    () => countSubscribersBySync(subscriberRows),
+    [subscriberRows],
+  );
+  const canRunIssueActions = selectedIssue !== null;
+  const canSendNow = selectedIssue !== null && selectedIssue.status !== "sent";
+  const canCancel =
+    selectedIssue !== null &&
+    selectedIssue.status !== "sent" &&
+    selectedIssue.status !== "cancelled";
+  const canSchedule =
+    selectedIssue !== null &&
+    selectedIssue.status !== "sent" &&
+    scheduleAt.trim().length > 0;
+
+  function resetDraft() {
+    setForm(blankIssue);
+    setScheduleAt("");
+  }
+
+  function selectIssue(issue: NewsletterIssueRecord) {
+    setForm(issueToForm(issue));
+    setScheduleAt(
+      issue.scheduledAt ? timestampToLocalInput(issue.scheduledAt) : "",
+    );
+  }
 
   async function saveIssue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const saved = await upsertIssue({ issue: formToIssue(form) });
+      const saved = await upsertIssue({
+        issue: formToIssue(form, selectedIssue?.status),
+      });
       if (saved) {
-        setForm(issueToForm(saved));
+        selectIssue(saved);
       }
       toast.success("Newsletter issue saved");
     } catch (error) {
@@ -65,7 +148,9 @@ export function AdminNewsletter() {
         metadata: { slug: form.slug },
         notify: false,
       });
-      toast.error(error instanceof Error ? error.message : "Could not save issue");
+      toast.error(
+        error instanceof Error ? error.message : "Could not save issue",
+      );
     }
   }
 
@@ -86,7 +171,9 @@ export function AdminNewsletter() {
         metadata: { slug: selectedSlug },
         notify: false,
       });
-      toast.error(error instanceof Error ? error.message : "Could not send test");
+      toast.error(
+        error instanceof Error ? error.message : "Could not send test",
+      );
     }
   }
 
@@ -95,7 +182,13 @@ export function AdminNewsletter() {
       toast.error("Save the issue first");
       return;
     }
-    if (!window.confirm(`Send ${selectedSlug} to confirmed subscribers?`)) {
+    if (
+      !window.confirm(
+        `Queue ${selectedSlug} for ${confirmedSubscribers} confirmed subscriber${
+          confirmedSubscribers === 1 ? "" : "s"
+        }?`,
+      )
+    ) {
       return;
     }
     try {
@@ -110,19 +203,21 @@ export function AdminNewsletter() {
         metadata: { slug: selectedSlug },
         notify: false,
       });
-      toast.error(error instanceof Error ? error.message : "Could not send issue");
+      toast.error(
+        error instanceof Error ? error.message : "Could not send issue",
+      );
     }
   }
 
   async function scheduleSelectedIssue() {
-    if (!selectedSlug || !form.scheduledAt) {
+    if (!selectedSlug || !scheduleAt) {
       toast.error("Pick an issue and a schedule time");
       return;
     }
     try {
       await scheduleIssue({
         slug: selectedSlug,
-        scheduledAt: new Date(form.scheduledAt).getTime(),
+        scheduledAt: new Date(scheduleAt).getTime(),
       });
       toast.success("Newsletter issue scheduled");
     } catch (error) {
@@ -134,129 +229,286 @@ export function AdminNewsletter() {
         metadata: { slug: selectedSlug },
         notify: false,
       });
-      toast.error(error instanceof Error ? error.message : "Could not schedule issue");
+      toast.error(
+        error instanceof Error ? error.message : "Could not schedule issue",
+      );
+    }
+  }
+
+  async function cancelSelectedIssue() {
+    if (!selectedSlug) {
+      toast.error("Pick an issue first");
+      return;
+    }
+    if (!window.confirm(`Cancel scheduled delivery for ${selectedSlug}?`)) {
+      return;
+    }
+    try {
+      await cancelIssue({ slug: selectedSlug });
+      toast.success("Scheduled issue cancelled");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "issue_cancel_failed",
+        component: "AdminNewsletter",
+        action: "newsletter:cancelAdminIssue",
+        metadata: { slug: selectedSlug },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not cancel issue",
+      );
     }
   }
 
   return (
-    <section className="mt-10 grid gap-8 lg:grid-cols-12">
-      <div className="lg:col-span-4">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Newsletter
-            </p>
-            <h2 className="mt-1 text-2xl font-semibold">Issues</h2>
+    <section className="mt-10 grid gap-6 xl:grid-cols-12">
+      <div className="xl:col-span-4">
+        <div className="rounded-xl border bg-background p-4 sm:p-5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Newsletter
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold">Issues</h2>
+            </div>
+            <Button size="sm" variant="outline" onClick={resetDraft}>
+              New
+            </Button>
           </div>
-          <Button size="sm" variant="outline" onClick={() => setForm(blankIssue)}>
-            New
-          </Button>
-        </div>
-        <div className="mt-5 grid gap-2">
-          {issueRows.map((issue) => (
-            <IssueButton
-              active={issue.slug === selectedSlug}
-              issue={issue}
-              key={issue._id}
-              onSelect={() => setForm(issueToForm(issue))}
-            />
-          ))}
-          {issues === undefined ? <StatusLine>Loading issues</StatusLine> : null}
-          {issues?.length === 0 ? <StatusLine>No issues yet</StatusLine> : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {ISSUE_FILTERS.map((filter) => (
+              <FilterChip
+                active={issueFilter === filter}
+                key={filter}
+                onClick={() => setIssueFilter(filter)}
+              >
+                {labelFromFilter(filter)}{" "}
+                <span className="text-muted-foreground">
+                  {filter === "all"
+                    ? issueRows.length
+                    : (issueCounts[filter] ?? 0)}
+                </span>
+              </FilterChip>
+            ))}
+          </div>
+          <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
+            {filteredIssues.map((issue) => (
+              <IssueButton
+                active={issue.slug === selectedSlug}
+                issue={issue}
+                key={issue._id}
+                onSelect={() => selectIssue(issue)}
+              />
+            ))}
+            {issues === undefined ? (
+              <StatusLine>Loading issues</StatusLine>
+            ) : null}
+            {issues?.length === 0 ? (
+              <StatusLine>No issues yet</StatusLine>
+            ) : null}
+            {issues !== undefined &&
+            issues.length > 0 &&
+            filteredIssues.length === 0 ? (
+              <StatusLine>No issues match this filter</StatusLine>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      <form onSubmit={saveIssue} className="lg:col-span-5">
-        <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            Editor
-          </p>
-          <Button type="submit" size="sm">
-            Save
-          </Button>
-        </div>
-        <div className="mt-4 grid gap-3">
-          <Field label="Subject">
-            <Input
-              value={form.subject}
-              onChange={(event) =>
-                setForm({ ...form, subject: event.target.value })
-              }
-              required
-            />
-          </Field>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Slug">
+      <form onSubmit={saveIssue} className="xl:col-span-5">
+        <div className="rounded-xl border bg-background p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Editor
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold">
+                  {selectedIssue ? selectedIssue.subject : "New issue"}
+                </h3>
+                {selectedIssue ? (
+                  <IssueStatusBadge status={selectedIssue.status} />
+                ) : (
+                  <Badge variant="outline">Unsaved</Badge>
+                )}
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedIssue
+                  ? `Updated ${formatDateTime(selectedIssue.updatedAt)}`
+                  : "Draft the editorial content here, then use delivery controls once it is saved."}
+              </p>
+            </div>
+            <Button type="submit" size="sm">
+              Save
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <Field label="Subject">
               <Input
-                value={form.slug}
+                value={form.subject}
                 onChange={(event) =>
-                  setForm({ ...form, slug: event.target.value })
+                  setForm({ ...form, subject: event.target.value })
                 }
-                placeholder="auto-from-subject"
+                required
               />
             </Field>
-            <Field label="Linked post">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="Slug">
+                <Input
+                  value={form.slug}
+                  onChange={(event) =>
+                    setForm({ ...form, slug: event.target.value })
+                  }
+                  placeholder="auto-from-subject"
+                />
+              </Field>
+              <Field label="Linked post">
+                <Input
+                  value={form.linkedPostSlug}
+                  onChange={(event) =>
+                    setForm({ ...form, linkedPostSlug: event.target.value })
+                  }
+                  placeholder="optional-post-slug"
+                />
+              </Field>
+            </div>
+            <Field label="Preview">
               <Input
-                value={form.linkedPostSlug}
+                value={form.previewText}
                 onChange={(event) =>
-                  setForm({ ...form, linkedPostSlug: event.target.value })
+                  setForm({ ...form, previewText: event.target.value })
                 }
-                placeholder="optional-post-slug"
+                required
+              />
+            </Field>
+            <Field label="Markdown body">
+              <Textarea
+                value={form.body}
+                onChange={(event) =>
+                  setForm({ ...form, body: event.target.value })
+                }
+                rows={14}
+                required
               />
             </Field>
           </div>
-          <Field label="Preview">
-            <Input
-              value={form.previewText}
-              onChange={(event) =>
-                setForm({ ...form, previewText: event.target.value })
-              }
-              required
-            />
-          </Field>
-          <Field label="Markdown body">
-            <Textarea
-              value={form.body}
-              onChange={(event) => setForm({ ...form, body: event.target.value })}
-              rows={10}
-              required
-            />
-          </Field>
         </div>
       </form>
 
-      <aside className="lg:col-span-3">
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          Controls
-        </p>
-        <div className="mt-4 grid gap-2">
-          <Input
-            value={testEmail}
-            onChange={(event) => setTestEmail(event.target.value)}
-            placeholder="test@domain.com"
-          />
-          <Button size="sm" variant="outline" onClick={testIssue}>
-            <TestTube2 aria-hidden="true" />
-            Send test
-          </Button>
-          <Input
-            type="datetime-local"
-            value={form.scheduledAt}
-            onChange={(event) =>
-              setForm({ ...form, scheduledAt: event.target.value })
-            }
-          />
-          <Button size="sm" variant="outline" onClick={scheduleSelectedIssue}>
-            <CalendarClock aria-hidden="true" />
-            Schedule
-          </Button>
-          <Button size="sm" onClick={sendIssueNow}>
-            <Send aria-hidden="true" />
-            Send now
-          </Button>
-        </div>
-        <SubscriberSummary subscribers={subscriberRows} />
-      </aside>
+      <div className="grid gap-6 xl:col-span-3">
+        <aside className="rounded-xl border bg-background p-4 sm:p-5">
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            Delivery
+          </p>
+          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="font-mono uppercase">
+                {selectedIssue?.slug || "unsaved"}
+              </Badge>
+              {selectedIssue ? (
+                <IssueStatusBadge status={selectedIssue.status} />
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm font-medium">
+              {selectedIssue?.subject ||
+                "Save an issue to unlock send controls"}
+            </p>
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+              <ControlFact
+                label="Audience"
+                value={`${confirmedSubscribers} confirmed / ${subscriberRows.length} total`}
+              />
+              <ControlFact
+                label="Scheduled"
+                value={
+                  selectedIssue?.scheduledAt
+                    ? formatDateTime(selectedIssue.scheduledAt)
+                    : "Not scheduled"
+                }
+              />
+              <ControlFact
+                label="Sent"
+                value={
+                  selectedIssue?.sentAt
+                    ? formatDateTime(selectedIssue.sentAt)
+                    : "Not sent"
+                }
+              />
+            </div>
+            {selectedIssue?.errorMessage ? (
+              <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                {selectedIssue.errorMessage}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-4">
+            <Field label="Test recipient">
+              <Input
+                value={testEmail}
+                onChange={(event) => setTestEmail(event.target.value)}
+                placeholder="test@domain.com"
+              />
+            </Field>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={testIssue}
+              disabled={!canRunIssueActions}
+            >
+              <TestTube2 aria-hidden="true" />
+              Send test
+            </Button>
+
+            <Field label="Schedule send">
+              <Input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={(event) => setScheduleAt(event.target.value)}
+              />
+            </Field>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Uses your local timezone in the browser. Saving the editor does
+              not queue delivery.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={scheduleSelectedIssue}
+                disabled={!canSchedule}
+              >
+                <CalendarClock aria-hidden="true" />
+                Schedule
+              </Button>
+              <Button size="sm" onClick={sendIssueNow} disabled={!canSendNow}>
+                <Send aria-hidden="true" />
+                {selectedIssue?.status === "scheduled"
+                  ? "Send immediately"
+                  : "Send now"}
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={cancelSelectedIssue}
+              disabled={!canCancel}
+            >
+              Cancel schedule
+            </Button>
+          </div>
+        </aside>
+
+        <SubscriberSummary
+          counts={subscriberCounts}
+          filter={subscriberFilter}
+          filteredSubscribers={filteredSubscribers}
+          onFilterChange={setSubscriberFilter}
+          subscribers={subscriberRows}
+          syncCounts={syncCounts}
+        />
+      </div>
     </section>
   );
 }
@@ -275,63 +527,132 @@ function IssueButton({
       type="button"
       onClick={onSelect}
       className={cn(
-        "grid gap-1 px-2 py-2 text-left hover:bg-muted/35",
-        active ? "bg-muted/35" : null,
+        "rounded-lg border p-3 text-left transition hover:border-foreground/30 hover:bg-muted/20",
+        active ? "border-foreground/40 bg-muted/30" : "border-border",
       )}
     >
-      <span className="truncate text-sm font-semibold">{issue.subject}</span>
-      <span className="font-mono text-[10px] uppercase text-muted-foreground">
-        {issue.status} / {formatDate(issue.updatedAt)}
-      </span>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{issue.subject}</p>
+          <p className="mt-1 truncate font-mono text-[11px] uppercase text-muted-foreground">
+            {issue.slug}
+          </p>
+        </div>
+        <IssueStatusBadge status={issue.status} />
+      </div>
+      <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+        <span>Updated {formatDate(issue.updatedAt)}</span>
+        <span>
+          {issue.sentAt
+            ? `Sent ${formatDate(issue.sentAt)}`
+            : issue.scheduledAt
+              ? `Scheduled ${formatDateTime(issue.scheduledAt)}`
+              : "Not scheduled"}
+        </span>
+      </div>
+      {issue.errorMessage ? (
+        <p className="mt-3 line-clamp-2 text-xs text-destructive">
+          {issue.errorMessage}
+        </p>
+      ) : null}
     </button>
   );
 }
 
 function SubscriberSummary({
+  counts,
+  filter,
+  filteredSubscribers,
+  onFilterChange,
   subscribers,
+  syncCounts,
 }: {
+  counts: Record<NewsletterSubscriberRecord["status"], number>;
+  filter: SubscriberFilter;
+  filteredSubscribers: NewsletterSubscriberRecord[];
+  onFilterChange: (filter: SubscriberFilter) => void;
   subscribers: NewsletterSubscriberRecord[];
+  syncCounts: Record<NewsletterSubscriberRecord["resendSyncStatus"], number>;
 }) {
-  const confirmed = subscribers.filter((row) => row.status === "confirmed").length;
   return (
-    <div className="mt-8">
+    <aside className="rounded-xl border bg-background p-4 sm:p-5">
       <p className="font-mono text-xs uppercase text-muted-foreground">
         Subscribers
       </p>
-      <div className="mt-3 grid grid-cols-2 gap-3 font-mono text-xs uppercase">
-        <div>
-          <p className="text-2xl font-semibold">{confirmed}</p>
-          <p className="text-muted-foreground">Confirmed</p>
-        </div>
-        <div>
-          <p className="text-2xl font-semibold">{subscribers.length}</p>
-          <p className="text-muted-foreground">Total</p>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 xl:grid-cols-2">
+        <MetricTile label="Confirmed" value={counts.confirmed} />
+        <MetricTile label="Pending" value={counts.pending} />
+        <MetricTile label="Unsubscribed" value={counts.unsubscribed} />
+        <MetricTile label="Bounced" value={counts.bounced} />
+      </div>
+      <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+        <p className="font-mono text-[11px] uppercase text-muted-foreground">
+          Resend sync
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+          <ControlFact label="Synced" value={syncCounts.synced} />
+          <ControlFact label="Idle" value={syncCounts.idle} />
+          <ControlFact label="Failed" value={syncCounts.failed} />
+          <ControlFact label="No config" value={syncCounts.not_configured} />
         </div>
       </div>
-      <div className="mt-4 grid gap-2">
-        {subscribers.slice(0, 8).map((subscriber) => (
-          <div
-            key={subscriber._id}
-            className="grid gap-1 font-mono text-[10px] uppercase text-muted-foreground"
+      <div className="mt-4 flex flex-wrap gap-2">
+        {SUBSCRIBER_FILTERS.map((value) => (
+          <FilterChip
+            active={filter === value}
+            key={value}
+            onClick={() => onFilterChange(value)}
           >
-            <span className="truncate">{subscriber.email}</span>
-            <span>
-              {subscriber.status} / {subscriber.resendSyncStatus}
+            {labelFromFilter(value)}{" "}
+            <span className="text-muted-foreground">
+              {value === "all" ? subscribers.length : (counts[value] ?? 0)}
             </span>
-          </div>
+          </FilterChip>
         ))}
       </div>
-    </div>
+      <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
+        {filteredSubscribers.slice(0, 24).map((subscriber) => (
+          <div
+            key={subscriber._id}
+            className="rounded-lg border p-3 text-sm transition hover:bg-muted/20"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="min-w-0 flex-1 truncate font-medium">
+                {subscriber.email}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <SubscriberStatusBadge status={subscriber.status} />
+                <SyncStatusBadge status={subscriber.resendSyncStatus} />
+              </div>
+            </div>
+            <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+              <span>Source {subscriber.source}</span>
+              <span>{subscriberLifecycleLabel(subscriber)}</span>
+            </div>
+            {subscriber.resendError ? (
+              <p className="mt-3 line-clamp-2 text-xs text-destructive">
+                {subscriber.resendError}
+              </p>
+            ) : null}
+          </div>
+        ))}
+        {subscribers.length === 0 ? (
+          <StatusLine>No subscribers yet</StatusLine>
+        ) : null}
+        {subscribers.length > 0 && filteredSubscribers.length === 0 ? (
+          <StatusLine>No subscribers match this filter</StatusLine>
+        ) : null}
+      </div>
+      {filteredSubscribers.length > 24 ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Showing the newest 24 matching subscribers.
+        </p>
+      ) : null}
+    </aside>
   );
 }
 
-function Field({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) {
+function Field({ children, label }: { children: ReactNode; label: string }) {
   return (
     <label className="grid gap-2 text-sm">
       <span className="font-mono text-[11px] uppercase text-muted-foreground">
@@ -339,6 +660,99 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function FilterChip({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 font-mono text-[11px] uppercase transition",
+        active
+          ? "border-foreground bg-foreground text-background"
+          : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <p className="text-lg font-semibold">{value}</p>
+      <p className="font-mono text-[11px] uppercase text-muted-foreground">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function ControlFact({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="font-mono uppercase text-muted-foreground">{label}</span>
+      <span className="text-right text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function IssueStatusBadge({
+  status,
+}: {
+  status: NewsletterIssueRecord["status"];
+}) {
+  const badge = issueStatusBadgeProps(status);
+  return (
+    <Badge
+      variant={badge.variant}
+      className={cn("font-mono uppercase", badge.className)}
+    >
+      {status}
+    </Badge>
+  );
+}
+
+function SubscriberStatusBadge({
+  status,
+}: {
+  status: NewsletterSubscriberRecord["status"];
+}) {
+  const badge = subscriberStatusBadgeProps(status);
+  return (
+    <Badge
+      variant={badge.variant}
+      className={cn("font-mono uppercase", badge.className)}
+    >
+      {status}
+    </Badge>
+  );
+}
+
+function SyncStatusBadge({
+  status,
+}: {
+  status: NewsletterSubscriberRecord["resendSyncStatus"];
+}) {
+  const badge = syncStatusBadgeProps(status);
+  return (
+    <Badge
+      variant={badge.variant}
+      className={cn("font-mono uppercase", badge.className)}
+    >
+      {status.replaceAll("_", " ")}
+    </Badge>
   );
 }
 
@@ -350,16 +764,17 @@ function StatusLine({ children }: { children: ReactNode }) {
   );
 }
 
-function formToIssue(form: IssueForm) {
+function formToIssue(
+  form: IssueForm,
+  status: NewsletterIssueRecord["status"] | undefined,
+) {
   return {
     slug: form.slug.trim() || undefined,
     subject: form.subject,
     previewText: form.previewText,
     body: form.body,
     linkedPostSlug: form.linkedPostSlug.trim() || undefined,
-    scheduledAt: form.scheduledAt
-      ? new Date(form.scheduledAt).getTime()
-      : undefined,
+    status,
   };
 }
 
@@ -370,8 +785,125 @@ function issueToForm(issue: NewsletterIssueRecord): IssueForm {
     previewText: issue.previewText,
     body: issue.body,
     linkedPostSlug: issue.linkedPostSlug ?? "",
-    scheduledAt: issue.scheduledAt
-      ? new Date(issue.scheduledAt).toISOString().slice(0, 16)
-      : "",
   };
+}
+
+function labelFromFilter(value: IssueFilter | SubscriberFilter) {
+  return value === "all" ? "all" : value.replaceAll("_", " ");
+}
+
+function countIssuesByStatus(issues: NewsletterIssueRecord[]) {
+  return issues.reduce<Record<NewsletterIssueRecord["status"], number>>(
+    (acc, issue) => {
+      acc[issue.status] += 1;
+      return acc;
+    },
+    { draft: 0, scheduled: 0, sent: 0, cancelled: 0, failed: 0 },
+  );
+}
+
+function countSubscribersByStatus(subscribers: NewsletterSubscriberRecord[]) {
+  return subscribers.reduce<
+    Record<NewsletterSubscriberRecord["status"], number>
+  >(
+    (acc, subscriber) => {
+      acc[subscriber.status] += 1;
+      return acc;
+    },
+    { pending: 0, confirmed: 0, unsubscribed: 0, bounced: 0 },
+  );
+}
+
+function countSubscribersBySync(subscribers: NewsletterSubscriberRecord[]) {
+  return subscribers.reduce<
+    Record<NewsletterSubscriberRecord["resendSyncStatus"], number>
+  >(
+    (acc, subscriber) => {
+      acc[subscriber.resendSyncStatus] += 1;
+      return acc;
+    },
+    { idle: 0, synced: 0, failed: 0, not_configured: 0 },
+  );
+}
+
+function subscriberLifecycleLabel(subscriber: NewsletterSubscriberRecord) {
+  if (subscriber.status === "confirmed" && subscriber.confirmedAt) {
+    return `Confirmed ${formatDateTime(subscriber.confirmedAt)}`;
+  }
+  if (subscriber.status === "unsubscribed" && subscriber.unsubscribedAt) {
+    return `Unsubscribed ${formatDateTime(subscriber.unsubscribedAt)}`;
+  }
+  return `Created ${formatDateTime(subscriber.createdAt)}`;
+}
+
+function timestampToLocalInput(value: number) {
+  const date = new Date(value);
+  const timezoneOffset = date.getTimezoneOffset();
+  return new Date(date.getTime() - timezoneOffset * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function formatDateTime(value: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
+}
+
+function issueStatusBadgeProps(status: NewsletterIssueRecord["status"]) {
+  switch (status) {
+    case "sent":
+      return { variant: "default" as const };
+    case "scheduled":
+      return {
+        variant: "outline" as const,
+        className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+      };
+    case "failed":
+      return { variant: "destructive" as const };
+    case "cancelled":
+      return {
+        variant: "outline" as const,
+        className: "border-border bg-muted text-muted-foreground",
+      };
+    default:
+      return { variant: "secondary" as const };
+  }
+}
+
+function subscriberStatusBadgeProps(
+  status: NewsletterSubscriberRecord["status"],
+) {
+  switch (status) {
+    case "confirmed":
+      return { variant: "default" as const };
+    case "pending":
+      return { variant: "secondary" as const };
+    case "bounced":
+      return { variant: "destructive" as const };
+    case "unsubscribed":
+      return {
+        variant: "outline" as const,
+        className: "border-border bg-muted text-muted-foreground",
+      };
+  }
+}
+
+function syncStatusBadgeProps(
+  status: NewsletterSubscriberRecord["resendSyncStatus"],
+) {
+  switch (status) {
+    case "synced":
+      return { variant: "default" as const };
+    case "failed":
+      return { variant: "destructive" as const };
+    case "not_configured":
+      return {
+        variant: "outline" as const,
+        className: "border-border bg-muted text-muted-foreground",
+      };
+    default:
+      return { variant: "secondary" as const };
+  }
 }

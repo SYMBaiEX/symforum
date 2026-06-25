@@ -256,11 +256,7 @@ export type SystemLogRecord = {
   metadataJson?: string;
 };
 
-export type AnalyticsSource =
-  | "client"
-  | "server"
-  | "api"
-  | "convex";
+export type AnalyticsSource = "client" | "server" | "api" | "convex";
 
 export type AnalyticsEventRecord = {
   _id: string;
@@ -447,11 +443,21 @@ export const convexRefs = {
       { slug: string },
       { deleted: boolean }
     >("admin:deletePortfolioProject"),
+    listComments: makeFunctionReference<
+      "query",
+      { entityType?: CommentEntityType; entityId?: string },
+      AdminCommentRecord[]
+    >("admin:listComments"),
     deleteComment: makeFunctionReference<
       "mutation",
       { commentId: string },
       { deleted: boolean }
     >("admin:deleteComment"),
+    listInteractions: makeFunctionReference<
+      "query",
+      { entityType?: AdminInteractionRecord["entityType"]; entityId?: string },
+      AdminInteractionRecord[]
+    >("admin:listInteractions"),
     deleteInteraction: makeFunctionReference<
       "mutation",
       { interactionId: string },

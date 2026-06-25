@@ -18,8 +18,15 @@ import {
 import { safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { FileText, Plus, Save, Trash2 } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { FileSearch, FileText, Plus, Save, Search, Trash2 } from "lucide-react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { toast } from "sonner";
 
 type SitePageForm = {
@@ -54,6 +61,12 @@ type PortfolioProjectForm = {
   repoUrl: string;
   writeupUrl: string;
 };
+
+type PageStatusFilter = SitePageForm["status"] | "all";
+type ProjectStatusFilter = PortfolioProjectForm["status"] | "all";
+
+const emptyPages: SitePageRecord[] = [];
+const emptyProjects: PortfolioProjectRecord[] = [];
 
 const blankPage: SitePageForm = {
   slug: "",
@@ -101,18 +114,133 @@ export function AdminSiteContent() {
   const [projectForm, setProjectForm] = useState<PortfolioProjectForm>(() =>
     projectToForm(defaultPortfolioProjects[0] ?? blankProject),
   );
+  const [pageSearch, setPageSearch] = useState("");
+  const [pageStatusFilter, setPageStatusFilter] =
+    useState<PageStatusFilter>("all");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectStatusFilter, setProjectStatusFilter] =
+    useState<ProjectStatusFilter>("all");
+  const [projectTypeFilter, setProjectTypeFilter] = useState("all");
+  const pageTitleRef = useRef<HTMLInputElement>(null);
+  const projectNameRef = useRef<HTMLInputElement>(null);
 
-  const pageRows = pages ?? [];
-  const projectRows = projects ?? [];
+  const pageRows = pages ?? emptyPages;
+  const projectRows = projects ?? emptyProjects;
   const pagePreview = safeImageUrl(pageForm.imageUrl);
   const projectPreview = safeImageUrl(projectForm.imageUrl);
+  const pageSlug = pageForm.slug.trim();
+  const projectSlug = projectForm.slug.trim();
+  const existingPage = pageRows.find((page) => page.slug === pageSlug) ?? null;
+  const existingProject =
+    projectRows.find((project) => project.slug === projectSlug) ?? null;
+  const pageHasFilters =
+    pageSearch.trim().length > 0 || pageStatusFilter !== "all";
+  const projectHasFilters =
+    projectSearch.trim().length > 0 ||
+    projectStatusFilter !== "all" ||
+    projectTypeFilter !== "all";
+
+  const projectTypeOptions = useMemo(
+    () => [
+      "all",
+      ...Array.from(
+        new Set(
+          projectRows
+            .map((project) => project.type.trim())
+            .filter((type) => type.length > 0),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    ],
+    [projectRows],
+  );
+
+  const filteredPages = useMemo(() => {
+    const query = pageSearch.trim().toLowerCase();
+    return pageRows.filter((page) => {
+      if (pageStatusFilter !== "all" && page.status !== pageStatusFilter) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [
+        page.slug,
+        page.title,
+        page.subtitle,
+        page.heroHeading,
+        page.heroBody,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [pageRows, pageSearch, pageStatusFilter]);
+
+  const filteredProjects = useMemo(() => {
+    const query = projectSearch.trim().toLowerCase();
+    return projectRows.filter((project) => {
+      if (
+        projectStatusFilter !== "all" &&
+        project.status !== projectStatusFilter
+      ) {
+        return false;
+      }
+      if (
+        projectTypeFilter !== "all" &&
+        project.type.toLowerCase() !== projectTypeFilter.toLowerCase()
+      ) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [
+        project.slug,
+        project.name,
+        project.type,
+        project.role,
+        project.timeframe,
+        project.summary,
+        project.tags.join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [projectRows, projectSearch, projectStatusFilter, projectTypeFilter]);
+
+  function focusField(
+    ref: RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
+  ) {
+    window.requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+  }
+
+  function loadPageForm(
+    nextPage: SitePageRecord | (typeof defaultSitePages)[number] | SitePageForm,
+  ) {
+    setPageForm(pageToForm(nextPage));
+    focusField(pageTitleRef);
+  }
+
+  function loadProjectForm(
+    nextProject:
+      | PortfolioProjectRecord
+      | (typeof defaultPortfolioProjects)[number]
+      | PortfolioProjectForm,
+  ) {
+    setProjectForm(projectToForm(nextProject));
+    focusField(projectNameRef);
+  }
 
   async function savePage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
       await upsertPage({
         page: {
-          slug: pageForm.slug.trim() || undefined,
+          slug: pageSlug || undefined,
           title: pageForm.title,
           subtitle: pageForm.subtitle,
           heroHeading: pageForm.heroHeading,
@@ -147,7 +275,7 @@ export function AdminSiteContent() {
     try {
       await deletePage({ slug });
       if (pageForm.slug === slug) {
-        setPageForm(blankPage);
+        loadPageForm(blankPage);
       }
       toast.success("Page deleted");
     } catch (error) {
@@ -170,7 +298,7 @@ export function AdminSiteContent() {
     try {
       await upsertProject({
         project: {
-          slug: projectForm.slug.trim() || undefined,
+          slug: projectSlug || undefined,
           name: projectForm.name,
           type: projectForm.type,
           role: projectForm.role,
@@ -181,7 +309,10 @@ export function AdminSiteContent() {
           outcome: projectForm.outcome,
           status: projectForm.status,
           order: Number(projectForm.order),
-          tags: projectForm.tags.split(","),
+          tags: projectForm.tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
           imageUrl: projectForm.imageUrl.trim() || undefined,
           imageAlt: projectForm.imageAlt.trim() || undefined,
           homepageUrl: projectForm.homepageUrl.trim() || undefined,
@@ -212,7 +343,7 @@ export function AdminSiteContent() {
     try {
       await deleteProject({ slug });
       if (projectForm.slug === slug) {
-        setProjectForm(blankProject);
+        loadProjectForm(blankProject);
       }
       toast.success("Project deleted");
     } catch (error) {
@@ -245,7 +376,7 @@ export function AdminSiteContent() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setPageForm(pageToForm(defaultSitePages[0]))}
+            onClick={() => loadPageForm(defaultSitePages[0])}
           >
             <FileText />
             About draft
@@ -253,7 +384,7 @@ export function AdminSiteContent() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setPageForm(pageToForm(defaultSitePages[1]))}
+            onClick={() => loadPageForm(defaultSitePages[1])}
           >
             <FileText />
             Portfolio intro
@@ -265,23 +396,70 @@ export function AdminSiteContent() {
         <div className="grid gap-5">
           <ContentList
             title="Pages"
-            rows={pageRows}
+            rows={filteredPages}
+            totalRows={pageRows.length}
             loading={pages === undefined}
             activeSlug={pageForm.slug}
-            emptyText="No managed pages yet. Save the drafts above to override the static fallbacks."
-            onNew={() => setPageForm(blankPage)}
-            onSeed={() => setPageForm(pageToForm(defaultSitePages[0]))}
-            onSelect={(page) => setPageForm(pageToForm(page))}
+            emptyText="No managed pages yet. Save one of the built-in drafts to override the static fallback content."
+            filteredEmptyText="No pages match the active search or status filter."
+            hasFiltersApplied={pageHasFilters}
+            controls={
+              <>
+                <label className="relative min-w-[220px] flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={pageSearch}
+                    onChange={(event) => setPageSearch(event.target.value)}
+                    placeholder="Search title, slug, hero copy"
+                    className="pl-9"
+                    aria-label="Search pages"
+                  />
+                </label>
+                <select
+                  className="h-10 min-w-[140px] border border-input bg-background px-3 text-sm"
+                  value={pageStatusFilter}
+                  onChange={(event) =>
+                    setPageStatusFilter(event.target.value as PageStatusFilter)
+                  }
+                  aria-label="Filter pages by status"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+              </>
+            }
+            onClearFilters={() => {
+              setPageSearch("");
+              setPageStatusFilter("all");
+            }}
+            onNew={() => loadPageForm(blankPage)}
+            onSeed={() => loadPageForm(defaultSitePages[0])}
+            onSelect={loadPageForm}
             onDelete={removePage}
             getTitle={(page) => page.title}
+            getDescription={(page) => page.subtitle}
             getMeta={(page) => `${page.slug} / ${page.status}`}
           />
 
           <form onSubmit={savePage} className="grid gap-3">
-            <EditorBar label="Page editor" />
+            <EditorBar
+              label="Page editor"
+              title={pageForm.title || "Untitled page"}
+              slug={pageSlug}
+              status={pageForm.status}
+              savedState={
+                existingPage
+                  ? "Editing saved page"
+                  : pageSlug || pageForm.title.trim()
+                    ? "New page draft"
+                    : "Blank page draft"
+              }
+            />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Title">
                 <Input
+                  ref={pageTitleRef}
                   value={pageForm.title}
                   onChange={(event) =>
                     setPageForm({ ...pageForm, title: event.target.value })
@@ -382,10 +560,23 @@ export function AdminSiteContent() {
                   <option value="published">Published</option>
                 </select>
               </Field>
-              <Button type="submit">
-                <Save />
-                Save page
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    existingPage
+                      ? loadPageForm(existingPage)
+                      : loadPageForm(blankPage)
+                  }
+                >
+                  Reset
+                </Button>
+                <Button type="submit">
+                  <Save />
+                  Save page
+                </Button>
+              </div>
             </div>
             {pagePreview ? (
               <img
@@ -400,17 +591,69 @@ export function AdminSiteContent() {
         <div className="grid gap-5">
           <ContentList
             title="Projects"
-            rows={projectRows}
+            rows={filteredProjects}
+            totalRows={projectRows.length}
             loading={projects === undefined}
             activeSlug={projectForm.slug}
             emptyText="No projects yet. Load a default project or create a new one."
-            onNew={() => setProjectForm(blankProject)}
-            onSeed={() =>
-              setProjectForm(projectToForm(defaultPortfolioProjects[0]))
+            filteredEmptyText="No projects match the active search or filters."
+            hasFiltersApplied={projectHasFilters}
+            controls={
+              <>
+                <label className="relative min-w-[220px] flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={projectSearch}
+                    onChange={(event) => setProjectSearch(event.target.value)}
+                    placeholder="Search name, slug, tags, role"
+                    className="pl-9"
+                    aria-label="Search projects"
+                  />
+                </label>
+                <select
+                  className="h-10 min-w-[140px] border border-input bg-background px-3 text-sm"
+                  value={projectStatusFilter}
+                  onChange={(event) =>
+                    setProjectStatusFilter(
+                      event.target.value as ProjectStatusFilter,
+                    )
+                  }
+                  aria-label="Filter projects by status"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <select
+                  className="h-10 min-w-[140px] border border-input bg-background px-3 text-sm"
+                  value={projectTypeFilter}
+                  onChange={(event) => setProjectTypeFilter(event.target.value)}
+                  aria-label="Filter projects by type"
+                >
+                  {projectTypeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {type === "all" ? "All types" : type}
+                    </option>
+                  ))}
+                </select>
+              </>
             }
-            onSelect={(project) => setProjectForm(projectToForm(project))}
+            onClearFilters={() => {
+              setProjectSearch("");
+              setProjectStatusFilter("all");
+              setProjectTypeFilter("all");
+            }}
+            onNew={() => loadProjectForm(blankProject)}
+            onSeed={() => loadProjectForm(defaultPortfolioProjects[0])}
+            onSelect={loadProjectForm}
             onDelete={removeProject}
             getTitle={(project) => project.name}
+            getDescription={(project) =>
+              [project.type, project.role, project.timeframe]
+                .filter(Boolean)
+                .join(" / ")
+            }
             getMeta={(project) =>
               `${String(project.order).padStart(2, "0")} / ${project.slug} / ${
                 project.status
@@ -423,7 +666,7 @@ export function AdminSiteContent() {
                 key={project.slug}
                 type="button"
                 variant="outline"
-                onClick={() => setProjectForm(projectToForm(project))}
+                onClick={() => loadProjectForm(project)}
               >
                 {project.name}
               </Button>
@@ -431,10 +674,23 @@ export function AdminSiteContent() {
           </div>
 
           <form onSubmit={saveProject} className="grid gap-3">
-            <EditorBar label="Project editor" />
+            <EditorBar
+              label="Project editor"
+              title={projectForm.name || "Untitled project"}
+              slug={projectSlug}
+              status={projectForm.status}
+              savedState={
+                existingProject
+                  ? "Editing saved project"
+                  : projectSlug || projectForm.name.trim()
+                    ? "New project draft"
+                    : "Blank project draft"
+              }
+            />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Name">
                 <Input
+                  ref={projectNameRef}
                   value={projectForm.name}
                   onChange={(event) =>
                     setProjectForm({
@@ -595,13 +851,38 @@ export function AdminSiteContent() {
                   <option value="archived">Archived</option>
                 </select>
               </Field>
-              <div className="flex items-end">
+              <div className="flex items-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() =>
+                    existingProject
+                      ? loadProjectForm(existingProject)
+                      : loadProjectForm(blankProject)
+                  }
+                >
+                  Reset
+                </Button>
                 <Button type="submit" className="w-full">
                   <Save />
                   Save project
                 </Button>
               </div>
             </div>
+            {projectForm.tags.trim() ? (
+              <div className="flex flex-wrap gap-2">
+                {projectForm.tags
+                  .split(",")
+                  .map((tag) => tag.trim())
+                  .filter(Boolean)
+                  .map((tag) => (
+                    <Badge key={tag} variant="outline">
+                      {tag}
+                    </Badge>
+                  ))}
+              </div>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Image URL">
                 <Input
@@ -678,34 +959,55 @@ export function AdminSiteContent() {
 function ContentList<T extends { slug: string }>({
   title,
   rows,
+  totalRows,
   loading,
   activeSlug,
   emptyText,
+  filteredEmptyText,
+  hasFiltersApplied,
+  controls,
+  onClearFilters,
   onNew,
   onSeed,
   onSelect,
   onDelete,
   getTitle,
+  getDescription,
   getMeta,
 }: {
   title: string;
   rows: T[];
+  totalRows: number;
   loading: boolean;
   activeSlug: string;
   emptyText: string;
+  filteredEmptyText: string;
+  hasFiltersApplied: boolean;
+  controls: ReactNode;
+  onClearFilters: () => void;
   onNew: () => void;
   onSeed: () => void;
   onSelect: (row: T) => void;
   onDelete: (slug: string) => Promise<void>;
   getTitle: (row: T) => string;
+  getDescription?: (row: T) => string;
   getMeta: (row: T) => string;
 }) {
   return (
     <div className="border-y border-row-border py-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          {title}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            {title}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {loading
+              ? `Loading ${title.toLowerCase()}`
+              : hasFiltersApplied
+                ? `${rows.length} of ${totalRows} shown`
+                : `${totalRows} total`}
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button type="button" size="sm" variant="outline" onClick={onSeed}>
             <Plus />
@@ -717,18 +1019,49 @@ function ContentList<T extends { slug: string }>({
           </Button>
         </div>
       </div>
+      <div className="mt-3 flex flex-wrap gap-2">{controls}</div>
+      {hasFiltersApplied ? (
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-dashed border-row-border px-3 py-2 text-xs text-muted-foreground">
+          <span>Filters are active.</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onClearFilters}
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
       <div className="mt-3 divide-y divide-row-border">
+        {loading
+          ? Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={`${title}-loading-${index}`}
+                className="grid grid-cols-[1fr_auto] gap-3 py-2.5"
+                aria-hidden="true"
+              >
+                <div className="space-y-2">
+                  <div className="h-4 w-40 animate-pulse bg-muted" />
+                  <div className="h-3 w-56 animate-pulse bg-muted/70" />
+                </div>
+                <div className="h-9 w-9 animate-pulse rounded-sm bg-muted" />
+              </div>
+            ))
+          : null}
         {rows.map((row) => (
           <div
             key={row.slug}
             className={cn(
-              "grid grid-cols-[1fr_auto] gap-3 py-3",
-              row.slug === activeSlug ? "bg-muted/35" : null,
+              "grid grid-cols-[1fr_auto] gap-3 py-2.5",
+              row.slug === activeSlug
+                ? "border-l-2 border-foreground bg-muted/35 pl-2"
+                : null,
             )}
           >
             <button
               type="button"
-              className="min-w-0 text-left"
+              className="min-w-0 rounded-sm px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => onSelect(row)}
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -737,6 +1070,11 @@ function ContentList<T extends { slug: string }>({
                 </h3>
                 <Badge variant="outline">{row.slug}</Badge>
               </div>
+              {getDescription ? (
+                <p className="mt-1 truncate text-sm text-muted-foreground">
+                  {getDescription(row)}
+                </p>
+              ) : null}
               <p className="mt-1 font-mono text-[11px] uppercase text-muted-foreground">
                 {getMeta(row)}
               </p>
@@ -751,14 +1089,10 @@ function ContentList<T extends { slug: string }>({
             </Button>
           </div>
         ))}
-        {loading ? (
-          <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-            Loading {title.toLowerCase()}
-          </div>
-        ) : null}
         {!loading && rows.length === 0 ? (
-          <div className="py-5 text-sm leading-6 text-muted-foreground">
-            {emptyText}
+          <div className="flex items-start gap-3 py-5 text-sm leading-6 text-muted-foreground">
+            <FileSearch className="mt-0.5 size-4 shrink-0" />
+            <div>{hasFiltersApplied ? filteredEmptyText : emptyText}</div>
           </div>
         ) : null}
       </div>
@@ -766,12 +1100,32 @@ function ContentList<T extends { slug: string }>({
   );
 }
 
-function EditorBar({ label }: { label: string }) {
+function EditorBar({
+  label,
+  title,
+  slug,
+  status,
+  savedState,
+}: {
+  label: string;
+  title: string;
+  slug: string;
+  status: string;
+  savedState: string;
+}) {
   return (
-    <div className="flex items-center justify-between gap-3 border-y border-row-border py-3">
-      <p className="font-mono text-xs uppercase text-muted-foreground">
-        {label}
-      </p>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-y border-row-border py-3">
+      <div>
+        <p className="font-mono text-xs uppercase text-muted-foreground">
+          {label}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">{title}</span>
+          <Badge variant="outline">{slug || "new"}</Badge>
+          <Badge variant="outline">{status}</Badge>
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground">{savedState}</p>
     </div>
   );
 }

@@ -20,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   convexRefs,
   type AdminApiKeyRecord,
+  type AdminCommentRecord,
+  type AdminInteractionRecord,
   type AdminOverviewRecord,
   type ConvexPostRecord,
 } from "@/lib/convex-refs";
@@ -45,7 +47,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type SelectHTMLAttributes,
+} from "react";
 import { toast } from "sonner";
 
 type PostForm = {
@@ -83,6 +91,10 @@ type AdminTab = {
   icon: LucideIcon;
 };
 
+type AdminEntityType =
+  | AdminCommentRecord["entityType"]
+  | AdminInteractionRecord["entityType"];
+
 const blankPost: PostForm = {
   slug: "",
   title: "",
@@ -97,6 +109,69 @@ const blankPost: PostForm = {
   imageAlt: "",
   imageCredit: "",
 };
+
+const adminApiRoutes = [
+  {
+    method: "GET",
+    path: "/api/admin/posts",
+    detail: "List posts for external publishing tools.",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/posts",
+    detail: "Create or update a post from a writer workflow.",
+  },
+  {
+    method: "GET",
+    path: "/api/admin/posts/[slug]",
+    detail: "Fetch one post by slug.",
+  },
+  {
+    method: "PATCH",
+    path: "/api/admin/posts/[slug]",
+    detail: "Patch one post by slug.",
+  },
+  {
+    method: "DELETE",
+    path: "/api/admin/posts/[slug]",
+    detail: "Delete one post by slug.",
+  },
+  {
+    method: "GET",
+    path: "/api/admin/interactions",
+    detail: "Inspect comments and interactions by entity filters.",
+  },
+  {
+    method: "GET",
+    path: "/api/admin/newsletter/subscribers",
+    detail: "Export newsletter subscribers for admin tooling.",
+  },
+  {
+    method: "GET",
+    path: "/api/admin/newsletter/issues",
+    detail: "List newsletter issues.",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/newsletter/issues",
+    detail: "Create or update a newsletter issue.",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/newsletter/issues/[slug]/test",
+    detail: "Send a test issue to one inbox.",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/newsletter/issues/[slug]/schedule",
+    detail: "Schedule a newsletter issue.",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/newsletter/issues/[slug]/send",
+    detail: "Send a newsletter issue immediately.",
+  },
+] as const;
 
 export function AdminDashboard() {
   const viewer = useQuery(convexRefs.admin.viewer, {});
@@ -163,6 +238,8 @@ function OwnerDashboard() {
   const overview = useQuery(convexRefs.admin.overview, {});
   const posts = useQuery(convexRefs.admin.listPosts, {});
   const apiKeys = useQuery(convexRefs.admin.listApiKeys, {});
+  const adminComments = useQuery(convexRefs.admin.listComments, {});
+  const adminInteractions = useQuery(convexRefs.admin.listInteractions, {});
   const upsertPost = useMutation(convexRefs.admin.upsertPost);
   const deletePost = useMutation(convexRefs.admin.deletePost);
   const createApiKey = useMutation(convexRefs.admin.createApiKey);
@@ -173,11 +250,110 @@ function OwnerDashboard() {
   const [apiKeyName, setApiKeyName] = useState("Blog writer");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTabId>("overview");
+  const [postSearch, setPostSearch] = useState("");
+  const [postStatusFilter, setPostStatusFilter] = useState<
+    "all" | ConvexPostRecord["status"]
+  >("all");
+  const [commentSearch, setCommentSearch] = useState("");
+  const [commentEntityFilter, setCommentEntityFilter] = useState<
+    "all" | AdminCommentRecord["entityType"]
+  >("all");
+  const [commentStatusFilter, setCommentStatusFilter] = useState<
+    "all" | NonNullable<AdminCommentRecord["status"]>
+  >("all");
+  const [interactionSearch, setInteractionSearch] = useState("");
+  const [interactionEntityFilter, setInteractionEntityFilter] = useState<
+    "all" | AdminInteractionRecord["entityType"]
+  >("all");
+  const [interactionStateFilter, setInteractionStateFilter] = useState<
+    "all" | "saved" | "unsaved" | "upvoted" | "downvoted" | "neutral"
+  >("all");
 
   const selectedSlug = form.slug.trim();
-  const sortedPosts = posts ?? [];
-  const activity = overview?.recentInteractions ?? [];
-  const comments = overview?.recentComments ?? [];
+  const sortedPosts = useMemo(
+    () =>
+      [...(posts ?? [])].sort(
+        (left, right) => right.publishedAt - left.publishedAt,
+      ),
+    [posts],
+  );
+  const activity = useMemo(
+    () => adminInteractions ?? overview?.recentInteractions ?? [],
+    [adminInteractions, overview?.recentInteractions],
+  );
+  const comments = useMemo(
+    () => adminComments ?? overview?.recentComments ?? [],
+    [adminComments, overview?.recentComments],
+  );
+  const activeApiKeys = useMemo(
+    () => (apiKeys ?? []).filter((key) => !key.revokedAt),
+    [apiKeys],
+  );
+  const postSearchValue = postSearch.trim().toLowerCase();
+  const filteredPosts = useMemo(() => {
+    return sortedPosts.filter((post) => {
+      const matchesStatus =
+        postStatusFilter === "all" || post.status === postStatusFilter;
+      const matchesSearch =
+        postSearchValue.length === 0 ||
+        [post.title, post.slug, post.excerpt, post.tags.join(" "), post.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(postSearchValue);
+      return matchesStatus && matchesSearch;
+    });
+  }, [postSearchValue, postStatusFilter, sortedPosts]);
+  const commentSearchValue = commentSearch.trim().toLowerCase();
+  const filteredComments = useMemo(() => {
+    return comments.filter((comment) => {
+      const status = comment.status ?? "active";
+      const matchesEntity =
+        commentEntityFilter === "all" ||
+        comment.entityType === commentEntityFilter;
+      const matchesStatus =
+        commentStatusFilter === "all" || status === commentStatusFilter;
+      const matchesSearch =
+        commentSearchValue.length === 0 ||
+        [
+          comment.author,
+          comment.entityId,
+          comment.body,
+          status,
+          comment.entityType,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(commentSearchValue);
+      return matchesEntity && matchesStatus && matchesSearch;
+    });
+  }, [commentEntityFilter, commentSearchValue, commentStatusFilter, comments]);
+  const interactionSearchValue = interactionSearch.trim().toLowerCase();
+  const filteredInteractions = useMemo(() => {
+    return activity.filter((item) => {
+      const matchesEntity =
+        interactionEntityFilter === "all" ||
+        item.entityType === interactionEntityFilter;
+      const matchesState =
+        interactionStateFilter === "all" ||
+        (interactionStateFilter === "saved" && item.saved) ||
+        (interactionStateFilter === "unsaved" && !item.saved) ||
+        (interactionStateFilter === "upvoted" && item.vote > 0) ||
+        (interactionStateFilter === "downvoted" && item.vote < 0) ||
+        (interactionStateFilter === "neutral" && item.vote === 0);
+      const matchesSearch =
+        interactionSearchValue.length === 0 ||
+        [item.author, item.entityId, item.entityType, String(item.vote)]
+          .join(" ")
+          .toLowerCase()
+          .includes(interactionSearchValue);
+      return matchesEntity && matchesState && matchesSearch;
+    });
+  }, [
+    activity,
+    interactionEntityFilter,
+    interactionSearchValue,
+    interactionStateFilter,
+  ]);
   const tabs = useMemo<AdminTab[]>(
     () => [
       {
@@ -353,7 +529,12 @@ function OwnerDashboard() {
       <div className="min-h-[42rem]">
         {activeTab === "overview" ? (
           <AdminOverviewPanel
+            activeApiKeys={activeApiKeys.length}
             overview={overview}
+            onCreatePost={() => {
+              setForm(blankPost);
+              setActiveTab("posts");
+            }}
             tabs={tabs}
             onChange={setActiveTab}
           />
@@ -381,8 +562,36 @@ function OwnerDashboard() {
                   New
                 </Button>
               </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem]">
+                <Field label="Search archive">
+                  <Input
+                    value={postSearch}
+                    placeholder="title, slug, tag"
+                    onChange={(event) => setPostSearch(event.target.value)}
+                  />
+                </Field>
+                <Field label="Status">
+                  <NativeSelect
+                    value={postStatusFilter}
+                    onChange={(event) =>
+                      setPostStatusFilter(
+                        event.target.value as
+                          | "all"
+                          | ConvexPostRecord["status"],
+                      )
+                    }
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="draft">Drafts</option>
+                    <option value="published">Published</option>
+                  </NativeSelect>
+                </Field>
+              </div>
+              <p className="mt-3 font-mono text-[11px] uppercase text-muted-foreground">
+                Showing {filteredPosts.length} of {sortedPosts.length}
+              </p>
               <div className="mt-2 divide-y divide-row-border">
-                {sortedPosts.map((post) => (
+                {filteredPosts.map((post) => (
                   <PostListItem
                     key={post._id}
                     post={post}
@@ -399,6 +608,13 @@ function OwnerDashboard() {
                 {posts?.length === 0 ? (
                   <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
                     No posts yet
+                  </div>
+                ) : null}
+                {posts !== undefined &&
+                posts.length > 0 &&
+                filteredPosts.length === 0 ? (
+                  <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                    No posts match the current filters
                   </div>
                 ) : null}
               </div>
@@ -491,8 +707,7 @@ function OwnerDashboard() {
                       />
                     </Field>
                     <Field label="Status">
-                      <select
-                        className="h-10 border border-input bg-background px-3 text-sm"
+                      <NativeSelect
                         value={form.status}
                         onChange={(event) =>
                           setForm({
@@ -503,7 +718,7 @@ function OwnerDashboard() {
                       >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
-                      </select>
+                      </NativeSelect>
                     </Field>
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
@@ -552,14 +767,21 @@ function OwnerDashboard() {
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
             <section className="py-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-mono text-xs uppercase text-muted-foreground">
-                  API keys
-                </p>
+                <div>
+                  <p className="font-mono text-xs uppercase text-muted-foreground">
+                    API keys
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {activeApiKeys.length} active / {(apiKeys ?? []).length}{" "}
+                    total
+                  </p>
+                </div>
                 <KeyRound className="size-4 text-muted-foreground" />
               </div>
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <Input
                   value={apiKeyName}
+                  placeholder="Integration name"
                   onChange={(event) => setApiKeyName(event.target.value)}
                 />
                 <Button type="button" variant="outline" onClick={issueApiKey}>
@@ -568,7 +790,15 @@ function OwnerDashboard() {
               </div>
               {createdToken ? (
                 <div className="mt-3 border border-row-border p-3">
+                  <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                    Token shown once
+                  </p>
                   <p className="break-all font-mono text-xs">{createdToken}</p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Store this token in a server-side secret or password
+                    manager. Do not ship it in client bundles or public
+                    environment variables.
+                  </p>
                   <Button
                     className="mt-3"
                     size="sm"
@@ -619,44 +849,146 @@ function OwnerDashboard() {
             </section>
 
             <section className="py-3">
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Integration
-              </p>
-              <div className="mt-4 grid gap-2 font-mono text-[11px] uppercase text-muted-foreground">
-                <p>GET /api/admin/posts</p>
-                <p>POST /api/admin/posts</p>
-                <p>GET /api/admin/posts/[slug]</p>
-                <p>PATCH /api/admin/posts/[slug]</p>
-                <p>DELETE /api/admin/posts/[slug]</p>
-                <p>GET /api/admin/interactions</p>
-                <p>GET /api/admin/newsletter/subscribers</p>
-                <p>GET /api/admin/newsletter/issues</p>
-                <p>POST /api/admin/newsletter/issues</p>
-                <p>POST /api/admin/newsletter/issues/[slug]/test</p>
-                <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
-                <p>POST /api/admin/newsletter/issues/[slug]/send</p>
+              <div className="border border-row-border p-4">
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  Integration
+                </p>
+                <div className="mt-4 space-y-3">
+                  {adminApiRoutes.map((route) => (
+                    <div
+                      key={`${route.method}-${route.path}`}
+                      className="grid gap-1 border-b border-row-border pb-3 last:border-b-0 last:pb-0"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{route.method}</Badge>
+                        <code className="font-mono text-[11px]">
+                          {route.path}
+                        </code>
+                      </div>
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        {route.detail}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                Send{" "}
-                <code className="font-mono">Authorization: Bearer token</code>{" "}
-                from your writing software.
-              </p>
+              <div className="mt-4 border border-row-border p-4">
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  Key safety
+                </p>
+                <div className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
+                  <p>
+                    Send{" "}
+                    <code className="font-mono">
+                      Authorization: Bearer token
+                    </code>{" "}
+                    from trusted server-side tooling only.
+                  </p>
+                  <p>
+                    Rotate keys when a workflow changes hands, and revoke any
+                    key you cannot account for.
+                  </p>
+                  <p>
+                    Browser requests to admin endpoints will fail without the
+                    bearer token header, so keep automation behind your own
+                    server or local scripts.
+                  </p>
+                </div>
+                <pre className="mt-4 overflow-x-auto border border-row-border bg-muted/35 p-3 font-mono text-[11px] leading-5 text-foreground">
+                  {`curl /api/admin/posts \\
+  -H "Authorization: Bearer $SYMBAIEX_ADMIN_TOKEN"`}
+                </pre>
+              </div>
             </section>
           </div>
         ) : null}
 
         {activeTab === "comments" ? (
           <section className="py-3">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Recent comments
+            <div className="flex flex-col gap-1">
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Comments
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Owner-only moderation stream, capped to the latest 100 records.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_11rem]">
+              <Field label="Search">
+                <Input
+                  value={commentSearch}
+                  placeholder="author, entity, body"
+                  onChange={(event) => setCommentSearch(event.target.value)}
+                />
+              </Field>
+              <Field label="Entity">
+                <NativeSelect
+                  value={commentEntityFilter}
+                  onChange={(event) =>
+                    setCommentEntityFilter(
+                      event.target.value as
+                        | "all"
+                        | AdminCommentRecord["entityType"],
+                    )
+                  }
+                >
+                  <option value="all">All entities</option>
+                  <option value="post">Posts</option>
+                  <option value="hnStory">News stories</option>
+                  <option value="portfolioProject">Projects</option>
+                </NativeSelect>
+              </Field>
+              <Field label="Status">
+                <NativeSelect
+                  value={commentStatusFilter}
+                  onChange={(event) =>
+                    setCommentStatusFilter(
+                      event.target.value as
+                        | "all"
+                        | NonNullable<AdminCommentRecord["status"]>,
+                    )
+                  }
+                >
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="hidden">Hidden</option>
+                  <option value="deleted">Deleted</option>
+                </NativeSelect>
+              </Field>
+            </div>
+            <p className="mt-3 font-mono text-[11px] uppercase text-muted-foreground">
+              Showing {filteredComments.length} of {comments.length}
             </p>
             <div className="mt-3 divide-y divide-row-border">
-              {comments.map((comment) => (
+              {filteredComments.map((comment) => (
                 <div key={comment._id} className="py-3">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-mono text-[11px] uppercase text-muted-foreground">
-                      {comment.author} / {comment.entityType}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-mono text-[11px] uppercase text-muted-foreground">
+                          {comment.author}
+                        </p>
+                        <Badge variant="outline">
+                          {comment.status ?? "active"}
+                        </Badge>
+                        <Badge variant="outline">{comment.entityType}</Badge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+                        <span>{formatShortDate(comment.createdAt)}</span>
+                        <span>{comment.entityId}</span>
+                        <Link
+                          className="text-foreground underline-offset-4 hover:underline"
+                          href={entityHref(
+                            comment.entityType,
+                            comment.entityId,
+                          )}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Open entity
+                        </Link>
+                      </div>
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -682,7 +1014,14 @@ function OwnerDashboard() {
                       <Trash2 />
                     </Button>
                   </div>
-                  <p className="mt-1 line-clamp-4 text-sm leading-6">
+                  <p
+                    className={cn(
+                      "mt-3 line-clamp-4 text-sm leading-6",
+                      comment.status === "deleted"
+                        ? "text-muted-foreground"
+                        : null,
+                    )}
+                  >
                     {comment.status === "deleted"
                       ? "Comment deleted"
                       : comment.body}
@@ -691,7 +1030,14 @@ function OwnerDashboard() {
               ))}
               {comments.length === 0 ? (
                 <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-                  No recent comments
+                  {adminComments === undefined
+                    ? "Loading comments"
+                    : "No comments"}
+                </div>
+              ) : null}
+              {comments.length > 0 && filteredComments.length === 0 ? (
+                <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                  No comments match the current filters
                 </div>
               ) : null}
             </div>
@@ -700,21 +1046,97 @@ function OwnerDashboard() {
 
         {activeTab === "interactions" ? (
           <section className="py-3">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Recent interactions
+            <div className="flex flex-col gap-1">
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Interactions
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Owner-only vote and save stream, capped to the latest 100
+                records.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_11rem]">
+              <Field label="Search">
+                <Input
+                  value={interactionSearch}
+                  placeholder="author, entity, vote"
+                  onChange={(event) => setInteractionSearch(event.target.value)}
+                />
+              </Field>
+              <Field label="Entity">
+                <NativeSelect
+                  value={interactionEntityFilter}
+                  onChange={(event) =>
+                    setInteractionEntityFilter(
+                      event.target.value as
+                        | "all"
+                        | AdminInteractionRecord["entityType"],
+                    )
+                  }
+                >
+                  <option value="all">All entities</option>
+                  <option value="post">Posts</option>
+                  <option value="hnStory">News stories</option>
+                </NativeSelect>
+              </Field>
+              <Field label="State">
+                <NativeSelect
+                  value={interactionStateFilter}
+                  onChange={(event) =>
+                    setInteractionStateFilter(
+                      event.target.value as
+                        | "all"
+                        | "saved"
+                        | "unsaved"
+                        | "upvoted"
+                        | "downvoted"
+                        | "neutral",
+                    )
+                  }
+                >
+                  <option value="all">All states</option>
+                  <option value="saved">Saved</option>
+                  <option value="unsaved">Unsaved</option>
+                  <option value="upvoted">Upvoted</option>
+                  <option value="downvoted">Downvoted</option>
+                  <option value="neutral">Neutral vote</option>
+                </NativeSelect>
+              </Field>
+            </div>
+            <p className="mt-3 font-mono text-[11px] uppercase text-muted-foreground">
+              Showing {filteredInteractions.length} of {activity.length}
             </p>
             <div className="mt-3 divide-y divide-row-border">
-              {activity.map((item) => (
+              {filteredInteractions.map((item) => (
                 <div
                   key={item._id}
                   className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm">{item.entityId}</p>
-                    <p className="font-mono text-[11px] uppercase text-muted-foreground">
-                      {item.author} / vote {item.vote} /{" "}
-                      {item.saved ? "saved" : "not saved"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold">
+                        {item.entityId}
+                      </p>
+                      <Badge variant="outline">{item.entityType}</Badge>
+                      <Badge variant={item.vote > 0 ? "default" : "outline"}>
+                        vote {item.vote}
+                      </Badge>
+                      <Badge variant={item.saved ? "default" : "outline"}>
+                        {item.saved ? "saved" : "not saved"}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+                      <span>{item.author}</span>
+                      <span>{formatShortDate(item.updatedAt)}</span>
+                      <Link
+                        className="text-foreground underline-offset-4 hover:underline"
+                        href={entityHref(item.entityType, item.entityId)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open entity
+                      </Link>
+                    </div>
                   </div>
                   <Button
                     size="icon"
@@ -744,7 +1166,14 @@ function OwnerDashboard() {
               ))}
               {activity.length === 0 ? (
                 <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-                  No recent interactions
+                  {adminInteractions === undefined
+                    ? "Loading interactions"
+                    : "No interactions"}
+                </div>
+              ) : null}
+              {activity.length > 0 && filteredInteractions.length === 0 ? (
+                <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                  No interactions match the current filters
                 </div>
               ) : null}
             </div>
@@ -836,13 +1265,13 @@ function AdminTabChrome({
       <div
         aria-label="Admin sections"
         className="hidden flex-wrap items-center gap-1 md:flex"
-        role="tablist"
+        role="group"
       >
         {tabs.map((tab) => {
           const selected = activeTab === tab.id;
           return (
             <button
-              aria-selected={selected}
+              aria-pressed={selected}
               className={cn(
                 "px-3 py-2 text-sm font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
@@ -852,7 +1281,6 @@ function AdminTabChrome({
               )}
               key={tab.id}
               onClick={() => onChange(tab.id)}
-              role="tab"
               type="button"
             >
               {tab.label}
@@ -865,18 +1293,147 @@ function AdminTabChrome({
 }
 
 function AdminOverviewPanel({
+  activeApiKeys,
   overview,
+  onCreatePost,
   onChange,
   tabs,
 }: {
+  activeApiKeys: number;
   overview: AdminOverviewRecord | undefined;
+  onCreatePost: () => void;
   onChange: (tab: AdminTabId) => void;
   tabs: AdminTab[];
 }) {
+  const totals = overview?.totals;
+  const healthRows = [
+    {
+      label: "Publishing",
+      status: (totals?.publishedPosts ?? 0) > 0 ? "Ready" : "Needs post",
+      note: `${totals?.publishedPosts ?? 0} published of ${totals?.posts ?? 0}`,
+      tab: "posts" as const,
+    },
+    {
+      label: "API access",
+      status: activeApiKeys > 0 ? "Ready" : "Missing key",
+      note:
+        activeApiKeys > 0
+          ? `${activeApiKeys} active automation key${
+              activeApiKeys === 1 ? "" : "s"
+            }`
+          : "Issue an admin key before wiring external tools",
+      tab: "api" as const,
+    },
+    {
+      label: "Moderation",
+      status:
+        (overview?.recentComments.length ?? 0) > 0 ? "Active" : "Quiet sample",
+      note: `${overview?.recentComments.length ?? 0} comments / ${
+        overview?.recentInteractions.length ?? 0
+      } interactions`,
+      tab: "comments" as const,
+    },
+    {
+      label: "System logs",
+      status: (totals?.openSystemLogs ?? 0) > 0 ? "Review" : "Clear",
+      note:
+        (totals?.openSystemLogs ?? 0) > 0
+          ? `${totals?.openSystemLogs ?? 0} open issue${
+              totals?.openSystemLogs === 1 ? "" : "s"
+            }`
+          : "No open issues in the current sample",
+      tab: "logs" as const,
+    },
+  ] as const;
+
   return (
     <section>
       <AdminCommandCenter overview={overview} />
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+        <section className="border-y border-row-border py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Health
+              </p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                Use this snapshot to move between publishing, moderation, API,
+                and ops without expanding the tab chrome.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {healthRows.map((row) => (
+              <button
+                className="border border-row-border p-3 text-left transition-colors hover:border-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                key={row.label}
+                onClick={() => onChange(row.tab)}
+                type="button"
+              >
+                <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                  {row.label}
+                </p>
+                <p className="mt-2 text-lg font-semibold">{row.status}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {row.note}
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-y border-row-border py-4">
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            Quick actions
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" onClick={onCreatePost}>
+              <Plus />
+              New draft
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onChange("api")}
+            >
+              <KeyRound />
+              Issue key
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onChange("comments")}
+            >
+              <MessageSquare />
+              Review comments
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onChange("interactions")}
+            >
+              <MousePointer2 />
+              Review interactions
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onChange("logs")}
+            >
+              <Activity />
+              Open logs
+            </Button>
+          </div>
+          <div className="mt-4 text-sm leading-6 text-muted-foreground">
+            <p>
+              Posts, comments, and interactions now expose direct open links so
+              moderation and verification can happen without leaving the console
+              blind.
+            </p>
+          </div>
+        </section>
+      </div>
+      <div className="mt-6 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {tabs
           .filter((tab) => tab.id !== "overview")
           .map((tab) => {
@@ -942,6 +1499,24 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function NativeSelect({
+  children,
+  className,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        "h-10 border border-input bg-background px-3 text-sm",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
+
 function PostListItem({
   post,
   active,
@@ -966,10 +1541,25 @@ function PostListItem({
           <Badge variant={post.status === "published" ? "default" : "outline"}>
             {post.status}
           </Badge>
+          {post.featured ? <Badge variant="outline">featured</Badge> : null}
         </div>
         <p className="mt-1 font-mono text-[11px] uppercase text-muted-foreground">
           {formatDate(new Date(post.publishedAt).toISOString())} / {post.slug}
         </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+          <span>{post.readingMinutes} min</span>
+          <span>
+            {post.tags.length} tag{post.tags.length === 1 ? "" : "s"}
+          </span>
+          <Link
+            className="text-foreground underline-offset-4 hover:underline"
+            href={entityHref("post", post.slug)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open live
+          </Link>
+        </div>
       </button>
       <Button
         size="icon"
@@ -990,7 +1580,13 @@ function ApiKeyList({
   apiKeys: AdminApiKeyRecord[] | undefined;
   onRevoke: (keyId: string) => Promise<void>;
 }) {
-  const rows = useMemo(() => apiKeys ?? [], [apiKeys]);
+  const rows = useMemo(
+    () =>
+      [...(apiKeys ?? [])].sort(
+        (left, right) => right.createdAt - left.createdAt,
+      ),
+    [apiKeys],
+  );
   return (
     <div className="mt-4 divide-y divide-row-border">
       {rows.map((key) => (
@@ -1014,14 +1610,23 @@ function ApiKeyList({
               </Button>
             )}
           </div>
-          <p className="mt-1 font-mono text-[11px] uppercase text-muted-foreground">
-            Last used{" "}
-            {key.lastUsedAt
-              ? formatDate(new Date(key.lastUsedAt).toISOString())
-              : "never"}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase text-muted-foreground">
+            <span>Issued {formatShortDate(key.createdAt)}</span>
+            <span>by {key.createdBy}</span>
+            <span>
+              Last used{" "}
+              {key.lastUsedAt
+                ? formatDate(new Date(key.lastUsedAt).toISOString())
+                : "never"}
+            </span>
+          </div>
         </div>
       ))}
+      {rows.length === 0 ? (
+        <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+          No API keys yet
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1059,4 +1664,21 @@ async function sha256Hex(value: string) {
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
+}
+
+function entityHref(entityType: AdminEntityType, entityId: string) {
+  switch (entityType) {
+    case "post":
+      return `/blog/${entityId}`;
+    case "hnStory":
+      return `/news/${entityId}`;
+    case "portfolioProject":
+      return `/portfolio/${entityId}`;
+    default:
+      return "/";
+  }
+}
+
+function formatShortDate(timestamp: number) {
+  return formatDate(new Date(timestamp).toISOString());
 }
