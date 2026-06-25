@@ -371,6 +371,99 @@ type DailyRunResult = {
   reason?: string;
 };
 
+type DailyNewsletterAdminSettings = {
+  enabled: boolean;
+  testMode: boolean;
+  timeZone: string;
+  maxIndexedArticles: number;
+  maxNewsletterStories: number;
+  siteUrl: string;
+  cron: {
+    hnRefreshUtc: string;
+    newsletterSendUtc: string;
+  };
+};
+
+export const adminSettings = query({
+  args: {},
+  handler: async (ctx): Promise<DailyNewsletterAdminSettings> => {
+    await requireOwner(ctx);
+    return await readAdminSettings(ctx);
+  },
+});
+
+export const updateAdminSettings = mutation({
+  args: {
+    enabled: v.optional(v.boolean()),
+    testMode: v.optional(v.boolean()),
+    timeZone: v.optional(v.string()),
+    maxIndexedArticles: v.optional(v.number()),
+    maxNewsletterStories: v.optional(v.number()),
+    siteUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<DailyNewsletterAdminSettings> => {
+    await requireOwner(ctx);
+    const updates: Array<{ key: string; value: string }> = [];
+
+    if (args.enabled !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.enabled",
+        value: args.enabled ? "true" : "false",
+      });
+    }
+    if (args.testMode !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.testMode",
+        value: args.testMode ? "true" : "false",
+      });
+    }
+    if (args.timeZone !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.timeZone",
+        value: normalizeTimeZone(args.timeZone),
+      });
+    }
+    if (args.maxIndexedArticles !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.maxIndexedArticles",
+        value: String(
+          clampNumber(
+            args.maxIndexedArticles,
+            5,
+            100,
+            DEFAULT_MAX_INDEXED_ARTICLES,
+          ),
+        ),
+      });
+    }
+    if (args.maxNewsletterStories !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.maxNewsletterStories",
+        value: String(
+          clampNumber(
+            args.maxNewsletterStories,
+            3,
+            12,
+            DEFAULT_NEWSLETTER_STORIES,
+          ),
+        ),
+      });
+    }
+    if (args.siteUrl !== undefined) {
+      updates.push({
+        key: "newsletter.siteUrl",
+        value: normalizeSiteUrl(args.siteUrl),
+      });
+    }
+
+    for (const update of updates) {
+      await setSettingDirect(ctx, update.key, update.value);
+    }
+
+    return await readAdminSettings(ctx);
+  },
+});
+
 export const runDailyNewsletter = internalAction({
   args: {
     runDate: v.optional(v.string()),
@@ -864,6 +957,79 @@ async function readDailyConfig(
   };
 }
 
+async function readAdminSettings(
+  ctx: QueryCtx | MutationCtx,
+): Promise<DailyNewsletterAdminSettings> {
+  const siteUrl =
+    (await getSettingDirect(ctx, "newsletter.siteUrl")) ??
+    "https://symbaiex.com";
+  const enabledSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.enabled",
+  );
+  const testModeSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.testMode",
+  );
+  const maxIndexedSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.maxIndexedArticles",
+  );
+  const maxStoriesSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.maxNewsletterStories",
+  );
+  const timeZoneSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.timeZone",
+  );
+
+  return {
+    siteUrl: normalizeSiteUrl(siteUrl),
+    timeZone: normalizeTimeZone(timeZoneSetting ?? DEFAULT_TIME_ZONE),
+    enabled: enabledSetting === null ? true : enabledSetting !== "false",
+    testMode:
+      testModeSetting === null ? false : testModeSetting === "true",
+    maxIndexedArticles: clampNumber(
+      numberFromSetting(maxIndexedSetting),
+      5,
+      100,
+      DEFAULT_MAX_INDEXED_ARTICLES,
+    ),
+    maxNewsletterStories: clampNumber(
+      numberFromSetting(maxStoriesSetting),
+      3,
+      12,
+      DEFAULT_NEWSLETTER_STORIES,
+    ),
+    cron: {
+      hnRefreshUtc: "0 11 * * *",
+      newsletterSendUtc: "15 12 * * *",
+    },
+  };
+}
+
+async function getSettingDirect(ctx: QueryCtx | MutationCtx, key: string) {
+  const row = await ctx.db
+    .query("newsletterSettings")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .unique();
+  return row?.value ?? null;
+}
+
+async function setSettingDirect(ctx: MutationCtx, key: string, value: string) {
+  const existing = await ctx.db
+    .query("newsletterSettings")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .unique();
+  const now = Date.now();
+  if (existing) {
+    await ctx.db.patch(existing._id, { value, updatedAt: now });
+  } else {
+    await ctx.db.insert("newsletterSettings", { key, value, updatedAt: now });
+  }
+}
+
 function rankStories(stories: NewsStory[]) {
   return stories
     .map((story) => {
@@ -1046,6 +1212,18 @@ function normalizeSiteUrl(value: string) {
     return url.origin;
   } catch {
     return "https://symbaiex.com";
+  }
+}
+
+function normalizeTimeZone(value: string) {
+  const candidate = value.trim() || DEFAULT_TIME_ZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(
+      Date.now(),
+    );
+    return candidate;
+  } catch {
+    return DEFAULT_TIME_ZONE;
   }
 }
 

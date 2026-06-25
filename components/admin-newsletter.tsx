@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   convexRefs,
+  type DailyNewsletterRunRecord,
+  type DailyNewsletterSettingsRecord,
+  type NewsletterSendLogRecord,
   type NewsletterIssueRecord,
   type NewsletterSubscriberRecord,
 } from "@/lib/convex-refs";
@@ -14,7 +17,13 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { CalendarClock, Send, TestTube2 } from "lucide-react";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 
 type IssueForm = {
@@ -27,6 +36,7 @@ type IssueForm = {
 
 type IssueFilter = "all" | NewsletterIssueRecord["status"];
 type SubscriberFilter = "all" | NewsletterSubscriberRecord["status"];
+type DailySettingsForm = Omit<DailyNewsletterSettingsRecord, "cron">;
 
 const ISSUE_FILTERS: IssueFilter[] = [
   "all",
@@ -56,20 +66,59 @@ const blankIssue: IssueForm = {
 export function AdminNewsletter() {
   const subscribers = useQuery(convexRefs.admin.listNewsletterSubscribers, {});
   const issues = useQuery(convexRefs.admin.listNewsletterIssues, {});
+  const dailySettings = useQuery(
+    convexRefs.admin.dailyNewsletterSettings,
+    {},
+  );
+  const dailyRuns = useQuery(convexRefs.admin.listDailyNewsletterRuns, {});
+  const dailySendLogs = useQuery(convexRefs.admin.listNewsletterSendLogs, {});
   const upsertIssue = useMutation(convexRefs.admin.upsertNewsletterIssue);
   const sendTest = useMutation(convexRefs.admin.sendNewsletterIssueTest);
   const sendNow = useMutation(convexRefs.admin.sendNewsletterIssueNow);
   const scheduleIssue = useMutation(convexRefs.admin.scheduleNewsletterIssue);
   const cancelIssue = useMutation(convexRefs.admin.cancelNewsletterIssue);
+  const updateDailySettings = useMutation(
+    convexRefs.admin.updateDailyNewsletterSettings,
+  );
+  const queueDailyNewsletter = useMutation(
+    convexRefs.admin.queueDailyNewsletter,
+  );
   const [form, setForm] = useState<IssueForm>(blankIssue);
+  const [dailyForm, setDailyForm] = useState<DailySettingsForm>({
+    enabled: true,
+    testMode: false,
+    timeZone: "America/Chicago",
+    maxIndexedArticles: 40,
+    maxNewsletterStories: 8,
+    siteUrl: "https://symbaiex.com",
+  });
   const [scheduleAt, setScheduleAt] = useState("");
   const [testEmail, setTestEmail] = useState("solsymbaiex@gmail.com");
   const [issueFilter, setIssueFilter] = useState<IssueFilter>("all");
   const [subscriberFilter, setSubscriberFilter] =
     useState<SubscriberFilter>("all");
 
+  useEffect(() => {
+    if (!dailySettings) {
+      return;
+    }
+    setDailyForm({
+      enabled: dailySettings.enabled,
+      testMode: dailySettings.testMode,
+      timeZone: dailySettings.timeZone,
+      maxIndexedArticles: dailySettings.maxIndexedArticles,
+      maxNewsletterStories: dailySettings.maxNewsletterStories,
+      siteUrl: dailySettings.siteUrl,
+    });
+  }, [dailySettings]);
+
   const subscriberRows = useMemo(() => subscribers ?? [], [subscribers]);
   const issueRows = useMemo(() => issues ?? [], [issues]);
+  const dailyRunRows = useMemo(() => dailyRuns ?? [], [dailyRuns]);
+  const dailySendLogRows = useMemo(
+    () => dailySendLogs ?? [],
+    [dailySendLogs],
+  );
   const selectedSlug = form.slug.trim();
   const selectedIssue = useMemo(
     () => issueRows.find((issue) => issue.slug === selectedSlug) ?? null,
@@ -261,8 +310,67 @@ export function AdminNewsletter() {
     }
   }
 
+  async function saveDailySettings() {
+    try {
+      const updated = await updateDailySettings(dailyForm);
+      setDailyForm({
+        enabled: updated.enabled,
+        testMode: updated.testMode,
+        timeZone: updated.timeZone,
+        maxIndexedArticles: updated.maxIndexedArticles,
+        maxNewsletterStories: updated.maxNewsletterStories,
+        siteUrl: updated.siteUrl,
+      });
+      toast.success("Daily newsletter settings saved");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "daily_settings_failed",
+        component: "AdminNewsletter",
+        action: "dailyNewsletter:updateAdminSettings",
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not save settings",
+      );
+    }
+  }
+
+  async function queueDailyRun(testMode: boolean) {
+    try {
+      await queueDailyNewsletter({
+        force: true,
+        sendEnabled: testMode ? false : dailyForm.enabled,
+        testMode,
+      });
+      toast.success(testMode ? "Daily dry run queued" : "Daily send queued");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "daily_queue_failed",
+        component: "AdminNewsletter",
+        action: "dailyNewsletter:queueAdminDailyNewsletter",
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not queue daily run",
+      );
+    }
+  }
+
   return (
-    <section className="mt-10 grid gap-6 xl:grid-cols-12">
+    <>
+      <DailyAutomationPanel
+        logs={dailySendLogRows}
+        onQueueLive={() => queueDailyRun(false)}
+        onQueueTest={() => queueDailyRun(true)}
+        onSave={saveDailySettings}
+        runs={dailyRunRows}
+        settings={dailySettings}
+        value={dailyForm}
+        onChange={setDailyForm}
+      />
+      <section className="mt-6 grid gap-6 xl:grid-cols-12">
       <div className="xl:col-span-4">
         <div className="rounded-xl border bg-background p-4 sm:p-5">
           <div className="flex items-end justify-between gap-3">
@@ -509,6 +617,152 @@ export function AdminNewsletter() {
           syncCounts={syncCounts}
         />
       </div>
+      </section>
+    </>
+  );
+}
+
+function DailyAutomationPanel({
+  logs,
+  onChange,
+  onQueueLive,
+  onQueueTest,
+  onSave,
+  runs,
+  settings,
+  value,
+}: {
+  logs: NewsletterSendLogRecord[];
+  onChange: (value: DailySettingsForm) => void;
+  onQueueLive: () => void;
+  onQueueTest: () => void;
+  onSave: () => void;
+  runs: DailyNewsletterRunRecord[];
+  settings: DailyNewsletterSettingsRecord | undefined;
+  value: DailySettingsForm;
+}) {
+  const latestRun = runs[0];
+  const latestLog = logs[0];
+  return (
+    <section className="mt-10 grid gap-4 rounded-xl border bg-background p-4 sm:p-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Daily automation
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold">
+              Hacker News digest
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={onQueueTest}>
+              Queue dry run
+            </Button>
+            <Button size="sm" onClick={onQueueLive}>
+              Queue live run
+            </Button>
+          </div>
+        </div>
+        <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+          Convex refreshes Hacker News at {settings?.cron.hnRefreshUtc ?? "0 11 * * *"} UTC
+          and queues the daily newsletter at{" "}
+          {settings?.cron.newsletterSendUtc ?? "15 12 * * *"} UTC. The
+          newsletter uses the indexed stories, stored quote rotation, and this
+          settings record before sending through Resend.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ToggleField
+            checked={value.enabled}
+            label="Sending enabled"
+            onChange={(enabled) => onChange({ ...value, enabled })}
+          />
+          <ToggleField
+            checked={value.testMode}
+            label="Test mode"
+            onChange={(testMode) => onChange({ ...value, testMode })}
+          />
+          <Field label="Timezone">
+            <Input
+              value={value.timeZone}
+              onChange={(event) =>
+                onChange({ ...value, timeZone: event.target.value })
+              }
+            />
+          </Field>
+          <Field label="Indexed stories">
+            <Input
+              type="number"
+              min={5}
+              max={100}
+              value={value.maxIndexedArticles}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  maxIndexedArticles: Number(event.target.value),
+                })
+              }
+            />
+          </Field>
+          <Field label="Email stories">
+            <Input
+              type="number"
+              min={3}
+              max={12}
+              value={value.maxNewsletterStories}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  maxNewsletterStories: Number(event.target.value),
+                })
+              }
+            />
+          </Field>
+          <Field label="Site URL">
+            <Input
+              value={value.siteUrl}
+              onChange={(event) =>
+                onChange({ ...value, siteUrl: event.target.value })
+              }
+            />
+          </Field>
+        </div>
+        <Button className="mt-4" size="sm" onClick={onSave}>
+          Save automation
+        </Button>
+      </div>
+      <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
+        <p className="font-mono text-[11px] uppercase text-muted-foreground">
+          Latest run
+        </p>
+        {latestRun ? (
+          <>
+            <ControlFact label="Date" value={latestRun.runDate} />
+            <ControlFact label="Status" value={latestRun.status} />
+            <ControlFact label="Mode" value={latestRun.mode} />
+            <ControlFact
+              label="Stories"
+              value={`${latestRun.topStoryIds.length}/${latestRun.storyCount}`}
+            />
+            <ControlFact
+              label="Started"
+              value={formatDateTime(latestRun.startedAt)}
+            />
+            {latestRun.errorMessage ? (
+              <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                {latestRun.errorMessage}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <StatusLine>No daily runs recorded yet</StatusLine>
+        )}
+        {latestLog ? (
+          <p className="border-t pt-3 text-xs text-muted-foreground">
+            Last send log: {latestLog.status} on {formatDateTime(latestLog.createdAt)}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -659,6 +913,30 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
         {label}
       </span>
       {children}
+    </label>
+  );
+}
+
+function ToggleField({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-10 items-center justify-between gap-3 border px-3 py-2 text-sm">
+      <span className="font-mono text-[11px] uppercase text-muted-foreground">
+        {label}
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 accent-primary"
+      />
     </label>
   );
 }

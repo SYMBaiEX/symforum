@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminAiChat } from "@/components/admin-ai-chat";
 import { AdminAnalytics } from "@/components/admin-analytics";
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
@@ -81,7 +82,8 @@ type AdminTabId =
   | "users"
   | "logs"
   | "newsletter"
-  | "content";
+  | "content"
+  | "ai";
 
 type AdminTab = {
   id: AdminTabId;
@@ -426,6 +428,12 @@ function OwnerDashboard() {
         count:
           (overview?.totals.sitePages ?? 0) +
           (overview?.totals.portfolioProjects ?? 0),
+        icon: Wrench,
+      },
+      {
+        id: "ai",
+        label: "AI",
+        note: "Operator",
         icon: Wrench,
       },
     ],
@@ -1185,6 +1193,7 @@ function OwnerDashboard() {
         {activeTab === "logs" ? <AdminSystemLogs /> : null}
         {activeTab === "newsletter" ? <AdminNewsletter /> : null}
         {activeTab === "content" ? <AdminSiteContent /> : null}
+        {activeTab === "ai" ? <AdminAiChat /> : null}
       </div>
     </>
   );

@@ -732,7 +732,9 @@ function BaseEmail({
       <Preview>{preview}</Preview>
       <Body style={styles.page}>
         <Container style={styles.container}>
-          <Text style={styles.brand}>SYMBaiEX</Text>
+          <Link href="https://symbaiex.com" style={styles.brand}>
+            SYMBaiEX
+          </Link>
           <Section>{children}</Section>
           <Text style={styles.footer}>
             Software, AI systems, and design notes.

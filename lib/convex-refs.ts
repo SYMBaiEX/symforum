@@ -188,6 +188,55 @@ export type NewsletterIssueRecord = {
   updatedAt: number;
 };
 
+export type DailyNewsletterSettingsRecord = {
+  enabled: boolean;
+  testMode: boolean;
+  timeZone: string;
+  maxIndexedArticles: number;
+  maxNewsletterStories: number;
+  siteUrl: string;
+  cron: {
+    hnRefreshUtc: string;
+    newsletterSendUtc: string;
+  };
+};
+
+export type DailyNewsletterRunRecord = {
+  _id: string;
+  _creationTime: number;
+  runDate: string;
+  snapshotDate?: string;
+  status:
+    | "running"
+    | "generated"
+    | "sent"
+    | "skipped"
+    | "failed";
+  mode: "cron" | "manual" | "test";
+  sendEnabled: boolean;
+  startedAt: number;
+  completedAt?: number;
+  sentAt?: number;
+  issueId?: string;
+  storyCount: number;
+  topStoryIds: number[];
+  resendBroadcastId?: string;
+  errorMessage?: string;
+  updatedAt: number;
+};
+
+export type NewsletterSendLogRecord = {
+  _id: string;
+  _creationTime: number;
+  runDate: string;
+  issueId?: string;
+  provider: "resend";
+  status: "queued" | "sent" | "skipped" | "failed";
+  resendBroadcastId?: string;
+  errorMessage?: string;
+  createdAt: number;
+};
+
 export type NewsSnapshotRecord = {
   _id: string;
   _creationTime: number;
@@ -523,6 +572,43 @@ export const convexRefs = {
       { slug: string },
       { cancelled: boolean }
     >("newsletter:cancelAdminIssue"),
+    dailyNewsletterSettings: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      DailyNewsletterSettingsRecord
+    >("dailyNewsletter:adminSettings"),
+    updateDailyNewsletterSettings: makeFunctionReference<
+      "mutation",
+      {
+        enabled?: boolean;
+        testMode?: boolean;
+        timeZone?: string;
+        maxIndexedArticles?: number;
+        maxNewsletterStories?: number;
+        siteUrl?: string;
+      },
+      DailyNewsletterSettingsRecord
+    >("dailyNewsletter:updateAdminSettings"),
+    queueDailyNewsletter: makeFunctionReference<
+      "mutation",
+      {
+        runDate?: string;
+        force?: boolean;
+        sendEnabled?: boolean;
+        testMode?: boolean;
+      },
+      { queued: boolean }
+    >("dailyNewsletter:queueAdminDailyNewsletter"),
+    listDailyNewsletterRuns: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      DailyNewsletterRunRecord[]
+    >("dailyNewsletter:listAdminRuns"),
+    listNewsletterSendLogs: makeFunctionReference<
+      "query",
+      { runDate?: string },
+      NewsletterSendLogRecord[]
+    >("dailyNewsletter:listAdminSendLogs"),
     listSystemLogs: makeFunctionReference<
       "query",
       {
