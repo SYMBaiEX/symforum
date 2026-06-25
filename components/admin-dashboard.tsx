@@ -9,6 +9,13 @@ import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   convexRefs,
@@ -19,7 +26,24 @@ import {
 import { compactNumber, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { Copy, KeyRound, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Copy,
+  FileText,
+  KeyRound,
+  Mail,
+  MessageSquare,
+  MousePointer2,
+  PanelsTopLeft,
+  Plus,
+  Save,
+  ShieldCheck,
+  Trash2,
+  UsersRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -37,6 +61,26 @@ type PostForm = {
   imageUrl: string;
   imageAlt: string;
   imageCredit: string;
+};
+
+type AdminTabId =
+  | "overview"
+  | "posts"
+  | "api"
+  | "comments"
+  | "interactions"
+  | "analytics"
+  | "users"
+  | "logs"
+  | "newsletter"
+  | "content";
+
+type AdminTab = {
+  id: AdminTabId;
+  label: string;
+  note: string;
+  count?: number;
+  icon: LucideIcon;
 };
 
 const blankPost: PostForm = {
@@ -128,11 +172,89 @@ function OwnerDashboard() {
   const [form, setForm] = useState<PostForm>(blankPost);
   const [apiKeyName, setApiKeyName] = useState("Blog writer");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTabId>("overview");
 
   const selectedSlug = form.slug.trim();
   const sortedPosts = posts ?? [];
   const activity = overview?.recentInteractions ?? [];
   const comments = overview?.recentComments ?? [];
+  const tabs = useMemo<AdminTab[]>(
+    () => [
+      {
+        id: "overview",
+        label: "Overview",
+        note: "Command desk",
+        count: overview?.totals.openSystemLogs ?? 0,
+        icon: PanelsTopLeft,
+      },
+      {
+        id: "posts",
+        label: "Posts",
+        note: "Write archive",
+        count: overview?.totals.posts ?? sortedPosts.length,
+        icon: FileText,
+      },
+      {
+        id: "api",
+        label: "API",
+        note: "Keys + routes",
+        count: apiKeys?.filter((key) => !key.revokedAt).length ?? 0,
+        icon: KeyRound,
+      },
+      {
+        id: "comments",
+        label: "Comments",
+        note: "Moderation",
+        count: comments.length,
+        icon: MessageSquare,
+      },
+      {
+        id: "interactions",
+        label: "Interactions",
+        note: "Votes + saves",
+        count: activity.length,
+        icon: MousePointer2,
+      },
+      {
+        id: "analytics",
+        label: "Analytics",
+        note: "Convex events",
+        count: overview?.totals.analyticsEventsSample ?? 0,
+        icon: BarChart3,
+      },
+      {
+        id: "users",
+        label: "Users",
+        note: "Roles",
+        count: overview?.totals.users ?? 0,
+        icon: UsersRound,
+      },
+      {
+        id: "logs",
+        label: "Logs",
+        note: "Errors",
+        count: overview?.totals.openSystemLogs ?? 0,
+        icon: Activity,
+      },
+      {
+        id: "newsletter",
+        label: "Newsletter",
+        note: "Issues + subs",
+        count: overview?.totals.confirmedSubscribers ?? 0,
+        icon: Mail,
+      },
+      {
+        id: "content",
+        label: "Content",
+        note: "Pages + projects",
+        count:
+          (overview?.totals.sitePages ?? 0) +
+          (overview?.totals.portfolioProjects ?? 0),
+        icon: Wrench,
+      },
+    ],
+    [activity.length, apiKeys, comments.length, overview, sortedPosts.length],
+  );
 
   async function savePost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -222,289 +344,309 @@ function OwnerDashboard() {
 
   return (
     <>
-      <AdminCommandCenter overview={overview} />
-      <AdminSectionNav />
-      <div id="posts" className="grid scroll-mt-24 gap-8 lg:grid-cols-12">
-        <section className="lg:col-span-4">
-          <div className="flex items-center justify-between border-y border-row-border py-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Posts
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {overview?.totals.publishedPosts ?? 0} published /{" "}
-                {overview?.totals.posts ?? sortedPosts.length} total
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setForm(blankPost)}
-            >
-              <Plus />
-              New
-            </Button>
-          </div>
-          <div className="divide-y divide-row-border">
-            {sortedPosts.map((post) => (
-              <PostListItem
-                key={post._id}
-                post={post}
-                active={post.slug === selectedSlug}
-                onSelect={() => setForm(postToForm(post))}
-                onDelete={() => removePost(post.slug)}
-              />
-            ))}
-            {posts === undefined ? (
-              <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-                Loading posts
-              </div>
-            ) : null}
-            {posts?.length === 0 ? (
-              <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
-                No posts yet
-              </div>
-            ) : null}
-          </div>
-        </section>
+      <AdminTabChrome
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={tabs}
+      />
 
-        <section className="lg:col-span-5">
-          <form onSubmit={savePost} className="border-y border-row-border py-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Editor
-              </p>
-              <Button type="submit" size="sm">
-                <Save />
-                Save
-              </Button>
-            </div>
-            <div className="mt-5 grid gap-3">
-              <Field label="Title">
-                <Input
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm({ ...form, title: event.target.value })
-                  }
-                  required
-                />
-              </Field>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Slug">
-                  <Input
-                    value={form.slug}
-                    placeholder="auto-from-title"
-                    onChange={(event) =>
-                      setForm({ ...form, slug: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Date">
-                  <Input
-                    type="date"
-                    value={form.publishedAt}
-                    onChange={(event) =>
-                      setForm({ ...form, publishedAt: event.target.value })
-                    }
-                    required
-                  />
-                </Field>
-              </div>
-              <Field label="Excerpt">
-                <Textarea
-                  value={form.excerpt}
-                  onChange={(event) =>
-                    setForm({ ...form, excerpt: event.target.value })
-                  }
-                  rows={3}
-                  required
-                />
-              </Field>
-              <Field label="Markdown body">
-                <Textarea
-                  value={form.body}
-                  onChange={(event) =>
-                    setForm({ ...form, body: event.target.value })
-                  }
-                  rows={12}
-                  required
-                />
-              </Field>
-              <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Tags">
-                  <Input
-                    value={form.tags}
-                    placeholder="ai, design"
-                    onChange={(event) =>
-                      setForm({ ...form, tags: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Minutes">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={120}
-                    value={form.readingMinutes}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        readingMinutes: Number(event.target.value),
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Status">
-                  <select
-                    className="h-10 border border-input bg-background px-3 text-sm"
-                    value={form.status}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        status: event.target.value as "draft" | "published",
-                      })
-                    }
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Image URL">
-                  <Input
-                    value={form.imageUrl}
-                    onChange={(event) =>
-                      setForm({ ...form, imageUrl: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Image alt">
-                  <Input
-                    value={form.imageAlt}
-                    onChange={(event) =>
-                      setForm({ ...form, imageAlt: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Credit">
-                  <Input
-                    value={form.imageCredit}
-                    onChange={(event) =>
-                      setForm({ ...form, imageCredit: event.target.value })
-                    }
-                  />
-                </Field>
-              </div>
-              <label className="flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={form.featured}
-                  onChange={(event) =>
-                    setForm({ ...form, featured: event.target.checked })
-                  }
-                />
-                Featured
-              </label>
-            </div>
-          </form>
-        </section>
+      <div className="min-h-[42rem]">
+        {activeTab === "overview" ? (
+          <AdminOverviewPanel
+            overview={overview}
+            tabs={tabs}
+            onChange={setActiveTab}
+          />
+        ) : null}
 
-        <aside className="flex flex-col gap-8 lg:col-span-3">
-          <section id="api" className="scroll-mt-24 border-y border-row-border py-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                API keys
-              </p>
-              <KeyRound className="size-4 text-muted-foreground" />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Input
-                value={apiKeyName}
-                onChange={(event) => setApiKeyName(event.target.value)}
-              />
-              <Button type="button" variant="outline" onClick={issueApiKey}>
-                Issue
-              </Button>
-            </div>
-            {createdToken ? (
-              <div className="mt-3 border border-row-border p-3">
-                <p className="break-all font-mono text-xs">{createdToken}</p>
+        {activeTab === "posts" ? (
+          <div className="grid gap-6 lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.6fr)]">
+            <section>
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <p className="font-mono text-xs uppercase text-muted-foreground">
+                    Posts
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {overview?.totals.publishedPosts ?? 0} published /{" "}
+                    {overview?.totals.posts ?? sortedPosts.length} total
+                  </p>
+                </div>
                 <Button
-                  className="mt-3"
                   size="sm"
                   variant="outline"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(createdToken);
-                      toast.success("Token copied");
-                    } catch (error) {
-                      reportAppError(error, {
-                        scope: "admin",
-                        eventType: "clipboard_failed",
-                        component: "AdminDashboard",
-                        action: "copy_api_token",
-                        notify: false,
-                      });
-                      toast.error("Could not copy token");
-                    }
-                  }}
+                  onClick={() => setForm(blankPost)}
                 >
-                  <Copy />
-                  Copy token
+                  <Plus />
+                  New
                 </Button>
               </div>
-            ) : null}
-            <ApiKeyList
-              apiKeys={apiKeys}
-              onRevoke={async (keyId) => {
-                try {
-                  await revokeApiKey({ keyId });
-                  toast.success("API key revoked");
-                } catch (error) {
-                  reportAppError(error, {
-                    scope: "admin",
-                    eventType: "api_key_revoke_failed",
-                    component: "AdminDashboard",
-                    action: "admin:revokeApiKey",
-                    notify: false,
-                  });
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not revoke key",
-                  );
-                }
-              }}
-            />
-          </section>
+              <div className="mt-2 divide-y divide-row-border">
+                {sortedPosts.map((post) => (
+                  <PostListItem
+                    key={post._id}
+                    post={post}
+                    active={post.slug === selectedSlug}
+                    onSelect={() => setForm(postToForm(post))}
+                    onDelete={() => removePost(post.slug)}
+                  />
+                ))}
+                {posts === undefined ? (
+                  <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                    Loading posts
+                  </div>
+                ) : null}
+                {posts?.length === 0 ? (
+                  <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                    No posts yet
+                  </div>
+                ) : null}
+              </div>
+            </section>
 
-          <section className="border-y border-row-border py-4">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Integration
-            </p>
-            <div className="mt-4 space-y-2 font-mono text-[11px] uppercase text-muted-foreground">
-              <p>GET /api/admin/posts</p>
-              <p>POST /api/admin/posts</p>
-              <p>GET /api/admin/posts/[slug]</p>
-              <p>PATCH /api/admin/posts/[slug]</p>
-              <p>DELETE /api/admin/posts/[slug]</p>
-              <p>GET /api/admin/interactions</p>
-              <p>GET /api/admin/newsletter/subscribers</p>
-              <p>GET /api/admin/newsletter/issues</p>
-              <p>POST /api/admin/newsletter/issues</p>
-              <p>POST /api/admin/newsletter/issues/[slug]/test</p>
-              <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
-              <p>POST /api/admin/newsletter/issues/[slug]/send</p>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Send{" "}
-              <code className="font-mono">Authorization: Bearer token</code>{" "}
-              from your writing software.
-            </p>
-          </section>
+            <section>
+              <form onSubmit={savePost} className="py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-xs uppercase text-muted-foreground">
+                    Editor
+                  </p>
+                  <Button type="submit" size="sm">
+                    <Save />
+                    Save
+                  </Button>
+                </div>
+                <div className="mt-5 grid gap-3">
+                  <Field label="Title">
+                    <Input
+                      value={form.title}
+                      onChange={(event) =>
+                        setForm({ ...form, title: event.target.value })
+                      }
+                      required
+                    />
+                  </Field>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Slug">
+                      <Input
+                        value={form.slug}
+                        placeholder="auto-from-title"
+                        onChange={(event) =>
+                          setForm({ ...form, slug: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Date">
+                      <Input
+                        type="date"
+                        value={form.publishedAt}
+                        onChange={(event) =>
+                          setForm({ ...form, publishedAt: event.target.value })
+                        }
+                        required
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Excerpt">
+                    <Textarea
+                      value={form.excerpt}
+                      onChange={(event) =>
+                        setForm({ ...form, excerpt: event.target.value })
+                      }
+                      rows={3}
+                      required
+                    />
+                  </Field>
+                  <Field label="Markdown body">
+                    <Textarea
+                      value={form.body}
+                      onChange={(event) =>
+                        setForm({ ...form, body: event.target.value })
+                      }
+                      rows={12}
+                      required
+                    />
+                  </Field>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="Tags">
+                      <Input
+                        value={form.tags}
+                        placeholder="ai, design"
+                        onChange={(event) =>
+                          setForm({ ...form, tags: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Minutes">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={form.readingMinutes}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            readingMinutes: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label="Status">
+                      <select
+                        className="h-10 border border-input bg-background px-3 text-sm"
+                        value={form.status}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            status: event.target.value as "draft" | "published",
+                          })
+                        }
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="Image URL">
+                      <Input
+                        value={form.imageUrl}
+                        onChange={(event) =>
+                          setForm({ ...form, imageUrl: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Image alt">
+                      <Input
+                        value={form.imageAlt}
+                        onChange={(event) =>
+                          setForm({ ...form, imageAlt: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Credit">
+                      <Input
+                        value={form.imageCredit}
+                        onChange={(event) =>
+                          setForm({ ...form, imageCredit: event.target.value })
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <label className="flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.featured}
+                      onChange={(event) =>
+                        setForm({ ...form, featured: event.target.checked })
+                      }
+                    />
+                    Featured
+                  </label>
+                </div>
+              </form>
+            </section>
+          </div>
+        ) : null}
 
-          <section className="border-y border-row-border py-4">
+        {activeTab === "api" ? (
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
+            <section className="py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  API keys
+                </p>
+                <KeyRound className="size-4 text-muted-foreground" />
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={apiKeyName}
+                  onChange={(event) => setApiKeyName(event.target.value)}
+                />
+                <Button type="button" variant="outline" onClick={issueApiKey}>
+                  Issue
+                </Button>
+              </div>
+              {createdToken ? (
+                <div className="mt-3 border border-row-border p-3">
+                  <p className="break-all font-mono text-xs">{createdToken}</p>
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(createdToken);
+                        toast.success("Token copied");
+                      } catch (error) {
+                        reportAppError(error, {
+                          scope: "admin",
+                          eventType: "clipboard_failed",
+                          component: "AdminDashboard",
+                          action: "copy_api_token",
+                          notify: false,
+                        });
+                        toast.error("Could not copy token");
+                      }
+                    }}
+                  >
+                    <Copy />
+                    Copy token
+                  </Button>
+                </div>
+              ) : null}
+              <ApiKeyList
+                apiKeys={apiKeys}
+                onRevoke={async (keyId) => {
+                  try {
+                    await revokeApiKey({ keyId });
+                    toast.success("API key revoked");
+                  } catch (error) {
+                    reportAppError(error, {
+                      scope: "admin",
+                      eventType: "api_key_revoke_failed",
+                      component: "AdminDashboard",
+                      action: "admin:revokeApiKey",
+                      notify: false,
+                    });
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not revoke key",
+                    );
+                  }
+                }}
+              />
+            </section>
+
+            <section className="py-3">
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Integration
+              </p>
+              <div className="mt-4 grid gap-2 font-mono text-[11px] uppercase text-muted-foreground">
+                <p>GET /api/admin/posts</p>
+                <p>POST /api/admin/posts</p>
+                <p>GET /api/admin/posts/[slug]</p>
+                <p>PATCH /api/admin/posts/[slug]</p>
+                <p>DELETE /api/admin/posts/[slug]</p>
+                <p>GET /api/admin/interactions</p>
+                <p>GET /api/admin/newsletter/subscribers</p>
+                <p>GET /api/admin/newsletter/issues</p>
+                <p>POST /api/admin/newsletter/issues</p>
+                <p>POST /api/admin/newsletter/issues/[slug]/test</p>
+                <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
+                <p>POST /api/admin/newsletter/issues/[slug]/send</p>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                Send{" "}
+                <code className="font-mono">Authorization: Bearer token</code>{" "}
+                from your writing software.
+              </p>
+            </section>
+          </div>
+        ) : null}
+
+        {activeTab === "comments" ? (
+          <section className="py-3">
             <p className="font-mono text-xs uppercase text-muted-foreground">
               Recent comments
             </p>
@@ -540,24 +682,34 @@ function OwnerDashboard() {
                       <Trash2 />
                     </Button>
                   </div>
-                  <p className="mt-1 line-clamp-3 text-sm leading-6">
+                  <p className="mt-1 line-clamp-4 text-sm leading-6">
                     {comment.status === "deleted"
                       ? "Comment deleted"
                       : comment.body}
                   </p>
                 </div>
               ))}
+              {comments.length === 0 ? (
+                <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                  No recent comments
+                </div>
+              ) : null}
             </div>
           </section>
+        ) : null}
 
-          <section className="border-y border-row-border py-4">
+        {activeTab === "interactions" ? (
+          <section className="py-3">
             <p className="font-mono text-xs uppercase text-muted-foreground">
               Recent interactions
             </p>
             <div className="mt-3 divide-y divide-row-border">
               {activity.map((item) => (
-                <div key={item._id} className="flex items-center gap-2 py-2">
-                  <div className="min-w-0 flex-1">
+                <div
+                  key={item._id}
+                  className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                >
+                  <div className="min-w-0">
                     <p className="truncate text-sm">{item.entityId}</p>
                     <p className="font-mono text-[11px] uppercase text-muted-foreground">
                       {item.author} / vote {item.vote} /{" "}
@@ -590,24 +742,20 @@ function OwnerDashboard() {
                   </Button>
                 </div>
               ))}
+              {activity.length === 0 ? (
+                <div className="py-5 font-mono text-xs uppercase text-muted-foreground">
+                  No recent interactions
+                </div>
+              ) : null}
             </div>
           </section>
-        </aside>
-      </div>
-      <div id="analytics" className="scroll-mt-24">
-        <AdminAnalytics />
-      </div>
-      <div id="users" className="scroll-mt-24">
-        <AdminUsers />
-      </div>
-      <div id="logs" className="scroll-mt-24">
-        <AdminSystemLogs />
-      </div>
-      <div id="newsletter" className="scroll-mt-24">
-        <AdminNewsletter />
-      </div>
-      <div id="site-content" className="scroll-mt-24">
-        <AdminSiteContent />
+        ) : null}
+
+        {activeTab === "analytics" ? <AdminAnalytics /> : null}
+        {activeTab === "users" ? <AdminUsers /> : null}
+        {activeTab === "logs" ? <AdminSystemLogs /> : null}
+        {activeTab === "newsletter" ? <AdminNewsletter /> : null}
+        {activeTab === "content" ? <AdminSiteContent /> : null}
       </div>
     </>
   );
@@ -643,7 +791,9 @@ function AdminCommandCenter({
             <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
               {label}
             </p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{note}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {note}
+            </p>
           </div>
         ))}
       </div>
@@ -651,25 +801,138 @@ function AdminCommandCenter({
   );
 }
 
-function AdminSectionNav() {
-  const sections = [
-    ["Posts", "#posts"],
-    ["Analytics", "#analytics"],
-    ["Users", "#users"],
-    ["Logs", "#logs"],
-    ["Newsletter", "#newsletter"],
-    ["Content", "#site-content"],
-    ["API", "#api"],
-  ] as const;
+function AdminTabChrome({
+  activeTab,
+  onChange,
+  tabs,
+}: {
+  activeTab: AdminTabId;
+  onChange: (tab: AdminTabId) => void;
+  tabs: AdminTab[];
+}) {
+  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
   return (
-    <nav className="mb-8 flex flex-wrap gap-1 font-mono text-[10px] uppercase">
-      {sections.map(([label, href]) => (
-        <Button asChild className="h-7 px-2" key={href} size="sm" variant="outline">
-          <Link href={href}>{label}</Link>
-        </Button>
-      ))}
-    </nav>
+    <div className="mb-8">
+      <div className="md:hidden">
+        <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
+          Admin section
+        </p>
+        <Select
+          value={activeTab}
+          onValueChange={(value) => onChange(value as AdminTabId)}
+        >
+          <SelectTrigger className="h-12 rounded-none font-mono text-xs uppercase">
+            <SelectValue>
+              {active.label} / {active.note}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent align="start" className="rounded-none">
+            {tabs.map((tab) => (
+              <SelectItem key={tab.id} value={tab.id}>
+                {tab.label} / {tab.note}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div
+        aria-label="Admin sections"
+        className="hidden gap-1 md:grid md:grid-cols-5 xl:grid-cols-10"
+        role="tablist"
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              aria-selected={selected}
+              className={cn(
+                "group min-h-20 border border-row-border px-3 py-3 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                selected
+                  ? "bg-foreground text-background"
+                  : "bg-transparent text-foreground hover:bg-muted/40",
+              )}
+              key={tab.id}
+              onClick={() => onChange(tab.id)}
+              role="tab"
+              type="button"
+            >
+              <span className="flex items-center justify-between gap-2">
+                <Icon className="size-4" />
+                <span
+                  className={cn(
+                    "font-mono text-[10px] uppercase",
+                    selected
+                      ? "text-background/75"
+                      : "text-muted-foreground group-hover:text-foreground",
+                  )}
+                >
+                  {compactNumber(tab.count ?? 0)}
+                </span>
+              </span>
+              <span className="mt-3 block text-sm font-semibold leading-none">
+                {tab.label}
+              </span>
+              <span
+                className={cn(
+                  "mt-1 block truncate font-mono text-[10px] uppercase",
+                  selected ? "text-background/70" : "text-muted-foreground",
+                )}
+              >
+                {tab.note}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminOverviewPanel({
+  overview,
+  onChange,
+  tabs,
+}: {
+  overview: AdminOverviewRecord | undefined;
+  onChange: (tab: AdminTabId) => void;
+  tabs: AdminTab[];
+}) {
+  return (
+    <section>
+      <AdminCommandCenter overview={overview} />
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {tabs
+          .filter((tab) => tab.id !== "overview")
+          .map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3 text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                key={tab.id}
+                onClick={() => onChange(tab.id)}
+                type="button"
+              >
+                <Icon className="size-4 text-muted-foreground" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">
+                    {tab.label}
+                  </span>
+                  <span className="block truncate font-mono text-[10px] uppercase text-muted-foreground">
+                    {tab.note}
+                  </span>
+                </span>
+                <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                  {compactNumber(tab.count ?? 0)}
+                </span>
+              </button>
+            );
+          })}
+      </div>
+    </section>
   );
 }
 
