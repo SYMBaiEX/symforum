@@ -18,13 +18,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
+  { href: "/", label: "Home" },
   { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
   { href: "/portfolio", label: "Portfolio" },
 ];
-
-const mobileNavItems = [{ href: "/", label: "Home" }, ...navItems];
 
 export function HeaderNav() {
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
@@ -161,7 +160,7 @@ function MobileNavMenu({
           Navigation
         </DropdownMenuLabel>
         <DropdownMenuGroup>
-          {mobileNavItems.map((item) => (
+          {navItems.map((item) => (
             <MobileNavItem
               active={isRouteActive(pathname, item.href)}
               href={item.href}
