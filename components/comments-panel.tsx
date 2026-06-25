@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +100,16 @@ function LiveComments({
         setAuthOpen(true);
         return;
       }
+      reportAppError(caught, {
+        scope: "comments",
+        eventType: parentId ? "reply_failed" : "comment_failed",
+        component: "CommentsPanel",
+        action: "comments:add",
+        entityType,
+        entityId,
+        metadata: { parentId },
+        notify: false,
+      });
       const message = userFacingError(caught, "Could not comment");
       if (errorKey === "root") {
         setError(message);

@@ -210,6 +210,38 @@ export type NewsTimelineRecord = {
   stories: NewsStoryRecord[];
 };
 
+export type SystemLogRecord = {
+  _id: string;
+  _creationTime: number;
+  createdAt: number;
+  updatedAt: number;
+  lastSeenAt: number;
+  occurrences: number;
+  level: "info" | "warn" | "error";
+  status: "open" | "reviewed" | "resolved";
+  source: "client" | "server" | "api" | "convex";
+  scope: string;
+  eventType: string;
+  message: string;
+  name?: string;
+  stack?: string;
+  fingerprint: string;
+  path?: string;
+  url?: string;
+  method?: string;
+  statusCode?: number;
+  requestId?: string;
+  sessionId?: string;
+  userAgent?: string;
+  component?: string;
+  action?: string;
+  actorUserId?: string;
+  apiKeyId?: string;
+  entityType?: string;
+  entityId?: string;
+  metadataJson?: string;
+};
+
 export const convexRefs = {
   admin: {
     viewer: makeFunctionReference<
@@ -399,6 +431,68 @@ export const convexRefs = {
       { slug: string },
       { cancelled: boolean }
     >("newsletter:cancelAdminIssue"),
+    listSystemLogs: makeFunctionReference<
+      "query",
+      {
+        status?: SystemLogRecord["status"];
+        level?: SystemLogRecord["level"];
+        source?: SystemLogRecord["source"];
+        limit?: number;
+      },
+      SystemLogRecord[]
+    >("systemLogs:listAdmin"),
+    summarySystemLogs: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      {
+        sampleSize: {
+          open: number;
+          reviewed: number;
+          resolved: number;
+          errors: number;
+          warnings: number;
+        };
+        newestOpenAt: number | null;
+      }
+    >("systemLogs:summaryAdmin"),
+    updateSystemLogStatus: makeFunctionReference<
+      "mutation",
+      { logId: string; status: SystemLogRecord["status"] },
+      { updated: boolean }
+    >("systemLogs:updateStatusAdmin"),
+    deleteSystemLog: makeFunctionReference<
+      "mutation",
+      { logId: string },
+      { deleted: boolean }
+    >("systemLogs:deleteAdmin"),
+  },
+  systemLogs: {
+    record: makeFunctionReference<
+      "mutation",
+      {
+        level?: SystemLogRecord["level"];
+        source?: SystemLogRecord["source"];
+        scope?: string;
+        eventType?: string;
+        message: string;
+        name?: string;
+        stack?: string;
+        fingerprint?: string;
+        path?: string;
+        url?: string;
+        method?: string;
+        statusCode?: number;
+        requestId?: string;
+        sessionId?: string;
+        userAgent?: string;
+        component?: string;
+        action?: string;
+        entityType?: string;
+        entityId?: string;
+        metadataJson?: string;
+      },
+      { logged: boolean; deduped: boolean; id: string | null }
+    >("systemLogs:record"),
   },
   comments: {
     list: makeFunctionReference<

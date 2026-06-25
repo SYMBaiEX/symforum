@@ -62,6 +62,6 @@ export async function POST(request: Request) {
 
     return jsonOk({ url });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

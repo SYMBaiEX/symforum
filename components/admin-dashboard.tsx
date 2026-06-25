@@ -2,6 +2,8 @@
 
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
+import { AdminSystemLogs } from "@/components/admin-system-logs";
+import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +19,7 @@ import { useMutation, useQuery } from "convex/react";
 import { Copy, KeyRound, Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 
 type PostForm = {
   slug: string;
@@ -121,6 +123,14 @@ function OwnerDashboard() {
       });
       toast.success("Post saved");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "post_save_failed",
+        component: "AdminDashboard",
+        action: "admin:upsertPost",
+        metadata: { slug: form.slug.trim() || undefined },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not save post",
       );
@@ -138,6 +148,14 @@ function OwnerDashboard() {
       }
       toast.success("Post deleted");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "post_delete_failed",
+        component: "AdminDashboard",
+        action: "admin:deletePost",
+        metadata: { slug },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not delete post",
       );
@@ -156,6 +174,14 @@ function OwnerDashboard() {
       setCreatedToken(token);
       toast.success("API key created");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "api_key_create_failed",
+        component: "AdminDashboard",
+        action: "admin:createApiKey",
+        metadata: { name: apiKeyName },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not create key",
       );
@@ -375,8 +401,19 @@ function OwnerDashboard() {
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    await navigator.clipboard.writeText(createdToken);
-                    toast.success("Token copied");
+                    try {
+                      await navigator.clipboard.writeText(createdToken);
+                      toast.success("Token copied");
+                    } catch (error) {
+                      reportAppError(error, {
+                        scope: "admin",
+                        eventType: "clipboard_failed",
+                        component: "AdminDashboard",
+                        action: "copy_api_token",
+                        notify: false,
+                      });
+                      toast.error("Could not copy token");
+                    }
                   }}
                 >
                   <Copy />
@@ -391,6 +428,13 @@ function OwnerDashboard() {
                   await revokeApiKey({ keyId });
                   toast.success("API key revoked");
                 } catch (error) {
+                  reportAppError(error, {
+                    scope: "admin",
+                    eventType: "api_key_revoke_failed",
+                    component: "AdminDashboard",
+                    action: "admin:revokeApiKey",
+                    notify: false,
+                  });
                   toast.error(
                     error instanceof Error
                       ? error.message
@@ -441,8 +485,21 @@ function OwnerDashboard() {
                       size="icon"
                       variant="ghost"
                       onClick={async () => {
-                        await deleteComment({ commentId: comment._id });
-                        toast.success("Comment deleted");
+                        try {
+                          await deleteComment({ commentId: comment._id });
+                          toast.success("Comment deleted");
+                        } catch (error) {
+                          reportAppError(error, {
+                            scope: "admin",
+                            eventType: "comment_delete_failed",
+                            component: "AdminDashboard",
+                            action: "admin:deleteComment",
+                            entityType: comment.entityType,
+                            entityId: comment.entityId,
+                            notify: false,
+                          });
+                          toast.error("Could not delete comment");
+                        }
                       }}
                       aria-label="Delete comment"
                     >
@@ -475,8 +532,21 @@ function OwnerDashboard() {
                     size="icon"
                     variant="ghost"
                     onClick={async () => {
-                      await deleteInteraction({ interactionId: item._id });
-                      toast.success("Interaction deleted");
+                      try {
+                        await deleteInteraction({ interactionId: item._id });
+                        toast.success("Interaction deleted");
+                      } catch (error) {
+                        reportAppError(error, {
+                          scope: "admin",
+                          eventType: "interaction_delete_failed",
+                          component: "AdminDashboard",
+                          action: "admin:deleteInteraction",
+                          entityType: item.entityType,
+                          entityId: item.entityId,
+                          notify: false,
+                        });
+                        toast.error("Could not delete interaction");
+                      }
                     }}
                     aria-label="Delete interaction"
                   >
@@ -488,9 +558,9 @@ function OwnerDashboard() {
           </section>
         </aside>
       </div>
+      <AdminSystemLogs />
       <AdminNewsletter />
       <AdminSiteContent />
-      <Toaster />
     </>
   );
 }

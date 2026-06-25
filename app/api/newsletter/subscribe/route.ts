@@ -4,6 +4,7 @@ import {
   newsletterSiteUrlFromRequest,
   newsletterTokenHash,
 } from "@/lib/newsletter-token";
+import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { ConvexHttpClient } from "convex/browser";
 import { NextResponse } from "next/server";
 
@@ -51,6 +52,22 @@ export async function POST(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    void recordSystemLog({
+      level: "warn",
+      source: "server",
+      scope: "newsletter-api",
+      eventType: "subscribe_failed",
+      message: error instanceof Error ? error.message : "Could not subscribe",
+      name: error instanceof Error ? error.name : undefined,
+      stack: error instanceof Error ? error.stack : undefined,
+      statusCode: 400,
+      fingerprint: [
+        "newsletter-api",
+        "subscribe_failed",
+        error instanceof Error ? error.message : "unknown",
+      ].join("|"),
+      ...requestLogContext(request),
+    });
     return NextResponse.json(
       {
         ok: false,

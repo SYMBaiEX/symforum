@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -444,6 +445,16 @@ function NewsVoteControl({
         setAuthOpen(true);
         return;
       }
+      reportAppError(caught, {
+        scope: "news",
+        eventType: "vote_failed",
+        component: "NewsVoteControl",
+        action: "interactions:set",
+        entityType: "hnStory",
+        entityId,
+        metadata: { vote: nextVote },
+        notify: false,
+      });
       setError("Could not update vote. Try again.");
     } finally {
       setPending(false);

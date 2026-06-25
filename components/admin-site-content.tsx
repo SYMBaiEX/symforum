@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,6 +126,14 @@ export function AdminSiteContent() {
       });
       toast.success("Page saved");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-content",
+        eventType: "page_save_failed",
+        component: "AdminSiteContent",
+        action: "admin:upsertSitePage",
+        metadata: { slug: pageForm.slug },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not save page",
       );
@@ -142,6 +151,14 @@ export function AdminSiteContent() {
       }
       toast.success("Page deleted");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-content",
+        eventType: "page_delete_failed",
+        component: "AdminSiteContent",
+        action: "admin:deleteSitePage",
+        metadata: { slug },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not delete page",
       );
@@ -174,6 +191,14 @@ export function AdminSiteContent() {
       });
       toast.success("Project saved");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-content",
+        eventType: "project_save_failed",
+        component: "AdminSiteContent",
+        action: "admin:upsertPortfolioProject",
+        metadata: { slug: projectForm.slug },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not save project",
       );
@@ -191,6 +216,14 @@ export function AdminSiteContent() {
       }
       toast.success("Project deleted");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-content",
+        eventType: "project_delete_failed",
+        component: "AdminSiteContent",
+        action: "admin:deletePortfolioProject",
+        metadata: { slug },
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not delete project",
       );

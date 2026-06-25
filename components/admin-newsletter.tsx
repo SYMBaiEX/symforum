@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +57,14 @@ export function AdminNewsletter() {
       }
       toast.success("Newsletter issue saved");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "issue_save_failed",
+        component: "AdminNewsletter",
+        action: "newsletter:upsertAdminIssue",
+        metadata: { slug: form.slug },
+        notify: false,
+      });
       toast.error(error instanceof Error ? error.message : "Could not save issue");
     }
   }
@@ -69,6 +78,14 @@ export function AdminNewsletter() {
       await sendTest({ slug: selectedSlug, to: testEmail });
       toast.success("Test email queued");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "issue_test_failed",
+        component: "AdminNewsletter",
+        action: "newsletter:sendAdminIssueTest",
+        metadata: { slug: selectedSlug },
+        notify: false,
+      });
       toast.error(error instanceof Error ? error.message : "Could not send test");
     }
   }
@@ -85,6 +102,14 @@ export function AdminNewsletter() {
       await sendNow({ slug: selectedSlug });
       toast.success("Newsletter send queued");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "issue_send_failed",
+        component: "AdminNewsletter",
+        action: "newsletter:sendAdminIssueNow",
+        metadata: { slug: selectedSlug },
+        notify: false,
+      });
       toast.error(error instanceof Error ? error.message : "Could not send issue");
     }
   }
@@ -101,6 +126,14 @@ export function AdminNewsletter() {
       });
       toast.success("Newsletter issue scheduled");
     } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "issue_schedule_failed",
+        component: "AdminNewsletter",
+        action: "newsletter:scheduleAdminIssue",
+        metadata: { slug: selectedSlug },
+        notify: false,
+      });
       toast.error(error instanceof Error ? error.message : "Could not schedule issue");
     }
   }

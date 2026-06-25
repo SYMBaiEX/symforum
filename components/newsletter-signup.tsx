@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,14 @@ export function NewsletterSignup({
       setMessage(payload.message ?? "Check your inbox to confirm.");
       setEmail("");
     } catch (error) {
+      reportAppError(error, {
+        scope: "newsletter",
+        eventType: "subscribe_failed",
+        component: "NewsletterSignup",
+        action: "subscribe",
+        metadata: { source },
+        notify: false,
+      });
       setMessage(error instanceof Error ? error.message : "Could not subscribe");
     } finally {
       setPending(false);

@@ -291,4 +291,45 @@ export default defineSchema({
     .index("by_issueId_and_createdAt", ["issueId", "createdAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),
+  systemLogs: defineTable({
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastSeenAt: v.number(),
+    occurrences: v.number(),
+    level: v.union(v.literal("info"), v.literal("warn"), v.literal("error")),
+    status: v.union(v.literal("open"), v.literal("reviewed"), v.literal("resolved")),
+    source: v.union(
+      v.literal("client"),
+      v.literal("server"),
+      v.literal("api"),
+      v.literal("convex"),
+    ),
+    scope: v.string(),
+    eventType: v.string(),
+    message: v.string(),
+    name: v.optional(v.string()),
+    stack: v.optional(v.string()),
+    fingerprint: v.string(),
+    path: v.optional(v.string()),
+    url: v.optional(v.string()),
+    method: v.optional(v.string()),
+    statusCode: v.optional(v.number()),
+    requestId: v.optional(v.string()),
+    sessionId: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    component: v.optional(v.string()),
+    action: v.optional(v.string()),
+    actorUserId: v.optional(v.id("users")),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    entityType: v.optional(v.string()),
+    entityId: v.optional(v.string()),
+    metadataJson: v.optional(v.string()),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_level_and_createdAt", ["level", "createdAt"])
+    .index("by_source_and_createdAt", ["source", "createdAt"])
+    .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
+    .index("by_apiKeyId_and_createdAt", ["apiKeyId", "createdAt"])
+    .index("by_fingerprint_and_createdAt", ["fingerprint", "createdAt"]),
 });

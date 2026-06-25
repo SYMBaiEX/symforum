@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     ]);
     return jsonOk({ comments, interactions });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }
 

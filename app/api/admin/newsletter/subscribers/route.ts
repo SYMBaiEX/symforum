@@ -18,6 +18,6 @@ export async function GET(request: Request) {
     );
     return jsonOk({ subscribers });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

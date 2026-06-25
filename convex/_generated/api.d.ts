@@ -25,6 +25,7 @@ import type * as posts from "../posts.js";
 import type * as resendClient from "../resendClient.js";
 import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
+import type * as systemLogs from "../systemLogs.js";
 import type * as users from "../users.js";
 
 import type {
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   resendClient: typeof resendClient;
   siteContent: typeof siteContent;
   siteContentModel: typeof siteContentModel;
+  systemLogs: typeof systemLogs;
   users: typeof users;
 }>;
 

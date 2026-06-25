@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const posts = await convex.mutation(adminApiRefs.listPosts, { tokenHash });
     return jsonOk({ posts });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }
 
@@ -33,6 +33,6 @@ export async function POST(request: Request) {
     });
     return jsonOk({ post: savedPost }, 201);
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

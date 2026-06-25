@@ -5,6 +5,7 @@ import {
   type NewsletterIssueRecord,
   type NewsletterSubscriberRecord,
 } from "@/lib/convex-refs";
+import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { createHash } from "node:crypto";
@@ -161,12 +162,15 @@ export function tokenHashFromRequest(request: Request) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function apiError(error: unknown) {
+export function apiError(error: unknown, request?: Request) {
+  const status = apiErrorStatus(error);
+  void recordAdminApiError(error, status, request);
+
   if (error instanceof AdminApiError) {
     return NextResponse.json(
       { ok: false, error: error.message },
       {
-        status: error.status,
+        status,
         headers: { "Cache-Control": "no-store" },
       },
     );
@@ -175,7 +179,7 @@ export function apiError(error: unknown) {
     return NextResponse.json(
       { ok: false, error: "Unauthorized" },
       {
-        status: 401,
+        status,
         headers: { "Cache-Control": "no-store" },
       },
     );
@@ -186,10 +190,20 @@ export function apiError(error: unknown) {
       error: "API request failed",
     },
     {
-      status: 500,
+      status,
       headers: { "Cache-Control": "no-store" },
     },
   );
+}
+
+function apiErrorStatus(error: unknown) {
+  if (error instanceof AdminApiError) {
+    return error.status;
+  }
+  if (isUnauthorizedApiError(error)) {
+    return 401;
+  }
+  return 500;
 }
 
 function isUnauthorizedApiError(error: unknown) {
@@ -201,6 +215,40 @@ function isUnauthorizedApiError(error: unknown) {
     (error instanceof Error && error.message.includes("Unauthorized")) ||
     (isRecord(data) && data.code === "UNAUTHORIZED")
   );
+}
+
+async function recordAdminApiError(
+  error: unknown,
+  statusCode: number,
+  request?: Request,
+) {
+  const context = requestLogContext(request);
+  const message =
+    error instanceof AdminApiError
+      ? error.message
+      : isUnauthorizedApiError(error)
+        ? "Unauthorized"
+        : error instanceof Error
+          ? error.message
+          : "Admin API request failed";
+  await recordSystemLog({
+    level: statusCode >= 500 ? "error" : "warn",
+    source: "api",
+    scope: "admin-api",
+    eventType: "request_failed",
+    message,
+    name: error instanceof Error ? error.name : undefined,
+    stack: error instanceof Error ? error.stack : undefined,
+    statusCode,
+    fingerprint: [
+      "api",
+      context.method,
+      context.path,
+      statusCode,
+      message,
+    ].join("|"),
+    ...context,
+  });
 }
 
 export function jsonOk<T>(payload: T, status = 200) {

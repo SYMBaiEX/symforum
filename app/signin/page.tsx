@@ -1,11 +1,12 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 
 export default function SignInPage() {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
@@ -99,6 +100,14 @@ function PasswordPanel() {
       toast.success(mode === "signUp" ? "Account created" : "Signed in");
       router.push(redirectTo);
     } catch (error) {
+      reportAppError(error, {
+        scope: "auth",
+        eventType: "signin_failed",
+        component: "PasswordPanel",
+        action: mode,
+        level: "warn",
+        notify: false,
+      });
       toast.error(
         error instanceof Error ? error.message : "Could not authenticate",
       );
@@ -175,7 +184,6 @@ function PasswordPanel() {
               : "Sign in"}
         </Button>
       </form>
-      <Toaster />
     </div>
   );
 }

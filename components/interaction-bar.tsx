@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import { isAuthRequiredError } from "@/lib/auth-errors";
@@ -51,6 +52,16 @@ export function InteractionBar({
         setAuthOpen(true);
         return;
       }
+      reportAppError(caught, {
+        scope: "interactions",
+        eventType: "interaction_failed",
+        component: "InteractionBar",
+        action: "interactions:set",
+        entityType,
+        entityId,
+        metadata: { vote: nextVote, saved: nextSaved },
+        notify: false,
+      });
       setError("Could not update interaction. Try again.");
     } finally {
       setPending(false);

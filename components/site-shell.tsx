@@ -1,5 +1,6 @@
 "use client";
 
+import { AppErrorSurface } from "@/components/app-error-surface";
 import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
         {children}
       </main>
+      <AppErrorSurface />
       <footer
         ref={footerRef}
         className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"

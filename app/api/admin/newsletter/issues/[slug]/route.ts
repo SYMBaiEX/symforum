@@ -30,7 +30,7 @@ export async function GET(
     }
     return jsonOk({ issue });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }
 
@@ -61,7 +61,7 @@ export async function PATCH(
     );
     return jsonOk({ issue: savedIssue });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }
 

@@ -24,6 +24,6 @@ export async function DELETE(
     });
     return jsonOk(result);
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

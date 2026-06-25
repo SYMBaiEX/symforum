@@ -1,5 +1,6 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { convexRefs } from "@/lib/convex-refs";
@@ -37,6 +38,13 @@ export function ProfileNewsletterPreferences() {
       });
       toast.success("Confirmation email queued");
     } catch (error) {
+      reportAppError(error, {
+        scope: "newsletter",
+        eventType: "profile_subscription_failed",
+        component: "ProfileNewsletterPreferences",
+        action: "newsletter:requestViewerSubscription",
+        notify: false,
+      });
       toast.error(
         error instanceof Error
           ? error.message
