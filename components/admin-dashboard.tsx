@@ -1,8 +1,10 @@
 "use client";
 
+import { AdminAnalytics } from "@/components/admin-analytics";
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
 import { AdminSystemLogs } from "@/components/admin-system-logs";
+import { AdminUsers } from "@/components/admin-users";
 import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,12 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   convexRefs,
   type AdminApiKeyRecord,
+  type AdminOverviewRecord,
   type ConvexPostRecord,
 } from "@/lib/convex-refs";
-import { formatDate } from "@/lib/format";
+import { compactNumber, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { Copy, KeyRound, Plus, Save, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -53,6 +56,7 @@ const blankPost: PostForm = {
 
 export function AdminDashboard() {
   const viewer = useQuery(convexRefs.admin.viewer, {});
+  const claimInitialOwner = useMutation(convexRefs.admin.claimInitialOwner);
 
   if (viewer === undefined) {
     return (
@@ -72,6 +76,34 @@ export function AdminDashboard() {
   }
 
   if (!viewer.isOwner) {
+    if (!viewer.ownerExists) {
+      return (
+        <AdminGate
+          title="Claim owner access"
+          body="No owner exists in this Convex deployment. Claim this account as the initial owner to unlock the console."
+          action={
+            <Button
+              className="mt-5"
+              onClick={async () => {
+                try {
+                  await claimInitialOwner({});
+                  toast.success("Owner access claimed");
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not claim owner access",
+                  );
+                }
+              }}
+            >
+              <ShieldCheck />
+              Claim owner
+            </Button>
+          }
+        />
+      );
+    }
     return (
       <AdminGate
         title="Owner access required"
@@ -190,7 +222,9 @@ function OwnerDashboard() {
 
   return (
     <>
-      <div className="grid gap-8 lg:grid-cols-12">
+      <AdminCommandCenter overview={overview} />
+      <AdminSectionNav />
+      <div id="posts" className="grid scroll-mt-24 gap-8 lg:grid-cols-12">
         <section className="lg:col-span-4">
           <div className="flex items-center justify-between border-y border-row-border py-3">
             <div>
@@ -377,7 +411,7 @@ function OwnerDashboard() {
         </section>
 
         <aside className="flex flex-col gap-8 lg:col-span-3">
-          <section className="border-y border-row-border py-4">
+          <section id="api" className="scroll-mt-24 border-y border-row-border py-4">
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-xs uppercase text-muted-foreground">
                 API keys
@@ -462,6 +496,8 @@ function OwnerDashboard() {
               <p>POST /api/admin/newsletter/issues/[slug]/test</p>
               <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
               <p>POST /api/admin/newsletter/issues/[slug]/send</p>
+              <p>GET /api/op/op1.js</p>
+              <p>POST /api/op/track</p>
             </div>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
               Send{" "}
@@ -560,22 +596,104 @@ function OwnerDashboard() {
           </section>
         </aside>
       </div>
-      <AdminSystemLogs />
-      <AdminNewsletter />
-      <AdminSiteContent />
+      <div id="analytics" className="scroll-mt-24">
+        <AdminAnalytics />
+      </div>
+      <div id="users" className="scroll-mt-24">
+        <AdminUsers />
+      </div>
+      <div id="logs" className="scroll-mt-24">
+        <AdminSystemLogs />
+      </div>
+      <div id="newsletter" className="scroll-mt-24">
+        <AdminNewsletter />
+      </div>
+      <div id="site-content" className="scroll-mt-24">
+        <AdminSiteContent />
+      </div>
     </>
   );
 }
 
-function AdminGate({ title, body }: { title: string; body: string }) {
+function AdminCommandCenter({
+  overview,
+}: {
+  overview: AdminOverviewRecord | undefined;
+}) {
+  const totals = overview?.totals;
+  const rows = [
+    ["Posts", totals?.publishedPosts ?? 0, `${totals?.posts ?? 0} total`],
+    ["Users", totals?.users ?? 0, `${totals?.owners ?? 0} owner`],
+    [
+      "Newsletter",
+      totals?.confirmedSubscribers ?? 0,
+      `${totals?.newsletterSubscribers ?? 0} subscribers`,
+    ],
+    ["Analytics", totals?.analyticsEventsSample ?? 0, "recent events"],
+    ["Logs", totals?.openSystemLogs ?? 0, "open issues"],
+    ["Projects", totals?.portfolioProjects ?? 0, "portfolio rows"],
+  ] as const;
+
+  return (
+    <section className="mb-8">
+      <div className="grid gap-x-6 gap-y-4 md:grid-cols-3 lg:grid-cols-6">
+        {rows.map(([label, value, note]) => (
+          <div key={label} className="py-2">
+            <p className="text-3xl font-semibold leading-none">
+              {compactNumber(value)}
+            </p>
+            <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+              {label}
+            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{note}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdminSectionNav() {
+  const sections = [
+    ["Posts", "#posts"],
+    ["Analytics", "#analytics"],
+    ["Users", "#users"],
+    ["Logs", "#logs"],
+    ["Newsletter", "#newsletter"],
+    ["Content", "#site-content"],
+    ["API", "#api"],
+  ] as const;
+
+  return (
+    <nav className="mb-8 flex flex-wrap gap-1 font-mono text-[10px] uppercase">
+      {sections.map(([label, href]) => (
+        <Button asChild className="h-7 px-2" key={href} size="sm" variant="outline">
+          <Link href={href}>{label}</Link>
+        </Button>
+      ))}
+    </nav>
+  );
+}
+
+function AdminGate({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
   return (
     <section className="border-y border-row-border py-8">
       <p className="font-mono text-xs uppercase text-muted-foreground">Admin</p>
       <h2 className="mt-3 text-3xl font-semibold">{title}</h2>
       <p className="mt-3 max-w-xl leading-7 text-muted-foreground">{body}</p>
-      <Button asChild className="mt-5">
-        <Link href="/signin?mode=signIn&redirectTo=/admin">Sign in</Link>
-      </Button>
+      {action ?? (
+        <Button asChild className="mt-5">
+          <Link href="/signin?mode=signIn&redirectTo=/admin">Sign in</Link>
+        </Button>
+      )}
     </section>
   );
 }

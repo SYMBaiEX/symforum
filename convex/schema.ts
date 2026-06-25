@@ -20,6 +20,8 @@ export default defineSchema({
     role: v.optional(
       v.union(v.literal("owner"), v.literal("admin"), v.literal("reader")),
     ),
+    roleAssignedAt: v.optional(v.number()),
+    roleAssignedBy: v.optional(v.id("users")),
     contactEmail: v.optional(v.string()),
     bio: v.optional(v.string()),
     onboardedAt: v.optional(v.number()),
@@ -345,4 +347,32 @@ export default defineSchema({
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_apiKeyId_and_createdAt", ["apiKeyId", "createdAt"])
     .index("by_fingerprint_and_createdAt", ["fingerprint", "createdAt"]),
+  analyticsEvents: defineTable({
+    name: v.string(),
+    source: v.union(
+      v.literal("client"),
+      v.literal("server"),
+      v.literal("api"),
+      v.literal("convex"),
+      v.literal("openpanel"),
+    ),
+    path: v.optional(v.string()),
+    route: v.optional(v.string()),
+    title: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+    sessionId: v.optional(v.string()),
+    visitorId: v.optional(v.string()),
+    actorUserId: v.optional(v.id("users")),
+    userAgent: v.optional(v.string()),
+    device: v.optional(v.string()),
+    metadataJson: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_name_and_createdAt", ["name", "createdAt"])
+    .index("by_source_and_createdAt", ["source", "createdAt"])
+    .index("by_path_and_createdAt", ["path", "createdAt"])
+    .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
+    .index("by_sessionId_and_createdAt", ["sessionId", "createdAt"])
+    .index("by_visitorId_and_createdAt", ["visitorId", "createdAt"]),
 });

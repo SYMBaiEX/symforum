@@ -1,12 +1,20 @@
 "use client";
 
 import { AppErrorSurface } from "@/components/app-error-surface";
+import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
-import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
+import {
+  CSSProperties,
+  ReactNode,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 const socialItems = [
   {
@@ -75,6 +83,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
         {children}
       </main>
+      <Suspense fallback={null}>
+        <AnalyticsTracker />
+      </Suspense>
       <AppErrorSurface />
       <footer
         ref={footerRef}

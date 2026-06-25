@@ -43,6 +43,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           usernameNormalized,
           usernameSource: username.startsWith("SYM-") ? "auto" : "chosen",
           role: "reader",
+          roleAssignedAt: Date.now(),
           contactEmail,
           onboardedAt: Date.now(),
         };

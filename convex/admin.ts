@@ -133,6 +133,24 @@ function publicApiKey(key: Doc<"apiKeys">) {
   return publicKey;
 }
 
+function adminUserRecord(user: Doc<"users">) {
+  return {
+    _id: user._id,
+    _creationTime: user._creationTime,
+    name: user.name,
+    email: user.email,
+    username: user.username,
+    usernameNormalized: user.usernameNormalized,
+    usernameSource: user.usernameSource,
+    role: user.role ?? "reader",
+    roleAssignedAt: user.roleAssignedAt,
+    roleAssignedBy: user.roleAssignedBy,
+    contactEmail: user.contactEmail,
+    bio: user.bio,
+    onboardedAt: user.onboardedAt,
+  };
+}
+
 export const viewer = query({
   args: {},
   handler: async (ctx) => {
@@ -146,25 +164,119 @@ export const viewer = query({
   },
 });
 
+export const claimInitialOwner = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await currentUser(ctx);
+    if (user === null) {
+      throw new Error("Not authenticated");
+    }
+    const owner = await firstOwner(ctx);
+    if (owner !== null) {
+      throw new Error("Owner already exists");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(user._id, {
+      role: "owner",
+      roleAssignedAt: now,
+      roleAssignedBy: user._id,
+    });
+    await ctx.db.insert("systemLogs", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+      occurrences: 1,
+      level: "info",
+      status: "open",
+      source: "convex",
+      scope: "admin",
+      eventType: "initial_owner_claimed",
+      message: "Initial owner claimed admin access",
+      fingerprint: `initial_owner_claimed:${user._id}`,
+      actorUserId: user._id,
+      entityType: "user",
+      entityId: user._id,
+    });
+
+    const updated = await ctx.db.get(user._id);
+    if (updated === null) {
+      throw new Error("User could not be reloaded");
+    }
+    return adminUserRecord(updated);
+  },
+});
+
 export const overview = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireOwner(ctx);
-    const posts = await ctx.db
-      .query("posts")
-      .withIndex("by_publishedAt")
-      .order("desc")
-      .take(100);
-    const recentComments = await ctx.db
-      .query("comments")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(20);
-    const recentInteractions = await ctx.db
-      .query("interactions")
-      .withIndex("by_updatedAt")
-      .order("desc")
-      .take(20);
+    const [
+      posts,
+      recentComments,
+      recentInteractions,
+      owners,
+      admins,
+      readers,
+      subscribers,
+      newsletterIssues,
+      portfolioProjects,
+      sitePages,
+      newsSnapshots,
+      openLogs,
+      analyticsEvents,
+    ] = await Promise.all([
+      ctx.db.query("posts").withIndex("by_publishedAt").order("desc").take(100),
+      ctx.db
+        .query("comments")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(20),
+      ctx.db
+        .query("interactions")
+        .withIndex("by_updatedAt")
+        .order("desc")
+        .take(20),
+      ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "owner"))
+        .take(100),
+      ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "admin"))
+        .take(100),
+      ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "reader"))
+        .take(500),
+      ctx.db
+        .query("newsletterSubscribers")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(500),
+      ctx.db
+        .query("newsletterIssues")
+        .withIndex("by_updatedAt")
+        .order("desc")
+        .take(100),
+      ctx.db.query("portfolioProjects").withIndex("by_order").take(100),
+      ctx.db.query("sitePages").withIndex("by_slug").take(50),
+      ctx.db
+        .query("newsSnapshots")
+        .withIndex("by_snapshotDate")
+        .order("desc")
+        .take(30),
+      ctx.db
+        .query("systemLogs")
+        .withIndex("by_status_and_createdAt", (q) => q.eq("status", "open"))
+        .order("desc")
+        .take(100),
+      ctx.db
+        .query("analyticsEvents")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(500),
+    ]);
 
     return {
       user,
@@ -174,6 +286,20 @@ export const overview = query({
           .length,
         commentsSample: recentComments.length,
         interactionsSample: recentInteractions.length,
+        users: owners.length + admins.length + readers.length,
+        owners: owners.length,
+        admins: admins.length,
+        readers: readers.length,
+        newsletterSubscribers: subscribers.length,
+        confirmedSubscribers: subscribers.filter(
+          (subscriber) => subscriber.status === "confirmed",
+        ).length,
+        newsletterIssues: newsletterIssues.length,
+        portfolioProjects: portfolioProjects.length,
+        sitePages: sitePages.length,
+        newsSnapshots: newsSnapshots.length,
+        openSystemLogs: openLogs.length,
+        analyticsEventsSample: analyticsEvents.length,
       },
       recentComments: await Promise.all(
         recentComments.map(async (comment) => ({
@@ -188,6 +314,77 @@ export const overview = query({
         })),
       ),
     };
+  },
+});
+
+export const listUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized")
+      .order("asc")
+      .take(200);
+    return users.map(adminUserRecord);
+  },
+});
+
+export const updateUserRole = mutation({
+  args: {
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("reader")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireOwner(ctx);
+    const user = await ctx.db.get(args.userId);
+    if (user === null) {
+      throw new Error("User not found");
+    }
+
+    if (user.role === "owner" && args.role !== "owner") {
+      const owners = await ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "owner"))
+        .take(2);
+      if (owners.length <= 1) {
+        throw new Error("Cannot demote the last owner");
+      }
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.userId, {
+      role: args.role,
+      roleAssignedAt: now,
+      roleAssignedBy: actor._id,
+    });
+    await ctx.db.insert("systemLogs", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+      occurrences: 1,
+      level: "info",
+      status: "open",
+      source: "convex",
+      scope: "admin",
+      eventType: "user_role_updated",
+      message: "User role updated from admin dashboard",
+      fingerprint: `user_role_updated:${args.userId}:${now}`,
+      actorUserId: actor._id,
+      entityType: "user",
+      entityId: args.userId,
+      metadataJson: JSON.stringify({
+        userId: args.userId,
+        previousRole: user.role ?? null,
+        nextRole: args.role,
+      }),
+    });
+
+    const updated = await ctx.db.get(args.userId);
+    if (updated === null) {
+      throw new Error("User could not be reloaded");
+    }
+    return adminUserRecord(updated);
   },
 });
 

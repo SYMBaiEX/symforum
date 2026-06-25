@@ -61,12 +61,18 @@ export type PortfolioProjectRecord = {
 
 export type AdminUserRecord = {
   _id: string;
+  _creationTime: number;
   name?: string;
   email?: string;
   username?: string;
   usernameNormalized?: string;
+  usernameSource?: "auto" | "chosen";
   role?: UserRole;
+  roleAssignedAt?: number;
+  roleAssignedBy?: string;
   contactEmail?: string;
+  bio?: string;
+  onboardedAt?: number;
 };
 
 export type ViewerUserRecord = {
@@ -250,6 +256,79 @@ export type SystemLogRecord = {
   metadataJson?: string;
 };
 
+export type AnalyticsSource =
+  | "client"
+  | "server"
+  | "api"
+  | "convex"
+  | "openpanel";
+
+export type AnalyticsEventRecord = {
+  _id: string;
+  _creationTime: number;
+  name: string;
+  source: AnalyticsSource;
+  path?: string;
+  route?: string;
+  title?: string;
+  referrer?: string;
+  sessionId?: string;
+  visitorId?: string;
+  actorUserId?: string;
+  userAgent?: string;
+  device?: string;
+  metadataJson?: string;
+  createdAt: number;
+};
+
+export type AnalyticsSummaryRecord = {
+  windowDays: number;
+  sampleSize: number;
+  totals: {
+    events: number;
+    pageViews: number;
+    visitors: number;
+    sessions: number;
+    signedInEvents: number;
+    todayEvents: number;
+  };
+  topEvents: Array<{ key: string; count: number }>;
+  topPages: Array<{ key: string; count: number }>;
+  referrers: Array<{ key: string; count: number }>;
+  sources: Array<{ key: AnalyticsSource; count: number }>;
+  daily: Array<{ date: string; events: number; pageViews: number }>;
+  recent: AnalyticsEventRecord[];
+  openPanel: {
+    mode: string;
+    proxyPath: string;
+    clientConfigured: boolean;
+  };
+};
+
+export type AdminOverviewRecord = {
+  user: AdminUserRecord;
+  totals: {
+    posts: number;
+    publishedPosts: number;
+    commentsSample: number;
+    interactionsSample: number;
+    users: number;
+    owners: number;
+    admins: number;
+    readers: number;
+    newsletterSubscribers: number;
+    confirmedSubscribers: number;
+    newsletterIssues: number;
+    portfolioProjects: number;
+    sitePages: number;
+    newsSnapshots: number;
+    openSystemLogs: number;
+    analyticsEventsSample: number;
+  };
+  recentComments: AdminCommentRecord[];
+  recentInteractions: AdminInteractionRecord[];
+};
+
 export const convexRefs = {
   admin: {
     viewer: makeFunctionReference<
@@ -264,18 +343,23 @@ export const convexRefs = {
     overview: makeFunctionReference<
       "query",
       Record<string, never>,
-      {
-        user: AdminUserRecord;
-        totals: {
-          posts: number;
-          publishedPosts: number;
-          commentsSample: number;
-          interactionsSample: number;
-        };
-        recentComments: AdminCommentRecord[];
-        recentInteractions: AdminInteractionRecord[];
-      }
+      AdminOverviewRecord
     >("admin:overview"),
+    claimInitialOwner: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      AdminUserRecord
+    >("admin:claimInitialOwner"),
+    listUsers: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      AdminUserRecord[]
+    >("admin:listUsers"),
+    updateUserRole: makeFunctionReference<
+      "mutation",
+      { userId: string; role: UserRole },
+      AdminUserRecord
+    >("admin:updateUserRole"),
     listPosts: makeFunctionReference<
       "query",
       Record<string, never>,
@@ -473,6 +557,34 @@ export const convexRefs = {
       { logId: string },
       { deleted: boolean }
     >("systemLogs:deleteAdmin"),
+    analyticsSummary: makeFunctionReference<
+      "query",
+      { days?: number },
+      AnalyticsSummaryRecord
+    >("analytics:summaryAdmin"),
+    analyticsEvents: makeFunctionReference<
+      "query",
+      { name?: string; source?: AnalyticsSource; limit?: number },
+      AnalyticsEventRecord[]
+    >("analytics:listAdmin"),
+  },
+  analytics: {
+    record: makeFunctionReference<
+      "mutation",
+      {
+        name: string;
+        path?: string;
+        route?: string;
+        title?: string;
+        referrer?: string;
+        sessionId?: string;
+        visitorId?: string;
+        userAgent?: string;
+        device?: string;
+        metadataJson?: string;
+      },
+      { recorded: boolean; deduped: boolean; id: string | null }
+    >("analytics:record"),
   },
   systemLogs: {
     record: makeFunctionReference<
