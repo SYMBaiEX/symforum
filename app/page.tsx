@@ -1,7 +1,6 @@
 import { AsciiSection } from "@/components/ascii-section";
 import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
-import { NewsletterSignup } from "@/components/newsletter-signup";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
@@ -48,20 +47,6 @@ export default async function HomePage() {
       </section>
 
       <AsciiSection />
-
-      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-        <div className="grid gap-3 md:grid-cols-12 md:items-center">
-          <div className="md:col-span-4">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Newsletter
-            </p>
-            <h2 className="mt-1 text-xl font-semibold">Get the next note</h2>
-          </div>
-          <div className="md:col-span-6 md:col-start-7">
-            <NewsletterSignup source="home" />
-          </div>
-        </div>
-      </section>
 
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8 md:py-24">
         <SectionHeader title="Latest blog" divided={false} />
