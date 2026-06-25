@@ -21,23 +21,9 @@ export default async function AboutPage() {
 
   return (
     <>
-      <article className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
-        <section className="grid gap-6 md:grid-cols-12 md:items-start md:gap-8">
-          <div className="md:col-span-6 md:col-start-2">
-            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
-              {page?.heroHeading ?? "About"}
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
-              {page?.heroBody}
-            </p>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              The path runs from early game-hacking curiosity into open-source
-              systems, AI agents, protocol work, and the long-term lens of
-              fatherhood.
-            </p>
-          </div>
-
-          <figure className="md:col-span-4">
+      <article className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
+        <section className="mx-auto max-w-5xl">
+          <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
             <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
               {imageUrl ? (
                 <img
@@ -62,19 +48,30 @@ export default async function AboutPage() {
               </figcaption>
             ) : null}
           </figure>
-        </section>
 
-        <section className="py-7 md:py-10">
-          <div className="mx-auto max-w-5xl">
+          <div className="max-w-2xl">
+            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
+              {page?.heroHeading ?? "About"}
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
+              {page?.heroBody}
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
+              The path runs from early game-hacking curiosity into open-source
+              systems, AI agents, protocol work, and the long-term lens of
+              fatherhood.
+            </p>
+          </div>
+
+          <div className="mt-7 max-w-4xl md:mt-8">
             {storySections.length > 0 ? (
-              <div className="grid gap-6 md:gap-8">
+              <div className="space-y-7 md:space-y-8">
                 {storySections.map((section, index) => (
                   <article
                     key={`${section.title}-${index}`}
-                    className="max-w-4xl"
                     data-about-story-row
                   >
-                    <div className="max-w-4xl" data-about-story-content>
+                    <div data-about-story-content>
                       <h2 className="text-lg font-semibold leading-snug text-balance md:text-2xl">
                         {section.title}
                       </h2>
@@ -89,13 +86,12 @@ export default async function AboutPage() {
                 ))}
               </div>
             ) : (
-              <div className="mx-auto max-w-4xl">
-                <MarkdownContent
-                  className="markdown-compact about-story-copy"
-                  content={page?.body ?? ""}
-                />
-              </div>
+              <MarkdownContent
+                className="markdown-compact about-story-copy"
+                content={page?.body ?? ""}
+              />
             )}
+            <div className="clear-both" />
           </div>
         </section>
       </article>
