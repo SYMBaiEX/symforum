@@ -58,7 +58,7 @@ export function EntryRow({
       </div>
       <div
         className={cn(
-          "col-start-2 row-start-1 flex items-start justify-end md:col-start-auto md:row-start-auto",
+          "col-span-2 flex items-start justify-end md:col-span-1",
           compact ? "gap-1.5" : "gap-2",
         )}
       >
