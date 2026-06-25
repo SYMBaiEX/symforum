@@ -15,7 +15,15 @@ import {
   sitePageInputValidator,
 } from "./siteContentModel";
 
-const entityTypeValidator = v.union(v.literal("post"), v.literal("hnStory"));
+const commentEntityTypeValidator = v.union(
+  v.literal("post"),
+  v.literal("hnStory"),
+  v.literal("portfolioProject"),
+);
+const interactionEntityTypeValidator = v.union(
+  v.literal("post"),
+  v.literal("hnStory"),
+);
 
 async function currentUser(ctx: QueryCtx | MutationCtx) {
   const userId = await getAuthUserId(ctx);
@@ -47,6 +55,55 @@ async function firstOwner(ctx: QueryCtx | MutationCtx) {
 async function authorName(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
   const user = await ctx.db.get(userId);
   return user?.username ?? user?.name ?? "SYM-UNKNOWN";
+}
+
+function commentStatus(comment: Pick<Doc<"comments">, "status">) {
+  return comment.status ?? "active";
+}
+
+async function softDeleteComment(
+  ctx: MutationCtx,
+  commentId: Id<"comments">,
+  actorUserId: Id<"users">,
+) {
+  const comment = await ctx.db.get(commentId);
+  if (comment === null) {
+    return { deleted: false };
+  }
+  if (commentStatus(comment) === "deleted") {
+    return { deleted: true };
+  }
+  const now = Date.now();
+  await ctx.db.patch(comment._id, {
+    body: "",
+    status: "deleted",
+    updatedAt: now,
+    deletedAt: now,
+    deletedBy: actorUserId,
+    moderationReason: "admin_delete",
+  });
+  await ctx.db.insert("systemLogs", {
+    createdAt: now,
+    updatedAt: now,
+    lastSeenAt: now,
+    occurrences: 1,
+    level: "info",
+    status: "open",
+    source: "convex",
+    scope: "comments",
+    eventType: "comment_admin_deleted",
+    message: "Comment soft-deleted from admin dashboard",
+    fingerprint: `comment_admin_deleted:${comment._id}`,
+    actorUserId,
+    entityType: comment.entityType,
+    entityId: comment.entityId,
+    metadataJson: JSON.stringify({
+      commentId: comment._id,
+      parentId: comment.parentId ?? null,
+      commentAuthorUserId: comment.userId,
+    }),
+  });
+  return { deleted: true };
 }
 
 function publicApiKey(key: Doc<"apiKeys">) {
@@ -291,7 +348,7 @@ export const deletePortfolioProject = mutation({
 
 export const listComments = query({
   args: {
-    entityType: v.optional(entityTypeValidator),
+    entityType: v.optional(commentEntityTypeValidator),
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -316,6 +373,9 @@ export const listComments = query({
     return await Promise.all(
       comments.map(async (comment) => ({
         ...comment,
+        status: commentStatus(comment),
+        body:
+          commentStatus(comment) === "active" ? comment.body : "Comment deleted",
         author: await authorName(ctx, comment.userId),
       })),
     );
@@ -325,15 +385,14 @@ export const listComments = query({
 export const deleteComment = mutation({
   args: { commentId: v.id("comments") },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
-    await ctx.db.delete(args.commentId);
-    return { deleted: true };
+    const user = await requireOwner(ctx);
+    return await softDeleteComment(ctx, args.commentId, user._id);
   },
 });
 
 export const listInteractions = query({
   args: {
-    entityType: v.optional(entityTypeValidator),
+    entityType: v.optional(interactionEntityTypeValidator),
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

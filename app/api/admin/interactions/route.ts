@@ -12,20 +12,23 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const tokenHash = tokenHashFromRequest(request);
-    const entityType = entityTypeParam(
-      request.nextUrl.searchParams.get("entityType"),
-    );
+    const entityTypeParamValue = request.nextUrl.searchParams.get("entityType");
+    const commentEntityType = commentEntityTypeParam(entityTypeParamValue);
+    const interactionEntityType =
+      entityTypeParamValue === "post" || entityTypeParamValue === "hnStory"
+        ? entityTypeParamValue
+        : undefined;
     const entityId = request.nextUrl.searchParams.get("entityId") ?? undefined;
     const convex = adminConvexClient();
     const [comments, interactions] = await Promise.all([
       convex.mutation(adminApiRefs.listComments, {
         tokenHash,
-        entityType,
+        entityType: commentEntityType,
         entityId,
       }),
       convex.mutation(adminApiRefs.listInteractions, {
         tokenHash,
-        entityType,
+        entityType: interactionEntityType,
         entityId,
       }),
     ]);
@@ -35,6 +38,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function entityTypeParam(value: string | null) {
-  return value === "post" || value === "hnStory" ? value : undefined;
+function commentEntityTypeParam(value: string | null) {
+  return value === "post" ||
+    value === "hnStory" ||
+    value === "portfolioProject"
+    ? value
+    : undefined;
 }

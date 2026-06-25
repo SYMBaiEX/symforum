@@ -507,7 +507,9 @@ function OwnerDashboard() {
                     </Button>
                   </div>
                   <p className="mt-1 line-clamp-3 text-sm leading-6">
-                    {comment.body}
+                    {comment.status === "deleted"
+                      ? "Comment deleted"
+                      : comment.body}
                   </p>
                 </div>
               ))}

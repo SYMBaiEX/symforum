@@ -28,11 +28,14 @@ function publicUserProfile(user: Doc<"users">) {
 }
 
 async function recentComments(ctx: QueryCtx, userId: Id<"users">) {
-  return await ctx.db
+  const rows = await ctx.db
     .query("comments")
     .withIndex("by_userId_and_createdAt", (q) => q.eq("userId", userId))
     .order("desc")
-    .take(5);
+    .take(20);
+  return rows
+    .filter((comment) => (comment.status ?? "active") === "active")
+    .slice(0, 5);
 }
 
 export const viewer = query({

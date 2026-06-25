@@ -17,7 +17,9 @@ export default defineSchema({
     username: v.optional(v.string()),
     usernameNormalized: v.optional(v.string()),
     usernameSource: v.optional(v.union(v.literal("auto"), v.literal("chosen"))),
-    role: v.optional(v.union(v.literal("owner"), v.literal("reader"))),
+    role: v.optional(
+      v.union(v.literal("owner"), v.literal("admin"), v.literal("reader")),
+    ),
     contactEmail: v.optional(v.string()),
     bio: v.optional(v.string()),
     onboardedAt: v.optional(v.number()),
@@ -115,10 +117,21 @@ export default defineSchema({
     .index("by_hnItemId", ["hnItemId"]),
   comments: defineTable({
     userId: v.id("users"),
-    entityType: v.union(v.literal("post"), v.literal("hnStory")),
+    entityType: v.union(
+      v.literal("post"),
+      v.literal("hnStory"),
+      v.literal("portfolioProject"),
+    ),
     entityId: v.string(),
     parentId: v.optional(v.id("comments")),
     body: v.string(),
+    status: v.optional(
+      v.union(v.literal("active"), v.literal("deleted"), v.literal("hidden")),
+    ),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+    moderationReason: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_createdAt", ["createdAt"])

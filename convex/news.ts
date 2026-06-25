@@ -113,7 +113,9 @@ async function getPlatformStats(ctx: QueryCtx, hnItemId: number) {
     .take(1000);
 
   return {
-    comments: comments.length,
+    comments: comments.filter(
+      (comment) => (comment.status ?? "active") === "active",
+    ).length,
     score: interactions.reduce((total, row) => total + row.vote, 0),
     saves: interactions.filter((row) => row.saved).length,
   };

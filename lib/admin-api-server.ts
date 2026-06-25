@@ -75,7 +75,7 @@ export const adminApiRefs = {
     "mutation",
     {
       tokenHash: string;
-      entityType?: "post" | "hnStory";
+      entityType?: "post" | "hnStory" | "portfolioProject";
       entityId?: string;
     },
     AdminCommentRecord[]

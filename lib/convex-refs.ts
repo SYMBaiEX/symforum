@@ -1,5 +1,9 @@
 import { makeFunctionReference } from "convex/server";
 
+export type UserRole = "owner" | "admin" | "reader";
+export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
+export type CommentStatus = "active" | "deleted" | "hidden";
+
 export type ConvexPostRecord = {
   _id: string;
   _creationTime: number;
@@ -61,7 +65,7 @@ export type AdminUserRecord = {
   email?: string;
   username?: string;
   usernameNormalized?: string;
-  role?: "owner" | "reader";
+  role?: UserRole;
   contactEmail?: string;
 };
 
@@ -73,7 +77,7 @@ export type ViewerUserRecord = {
   username?: string;
   usernameNormalized?: string;
   usernameSource?: "auto" | "chosen";
-  role?: "owner" | "reader";
+  role?: UserRole;
   contactEmail?: string;
   bio?: string;
   onboardedAt?: number;
@@ -81,7 +85,7 @@ export type ViewerUserRecord = {
 
 export type PublicProfileCommentRecord = {
   _id: string;
-  entityType: "post" | "hnStory";
+  entityType: CommentEntityType;
   entityId: string;
   body: string;
   createdAt: number;
@@ -93,7 +97,7 @@ export type PublicProfileRecord = {
     username: string;
     usernameNormalized: string;
     bio?: string;
-    role?: "owner" | "reader";
+    role?: UserRole;
     usernameSource?: "auto" | "chosen";
     onboardedAt?: number;
   };
@@ -111,10 +115,14 @@ export type InteractionSummaryRecord = {
 export type AdminCommentRecord = {
   _id: string;
   userId: string;
-  entityType: "post" | "hnStory";
+  entityType: CommentEntityType;
   entityId: string;
   parentId?: string;
   body: string;
+  status?: CommentStatus;
+  updatedAt?: number;
+  deletedAt?: number;
+  deletedBy?: string;
   createdAt: number;
   author: string;
 };
@@ -497,28 +505,38 @@ export const convexRefs = {
   comments: {
     list: makeFunctionReference<
       "query",
-      { entityType: "post" | "hnStory"; entityId: string },
+      { entityType: CommentEntityType; entityId: string },
       Array<{
         _id: string;
         userId: string;
-        entityType: "post" | "hnStory";
+        entityType: CommentEntityType;
         entityId: string;
         parentId?: string;
         body: string;
+        status: CommentStatus;
+        updatedAt: number;
+        deletedAt?: number;
         createdAt: number;
         author: string;
+        viewerCanDelete: boolean;
+        viewerCanModerate: boolean;
       }>
     >("comments:list"),
     add: makeFunctionReference<
       "mutation",
       {
-        entityType: "post" | "hnStory";
+        entityType: CommentEntityType;
         entityId: string;
         body: string;
         parentId?: string;
       },
       null
     >("comments:add"),
+    softDelete: makeFunctionReference<
+      "mutation",
+      { commentId: string },
+      { deleted: boolean }
+    >("comments:softDelete"),
   },
   users: {
     maybeViewer: makeFunctionReference<

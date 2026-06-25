@@ -1,8 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
-import type { Id as ConvexId } from "./_generated/dataModel";
 import {
   newsletterIssueInputValidator,
   normalizeEmail,
@@ -10,17 +9,25 @@ import {
 } from "./newsletterModel";
 import { normalizePostInput, postInputValidator } from "./postModel";
 
-const entityTypeValidator = v.union(v.literal("post"), v.literal("hnStory"));
+const commentEntityTypeValidator = v.union(
+  v.literal("post"),
+  v.literal("hnStory"),
+  v.literal("portfolioProject"),
+);
+const interactionEntityTypeValidator = v.union(
+  v.literal("post"),
+  v.literal("hnStory"),
+);
 
 const sendIssueTestRef = makeFunctionReference<
   "action",
-  { issueId: ConvexId<"newsletterIssues">; to: string },
+  { issueId: Id<"newsletterIssues">; to: string },
   null
 >("newsletterEmails:sendNewsletterIssueTest");
 
 const sendIssueRef = makeFunctionReference<
   "action",
-  { issueId: ConvexId<"newsletterIssues"> },
+  { issueId: Id<"newsletterIssues"> },
   null
 >("newsletterEmails:sendNewsletterIssue");
 
@@ -49,6 +56,59 @@ function throwUnauthorized(): never {
 async function authorName(ctx: MutationCtx, userId: Id<"users">) {
   const user = await ctx.db.get(userId);
   return user?.username ?? user?.name ?? "SYM-UNKNOWN";
+}
+
+function commentStatus(comment: Pick<Doc<"comments">, "status">) {
+  return comment.status ?? "active";
+}
+
+async function softDeleteComment(
+  ctx: MutationCtx,
+  args: {
+    commentId: Id<"comments">;
+    actorUserId: Id<"users">;
+    apiKeyId: Id<"apiKeys">;
+  },
+) {
+  const comment = await ctx.db.get(args.commentId);
+  if (comment === null) {
+    return { deleted: false };
+  }
+  if (commentStatus(comment) === "deleted") {
+    return { deleted: true };
+  }
+  const now = Date.now();
+  await ctx.db.patch(comment._id, {
+    body: "",
+    status: "deleted",
+    updatedAt: now,
+    deletedAt: now,
+    deletedBy: args.actorUserId,
+    moderationReason: "admin_api_delete",
+  });
+  await ctx.db.insert("systemLogs", {
+    createdAt: now,
+    updatedAt: now,
+    lastSeenAt: now,
+    occurrences: 1,
+    level: "info",
+    status: "open",
+    source: "api",
+    scope: "comments",
+    eventType: "comment_admin_api_deleted",
+    message: "Comment soft-deleted through admin API",
+    fingerprint: `comment_admin_api_deleted:${comment._id}`,
+    actorUserId: args.actorUserId,
+    apiKeyId: args.apiKeyId,
+    entityType: comment.entityType,
+    entityId: comment.entityId,
+    metadataJson: JSON.stringify({
+      commentId: comment._id,
+      parentId: comment.parentId ?? null,
+      commentAuthorUserId: comment.userId,
+    }),
+  });
+  return { deleted: true };
 }
 
 export const listPosts = mutation({
@@ -131,7 +191,7 @@ export const resolveStorageUrl = mutation({
 export const listComments = mutation({
   args: {
     tokenHash: v.string(),
-    entityType: v.optional(entityTypeValidator),
+    entityType: v.optional(commentEntityTypeValidator),
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -156,6 +216,9 @@ export const listComments = mutation({
     return await Promise.all(
       comments.map(async (comment) => ({
         ...comment,
+        status: commentStatus(comment),
+        body:
+          commentStatus(comment) === "active" ? comment.body : "Comment deleted",
         author: await authorName(ctx, comment.userId),
       })),
     );
@@ -165,16 +228,19 @@ export const listComments = mutation({
 export const deleteComment = mutation({
   args: { tokenHash: v.string(), commentId: v.id("comments") },
   handler: async (ctx, args) => {
-    await authorize(ctx, args.tokenHash);
-    await ctx.db.delete(args.commentId);
-    return { deleted: true };
+    const key = await authorize(ctx, args.tokenHash);
+    return await softDeleteComment(ctx, {
+      commentId: args.commentId,
+      actorUserId: key.createdBy,
+      apiKeyId: key._id,
+    });
   },
 });
 
 export const listInteractions = mutation({
   args: {
     tokenHash: v.string(),
-    entityType: v.optional(entityTypeValidator),
+    entityType: v.optional(interactionEntityTypeValidator),
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

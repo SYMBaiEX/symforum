@@ -4,6 +4,15 @@ import { mutation, query } from "./_generated/server";
 
 const entityType = v.union(v.literal("post"), v.literal("hnStory"));
 
+function activeCommentCount(
+  comments: Array<{
+    status?: "active" | "deleted" | "hidden";
+  }>,
+) {
+  return comments.filter((comment) => (comment.status ?? "active") === "active")
+    .length;
+}
+
 export const summary = query({
   args: {
     entityType,
@@ -25,7 +34,7 @@ export const summary = query({
     const viewerId = await getAuthUserId(ctx);
     const viewer = rows.find((row) => row.userId === viewerId) ?? null;
     return {
-      comments: comments.length,
+      comments: activeCommentCount(comments),
       score: rows.reduce((total, row) => total + row.vote, 0),
       saves: rows.filter((row) => row.saved).length,
       viewer,
@@ -66,7 +75,7 @@ export const summaries = query({
         .take(1000);
       const viewer = rows.find((row) => row.userId === viewerId) ?? null;
       summariesByEntityId[entityId] = {
-        comments: comments.length,
+        comments: activeCommentCount(comments),
         score: rows.reduce((total, row) => total + row.vote, 0),
         saves: rows.filter((row) => row.saved).length,
         viewer,

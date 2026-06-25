@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { CommentsPanel } from "@/components/comments-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
@@ -55,6 +56,7 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
   const nextProject =
     projects.length > 1 ? projects[(projectIndex + 1) % projects.length] : null;
   const repoPath = repoPathLabel(project.repoUrl);
+  const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
     <article className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
@@ -90,6 +92,15 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
           </section>
 
           <ProjectPager previous={previousProject} next={nextProject} />
+
+          <section className="mt-10 max-w-3xl">
+            <h2 className="mb-4 font-mono text-xs uppercase">Project thread</h2>
+            <CommentsPanel
+              entityType="portfolioProject"
+              entityId={project.slug}
+              enabled={convexEnabled}
+            />
+          </section>
         </div>
 
         <aside className="md:pt-16">

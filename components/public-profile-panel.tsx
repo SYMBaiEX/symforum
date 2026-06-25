@@ -104,13 +104,23 @@ export function PublicProfilePanel({ username }: { username: string }) {
 }
 
 function commentLabel(comment: PublicProfileCommentRecord) {
-  return comment.entityType === "post" ? "Blog comment" : "News comment";
+  if (comment.entityType === "post") {
+    return "Blog comment";
+  }
+  if (comment.entityType === "portfolioProject") {
+    return "Project comment";
+  }
+  return "News comment";
 }
 
 function commentPath(comment: PublicProfileCommentRecord) {
-  return comment.entityType === "post"
-    ? `/blog/${comment.entityId}`
-    : `/news/${comment.entityId}`;
+  if (comment.entityType === "post") {
+    return `/blog/${comment.entityId}`;
+  }
+  if (comment.entityType === "portfolioProject") {
+    return `/portfolio/${comment.entityId}`;
+  }
+  return `/news/${comment.entityId}`;
 }
 
 function MetaItem({
