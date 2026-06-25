@@ -1,9 +1,11 @@
+"use client";
+
 import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
-import { ReactNode } from "react";
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 
 const socialItems = [
   {
@@ -19,8 +21,43 @@ const socialItems = [
 ];
 
 export function SiteShell({ children }: { children: ReactNode }) {
+  const footerRef = useRef<HTMLElement | null>(null);
+  const [footerOffset, setFooterOffset] = useState<number | null>(null);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+
+    if (!footer) {
+      return;
+    }
+
+    const updateFooterOffset = () => {
+      setFooterOffset(Math.ceil(footer.getBoundingClientRect().height));
+    };
+
+    updateFooterOffset();
+
+    const observer = new ResizeObserver(updateFooterOffset);
+    observer.observe(footer);
+    window.addEventListener("resize", updateFooterOffset);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateFooterOffset);
+    };
+  }, []);
+
   return (
-    <div className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:20.5rem] [--site-header-offset:4rem] md:[--site-footer-offset:4.5rem] md:[--site-header-offset:3.75rem]">
+    <div
+      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:8.75rem] [--site-header-offset:4rem] md:[--site-footer-offset:4.5rem] md:[--site-header-offset:3.75rem]"
+      style={
+        footerOffset
+          ? ({
+              "--site-footer-offset": `${footerOffset}px`,
+            } as CSSProperties)
+          : undefined
+      }
+    >
       <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
           <div className="flex min-w-0 items-center">
@@ -37,12 +74,15 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
         {children}
       </main>
-      <footer className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur">
-        <div className="mx-auto grid max-w-7xl items-end gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:grid-cols-12 md:px-8">
-          <div className="md:col-span-4">
+      <footer
+        ref={footerRef}
+        className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
+      >
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:grid-cols-12 md:px-8">
+          <div className="min-w-0 md:col-span-4">
             <p className="font-mono uppercase">SYMBaiEX</p>
           </div>
-          <div className="md:col-span-5">
+          <div className="col-span-2 md:col-span-5">
             <NewsletterSignup source="footer" variant="footer" />
           </div>
           <div className="flex flex-wrap items-end justify-end gap-1 md:col-span-3">

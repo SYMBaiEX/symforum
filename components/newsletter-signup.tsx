@@ -51,7 +51,9 @@ export function NewsletterSignup({
       onSubmit={subscribe}
       className={cn(
         "grid gap-2",
-        variant === "footer" ? "md:grid-cols-[1fr_auto]" : "sm:grid-cols-[1fr_auto]",
+        variant === "footer"
+          ? "grid-cols-[minmax(0,1fr)_auto]"
+          : "sm:grid-cols-[1fr_auto]",
         className,
       )}
     >
@@ -81,7 +83,7 @@ export function NewsletterSignup({
         <p
           className={cn(
             "font-mono text-[10px] uppercase text-muted-foreground",
-            variant === "footer" ? "md:col-span-2" : "sm:col-span-2",
+            variant === "footer" ? "col-span-2" : "sm:col-span-2",
           )}
         >
           {message}
