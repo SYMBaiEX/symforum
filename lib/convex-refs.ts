@@ -113,6 +113,7 @@ export type AdminCommentRecord = {
   userId: string;
   entityType: "post" | "hnStory";
   entityId: string;
+  parentId?: string;
   body: string;
   createdAt: number;
   author: string;
@@ -330,6 +331,7 @@ export const convexRefs = {
         userId: string;
         entityType: "post" | "hnStory";
         entityId: string;
+        parentId?: string;
         body: string;
         createdAt: number;
         author: string;
@@ -337,7 +339,12 @@ export const convexRefs = {
     >("comments:list"),
     add: makeFunctionReference<
       "mutation",
-      { entityType: "post" | "hnStory"; entityId: string; body: string },
+      {
+        entityType: "post" | "hnStory";
+        entityId: string;
+        body: string;
+        parentId?: string;
+      },
       null
     >("comments:add"),
   },

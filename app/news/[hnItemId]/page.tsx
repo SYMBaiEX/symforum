@@ -1,12 +1,11 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { compactNumber, formatDate } from "@/lib/format";
 import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
 import { newsStorySlug, parseNewsStoryParam } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
-import { ArrowUpRight, Bookmark, MessageSquare } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -56,107 +55,77 @@ export default async function NewsStoryPage({ params }: PageProps) {
 
   return (
     <>
-      <article className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
-        <div className="grid gap-7 md:grid-cols-12">
-          <aside className="font-mono text-[11px] uppercase text-muted-foreground md:col-span-3">
-            <div className="sticky top-24 flex flex-col gap-2 border-y border-row-border py-3">
-              <span>HN #{story.hnItemId}</span>
-              {story.rank ? <span>Rank {story.rank}</span> : null}
-              {story.timePosted ? (
-                <span>{formatDate(story.timePosted * 1000)}</span>
-              ) : null}
-              <span>{story.host ?? "news.ycombinator.com"}</span>
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                <Badge variant="outline" className="font-mono uppercase">
-                  {compactNumber(stats.score)} pts
-                </Badge>
-                <Badge
-                  variant="secondary"
-                  className="gap-1 font-mono uppercase"
-                >
-                  <MessageSquare />
-                  {compactNumber(stats.comments)} comments
-                </Badge>
-                <Badge variant="outline" className="gap-1 font-mono uppercase">
-                  <Bookmark />
-                  {compactNumber(stats.saves)} saves
-                </Badge>
-              </div>
-            </div>
-          </aside>
-          <div className="md:col-span-8">
-            <p className="font-mono text-[11px] uppercase text-muted-foreground">
-              Indexed article
-            </p>
-            <h1 className="mt-3 break-words text-3xl font-bold leading-tight text-balance md:text-5xl">
-              {story.title}
-            </h1>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {sourceUrl ? (
-                <Button asChild size="sm">
-                  <Link
-                    href={sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Read source
-                    <ArrowUpRight />
-                  </Link>
-                </Button>
-              ) : null}
-              <Button asChild variant="outline" size="sm">
-                <Link href="/news">Back to index</Link>
-              </Button>
-            </div>
-
-            <div className="mt-6 border-y border-row-border py-3">
-              {convexEnabled ? (
-                <InteractionBar entityType="hnStory" entityId={entityId} />
-              ) : (
-                <p className="font-mono text-xs uppercase text-muted-foreground">
-                  Connect Convex to enable voting and saves.
-                </p>
-              )}
-            </div>
-
-            <section className="mt-6 border border-row-border bg-card/55 p-4">
-              {body ? (
-                <div className="flex flex-col gap-4">
-                  {body.split(/\n{2,}/).map((paragraph) => (
-                    <p
-                      key={paragraph}
-                      className="text-sm leading-7 md:text-base"
-                    >
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm leading-7 text-muted-foreground md:text-base">
-                  This indexed story points to an external source article. Read
-                  the source, then come back here for the SYMBiEX discussion
-                  layer.
-                </p>
-              )}
-            </section>
-
-            <section className="mt-9">
-              <h2 className="mb-3 font-mono text-xs uppercase">Comments</h2>
-              {convexEnabled ? (
-                <CommentsPanel
-                  entityType="hnStory"
-                  entityId={entityId}
-                  enabled={convexEnabled}
-                />
-              ) : (
-                <CommentsPanel
-                  entityType="hnStory"
-                  entityId={entityId}
-                  enabled={convexEnabled}
-                />
-              )}
-            </section>
+      <article className="mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
+        <div className="max-w-4xl">
+          <p className="font-mono text-[11px] uppercase text-muted-foreground">
+            Indexed article
+          </p>
+          <h1 className="mt-3 break-words text-3xl font-bold leading-tight text-balance md:text-5xl">
+            {story.title}
+          </h1>
+          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+            <span>HN #{story.hnItemId}</span>
+            {story.rank ? <span>Rank {story.rank}</span> : null}
+            {story.timePosted ? (
+              <span>{formatDate(story.timePosted * 1000)}</span>
+            ) : null}
+            <span>{story.host ?? "news.ycombinator.com"}</span>
+            <span>{compactNumber(stats.score)} pts</span>
+            <span>{compactNumber(stats.comments)} comments</span>
+            <span>{compactNumber(stats.saves)} saves</span>
           </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {sourceUrl ? (
+              <Button asChild size="sm">
+                <Link
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read source
+                  <ArrowUpRight />
+                </Link>
+              </Button>
+            ) : null}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/news">Back to index</Link>
+            </Button>
+            {convexEnabled ? (
+              <InteractionBar entityType="hnStory" entityId={entityId} />
+            ) : (
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                Connect Convex to enable voting and saves.
+              </p>
+            )}
+          </div>
+
+          <section className="mt-8 max-w-3xl">
+            {body ? (
+              <div className="flex flex-col gap-4">
+                {body.split(/\n{2,}/).map((paragraph) => (
+                  <p key={paragraph} className="text-sm leading-7 md:text-base">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm leading-7 text-muted-foreground md:text-base">
+                This indexed story points to an external source article. Read
+                the source, then come back here for the SYMBiEX discussion
+                layer.
+              </p>
+            )}
+          </section>
+
+          <section className="mt-10 max-w-3xl">
+            <h2 className="mb-3 font-mono text-xs uppercase">Thread</h2>
+            <CommentsPanel
+              entityType="hnStory"
+              entityId={entityId}
+              enabled={convexEnabled}
+            />
+          </section>
         </div>
       </article>
     </>

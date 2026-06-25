@@ -16,7 +16,7 @@ export const list = query({
         q.eq("entityType", args.entityType).eq("entityId", args.entityId),
       )
       .order("asc")
-      .take(100);
+      .take(200);
     const usersById = new Map(
       await Promise.all(
         [...new Set(rows.map((comment) => comment.userId))].map(
@@ -39,6 +39,7 @@ export const add = mutation({
   args: {
     entityType,
     entityId: v.string(),
+    parentId: v.optional(v.id("comments")),
     body: v.string(),
   },
   handler: async (ctx, args) => {
@@ -49,6 +50,16 @@ export const add = mutation({
     const body = args.body.trim();
     if (body.length < 2 || body.length > 1200) {
       throw new Error("Comment must be between 2 and 1200 characters");
+    }
+    if (args.parentId !== undefined) {
+      const parent = await ctx.db.get(args.parentId);
+      if (
+        parent === null ||
+        parent.entityType !== args.entityType ||
+        parent.entityId !== args.entityId
+      ) {
+        throw new Error("Reply target does not belong to this thread");
+      }
     }
     const recent = await ctx.db
       .query("comments")
@@ -62,6 +73,7 @@ export const add = mutation({
       userId,
       entityType: args.entityType,
       entityId: args.entityId,
+      ...(args.parentId !== undefined ? { parentId: args.parentId } : {}),
       body,
       createdAt: Date.now(),
     });

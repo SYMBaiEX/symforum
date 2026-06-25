@@ -117,6 +117,7 @@ export default defineSchema({
     userId: v.id("users"),
     entityType: v.union(v.literal("post"), v.literal("hnStory")),
     entityId: v.string(),
+    parentId: v.optional(v.id("comments")),
     body: v.string(),
     createdAt: v.number(),
   })
@@ -124,6 +125,12 @@ export default defineSchema({
     .index("by_entityType_and_entityId_and_createdAt", [
       "entityType",
       "entityId",
+      "createdAt",
+    ])
+    .index("by_entityType_and_entityId_and_parentId_and_createdAt", [
+      "entityType",
+      "entityId",
+      "parentId",
       "createdAt",
     ])
     .index("by_userId_and_createdAt", ["userId", "createdAt"]),
