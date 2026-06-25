@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { action, internalMutation, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+} from "./_generated/server";
 import { makeFunctionReference } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -49,6 +54,13 @@ const markSnapshotFailedRef = makeFunctionReference<
   },
   null
 >("news:markSnapshotFailed");
+
+function clampStoryLimit(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 30;
+  }
+  return Math.max(1, Math.min(100, Math.floor(value)));
+}
 
 function snapshotDate(timestamp = Date.now()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -164,6 +176,31 @@ export const latest = query({
   },
 });
 
+export const readIndexedSnapshot = internalQuery({
+  args: {
+    snapshotDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const snapshot = args.snapshotDate
+      ? await snapshotForDate(ctx, args.snapshotDate)
+      : await latestIndexedSnapshot(ctx);
+    if (snapshot === null) {
+      return { snapshot: null, stories: [] };
+    }
+
+    const stories = await ctx.db
+      .query("hnStories")
+      .withIndex("by_snapshotDate_and_rank", (q) =>
+        q.eq("snapshotDate", snapshot.snapshotDate),
+      )
+      .order("asc")
+      .take(clampStoryLimit(args.limit));
+
+    return { snapshot, stories };
+  },
+});
+
 export const timeline = query({
   args: {
     snapshotDate: v.optional(v.string()),
@@ -210,10 +247,13 @@ export const getStory = query({
 });
 
 export const refreshTopStories = action({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
     const date = snapshotDate();
     const startedAt = Date.now();
+    const limit = clampStoryLimit(args.limit);
     await ctx.runMutation(markSnapshotStartedRef, {
       snapshotDate: date,
       startedAt,
@@ -225,7 +265,7 @@ export const refreshTopStories = action({
         throw new Error(`HN topstories failed: ${topResponse.status}`);
       }
       const ids = (await topResponse.json()) as number[];
-      const topIds = ids.slice(0, 30);
+      const topIds = ids.slice(0, limit);
       const stories = await Promise.all(
         topIds.map(async (id, index) => {
           const response = await fetch(`${HN_ITEM_URL}${id}.json`);

@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 
 const refreshTopStories = makeFunctionReference<
   "action",
-  Record<string, never>,
+  { limit?: number },
   { snapshotDate: string; storyCount: number }
 >("news:refreshTopStories");
 

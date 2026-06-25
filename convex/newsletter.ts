@@ -392,6 +392,7 @@ export const markIssueBroadcast = internalMutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
     await ctx.db.patch(args.issueId, {
       status: args.status,
       resendBroadcastId: args.resendBroadcastId,
@@ -399,6 +400,41 @@ export const markIssueBroadcast = internalMutation({
       sentAt: args.status === "sent" ? Date.now() : undefined,
       updatedAt: Date.now(),
     });
+
+    const dailyRun = await ctx.db
+      .query("dailyNewsletterRuns")
+      .withIndex("by_issueId", (q) => q.eq("issueId", args.issueId))
+      .unique();
+    if (dailyRun !== null) {
+      const now = Date.now();
+      await ctx.db.patch(dailyRun._id, {
+        status: args.status,
+        sentAt: args.status === "sent" ? now : undefined,
+        completedAt: now,
+        resendBroadcastId: args.resendBroadcastId,
+        errorMessage: args.errorMessage,
+        updatedAt: now,
+      });
+      await ctx.db.insert("newsletterSendLogs", {
+        runDate: dailyRun.runDate,
+        issueId: args.issueId,
+        provider: "resend",
+        status: args.status,
+        resendBroadcastId: args.resendBroadcastId,
+        errorMessage: args.errorMessage,
+        createdAt: now,
+      });
+    } else if (issue !== null) {
+      await ctx.db.insert("newsletterSendLogs", {
+        runDate: issue.slug,
+        issueId: args.issueId,
+        provider: "resend",
+        status: args.status,
+        resendBroadcastId: args.resendBroadcastId,
+        errorMessage: args.errorMessage,
+        createdAt: Date.now(),
+      });
+    }
     return null;
   },
 });

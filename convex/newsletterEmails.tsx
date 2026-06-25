@@ -74,6 +74,43 @@ const markIssueBroadcastRef = makeFunctionReference<
   null
 >("newsletter:markIssueBroadcast");
 
+type DailyNewsletterStory = {
+  hnItemId: number;
+  rank: number;
+  title: string;
+  host?: string;
+  by?: string;
+  score?: number;
+  comments?: number;
+  sourceUrl?: string;
+  siteUrl: string;
+  summary: string;
+  theme: string;
+  relevanceScore: number;
+};
+
+type DailyNewsletterPayload = {
+  kind: "daily-news";
+  version: 1;
+  runDate: string;
+  snapshotDate: string;
+  generatedAt: number;
+  siteUrl: string;
+  newsUrl: string;
+  intro: string;
+  themeLabel: string;
+  quote: {
+    quoteKey: string;
+    quote: string;
+    author: string;
+    source: string;
+    sourceUrl?: string;
+    reflection: string;
+  };
+  topStories: DailyNewsletterStory[];
+  additionalStories: DailyNewsletterStory[];
+};
+
 export const sendConfirmationEmail = internalAction({
   args: {
     subscriberId: v.id("newsletterSubscribers"),
@@ -423,6 +460,11 @@ async function renderIssueEmail(
   issue: Doc<"newsletterIssues">,
   unsubscribeUrl: string,
 ) {
+  const dailyPayload = parseDailyNewsletterPayload(issue.body);
+  if (dailyPayload) {
+    return await renderDailyNewsletterEmail(issue, dailyPayload, unsubscribeUrl);
+  }
+
   return await renderEmail(
     <BaseEmail preview={issue.previewText}>
       <Heading style={styles.heading}>{issue.subject}</Heading>
@@ -439,6 +481,109 @@ async function renderIssueEmail(
       </Text>
     </BaseEmail>,
   );
+}
+
+async function renderDailyNewsletterEmail(
+  issue: Doc<"newsletterIssues">,
+  payload: DailyNewsletterPayload,
+  unsubscribeUrl: string,
+) {
+  const dateLabel = formatRunDate(payload.runDate);
+  return await renderEmail(
+    <BaseEmail preview={issue.previewText}>
+      <Section style={styles.accentRule}>
+        <Text style={styles.accentMagenta}> </Text>
+        <Text style={styles.accentCyan}> </Text>
+        <Text style={styles.accentYellow}> </Text>
+      </Section>
+      <Text style={styles.eyebrow}>Daily signal / {dateLabel}</Text>
+      <Heading style={styles.heading}>The Morning Signal</Heading>
+      <Text style={styles.copy}>{payload.intro}</Text>
+      <Section style={styles.quoteBlock}>
+        <Text style={styles.quoteMark}>{"("}signal{")"}</Text>
+        <Text style={styles.quoteText}>&ldquo;{payload.quote.quote}&rdquo;</Text>
+        <Text style={styles.quoteAuthor}>
+          - {payload.quote.author} / {payload.quote.source}
+        </Text>
+        <Text style={styles.quoteReflection}>{payload.quote.reflection}</Text>
+      </Section>
+      <Button href={payload.newsUrl} style={styles.button}>
+        Open today&apos;s index
+      </Button>
+      <Hr style={styles.hr} />
+      <Text style={styles.sectionLabel}>Top 3</Text>
+      {payload.topStories.map((story, index) => (
+        <Section key={story.hnItemId} style={styles.storyFeature}>
+          <Text style={styles.storyMeta}>
+            #{String(index + 1).padStart(2, "0")} / {story.theme}
+            {story.host ? ` / ${story.host}` : ""}
+          </Text>
+          <Link href={story.siteUrl} style={styles.storyTitle}>
+            {story.title}
+          </Link>
+          <Text style={styles.storySummary}>{story.summary}</Text>
+          <Button href={story.siteUrl} style={styles.smallButton}>
+            Read on SYMBaiEX
+          </Button>
+        </Section>
+      ))}
+      <Hr style={styles.hr} />
+      <Text style={styles.sectionLabel}>Five more worth opening</Text>
+      {payload.additionalStories.map((story) => (
+        <Section key={story.hnItemId} style={styles.storyCompact}>
+          <Link href={story.siteUrl} style={styles.compactTitle}>
+            {story.title}
+          </Link>
+          <Text style={styles.compactMeta}>
+            {story.host ?? "news.ycombinator.com"}
+            {typeof story.comments === "number"
+              ? ` / ${story.comments} HN comments`
+              : ""}
+          </Text>
+        </Section>
+      ))}
+      <Hr style={styles.hr} />
+      <Text style={styles.small}>
+        This email links to the SYMBaiEX index first so you can read the source,
+        save stories, and join the thread. Manage preferences or unsubscribe at{" "}
+        <Link href={unsubscribeUrl} style={styles.link}>
+          symbaiex.com/newsletter/preferences
+        </Link>
+        .
+      </Text>
+    </BaseEmail>,
+  );
+}
+
+function parseDailyNewsletterPayload(value: string) {
+  try {
+    const parsed = JSON.parse(value) as Partial<DailyNewsletterPayload>;
+    if (
+      parsed.kind !== "daily-news" ||
+      parsed.version !== 1 ||
+      typeof parsed.runDate !== "string" ||
+      typeof parsed.newsUrl !== "string" ||
+      typeof parsed.intro !== "string" ||
+      !parsed.quote ||
+      !Array.isArray(parsed.topStories) ||
+      !Array.isArray(parsed.additionalStories)
+    ) {
+      return null;
+    }
+    return parsed as DailyNewsletterPayload;
+  } catch {
+    return null;
+  }
+}
+
+function formatRunDate(runDate: string) {
+  const date = new Date(`${runDate}T12:00:00.000Z`);
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 async function renderEmail(children: ReactElement) {
@@ -522,6 +667,44 @@ const styles = {
     letterSpacing: "0.08em",
     textTransform: "uppercase" as const,
   },
+  accentRule: {
+    display: "flex",
+    width: "100%",
+    margin: "0 0 30px",
+  },
+  accentMagenta: {
+    display: "inline-block",
+    width: "34%",
+    height: "4px",
+    margin: "0",
+    backgroundColor: "#ff35c8",
+    lineHeight: "4px",
+  },
+  accentCyan: {
+    display: "inline-block",
+    width: "33%",
+    height: "4px",
+    margin: "0",
+    backgroundColor: "#8de7df",
+    lineHeight: "4px",
+  },
+  accentYellow: {
+    display: "inline-block",
+    width: "33%",
+    height: "4px",
+    margin: "0",
+    backgroundColor: "#ffe95f",
+    lineHeight: "4px",
+  },
+  eyebrow: {
+    margin: "0 0 12px",
+    color: "#9b9b9b",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase" as const,
+  },
   heading: {
     margin: "0 0 18px",
     color: "#ffffff",
@@ -541,6 +724,108 @@ const styles = {
     fontSize: "16px",
     lineHeight: "1.7",
     whiteSpace: "pre-wrap" as const,
+  },
+  quoteBlock: {
+    margin: "26px 0",
+    padding: "22px 0",
+    borderTop: "1px solid #2b2b2b",
+    borderBottom: "1px solid #2b2b2b",
+  },
+  quoteMark: {
+    margin: "0 0 12px",
+    color: "#ff35c8",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase" as const,
+  },
+  quoteText: {
+    margin: "0",
+    color: "#ffffff",
+    fontSize: "22px",
+    lineHeight: "1.35",
+    fontWeight: 650,
+  },
+  quoteAuthor: {
+    margin: "12px 0 0",
+    color: "#a7a7a7",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "12px",
+    lineHeight: "1.5",
+    textTransform: "uppercase" as const,
+  },
+  quoteReflection: {
+    margin: "16px 0 0",
+    color: "#c8c8c8",
+    fontSize: "15px",
+    lineHeight: "1.65",
+  },
+  sectionLabel: {
+    margin: "0 0 16px",
+    color: "#8de7df",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase" as const,
+  },
+  storyFeature: {
+    margin: "0 0 28px",
+    padding: "0",
+  },
+  storyMeta: {
+    margin: "0 0 8px",
+    color: "#9b9b9b",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "12px",
+    lineHeight: "1.5",
+    textTransform: "uppercase" as const,
+  },
+  storyTitle: {
+    display: "block",
+    margin: "0",
+    color: "#ffffff",
+    fontSize: "22px",
+    lineHeight: "1.25",
+    fontWeight: 750,
+    textDecoration: "none",
+  },
+  storySummary: {
+    margin: "10px 0 14px",
+    color: "#bdbdbd",
+    fontSize: "15px",
+    lineHeight: "1.6",
+  },
+  smallButton: {
+    display: "inline-block",
+    backgroundColor: "transparent",
+    color: "#ffffff",
+    padding: "10px 13px",
+    border: "1px solid #3a3a3a",
+    borderRadius: "0",
+    fontSize: "12px",
+    fontWeight: 700,
+    textDecoration: "none",
+  },
+  storyCompact: {
+    margin: "0 0 16px",
+  },
+  compactTitle: {
+    display: "block",
+    color: "#ffffff",
+    fontSize: "16px",
+    lineHeight: "1.35",
+    fontWeight: 700,
+    textDecoration: "none",
+  },
+  compactMeta: {
+    margin: "5px 0 0",
+    color: "#8f8f8f",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "11px",
+    lineHeight: "1.5",
+    textTransform: "uppercase" as const,
   },
   button: {
     display: "inline-block",

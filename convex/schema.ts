@@ -235,4 +235,60 @@ export default defineSchema({
     value: v.string(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+  dailyNewsletterRuns: defineTable({
+    runDate: v.string(),
+    snapshotDate: v.optional(v.string()),
+    status: v.union(
+      v.literal("running"),
+      v.literal("generated"),
+      v.literal("sent"),
+      v.literal("skipped"),
+      v.literal("failed"),
+    ),
+    mode: v.union(v.literal("cron"), v.literal("manual"), v.literal("test")),
+    sendEnabled: v.boolean(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    issueId: v.optional(v.id("newsletterIssues")),
+    storyCount: v.number(),
+    topStoryIds: v.array(v.number()),
+    resendBroadcastId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_runDate", ["runDate"])
+    .index("by_issueId", ["issueId"])
+    .index("by_startedAt", ["startedAt"])
+    .index("by_status_and_startedAt", ["status", "startedAt"]),
+  dailyQuotes: defineTable({
+    quoteKey: v.string(),
+    quote: v.string(),
+    author: v.string(),
+    source: v.string(),
+    sourceUrl: v.optional(v.string()),
+    reflection: v.string(),
+    usedDate: v.string(),
+    usedAt: v.number(),
+  })
+    .index("by_usedDate", ["usedDate"])
+    .index("by_quoteKey_and_usedAt", ["quoteKey", "usedAt"]),
+  newsletterSendLogs: defineTable({
+    runDate: v.string(),
+    issueId: v.optional(v.id("newsletterIssues")),
+    provider: v.literal("resend"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sent"),
+      v.literal("skipped"),
+      v.literal("failed"),
+    ),
+    resendBroadcastId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_runDate_and_createdAt", ["runDate", "createdAt"])
+    .index("by_issueId_and_createdAt", ["issueId", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_status_and_createdAt", ["status", "createdAt"]),
 });

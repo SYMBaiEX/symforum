@@ -13,6 +13,7 @@ import type * as adminApi from "../adminApi.js";
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
 import type * as crons from "../crons.js";
+import type * as dailyNewsletter from "../dailyNewsletter.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as news from "../news.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   comments: typeof comments;
   crons: typeof crons;
+  dailyNewsletter: typeof dailyNewsletter;
   http: typeof http;
   interactions: typeof interactions;
   news: typeof news;
