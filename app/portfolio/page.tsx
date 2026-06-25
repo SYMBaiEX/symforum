@@ -115,9 +115,8 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
 
 function ProjectIndexHeader({ count }: { count: number }) {
   return (
-    <div className="mb-2 grid gap-2 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-[2.25rem_minmax(9.5rem,0.72fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:px-2">
+    <div className="mb-2 grid gap-2 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-[minmax(11rem,0.78fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:px-2">
       <div className="md:hidden">Work index / {count} projects</div>
-      <div className="hidden md:block">No.</div>
       <div className="hidden md:block">Project</div>
       <div className="hidden md:block">Focus</div>
       <div className="hidden md:block md:text-right">Proof</div>
@@ -139,21 +138,16 @@ function ProjectListRow({
 
   return (
     <article
-      className="group relative grid grid-cols-[2rem_minmax(0,1fr)_1.75rem] gap-x-2 gap-y-1 py-2 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-px before:bg-transparent hover:bg-muted/25 hover:before:bg-[var(--accent-magenta)] md:grid-cols-[2.25rem_minmax(9.5rem,0.72fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:items-center md:gap-2 md:px-2 md:py-1.5"
+      className="group relative grid grid-cols-[minmax(0,1fr)_1.75rem] gap-x-2 gap-y-1 py-2 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-px before:bg-transparent hover:bg-muted/25 hover:before:bg-[var(--accent-magenta)] md:grid-cols-[minmax(11rem,0.78fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:items-center md:gap-2 md:px-2 md:py-1.5"
       data-portfolio-project-row
     >
-      <div className="row-span-2 flex flex-col items-start gap-1.5 md:row-auto md:gap-1">
-        <div className="font-mono text-[10px] uppercase text-muted-foreground">
-          {String(project.order).padStart(2, "0")}
-        </div>
+      <div className="flex min-w-0 items-center gap-3">
         <ProjectMark
           name={project.name}
           imageUrl={imageUrl ?? metric?.avatarUrl}
           imageAlt={project.imageAlt ?? `${project.name} project asset`}
           order={project.order}
         />
-      </div>
-      <div className="col-start-2 min-w-0 md:col-auto">
         <Link
           href={projectHref}
           className="focus-ring inline-flex max-w-full text-[0.95rem] font-semibold leading-tight hover:text-primary md:text-base"
@@ -161,14 +155,14 @@ function ProjectListRow({
           <span className="truncate">{project.name}</span>
         </Link>
       </div>
-      <p className="col-span-2 col-start-2 min-w-0 line-clamp-2 text-[0.8125rem] leading-5 text-muted-foreground md:col-auto md:line-clamp-1">
+      <p className="col-span-2 min-w-0 line-clamp-2 text-[0.8125rem] leading-5 text-muted-foreground md:col-auto md:line-clamp-1">
         {project.summary}
       </p>
       <div className="hidden min-w-0 font-mono text-[10px] uppercase text-muted-foreground md:col-auto md:block md:text-right">
         <p className="truncate">{project.role}</p>
         <p className="mt-1 truncate">{repoLabel}</p>
       </div>
-      <div className="col-start-3 row-start-1 flex items-center justify-end md:col-auto md:row-auto">
+      <div className="col-start-2 row-start-1 flex items-center justify-end md:col-auto md:row-auto">
         <Button
           asChild
           className="size-7 rounded-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted/40 group-hover:text-foreground"
