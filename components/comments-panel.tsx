@@ -60,6 +60,7 @@ function LiveComments({
   const [body, setBody] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
+  const [replyErrors, setReplyErrors] = useState<Record<string, string>>({});
   const [authOpen, setAuthOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -74,12 +75,17 @@ function LiveComments({
     nextBody: string,
     afterSubmit: () => void,
   ) {
+    const errorKey = parentId ?? "root";
     if (!isAuthenticated) {
       setAuthOpen(true);
       return;
     }
     setPending(true);
-    setError("");
+    if (errorKey === "root") {
+      setError("");
+    } else {
+      setReplyErrors((current) => ({ ...current, [errorKey]: "" }));
+    }
     try {
       await addComment({
         entityType,
@@ -93,7 +99,12 @@ function LiveComments({
         setAuthOpen(true);
         return;
       }
-      setError(userFacingError(caught, "Could not comment"));
+      const message = userFacingError(caught, "Could not comment");
+      if (errorKey === "root") {
+        setError(message);
+      } else {
+        setReplyErrors((current) => ({ ...current, [errorKey]: message }));
+      }
     } finally {
       setPending(false);
     }
@@ -148,6 +159,7 @@ function LiveComments({
                 comment={comment}
                 depth={0}
                 pending={pending}
+                replyErrors={replyErrors}
                 replyingTo={replyingTo}
                 replyBodies={replyBodies}
                 requestAuth={() => setAuthOpen(true)}
@@ -174,6 +186,7 @@ function CommentThread({
   comment,
   depth,
   pending,
+  replyErrors,
   replyingTo,
   replyBodies,
   requestAuth,
@@ -185,6 +198,7 @@ function CommentThread({
   comment: ThreadComment;
   depth: number;
   pending: boolean;
+  replyErrors: Record<string, string>;
   replyingTo: string | null;
   replyBodies: Record<string, string>;
   requestAuth: () => void;
@@ -198,6 +212,7 @@ function CommentThread({
   userCanReply: boolean;
 }) {
   const replyBody = replyBodies[comment._id] ?? "";
+  const replyError = replyErrors[comment._id] ?? "";
   const isReplying = replyingTo === comment._id;
 
   function onReplySubmit(event: FormEvent<HTMLFormElement>) {
@@ -273,6 +288,11 @@ function CommentThread({
                 Post reply
               </Button>
             </div>
+            {replyError ? (
+              <p className="border border-row-border p-2.5 text-sm text-muted-foreground">
+                {replyError}
+              </p>
+            ) : null}
           </form>
         ) : null}
       </div>
@@ -284,6 +304,7 @@ function CommentThread({
               comment={reply}
               depth={depth + 1}
               pending={pending}
+              replyErrors={replyErrors}
               replyingTo={replyingTo}
               replyBodies={replyBodies}
               requestAuth={requestAuth}

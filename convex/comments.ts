@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 
@@ -40,41 +40,64 @@ export const add = mutation({
   args: {
     entityType,
     entityId: v.string(),
-    parentId: v.optional(v.string()),
+    parentId: v.optional(v.id("comments")),
     body: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError({
+        code: "AUTH_REQUIRED",
+        message: "Sign in with a SYM handle to join the thread.",
+      });
     }
     const body = args.body.trim();
     if (body.length < 2 || body.length > 1200) {
-      throw new Error("Comment must be between 2 and 1200 characters");
+      throw new ConvexError({
+        code: "INVALID_COMMENT",
+        message: "Comment must be between 2 and 1200 characters.",
+      });
     }
     let parentId: Id<"comments"> | undefined;
     if (args.parentId !== undefined) {
-      const normalizedParentId = ctx.db.normalizeId("comments", args.parentId);
-      if (normalizedParentId === null) {
-        throw new Error("Reply target does not belong to this thread");
-      }
-      const parent = await ctx.db.get(normalizedParentId);
+      const parent = await ctx.db.get(args.parentId);
       if (
         parent === null ||
         parent.entityType !== args.entityType ||
         parent.entityId !== args.entityId
       ) {
-        throw new Error("Reply target does not belong to this thread");
+        throw new ConvexError({
+          code: "INVALID_REPLY_TARGET",
+          message: "That reply target is no longer part of this thread.",
+        });
       }
-      parentId = normalizedParentId;
+      parentId = args.parentId;
     }
     const recent = await ctx.db
       .query("comments")
       .withIndex("by_userId_and_createdAt", (q) => q.eq("userId", userId))
       .order("desc")
-      .take(1);
-    if (recent[0] !== undefined && Date.now() - recent[0].createdAt < 10_000) {
-      throw new Error("Please wait a few seconds before commenting again");
+      .take(5);
+    const now = Date.now();
+    const lastComment = recent[0];
+    if (lastComment !== undefined && now - lastComment.createdAt < 2_500) {
+      throw new ConvexError({
+        code: "COMMENT_RATE_LIMITED",
+        message: "Give the thread a breath, then try again.",
+      });
+    }
+    const duplicate = recent.find(
+      (comment) =>
+        comment.entityType === args.entityType &&
+        comment.entityId === args.entityId &&
+        comment.body.trim() === body &&
+        now - comment.createdAt < 15_000,
+    );
+    if (duplicate !== undefined) {
+      throw new ConvexError({
+        code: "DUPLICATE_COMMENT",
+        message: "That comment already landed.",
+      });
     }
     await ctx.db.insert("comments", {
       userId,
@@ -82,7 +105,7 @@ export const add = mutation({
       entityId: args.entityId,
       ...(parentId !== undefined ? { parentId } : {}),
       body,
-      createdAt: Date.now(),
+      createdAt: now,
     });
   },
 });
