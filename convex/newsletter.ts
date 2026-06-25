@@ -241,7 +241,9 @@ export const sendAdminIssueTest = mutation({
     if (issue === null) {
       throw new Error("Newsletter issue not found");
     }
-    const to = normalizeEmail(args.to ?? owner.email ?? "solsymbaiex@gmail.com");
+    const to = normalizeEmail(
+      args.to ?? owner.email ?? "solsymbaiex@gmail.com",
+    );
     await ctx.scheduler.runAfter(0, sendIssueTestRef, {
       issueId: issue._id,
       to,
@@ -321,6 +323,18 @@ export const readSubscriber = internalQuery({
   },
 });
 
+export const listConfirmedSubscribersForResendSync = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 100), 200));
+    return await ctx.db
+      .query("newsletterSubscribers")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "confirmed"))
+      .order("desc")
+      .take(limit);
+  },
+});
+
 export const readIssue = internalQuery({
   args: { issueId: v.id("newsletterIssues") },
   handler: async (ctx, args) => {
@@ -354,7 +368,10 @@ export const setSetting = internalMutation({
       });
       return null;
     }
-    await ctx.db.patch(existing._id, { value: args.value, updatedAt: Date.now() });
+    await ctx.db.patch(existing._id, {
+      value: args.value,
+      updatedAt: Date.now(),
+    });
     return null;
   },
 });
@@ -457,7 +474,9 @@ export const handleEmailEvent = internalMutation({
     const subscriber = email
       ? await ctx.db
           .query("newsletterSubscribers")
-          .withIndex("by_emailNormalized", (q) => q.eq("emailNormalized", email))
+          .withIndex("by_emailNormalized", (q) =>
+            q.eq("emailNormalized", email),
+          )
           .unique()
       : null;
     const broadcastId =
@@ -590,7 +609,9 @@ async function subscriberByTokenHash(
 ) {
   return await ctx.db
     .query("newsletterSubscribers")
-    .withIndex("by_tokenHash", (q) => q.eq("tokenHash", normalizeTokenHash(tokenHash)))
+    .withIndex("by_tokenHash", (q) =>
+      q.eq("tokenHash", normalizeTokenHash(tokenHash)),
+    )
     .unique();
 }
 
@@ -607,7 +628,10 @@ async function issueBySlug(ctx: MutationCtx, slug: string) {
     .unique();
 }
 
-async function upsertIssue(ctx: MutationCtx, input: Parameters<typeof normalizeIssueInput>[0]) {
+async function upsertIssue(
+  ctx: MutationCtx,
+  input: Parameters<typeof normalizeIssueInput>[0],
+) {
   const issue = normalizeIssueInput(input);
   const existing = await ctx.db
     .query("newsletterIssues")

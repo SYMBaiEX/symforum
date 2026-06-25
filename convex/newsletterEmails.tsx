@@ -27,12 +27,22 @@ const SEGMENT_NAME = "SYMBaiEX Newsletter";
 const TOPIC_NAME = "Field Notes";
 const SEGMENT_SETTING = "resend.segmentId";
 const TOPIC_SETTING = "resend.topicId";
+const RESEND_BROADCAST_NAME_MAX_LENGTH = 70;
+const RESEND_REQUEST_INTERVAL_MS = 260;
+
+type ResendPacer = () => Promise<void>;
 
 const readSubscriberRef = makeFunctionReference<
   "query",
   { subscriberId: Id<"newsletterSubscribers"> },
   Doc<"newsletterSubscribers"> | null
 >("newsletter:readSubscriber");
+
+const listConfirmedSubscribersForResendSyncRef = makeFunctionReference<
+  "query",
+  { limit?: number },
+  Doc<"newsletterSubscribers">[]
+>("newsletter:listConfirmedSubscribersForResendSync");
 
 const readIssueRef = makeFunctionReference<
   "query",
@@ -231,68 +241,20 @@ export const syncSubscriberToResend = internalAction({
 
     try {
       const client = resendSdk();
-      const { segmentId, topicId } = await ensureResendListSettings(ctx, client);
-      const unsubscribed = subscriber.status !== "confirmed";
-      const topicSubscription = unsubscribed ? "opt_out" : "opt_in";
-      let contactId = subscriber.resendContactId;
-
-      if (!contactId) {
-        const existing = await client.contacts.get({ email: subscriber.email });
-        if (existing.data) {
-          contactId = existing.data.id;
-        } else if (existing.error && existing.error.name !== "not_found") {
-          throw new Error(existing.error.message);
-        }
-      }
-
-      if (contactId) {
-        const updated = await client.contacts.update({
-          id: contactId,
-          unsubscribed,
-          properties: {
-            source: subscriber.source,
-            status: subscriber.status,
-          },
-        });
-        if (updated.error) {
-          throw new Error(updated.error.message);
-        }
-        const segment = await client.contacts.segments.add({
-          contactId,
-          segmentId,
-        });
-        if (segment.error && segment.error.name !== "validation_error") {
-          throw new Error(segment.error.message);
-        }
-        const topic = await client.contacts.topics.update({
-          id: contactId,
-          topics: [{ id: topicId, subscription: topicSubscription }],
-        });
-        if (topic.error) {
-          throw new Error(topic.error.message);
-        }
-      } else {
-        const created = await client.contacts.create({
-          email: subscriber.email,
-          unsubscribed,
-          properties: {
-            source: subscriber.source,
-            status: subscriber.status,
-          },
-          segments: [{ id: segmentId }],
-          topics: [{ id: topicId, subscription: topicSubscription }],
-        });
-        if (created.error) {
-          throw new Error(created.error.message);
-        }
-        contactId = created.data.id;
-      }
-
-      await ctx.runMutation(markSubscriberResendStateRef, {
-        subscriberId: subscriber._id,
-        resendContactId: contactId,
-        resendSyncStatus: "synced",
-      });
+      const pacer = createResendPacer();
+      const { segmentId, topicId } = await ensureResendListSettings(
+        ctx,
+        client,
+        pacer,
+      );
+      await syncSubscriberRecordToResend(
+        ctx,
+        client,
+        subscriber,
+        segmentId,
+        topicId,
+        pacer,
+      );
     } catch (error) {
       await ctx.runMutation(markSubscriberResendStateRef, {
         subscriberId: args.subscriberId,
@@ -352,22 +314,46 @@ export const sendNewsletterIssue = internalAction({
 
     try {
       const client = resendSdk();
-      const { segmentId, topicId } = await ensureResendListSettings(ctx, client);
+      const pacer = createResendPacer();
+      const { segmentId, topicId } = await ensureResendListSettings(
+        ctx,
+        client,
+        pacer,
+      );
+      const audience = await syncConfirmedAudienceForBroadcast(
+        ctx,
+        client,
+        segmentId,
+        topicId,
+        pacer,
+      );
+      if (audience.confirmed === 0) {
+        throw new Error(
+          "No confirmed newsletter subscribers. Confirm at least one subscriber before sending a broadcast.",
+        );
+      }
+      if (audience.synced === 0) {
+        throw new Error(
+          `No confirmed subscribers could be synced to Resend (${audience.failed} failed).`,
+        );
+      }
       const siteUrl = process.env.NEWSLETTER_SITE_URL || "https://symbaiex.com";
       const unsubscribeUrl = `${siteUrl}/newsletter/preferences`;
       const { html, text } = await renderIssueEmail(issue, unsubscribeUrl);
-      const response = await client.broadcasts.create({
-        name: issue.subject,
-        from: fromEmail(),
-        replyTo: replyToEmails(),
-        subject: issue.subject,
-        previewText: issue.previewText,
-        html,
-        text,
-        segmentId,
-        topicId,
-        send: true,
-      });
+      const response = await callResend(pacer, () =>
+        client.broadcasts.create({
+          name: resendBroadcastName(issue),
+          from: fromEmail(),
+          replyTo: replyToEmails(),
+          subject: issue.subject,
+          previewText: issue.previewText,
+          html,
+          text,
+          segmentId,
+          topicId,
+          send: true,
+        }),
+      );
       if (response.error) {
         throw new Error(response.error.message);
       }
@@ -387,24 +373,155 @@ export const sendNewsletterIssue = internalAction({
   },
 });
 
+async function syncConfirmedAudienceForBroadcast(
+  ctx: ActionCtx,
+  client: ResendSdk,
+  segmentId: string,
+  topicId: string,
+  pacer: ResendPacer,
+) {
+  const subscribers = await ctx.runQuery(
+    listConfirmedSubscribersForResendSyncRef,
+    {
+      limit: 100,
+    },
+  );
+  let synced = 0;
+  let failed = 0;
+
+  for (const subscriber of subscribers) {
+    try {
+      await syncSubscriberRecordToResend(
+        ctx,
+        client,
+        subscriber,
+        segmentId,
+        topicId,
+        pacer,
+      );
+      synced += 1;
+    } catch (error) {
+      await ctx.runMutation(markSubscriberResendStateRef, {
+        subscriberId: subscriber._id,
+        resendSyncStatus: "failed",
+        resendError: errorMessage(error),
+      });
+      failed += 1;
+    }
+  }
+
+  return { confirmed: subscribers.length, synced, failed };
+}
+
+async function syncSubscriberRecordToResend(
+  ctx: ActionCtx,
+  client: ResendSdk,
+  subscriber: Doc<"newsletterSubscribers">,
+  segmentId: string,
+  topicId: string,
+  pacer: ResendPacer,
+) {
+  const unsubscribed = subscriber.status !== "confirmed";
+  const topicSubscription = unsubscribed ? "opt_out" : "opt_in";
+  let contactId = subscriber.resendContactId;
+
+  if (!contactId) {
+    const existing = await callResend(pacer, () =>
+      client.contacts.get({ email: subscriber.email }),
+    );
+    if (existing.data) {
+      contactId = existing.data.id;
+    } else if (existing.error && existing.error.name !== "not_found") {
+      throw new Error(existing.error.message);
+    }
+  }
+
+  const resolvedContactId = contactId;
+
+  if (resolvedContactId) {
+    const updated = await callResend(pacer, () =>
+      client.contacts.update({
+        id: resolvedContactId,
+        unsubscribed,
+        properties: {
+          source: subscriber.source,
+          status: subscriber.status,
+        },
+      }),
+    );
+    if (updated.error) {
+      throw new Error(updated.error.message);
+    }
+
+    const segment = await callResend(pacer, () =>
+      client.contacts.segments.add({
+        contactId: resolvedContactId,
+        segmentId,
+      }),
+    );
+    if (segment.error && segment.error.name !== "validation_error") {
+      throw new Error(segment.error.message);
+    }
+
+    const topic = await callResend(pacer, () =>
+      client.contacts.topics.update({
+        id: resolvedContactId,
+        topics: [{ id: topicId, subscription: topicSubscription }],
+      }),
+    );
+    if (topic.error) {
+      throw new Error(topic.error.message);
+    }
+  } else {
+    const created = await callResend(pacer, () =>
+      client.contacts.create({
+        email: subscriber.email,
+        unsubscribed,
+        properties: {
+          source: subscriber.source,
+          status: subscriber.status,
+        },
+        segments: [{ id: segmentId }],
+        topics: [{ id: topicId, subscription: topicSubscription }],
+      }),
+    );
+    if (created.error) {
+      throw new Error(created.error.message);
+    }
+    contactId = created.data.id;
+  }
+
+  await ctx.runMutation(markSubscriberResendStateRef, {
+    subscriberId: subscriber._id,
+    resendContactId: contactId,
+    resendSyncStatus: "synced",
+  });
+}
+
 async function ensureResendListSettings(
   ctx: ActionCtx,
   client: ResendSdk,
+  pacer: ResendPacer,
 ) {
-  const segmentId = await ensureSegment(ctx, client);
-  const topicId = await ensureTopic(ctx, client);
+  const segmentId = await ensureSegment(ctx, client, pacer);
+  const topicId = await ensureTopic(ctx, client, pacer);
   return { segmentId, topicId };
 }
 
 async function ensureSegment(
   ctx: ActionCtx,
   client: ResendSdk,
+  pacer: ResendPacer,
 ) {
-  const existingId = await ctx.runQuery(getSettingRef, { key: SEGMENT_SETTING });
+  const existingId = await ctx.runQuery(getSettingRef, {
+    key: SEGMENT_SETTING,
+  });
   if (existingId) {
     return existingId;
   }
-  const list = await client.segments.list({ limit: 100 });
+  const list = await callResend(pacer, () =>
+    client.segments.list({ limit: 100 }),
+  );
   if (list.error) {
     throw new Error(list.error.message);
   }
@@ -416,7 +533,9 @@ async function ensureSegment(
     });
     return found.id;
   }
-  const created = await client.segments.create({ name: SEGMENT_NAME });
+  const created = await callResend(pacer, () =>
+    client.segments.create({ name: SEGMENT_NAME }),
+  );
   if (created.error) {
     throw new Error(created.error.message);
   }
@@ -430,29 +549,38 @@ async function ensureSegment(
 async function ensureTopic(
   ctx: ActionCtx,
   client: ResendSdk,
+  pacer: ResendPacer,
 ) {
   const existingId = await ctx.runQuery(getSettingRef, { key: TOPIC_SETTING });
   if (existingId) {
     return existingId;
   }
-  const list = await client.topics.list();
+  const list = await callResend(pacer, () => client.topics.list());
   if (list.error) {
     throw new Error(list.error.message);
   }
   const found = list.data.data.find((topic) => topic.name === TOPIC_NAME);
   if (found) {
-    await ctx.runMutation(setSettingRef, { key: TOPIC_SETTING, value: found.id });
+    await ctx.runMutation(setSettingRef, {
+      key: TOPIC_SETTING,
+      value: found.id,
+    });
     return found.id;
   }
-  const created = await client.topics.create({
-    name: TOPIC_NAME,
-    description: "SYMBaiEX essays, project notes, and news digests.",
-    defaultSubscription: "opt_in",
-  });
+  const created = await callResend(pacer, () =>
+    client.topics.create({
+      name: TOPIC_NAME,
+      description: "SYMBaiEX essays, project notes, and news digests.",
+      defaultSubscription: "opt_in",
+    }),
+  );
   if (created.error) {
     throw new Error(created.error.message);
   }
-  await ctx.runMutation(setSettingRef, { key: TOPIC_SETTING, value: created.data.id });
+  await ctx.runMutation(setSettingRef, {
+    key: TOPIC_SETTING,
+    value: created.data.id,
+  });
   return created.data.id;
 }
 
@@ -462,7 +590,11 @@ async function renderIssueEmail(
 ) {
   const dailyPayload = parseDailyNewsletterPayload(issue.body);
   if (dailyPayload) {
-    return await renderDailyNewsletterEmail(issue, dailyPayload, unsubscribeUrl);
+    return await renderDailyNewsletterEmail(
+      issue,
+      dailyPayload,
+      unsubscribeUrl,
+    );
   }
 
   return await renderEmail(
@@ -500,8 +632,12 @@ async function renderDailyNewsletterEmail(
       <Heading style={styles.heading}>The Morning Signal</Heading>
       <Text style={styles.copy}>{payload.intro}</Text>
       <Section style={styles.quoteBlock}>
-        <Text style={styles.quoteMark}>{"("}signal{")"}</Text>
-        <Text style={styles.quoteText}>&ldquo;{payload.quote.quote}&rdquo;</Text>
+        <Text style={styles.quoteMark}>
+          {"("}signal{")"}
+        </Text>
+        <Text style={styles.quoteText}>
+          &ldquo;{payload.quote.quote}&rdquo;
+        </Text>
         <Text style={styles.quoteAuthor}>
           - {payload.quote.author} / {payload.quote.source}
         </Text>
@@ -625,8 +761,7 @@ function isResendConfigured() {
 
 function fromEmail() {
   return (
-    process.env.NEWSLETTER_FROM_EMAIL ||
-    "SYMBaiEX <onboarding@resend.dev>"
+    process.env.NEWSLETTER_FROM_EMAIL || "SYMBaiEX <onboarding@resend.dev>"
   );
 }
 
@@ -640,8 +775,54 @@ function testUnsubscribeUrl() {
   return `${siteUrl}/newsletter/preferences`;
 }
 
+function createResendPacer(intervalMs = RESEND_REQUEST_INTERVAL_MS) {
+  let nextRequestAt = 0;
+  return async () => {
+    const now = Date.now();
+    const waitMs = Math.max(0, nextRequestAt - now);
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+    nextRequestAt = Date.now() + intervalMs;
+  };
+}
+
+async function callResend<Result>(
+  pacer: ResendPacer,
+  request: () => Promise<Result>,
+) {
+  await pacer();
+  return await request();
+}
+
+async function sleep(milliseconds: number) {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function resendBroadcastName(
+  issue: Pick<Doc<"newsletterIssues">, "slug" | "subject">,
+) {
+  return (
+    limitPlainText(issue.subject, RESEND_BROADCAST_NAME_MAX_LENGTH) ||
+    limitPlainText(issue.slug, RESEND_BROADCAST_NAME_MAX_LENGTH) ||
+    "SYMBaiEX newsletter"
+  );
+}
+
+function limitPlainText(value: string, maxLength: number) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLength) {
+    return clean;
+  }
+
+  const suffix = "...";
+  return `${clean.slice(0, maxLength - suffix.length).trimEnd()}${suffix}`;
+}
+
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message.slice(0, 1000) : "Unknown error";
+  return error instanceof Error
+    ? error.message.slice(0, 1000)
+    : "Unknown error";
 }
 
 const styles = {

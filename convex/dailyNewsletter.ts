@@ -82,6 +82,7 @@ const DEFAULT_TIME_ZONE = "America/Chicago";
 const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
 const DAILY_CAMPAIGN = "daily_hn_newsletter";
+const NEWSLETTER_SUBJECT_MAX_LENGTH = 70;
 
 const refreshTopStoriesRef = makeFunctionReference<
   "action",
@@ -183,7 +184,8 @@ const markDailyRunFailedRef = makeFunctionReference<
 const quoteBank = [
   {
     quoteKey: "edison-perspiration",
-    quote: "Genius is one percent inspiration and ninety-nine percent perspiration.",
+    quote:
+      "Genius is one percent inspiration and ninety-nine percent perspiration.",
     author: "Thomas Edison",
     source: "Quote Investigator review of the Edison attribution",
   },
@@ -195,7 +197,8 @@ const quoteBank = [
   },
   {
     quoteKey: "hopper-dangerous-phrase",
-    quote: "The most dangerous phrase in the language is, 'We've always done it this way.'",
+    quote:
+      "The most dangerous phrase in the language is, 'We've always done it this way.'",
     author: "Grace Hopper",
     source: "Quote Investigator, 1976 Hopper attribution",
   },
@@ -207,7 +210,8 @@ const quoteBank = [
   },
   {
     quoteKey: "lovelace-analytical-engine",
-    quote: "The Analytical Engine weaves algebraic patterns, just as the Jacquard loom weaves flowers and leaves.",
+    quote:
+      "The Analytical Engine weaves algebraic patterns, just as the Jacquard loom weaves flowers and leaves.",
     author: "Ada Lovelace",
     source: "notes on the Analytical Engine, 1843",
   },
@@ -219,19 +223,22 @@ const quoteBank = [
   },
   {
     quoteKey: "musk-important-enough",
-    quote: "When something is important enough, you do it even if the odds are not in your favor.",
+    quote:
+      "When something is important enough, you do it even if the odds are not in your favor.",
     author: "Elon Musk",
     source: "public interviews and talks",
   },
   {
     quoteKey: "tesla-future-worked",
-    quote: "The present is theirs; the future, for which I really worked, is mine.",
+    quote:
+      "The present is theirs; the future, for which I really worked, is mine.",
     author: "Nikola Tesla",
     source: "attributed in Tesla interviews and essays",
   },
   {
     quoteKey: "fuller-change-model",
-    quote: "To change something, build a new model that makes the existing model obsolete.",
+    quote:
+      "To change something, build a new model that makes the existing model obsolete.",
     author: "Buckminster Fuller",
     source: "attributed in Buckminster Fuller lectures",
   },
@@ -437,7 +444,9 @@ export const runDailyNewsletter = internalAction({
         intro,
         themeLabel,
         quote,
-        topStories: topStories.map((story) => storyForPayload(story, siteUrl, runDate)),
+        topStories: topStories.map((story) =>
+          storyForPayload(story, siteUrl, runDate),
+        ),
         additionalStories: additionalStories.map((story) =>
           storyForPayload(story, siteUrl, runDate),
         ),
@@ -542,9 +551,7 @@ export const listAdminSendLogs = query({
     if (runDate) {
       return await ctx.db
         .query("newsletterSendLogs")
-        .withIndex("by_runDate_and_createdAt", (q) =>
-          q.eq("runDate", runDate),
-        )
+        .withIndex("by_runDate_and_createdAt", (q) => q.eq("runDate", runDate))
         .order("desc")
         .take(100);
     }
@@ -661,7 +668,10 @@ export const selectDailyQuote = internalMutation({
         )
         .order("desc")
         .take(1);
-      if (recent[0] && Date.now() - recent[0].usedAt < 14 * 24 * 60 * 60 * 1000) {
+      if (
+        recent[0] &&
+        Date.now() - recent[0].usedAt < 14 * 24 * 60 * 60 * 1000
+      ) {
         recentlyUsed.add(quote.quoteKey);
       }
     }
@@ -873,7 +883,11 @@ function rankStories(stories: NewsStory[]) {
       const discussionScore = (story.descendants ?? 0) / 8;
       const sourceBonus = story.url ? 5 : 0;
       const relevanceScore =
-        rankScore + popularityScore + discussionScore + themeScore * 7 + sourceBonus;
+        rankScore +
+        popularityScore +
+        discussionScore +
+        themeScore * 7 +
+        sourceBonus;
 
       return {
         ...story,
@@ -1000,7 +1014,10 @@ function subjectForDate(runDate: string, themeLabel: string) {
     day: "numeric",
     timeZone: "UTC",
   }).format(date);
-  return `The Morning Signal from SYMBaiEX - ${label}: ${themeLabel}`;
+  return limitPlainText(
+    `SYMBaiEX Morning Signal - ${label}: ${themeLabel}`,
+    NEWSLETTER_SUBJECT_MAX_LENGTH,
+  );
 }
 
 function introForThemes(themeLabel: string) {
@@ -1052,6 +1069,16 @@ function clampNumber(
   return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
+function limitPlainText(value: string, maxLength: number) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLength) {
+    return clean;
+  }
+
+  const suffix = "...";
+  return `${clean.slice(0, maxLength - suffix.length).trimEnd()}${suffix}`;
+}
+
 function hashString(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -1061,7 +1088,9 @@ function hashString(value: string) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message.slice(0, 1000) : "Unknown error";
+  return error instanceof Error
+    ? error.message.slice(0, 1000)
+    : "Unknown error";
 }
 
 async function requireOwner(ctx: MutationCtx | QueryCtx) {
