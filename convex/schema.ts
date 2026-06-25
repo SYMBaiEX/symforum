@@ -354,7 +354,6 @@ export default defineSchema({
       v.literal("server"),
       v.literal("api"),
       v.literal("convex"),
-      v.literal("openpanel"),
     ),
     path: v.optional(v.string()),
     route: v.optional(v.string()),

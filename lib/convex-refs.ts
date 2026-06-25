@@ -260,8 +260,7 @@ export type AnalyticsSource =
   | "client"
   | "server"
   | "api"
-  | "convex"
-  | "openpanel";
+  | "convex";
 
 export type AnalyticsEventRecord = {
   _id: string;
@@ -298,11 +297,6 @@ export type AnalyticsSummaryRecord = {
   sources: Array<{ key: AnalyticsSource; count: number }>;
   daily: Array<{ date: string; events: number; pageViews: number }>;
   recent: AnalyticsEventRecord[];
-  openPanel: {
-    mode: string;
-    proxyPath: string;
-    clientConfigured: boolean;
-  };
 };
 
 export type AdminOverviewRecord = {

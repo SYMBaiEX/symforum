@@ -13,7 +13,6 @@ const analyticsSource = v.union(
   v.literal("server"),
   v.literal("api"),
   v.literal("convex"),
-  v.literal("openpanel"),
 );
 
 const NAME_LIMIT = 96;
@@ -172,11 +171,6 @@ export const summaryAdmin = query({
       }>,
       daily: dailyBuckets(events, days),
       recent: events.slice(0, 20),
-      openPanel: {
-        mode: "optional",
-        proxyPath: "/api/op",
-        clientConfigured: false,
-      },
     };
   },
 });

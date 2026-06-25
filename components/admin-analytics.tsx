@@ -23,8 +23,6 @@ export function AdminAnalytics() {
       ),
     [summary],
   );
-  const openPanelEnabled = Boolean(process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID);
-
   return (
     <section className="mt-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -106,10 +104,9 @@ export function AdminAnalytics() {
             {summary === undefined ? <StatusLine>Loading analytics</StatusLine> : null}
           </div>
           <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
-            Native Convex analytics are always on. OpenPanel is{" "}
-            {openPanelEnabled ? "configured" : "ready but not configured"} and
-            proxied through <code className="font-mono">/api/op</code> when a
-            client id is present.
+            Convex is the analytics system of record: page views, sessions,
+            events, visitors, and signed-in activity all land in the app
+            database and surface here without a third-party dashboard.
           </p>
         </div>
 

@@ -496,8 +496,6 @@ function OwnerDashboard() {
               <p>POST /api/admin/newsletter/issues/[slug]/test</p>
               <p>POST /api/admin/newsletter/issues/[slug]/schedule</p>
               <p>POST /api/admin/newsletter/issues/[slug]/send</p>
-              <p>GET /api/op/op1.js</p>
-              <p>POST /api/op/track</p>
             </div>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
               Send{" "}
