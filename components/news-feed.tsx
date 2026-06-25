@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -23,6 +16,7 @@ import {
   type NewsSnapshotRecord,
   type NewsTimelineRecord,
 } from "@/lib/convex-refs";
+import { isAuthRequiredError } from "@/lib/auth-errors";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
 import { newsStoryPath } from "@/lib/news-slugs";
@@ -423,6 +417,7 @@ function NewsVoteControl({
 }) {
   const setInteraction = useMutation(convexRefs.interactions.set);
   const [authOpen, setAuthOpen] = useState(false);
+  const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const viewer = summary?.viewer;
   const vote: -1 | 0 | 1 =
@@ -436,6 +431,7 @@ function NewsVoteControl({
       return;
     }
     setPending(true);
+    setError("");
     try {
       await setInteraction({
         entityType: "hnStory",
@@ -443,8 +439,12 @@ function NewsVoteControl({
         vote: vote === nextVote ? 0 : nextVote,
         saved: viewer?.saved ?? false,
       });
-    } catch {
-      setAuthOpen(true);
+    } catch (caught) {
+      if (isAuthRequiredError(caught)) {
+        setAuthOpen(true);
+        return;
+      }
+      setError("Could not update vote. Try again.");
     } finally {
       setPending(false);
     }
@@ -485,25 +485,17 @@ function NewsVoteControl({
           <ChevronDown />
         </Button>
       </div>
-      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
-        <DialogContent className="rounded-none sm:max-w-sm sm:rounded-none">
-          <DialogHeader>
-            <DialogTitle>Sign in to vote</DialogTitle>
-            <DialogDescription>
-              Use a SYM handle to upvote, downvote, save, and comment on the
-              SYMBiEX news layer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:justify-start sm:space-x-0">
-            <Button asChild>
-              <Link href="/signin?mode=signUp&redirectTo=/news">Sign up</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/signin?mode=signIn&redirectTo=/news">Sign in</Link>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {error ? (
+        <span className="sr-only" role="status">
+          {error}
+        </span>
+      ) : null}
+      <AuthRequiredDialog
+        action="vote and discuss"
+        open={authOpen}
+        redirectTo="/news"
+        setOpen={setAuthOpen}
+      />
     </>
   );
 }

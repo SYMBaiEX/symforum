@@ -1,13 +1,15 @@
 "use client";
 
+import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { CornerDownRight } from "lucide-react";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 type CommentRecord = {
@@ -51,16 +53,17 @@ function LiveComments({
   entityType: "post" | "hnStory";
   entityId: string;
 }) {
+  const pathname = usePathname();
   const comments = useQuery(convexRefs.comments.list, { entityType, entityId });
   const addComment = useMutation(convexRefs.comments.add);
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const [body, setBody] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
+  const [authOpen, setAuthOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const signinHref = `/signin?redirectTo=${encodeURIComponent(
-    commentRedirectPath(entityType, entityId),
-  )}`;
+  const redirectTo = pathname ?? commentRedirectPath(entityType, entityId);
   const thread = useMemo(
     () => buildCommentThread(comments ?? []),
     [comments],
@@ -71,6 +74,10 @@ function LiveComments({
     nextBody: string,
     afterSubmit: () => void,
   ) {
+    if (!isAuthenticated) {
+      setAuthOpen(true);
+      return;
+    }
     setPending(true);
     setError("");
     try {
@@ -82,7 +89,11 @@ function LiveComments({
       });
       afterSubmit();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not comment");
+      if (isAuthRequiredError(caught)) {
+        setAuthOpen(true);
+        return;
+      }
+      setError(userFacingError(caught, "Could not comment"));
     } finally {
       setPending(false);
     }
@@ -111,17 +122,14 @@ function LiveComments({
           <Button
             type="submit"
             size="sm"
-            disabled={pending || body.trim().length < 2}
+            disabled={authLoading || pending || body.trim().length < 2}
           >
             Post comment
           </Button>
         </div>
         {error ? (
           <p className="border border-row-border p-2.5 text-sm text-muted-foreground">
-            {error}{" "}
-            <Link href={signinHref} className="underline">
-              Sign in
-            </Link>
+            {error}
           </p>
         ) : null}
       </form>
@@ -142,14 +150,22 @@ function LiveComments({
                 pending={pending}
                 replyingTo={replyingTo}
                 replyBodies={replyBodies}
+                requestAuth={() => setAuthOpen(true)}
                 setReplyingTo={setReplyingTo}
                 setReplyBodies={setReplyBodies}
                 submitReply={submitComment}
+                userCanReply={isAuthenticated && !authLoading}
               />
             ))}
           </div>
         )}
       </div>
+      <AuthRequiredDialog
+        action="join the thread"
+        open={authOpen}
+        redirectTo={redirectTo}
+        setOpen={setAuthOpen}
+      />
     </div>
   );
 }
@@ -160,15 +176,18 @@ function CommentThread({
   pending,
   replyingTo,
   replyBodies,
+  requestAuth,
   setReplyingTo,
   setReplyBodies,
   submitReply,
+  userCanReply,
 }: {
   comment: ThreadComment;
   depth: number;
   pending: boolean;
   replyingTo: string | null;
   replyBodies: Record<string, string>;
+  requestAuth: () => void;
   setReplyingTo: (commentId: string | null) => void;
   setReplyBodies: (value: Record<string, string>) => void;
   submitReply: (
@@ -176,6 +195,7 @@ function CommentThread({
     body: string,
     afterSubmit: () => void,
   ) => Promise<void>;
+  userCanReply: boolean;
 }) {
   const replyBody = replyBodies[comment._id] ?? "";
   const isReplying = replyingTo === comment._id;
@@ -211,7 +231,13 @@ function CommentThread({
             variant="ghost"
             size="sm"
             className="h-6 rounded-none px-1.5 font-mono text-[10px] uppercase text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-            onClick={() => setReplyingTo(isReplying ? null : comment._id)}
+            onClick={() => {
+              if (!userCanReply) {
+                requestAuth();
+                return;
+              }
+              setReplyingTo(isReplying ? null : comment._id);
+            }}
           >
             <CornerDownRight aria-hidden="true" />
             Reply
@@ -260,9 +286,11 @@ function CommentThread({
               pending={pending}
               replyingTo={replyingTo}
               replyBodies={replyBodies}
+              requestAuth={requestAuth}
               setReplyingTo={setReplyingTo}
               setReplyBodies={setReplyBodies}
               submitReply={submitReply}
+              userCanReply={userCanReply}
             />
           ))}
         </div>
