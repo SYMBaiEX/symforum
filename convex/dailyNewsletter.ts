@@ -79,6 +79,7 @@ type DailyRunStart =
     };
 
 const DEFAULT_TIME_ZONE = "America/Chicago";
+const DEFAULT_SEND_TIME_LOCAL = "07:15";
 const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
 const DAILY_CAMPAIGN = "daily_hn_newsletter";
@@ -375,12 +376,13 @@ type DailyNewsletterAdminSettings = {
   enabled: boolean;
   testMode: boolean;
   timeZone: string;
+  sendTimeLocal: string;
   maxIndexedArticles: number;
   maxNewsletterStories: number;
   siteUrl: string;
   cron: {
     hnRefreshUtc: string;
-    newsletterSendUtc: string;
+    scheduleCheckUtc: string;
   };
 };
 
@@ -397,6 +399,7 @@ export const updateAdminSettings = mutation({
     enabled: v.optional(v.boolean()),
     testMode: v.optional(v.boolean()),
     timeZone: v.optional(v.string()),
+    sendTimeLocal: v.optional(v.string()),
     maxIndexedArticles: v.optional(v.number()),
     maxNewsletterStories: v.optional(v.number()),
     siteUrl: v.optional(v.string()),
@@ -421,6 +424,12 @@ export const updateAdminSettings = mutation({
       updates.push({
         key: "dailyNewsletter.timeZone",
         value: normalizeTimeZone(args.timeZone),
+      });
+    }
+    if (args.sendTimeLocal !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.sendTimeLocal",
+        value: normalizeSendTime(args.sendTimeLocal),
       });
     }
     if (args.maxIndexedArticles !== undefined) {
@@ -461,6 +470,50 @@ export const updateAdminSettings = mutation({
     }
 
     return await readAdminSettings(ctx);
+  },
+});
+
+export const checkDailyNewsletterSchedule = internalAction({
+  args: {},
+  handler: async (ctx): Promise<DailyRunResult> => {
+    const config = await readDailyConfig(ctx, {});
+    const sendTimeLocal = normalizeSendTime(
+      (await ctx.runQuery(getSettingRef, {
+        key: "dailyNewsletter.sendTimeLocal",
+      })) ?? DEFAULT_SEND_TIME_LOCAL,
+    );
+    const now = Date.now();
+    const runDate = dateInTimeZone(now, config.timeZone);
+
+    if (!config.sendEnabled) {
+      return {
+        ok: true,
+        skipped: true,
+        runDate,
+        reason: "daily-newsletter-disabled",
+      };
+    }
+    if (config.testMode) {
+      return {
+        ok: true,
+        skipped: true,
+        runDate,
+        reason: "daily-newsletter-test-mode",
+      };
+    }
+    if (!isPastConfiguredSendTime(now, config.timeZone, sendTimeLocal)) {
+      return {
+        ok: true,
+        skipped: true,
+        runDate,
+        reason: "before-configured-send-time",
+      };
+    }
+
+    return await ctx.runAction(runDailyNewsletterRef, {
+      runDate,
+      mode: "cron",
+    });
   },
 });
 
@@ -983,10 +1036,17 @@ async function readAdminSettings(
     ctx,
     "dailyNewsletter.timeZone",
   );
+  const sendTimeSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.sendTimeLocal",
+  );
 
   return {
     siteUrl: normalizeSiteUrl(siteUrl),
     timeZone: normalizeTimeZone(timeZoneSetting ?? DEFAULT_TIME_ZONE),
+    sendTimeLocal: normalizeSendTime(
+      sendTimeSetting ?? DEFAULT_SEND_TIME_LOCAL,
+    ),
     enabled: enabledSetting === null ? true : enabledSetting !== "false",
     testMode:
       testModeSetting === null ? false : testModeSetting === "true",
@@ -1004,7 +1064,7 @@ async function readAdminSettings(
     ),
     cron: {
       hnRefreshUtc: "0 11 * * *",
-      newsletterSendUtc: "15 12 * * *",
+      scheduleCheckUtc: "*/15 * * * *",
     },
   };
 }
@@ -1225,6 +1285,52 @@ function normalizeTimeZone(value: string) {
   } catch {
     return DEFAULT_TIME_ZONE;
   }
+}
+
+function normalizeSendTime(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return DEFAULT_SEND_TIME_LOCAL;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return DEFAULT_SEND_TIME_LOCAL;
+  }
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function isPastConfiguredSendTime(
+  timestamp: number,
+  timeZone: string,
+  sendTimeLocal: string,
+) {
+  const [targetHour, targetMinute] = sendTimeLocal.split(":").map(Number);
+  const current = timePartsInZone(timestamp, timeZone);
+  return (
+    current.hour * 60 + current.minute >= targetHour * 60 + targetMinute
+  );
+}
+
+function timePartsInZone(timestamp: number, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(timestamp);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value ?? 0,
+  );
+  return { hour, minute };
 }
 
 function numberFromSetting(value: string | null) {

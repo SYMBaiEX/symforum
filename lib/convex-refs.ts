@@ -192,12 +192,13 @@ export type DailyNewsletterSettingsRecord = {
   enabled: boolean;
   testMode: boolean;
   timeZone: string;
+  sendTimeLocal: string;
   maxIndexedArticles: number;
   maxNewsletterStories: number;
   siteUrl: string;
   cron: {
     hnRefreshUtc: string;
-    newsletterSendUtc: string;
+    scheduleCheckUtc: string;
   };
 };
 
@@ -583,6 +584,7 @@ export const convexRefs = {
         enabled?: boolean;
         testMode?: boolean;
         timeZone?: string;
+        sendTimeLocal?: string;
         maxIndexedArticles?: number;
         maxNewsletterStories?: number;
         siteUrl?: string;

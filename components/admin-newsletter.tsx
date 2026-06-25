@@ -88,6 +88,7 @@ export function AdminNewsletter() {
     enabled: true,
     testMode: false,
     timeZone: "America/Chicago",
+    sendTimeLocal: "07:15",
     maxIndexedArticles: 40,
     maxNewsletterStories: 8,
     siteUrl: "https://symbaiex.com",
@@ -106,6 +107,7 @@ export function AdminNewsletter() {
       enabled: dailySettings.enabled,
       testMode: dailySettings.testMode,
       timeZone: dailySettings.timeZone,
+      sendTimeLocal: dailySettings.sendTimeLocal,
       maxIndexedArticles: dailySettings.maxIndexedArticles,
       maxNewsletterStories: dailySettings.maxNewsletterStories,
       siteUrl: dailySettings.siteUrl,
@@ -317,6 +319,7 @@ export function AdminNewsletter() {
         enabled: updated.enabled,
         testMode: updated.testMode,
         timeZone: updated.timeZone,
+        sendTimeLocal: updated.sendTimeLocal,
         maxIndexedArticles: updated.maxIndexedArticles,
         maxNewsletterStories: updated.maxNewsletterStories,
         siteUrl: updated.siteUrl,
@@ -666,10 +669,10 @@ function DailyAutomationPanel({
         </div>
         <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
           Convex refreshes Hacker News at {settings?.cron.hnRefreshUtc ?? "0 11 * * *"} UTC
-          and queues the daily newsletter at{" "}
-          {settings?.cron.newsletterSendUtc ?? "15 12 * * *"} UTC. The
-          newsletter uses the indexed stories, stored quote rotation, and this
-          settings record before sending through Resend.
+          and checks the newsletter schedule with{" "}
+          {settings?.cron.scheduleCheckUtc ?? "*/15 * * * *"}. The daily send
+          uses the configured local time, indexed stories, stored quote
+          rotation, and this settings record before sending through Resend.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <ToggleField
@@ -687,6 +690,15 @@ function DailyAutomationPanel({
               value={value.timeZone}
               onChange={(event) =>
                 onChange({ ...value, timeZone: event.target.value })
+              }
+            />
+          </Field>
+          <Field label="Daily send time">
+            <Input
+              type="time"
+              value={value.sendTimeLocal}
+              onChange={(event) =>
+                onChange({ ...value, sendTimeLocal: event.target.value })
               }
             />
           </Field>

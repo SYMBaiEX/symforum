@@ -9,27 +9,19 @@ const refreshTopStoriesRef = makeFunctionReference<
   unknown
 >("news:refreshTopStories");
 
-const runDailyNewsletterRef = makeFunctionReference<
+const checkDailyNewsletterScheduleRef = makeFunctionReference<
   "action",
-  {
-    runDate?: string;
-    force?: boolean;
-    sendEnabled?: boolean;
-    testMode?: boolean;
-    maxIndexedArticles?: number;
-    maxNewsletterStories?: number;
-    mode?: "cron" | "manual" | "test";
-  },
+  Record<string, never>,
   unknown
->("dailyNewsletter:runDailyNewsletter");
+>("dailyNewsletter:checkDailyNewsletterSchedule");
 
 crons.cron("refresh Hacker News snapshot", "0 11 * * *", refreshTopStoriesRef, {
   limit: 40,
 });
 crons.cron(
-  "send daily SYMBaiEX newsletter",
-  "15 12 * * *",
-  runDailyNewsletterRef,
+  "check daily SYMBaiEX newsletter schedule",
+  "*/15 * * * *",
+  checkDailyNewsletterScheduleRef,
   {},
 );
 

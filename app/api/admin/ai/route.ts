@@ -190,6 +190,7 @@ function adminAgentTools(convex: ConvexHttpClient) {
         enabled: z.boolean().optional(),
         testMode: z.boolean().optional(),
         timeZone: z.string().optional(),
+        sendTimeLocal: z.string().regex(/^\d{1,2}:\d{2}$/).optional(),
         maxIndexedArticles: z.number().min(5).max(100).optional(),
         maxNewsletterStories: z.number().min(3).max(12).optional(),
         siteUrl: z.string().url().optional(),
