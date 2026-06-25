@@ -443,10 +443,6 @@ async function syncSubscriberRecordToResend(
       client.contacts.update({
         id: resolvedContactId,
         unsubscribed,
-        properties: {
-          source: subscriber.source,
-          status: subscriber.status,
-        },
       }),
     );
     if (updated.error) {
@@ -477,10 +473,6 @@ async function syncSubscriberRecordToResend(
       client.contacts.create({
         email: subscriber.email,
         unsubscribed,
-        properties: {
-          source: subscriber.source,
-          status: subscriber.status,
-        },
         segments: [{ id: segmentId }],
         topics: [{ id: topicId, subscription: topicSubscription }],
       }),
