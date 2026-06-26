@@ -42,6 +42,11 @@ export async function POST(request: Request) {
       ].join("\n"),
       tools: adminAgentTools(convex),
       stopWhen: isStepCount(8),
+      providerOptions: {
+        gateway: {
+          tags: ["feature:admin-ai", "surface:owner-console"],
+        },
+      },
     });
 
     return createAgentUIStreamResponse({

@@ -60,7 +60,7 @@ export function MessageResponse({
           ),
           p: ({ children }) => <p className="my-2">{children}</p>,
           pre: ({ children }) => (
-            <pre className="my-3 overflow-x-auto border bg-muted/20 p-3">
+            <pre className="my-3 overflow-x-auto bg-muted/20 p-3">
               {children}
             </pre>
           ),
