@@ -338,15 +338,62 @@
 
   .markdown-body ul,
   .markdown-body ol {
-    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.45rem;
+    padding-left: 1.45rem;
+  }
+
+  .markdown-body ul {
+    list-style: disc;
+  }
+
+  .markdown-body ol {
+    list-style: decimal;
+  }
+
+  .markdown-body ul ul {
+    list-style: circle;
+  }
+
+  .markdown-body ul ul ul {
+    list-style: square;
+  }
+
+  .markdown-body ol ol {
+    list-style: lower-alpha;
+  }
+
+  .markdown-body ol ol ol {
+    list-style: lower-roman;
+  }
+
+  .markdown-body li {
+    padding-left: 0.15rem;
   }
 
   .markdown-body li + li {
-    margin-top: 0.35rem;
+    margin-top: 0;
+  }
+
+  .markdown-body li > ul,
+  .markdown-body li > ol {
+    margin-top: 0.55rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .markdown-body li > p {
+    margin: 0;
+  }
+
+  .markdown-body li > p + p {
+    margin-top: 0.55rem;
   }
 
   .markdown-body li::marker {
     color: hsl(var(--primary));
+    font-family: var(--font-geist-mono);
+    font-size: 0.82em;
+    font-weight: 700;
   }
 
   .markdown-body input[type="checkbox"] {
