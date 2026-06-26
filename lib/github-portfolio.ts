@@ -213,56 +213,46 @@ export async function getGithubPortfolioMetrics(options?: {
   allowFallback?: boolean;
 }): Promise<GithubPortfolioMetrics> {
   try {
-    const [
-      user,
-      repos,
-      authoredPrs,
-      indexedCommits,
-      contributionActivity,
-      elizaPrs,
-      babylonPrs,
-      hyperiaPrs,
-      elizaRepo,
-      babylonRepo,
-      hyperiaRepo,
-      openControllerRepo,
-      arkLibRepo,
-    ] = await Promise.all([
-      githubJson<GithubUser>(`https://api.github.com/users/${GITHUB_USER}`),
-      githubJson<GithubRepo[]>(
-        `https://api.github.com/users/${GITHUB_USER}/repos?per_page=100&type=owner`,
-      ),
-      githubJson<GithubSearch>(
-        `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr`,
-      ),
-      githubJson<GithubSearch>(
-        `https://api.github.com/search/commits?q=author:${GITHUB_USER}`,
-        "application/vnd.github.cloak-preview+json",
-      ),
-      getPublicContributionActivity().catch(() => null),
-      githubJson<GithubSearch>(
-        `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:elizaOS/eliza`,
-      ),
-      githubJson<GithubSearch>(
-        `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:BabylonSocial/babylon`,
-      ),
-      githubJson<GithubSearch>(
-        `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:PlayHyperia/hyperforge`,
-      ),
-      githubJson<GithubRepo>("https://api.github.com/repos/elizaOS/eliza"),
-      githubJson<GithubRepo>(
-        "https://api.github.com/repos/BabylonSocial/babylon",
-      ),
-      githubJson<GithubRepo>(
-        "https://api.github.com/repos/PlayHyperia/hyperforge",
-      ),
-      githubJson<GithubRepo>(
-        "https://api.github.com/repos/SYMBaiEX/OpenController",
-      ),
-      githubJson<GithubRepo>("https://api.github.com/repos/lalalune/ArkLib").catch(
-        () => null,
-      ),
-    ]);
+    const user = await githubJson<GithubUser>(
+      `https://api.github.com/users/${GITHUB_USER}`,
+    );
+    const repos = await githubJson<GithubRepo[]>(
+      `https://api.github.com/users/${GITHUB_USER}/repos?per_page=100&type=owner`,
+    );
+    const authoredPrs = await githubJson<GithubSearch>(
+      `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr`,
+    );
+    const indexedCommits = await githubJson<GithubSearch>(
+      `https://api.github.com/search/commits?q=author:${GITHUB_USER}`,
+      "application/vnd.github.cloak-preview+json",
+    );
+    const contributionActivity = await getPublicContributionActivity().catch(
+      () => null,
+    );
+    const elizaPrs = await githubJson<GithubSearch>(
+      `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:elizaOS/eliza`,
+    );
+    const babylonPrs = await githubJson<GithubSearch>(
+      `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:BabylonSocial/babylon`,
+    );
+    const hyperiaPrs = await githubJson<GithubSearch>(
+      `https://api.github.com/search/issues?q=author:${GITHUB_USER}+type:pr+repo:PlayHyperia/hyperforge`,
+    );
+    const elizaRepo = await githubJson<GithubRepo>(
+      "https://api.github.com/repos/elizaOS/eliza",
+    );
+    const babylonRepo = await githubJson<GithubRepo>(
+      "https://api.github.com/repos/BabylonSocial/babylon",
+    );
+    const hyperiaRepo = await githubJson<GithubRepo>(
+      "https://api.github.com/repos/PlayHyperia/hyperforge",
+    );
+    const openControllerRepo = await githubJson<GithubRepo>(
+      "https://api.github.com/repos/SYMBaiEX/OpenController",
+    );
+    const arkLibRepo = await githubJson<GithubRepo>(
+      "https://api.github.com/repos/lalalune/ArkLib",
+    ).catch(() => null);
 
     const ownedRepos = Array.isArray(repos) ? repos.length : user.public_repos;
     const nonForkRepos = Array.isArray(repos)
@@ -330,9 +320,11 @@ async function githubJson<T>(
   url: string,
   accept = "application/vnd.github+json",
 ) {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
   const init: NextFetchInit = {
     headers: {
       Accept: accept,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "symbaiex-blog",
     },
@@ -340,7 +332,7 @@ async function githubJson<T>(
   };
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`GitHub request failed: ${response.status} ${url}`);
+    throw new Error(await githubErrorMessage(response, url));
   }
   return (await response.json()) as T;
 }
@@ -360,10 +352,11 @@ async function getAuthenticatedCommitMetric(
     (_, index) => startYear + index,
   );
 
-  const yearlyTotals = await Promise.all(
-    years.map((year) => githubContributionYear(token, year)),
-  );
-  const value = yearlyTotals.reduce(
+  const yearlyTotals = [];
+  for (const year of years) {
+    yearlyTotals.push(await githubContributionYear(token, year));
+  }
+  const visibleCommits = yearlyTotals.reduce(
     (total, year) => total + year.totalCommitContributions,
     0,
   );
@@ -371,13 +364,14 @@ async function getAuthenticatedCommitMetric(
     (total, year) => total + year.restrictedContributionsCount,
     0,
   );
+  const value = visibleCommits + restricted;
 
   return {
     value,
-    label: "Private + public commits",
+    label: restricted > 0 ? "Private + public activity" : "Public commits",
     detail:
       restricted > 0
-        ? `GitHub GraphQL across ${years.length} yearly windows; ${restricted} restricted contributions counted by GitHub.`
+        ? `GitHub GraphQL across ${years.length} yearly windows; ${visibleCommits} visible commit contributions plus ${restricted} restricted contributions.`
         : `GitHub GraphQL across ${years.length} yearly windows.`,
     source: "github-graphql",
     includesPrivate: true,
@@ -421,7 +415,9 @@ async function githubContributionYear(token: string, year: number) {
   const response = await fetch("https://api.github.com/graphql", init);
 
   if (!response.ok) {
-    throw new Error(`GitHub GraphQL request failed: ${response.status}`);
+    throw new Error(
+      await githubErrorMessage(response, "https://api.github.com/graphql"),
+    );
   }
 
   const payload = (await response.json()) as GraphqlContributionResponse;
@@ -433,6 +429,25 @@ async function githubContributionYear(token: string, year: number) {
     throw new Error("GitHub GraphQL did not return contributions");
   }
   return collection;
+}
+
+async function githubErrorMessage(response: Response, url: string) {
+  let providerMessage = "";
+  try {
+    const payload = (await response.clone().json()) as { message?: string };
+    providerMessage = payload.message ? `: ${payload.message}` : "";
+  } catch {
+    providerMessage = "";
+  }
+
+  const remaining = response.headers.get("x-ratelimit-remaining");
+  const reset = response.headers.get("x-ratelimit-reset");
+  const resetText = reset
+    ? `; resets ${new Date(Number(reset) * 1000).toISOString()}`
+    : "";
+  const remainingText = remaining ? `; remaining ${remaining}` : "";
+
+  return `GitHub request failed: ${response.status} ${url}${providerMessage}${remainingText}${resetText}`;
 }
 
 async function getPublicContributionActivity(): Promise<ContributionActivityMetric | null> {
