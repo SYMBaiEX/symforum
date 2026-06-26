@@ -1,23 +1,22 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
-const themeSequence = ["light", "dark", "system"] as const;
+const themeSequence = ["light", "dark"] as const;
 type ThemePreference = (typeof themeSequence)[number];
 
 const themeLabels: Record<ThemePreference, string> = {
   light: "Light",
   dark: "Dark",
-  system: "System",
 };
 
 function isThemePreference(
   value: string | undefined,
 ): value is ThemePreference {
-  return value === "light" || value === "dark" || value === "system";
+  return value === "light" || value === "dark";
 }
 
 export function ThemeToggle() {
@@ -28,17 +27,18 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
-  const currentTheme = mounted && isThemePreference(theme) ? theme : "system";
+  useEffect(() => {
+    if (mounted && !isThemePreference(theme)) {
+      setTheme("dark");
+    }
+  }, [mounted, setTheme, theme]);
+
+  const currentTheme = mounted && isThemePreference(theme) ? theme : "dark";
   const nextTheme =
     themeSequence[
       (themeSequence.indexOf(currentTheme) + 1) % themeSequence.length
     ];
-  const Icon =
-    !mounted || currentTheme === "system"
-      ? Monitor
-      : currentTheme === "dark"
-        ? Moon
-        : Sun;
+  const Icon = currentTheme === "dark" ? Moon : Sun;
 
   return (
     <Button
