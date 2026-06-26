@@ -430,6 +430,16 @@ export const convexRefs = {
       { slug: string },
       { deleted: boolean }
     >("admin:deletePost"),
+    generateUploadUrl: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      string
+    >("admin:generateUploadUrl"),
+    resolveStorageUrl: makeFunctionReference<
+      "mutation",
+      { storageId: string },
+      string | null
+    >("admin:resolveStorageUrl"),
     listSitePages: makeFunctionReference<
       "query",
       Record<string, never>,

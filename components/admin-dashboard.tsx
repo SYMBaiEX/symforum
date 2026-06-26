@@ -34,6 +34,7 @@ import {
   BarChart3,
   Copy,
   FileText,
+  ImagePlus,
   KeyRound,
   Mail,
   MessageSquare,
@@ -43,6 +44,7 @@ import {
   Save,
   ShieldCheck,
   Trash2,
+  Upload,
   UsersRound,
   Wrench,
   type LucideIcon,
@@ -50,7 +52,9 @@ import {
 import Link from "next/link";
 import {
   useMemo,
+  useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type ReactNode,
   type SelectHTMLAttributes,
@@ -244,11 +248,19 @@ function OwnerDashboard() {
   const adminInteractions = useQuery(convexRefs.admin.listInteractions, {});
   const upsertPost = useMutation(convexRefs.admin.upsertPost);
   const deletePost = useMutation(convexRefs.admin.deletePost);
+  const generateUploadUrl = useMutation(convexRefs.admin.generateUploadUrl);
+  const resolveStorageUrl = useMutation(convexRefs.admin.resolveStorageUrl);
   const createApiKey = useMutation(convexRefs.admin.createApiKey);
   const revokeApiKey = useMutation(convexRefs.admin.revokeApiKey);
   const deleteComment = useMutation(convexRefs.admin.deleteComment);
   const deleteInteraction = useMutation(convexRefs.admin.deleteInteraction);
   const [form, setForm] = useState<PostForm>(blankPost);
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const coverImageInputRef = useRef<HTMLInputElement | null>(null);
+  const bodyImageInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingImageTarget, setUploadingImageTarget] = useState<
+    "cover" | "body" | null
+  >(null);
   const [apiKeyName, setApiKeyName] = useState("Blog writer");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTabId>("overview");
@@ -475,6 +487,121 @@ function OwnerDashboard() {
     }
   }
 
+  async function uploadPostImage(file: File) {
+    if (!file.type.toLowerCase().startsWith("image/")) {
+      throw new Error("Choose an image file");
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error("Image is too large (max 8 MB)");
+    }
+
+    const uploadUrl = await generateUploadUrl({});
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!uploadResponse.ok) {
+      throw new Error("Could not upload image to storage");
+    }
+
+    const { storageId } = (await uploadResponse.json()) as {
+      storageId?: string;
+    };
+    if (!storageId) {
+      throw new Error("Storage did not return an image id");
+    }
+
+    const url = await resolveStorageUrl({ storageId });
+    if (!url) {
+      throw new Error("Could not resolve uploaded image URL");
+    }
+    return url;
+  }
+
+  async function handleCoverImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setUploadingImageTarget("cover");
+    try {
+      const url = await uploadPostImage(file);
+      const fallbackAlt = imageAltFromFilename(file.name);
+      setForm((current) => ({
+        ...current,
+        imageUrl: url,
+        imageAlt: current.imageAlt || fallbackAlt,
+      }));
+      toast.success("Cover image uploaded");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "post_cover_image_upload_failed",
+        component: "AdminDashboard",
+        action: "admin:uploadCoverImage",
+        metadata: { fileName: file.name, fileSize: file.size },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not upload image",
+      );
+    } finally {
+      setUploadingImageTarget(null);
+    }
+  }
+
+  async function handleBodyImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setUploadingImageTarget("body");
+    try {
+      const url = await uploadPostImage(file);
+      insertBodyImageMarkdown(url, imageAltFromFilename(file.name));
+      toast.success("Image inserted into body");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "post_body_image_upload_failed",
+        component: "AdminDashboard",
+        action: "admin:uploadBodyImage",
+        metadata: { fileName: file.name, fileSize: file.size },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not insert image",
+      );
+    } finally {
+      setUploadingImageTarget(null);
+    }
+  }
+
+  function insertBodyImageMarkdown(url: string, alt: string) {
+    const textarea = bodyTextareaRef.current;
+    const body = form.body;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? start;
+    const before = body.slice(0, start);
+    const after = body.slice(end);
+    const markdown = `![${escapeMarkdownAlt(alt)}](${url})`;
+    const leading = before.length > 0 && !before.endsWith("\n") ? "\n\n" : "";
+    const trailing = after.length > 0 && !after.startsWith("\n") ? "\n\n" : "";
+    const nextBody = `${before}${leading}${markdown}${trailing}${after}`;
+    const cursor = `${before}${leading}${markdown}`.length;
+
+    setForm({ ...form, body: nextBody });
+    window.requestAnimationFrame(() => {
+      bodyTextareaRef.current?.focus();
+      bodyTextareaRef.current?.setSelectionRange(cursor, cursor);
+    });
+  }
+
   async function removePost(slug: string) {
     if (!window.confirm(`Delete ${slug}?`)) {
       return;
@@ -680,8 +807,35 @@ function OwnerDashboard() {
                       required
                     />
                   </Field>
-                  <Field label="Markdown body">
+                  <div className="grid gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] uppercase text-muted-foreground">
+                        Markdown body
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={bodyImageInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={handleBodyImageUpload}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={uploadingImageTarget !== null}
+                          onClick={() => bodyImageInputRef.current?.click()}
+                        >
+                          <ImagePlus aria-hidden="true" />
+                          {uploadingImageTarget === "body"
+                            ? "Uploading"
+                            : "Insert image"}
+                        </Button>
+                      </div>
+                    </div>
                     <Textarea
+                      ref={bodyTextareaRef}
                       value={form.body}
                       onChange={(event) =>
                         setForm({ ...form, body: event.target.value })
@@ -689,7 +843,10 @@ function OwnerDashboard() {
                       rows={12}
                       required
                     />
-                  </Field>
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                      Inserts markdown at the cursor.
+                    </p>
+                  </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     <Field label="Tags">
                       <Input
@@ -731,12 +888,33 @@ function OwnerDashboard() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     <Field label="Image URL">
-                      <Input
-                        value={form.imageUrl}
-                        onChange={(event) =>
-                          setForm({ ...form, imageUrl: event.target.value })
-                        }
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          value={form.imageUrl}
+                          onChange={(event) =>
+                            setForm({ ...form, imageUrl: event.target.value })
+                          }
+                        />
+                        <input
+                          ref={coverImageInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={handleCoverImageUpload}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={uploadingImageTarget !== null}
+                          onClick={() => coverImageInputRef.current?.click()}
+                        >
+                          <Upload aria-hidden="true" />
+                          {uploadingImageTarget === "cover"
+                            ? "Uploading"
+                            : "Upload"}
+                        </Button>
+                      </div>
                     </Field>
                     <Field label="Image alt">
                       <Input
@@ -1499,12 +1677,12 @@ function AdminGate({
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="flex flex-col gap-2 text-sm font-medium">
+    <div className="flex flex-col gap-2 text-sm font-medium">
       <span className="font-mono text-[11px] uppercase text-muted-foreground">
         {label}
       </span>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -1655,6 +1833,22 @@ function postToForm(post: ConvexPostRecord): PostForm {
     imageAlt: post.imageAlt ?? "",
     imageCredit: post.imageCredit ?? "",
   };
+}
+
+function imageAltFromFilename(filename: string) {
+  const clean = filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!clean) {
+    return "Blog image";
+  }
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function escapeMarkdownAlt(value: string) {
+  return value.replace(/[\[\]]/g, "");
 }
 
 function createToken() {

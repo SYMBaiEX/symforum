@@ -281,6 +281,20 @@
     line-height: 1.7;
   }
 
+  .markdown-body img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    margin: 1.5rem 0;
+    background: hsl(var(--muted));
+    object-fit: cover;
+  }
+
+  .markdown-body p > img:only-child {
+    margin: 0;
+  }
+
   .markdown-body table {
     display: block;
     width: 100%;

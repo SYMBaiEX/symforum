@@ -447,6 +447,22 @@ export const deletePost = mutation({
   },
 });
 
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const resolveStorageUrl = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
 export const listSitePages = query({
   args: {},
   handler: async (ctx) => {
