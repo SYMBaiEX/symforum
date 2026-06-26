@@ -14,7 +14,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AboutPage() {
   const page = await getSitePage("about");
-  const imageUrl = page?.showImage ? safeImageUrl(page.imageUrl) : null;
+  const darkImageUrl = page?.showImage ? safeImageUrl(page.imageUrl) : null;
+  const lightImageUrl = page?.showImage
+    ? safeImageUrl(page.imageLightUrl)
+    : null;
+  const imageUrl = darkImageUrl ?? lightImageUrl;
   const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
@@ -24,11 +28,30 @@ export default async function AboutPage() {
           {imageUrl ? (
             <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
               <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
-                <img
-                  src={imageUrl}
-                  alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
-                  className="h-full w-full object-cover"
-                />
+                {lightImageUrl ? (
+                  <img
+                    src={lightImageUrl}
+                    alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    className="h-full w-full object-cover dark:hidden"
+                    width={960}
+                    height={1200}
+                    decoding="async"
+                  />
+                ) : null}
+                {darkImageUrl ? (
+                  <img
+                    src={darkImageUrl}
+                    alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    className={
+                      lightImageUrl
+                        ? "hidden h-full w-full object-cover dark:block"
+                        : "h-full w-full object-cover"
+                    }
+                    width={960}
+                    height={1200}
+                    decoding="async"
+                  />
+                ) : null}
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"

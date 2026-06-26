@@ -34,6 +34,7 @@ export type SitePageRecord = {
   updatedAt: number;
   showImage?: boolean;
   imageUrl?: string;
+  imageLightUrl?: string;
   imageAlt?: string;
   imageCredit?: string;
 };
@@ -470,6 +471,7 @@ export const convexRefs = {
           status: "draft" | "published";
           showImage?: boolean;
           imageUrl?: string;
+          imageLightUrl?: string;
           imageAlt?: string;
           imageCredit?: string;
         };

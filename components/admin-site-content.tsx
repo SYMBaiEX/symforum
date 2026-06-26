@@ -39,6 +39,7 @@ type SitePageForm = {
   status: "draft" | "published";
   showImage: boolean;
   imageUrl: string;
+  imageLightUrl: string;
   imageAlt: string;
   imageCredit: string;
 };
@@ -79,6 +80,7 @@ const blankPage: SitePageForm = {
   status: "draft",
   showImage: false,
   imageUrl: "",
+  imageLightUrl: "",
   imageAlt: "",
   imageCredit: "",
 };
@@ -128,7 +130,8 @@ export function AdminSiteContent() {
 
   const pageRows = pages ?? emptyPages;
   const projectRows = projects ?? emptyProjects;
-  const pagePreview = safeImageUrl(pageForm.imageUrl);
+  const pagePreview =
+    safeImageUrl(pageForm.imageUrl) ?? safeImageUrl(pageForm.imageLightUrl);
   const projectPreview = safeImageUrl(projectForm.imageUrl);
   const pageSlug = pageForm.slug.trim();
   const projectSlug = projectForm.slug.trim();
@@ -251,6 +254,7 @@ export function AdminSiteContent() {
           status: pageForm.status,
           showImage: pageForm.showImage,
           imageUrl: pageForm.imageUrl.trim() || undefined,
+          imageLightUrl: pageForm.imageLightUrl.trim() || undefined,
           imageAlt: pageForm.imageAlt.trim() || undefined,
           imageCredit: pageForm.imageCredit.trim() || undefined,
         },
@@ -531,8 +535,8 @@ export function AdminSiteContent() {
               />
               Show image on public page
             </label>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Image URL">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="Dark image URL">
                 <Input
                   value={pageForm.imageUrl}
                   onChange={(event) =>
@@ -540,6 +544,19 @@ export function AdminSiteContent() {
                   }
                 />
               </Field>
+              <Field label="Light image URL">
+                <Input
+                  value={pageForm.imageLightUrl}
+                  onChange={(event) =>
+                    setPageForm({
+                      ...pageForm,
+                      imageLightUrl: event.target.value,
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
               <Field label="Image alt">
                 <Input
                   value={pageForm.imageAlt}
@@ -1170,6 +1187,7 @@ function pageToForm(
     status: page.status,
     showImage: page.showImage ?? false,
     imageUrl: page.imageUrl ?? "",
+    imageLightUrl: page.imageLightUrl ?? "",
     imageAlt: page.imageAlt ?? "",
     imageCredit: page.imageCredit ?? "",
   };

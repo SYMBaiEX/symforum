@@ -59,6 +59,7 @@ export default defineSchema({
     updatedAt: v.number(),
     showImage: v.optional(v.boolean()),
     imageUrl: v.optional(v.string()),
+    imageLightUrl: v.optional(v.string()),
     imageAlt: v.optional(v.string()),
     imageCredit: v.optional(v.string()),
   })

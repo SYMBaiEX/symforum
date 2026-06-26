@@ -13,6 +13,7 @@ export const sitePageInputValidator = v.object({
   status: pageStatusValidator,
   showImage: v.optional(v.boolean()),
   imageUrl: v.optional(v.string()),
+  imageLightUrl: v.optional(v.string()),
   imageAlt: v.optional(v.string()),
   imageCredit: v.optional(v.string()),
 });
@@ -67,6 +68,7 @@ export function normalizeSitePageInput(input: SitePageInput) {
     updatedAt: number;
     showImage?: boolean;
     imageUrl?: string;
+    imageLightUrl?: string;
     imageAlt?: string;
     imageCredit?: string;
   } = {
@@ -85,10 +87,14 @@ export function normalizeSitePageInput(input: SitePageInput) {
   }
 
   const imageUrl = cleanSafeUrl(input.imageUrl, "Image URL");
+  const imageLightUrl = cleanSafeUrl(input.imageLightUrl, "Light image URL");
   const imageAlt = cleanOptional(input.imageAlt, 220);
   const imageCredit = cleanOptional(input.imageCredit, 220);
   if (imageUrl) {
     page.imageUrl = imageUrl;
+  }
+  if (imageLightUrl) {
+    page.imageLightUrl = imageLightUrl;
   }
   if (imageAlt) {
     page.imageAlt = imageAlt;

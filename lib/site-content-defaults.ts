@@ -11,6 +11,7 @@ export type SitePageRecord = {
   updatedAt: number;
   showImage?: boolean;
   imageUrl?: string;
+  imageLightUrl?: string;
   imageAlt?: string;
   imageCredit?: string;
 };
@@ -62,6 +63,12 @@ export const defaultSitePages: SitePageRecord[] = [
     ].join("\n\n"),
     status: "published",
     updatedAt: UPDATED_AT,
+    showImage: true,
+    imageUrl: "https://symbaiex.com/images/about-symbiex-portrait-dark.webp",
+    imageLightUrl:
+      "https://symbaiex.com/images/about-symbiex-portrait-light.webp",
+    imageAlt: "Stylized SYMBaiEX portrait in a neon city scene",
+    imageCredit: "SYMBaiEX",
   },
   {
     slug: "portfolio",

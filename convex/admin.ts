@@ -494,6 +494,7 @@ export const upsertSitePage = mutation({
       ...page,
       showImage: page.showImage === true ? true : undefined,
       imageUrl: page.imageUrl,
+      imageLightUrl: page.imageLightUrl,
       imageAlt: page.imageAlt,
       imageCredit: page.imageCredit,
     });
