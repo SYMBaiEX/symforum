@@ -20,12 +20,12 @@ export default async function PublicProfilePage({ params }: PageProps) {
 
   return (
     <>
-      <section className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
+      <section className="page-frame">
         <div className="mb-7">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
+          <p className="page-kicker">
             Public handle
           </p>
-          <h1 className="mt-3 break-words text-4xl font-bold leading-none sm:text-5xl md:text-7xl">
+          <h1 className="page-title-display mt-3">
             /u/{username}
           </h1>
         </div>

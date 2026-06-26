@@ -37,6 +37,7 @@ type SitePageForm = {
   heroBody: string;
   body: string;
   status: "draft" | "published";
+  showImage: boolean;
   imageUrl: string;
   imageAlt: string;
   imageCredit: string;
@@ -76,6 +77,7 @@ const blankPage: SitePageForm = {
   heroBody: "",
   body: "",
   status: "draft",
+  showImage: false,
   imageUrl: "",
   imageAlt: "",
   imageCredit: "",
@@ -247,6 +249,7 @@ export function AdminSiteContent() {
           heroBody: pageForm.heroBody,
           body: pageForm.body,
           status: pageForm.status,
+          showImage: pageForm.showImage,
           imageUrl: pageForm.imageUrl.trim() || undefined,
           imageAlt: pageForm.imageAlt.trim() || undefined,
           imageCredit: pageForm.imageCredit.trim() || undefined,
@@ -515,6 +518,19 @@ export function AdminSiteContent() {
                 required
               />
             </Field>
+            <label className="flex items-center gap-2 font-mono text-xs uppercase text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={pageForm.showImage}
+                onChange={(event) =>
+                  setPageForm({
+                    ...pageForm,
+                    showImage: event.target.checked,
+                  })
+                }
+              />
+              Show image on public page
+            </label>
             <div className="grid gap-3 md:grid-cols-3">
               <Field label="Image URL">
                 <Input
@@ -578,7 +594,7 @@ export function AdminSiteContent() {
                 </Button>
               </div>
             </div>
-            {pagePreview ? (
+            {pageForm.showImage && pagePreview ? (
               <img
                 src={pagePreview}
                 alt={pageForm.imageAlt || "Page preview"}
@@ -1152,6 +1168,7 @@ function pageToForm(
     heroBody: page.heroBody,
     body: page.body,
     status: page.status,
+    showImage: page.showImage ?? false,
     imageUrl: page.imageUrl ?? "",
     imageAlt: page.imageAlt ?? "",
     imageCredit: page.imageCredit ?? "",

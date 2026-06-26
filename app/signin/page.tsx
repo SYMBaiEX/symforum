@@ -13,15 +13,15 @@ export default function SignInPage() {
 
   return (
     <>
-      <section className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-12 md:px-8 md:py-24">
+      <section className="page-frame page-frame-spacious grid gap-10 md:grid-cols-12">
         <div className="md:col-span-5">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
+          <p className="page-kicker">
             Reader identity
           </p>
-          <h1 className="mt-5 text-5xl font-bold leading-none md:text-7xl">
+          <h1 className="page-title-display mt-5">
             Sign in with a SYM handle.
           </h1>
-          <p className="mt-6 text-lg leading-8 text-muted-foreground">
+          <p className="page-lede mt-6">
             Accounts start with a random SYM number, and can also use a chosen
             handle. Comments, saves, and votes all attach to this identity.
           </p>

@@ -21,11 +21,11 @@ export default function RouteError({
   }, [error]);
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-      <p className="font-mono text-xs uppercase text-muted-foreground">
+    <section className="page-frame page-frame-spacious">
+      <p className="page-kicker">
         Route error
       </p>
-      <h1 className="mt-3 text-3xl font-semibold">Something slipped.</h1>
+      <h1 className="page-title mt-3">Something slipped.</h1>
       <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
         The issue was logged for review. You can retry the route without losing
         the rest of the app shell.

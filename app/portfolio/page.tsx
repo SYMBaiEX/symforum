@@ -32,14 +32,14 @@ export default async function PortfolioPage() {
 
   return (
     <>
-      <article className="mx-auto max-w-7xl px-4 py-7 md:px-8 md:py-10">
+      <article className="page-frame page-frame-dense">
         <section className="grid gap-7 md:grid-cols-[minmax(0,0.95fr)_minmax(20rem,0.55fr)] md:items-end">
           <div className="max-w-3xl">
-            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
+            <h1 className="page-title">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
             {page?.heroBody ? (
-              <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+              <p className="page-lede mt-4">
                 {page.heroBody}
               </p>
             ) : null}

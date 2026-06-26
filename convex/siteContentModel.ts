@@ -11,6 +11,7 @@ export const sitePageInputValidator = v.object({
   heroBody: v.string(),
   body: v.string(),
   status: pageStatusValidator,
+  showImage: v.optional(v.boolean()),
   imageUrl: v.optional(v.string()),
   imageAlt: v.optional(v.string()),
   imageCredit: v.optional(v.string()),
@@ -64,6 +65,7 @@ export function normalizeSitePageInput(input: SitePageInput) {
     body: string;
     status: "draft" | "published";
     updatedAt: number;
+    showImage?: boolean;
     imageUrl?: string;
     imageAlt?: string;
     imageCredit?: string;
@@ -77,6 +79,10 @@ export function normalizeSitePageInput(input: SitePageInput) {
     status: input.status,
     updatedAt: Date.now(),
   };
+
+  if (input.showImage === true) {
+    page.showImage = true;
+  }
 
   const imageUrl = cleanSafeUrl(input.imageUrl, "Image URL");
   const imageAlt = cleanOptional(input.imageAlt, 220);

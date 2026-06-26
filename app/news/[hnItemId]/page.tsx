@@ -55,12 +55,12 @@ export default async function NewsStoryPage({ params }: PageProps) {
 
   return (
     <>
-      <article className="mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
-        <div className="max-w-4xl">
-          <p className="font-mono text-[11px] uppercase text-muted-foreground">
+      <article className="page-frame">
+        <div className="page-content">
+          <p className="page-kicker">
             Indexed article
           </p>
-          <h1 className="mt-3 break-words text-3xl font-bold leading-tight text-balance md:text-5xl">
+          <h1 className="page-title mt-3">
             {story.title}
           </h1>
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
@@ -100,7 +100,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
             )}
           </div>
 
-          <section className="mt-8 max-w-3xl">
+          <section className="page-content-readable mt-8">
             {body ? (
               <div className="flex flex-col gap-4">
                 {body.split(/\n{2,}/).map((paragraph) => (
@@ -118,7 +118,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
             )}
           </section>
 
-          <section className="mt-10 max-w-3xl">
+          <section className="page-content-readable mt-10">
             <h2 className="mb-3 font-mono text-xs uppercase">Thread</h2>
             <CommentsPanel
               entityType="hnStory"

@@ -37,12 +37,12 @@ export default async function BlogPostPage({
 
   return (
     <>
-      <article className="mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
-        <div className="max-w-4xl">
-          <p className="font-mono text-[11px] uppercase text-muted-foreground">
+      <article className="page-frame">
+        <div className="page-content">
+          <p className="page-kicker">
             Field note
           </p>
-          <h1 className="mt-3 break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
+          <h1 className="page-title mt-3">
             {post.title}
           </h1>
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
@@ -52,7 +52,7 @@ export default async function BlogPostPage({
               <span key={tag}>{tag}</span>
             ))}
           </div>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+          <p className="page-lede mt-5">
             {post.excerpt}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -80,7 +80,7 @@ export default async function BlogPostPage({
             </figure>
           ) : null}
 
-          <div className="max-w-3xl">
+          <div className="page-content-readable">
             <MarkdownContent content={post.body} />
             <section className="mt-12 grid gap-3 sm:grid-cols-[1fr_minmax(18rem,26rem)] sm:items-center">
               <div>

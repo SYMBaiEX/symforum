@@ -9,6 +9,7 @@ export type SitePageRecord = {
   body: string;
   status: "draft" | "published";
   updatedAt: number;
+  showImage?: boolean;
   imageUrl?: string;
   imageAlt?: string;
   imageCredit?: string;
@@ -38,9 +39,6 @@ export type PortfolioProjectRecord = {
 
 const UPDATED_AT = Date.UTC(2026, 5, 24, 12);
 
-export const AUSTIN_GITHUB_AVATAR_URL =
-  "https://avatars.githubusercontent.com/u/192078165?v=4";
-
 export const defaultSitePages: SitePageRecord[] = [
   {
     slug: "about",
@@ -64,9 +62,6 @@ export const defaultSitePages: SitePageRecord[] = [
     ].join("\n\n"),
     status: "published",
     updatedAt: UPDATED_AT,
-    imageUrl: AUSTIN_GITHUB_AVATAR_URL,
-    imageAlt: "Austin Hamilton GitHub avatar",
-    imageCredit: "GitHub / SYMBaiEX",
   },
   {
     slug: "portfolio",

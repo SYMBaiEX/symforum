@@ -1,7 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
 import { getSitePage } from "@/lib/site-content";
-import { AUSTIN_GITHUB_AVATAR_URL } from "@/lib/site-content-defaults";
 import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 
@@ -15,45 +14,39 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AboutPage() {
   const page = await getSitePage("about");
-  const imageUrl =
-    safeImageUrl(page?.imageUrl) ?? safeImageUrl(AUSTIN_GITHUB_AVATAR_URL);
+  const imageUrl = page?.showImage ? safeImageUrl(page.imageUrl) : null;
   const storySections = splitMarkdownSections(page?.body ?? "");
 
   return (
     <>
-      <article className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
-        <section className="mx-auto max-w-5xl">
-          <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
-            <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
-              {imageUrl ? (
+      <article className="page-frame page-frame-dense">
+        <section className="page-content-wide mx-auto">
+          {imageUrl ? (
+            <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
+              <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
                 <img
                   src={imageUrl}
                   alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
                   className="h-full w-full object-cover"
                 />
-              ) : (
                 <div
                   aria-hidden="true"
-                  className="h-full w-full bg-[linear-gradient(135deg,hsl(var(--foreground))_0_1px,transparent_1px),linear-gradient(45deg,var(--accent-magenta),var(--accent-cyan),var(--accent-canary))] bg-[length:18px_18px,100%_100%] opacity-80"
+                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"
                 />
-              )}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_36%,hsl(var(--background)/0.16)_62%,hsl(var(--background)/0.72)_100%),linear-gradient(180deg,hsl(var(--background)/0.2),transparent_28%,hsl(var(--background)/0.34)_100%)]"
-              />
-            </div>
-            {page?.imageCredit ? (
-              <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
-                {page.imageCredit}
-              </figcaption>
-            ) : null}
-          </figure>
+              </div>
+              {page?.imageCredit ? (
+                <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
+                  {page.imageCredit}
+                </figcaption>
+              ) : null}
+            </figure>
+          ) : null}
 
-          <div className="max-w-2xl">
-            <h1 className="break-words text-3xl font-bold leading-[0.96] text-balance sm:text-4xl md:text-5xl">
+          <div className="page-content-readable">
+            <h1 className="page-title">
               {page?.heroHeading ?? "About"}
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground md:mt-6 md:text-lg md:leading-8">
+            <p className="page-lede mt-5 md:mt-6">
               {page?.heroBody}
             </p>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
@@ -63,7 +56,7 @@ export default async function AboutPage() {
             </p>
           </div>
 
-          <div className="mt-7 max-w-4xl md:mt-8">
+          <div className="mt-7 page-content md:mt-8">
             {storySections.length > 0 ? (
               <div className="space-y-7 md:space-y-8">
                 {storySections.map((section, index) => (

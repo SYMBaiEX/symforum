@@ -490,7 +490,13 @@ export const upsertSitePage = mutation({
       return await ctx.db.get(id);
     }
 
-    await ctx.db.patch(existing._id, page);
+    await ctx.db.patch(existing._id, {
+      ...page,
+      showImage: page.showImage === true ? true : undefined,
+      imageUrl: page.imageUrl,
+      imageAlt: page.imageAlt,
+      imageCredit: page.imageCredit,
+    });
     return await ctx.db.get(existing._id);
   },
 });

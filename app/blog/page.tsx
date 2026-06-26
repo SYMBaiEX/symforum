@@ -12,7 +12,7 @@ export default async function BlogPage() {
 
   return (
     <>
-      <section className="mx-auto max-w-7xl px-4 py-14 md:px-8 md:py-24">
+      <section className="page-frame page-frame-spacious">
         <SectionHeader title="All posts" divided={false} />
         <div className="mt-8">
           <BlogPostFilter posts={posts} />

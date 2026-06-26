@@ -57,6 +57,7 @@ export default defineSchema({
     body: v.string(),
     status: v.union(v.literal("draft"), v.literal("published")),
     updatedAt: v.number(),
+    showImage: v.optional(v.boolean()),
     imageUrl: v.optional(v.string()),
     imageAlt: v.optional(v.string()),
     imageCredit: v.optional(v.string()),

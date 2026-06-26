@@ -16,7 +16,7 @@ export function AsciiSection() {
   });
 
   return (
-    <section className="mx-auto flex max-w-7xl items-center justify-center px-4 py-8 md:px-8 md:py-14">
+    <section className="page-frame flex items-center justify-center py-8 md:py-14">
       <pre
         ref={asciiTextRef}
         aria-label="SYMBiEX animated ASCII signature"

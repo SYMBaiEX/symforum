@@ -10,12 +10,12 @@ export default function ProfilePage() {
 
   return (
     <>
-      <section className="mx-auto max-w-7xl px-4 py-9 md:px-8 md:py-14">
+      <section className="page-frame">
         <div className="mb-7">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
+          <p className="page-kicker">
             Signed-in profile
           </p>
-          <h1 className="mt-3 text-4xl font-bold leading-none sm:text-5xl md:text-7xl">
+          <h1 className="page-title-display mt-3">
             Profile
           </h1>
         </div>

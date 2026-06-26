@@ -16,7 +16,7 @@ export default async function NewsPage() {
 
   return (
     <>
-      <section className="mx-auto max-w-6xl px-4 py-12 md:px-8 md:py-20">
+      <section className="page-frame page-frame-spacious">
         <SectionHeader title="Daily news" divided={false} />
         <div className="mt-8">
           <NewsFeed

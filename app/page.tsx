@@ -25,7 +25,7 @@ export default async function HomePage() {
   return (
     <>
       <section>
-        <div className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-10">
+        <div className="page-frame page-frame-dense">
           <h1 className="grid gap-4 break-words md:grid-cols-12 md:items-start">
             <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-12 md:text-6xl lg:text-7xl">
               Hi, I&apos;m
@@ -48,7 +48,7 @@ export default async function HomePage() {
 
       <AsciiSection />
 
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8 md:py-24">
+      <section className="page-frame page-frame-spacious">
         <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
           {featured ? (
@@ -61,7 +61,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8 md:pb-24">
+      <section className="page-frame page-frame-bottom">
         <SectionHeader title="Daily news" divided={false} />
         <div className="mt-6">
           <DailyNewsList stories={dailyNews} />

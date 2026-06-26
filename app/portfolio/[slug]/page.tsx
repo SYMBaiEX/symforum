@@ -59,7 +59,7 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <article className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
+    <article className="page-frame page-frame-dense">
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_16rem] md:gap-12">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
@@ -76,10 +76,10 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
           <p className="mt-7 font-mono text-[11px] uppercase text-muted-foreground">
             {project.type}
           </p>
-          <h1 className="mt-2 max-w-4xl break-words text-4xl font-bold leading-none text-balance md:text-5xl">
+          <h1 className="page-title mt-2 max-w-4xl">
             {project.name}
           </h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+          <p className="page-lede mt-5">
             {project.summary}
           </p>
 

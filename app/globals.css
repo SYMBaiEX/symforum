@@ -149,6 +149,54 @@
     -webkit-background-clip: text;
     filter: var(--ascii-filter);
   }
+}
+
+@layer components {
+  .page-frame {
+    @apply mx-auto w-full max-w-7xl px-4 py-8 md:px-8 md:py-12;
+  }
+
+  .page-frame-spacious {
+    @apply py-12 md:py-20;
+  }
+
+  .page-frame-dense {
+    @apply py-7 md:py-10;
+  }
+
+  .page-frame-bottom {
+    @apply pb-12 pt-0 md:pb-20 md:pt-0;
+  }
+
+  .page-content-readable {
+    @apply max-w-3xl;
+  }
+
+  .page-content {
+    @apply max-w-4xl;
+  }
+
+  .page-content-wide {
+    @apply max-w-6xl;
+  }
+
+  .page-kicker {
+    @apply font-mono text-[11px] uppercase text-muted-foreground;
+  }
+
+  .page-title {
+    @apply break-words text-3xl font-bold leading-[0.96] sm:text-4xl md:text-5xl;
+    text-wrap: balance;
+  }
+
+  .page-title-display {
+    @apply break-words text-4xl font-bold leading-none sm:text-5xl md:text-6xl;
+    text-wrap: balance;
+  }
+
+  .page-lede {
+    @apply max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8;
+  }
 
   .markdown-body {
     margin-top: 2rem;
