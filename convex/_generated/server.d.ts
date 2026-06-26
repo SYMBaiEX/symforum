@@ -25,6 +25,8 @@ import type { DataModel } from "./dataModel.js";
  * Typesafe environment variables declared in `convex.config.ts`.
  */
 type Env = {
+  readonly GH_TOKEN: string | undefined;
+  readonly GITHUB_TOKEN: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;

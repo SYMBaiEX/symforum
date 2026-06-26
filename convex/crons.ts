@@ -15,9 +15,21 @@ const checkDailyNewsletterScheduleRef = makeFunctionReference<
   unknown
 >("dailyNewsletter:checkDailyNewsletterSchedule");
 
+const refreshPortfolioMetricsRef = makeFunctionReference<
+  "action",
+  { source?: "cron" },
+  unknown
+>("githubPortfolio:refreshPortfolioMetrics");
+
 crons.cron("refresh Hacker News snapshot", "0 11 * * *", refreshTopStoriesRef, {
   limit: 40,
 });
+crons.cron(
+  "refresh GitHub portfolio metrics",
+  "0 */6 * * *",
+  refreshPortfolioMetricsRef,
+  { source: "cron" },
+);
 crons.cron(
   "check daily SYMBaiEX newsletter schedule",
   "*/15 * * * *",

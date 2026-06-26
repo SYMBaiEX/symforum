@@ -346,6 +346,17 @@ export type AnalyticsSummaryRecord = {
   recent: AnalyticsEventRecord[];
 };
 
+export type GithubPortfolioSnapshotRecord = {
+  _id: string;
+  _creationTime: number;
+  key: string;
+  metricsJson: string;
+  source: "cron" | "manual";
+  refreshedAt: number;
+  lastErrorMessage?: string;
+  lastErrorAt?: number;
+};
+
 export type AdminOverviewRecord = {
   user: AdminUserRecord;
   totals: {
@@ -685,6 +696,19 @@ export const convexRefs = {
       },
       { recorded: boolean; deduped: boolean; id: string | null }
     >("analytics:record"),
+  },
+  githubPortfolio: {
+    latest: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      GithubPortfolioSnapshotRecord | null
+    >("githubPortfolio:latest"),
+    refreshPortfolioMetrics: makeFunctionReference<
+      "action",
+      { force?: boolean; source?: "cron" | "manual" },
+      | { ok: true; skipped: boolean; refreshedAt: number }
+      | { ok: false; errorMessage: string }
+    >("githubPortfolio:refreshPortfolioMetrics"),
   },
   systemLogs: {
     record: makeFunctionReference<

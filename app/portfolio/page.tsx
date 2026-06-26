@@ -2,10 +2,10 @@
 import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import {
-  getGithubPortfolioMetrics,
   type GithubPortfolioMetrics,
   type GithubPortfolioProjectMetric,
 } from "@/lib/github-portfolio";
+import { getCachedGithubPortfolioMetrics } from "@/lib/portfolio-metrics";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { getPortfolioProjects, getSitePage } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
@@ -14,6 +14,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 const PERSONAL_GITHUB_AVATAR_TOKEN = "/u/192078165";
+export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getSitePage("portfolio");
@@ -27,7 +28,7 @@ export default async function PortfolioPage() {
   const [page, projects, githubMetrics] = await Promise.all([
     getSitePage("portfolio"),
     getPortfolioProjects(),
-    getGithubPortfolioMetrics(),
+    getCachedGithubPortfolioMetrics(),
   ]);
 
   return (

@@ -1,5 +1,6 @@
 const GITHUB_USER = "SYMBaiEX";
 const CACHE_SECONDS = 60 * 60;
+type NextFetchInit = RequestInit & { next?: { revalidate: number } };
 
 type GithubUser = {
   login: string;
@@ -208,7 +209,9 @@ export const fallbackGithubPortfolioMetrics: GithubPortfolioMetrics = {
   ],
 };
 
-export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetrics> {
+export async function getGithubPortfolioMetrics(options?: {
+  allowFallback?: boolean;
+}): Promise<GithubPortfolioMetrics> {
   try {
     const [
       user,
@@ -315,6 +318,9 @@ export async function getGithubPortfolioMetrics(): Promise<GithubPortfolioMetric
       ),
     };
   } catch (error) {
+    if (options?.allowFallback === false) {
+      throw error;
+    }
     console.warn("Falling back to static GitHub portfolio metrics", error);
     return fallbackGithubPortfolioMetrics;
   }
@@ -324,14 +330,15 @@ async function githubJson<T>(
   url: string,
   accept = "application/vnd.github+json",
 ) {
-  const response = await fetch(url, {
+  const init: NextFetchInit = {
     headers: {
       Accept: accept,
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "symbaiex-blog",
     },
     next: { revalidate: CACHE_SECONDS },
-  });
+  };
+  const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(`GitHub request failed: ${response.status} ${url}`);
   }
@@ -384,7 +391,7 @@ async function githubContributionYear(token: string, year: number) {
   const from = `${year}-01-01T00:00:00Z`;
   const to =
     year === currentYear ? now.toISOString() : `${year}-12-31T23:59:59Z`;
-  const response = await fetch("https://api.github.com/graphql", {
+  const init: NextFetchInit = {
     method: "POST",
     headers: {
       Accept: "application/vnd.github+json",
@@ -410,7 +417,8 @@ async function githubContributionYear(token: string, year: number) {
       },
     }),
     next: { revalidate: CACHE_SECONDS },
-  });
+  };
+  const response = await fetch("https://api.github.com/graphql", init);
 
   if (!response.ok) {
     throw new Error(`GitHub GraphQL request failed: ${response.status}`);
@@ -428,15 +436,16 @@ async function githubContributionYear(token: string, year: number) {
 }
 
 async function getPublicContributionActivity(): Promise<ContributionActivityMetric | null> {
+  const init: NextFetchInit = {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "symbaiex-blog",
+    },
+    next: { revalidate: CACHE_SECONDS },
+  };
   const response = await fetch(
     `https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}`,
-    {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "symbaiex-blog",
-      },
-      next: { revalidate: CACHE_SECONDS },
-    },
+    init,
   );
   if (!response.ok) {
     return null;

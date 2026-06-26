@@ -90,6 +90,16 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_order", ["order"])
     .index("by_status_and_order", ["status", "order"]),
+  githubPortfolioSnapshots: defineTable({
+    key: v.string(),
+    metricsJson: v.string(),
+    source: v.union(v.literal("cron"), v.literal("manual")),
+    refreshedAt: v.number(),
+    lastErrorMessage: v.optional(v.string()),
+    lastErrorAt: v.optional(v.number()),
+  })
+    .index("by_key", ["key"])
+    .index("by_refreshedAt", ["refreshedAt"]),
   newsSnapshots: defineTable({
     snapshotDate: v.string(),
     status: v.union(
