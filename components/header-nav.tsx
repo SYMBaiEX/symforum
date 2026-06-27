@@ -23,6 +23,7 @@ const navItems = [
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export function HeaderNav() {
