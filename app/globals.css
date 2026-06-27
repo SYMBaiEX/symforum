@@ -32,11 +32,6 @@
     --accent-magenta: #fa00a8;
     --accent-cyan: #81d8d0;
     --accent-canary: #ffe14d;
-    --ascii-magenta: #b8007c;
-    --ascii-cyan: #087d78;
-    --ascii-canary: #9c7400;
-    --ascii-foreground: hsl(var(--foreground));
-    --ascii-filter: none;
     --row-border: 0 0% 64%;
     --vignette-color: 0 0% 0%;
     --vignette-opacity: 0.12;
@@ -69,12 +64,6 @@
     --chart-5: 0 0% 65%;
     --row-border: 0 0% 22%;
     --vignette-opacity: 0.46;
-    --ascii-magenta: #ff35bc;
-    --ascii-cyan: #8ef2ea;
-    --ascii-canary: #ffe968;
-    --ascii-foreground: hsl(var(--foreground));
-    --ascii-filter: drop-shadow(0 0 18px hsl(var(--primary) / 0.24))
-      drop-shadow(0 0 34px hsl(var(--accent) / 0.12));
   }
 }
 
@@ -134,21 +123,6 @@
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
-  .ascii-gradient {
-    color: transparent;
-    background: linear-gradient(
-      90deg,
-      var(--ascii-magenta) 0%,
-      var(--ascii-magenta) 23%,
-      var(--ascii-cyan) 44%,
-      var(--ascii-canary) 67%,
-      var(--ascii-foreground) 92%,
-      var(--ascii-foreground) 100%
-    );
-    background-clip: text;
-    -webkit-background-clip: text;
-    filter: var(--ascii-filter);
-  }
 }
 
 @layer components {

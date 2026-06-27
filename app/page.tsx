@@ -1,6 +1,6 @@
-import { AsciiSection } from "@/components/ascii-section";
 import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
+import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
@@ -46,7 +46,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <AsciiSection />
+      <HomeBanner />
 
       <section className="page-frame page-frame-spacious">
         <SectionHeader title="Latest blog" divided={false} />
