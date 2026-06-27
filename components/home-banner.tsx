@@ -15,7 +15,7 @@ export function HomeBanner() {
           sizes="(max-width: 768px) calc(100vw - 2rem), min(100vw - 4rem, 1280px)"
           unoptimized
           decoding="async"
-          className="h-full w-full object-cover dark:hidden"
+          className="h-full w-full object-cover object-[center_68%] dark:hidden"
         />
         <Image
           src="/images/home-banner-dark.webp"
@@ -25,7 +25,7 @@ export function HomeBanner() {
           sizes="(max-width: 768px) calc(100vw - 2rem), min(100vw - 4rem, 1280px)"
           unoptimized
           decoding="async"
-          className="hidden h-full w-full object-cover dark:block"
+          className="hidden h-full w-full object-cover object-[center_68%] dark:block"
         />
       </div>
     </section>
