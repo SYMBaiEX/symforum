@@ -623,10 +623,7 @@
   0% {
     left: 0;
   }
-  47% {
-    left: calc(100% - var(--signal-moth-w));
-  }
-  53% {
+  50% {
     left: calc(100% - var(--signal-moth-w));
   }
   100% {
