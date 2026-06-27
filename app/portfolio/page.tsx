@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,11 +5,16 @@ import {
   type GithubPortfolioProjectMetric,
 } from "@/lib/github-portfolio";
 import { getCachedGithubPortfolioMetrics } from "@/lib/portfolio-metrics";
-import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
+import {
+  isLocalImageUrl,
+  safeExternalUrl,
+  safeImageUrl,
+} from "@/lib/safe-url";
 import { getPortfolioProjects, getSitePage } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
 import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 const PERSONAL_GITHUB_AVATAR_TOKEN = "/u/192078165";
@@ -193,9 +197,13 @@ function ProjectMark({
   if (imageUrl && !isPersonalProjectAvatar(imageUrl)) {
     return (
       <div className="grid size-8 shrink-0 place-items-center">
-        <img
+        <Image
           src={imageUrl}
           alt={imageAlt ?? name}
+          width={24}
+          height={24}
+          sizes="1.5rem"
+          unoptimized={isLocalImageUrl(imageUrl)}
           className="size-6 object-contain"
         />
       </div>

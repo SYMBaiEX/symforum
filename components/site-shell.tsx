@@ -4,6 +4,7 @@ import { AppErrorSurface } from "@/components/app-error-surface";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { RouteImagePreloader } from "@/components/route-image-preloader";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter } from "lucide-react";
 import Link from "next/link";
@@ -86,6 +87,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <AnalyticsTracker />
       </Suspense>
+      <RouteImagePreloader />
       <AppErrorSurface />
       <footer
         ref={footerRef}

@@ -24,5 +24,22 @@ export function safeImageUrl(value: string | undefined | null) {
     return trimmed.includes("\\") ? undefined : trimmed;
   }
 
-  return safeExternalUrl(trimmed);
+  const externalUrl = safeExternalUrl(trimmed);
+  if (!externalUrl) {
+    return undefined;
+  }
+
+  const url = new URL(externalUrl);
+  if (
+    (url.hostname === "symbaiex.com" || url.hostname === "www.symbaiex.com") &&
+    url.pathname.startsWith("/images/")
+  ) {
+    return `${url.pathname}${url.search}`;
+  }
+
+  return externalUrl;
+}
+
+export function isLocalImageUrl(value: string | undefined | null) {
+  return Boolean(value?.startsWith("/") && !value.startsWith("//"));
 }

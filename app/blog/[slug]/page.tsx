@@ -1,12 +1,12 @@
-/* eslint-disable @next/next/no-img-element */
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
 import { MarkdownContent } from "@/components/markdown-content";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
-import { safeImageUrl } from "@/lib/safe-url";
+import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 export async function generateMetadata({
@@ -67,11 +67,17 @@ export default async function BlogPostPage({
 
           {imageUrl ? (
             <figure className="mt-8 max-w-3xl border-y border-row-border py-4">
-              <img
-                src={imageUrl}
-                alt={post.imageAlt ?? post.title}
-                className="aspect-[16/9] w-full object-cover"
-              />
+              <div className="relative aspect-[16/9] w-full overflow-hidden">
+                <Image
+                  src={imageUrl}
+                  alt={post.imageAlt ?? post.title}
+                  fill
+                  priority
+                  sizes="(max-width: 768px) calc(100vw - 2rem), 48rem"
+                  unoptimized={isLocalImageUrl(imageUrl)}
+                  className="object-cover"
+                />
+              </div>
               {post.imageCredit ? (
                 <figcaption className="mt-2 font-mono text-[11px] uppercase text-muted-foreground">
                   {post.imageCredit}

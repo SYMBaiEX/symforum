@@ -52,7 +52,7 @@ export default async function HomePage() {
         <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
           {featured ? (
-            <EntryRow post={featured} divided={false} compact />
+            <EntryRow post={featured} divided={false} compact priority />
           ) : (
             <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
               No published posts yet.

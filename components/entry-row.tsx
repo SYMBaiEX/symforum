@@ -1,19 +1,21 @@
-/* eslint-disable @next/next/no-img-element */
 import { BlogPost } from "@/lib/content";
 import { formatDate } from "@/lib/format";
-import { safeImageUrl } from "@/lib/safe-url";
+import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 export function EntryRow({
   post,
   divided = true,
   compact = false,
+  priority = false,
 }: {
   post: BlogPost;
   divided?: boolean;
   compact?: boolean;
+  priority?: boolean;
 }) {
   const imageUrl = safeImageUrl(post.imageUrl);
 
@@ -38,10 +40,14 @@ export function EntryRow({
         {formatDate(post.publishedAt)}
       </div>
       {imageUrl ? (
-        <div className="col-span-2 w-full max-w-[7.5rem] md:col-span-1">
-          <img
+        <div className="relative col-span-2 h-[5.5rem] w-full max-w-[7.5rem] md:col-span-1">
+          <Image
             src={imageUrl}
             alt={post.imageAlt ?? post.title}
+            fill
+            priority={priority}
+            sizes="7.5rem"
+            unoptimized={isLocalImageUrl(imageUrl)}
             className="h-[5.5rem] w-full border border-row-border object-cover"
           />
         </div>

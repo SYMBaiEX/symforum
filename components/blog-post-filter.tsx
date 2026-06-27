@@ -79,8 +79,14 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
       </div>
 
       <div>
-        {visiblePosts.map((post) => (
-          <EntryRow key={post.slug} post={post} divided={false} compact />
+        {visiblePosts.map((post, index) => (
+          <EntryRow
+            key={post.slug}
+            post={post}
+            divided={false}
+            compact
+            priority={index === 0}
+          />
         ))}
       </div>
     </div>

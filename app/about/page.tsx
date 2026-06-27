@@ -1,8 +1,8 @@
-/* eslint-disable @next/next/no-img-element */
 import { MarkdownContent } from "@/components/markdown-content";
 import { getSitePage } from "@/lib/site-content";
-import { safeImageUrl } from "@/lib/safe-url";
+import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
+import Image from "next/image";
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getSitePage("about");
@@ -29,26 +29,30 @@ export default async function AboutPage() {
             <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
               <div className="relative aspect-[16/10] overflow-hidden border border-row-border md:aspect-[4/5]">
                 {lightImageUrl ? (
-                  <img
+                  <Image
                     src={lightImageUrl}
                     alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    fill
+                    priority
+                    sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
+                    unoptimized={isLocalImageUrl(lightImageUrl)}
                     className="h-full w-full object-cover dark:hidden"
-                    width={960}
-                    height={1200}
                     decoding="async"
                   />
                 ) : null}
                 {darkImageUrl ? (
-                  <img
+                  <Image
                     src={darkImageUrl}
                     alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    fill
+                    priority
+                    sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
+                    unoptimized={isLocalImageUrl(darkImageUrl)}
                     className={
                       lightImageUrl
                         ? "hidden h-full w-full object-cover dark:block"
                         : "h-full w-full object-cover"
                     }
-                    width={960}
-                    height={1200}
                     decoding="async"
                   />
                 ) : null}

@@ -1,8 +1,11 @@
-/* eslint-disable @next/next/no-img-element */
 import { CommentsPanel } from "@/components/comments-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
+import {
+  isLocalImageUrl,
+  safeExternalUrl,
+  safeImageUrl,
+} from "@/lib/safe-url";
 import {
   getPortfolioProject,
   getPortfolioProjects,
@@ -16,6 +19,7 @@ import {
   Github,
 } from "lucide-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -279,9 +283,13 @@ function ProjectMark({
   if (imageUrl && !isPersonalProjectAvatar(imageUrl)) {
     return (
       <div className="grid size-20 place-items-center">
-        <img
+        <Image
           src={imageUrl}
           alt={imageAlt ?? name}
+          width={64}
+          height={64}
+          sizes="4rem"
+          unoptimized={isLocalImageUrl(imageUrl)}
           className="size-16 object-contain"
         />
       </div>
