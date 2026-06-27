@@ -2,10 +2,10 @@
 
 export function HomeBanner() {
   return (
-    <section className="page-frame py-5 md:py-6">
+    <section className="page-frame py-4 md:py-5">
       <div
         data-home-banner
-        className="relative h-28 w-full overflow-hidden border border-row-border bg-secondary sm:h-32 md:h-40 lg:h-48"
+        className="relative h-[4.5rem] w-full overflow-hidden border border-row-border bg-secondary sm:h-[5.5rem] md:h-28 lg:h-36"
       >
         <img
           src="/images/home-banner-light.webp"

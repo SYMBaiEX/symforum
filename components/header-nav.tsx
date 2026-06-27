@@ -154,10 +154,10 @@ function MobileNavMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[min(18rem,calc(100vw-2rem))] rounded-none border-row-border bg-background/96 p-2 shadow-none backdrop-blur md:hidden"
+        className="w-[min(16rem,calc(100vw-2rem))] rounded-none border-row-border bg-background p-1.5 text-foreground shadow-[0_18px_70px_rgba(0,0,0,0.55)] dark:bg-[#030303] md:hidden"
       >
-        <DropdownMenuLabel className="px-2 pb-2 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
-          Navigation
+        <DropdownMenuLabel className="px-2 pb-1.5 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
+          Menu
         </DropdownMenuLabel>
         <DropdownMenuGroup>
           {navItems.map((item) => (
@@ -173,7 +173,7 @@ function MobileNavMenu({
         <DropdownMenuGroup>
           {authPending ? (
             <DropdownMenuItem
-              className="rounded-none px-2 py-3 font-mono text-[10px] uppercase text-muted-foreground"
+              className="h-10 rounded-none px-3 font-mono text-[10px] uppercase text-muted-foreground"
               disabled
             >
               Auth
@@ -204,15 +204,18 @@ function MobileNavItem({
     <DropdownMenuItem
       asChild
       className={cn(
-        "rounded-none px-2 py-3 text-base font-medium text-muted-foreground focus:bg-transparent focus:text-foreground",
-        active && "bg-foreground text-background focus:bg-foreground focus:text-background",
+        "h-10 rounded-none px-3 text-base font-semibold text-foreground focus:bg-muted focus:text-foreground",
+        active &&
+          "bg-foreground text-background focus:bg-foreground focus:text-background",
       )}
     >
       <Link aria-current={active ? "page" : undefined} href={href}>
-        <span className="font-mono text-[10px] uppercase">
-          {active ? "Current" : "Open"}
-        </span>
-        <span className="ml-auto">{label}</span>
+        <span>{label}</span>
+        {active ? (
+          <span className="ml-auto font-mono text-[9px] uppercase opacity-70">
+            Current
+          </span>
+        ) : null}
       </Link>
     </DropdownMenuItem>
   );
