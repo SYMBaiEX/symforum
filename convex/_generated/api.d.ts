@@ -13,6 +13,8 @@ import type * as adminApi from "../adminApi.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
+import type * as contact from "../contact.js";
+import type * as contactEmails from "../contactEmails.js";
 import type * as crons from "../crons.js";
 import type * as dailyNewsletter from "../dailyNewsletter.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
@@ -42,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   auth: typeof auth;
   comments: typeof comments;
+  contact: typeof contact;
+  contactEmails: typeof contactEmails;
   crons: typeof crons;
   dailyNewsletter: typeof dailyNewsletter;
   githubPortfolio: typeof githubPortfolio;

@@ -2,6 +2,7 @@
 
 import { AdminAiChat } from "@/components/admin-ai-chat";
 import { AdminAnalytics } from "@/components/admin-analytics";
+import { AdminContactRequests } from "@/components/admin-contact-requests";
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
 import { AdminSystemLogs } from "@/components/admin-system-logs";
@@ -86,6 +87,7 @@ type AdminTabId =
   | "users"
   | "logs"
   | "newsletter"
+  | "contact"
   | "content"
   | "ai";
 
@@ -431,6 +433,13 @@ function OwnerDashboard() {
         label: "Newsletter",
         note: "Issues + subs",
         count: overview?.totals.confirmedSubscribers ?? 0,
+        icon: Mail,
+      },
+      {
+        id: "contact",
+        label: "Contact",
+        note: "Inbound",
+        count: overview?.totals.openContactRequests ?? 0,
         icon: Mail,
       },
       {
@@ -1370,6 +1379,7 @@ function OwnerDashboard() {
         {activeTab === "users" ? <AdminUsers /> : null}
         {activeTab === "logs" ? <AdminSystemLogs /> : null}
         {activeTab === "newsletter" ? <AdminNewsletter /> : null}
+        {activeTab === "contact" ? <AdminContactRequests /> : null}
         {activeTab === "content" ? <AdminSiteContent /> : null}
         {activeTab === "ai" ? <AdminAiChat /> : null}
       </div>

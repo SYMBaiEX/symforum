@@ -11,6 +11,8 @@ const app = defineApp({
     NEWSLETTER_FROM_EMAIL: v.optional(v.string()),
     NEWSLETTER_REPLY_TO: v.optional(v.string()),
     NEWSLETTER_SITE_URL: v.optional(v.string()),
+    CONTACT_FROM_EMAIL: v.optional(v.string()),
+    CONTACT_NOTIFICATION_TO: v.optional(v.string()),
   },
 });
 

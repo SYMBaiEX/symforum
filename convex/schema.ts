@@ -187,6 +187,30 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_createdAt", ["createdAt"]),
+  contactRequests: defineTable({
+    name: v.string(),
+    email: v.string(),
+    emailNormalized: v.string(),
+    subject: v.string(),
+    description: v.string(),
+    status: v.union(
+      v.literal("new"),
+      v.literal("read"),
+      v.literal("archived"),
+    ),
+    source: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    emailedAt: v.optional(v.number()),
+    emailError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_emailNormalized_and_createdAt", [
+      "emailNormalized",
+      "createdAt",
+    ]),
   newsletterSubscribers: defineTable({
     email: v.string(),
     emailNormalized: v.string(),

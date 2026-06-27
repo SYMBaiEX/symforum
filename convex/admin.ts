@@ -24,6 +24,11 @@ const interactionEntityTypeValidator = v.union(
   v.literal("post"),
   v.literal("hnStory"),
 );
+const contactRequestStatusValidator = v.union(
+  v.literal("new"),
+  v.literal("read"),
+  v.literal("archived"),
+);
 
 async function currentUser(ctx: QueryCtx | MutationCtx) {
   const userId = await getAuthUserId(ctx);
@@ -223,6 +228,8 @@ export const overview = query({
       portfolioProjects,
       sitePages,
       newsSnapshots,
+      contactRequests,
+      openContactRequests,
       openLogs,
       analyticsEvents,
     ] = await Promise.all([
@@ -267,6 +274,16 @@ export const overview = query({
         .order("desc")
         .take(30),
       ctx.db
+        .query("contactRequests")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(100),
+      ctx.db
+        .query("contactRequests")
+        .withIndex("by_status_and_createdAt", (q) => q.eq("status", "new"))
+        .order("desc")
+        .take(100),
+      ctx.db
         .query("systemLogs")
         .withIndex("by_status_and_createdAt", (q) => q.eq("status", "open"))
         .order("desc")
@@ -298,6 +315,8 @@ export const overview = query({
         portfolioProjects: portfolioProjects.length,
         sitePages: sitePages.length,
         newsSnapshots: newsSnapshots.length,
+        contactRequestsSample: contactRequests.length,
+        openContactRequests: openContactRequests.length,
         openSystemLogs: openLogs.length,
         analyticsEventsSample: analyticsEvents.length,
       },
@@ -707,5 +726,41 @@ export const revokeApiKey = mutation({
     await requireOwner(ctx);
     await ctx.db.patch(args.keyId, { revokedAt: Date.now() });
     return { revoked: true };
+  },
+});
+
+export const listContactRequests = query({
+  args: { status: v.optional(contactRequestStatusValidator) },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    if (args.status !== undefined) {
+      return await ctx.db
+        .query("contactRequests")
+        .withIndex("by_status_and_createdAt", (q) =>
+          q.eq("status", args.status!),
+        )
+        .order("desc")
+        .take(100);
+    }
+    return await ctx.db
+      .query("contactRequests")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(100);
+  },
+});
+
+export const updateContactRequestStatus = mutation({
+  args: {
+    requestId: v.id("contactRequests"),
+    status: contactRequestStatusValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireOwner(ctx);
+    await ctx.db.patch(args.requestId, {
+      status: args.status,
+      updatedAt: Date.now(),
+    });
+    return { updated: true };
   },
 });

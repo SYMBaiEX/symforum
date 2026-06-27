@@ -3,6 +3,7 @@ import { makeFunctionReference } from "convex/server";
 export type UserRole = "owner" | "admin" | "reader";
 export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
 export type CommentStatus = "active" | "deleted" | "hidden";
+export type ContactRequestStatus = "new" | "read" | "archived";
 
 export type ConvexPostRecord = {
   _id: string;
@@ -155,6 +156,22 @@ export type AdminApiKeyRecord = {
   createdAt: number;
   lastUsedAt?: number;
   revokedAt?: number;
+};
+
+export type ContactRequestRecord = {
+  _id: string;
+  _creationTime: number;
+  name: string;
+  email: string;
+  subject: string;
+  description: string;
+  status: ContactRequestStatus;
+  source?: string;
+  userAgent?: string;
+  emailedAt?: number;
+  emailError?: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type NewsletterSubscriberRecord = {
@@ -375,6 +392,8 @@ export type AdminOverviewRecord = {
     portfolioProjects: number;
     sitePages: number;
     newsSnapshots: number;
+    contactRequestsSample: number;
+    openContactRequests: number;
     openSystemLogs: number;
     analyticsEventsSample: number;
   };
@@ -553,6 +572,16 @@ export const convexRefs = {
       { keyId: string },
       { revoked: boolean }
     >("admin:revokeApiKey"),
+    listContactRequests: makeFunctionReference<
+      "query",
+      { status?: ContactRequestStatus },
+      ContactRequestRecord[]
+    >("admin:listContactRequests"),
+    updateContactRequestStatus: makeFunctionReference<
+      "mutation",
+      { requestId: string; status: ContactRequestStatus },
+      { updated: boolean }
+    >("admin:updateContactRequestStatus"),
     listNewsletterSubscribers: makeFunctionReference<
       "query",
       Record<string, never>,
@@ -680,6 +709,22 @@ export const convexRefs = {
       { name?: string; source?: AnalyticsSource; limit?: number },
       AnalyticsEventRecord[]
     >("analytics:listAdmin"),
+  },
+  contact: {
+    submit: makeFunctionReference<
+      "mutation",
+      {
+        request: {
+          name: string;
+          email: string;
+          subject: string;
+          description: string;
+          source?: string;
+          userAgent?: string;
+        };
+      },
+      { ok: boolean; request: ContactRequestRecord }
+    >("contact:submit"),
   },
   analytics: {
     record: makeFunctionReference<
