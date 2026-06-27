@@ -172,6 +172,115 @@
     @apply max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8;
   }
 
+  .signal-moth-track {
+    --signal-moth-w: clamp(1.55rem, 2.25vw, 2.75rem);
+    --signal-moth-h: calc(var(--signal-moth-w) * 1.083333);
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 0;
+    position: absolute;
+    left: 0;
+    top: calc(-1 * var(--signal-moth-h) - 0.03rem);
+    z-index: 5;
+    width: var(--signal-moth-w);
+    height: var(--signal-moth-h);
+    animation: signal-moth-patrol 32s linear infinite;
+    will-change: left;
+  }
+
+  .signal-moth-track:focus-visible {
+    outline: 1px solid hsl(var(--accent));
+    outline-offset: 0.2rem;
+  }
+
+  .signal-moth-track.is-acting {
+    animation-play-state: paused;
+  }
+
+  .signal-moth-bob {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    animation: signal-moth-hover 2.8s var(--motion-ease) infinite;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .signal-moth-sprite {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background-image: url("/images/pets/signal-moth.webp");
+    background-repeat: no-repeat;
+    background-position: 0 12.5%;
+    background-size: 800% 900%;
+    filter:
+      drop-shadow(0 0.08rem 0 hsl(var(--background) / 0.75))
+      drop-shadow(0 0 0.45rem hsl(var(--accent) / 0.18));
+    opacity: 0;
+    will-change: background-position, opacity;
+  }
+
+  .signal-moth-sprite--right {
+    opacity: 1;
+    animation:
+      signal-moth-run-right 1.06s steps(1, end) infinite,
+      signal-moth-facing-right 32s step-end infinite;
+  }
+
+  .signal-moth-sprite--left {
+    background-position: 0 25%;
+    animation:
+      signal-moth-run-left 1.06s steps(1, end) infinite,
+      signal-moth-facing-left 32s step-end infinite;
+  }
+
+  .signal-moth-sprite--action {
+    background-position: 0 37.5%;
+    visibility: hidden;
+  }
+
+  .signal-moth-track.is-acting .signal-moth-sprite--right,
+  .signal-moth-track.is-acting .signal-moth-sprite--left {
+    opacity: 0;
+    visibility: hidden;
+    animation-play-state: paused;
+  }
+
+  .signal-moth-track.is-acting .signal-moth-sprite--action {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .signal-moth-track.action-waving .signal-moth-sprite--action {
+    animation: signal-moth-waving 0.7s steps(1, end) infinite;
+  }
+
+  .signal-moth-track.action-jumping .signal-moth-sprite--action {
+    animation: signal-moth-jumping 0.84s steps(1, end) infinite;
+  }
+
+  .signal-moth-track.action-failed .signal-moth-sprite--action {
+    animation: signal-moth-failed 1.22s steps(1, end) infinite;
+  }
+
+  .signal-moth-track.action-waiting .signal-moth-sprite--action {
+    animation: signal-moth-waiting 1.01s steps(1, end) infinite;
+  }
+
+  .signal-moth-track.action-review .signal-moth-sprite--action {
+    animation: signal-moth-review 1.03s steps(1, end) infinite;
+  }
+
+  .dark .signal-moth-sprite {
+    filter:
+      drop-shadow(0 0.08rem 0 hsl(0 0% 0% / 0.78))
+      drop-shadow(0 0 0.55rem hsl(var(--accent) / 0.26));
+  }
+
   .markdown-body {
     margin-top: 2rem;
     max-width: none;
@@ -510,6 +619,257 @@
   }
 }
 
+@keyframes signal-moth-patrol {
+  0% {
+    left: 0;
+  }
+  47% {
+    left: calc(100% - var(--signal-moth-w));
+  }
+  53% {
+    left: calc(100% - var(--signal-moth-w));
+  }
+  100% {
+    left: 0;
+  }
+}
+
+@keyframes signal-moth-facing-right {
+  0%,
+  49.999% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes signal-moth-facing-left {
+  0%,
+  49.999% {
+    opacity: 0;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes signal-moth-run-right {
+  0%,
+  11.320754% {
+    background-position: 0 12.5%;
+  }
+  11.320755%,
+  22.641508% {
+    background-position: 14.285714% 12.5%;
+  }
+  22.641509%,
+  33.962263% {
+    background-position: 28.571429% 12.5%;
+  }
+  33.962264%,
+  45.283018% {
+    background-position: 42.857143% 12.5%;
+  }
+  45.283019%,
+  56.603772% {
+    background-position: 57.142857% 12.5%;
+  }
+  56.603773%,
+  67.924527% {
+    background-position: 71.428571% 12.5%;
+  }
+  67.924528%,
+  79.245282% {
+    background-position: 85.714286% 12.5%;
+  }
+  79.245283%,
+  100% {
+    background-position: 100% 12.5%;
+  }
+}
+
+@keyframes signal-moth-run-left {
+  0%,
+  11.320754% {
+    background-position: 0 25%;
+  }
+  11.320755%,
+  22.641508% {
+    background-position: 14.285714% 25%;
+  }
+  22.641509%,
+  33.962263% {
+    background-position: 28.571429% 25%;
+  }
+  33.962264%,
+  45.283018% {
+    background-position: 42.857143% 25%;
+  }
+  45.283019%,
+  56.603772% {
+    background-position: 57.142857% 25%;
+  }
+  56.603773%,
+  67.924527% {
+    background-position: 71.428571% 25%;
+  }
+  67.924528%,
+  79.245282% {
+    background-position: 85.714286% 25%;
+  }
+  79.245283%,
+  100% {
+    background-position: 100% 25%;
+  }
+}
+
+@keyframes signal-moth-waving {
+  0%,
+  20% {
+    background-position: 0 37.5%;
+  }
+  20.001%,
+  40% {
+    background-position: 14.285714% 37.5%;
+  }
+  40.001%,
+  60% {
+    background-position: 28.571429% 37.5%;
+  }
+  60.001%,
+  100% {
+    background-position: 42.857143% 37.5%;
+  }
+}
+
+@keyframes signal-moth-jumping {
+  0%,
+  16.666666% {
+    background-position: 0 50%;
+  }
+  16.666667%,
+  33.333332% {
+    background-position: 14.285714% 50%;
+  }
+  33.333333%,
+  49.999999% {
+    background-position: 28.571429% 50%;
+  }
+  50%,
+  66.666666% {
+    background-position: 42.857143% 50%;
+  }
+  66.666667%,
+  100% {
+    background-position: 57.142857% 50%;
+  }
+}
+
+@keyframes signal-moth-failed {
+  0%,
+  11.475409% {
+    background-position: 0 62.5%;
+  }
+  11.47541%,
+  22.950819% {
+    background-position: 14.285714% 62.5%;
+  }
+  22.95082%,
+  34.426229% {
+    background-position: 28.571429% 62.5%;
+  }
+  34.42623%,
+  45.901639% {
+    background-position: 42.857143% 62.5%;
+  }
+  45.90164%,
+  57.377049% {
+    background-position: 57.142857% 62.5%;
+  }
+  57.37705%,
+  68.852459% {
+    background-position: 71.428571% 62.5%;
+  }
+  68.85246%,
+  80.327868% {
+    background-position: 85.714286% 62.5%;
+  }
+  80.327869%,
+  100% {
+    background-position: 100% 62.5%;
+  }
+}
+
+@keyframes signal-moth-waiting {
+  0%,
+  14.851484% {
+    background-position: 0 75%;
+  }
+  14.851485%,
+  29.702969% {
+    background-position: 14.285714% 75%;
+  }
+  29.70297%,
+  44.554454% {
+    background-position: 28.571429% 75%;
+  }
+  44.554455%,
+  59.405939% {
+    background-position: 42.857143% 75%;
+  }
+  59.40594%,
+  74.257425% {
+    background-position: 57.142857% 75%;
+  }
+  74.257426%,
+  100% {
+    background-position: 71.428571% 75%;
+  }
+}
+
+@keyframes signal-moth-review {
+  0%,
+  14.563106% {
+    background-position: 0 100%;
+  }
+  14.563107%,
+  29.126213% {
+    background-position: 14.285714% 100%;
+  }
+  29.126214%,
+  43.68932% {
+    background-position: 28.571429% 100%;
+  }
+  43.689321%,
+  58.252426% {
+    background-position: 42.857143% 100%;
+  }
+  58.252427%,
+  72.815533% {
+    background-position: 57.142857% 100%;
+  }
+  72.815534%,
+  100% {
+    background-position: 71.428571% 100%;
+  }
+}
+
+@keyframes signal-moth-hover {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-0.8deg);
+  }
+  35% {
+    transform: translate3d(0, -0.2rem, 0) rotate(1.2deg);
+  }
+  70% {
+    transform: translate3d(0, 0.1rem, 0) rotate(-0.5deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -518,5 +878,16 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .signal-moth-track {
+    left: 1rem;
+    animation: none !important;
+  }
+
+  .signal-moth-bob,
+  .signal-moth-sprite {
+    animation: none !important;
+    background-position: 0 0;
   }
 }

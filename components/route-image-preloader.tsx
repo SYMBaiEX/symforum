@@ -5,6 +5,7 @@ import { useEffect } from "react";
 const routeImages = [
   "/images/home-banner-dark.webp",
   "/images/home-banner-light.webp",
+  "/images/pets/signal-moth.webp",
   "/images/about-symbiex-portrait-dark.webp",
   "/images/about-symbiex-portrait-light.webp",
 ];
