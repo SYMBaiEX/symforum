@@ -2,7 +2,6 @@ import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
-import { TerminalMoth } from "@/components/terminal-moth";
 import { Button } from "@/components/ui/button";
 import { getFeaturedPost } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
@@ -47,9 +46,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <div className="page-frame relative h-0 py-0">
-        <TerminalMoth className="-top-3 left-4 sm:left-8 md:-top-4 md:left-10" />
-      </div>
       <HomeBanner />
 
       <section className="page-frame page-frame-spacious">
