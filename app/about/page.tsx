@@ -36,7 +36,7 @@ export default async function AboutPage() {
                     priority
                     sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
                     unoptimized={isLocalImageUrl(lightImageUrl)}
-                    className="h-full w-full object-cover object-[center_12%] dark:hidden md:object-center"
+                    className="h-full w-full object-cover object-[center_10%] dark:hidden md:object-center"
                     decoding="async"
                   />
                 ) : null}
@@ -50,8 +50,8 @@ export default async function AboutPage() {
                     unoptimized={isLocalImageUrl(darkImageUrl)}
                     className={
                       lightImageUrl
-                        ? "hidden h-full w-full object-cover object-[center_12%] dark:block md:object-center"
-                        : "h-full w-full object-cover object-[center_12%] md:object-center"
+                        ? "hidden h-full w-full object-cover object-[center_10%] dark:block md:object-center"
+                        : "h-full w-full object-cover object-[center_10%] md:object-center"
                     }
                     decoding="async"
                   />
