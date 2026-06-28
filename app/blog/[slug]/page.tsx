@@ -39,9 +39,6 @@ export default async function BlogPostPage({
     <>
       <article className="page-frame">
         <div className="page-content">
-          <p className="page-kicker">
-            Field note
-          </p>
           <h1 className="page-title mt-3">
             {post.title}
           </h1>
