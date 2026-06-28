@@ -127,7 +127,7 @@ function DesktopNavLink({
       size="sm"
       variant="ghost"
     >
-      <Link aria-current={active ? "page" : undefined} href={href}>
+      <Link aria-current={active ? "page" : undefined} href={href} prefetch>
         {children}
       </Link>
     </Button>
@@ -216,7 +216,7 @@ function MobileNavItem({
           "bg-foreground text-background focus:bg-foreground focus:text-background",
       )}
     >
-      <Link aria-current={active ? "page" : undefined} href={href}>
+      <Link aria-current={active ? "page" : undefined} href={href} prefetch>
         <span>{label}</span>
         {active ? (
           <span className="ml-auto font-mono text-[9px] uppercase opacity-70">

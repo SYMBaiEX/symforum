@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 const routeImages = [
@@ -10,13 +11,36 @@ const routeImages = [
   "/images/about-symbiex-portrait-light.webp",
 ];
 
+const warmRoutes = [
+  "/",
+  "/about",
+  "/blog",
+  "/news",
+  "/portfolio",
+  "/contact",
+  "/profile",
+  "/signin",
+];
+
 export function RouteImagePreloader() {
+  const router = useRouter();
+
   useEffect(() => {
+    let cancelled = false;
+
     const preload = () => {
+      if (cancelled) {
+        return;
+      }
+
       for (const src of routeImages) {
         const image = new window.Image();
         image.decoding = "async";
         image.src = src;
+      }
+
+      for (const href of warmRoutes) {
+        router.prefetch(href);
       }
     };
 
@@ -24,12 +48,18 @@ export function RouteImagePreloader() {
       timeout: 1200,
     });
     if (idleCallback) {
-      return () => window.cancelIdleCallback?.(idleCallback);
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(idleCallback);
+      };
     }
 
     const timeout = window.setTimeout(preload, 500);
-    return () => window.clearTimeout(timeout);
-  }, []);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [router]);
 
   return null;
 }

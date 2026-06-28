@@ -73,6 +73,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 items-center">
             <Link
               href="/"
+              prefetch
               className="focus-ring truncate font-mono text-sm font-semibold uppercase"
             >
               SYMBaiEX
