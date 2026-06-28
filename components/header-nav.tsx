@@ -16,6 +16,7 @@ import { useConvexAuth } from "convex/react";
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -36,8 +37,13 @@ export function HeaderNav() {
 
 function LiveHeaderNav() {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const [mounted, setMounted] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || isLoading) {
     return <NavRow authPending />;
   }
 
