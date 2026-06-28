@@ -37,12 +37,18 @@ export function AuthRequiredDialog({
         </DialogHeader>
         <DialogFooter className="gap-2 sm:justify-start sm:space-x-0">
           <Button asChild>
-            <Link href={`/signin?mode=signUp&redirectTo=${encodedRedirect}`}>
+            <Link
+              href={`/signin?mode=signUp&redirectTo=${encodedRedirect}`}
+              prefetch
+            >
               Sign up
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={`/signin?mode=signIn&redirectTo=${encodedRedirect}`}>
+            <Link
+              href={`/signin?mode=signIn&redirectTo=${encodedRedirect}`}
+              prefetch
+            >
               Sign in
             </Link>
           </Button>

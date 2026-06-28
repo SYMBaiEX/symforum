@@ -155,6 +155,7 @@ function ProjectListRow({
         />
         <Link
           href={projectHref}
+          prefetch
           className="focus-ring inline-flex max-w-full text-[0.95rem] font-semibold leading-tight hover:text-primary md:text-base"
         >
           <span className="truncate">{project.name}</span>
@@ -174,7 +175,7 @@ function ProjectListRow({
           size="icon"
           variant="ghost"
         >
-          <Link href={projectHref} aria-label={`Open ${project.name}`}>
+          <Link href={projectHref} prefetch aria-label={`Open ${project.name}`}>
             <ArrowUpRight aria-hidden="true" />
           </Link>
         </Button>

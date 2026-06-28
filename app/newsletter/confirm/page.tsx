@@ -41,10 +41,14 @@ export default async function NewsletterConfirmPage({
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/blog">Read blog</Link>
+            <Link href="/blog" prefetch>
+              Read blog
+            </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/">Home</Link>
+            <Link href="/" prefetch>
+              Home
+            </Link>
           </Button>
         </div>
       </div>

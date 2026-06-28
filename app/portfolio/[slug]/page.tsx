@@ -67,7 +67,11 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_16rem] md:gap-12">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-            <Link href="/portfolio" className="focus-ring hover:text-foreground">
+            <Link
+              href="/portfolio"
+              prefetch
+              className="focus-ring hover:text-foreground"
+            >
               Portfolio
             </Link>
             <span>/</span>
@@ -198,6 +202,7 @@ function ProjectPagerLink({
   return (
     <Link
       href={href}
+      prefetch
       className={`focus-ring group flex items-center gap-3 py-3 transition-colors hover:bg-muted/25 ${
         isPrevious ? "justify-start" : "justify-end text-right"
       }`}

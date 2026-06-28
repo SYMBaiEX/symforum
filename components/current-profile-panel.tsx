@@ -31,7 +31,9 @@ export function CurrentProfilePanel() {
         </p>
         <div className="mt-5">
           <Button asChild>
-            <Link href="/signin?mode=signIn&redirectTo=/profile">Sign in</Link>
+            <Link href="/signin?mode=signIn&redirectTo=/profile" prefetch>
+              Sign in
+            </Link>
           </Button>
         </div>
       </div>
@@ -54,7 +56,9 @@ export function CurrentProfilePanel() {
         <div className="mt-5 flex flex-wrap gap-2">
           {publicHref ? (
             <Button asChild size="sm">
-              <Link href={publicHref}>Open public profile</Link>
+              <Link href={publicHref} prefetch>
+                Open public profile
+              </Link>
             </Button>
           ) : null}
           {viewer.role === "owner" ? (

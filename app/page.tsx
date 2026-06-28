@@ -68,7 +68,9 @@ export default async function HomePage() {
         </div>
         <div className="mt-5">
           <Button asChild variant="outline">
-            <Link href="/news">Open today&apos;s index</Link>
+            <Link href="/news" prefetch>
+              Open today&apos;s index
+            </Link>
           </Button>
         </div>
       </section>

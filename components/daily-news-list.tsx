@@ -18,6 +18,7 @@ export function DailyNewsList({ stories }: { stories: HnStory[] }) {
         <Link
           key={story.hnItemId}
           href={newsStoryPath(story)}
+          prefetch
           className="focus-ring group grid gap-1 py-2 transition-colors hover:bg-muted/35 md:grid-cols-[2.25rem_minmax(0,1fr)_9rem] md:items-center md:gap-3 md:px-3"
         >
           <span className="font-mono text-[10px] uppercase text-muted-foreground">

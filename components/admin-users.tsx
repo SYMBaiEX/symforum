@@ -366,7 +366,9 @@ function UserRow({
         </Select>
         {publicHandle ? (
           <Button asChild size="sm" variant="outline">
-            <Link href={`/u/${publicHandle}`}>View</Link>
+            <Link href={`/u/${publicHandle}`} prefetch>
+              View
+            </Link>
           </Button>
         ) : (
           <Button disabled size="sm" variant="outline">

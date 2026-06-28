@@ -86,7 +86,9 @@ export default async function NewsStoryPage({ params }: PageProps) {
               </Button>
             ) : null}
             <Button asChild variant="outline" size="sm">
-              <Link href="/news">Back to index</Link>
+              <Link href="/news" prefetch>
+                Back to index
+              </Link>
             </Button>
             {convexEnabled ? (
               <InteractionBar entityType="hnStory" entityId={entityId} />

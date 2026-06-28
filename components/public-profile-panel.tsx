@@ -61,7 +61,9 @@ export function PublicProfilePanel({ username }: { username: string }) {
         {profile.isCurrentUser ? (
           <div className="mt-6">
             <Button asChild size="sm">
-              <Link href="/profile">Open your profile</Link>
+              <Link href="/profile" prefetch>
+                Open your profile
+              </Link>
             </Button>
           </div>
         ) : null}
@@ -91,7 +93,9 @@ export function PublicProfilePanel({ username }: { username: string }) {
                 <p className="text-sm leading-7 md:text-base">{comment.body}</p>
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
-                    <Link href={commentPath(comment)}>Open thread</Link>
+                    <Link href={commentPath(comment)} prefetch>
+                      Open thread
+                    </Link>
                   </Button>
                 </div>
               </article>

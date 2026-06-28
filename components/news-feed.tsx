@@ -276,6 +276,7 @@ function NewsRowsView({
                   <h2 className="min-w-0 flex-1 font-sans text-[13px] font-semibold leading-none md:text-sm">
                     <Link
                       href={newsStoryPath(story)}
+                      prefetch
                       title={story.title}
                       className="focus-ring block max-w-full truncate transition-colors hover:text-primary"
                     >

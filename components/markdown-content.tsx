@@ -48,7 +48,11 @@ export function MarkdownContent({
           a({ href, children }) {
             const cleanHref = normalizeMarkdownHref(href);
             if (cleanHref.startsWith("/")) {
-              return <Link href={cleanHref}>{children}</Link>;
+              return (
+                <Link href={cleanHref} prefetch>
+                  {children}
+                </Link>
+              );
             }
             return (
               <a

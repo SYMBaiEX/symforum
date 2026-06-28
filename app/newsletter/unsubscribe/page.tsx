@@ -36,7 +36,9 @@ export default async function NewsletterUnsubscribePage({
         </p>
         <div className="mt-6">
           <Button asChild variant="outline">
-            <Link href="/">Back home</Link>
+            <Link href="/" prefetch>
+              Back home
+            </Link>
           </Button>
         </div>
       </div>
