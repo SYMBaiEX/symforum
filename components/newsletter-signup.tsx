@@ -74,7 +74,7 @@ export function NewsletterSignup({
         type="email"
         value={email}
         onChange={(event) => setEmail(event.target.value)}
-        placeholder="email@domain.com"
+        placeholder="Sign up for Newsletter"
         autoComplete="email"
         className="h-9 rounded-none border-row-border bg-background/50 font-mono text-xs"
         required

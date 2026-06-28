@@ -76,7 +76,7 @@ export function ProfileNewsletterPreferences() {
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="email@domain.com"
+          placeholder="Sign up for Newsletter"
           className="rounded-none"
           required
         />
