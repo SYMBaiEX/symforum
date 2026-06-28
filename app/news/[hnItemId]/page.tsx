@@ -57,9 +57,6 @@ export default async function NewsStoryPage({ params }: PageProps) {
     <>
       <article className="page-frame">
         <div className="page-content">
-          <p className="page-kicker">
-            Indexed article
-          </p>
           <h1 className="page-title mt-3">
             {story.title}
           </h1>
