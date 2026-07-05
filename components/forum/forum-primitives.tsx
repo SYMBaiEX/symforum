@@ -910,41 +910,39 @@ export function ForumAnnouncementPanel({
   }
 
   return (
-    <section className="border-y border-row-border py-4">
-      <div className="grid gap-4 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:items-start">
-        <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Forum bulletin
-          </p>
-          <h2 className="mt-1 text-lg font-semibold">{title}</h2>
-        </div>
+    <section className="py-1">
+      <div className="grid gap-x-3 gap-y-1 lg:grid-cols-[7.5rem_minmax(0,1fr)_auto] lg:items-start">
+        <h2 className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
+          {title}
+        </h2>
         <div
           className={cn(
             "min-w-0",
-            collapsed ? "self-center" : "divide-y divide-row-border",
+            collapsed ? "self-center" : "space-y-2",
           )}
           id={FORUM_ANNOUNCEMENT_PANEL_ID}
         >
           {collapsed ? (
-            <p className="truncate text-sm text-muted-foreground">
-              Latest /{" "}
+            <p className="truncate text-xs leading-5 text-muted-foreground">
+              <span className="font-mono uppercase">Latest</span>
+              <span className="px-1.5">/</span>
               <ForumLink
                 className="focus-ring font-semibold text-foreground hover:text-primary"
                 href={forumAnnouncementPath(latestAnnouncement)}
                 prefetch
               >
                 {latestAnnouncement.title}
-              </ForumLink>{" "}
-              / Updated {formatForumDateTime(latestAnnouncement.updatedAt)}
+              </ForumLink>
+              <span className="px-1.5">/</span>
+              <span>
+                Updated {formatForumDateTime(latestAnnouncement.updatedAt)}
+              </span>
             </p>
           ) : (
             announcements.map((announcement) => (
-              <article
-                className="py-3 first:pt-0 last:pb-0"
-                key={announcement._id}
-              >
+              <article className="max-w-4xl" key={announcement._id}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold leading-snug">
+                  <h3 className="text-sm font-semibold leading-5">
                     <ForumLink
                       href={forumAnnouncementPath(announcement)}
                       prefetch
@@ -953,31 +951,31 @@ export function ForumAnnouncementPanel({
                     </ForumLink>
                   </h3>
                   {announcement.categoryName ? (
-                    <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
                       {announcement.categoryName}
                     </span>
                   ) : (
-                    <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
                       global
                     </span>
                   )}
                 </div>
                 <ForumBody
                   body={announcement.body}
-                  className="mt-2 text-sm leading-6 text-muted-foreground md:text-sm"
+                  className="mt-1 text-xs leading-5 text-muted-foreground md:text-xs"
                 />
-                <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+                <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
                   Updated {formatForumDateTime(announcement.updatedAt)}
                 </p>
               </article>
             ))
           )}
         </div>
-        <div className="flex flex-wrap gap-2 lg:justify-self-end">
+        <div className="flex flex-wrap gap-3 lg:justify-self-end">
           <Button
             aria-controls={FORUM_ANNOUNCEMENT_PANEL_ID}
             aria-expanded={!collapsed}
-            className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
+            className="h-5 rounded-none px-0 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground"
             size="sm"
             type="button"
             variant="ghost"
@@ -987,7 +985,7 @@ export function ForumAnnouncementPanel({
           </Button>
           <Button
             asChild
-            className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
+            className="h-5 rounded-none px-0 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground"
             size="sm"
             variant="ghost"
           >
