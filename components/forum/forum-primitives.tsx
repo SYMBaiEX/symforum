@@ -1,8 +1,5 @@
 "use client";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { primarySiteHrefForPath } from "@/components/forum/forum-host-url";
-import { useForumShellContext } from "@/components/forum/forum-shell-context";
 import { Button } from "@/components/ui/button";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
@@ -75,14 +72,6 @@ const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum/members", label: "Members" },
   { href: "/forum/online", label: "Who's online" },
   { href: "/forum/announcements", label: "Announcements" },
-];
-const PRIMARY_SITE_NAV_ITEMS = [
-  { href: "/", label: "Main" },
-  { href: "/news", label: "News" },
-  { href: "/blog", label: "Blog" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
 ];
 const GUEST_FORUM_NAV_STATE: ForumWelcomeNavState = {
   authenticated: false,
@@ -336,24 +325,18 @@ export function ForumChrome({
   className?: string;
 }) {
   const pathname = usePathname();
-  const routeLabel = forumChromeRouteLabel(pathname);
 
   return (
-    <header className={cn("border border-row-border bg-background", className)}>
+    <header
+      className={cn(
+        "overflow-hidden border border-row-border bg-background",
+        className,
+      )}
+    >
       <ForumPresenceHeartbeat pathname={pathname} />
       <ForumWelcomeStrip />
-      <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="bg-background px-4 py-3 md:px-5">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            SYMBaiEX forum / {routeLabel}
-          </p>
-        </div>
-        <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
-          Convex board
-        </div>
-      </div>
       {children ? (
-        <div className="border-t border-row-border bg-background px-2 py-2">
+        <div className="border-t border-row-border bg-background px-3 py-3 md:px-4">
           {children}
         </div>
       ) : null}
@@ -406,32 +389,23 @@ function LiveForumPresenceHeartbeat({ pathname }: { pathname: string | null }) {
 
 function ForumWelcomeStrip() {
   const pathname = usePathname();
-  const { primarySiteHref } = useForumShellContext();
 
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
     return (
       <ForumWelcomeStripLayout
         navState={GUEST_FORUM_NAV_STATE}
         pathname={pathname}
-        primarySiteHref={primarySiteHref}
       />
     );
   }
 
-  return (
-    <LiveForumWelcomeStrip
-      pathname={pathname}
-      primarySiteHref={primarySiteHref}
-    />
-  );
+  return <LiveForumWelcomeStrip pathname={pathname} />;
 }
 
 function LiveForumWelcomeStrip({
   pathname,
-  primarySiteHref,
 }: {
   pathname: string | null;
-  primarySiteHref: string;
 }) {
   const navState = useQuery(forumRefs.getMyForumNavState, {});
 
@@ -439,7 +413,6 @@ function LiveForumWelcomeStrip({
     <ForumWelcomeStripLayout
       navState={navState}
       pathname={pathname}
-      primarySiteHref={primarySiteHref}
     />
   );
 }
@@ -462,11 +435,9 @@ type ForumWelcomeNavState = {
 function ForumWelcomeStripLayout({
   navState,
   pathname,
-  primarySiteHref,
 }: {
   navState?: ForumWelcomeNavState;
   pathname: string | null;
-  primarySiteHref: string;
 }) {
   const signInHref = forumSignInHref(pathname);
   const privateMessageBadge = forumNavBadgeLabel(
@@ -479,76 +450,48 @@ function ForumWelcomeStripLayout({
   );
 
   return (
-    <div className="grid gap-px border-t border-row-border bg-row-border lg:grid-cols-[minmax(0,1fr)_auto]">
-      <div className="bg-muted/20 px-4 py-2 md:px-5">
-        <p className="font-mono text-[10px] uppercase leading-5 text-muted-foreground">
+    <div className="px-4 py-3 md:px-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <p className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
           {forumWelcomeMessage(navState)}
         </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-1 bg-background px-2 py-2">
-        {navState === undefined ? (
-          <span className="inline-flex h-7 items-center border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground">
-            Session
-          </span>
-        ) : navState.authenticated ? (
-          <>
-            <ForumMastheadLink href="/profile" label="Profile" />
-            <ForumMastheadLink href="/forum/control-panel" label="User CP" />
-            {navState.trusted ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+          <nav
+            aria-label="Forum account"
+            className="flex flex-wrap items-center gap-1"
+          >
+            {navState === undefined ? null : navState.authenticated ? (
               <>
-                <ForumMastheadLink
-                  badge={privateMessageBadge}
-                  href="/forum/messages"
-                  label="PMs"
-                />
-                <ForumMastheadLink
-                  badge={subscriptionBadge}
-                  href="/forum/subscriptions"
-                  label="Watched"
-                />
+                <ForumMastheadLink href="/forum/control-panel" label="User CP" />
+                {navState.trusted ? (
+                  <>
+                    <ForumMastheadLink
+                      badge={privateMessageBadge}
+                      href="/forum/messages"
+                      label="PMs"
+                    />
+                    <ForumMastheadLink
+                      badge={subscriptionBadge}
+                      href="/forum/subscriptions"
+                      label="Watched"
+                    />
+                  </>
+                ) : null}
+                {navState.canModerate ? (
+                  <ForumMastheadLink href="/forum/moderation" label="Mod CP" />
+                ) : null}
+                {navState.canManageBoards ? (
+                  <ForumMastheadLink href="/admin" label="Admin CP" />
+                ) : null}
               </>
-            ) : null}
-            {navState.canModerate ? (
-              <ForumMastheadLink href="/forum/moderation" label="Mod CP" />
-            ) : null}
-            {navState.canManageBoards ? (
-              <ForumMastheadLink href="/admin" label="Admin CP" />
-            ) : null}
-          </>
-        ) : (
-          <>
-            <ForumMastheadLink href={signInHref} label="Sign in" />
-            <ForumMastheadLink href="/forum" label="Browse" />
-          </>
-        )}
-        <ForumPrimarySiteNav primarySiteHref={primarySiteHref} />
-        <ForumQuickSearch pathname={pathname} />
-        <ThemeToggle />
+            ) : (
+              <ForumMastheadLink href={signInHref} label="Sign in" />
+            )}
+          </nav>
+          <ForumQuickSearch pathname={pathname} />
+        </div>
       </div>
     </div>
-  );
-}
-
-function ForumPrimarySiteNav({ primarySiteHref }: { primarySiteHref: string }) {
-  return (
-    <nav aria-label="SYMBaiEX site" className="contents">
-      {PRIMARY_SITE_NAV_ITEMS.map((item) => {
-        const href = primarySiteHrefForPath(primarySiteHref, item.href);
-        return (
-          <Button
-            asChild
-            className="h-7 rounded-none border-row-border px-2 font-mono text-[10px] uppercase shadow-none"
-            key={item.href}
-            size="sm"
-            variant="outline"
-          >
-            <Link href={href} prefetch={href.startsWith("/")}>
-              {item.label}
-            </Link>
-          </Button>
-        );
-      })}
-    </nav>
   );
 }
 
@@ -571,7 +514,7 @@ function ForumQuickSearch({ pathname }: { pathname: string | null }) {
   return (
     <form
       aria-label="Quick forum search"
-      className="grid h-7 min-w-[min(18rem,100%)] grid-cols-[minmax(8rem,1fr)_auto]"
+      className="grid h-7 w-full grid-cols-[minmax(8rem,1fr)_auto] sm:w-[18rem]"
       onSubmit={submitSearch}
     >
       <label className="sr-only" htmlFor="forum-masthead-search">
@@ -609,9 +552,9 @@ function ForumMastheadLink({
   return (
     <Button
       asChild
-      className="h-7 rounded-none border-row-border px-2 font-mono text-[10px] uppercase shadow-none"
+      className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground"
       size="sm"
-      variant="outline"
+      variant="ghost"
     >
       <ForumLink href={href} prefetch>
         <span className="inline-flex items-center gap-1.5">
@@ -710,53 +653,6 @@ function forumPresencePayload(pathname: string | null): {
   return { locationType: "board", path, label: "Viewing board" };
 }
 
-function forumChromeRouteLabel(pathname: string | null) {
-  const path = normalizedForumPathname(pathname);
-  if (path === "/forum") {
-    return "Index";
-  }
-  if (path.startsWith("/forum/announcements")) {
-    return "Announcements";
-  }
-  if (path.startsWith("/forum/help")) {
-    return "Help / FAQ";
-  }
-  if (path.startsWith("/forum/calendar")) {
-    return "Calendar";
-  }
-  if (path.startsWith("/forum/search")) {
-    return "Search";
-  }
-  if (path.startsWith("/forum/new-posts")) {
-    return "New Posts";
-  }
-  if (path.startsWith("/forum/todays-posts")) {
-    return "Today";
-  }
-  if (path.startsWith("/forum/members")) {
-    return "Members";
-  }
-  if (path.startsWith("/forum/online")) {
-    return "Online";
-  }
-  if (path.startsWith("/forum/messages")) {
-    return "Messages";
-  }
-  if (path.startsWith("/forum/subscriptions")) {
-    return "Watched";
-  }
-  if (path.startsWith("/forum/control-panel")) {
-    return "User CP";
-  }
-  if (path.startsWith("/forum/moderation")) {
-    return "Moderator CP";
-  }
-  if (path.split("/").filter(Boolean).length === 2) {
-    return "Board";
-  }
-  return "Thread";
-}
-
 export function ForumUtilityNav({ className }: { className?: string }) {
   return (
     <ForumChrome className={className}>
@@ -774,78 +670,44 @@ function ForumUtilityLinkRow({ className }: { className?: string }) {
 }
 
 function LiveForumUtilityLinkRow({ className }: { className?: string }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
   const categories = useQuery(forumRefs.listCategories, { limit: 200 });
-  const navState = useQuery(
-    forumRefs.getMyForumNavState,
-    !isLoading && isAuthenticated ? {} : "skip",
-  );
 
-  return (
-    <ForumUtilityLinks
-      categories={categories}
-      className={className}
-      navState={navState}
-    />
-  );
+  return <ForumUtilityLinks categories={categories} className={className} />;
 }
 
 function ForumUtilityLinks({
   categories = null,
   className,
-  navState,
 }: {
   categories?: ForumCategoryRecord[] | null;
   className?: string;
-  navState?: {
-    unreadNotifications: number;
-    unreadNotificationsLimited: boolean;
-    unreadPrivateMessages: number;
-    unreadPrivateMessagesLimited: boolean;
-    canModerate?: boolean;
-  };
 }) {
   const pathname = usePathname();
   const normalizedPathname = normalizedForumPathname(pathname);
-  const privateMessageBadge = forumNavBadgeLabel(
-    navState?.unreadPrivateMessages ?? 0,
-    navState?.unreadPrivateMessagesLimited ?? false,
-  );
-  const subscriptionBadge = forumNavBadgeLabel(
-    navState?.unreadNotifications ?? 0,
-    navState?.unreadNotificationsLimited ?? false,
-  );
   const items = [
     { href: "/forum", label: "Board index" },
     { href: "/forum/help", label: "Help / FAQ" },
     { href: "/forum/calendar", label: "Calendar" },
     { href: "/forum/announcements", label: "Announcements" },
     { href: "/forum/new-posts", label: "New posts" },
-    { href: "/forum/todays-posts", label: "Today's posts" },
+    { href: "/forum/todays-posts", label: "Today" },
     { href: "/forum/search", label: "Search" },
     { href: "/forum/members", label: "Members" },
-    { href: "/forum/online", label: "Who's online" },
-    { href: "/forum/control-panel", label: "User CP" },
-    ...(navState?.canModerate
-      ? [{ href: "/forum/moderation", label: "Moderator CP" }]
-      : []),
-    {
-      href: "/forum/messages",
-      label: "Private messages",
-      badge: privateMessageBadge,
-    },
-    {
-      href: "/forum/subscriptions",
-      label: "Subscriptions",
-      badge: subscriptionBadge,
-    },
+    { href: "/forum/online", label: "Online" },
   ];
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
-      <nav aria-label="Forum tools" className="flex flex-wrap gap-1">
+    <div
+      className={cn(
+        "flex flex-col gap-3 md:flex-row md:items-center md:justify-between",
+        className,
+      )}
+    >
+      <nav
+        aria-label="Forum tools"
+        className="flex min-w-0 flex-wrap items-center gap-1"
+      >
         {items.map((item) => {
-          const badge = item.badge ?? null;
           const active =
             item.href === "/forum"
               ? normalizedPathname === "/forum"
@@ -856,30 +718,21 @@ function ForumUtilityLinks({
             <Button
               asChild
               className={cn(
-                "h-7 rounded-none border-row-border px-2.5 font-mono text-[10px] uppercase shadow-none",
+                "h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground",
                 active &&
                   "border-foreground bg-foreground text-background hover:bg-foreground hover:text-background",
               )}
               key={item.href}
               size="sm"
-              variant="outline"
+              variant="ghost"
             >
               <Link
                 aria-current={active ? "page" : undefined}
-                aria-label={
-                  badge === null ? item.label : `${item.label}, ${badge} unread`
-                }
+                aria-label={item.label}
                 href={forumHrefForPathname(item.href, pathname)}
                 prefetch
               >
-                <span className="inline-flex items-center gap-1.5">
-                  <span>{item.label}</span>
-                  {badge !== null ? (
-                    <span className="min-w-4 border border-current px-1 text-center leading-4">
-                      {badge}
-                    </span>
-                  ) : null}
-                </span>
+                {item.label}
               </Link>
             </Button>
           );
@@ -911,11 +764,11 @@ function ForumJumpSelect({
   const selectedValue = forumJumpSelectedValue(normalizedPathname, categories);
 
   return (
-    <label className="ml-0 flex h-7 min-w-0 max-w-full items-center gap-1 font-mono text-[10px] uppercase sm:ml-auto">
+    <label className="flex h-7 min-w-0 max-w-full items-center gap-1 font-mono text-[10px] uppercase md:ml-auto">
       <span className="shrink-0 text-muted-foreground">Jump</span>
       <select
         aria-label="Forum jump"
-        className="focus-ring h-7 w-[min(16rem,calc(100vw-3rem))] rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground outline-none disabled:text-muted-foreground"
+        className="focus-ring h-7 w-[min(15rem,calc(100vw-3rem))] rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground outline-none disabled:text-muted-foreground"
         value={selectedValue}
         onChange={(event) => {
           const href = event.target.value;
