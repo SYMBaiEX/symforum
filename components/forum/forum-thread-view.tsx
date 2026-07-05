@@ -37,7 +37,6 @@ import {
 import {
   ForumAnnouncementPanel,
   ForumAttachmentList,
-  ForumBoardRulesPanel,
   ForumBody,
   ForumBreadcrumbs,
   ForumJumpLink,
@@ -1082,7 +1081,6 @@ function LiveForumThreadView({
       </div>
 
       <ForumAnnouncementPanel announcements={detail.announcements} />
-      <ForumBoardRulesPanel rules={detail.rules} />
 
       {editingThread ? (
         <section className="space-y-4">

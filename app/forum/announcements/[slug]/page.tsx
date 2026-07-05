@@ -23,7 +23,7 @@ export async function generateMetadata({
   const { board } = (await searchParams) ?? {};
   return {
     title: `Forum Announcement / ${humanizeSlug(slug)}`,
-    description: "A SYMBiEX forum announcement or board notice.",
+    description: "A SYMBaiEX forum announcement or board notice.",
     alternates: {
       canonical: forumAnnouncementCanonicalPath(slug, board),
     },

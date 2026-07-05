@@ -11,7 +11,7 @@ export async function generateMetadata({
   const { username } = await params;
   return {
     title: `Forum Member / ${username}`,
-    description: `SYMBiEX forum profile for ${username}.`,
+    description: `SYMBaiEX forum profile for ${username}.`,
     alternates: {
       canonical: `https://forum.symbaiex.com/members/${encodeURIComponent(
         username,

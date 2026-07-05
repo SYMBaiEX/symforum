@@ -215,9 +215,9 @@ export function forumNotificationEmailSubject(
   context: ForumNotificationEmailRenderContext,
 ) {
   if (context.type === "reply") {
-    return `[SYMBiEX Forum] New reply: ${truncateSubject(context.threadTitle)}`;
+    return `[SYMBaiEX forum] New reply: ${truncateSubject(context.threadTitle)}`;
   }
-  return `[SYMBiEX Forum] New thread in ${truncateSubject(
+  return `[SYMBaiEX forum] New thread in ${truncateSubject(
     context.categoryName,
     48,
   )}: ${truncateSubject(context.threadTitle)}`;
@@ -265,7 +265,7 @@ function BaseEmail({
       <Body style={styles.page}>
         <Container style={styles.container}>
           <Link href={normalizeForumSiteUrl(siteUrl)} style={styles.brand}>
-            SYMBiEX Forum
+            SYMBaiEX forum
           </Link>
           <Section>{children}</Section>
           <Text style={styles.footer}>

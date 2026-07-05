@@ -9,7 +9,7 @@ type PageProps = {
 
 export const metadata: Metadata = {
   title: "Forum Calendar",
-  description: "Calendar events for the SYMBiEX forum.",
+  description: "Calendar events for the SYMBaiEX forum.",
   alternates: {
     canonical: "https://forum.symbaiex.com/calendar",
   },

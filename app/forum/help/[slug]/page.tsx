@@ -18,7 +18,7 @@ export async function generateMetadata({
   const { slug } = await params;
   return {
     title: `Forum Help / ${humanizeSlug(slug)}`,
-    description: "A SYMBiEX forum help or FAQ document.",
+    description: "A SYMBaiEX forum help or FAQ document.",
     alternates: {
       canonical: `https://forum.symbaiex.com/help/${encodeURIComponent(slug)}`,
     },
