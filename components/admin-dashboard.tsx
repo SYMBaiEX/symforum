@@ -3,6 +3,7 @@
 import { AdminAiChat } from "@/components/admin-ai-chat";
 import { AdminAnalytics } from "@/components/admin-analytics";
 import { AdminContactRequests } from "@/components/admin-contact-requests";
+import { AdminForum, adminForumOverviewRef } from "@/components/admin-forum";
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
 import { AdminSystemLogs } from "@/components/admin-system-logs";
@@ -79,6 +80,7 @@ type PostForm = {
 
 type AdminTabId =
   | "overview"
+  | "forum"
   | "posts"
   | "api"
   | "comments"
@@ -184,6 +186,7 @@ const adminApiRoutes = [
 export function AdminDashboard() {
   const viewer = useQuery(convexRefs.admin.viewer, {});
   const claimInitialOwner = useMutation(convexRefs.admin.claimInitialOwner);
+  const [ownerBootstrapToken, setOwnerBootstrapToken] = useState("");
 
   if (viewer === undefined) {
     return (
@@ -206,35 +209,55 @@ export function AdminDashboard() {
     if (!viewer.ownerExists) {
       return (
         <AdminGate
-          title="Claim owner access"
-          body="No owner exists in this Convex deployment. Claim this account as the initial owner to unlock the console."
+          title="Bootstrap owner access"
+          body="No owner exists in this Convex deployment. Enter the configured owner bootstrap token to unlock the console for this account."
           action={
-            <Button
-              className="mt-5"
-              onClick={async () => {
-                try {
-                  await claimInitialOwner({});
-                  toast.success("Owner access claimed");
-                } catch (error) {
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not claim owner access",
-                  );
-                }
-              }}
-            >
-              <ShieldCheck />
-              Claim owner
-            </Button>
+            <div className="mt-5 grid gap-3">
+              <Input
+                className="max-w-md rounded-none border-row-border"
+                type="password"
+                autoComplete="one-time-code"
+                placeholder="Owner bootstrap token"
+                value={ownerBootstrapToken}
+                onChange={(event) => setOwnerBootstrapToken(event.target.value)}
+              />
+              <Button
+                className="justify-self-start"
+                disabled={ownerBootstrapToken.trim().length === 0}
+                onClick={async () => {
+                  try {
+                    await claimInitialOwner({
+                      bootstrapToken: ownerBootstrapToken.trim(),
+                    });
+                    setOwnerBootstrapToken("");
+                    toast.success("Owner access claimed");
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not claim owner access",
+                    );
+                  }
+                }}
+              >
+                <ShieldCheck />
+                Claim owner
+              </Button>
+            </div>
           }
         />
       );
     }
+    if (viewer.canAdminForum) {
+      return <ForumStaffDashboard mode="full" />;
+    }
+    if (viewer.canModerateForum) {
+      return <ForumStaffDashboard mode="moderation" />;
+    }
     return (
       <AdminGate
         title="Owner access required"
-        body="This account is signed in, but it is not the blog owner."
+        body="This account is signed in, but it is not the blog owner or a forum moderator."
       />
     );
   }
@@ -242,8 +265,31 @@ export function AdminDashboard() {
   return <OwnerDashboard />;
 }
 
+function ForumStaffDashboard({ mode }: { mode: "full" | "moderation" }) {
+  const moderationOnly = mode === "moderation";
+  return (
+    <div className="space-y-6">
+      <section className="border-y border-row-border py-5">
+        <p className="font-mono text-xs uppercase text-muted-foreground">
+          {moderationOnly ? "Forum moderation" : "Forum admin"}
+        </p>
+        <h2 className="mt-3 text-3xl font-semibold">
+          {moderationOnly ? "Moderator console" : "Forum admin console"}
+        </h2>
+        <p className="mt-3 max-w-2xl leading-7 text-muted-foreground">
+          {moderationOnly
+            ? "This account can review queues, reports, warnings, polls, and moderation logs. Owner-only site publishing and board management stay hidden."
+            : "This account can manage forum boards, pages, prefixes, rules, and moderation queues. Owner-only site publishing stays hidden."}
+        </p>
+      </section>
+      <AdminForum mode={mode} />
+    </div>
+  );
+}
+
 function OwnerDashboard() {
   const overview = useQuery(convexRefs.admin.overview, {});
+  const forumOverview = useQuery(adminForumOverviewRef, {});
   const posts = useQuery(convexRefs.admin.listPosts, {});
   const apiKeys = useQuery(convexRefs.admin.listApiKeys, {});
   const adminComments = useQuery(convexRefs.admin.listComments, {});
@@ -380,6 +426,17 @@ function OwnerDashboard() {
         icon: PanelsTopLeft,
       },
       {
+        id: "forum",
+        label: "Forum",
+        note: "Boards + mods",
+        count:
+          forumOverview?.totals?.threads ??
+          forumOverview?.recentThreads.length ??
+          forumOverview?.totals?.categories ??
+          0,
+        icon: MessageSquare,
+      },
+      {
         id: "posts",
         label: "Posts",
         note: "Write archive",
@@ -458,7 +515,14 @@ function OwnerDashboard() {
         icon: Wrench,
       },
     ],
-    [activity.length, apiKeys, comments.length, overview, sortedPosts.length],
+    [
+      activity.length,
+      apiKeys,
+      comments.length,
+      forumOverview,
+      overview,
+      sortedPosts.length,
+    ],
   );
 
   async function savePost(event: FormEvent<HTMLFormElement>) {
@@ -683,6 +747,8 @@ function OwnerDashboard() {
             onChange={setActiveTab}
           />
         ) : null}
+
+        {activeTab === "forum" ? <AdminForum /> : null}
 
         {activeTab === "posts" ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.6fr)]">

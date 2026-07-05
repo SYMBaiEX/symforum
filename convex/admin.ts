@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  env,
   mutation,
   query,
   type MutationCtx,
@@ -29,6 +30,15 @@ const contactRequestStatusValidator = v.union(
   v.literal("read"),
   v.literal("archived"),
 );
+const forumAccountStatusValidator = v.union(
+  v.literal("active"),
+  v.literal("suspended"),
+  v.literal("banned"),
+);
+const forumRoleValidator = v.union(v.literal("moderator"), v.literal("admin"));
+
+const FORUM_STATUS_REASON_MAX_LENGTH = 180;
+const FORUM_DEFAULT_SUSPENSION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 async function currentUser(ctx: QueryCtx | MutationCtx) {
   const userId = await getAuthUserId(ctx);
@@ -60,6 +70,14 @@ async function firstOwner(ctx: QueryCtx | MutationCtx) {
 async function authorName(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
   const user = await ctx.db.get(userId);
   return user?.username ?? user?.name ?? "SYM-UNKNOWN";
+}
+
+function cleanOptionalText(value: string | undefined, maxLength: number) {
+  const cleaned = value?.trim();
+  if (cleaned === undefined || cleaned.length === 0) {
+    return undefined;
+  }
+  return cleaned.slice(0, maxLength);
 }
 
 function commentStatus(comment: Pick<Doc<"comments">, "status">) {
@@ -150,10 +168,57 @@ function adminUserRecord(user: Doc<"users">) {
     role: user.role ?? "reader",
     roleAssignedAt: user.roleAssignedAt,
     roleAssignedBy: user.roleAssignedBy,
+    forumRole: user.forumRole,
+    forumRoleAssignedAt: user.forumRoleAssignedAt,
+    forumRoleAssignedBy: user.forumRoleAssignedBy,
     contactEmail: user.contactEmail,
     bio: user.bio,
     onboardedAt: user.onboardedAt,
+    forumTrustedAt: user.forumTrustedAt,
+    forumTrustedBy: user.forumTrustedBy,
+    forumTrustRevokedAt: user.forumTrustRevokedAt,
+    forumTrustRevokedBy: user.forumTrustRevokedBy,
+    forumSuspendedUntil: user.forumSuspendedUntil,
+    forumSuspendedReason: user.forumSuspendedReason,
+    forumSuspendedBy: user.forumSuspendedBy,
+    forumBannedAt: user.forumBannedAt,
+    forumBannedReason: user.forumBannedReason,
+    forumBannedBy: user.forumBannedBy,
   };
+}
+
+function legacyForumAdmin(user: Doc<"users"> | null | undefined) {
+  return user?.role === "owner" || user?.role === "admin";
+}
+
+function forumAccountRestricted(user: Doc<"users"> | null | undefined) {
+  if (user === null || user === undefined || legacyForumAdmin(user)) {
+    return false;
+  }
+  if (user.forumBannedAt !== undefined) {
+    return true;
+  }
+  return (
+    user.forumSuspendedUntil !== undefined &&
+    user.forumSuspendedUntil > Date.now()
+  );
+}
+
+function canModerateForum(user: Doc<"users"> | null | undefined) {
+  if (legacyForumAdmin(user)) {
+    return true;
+  }
+  return (
+    !forumAccountRestricted(user) &&
+    (user?.forumRole === "moderator" || user?.forumRole === "admin")
+  );
+}
+
+function canAdminForum(user: Doc<"users"> | null | undefined) {
+  if (legacyForumAdmin(user)) {
+    return true;
+  }
+  return !forumAccountRestricted(user) && user?.forumRole === "admin";
 }
 
 export const viewer = query({
@@ -161,20 +226,43 @@ export const viewer = query({
   handler: async (ctx) => {
     const user = await currentUser(ctx);
     const owner = await firstOwner(ctx);
+    const hasBoardModeratorAssignment =
+      user !== null &&
+      user !== undefined &&
+      !canModerateForum(user) &&
+      !forumAccountRestricted(user) &&
+      (
+        await ctx.db
+          .query("forumCategoryModerators")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .take(1)
+      ).length > 0;
     return {
       user,
       isOwner: user?.role === "owner",
+      canModerateForum: canModerateForum(user) || hasBoardModeratorAssignment,
+      canAdminForum: canAdminForum(user),
       ownerExists: owner !== null,
     };
   },
 });
 
 export const claimInitialOwner = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    bootstrapToken: v.string(),
+  },
+  handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     if (user === null) {
       throw new Error("Not authenticated");
+    }
+    const configuredToken = env.OWNER_BOOTSTRAP_TOKEN;
+    if (
+      configuredToken === undefined ||
+      configuredToken.trim().length === 0 ||
+      args.bootstrapToken !== configuredToken
+    ) {
+      throw new Error("Invalid owner bootstrap token");
     }
     const owner = await firstOwner(ctx);
     if (owner !== null) {
@@ -396,6 +484,206 @@ export const updateUserRole = mutation({
         userId: args.userId,
         previousRole: user.role ?? null,
         nextRole: args.role,
+      }),
+    });
+
+    const updated = await ctx.db.get(args.userId);
+    if (updated === null) {
+      throw new Error("User could not be reloaded");
+    }
+    return adminUserRecord(updated);
+  },
+});
+
+export const updateUserForumRole = mutation({
+  args: {
+    userId: v.id("users"),
+    forumRole: v.union(forumRoleValidator, v.null()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireOwner(ctx);
+    const user = await ctx.db.get(args.userId);
+    if (user === null) {
+      throw new Error("User not found");
+    }
+    if (
+      args.forumRole !== null &&
+      (user.role === "owner" || user.role === "admin")
+    ) {
+      throw new Error("Site owners and admins already have forum admin access");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.userId, {
+      forumRole: args.forumRole ?? undefined,
+      forumRoleAssignedAt: args.forumRole === null ? undefined : now,
+      forumRoleAssignedBy: args.forumRole === null ? undefined : actor._id,
+    });
+    await ctx.db.insert("systemLogs", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+      occurrences: 1,
+      level: "info",
+      status: "open",
+      source: "convex",
+      scope: "admin",
+      eventType: "user_forum_role_updated",
+      message: "User forum staff role updated from admin dashboard",
+      fingerprint: `user_forum_role_updated:${args.userId}:${now}`,
+      actorUserId: actor._id,
+      entityType: "user",
+      entityId: args.userId,
+      metadataJson: JSON.stringify({
+        userId: args.userId,
+        previousForumRole: user.forumRole ?? null,
+        nextForumRole: args.forumRole,
+      }),
+    });
+
+    const updated = await ctx.db.get(args.userId);
+    if (updated === null) {
+      throw new Error("User could not be reloaded");
+    }
+    return adminUserRecord(updated);
+  },
+});
+
+export const updateUserForumTrust = mutation({
+  args: {
+    userId: v.id("users"),
+    trusted: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireOwner(ctx);
+    const user = await ctx.db.get(args.userId);
+    if (user === null) {
+      throw new Error("User not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.userId, {
+      forumTrustedAt: args.trusted ? user.forumTrustedAt ?? now : undefined,
+      forumTrustedBy: args.trusted ? user.forumTrustedBy ?? actor._id : undefined,
+      forumTrustRevokedAt: args.trusted ? undefined : now,
+      forumTrustRevokedBy: args.trusted ? undefined : actor._id,
+    });
+    if (!args.trusted) {
+      const presence = await ctx.db
+        .query("forumPresence")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      if (presence !== null) {
+        await ctx.db.delete(presence._id);
+      }
+    }
+    await ctx.db.insert("systemLogs", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+      occurrences: 1,
+      level: "info",
+      status: "open",
+      source: "convex",
+      scope: "admin",
+      eventType: "user_forum_trust_updated",
+      message: "User forum trust updated from admin dashboard",
+      fingerprint: `user_forum_trust_updated:${args.userId}:${now}`,
+      actorUserId: actor._id,
+      entityType: "user",
+      entityId: args.userId,
+      metadataJson: JSON.stringify({
+        userId: args.userId,
+        trusted: args.trusted,
+      }),
+    });
+
+    const updated = await ctx.db.get(args.userId);
+    if (updated === null) {
+      throw new Error("User could not be reloaded");
+    }
+    return adminUserRecord(updated);
+  },
+});
+
+export const updateUserForumStatus = mutation({
+  args: {
+    userId: v.id("users"),
+    status: forumAccountStatusValidator,
+    reason: v.optional(v.string()),
+    suspendedUntil: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireOwner(ctx);
+    const user = await ctx.db.get(args.userId);
+    if (user === null) {
+      throw new Error("User not found");
+    }
+    if (
+      args.status !== "active" &&
+      (user.role === "owner" || user.role === "admin")
+    ) {
+      throw new Error("Owner and admin accounts cannot be forum suspended here");
+    }
+
+    const now = Date.now();
+    const reason = cleanOptionalText(args.reason, FORUM_STATUS_REASON_MAX_LENGTH);
+    const suspendedUntil =
+      args.status === "suspended"
+        ? Math.max(args.suspendedUntil ?? now + FORUM_DEFAULT_SUSPENSION_MS, now + 60_000)
+        : undefined;
+    const clearingStaffRole = args.status !== "active" && user.forumRole !== undefined;
+
+    await ctx.db.patch(args.userId, {
+      forumRole: clearingStaffRole ? undefined : user.forumRole,
+      forumRoleAssignedAt: clearingStaffRole
+        ? undefined
+        : user.forumRoleAssignedAt,
+      forumRoleAssignedBy: clearingStaffRole
+        ? undefined
+        : user.forumRoleAssignedBy,
+      forumSuspendedUntil: args.status === "suspended" ? suspendedUntil : undefined,
+      forumSuspendedReason: args.status === "suspended" ? reason : undefined,
+      forumSuspendedBy: args.status === "suspended" ? actor._id : undefined,
+      forumBannedAt: args.status === "banned" ? now : undefined,
+      forumBannedReason: args.status === "banned" ? reason : undefined,
+      forumBannedBy: args.status === "banned" ? actor._id : undefined,
+    });
+
+    if (args.status !== "active") {
+      const presence = await ctx.db
+        .query("forumPresence")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      if (presence !== null) {
+        await ctx.db.delete(presence._id);
+      }
+    }
+
+    await ctx.db.insert("systemLogs", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+      occurrences: 1,
+      level: "info",
+      status: "open",
+      source: "convex",
+      scope: "admin",
+      eventType: "user_forum_status_updated",
+      message: "User forum account status updated from admin dashboard",
+      fingerprint: `user_forum_status_updated:${args.userId}:${now}`,
+      actorUserId: actor._id,
+      entityType: "user",
+      entityId: args.userId,
+      metadataJson: JSON.stringify({
+        userId: args.userId,
+        previousSuspendedUntil: user.forumSuspendedUntil ?? null,
+        previousBannedAt: user.forumBannedAt ?? null,
+        previousForumRole: user.forumRole ?? null,
+        clearedForumRole: clearingStaffRole,
+        nextStatus: args.status,
+        suspendedUntil: suspendedUntil ?? null,
+        reason: reason ?? null,
       }),
     });
 

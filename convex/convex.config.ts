@@ -13,6 +13,11 @@ const app = defineApp({
     NEWSLETTER_SITE_URL: v.optional(v.string()),
     CONTACT_FROM_EMAIL: v.optional(v.string()),
     CONTACT_NOTIFICATION_TO: v.optional(v.string()),
+    FORUM_EMAIL_NOTIFICATIONS_ENABLED: v.optional(v.string()),
+    FORUM_FROM_EMAIL: v.optional(v.string()),
+    FORUM_REPLY_TO: v.optional(v.string()),
+    FORUM_SITE_URL: v.optional(v.string()),
+    OWNER_BOOTSTRAP_TOKEN: v.optional(v.string()),
   },
 });
 

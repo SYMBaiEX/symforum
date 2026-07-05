@@ -5,6 +5,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SiteShell } from "@/components/site-shell";
+import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
@@ -19,6 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://symbaiex.com"),
   title: {
     default: "Austin Hamilton (SYMBiEX)",
     template: "%s | Austin Hamilton",
@@ -38,7 +40,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const requestHeaders = await headers();
+  const nonce = requestHeaders.get("x-nonce") ?? undefined;
+  const host = requestHeaders.get("host");
+  const initialForumHost = isForumSubdomainHost(host);
+  const initialPrimarySiteHref = primarySiteHrefFromForumHost({
+    host,
+    protocol: requestHeaders.get("x-forwarded-proto"),
+  });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -56,7 +65,12 @@ export default async function RootLayout({
           nonce={nonce}
         >
           <ConvexClientProvider>
-            <SiteShell>{children}</SiteShell>
+            <SiteShell
+              initialForumHost={initialForumHost}
+              initialPrimarySiteHref={initialPrimarySiteHref}
+            >
+              {children}
+            </SiteShell>
           </ConvexClientProvider>
         </ThemeProvider>
       </body>
@@ -70,4 +84,24 @@ export default async function RootLayout({
   return (
     <ConvexAuthNextjsServerProvider>{document}</ConvexAuthNextjsServerProvider>
   );
+}
+
+function primarySiteHrefFromForumHost({
+  host,
+  protocol,
+}: {
+  host: string | null;
+  protocol: string | null;
+}) {
+  if (!isForumSubdomainHost(host)) {
+    return "/";
+  }
+  const [hostname, port] = (host ?? "").split(":");
+  const primaryHostname = hostname?.startsWith("forum.")
+    ? hostname.slice("forum.".length)
+    : "symbaiex.com";
+  const primaryPort = port ? `:${port}` : "";
+  const primaryProtocol =
+    protocol ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  return `${primaryProtocol}://${primaryHostname}${primaryPort}/`;
 }

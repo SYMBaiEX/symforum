@@ -17,6 +17,8 @@ import type * as contact from "../contact.js";
 import type * as contactEmails from "../contactEmails.js";
 import type * as crons from "../crons.js";
 import type * as dailyNewsletter from "../dailyNewsletter.js";
+import type * as forum from "../forum.js";
+import type * as forumNotificationEmails from "../forumNotificationEmails.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
@@ -48,6 +50,8 @@ declare const fullApi: ApiFromModules<{
   contactEmails: typeof contactEmails;
   crons: typeof crons;
   dailyNewsletter: typeof dailyNewsletter;
+  forum: typeof forum;
+  forumNotificationEmails: typeof forumNotificationEmails;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
   interactions: typeof interactions;
