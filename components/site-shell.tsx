@@ -183,7 +183,7 @@ function ForumSiteShell({
         <AppErrorSurface />
         <footer className="border-t border-row-border bg-background/95">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 font-mono text-[10px] uppercase text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
-            <p>SYMBiEX forum / Convex board</p>
+            <p>SYMBaiEX forum</p>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <Link
                 className="focus-ring hover:text-foreground"

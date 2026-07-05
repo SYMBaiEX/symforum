@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Forum Search",
-  description: "Search public SYMBiEX forum threads and replies.",
+  description: "Search public SYMBaiEX forum threads and replies.",
   alternates: {
     canonical: "/search",
   },

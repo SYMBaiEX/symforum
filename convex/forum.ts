@@ -7713,7 +7713,7 @@ export const ensureDefaultForumCategories = mutation({
     const createdCategoryIds: Id<"forumCategories">[] = [];
     const section = await ensureDefaultForumCategory(ctx, {
       slug: "symbaiex",
-      name: "SYMBiEX",
+      name: "SYMBaiEX",
       description: "Site forum index, build threads, and long-running notes.",
       kind: "section" as const,
       status: "active" as const,
@@ -7956,7 +7956,7 @@ async function ensureDefaultForumAnnouncements(
   const defaults = [
     {
       slug: "welcome",
-      title: "Welcome to the SYMBiEX forum",
+      title: "Welcome to the SYMBaiEX forum",
       body: "This is the public board index for long-running discussion, build logs, and old-web notes.\n\nUse the User CP to set a title, signature, avatar, notification settings, buddies, and ignored members.",
       position: 0,
     },

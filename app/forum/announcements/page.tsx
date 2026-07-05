@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Forum Announcements",
-  description: "Announcements and board notices for the SYMBiEX forum.",
+  description: "Announcements and board notices for the SYMBaiEX forum.",
   alternates: {
     canonical: "/announcements",
   },

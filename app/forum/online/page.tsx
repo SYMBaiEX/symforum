@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Who's Online",
-  description: "Currently active registered members on the SYMBiEX forum.",
+  description: "Currently active registered members on the SYMBaiEX forum.",
   alternates: {
     canonical: "/online",
   },

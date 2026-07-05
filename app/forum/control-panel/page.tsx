@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Forum User CP",
-  description: "Edit SYMBiEX forum profile settings, titles, and signatures.",
+  description: "Edit SYMBaiEX forum profile settings, titles, and signatures.",
   alternates: {
     canonical: "/control-panel",
   },

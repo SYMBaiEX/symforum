@@ -4,7 +4,7 @@ import { ForumUserCpShell } from "@/components/forum/forum-primitives";
 
 export const metadata: Metadata = {
   title: "Forum Subscriptions",
-  description: "Subscribed SYMBiEX forum boards and threads.",
+  description: "Subscribed SYMBaiEX forum boards and threads.",
   alternates: {
     canonical: "/subscriptions",
   },

@@ -21,7 +21,7 @@ export async function generateMetadata({
   const slug = normalizeCalendarEventSlugParam(rawSlug) ?? rawSlug;
   return {
     title: `Forum Calendar / ${humanizeSlug(slug)}`,
-    description: "A SYMBiEX forum calendar event.",
+    description: "A SYMBaiEX forum calendar event.",
     alternates: {
       canonical: `https://forum.symbaiex.com/calendar/${encodeURIComponent(
         slug,

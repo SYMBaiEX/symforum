@@ -45,7 +45,6 @@ import {
   isPinnedThread,
   normalizedForumPathname,
   type ForumAnnouncementRecord,
-  type ForumBoardRulesRecord,
   type ForumCategoryRecord,
   type ForumCategorySectionRecord,
   type ForumPaginationRecord,
@@ -352,7 +351,7 @@ export function ForumChrome({
             forum.symbaiex.com
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-none md:text-5xl">
-            SYMBiEX Forum
+            SYMBaiEX forum
           </h1>
         </ForumLink>
         <div className="grid grid-cols-3 border-t border-background/25 font-mono text-[10px] uppercase lg:border-l lg:border-t-0">
@@ -379,7 +378,7 @@ export function ForumChrome({
       <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="bg-background px-4 py-3 md:px-5">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            SYMBiEX / Forum / {routeLabel}
+            SYMBaiEX forum / {routeLabel}
           </p>
         </div>
         <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
@@ -565,7 +564,7 @@ function ForumWelcomeStripLayout({
 
 function ForumPrimarySiteNav({ primarySiteHref }: { primarySiteHref: string }) {
   return (
-    <nav aria-label="SYMBiEX site" className="contents">
+    <nav aria-label="SYMBaiEX site" className="contents">
       {PRIMARY_SITE_NAV_ITEMS.map((item) => {
         const href = primarySiteHrefForPath(primarySiteHref, item.href);
         return (
@@ -1094,33 +1093,6 @@ export function ForumAnnouncementPanel({
             </p>
           </article>
         ))}
-      </div>
-    </section>
-  );
-}
-
-export function ForumBoardRulesPanel({
-  rules,
-}: {
-  rules: ForumBoardRulesRecord | null;
-}) {
-  if (!rules) {
-    return null;
-  }
-
-  return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3">
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          Board rules
-        </p>
-        <h2 className="mt-1 text-lg font-semibold">{rules.title}</h2>
-      </div>
-      <div className="px-4 py-3">
-        <ForumBody body={rules.body} className="text-sm md:text-sm" />
-        <p className="mt-3 font-mono text-[10px] uppercase text-muted-foreground">
-          Updated {formatForumDateTime(rules.updatedAt)}
-        </p>
       </div>
     </section>
   );

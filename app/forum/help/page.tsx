@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Forum Help / FAQ",
-  description: "Help and FAQ documents for the SYMBiEX forum.",
+  description: "Help and FAQ documents for the SYMBaiEX forum.",
   alternates: {
     canonical: "https://forum.symbaiex.com/help",
   },

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Forum Moderator CP",
   description:
-    "Moderate SYMBiEX forum reports, queues, warnings, and audit logs.",
+    "Moderate SYMBaiEX forum reports, queues, warnings, and audit logs.",
   alternates: {
     canonical: "/moderation",
   },

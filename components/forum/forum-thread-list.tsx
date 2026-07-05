@@ -22,7 +22,6 @@ import {
 } from "@/components/forum/forum-refs";
 import {
   ForumAnnouncementPanel,
-  ForumBoardRulesPanel,
   ForumBody,
   ForumBreadcrumbs,
   ForumLink,
@@ -185,6 +184,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   const sortedNewestThreads = useMemo(() => {
     return listResult?.activityThreads ?? currentPageThreads.slice(0, 5);
   }, [currentPageThreads, listResult?.activityThreads]);
+  const hasBoardActivity = sortedNewestThreads.length > 0;
   const viewerCanCreatePoll =
     listResult?.category?.viewerCanCreatePoll === true;
 
@@ -453,7 +453,13 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
 
       <ForumAnnouncementPanel announcements={listResult.announcements} />
 
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.8fr)]">
+      <section
+        className={`grid gap-8 ${
+          hasBoardActivity
+            ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.8fr)]"
+            : ""
+        }`}
+      >
         <div className="min-w-0 space-y-6">
           <div className="flex flex-col gap-3 border-y border-row-border py-4 md:flex-row md:items-center md:justify-between">
             <label className="min-w-0 flex-1">
@@ -466,14 +472,14 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                 aria-label="Search this board"
               />
             </label>
-              <Button
-                className="rounded-none font-mono text-[10px] uppercase"
-                type="button"
-                disabled={authLoading || pending}
-                onClick={toggleThreadComposer}
-              >
-                {composeOpen ? "Close thread form" : "New thread"}
-              </Button>
+            <Button
+              className="rounded-none font-mono text-[10px] uppercase"
+              type="button"
+              disabled={authLoading || pending}
+              onClick={toggleThreadComposer}
+            >
+              {composeOpen ? "Close thread form" : "New thread"}
+            </Button>
             <Button
               className="rounded-none font-mono text-[10px] uppercase"
               type="button"
@@ -616,21 +622,18 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
           />
         </div>
 
-        <div className="space-y-6">
-          <ForumBoardRulesPanel rules={listResult.rules} />
-          <ForumNewestThreads
-            threads={sortedNewestThreads}
-            heading={
-              selectedPrefixFilter === PREFIX_FILTER_ALL
-                ? "Board activity"
-                : `Board activity: ${prefixFilterSummary}`
-            }
-          />
-          <ForumStatusBox
-            title="Posting"
-            body="Threads and replies use the site account attached to your SYM handle. If auth expires while you type, the sign-in dialog will reopen without leaving the board."
-          />
-        </div>
+        {hasBoardActivity ? (
+          <div className="space-y-6">
+            <ForumNewestThreads
+              threads={sortedNewestThreads}
+              heading={
+                selectedPrefixFilter === PREFIX_FILTER_ALL
+                  ? "Board activity"
+                  : `Board activity: ${prefixFilterSummary}`
+              }
+            />
+          </div>
+        ) : null}
       </section>
 
       <AuthRequiredDialog

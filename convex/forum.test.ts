@@ -1745,7 +1745,7 @@ describe("forum notification preferences", () => {
       "https://forum.symbaiex.com/public-square/public-lunar-brief?postPage=2#post-21",
     );
     expect(forumNotificationEmailSubject(context)).toBe(
-      "[SYMBiEX Forum] New reply: Public lunar brief",
+      "[SYMBaiEX forum] New reply: Public lunar brief",
     );
 
     const email = await buildForumNotificationEmail(
@@ -1759,7 +1759,7 @@ describe("forum notification preferences", () => {
     expect(email.text).toContain("Other Trusted");
     expect(email.text).toContain("Public Square");
     expect(email.text).toContain("watch this forum thread");
-    expect(email.html).toContain("SYMBiEX Forum");
+    expect(email.html).toContain("SYMBaiEX forum");
   });
 
   test("new-thread fanout respects board notification preferences", async () => {

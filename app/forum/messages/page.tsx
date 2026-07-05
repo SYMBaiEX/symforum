@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Forum Private Messages",
-  description: "Read and send SYMBiEX forum private messages.",
+  description: "Read and send SYMBaiEX forum private messages.",
   alternates: {
     canonical: "/messages",
   },
