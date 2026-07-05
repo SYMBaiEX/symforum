@@ -1,6 +1,7 @@
 import {
   isForumSubdomainSitePath,
   primarySiteHrefForForumHost,
+  primarySiteHrefForPath,
   shouldLeaveForumHostForHref,
 } from "@/components/forum/forum-host-url";
 import { forumHrefForPathname } from "@/components/forum/forum-refs";
@@ -65,11 +66,4 @@ export function isHeaderRouteActive(pathname: string, href: string) {
 
 export function isExternalHeaderHref(href: string) {
   return /^https?:\/\//i.test(href);
-}
-
-function primarySiteHrefForPath(primarySiteHref: string, href: string) {
-  if (!isExternalHeaderHref(primarySiteHref)) {
-    return href;
-  }
-  return new URL(href, primarySiteHref).toString();
 }

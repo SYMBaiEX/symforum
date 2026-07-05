@@ -92,6 +92,28 @@ describe("middleware forum routing", () => {
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
+  test("redirects production forum primary-site routes to the canonical www host", async () => {
+    const middleware = await loadMiddleware();
+    const response = await middleware(
+      requestFor("https://forum.symbaiex.com/about"),
+    );
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe(
+      "https://www.symbaiex.com/about",
+    );
+    const policy = response.headers.get("content-security-policy") ?? "";
+    expect(policy).toContain("https://symbaiex.com");
+    expect(policy).toContain("https://www.symbaiex.com");
+
+    const portedResponse = await middleware(
+      requestFor("https://forum.symbaiex.com:3001/news"),
+    );
+    expect(portedResponse.headers.get("location")).toBe(
+      "https://www.symbaiex.com/news",
+    );
+  });
+
   test("sanitizes authenticated sign-in redirect destinations", async () => {
     process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
     authState.authenticated = true;

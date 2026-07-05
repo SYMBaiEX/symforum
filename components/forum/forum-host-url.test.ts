@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   isForumHostname,
   primarySiteHrefForForumHost,
+  primarySiteHrefForPath,
   shouldUseForumShell,
 } from "./forum-host-url";
 
@@ -20,7 +21,17 @@ describe("forum host URL helpers", () => {
         port: "",
         protocol: "https:",
       }),
-    ).toBe("https://symbaiex.com/about");
+    ).toBe("https://www.symbaiex.com/about");
+  });
+
+  test("builds primary-site nav hrefs from an absolute primary host", () => {
+    expect(primarySiteHrefForPath("https://www.symbaiex.com/", "/news")).toBe(
+      "https://www.symbaiex.com/news",
+    );
+    expect(primarySiteHrefForPath("/", "/news")).toBe("/news");
+    expect(
+      primarySiteHrefForPath("https://www.symbaiex.com/", "//cdn.test"),
+    ).toBe("//cdn.test");
   });
 
   test("preserves forum, site-owned, external, and arbitrary-host links", () => {

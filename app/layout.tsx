@@ -9,6 +9,9 @@ import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
+const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
+const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -97,10 +100,14 @@ function primarySiteHrefFromForumHost({
     return "/";
   }
   const [hostname, port] = (host ?? "").split(":");
-  const primaryHostname = hostname?.startsWith("forum.")
-    ? hostname.slice("forum.".length)
-    : "symbaiex.com";
-  const primaryPort = port ? `:${port}` : "";
+  const primaryHostname =
+    hostname === FORUM_PRODUCTION_HOSTNAME
+      ? PRIMARY_PRODUCTION_HOSTNAME
+      : hostname?.startsWith("forum.")
+        ? hostname.slice("forum.".length)
+        : PRIMARY_PRODUCTION_HOSTNAME;
+  const primaryPort =
+    hostname === FORUM_PRODUCTION_HOSTNAME || !port ? "" : `:${port}`;
   const primaryProtocol =
     protocol ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   return `${primaryProtocol}://${primaryHostname}${primaryPort}/`;
