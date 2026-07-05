@@ -62,6 +62,9 @@ const FORUM_SMILIES = new Map([
   [":heart:", "<3"],
 ]);
 const FORUM_JUMP_PLACEHOLDER_VALUE = "__forum_jump__";
+const FORUM_ANNOUNCEMENT_COLLAPSE_KEY =
+  "symbaiex:forum:announcement-collapse";
+const FORUM_ANNOUNCEMENT_PANEL_ID = "forum-announcements-panel";
 const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum", label: "Board index" },
   { href: "/forum/help", label: "Help / FAQ" },
@@ -861,61 +864,149 @@ export function ForumAnnouncementPanel({
   announcements: ForumAnnouncementRecord[];
   title?: string;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const announcementSignature = forumAnnouncementSignature(announcements);
+
+  useEffect(() => {
+    if (announcementSignature.length === 0) {
+      return;
+    }
+
+    try {
+      setCollapsed(
+        window.localStorage.getItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY) ===
+          announcementSignature,
+      );
+    } catch {
+      setCollapsed(false);
+    }
+  }, [announcementSignature]);
+
   if (announcements.length === 0) {
     return null;
   }
 
+  const latestAnnouncement = announcements[0]!;
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const nextCollapsed = !current;
+
+      try {
+        if (nextCollapsed) {
+          window.localStorage.setItem(
+            FORUM_ANNOUNCEMENT_COLLAPSE_KEY,
+            announcementSignature,
+          );
+        } else {
+          window.localStorage.removeItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY);
+        }
+      } catch {
+        // Keep the UI usable when storage is blocked.
+      }
+
+      return nextCollapsed;
+    });
+  }
+
   return (
     <section className="border-y border-row-border py-4">
-      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="grid gap-4 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Forum bulletin
           </p>
           <h2 className="mt-1 text-lg font-semibold">{title}</h2>
         </div>
-        <Button
-          asChild
-          className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
-          size="sm"
-          variant="ghost"
+        <div
+          className={cn(
+            "min-w-0",
+            collapsed ? "self-center" : "divide-y divide-row-border",
+          )}
+          id={FORUM_ANNOUNCEMENT_PANEL_ID}
         >
-          <ForumLink href="/forum/announcements" prefetch>
-            View all
-          </ForumLink>
-        </Button>
-      </div>
-      <div className="divide-y divide-row-border">
-        {announcements.map((announcement) => (
-          <article className="py-3" key={announcement._id}>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold leading-snug">
-                <ForumLink href={forumAnnouncementPath(announcement)} prefetch>
-                  {announcement.title}
-                </ForumLink>
-              </h3>
-              {announcement.categoryName ? (
-                <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-                  {announcement.categoryName}
-                </span>
-              ) : (
-                <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-                  global
-                </span>
-              )}
-            </div>
-            <ForumBody
-              body={announcement.body}
-              className="mt-2 text-sm leading-6 text-muted-foreground md:text-sm"
-            />
-            <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
-              Updated {formatForumDateTime(announcement.updatedAt)}
+          {collapsed ? (
+            <p className="truncate text-sm text-muted-foreground">
+              Latest /{" "}
+              <ForumLink
+                className="focus-ring font-semibold text-foreground hover:text-primary"
+                href={forumAnnouncementPath(latestAnnouncement)}
+                prefetch
+              >
+                {latestAnnouncement.title}
+              </ForumLink>{" "}
+              / Updated {formatForumDateTime(latestAnnouncement.updatedAt)}
             </p>
-          </article>
-        ))}
+          ) : (
+            announcements.map((announcement) => (
+              <article
+                className="py-3 first:pt-0 last:pb-0"
+                key={announcement._id}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold leading-snug">
+                    <ForumLink
+                      href={forumAnnouncementPath(announcement)}
+                      prefetch
+                    >
+                      {announcement.title}
+                    </ForumLink>
+                  </h3>
+                  {announcement.categoryName ? (
+                    <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+                      {announcement.categoryName}
+                    </span>
+                  ) : (
+                    <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+                      global
+                    </span>
+                  )}
+                </div>
+                <ForumBody
+                  body={announcement.body}
+                  className="mt-2 text-sm leading-6 text-muted-foreground md:text-sm"
+                />
+                <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+                  Updated {formatForumDateTime(announcement.updatedAt)}
+                </p>
+              </article>
+            ))
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 lg:justify-self-end">
+          <Button
+            aria-controls={FORUM_ANNOUNCEMENT_PANEL_ID}
+            aria-expanded={!collapsed}
+            className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={toggleCollapsed}
+          >
+            {collapsed ? "Expand" : "Collapse"}
+          </Button>
+          <Button
+            asChild
+            className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
+            size="sm"
+            variant="ghost"
+          >
+            <ForumLink href="/forum/announcements" prefetch>
+              View all
+            </ForumLink>
+          </Button>
+        </div>
       </div>
     </section>
   );
+}
+
+function forumAnnouncementSignature(
+  announcements: ForumAnnouncementRecord[],
+) {
+  return announcements
+    .map((announcement) => `${announcement._id}:${announcement.updatedAt}`)
+    .join("|");
 }
 
 export function ForumUserCpShell({
