@@ -90,7 +90,10 @@ export function SiteShell({
 
   if (forumShell) {
     return (
-      <ForumSiteShell primarySiteHref={primarySiteHref}>
+      <ForumSiteShell
+        forumHost={forumHost}
+        primarySiteHref={primarySiteHref}
+      >
         {children}
       </ForumSiteShell>
     );
@@ -107,23 +110,13 @@ export function SiteShell({
           : undefined
       }
     >
-      <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
-          <div className="flex min-w-0 items-center">
-            <Link
-              href={primarySiteHref}
-              prefetch={primarySiteHref === "/"}
-              className="focus-ring truncate font-mono text-sm font-semibold uppercase"
-            >
-              SYMBaiEX
-            </Link>
-          </div>
-          <HeaderNav
-            initialForumHost={initialForumHost}
-            initialPrimarySiteHref={initialPrimarySiteHref}
-          />
-        </div>
-      </header>
+      <SiteHeader
+        brandHref={primarySiteHref}
+        brandLabel="SYMBaiEX"
+        brandPrefetch={primarySiteHref === "/"}
+        initialForumHost={initialForumHost}
+        initialPrimarySiteHref={initialPrimarySiteHref}
+      />
       <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
         {children}
       </main>
@@ -167,15 +160,28 @@ export function SiteShell({
 
 function ForumSiteShell({
   children,
+  forumHost,
   primarySiteHref,
 }: {
   children: ReactNode;
+  forumHost: boolean;
   primarySiteHref: string;
 }) {
+  const forumBrandHref = forumHost ? "/" : "/forum";
+
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
-      <div className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground">
-        <main className="min-h-dvh">{children}</main>
+      <div className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]">
+        <SiteHeader
+          brandHref={forumBrandHref}
+          brandLabel="SYMBaiEX Forum"
+          brandPrefetch={!forumHost}
+          initialForumHost={forumHost}
+          initialPrimarySiteHref={primarySiteHref}
+        />
+        <main className="min-h-dvh pt-[var(--site-header-offset)]">
+          {children}
+        </main>
         <Suspense fallback={null}>
           <AnalyticsTracker />
         </Suspense>
@@ -183,7 +189,7 @@ function ForumSiteShell({
         <AppErrorSurface />
         <footer className="border-t border-row-border bg-background/95">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 font-mono text-[10px] uppercase text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
-            <p>SYMBaiEX forum</p>
+            <p>SYMBaiEX Forum</p>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <Link
                 className="focus-ring hover:text-foreground"
@@ -205,5 +211,39 @@ function ForumSiteShell({
         </footer>
       </div>
     </ForumShellContextProvider>
+  );
+}
+
+function SiteHeader({
+  brandHref,
+  brandLabel,
+  brandPrefetch,
+  initialForumHost,
+  initialPrimarySiteHref,
+}: {
+  brandHref: string;
+  brandLabel: string;
+  brandPrefetch: boolean;
+  initialForumHost: boolean;
+  initialPrimarySiteHref: string;
+}) {
+  return (
+    <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
+        <div className="flex min-w-0 items-center">
+          <Link
+            href={brandHref}
+            prefetch={brandPrefetch}
+            className="focus-ring truncate font-mono text-sm font-semibold uppercase"
+          >
+            {brandLabel}
+          </Link>
+        </div>
+        <HeaderNav
+          initialForumHost={initialForumHost}
+          initialPrimarySiteHref={initialPrimarySiteHref}
+        />
+      </div>
+    </header>
   );
 }
