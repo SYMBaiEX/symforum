@@ -867,29 +867,29 @@ export function ForumAnnouncementPanel({
 
   return (
     <section className="border-y border-row-border py-4">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Forum bulletin
           </p>
-          <h2 className="mt-1 text-xl font-semibold">{title}</h2>
+          <h2 className="mt-1 text-lg font-semibold">{title}</h2>
         </div>
         <Button
           asChild
-          className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+          className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground"
           size="sm"
-          variant="outline"
+          variant="ghost"
         >
           <ForumLink href="/forum/announcements" prefetch>
             View all
           </ForumLink>
         </Button>
       </div>
-      <div className="divide-y divide-row-border border border-row-border">
+      <div className="divide-y divide-row-border">
         {announcements.map((announcement) => (
-          <article className="px-4 py-3" key={announcement._id}>
+          <article className="py-3" key={announcement._id}>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold">
+              <h3 className="text-base font-semibold leading-snug">
                 <ForumLink href={forumAnnouncementPath(announcement)} prefetch>
                   {announcement.title}
                 </ForumLink>
@@ -906,9 +906,9 @@ export function ForumAnnouncementPanel({
             </div>
             <ForumBody
               body={announcement.body}
-              className="mt-3 text-sm md:text-sm"
+              className="mt-2 text-sm leading-6 text-muted-foreground md:text-sm"
             />
-            <p className="mt-3 font-mono text-[10px] uppercase text-muted-foreground">
+            <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
               Updated {formatForumDateTime(announcement.updatedAt)}
             </p>
           </article>
@@ -1838,20 +1838,20 @@ export function ForumNewestThreads({
   heading?: string;
 }) {
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground">
+    <section className="border-y border-row-border py-4">
+      <div className="font-mono text-[10px] uppercase text-muted-foreground">
         {heading}
       </div>
       {threads.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           No active threads yet.
         </p>
       ) : (
-        <div className="divide-y divide-row-border">
+        <div className="mt-3 divide-y divide-row-border border-t border-row-border">
           {threads.map((thread) => (
             <div
               key={`${thread.categorySlug ?? "forum"}-${thread.slug}`}
-              className="px-4 py-4"
+              className="py-4"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <ForumThreadPrefixBadge thread={thread} />
