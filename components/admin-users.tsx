@@ -14,6 +14,8 @@ import {
 import {
   convexRefs,
   type AdminUserRecord,
+  type ForumAccountStatus,
+  type ForumRole,
   type UserRole,
 } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
@@ -24,7 +26,10 @@ import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 const roles: UserRole[] = ["owner", "admin", "reader"];
+const forumRoleOptions = ["none", "moderator", "admin"] as const;
 const roleFilters = ["all", ...roles] as const;
+const forumRoleFilters = ["all", ...forumRoleOptions] as const;
+const FORUM_SUSPENSION_MS = 7 * 24 * 60 * 60 * 1_000;
 const profileFilters = [
   "all",
   "needs-attention",
@@ -35,19 +40,34 @@ const profileFilters = [
 ] as const;
 
 type RoleFilter = (typeof roleFilters)[number];
+type ForumRoleFilter = (typeof forumRoleFilters)[number];
 type ProfileFilter = (typeof profileFilters)[number];
 type UserSort = "joined-desc" | "joined-asc" | "role" | "name-asc";
 
 export function AdminUsers() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [forumRoleFilter, setForumRoleFilter] =
+    useState<ForumRoleFilter>("all");
   const [profileFilter, setProfileFilter] = useState<ProfileFilter>("all");
   const [sort, setSort] = useState<UserSort>("joined-desc");
   const [pendingRoles, setPendingRoles] = useState<Record<string, UserRole>>(
     {},
   );
+  const [pendingForumRoles, setPendingForumRoles] = useState<
+    Record<string, ForumRole | "none">
+  >({});
+  const [pendingForumTrust, setPendingForumTrust] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [pendingForumStatus, setPendingForumStatus] = useState<
+    Record<string, ForumAccountStatus>
+  >({});
   const users = useQuery(convexRefs.admin.listUsers, {});
   const updateRole = useMutation(convexRefs.admin.updateUserRole);
+  const updateForumRole = useMutation(convexRefs.admin.updateUserForumRole);
+  const updateForumTrust = useMutation(convexRefs.admin.updateUserForumTrust);
+  const updateForumStatus = useMutation(convexRefs.admin.updateUserForumStatus);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const allUsers = useMemo(() => users ?? [], [users]);
 
@@ -57,6 +77,21 @@ export function AdminUsers() {
         const role = user.role ?? "reader";
         totals.total += 1;
         totals[role] += 1;
+        if (isForumTrusted(user)) {
+          totals.forumTrusted += 1;
+        }
+        if (user.forumRole === "moderator") {
+          totals.forumModerators += 1;
+        }
+        if (user.forumRole === "admin") {
+          totals.forumAdmins += 1;
+        }
+        if (getForumAccountStatus(user) === "suspended") {
+          totals.forumSuspended += 1;
+        }
+        if (getForumAccountStatus(user) === "banned") {
+          totals.forumBanned += 1;
+        }
         if (profileNeedsAttention(user)) {
           totals.needsAttention += 1;
         }
@@ -67,6 +102,11 @@ export function AdminUsers() {
         owner: 0,
         admin: 0,
         reader: 0,
+        forumTrusted: 0,
+        forumModerators: 0,
+        forumAdmins: 0,
+        forumSuspended: 0,
+        forumBanned: 0,
         needsAttention: 0,
       },
     );
@@ -79,9 +119,13 @@ export function AdminUsers() {
         const role = user.role ?? "reader";
         return roleFilter === "all" ? true : role === roleFilter;
       })
+      .filter((user) => {
+        const forumRole = user.forumRole ?? "none";
+        return forumRoleFilter === "all" ? true : forumRole === forumRoleFilter;
+      })
       .filter((user) => matchesProfileFilter(user, profileFilter))
       .sort((left, right) => compareUsers(left, right, sort));
-  }, [allUsers, deferredQuery, profileFilter, roleFilter, sort]);
+  }, [allUsers, deferredQuery, forumRoleFilter, profileFilter, roleFilter, sort]);
 
   async function setRole(user: AdminUserRecord, role: UserRole) {
     const currentRole = pendingRoles[user._id] ?? user.role ?? "reader";
@@ -116,6 +160,139 @@ export function AdminUsers() {
     }
   }
 
+  async function setForumTrust(user: AdminUserRecord, trusted: boolean) {
+    const currentTrusted = pendingForumTrust[user._id] ?? isForumTrusted(user);
+    if (currentTrusted === trusted) {
+      return;
+    }
+
+    setPendingForumTrust((current) => ({ ...current, [user._id]: trusted }));
+    try {
+      await updateForumTrust({ userId: user._id, trusted });
+      toast.success(trusted ? "Forum trust granted" : "Forum trust revoked");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-users",
+        eventType: "forum_trust_update_failed",
+        component: "AdminUsers",
+        action: "admin:updateUserForumTrust",
+        entityType: "user",
+        entityId: user._id,
+        metadata: { trusted },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update forum trust",
+      );
+    } finally {
+      setPendingForumTrust((current) => {
+        const next = { ...current };
+        delete next[user._id];
+        return next;
+      });
+    }
+  }
+
+  async function setForumRole(
+    user: AdminUserRecord,
+    forumRole: ForumRole | "none",
+  ) {
+    const currentRole =
+      pendingForumRoles[user._id] ?? user.forumRole ?? "none";
+    if (currentRole === forumRole) {
+      return;
+    }
+
+    setPendingForumRoles((current) => ({ ...current, [user._id]: forumRole }));
+    try {
+      await updateForumRole({
+        userId: user._id,
+        forumRole: forumRole === "none" ? null : forumRole,
+      });
+      toast.success(
+        forumRole === "none" ? "Forum staff cleared" : "Forum staff updated",
+      );
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-users",
+        eventType: "forum_role_update_failed",
+        component: "AdminUsers",
+        action: "admin:updateUserForumRole",
+        entityType: "user",
+        entityId: user._id,
+        metadata: { forumRole },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update forum staff role",
+      );
+    } finally {
+      setPendingForumRoles((current) => {
+        const next = { ...current };
+        delete next[user._id];
+        return next;
+      });
+    }
+  }
+
+  async function setForumStatus(
+    user: AdminUserRecord,
+    status: ForumAccountStatus,
+  ) {
+    const currentStatus = pendingForumStatus[user._id] ?? getForumAccountStatus(user);
+    if (currentStatus === status) {
+      return;
+    }
+
+    setPendingForumStatus((current) => ({ ...current, [user._id]: status }));
+    try {
+      await updateForumStatus({
+        userId: user._id,
+        status,
+        ...(status === "suspended"
+          ? {
+              reason: "Owner dashboard suspension",
+              suspendedUntil: Date.now() + FORUM_SUSPENSION_MS,
+            }
+          : {}),
+        ...(status === "banned" ? { reason: "Owner dashboard ban" } : {}),
+      });
+      toast.success(
+        status === "active"
+          ? "Forum status cleared"
+          : status === "suspended"
+            ? "Forum user suspended"
+            : "Forum user banned",
+      );
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-users",
+        eventType: "forum_status_update_failed",
+        component: "AdminUsers",
+        action: "admin:updateUserForumStatus",
+        entityType: "user",
+        entityId: user._id,
+        metadata: { status },
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update forum status",
+      );
+    } finally {
+      setPendingForumStatus((current) => {
+        const next = { ...current };
+        delete next[user._id];
+        return next;
+      });
+    }
+  }
+
   return (
     <section className="mt-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -130,7 +307,7 @@ export function AdminUsers() {
         </p>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1.4fr)_11rem_13rem_11rem]">
+      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1.4fr)_11rem_11rem_13rem_11rem]">
         <label className="grid gap-2">
           <span className="font-mono text-[10px] uppercase text-muted-foreground">
             Search
@@ -150,6 +327,23 @@ export function AdminUsers() {
           value={roleFilter}
         >
           {roleFilters.map((option) => (
+            <SelectItem
+              key={option}
+              value={option}
+              className="rounded-none font-mono text-[10px] uppercase"
+            >
+              {option.replace("-", " ")}
+            </SelectItem>
+          ))}
+        </LabeledSelect>
+        <LabeledSelect
+          label="Forum role"
+          onValueChange={(value) =>
+            setForumRoleFilter(value as ForumRoleFilter)
+          }
+          value={forumRoleFilter}
+        >
+          {forumRoleFilters.map((option) => (
             <SelectItem
               key={option}
               value={option}
@@ -206,13 +400,22 @@ export function AdminUsers() {
         </LabeledSelect>
       </div>
 
-      <div className="mt-4 grid gap-3 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-4">
+      <div className="mt-4 grid gap-3 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-7">
         <Metric label="Total" value={summary.total} />
         <Metric
           label="Owners / Admins"
           value={`${summary.owner} / ${summary.admin}`}
         />
         <Metric label="Readers" value={summary.reader} />
+        <Metric
+          label="Forum staff"
+          value={`${summary.forumModerators} / ${summary.forumAdmins}`}
+        />
+        <Metric label="Forum trusted" value={summary.forumTrusted} />
+        <Metric
+          label="Forum limited"
+          value={`${summary.forumSuspended} / ${summary.forumBanned}`}
+        />
         <Metric label="Needs attention" value={summary.needsAttention} />
       </div>
 
@@ -224,6 +427,7 @@ export function AdminUsers() {
         </p>
         {(query ||
           roleFilter !== "all" ||
+          forumRoleFilter !== "all" ||
           profileFilter !== "all" ||
           sort !== "joined-desc") &&
         users !== undefined ? (
@@ -232,6 +436,7 @@ export function AdminUsers() {
             onClick={() => {
               setQuery("");
               setRoleFilter("all");
+              setForumRoleFilter("all");
               setProfileFilter("all");
               setSort("joined-desc");
             }}
@@ -248,9 +453,24 @@ export function AdminUsers() {
         {filteredUsers.map((user) => (
           <UserRow
             key={user._id}
-            pending={Boolean(pendingRoles[user._id])}
+            pending={
+              Boolean(pendingRoles[user._id]) ||
+              Boolean(pendingForumRoles[user._id]) ||
+              Object.prototype.hasOwnProperty.call(pendingForumTrust, user._id) ||
+              Object.prototype.hasOwnProperty.call(pendingForumStatus, user._id)
+            }
             role={pendingRoles[user._id] ?? user.role ?? "reader"}
+            forumRole={pendingForumRoles[user._id] ?? user.forumRole ?? "none"}
+            forumStatus={
+              pendingForumStatus[user._id] ?? getForumAccountStatus(user)
+            }
+            forumTrusted={
+              pendingForumTrust[user._id] ?? isForumTrusted(user)
+            }
             user={user}
+            onForumRoleChange={(forumRole) => setForumRole(user, forumRole)}
+            onForumStatusChange={(status) => setForumStatus(user, status)}
+            onForumTrustChange={(trusted) => setForumTrust(user, trusted)}
             onRoleChange={(role) => setRole(user, role)}
           />
         ))}
@@ -267,11 +487,23 @@ export function AdminUsers() {
 }
 
 function UserRow({
+  forumRole,
+  forumStatus,
+  forumTrusted,
+  onForumRoleChange,
+  onForumStatusChange,
+  onForumTrustChange,
   pending,
   role,
   user,
   onRoleChange,
 }: {
+  forumRole: ForumRole | "none";
+  forumStatus: ForumAccountStatus;
+  forumTrusted: boolean;
+  onForumRoleChange: (forumRole: ForumRole | "none") => void;
+  onForumStatusChange: (status: ForumAccountStatus) => void;
+  onForumTrustChange: (trusted: boolean) => void;
   pending: boolean;
   role: UserRole;
   user: AdminUserRecord;
@@ -282,6 +514,8 @@ function UserRow({
   const publicHandle = user.usernameNormalized ?? user.username ?? null;
   const contactEmail = user.contactEmail ?? user.email ?? null;
   const signals = getProfileSignals(user);
+  const legacyForumAdmin = role === "owner" || role === "admin";
+  const staffTrusted = legacyForumAdmin || forumRole !== "none";
 
   return (
     <article
@@ -297,6 +531,17 @@ function UserRow({
             {user.username ?? user.name ?? handle}
           </p>
           <RoleBadge role={role} />
+          <ForumRoleBadge forumRole={forumRole} legacy={legacyForumAdmin} />
+          <Badge
+            variant={forumTrusted ? "default" : "outline"}
+            className={cn(
+              "rounded-none font-mono text-[10px] uppercase",
+              forumTrusted ? null : "text-muted-foreground",
+            )}
+          >
+            {forumTrusted ? "Forum trusted" : "Forum gated"}
+          </Badge>
+          <ForumStatusBadge status={forumStatus} />
           {pending ? (
             <Badge
               variant="outline"
@@ -334,6 +579,32 @@ function UserRow({
         ) : (
           <p>Role timestamp unavailable</p>
         )}
+        {legacyForumAdmin ? (
+          <p>Forum admin via site role</p>
+        ) : forumRole !== "none" && user.forumRoleAssignedAt ? (
+          <p>Forum role set {formatDate(user.forumRoleAssignedAt)}</p>
+        ) : (
+          <p>No forum staff role</p>
+        )}
+        {forumTrusted && user.forumTrustedAt ? (
+          <p>Forum trusted {formatDate(user.forumTrustedAt)}</p>
+        ) : user.forumTrustRevokedAt ? (
+          <p>Forum revoked {formatDate(user.forumTrustRevokedAt)}</p>
+        ) : (
+          <p>Forum trust not granted</p>
+        )}
+        {forumStatus === "suspended" && user.forumSuspendedUntil ? (
+          <p>Suspended until {formatDate(user.forumSuspendedUntil)}</p>
+        ) : forumStatus === "banned" && user.forumBannedAt ? (
+          <p>Banned {formatDate(user.forumBannedAt)}</p>
+        ) : (
+          <p>Forum account active</p>
+        )}
+        {user.forumSuspendedReason || user.forumBannedReason ? (
+          <p className="line-clamp-1 normal-case">
+            {user.forumSuspendedReason ?? user.forumBannedReason}
+          </p>
+        ) : null}
         {user.bio?.trim() ? (
           <p className="line-clamp-2 normal-case text-sm">{user.bio.trim()}</p>
         ) : (
@@ -364,6 +635,79 @@ function UserRow({
             ))}
           </SelectContent>
         </Select>
+        <Select
+          disabled={pending}
+          value={forumRole}
+          onValueChange={(value) =>
+            onForumRoleChange(value as ForumRole | "none")
+          }
+        >
+          <SelectTrigger
+            aria-label={`Set forum role for ${
+              user.username ?? user.name ?? handle
+            }`}
+            className="h-8 rounded-none font-mono text-[10px] uppercase"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {forumRoleOptions.map((option) => (
+              <SelectItem
+                key={option}
+                value={option}
+                disabled={legacyForumAdmin && option !== "none"}
+                className="rounded-none font-mono text-[10px] uppercase"
+              >
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          disabled={pending || staffTrusted}
+          size="sm"
+          type="button"
+          variant="outline"
+          onClick={() => onForumTrustChange(!forumTrusted)}
+        >
+          {staffTrusted
+            ? "Staff trusted"
+            : forumTrusted
+              ? "Revoke forum"
+              : "Trust forum"}
+        </Button>
+        {forumStatus === "active" ? (
+          <Button
+            disabled={pending || legacyForumAdmin}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => onForumStatusChange("suspended")}
+          >
+            Suspend 7d
+          </Button>
+        ) : (
+          <Button
+            disabled={pending || legacyForumAdmin}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => onForumStatusChange("active")}
+          >
+            Clear forum
+          </Button>
+        )}
+        {forumStatus !== "banned" ? (
+          <Button
+            disabled={pending || legacyForumAdmin}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => onForumStatusChange("banned")}
+          >
+            Ban
+          </Button>
+        ) : null}
         {publicHandle ? (
           <Button asChild size="sm" variant="outline">
             <Link href={`/u/${publicHandle}`} prefetch>
@@ -432,6 +776,49 @@ function RoleBadge({ role }: { role: UserRole }) {
   );
 }
 
+function ForumRoleBadge({
+  forumRole,
+  legacy,
+}: {
+  forumRole: ForumRole | "none";
+  legacy: boolean;
+}) {
+  if (legacy) {
+    return (
+      <Badge className="rounded-none font-mono text-[10px] uppercase">
+        Forum admin
+      </Badge>
+    );
+  }
+  if (forumRole === "none") {
+    return null;
+  }
+
+  return (
+    <Badge
+      variant={forumRole === "admin" ? "default" : "outline"}
+      className="rounded-none font-mono text-[10px] uppercase"
+    >
+      Forum {forumRole}
+    </Badge>
+  );
+}
+
+function ForumStatusBadge({ status }: { status: ForumAccountStatus }) {
+  if (status === "active") {
+    return null;
+  }
+
+  return (
+    <Badge
+      variant={status === "banned" ? "destructive" : "secondary"}
+      className="rounded-none font-mono text-[10px] uppercase"
+    >
+      {status === "banned" ? "Forum banned" : "Forum suspended"}
+    </Badge>
+  );
+}
+
 function StatusLine({ children }: { children: ReactNode }) {
   return (
     <p className="py-3 font-mono text-xs uppercase text-muted-foreground">
@@ -470,6 +857,32 @@ function profileNeedsAttention(user: AdminUserRecord) {
   );
 }
 
+function isForumTrusted(user: AdminUserRecord) {
+  if (user.role === "owner" || user.role === "admin") {
+    return true;
+  }
+  if (getForumAccountStatus(user) !== "active") {
+    return false;
+  }
+  if (user.forumRole === "moderator" || user.forumRole === "admin") {
+    return true;
+  }
+  return user.forumTrustedAt !== undefined && user.forumTrustRevokedAt === undefined;
+}
+
+function getForumAccountStatus(user: AdminUserRecord): ForumAccountStatus {
+  if (user.forumBannedAt !== undefined) {
+    return "banned";
+  }
+  if (
+    user.forumSuspendedUntil !== undefined &&
+    user.forumSuspendedUntil > Date.now()
+  ) {
+    return "suspended";
+  }
+  return "active";
+}
+
 function matchesQuery(user: AdminUserRecord, query: string) {
   if (!query) {
     return true;
@@ -479,6 +892,7 @@ function matchesQuery(user: AdminUserRecord, query: string) {
     user.username,
     user.usernameNormalized,
     user.name,
+    user.forumRole,
     user.contactEmail,
     user.email,
     user._id,

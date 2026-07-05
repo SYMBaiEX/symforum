@@ -1,5 +1,6 @@
 import { cronJobs } from "convex/server";
 import { makeFunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -34,6 +35,12 @@ crons.cron(
   "check daily SYMBaiEX newsletter schedule",
   "*/15 * * * *",
   checkDailyNewsletterScheduleRef,
+  {},
+);
+crons.interval(
+  "cleanup expired forum attachment uploads",
+  { hours: 1 },
+  internal.forum.cleanupForumAttachmentStorage,
   {},
 );
 

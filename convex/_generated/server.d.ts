@@ -27,11 +27,16 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
+  readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;
+  readonly FORUM_FROM_EMAIL: string | undefined;
+  readonly FORUM_REPLY_TO: string | undefined;
+  readonly FORUM_SITE_URL: string | undefined;
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
+  readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
 };

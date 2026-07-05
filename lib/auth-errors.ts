@@ -6,10 +6,19 @@ export function isAuthRequiredError(error: unknown) {
       : "";
   const message = errorMessage(error);
 
-  return (
-    /auth|required|unauthorized/i.test(code) ||
-    /not authenticated|unauthorized|sign in|required auth/i.test(message)
-  );
+  if (/^(AUTH_REQUIRED|UNAUTHENTICATED|NOT_AUTHENTICATED)$/i.test(code)) {
+    return true;
+  }
+  if (
+    /^(FORUM_TRUST_REQUIRED|UNAUTHORIZED)$/i.test(code) ||
+    /forum approval|forum posting access|forum reply access|forum voting access|forum edit access/i.test(
+      message,
+    )
+  ) {
+    return false;
+  }
+
+  return /not authenticated|sign in|required auth/i.test(message);
 }
 
 export function userFacingError(error: unknown, fallback: string) {

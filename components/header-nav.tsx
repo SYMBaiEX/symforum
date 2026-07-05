@@ -1,6 +1,16 @@
 "use client";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  isForumHostname,
+  primarySiteHrefForForumHost,
+} from "@/components/forum/forum-host-url";
+import {
+  isExternalHeaderHref,
+  isHeaderRouteActive,
+  resolveHeaderNavActive,
+  resolveHeaderNavHref,
+} from "@/components/header-nav-routing";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,19 +33,44 @@ const navItems = [
   { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
+  { href: "/forum", label: "Forum" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/contact", label: "Contact" },
 ];
 
-export function HeaderNav() {
+export function HeaderNav({
+  initialForumHost = false,
+  initialPrimarySiteHref = "/",
+}: {
+  initialForumHost?: boolean;
+  initialPrimarySiteHref?: string;
+}) {
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
-    return <NavRow authHref="/signin" authLabel="Sign in" />;
+    return (
+      <NavRow
+        authHref="/signin"
+        authLabel="Sign in"
+        initialForumHost={initialForumHost}
+        initialPrimarySiteHref={initialPrimarySiteHref}
+      />
+    );
   }
 
-  return <LiveHeaderNav />;
+  return (
+    <LiveHeaderNav
+      initialForumHost={initialForumHost}
+      initialPrimarySiteHref={initialPrimarySiteHref}
+    />
+  );
 }
 
-function LiveHeaderNav() {
+function LiveHeaderNav({
+  initialForumHost,
+  initialPrimarySiteHref,
+}: {
+  initialForumHost: boolean;
+  initialPrimarySiteHref: string;
+}) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [mounted, setMounted] = useState(false);
 
@@ -44,35 +79,90 @@ function LiveHeaderNav() {
   }, []);
 
   if (!mounted || isLoading) {
-    return <NavRow authPending />;
+    return (
+      <NavRow
+        authPending
+        initialForumHost={initialForumHost}
+        initialPrimarySiteHref={initialPrimarySiteHref}
+      />
+    );
   }
 
   if (isAuthenticated) {
-    return <NavRow authHref="/profile" authLabel="Profile" />;
+    return (
+      <NavRow
+        authHref="/profile"
+        authLabel="Profile"
+        initialForumHost={initialForumHost}
+        initialPrimarySiteHref={initialPrimarySiteHref}
+      />
+    );
   }
 
-  return <NavRow authHref="/signin" authLabel="Sign in" />;
+  return (
+    <NavRow
+      authHref="/signin"
+      authLabel="Sign in"
+      initialForumHost={initialForumHost}
+      initialPrimarySiteHref={initialPrimarySiteHref}
+    />
+  );
 }
 
 function NavRow({
   authHref,
   authLabel,
   authPending = false,
+  initialForumHost = false,
+  initialPrimarySiteHref = "/",
 }: {
   authHref?: string;
   authLabel?: string;
   authPending?: boolean;
+  initialForumHost?: boolean;
+  initialPrimarySiteHref?: string;
 }) {
-  const pathname = usePathname();
-  const authIsActive = authHref ? isRouteActive(pathname, authHref) : false;
+  const pathname = usePathname() ?? "/";
+  const [forumHost, setForumHost] = useState(initialForumHost);
+  const [primarySiteHref, setPrimarySiteHref] = useState(
+    initialPrimarySiteHref,
+  );
+  const browserLocation =
+    typeof window === "undefined" ? undefined : window.location;
+
+  useEffect(() => {
+    if (isForumHostname(window.location.hostname)) {
+      setForumHost(true);
+      setPrimarySiteHref(primarySiteHrefForForumHost("/", window.location));
+    } else {
+      setForumHost(false);
+      setPrimarySiteHref("/");
+    }
+  }, []);
+
+  const authIsActive = authHref
+    ? isHeaderRouteActive(pathname, authHref)
+    : false;
+  const resolveHref = (href: string) => {
+    return resolveHeaderNavHref({
+      forumHost,
+      href,
+      location: forumHost ? browserLocation : undefined,
+      pathname,
+      primarySiteHref,
+    });
+  };
+  const resolveActive = (href: string) => {
+    return resolveHeaderNavActive({ forumHost, href, pathname });
+  };
 
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
       <div className="hidden min-w-0 items-center gap-1 md:flex">
         {navItems.map((item) => (
           <DesktopNavLink
-            active={isRouteActive(pathname, item.href)}
-            href={item.href}
+            active={resolveActive(item.href)}
+            href={resolveHref(item.href)}
             key={item.href}
           >
             {item.label}
@@ -87,7 +177,7 @@ function NavRow({
               Auth
             </span>
           ) : authHref && authLabel ? (
-            <DesktopNavLink active={authIsActive} href={authHref}>
+            <DesktopNavLink active={authIsActive} href={resolveHref(authHref)}>
               {authLabel}
             </DesktopNavLink>
           ) : null}
@@ -99,7 +189,8 @@ function NavRow({
           authIsActive={authIsActive}
           authLabel={authLabel}
           authPending={authPending}
-          pathname={pathname}
+          resolveActive={resolveActive}
+          resolveHref={resolveHref}
         />
       </div>
       <ThemeToggle />
@@ -127,7 +218,11 @@ function DesktopNavLink({
       size="sm"
       variant="ghost"
     >
-      <Link aria-current={active ? "page" : undefined} href={href} prefetch>
+      <Link
+        aria-current={active ? "page" : undefined}
+        href={href}
+        prefetch={!isExternalHeaderHref(href)}
+      >
         {children}
       </Link>
     </Button>
@@ -139,13 +234,15 @@ function MobileNavMenu({
   authIsActive,
   authLabel,
   authPending,
-  pathname,
+  resolveActive,
+  resolveHref,
 }: {
   authHref?: string;
   authIsActive: boolean;
   authLabel?: string;
   authPending: boolean;
-  pathname: string;
+  resolveActive: (href: string) => boolean;
+  resolveHref: (href: string) => string;
 }) {
   return (
     <DropdownMenu>
@@ -169,8 +266,8 @@ function MobileNavMenu({
         <DropdownMenuGroup>
           {navItems.map((item) => (
             <MobileNavItem
-              active={isRouteActive(pathname, item.href)}
-              href={item.href}
+              active={resolveActive(item.href)}
+              href={resolveHref(item.href)}
               key={item.href}
               label={item.label}
             />
@@ -188,7 +285,7 @@ function MobileNavMenu({
           ) : authHref && authLabel ? (
             <MobileNavItem
               active={authIsActive}
-              href={authHref}
+              href={resolveHref(authHref)}
               label={authLabel}
             />
           ) : null}
@@ -216,7 +313,11 @@ function MobileNavItem({
           "bg-foreground text-background focus:bg-foreground focus:text-background",
       )}
     >
-      <Link aria-current={active ? "page" : undefined} href={href} prefetch>
+      <Link
+        aria-current={active ? "page" : undefined}
+        href={href}
+        prefetch={!isExternalHeaderHref(href)}
+      >
         <span>{label}</span>
         {active ? (
           <span className="ml-auto font-mono text-[9px] uppercase opacity-70">
@@ -226,12 +327,4 @@ function MobileNavItem({
       </Link>
     </DropdownMenuItem>
   );
-}
-
-function isRouteActive(pathname: string, href: string) {
-  if (href === "/") {
-    return pathname === "/";
-  }
-
-  return pathname === href || pathname.startsWith(`${href}/`);
 }

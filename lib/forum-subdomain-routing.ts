@@ -1,0 +1,90 @@
+const FORUM_PRODUCTION_HOST = "forum.symbaiex.com";
+const FORUM_LOCAL_HOSTS = new Set([
+  "forum.localhost",
+  "forum.127.0.0.1",
+  "forum.localtest.me",
+]);
+const FORUM_SUBDOMAIN_SITE_PREFIXES = [
+  "/admin",
+  "/api",
+  "/profile",
+  "/signin",
+  "/u",
+];
+const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
+  "/about",
+  "/blog",
+  "/contact",
+  "/news",
+  "/newsletter",
+  "/portfolio",
+];
+
+export type ForumSubdomainRoute =
+  | { kind: "redirect"; pathname: string; primaryHost?: boolean }
+  | { kind: "rewrite"; pathname: string };
+type RuntimeEnvironment = string | undefined;
+
+export function resolveForumSubdomainRoute({
+  host,
+  nodeEnv = process.env.NODE_ENV,
+  pathname,
+}: {
+  host: string | null | undefined;
+  nodeEnv?: RuntimeEnvironment;
+  pathname: string;
+}): ForumSubdomainRoute | null {
+  if (!isForumSubdomainHost(host, nodeEnv)) {
+    return null;
+  }
+
+  if (pathname === "/forum" || pathname.startsWith("/forum/")) {
+    return {
+      kind: "redirect",
+      pathname: pathname === "/forum" ? "/" : pathname.slice("/forum".length),
+    };
+  }
+
+  if (isForumSubdomainSiteRoute(pathname)) {
+    return null;
+  }
+
+  if (isForumSubdomainPrimarySiteRoute(pathname)) {
+    return {
+      kind: "redirect",
+      pathname,
+      primaryHost: true,
+    };
+  }
+
+  return {
+    kind: "rewrite",
+    pathname: pathname === "/" ? "/forum" : `/forum${pathname}`,
+  };
+}
+
+export function isForumSubdomainHost(
+  host: string | null | undefined,
+  nodeEnv: RuntimeEnvironment = process.env.NODE_ENV,
+) {
+  const normalized = host?.split(":")[0]?.toLowerCase();
+  if (normalized === FORUM_PRODUCTION_HOST) {
+    return true;
+  }
+  if (nodeEnv !== "production" && normalized !== undefined) {
+    return FORUM_LOCAL_HOSTS.has(normalized);
+  }
+  return false;
+}
+
+function isForumSubdomainSiteRoute(pathname: string) {
+  return FORUM_SUBDOMAIN_SITE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function isForumSubdomainPrimarySiteRoute(pathname: string) {
+  return FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}

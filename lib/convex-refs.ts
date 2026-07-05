@@ -1,9 +1,923 @@
 import { makeFunctionReference } from "convex/server";
 
 export type UserRole = "owner" | "admin" | "reader";
+export type ForumAccountStatus = "active" | "suspended" | "banned";
+export type ForumRole = "moderator" | "admin";
 export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
 export type CommentStatus = "active" | "deleted" | "hidden";
 export type ContactRequestStatus = "new" | "read" | "archived";
+export type ForumCategoryStatus = "active" | "archived";
+export type ForumThreadPrefixStatus = "active" | "archived";
+export type ForumPageStatus = "active" | "archived";
+export type ForumCalendarEventStatus = "active" | "archived";
+export type ForumCategoryKind = "section" | "board";
+export type ForumCategoryViewAccess =
+  | "public"
+  | "members"
+  | "trusted"
+  | "staff";
+export type ForumCategoryWriteAccess =
+  | "members"
+  | "trusted"
+  | "staff"
+  | "closed";
+export type ForumThreadStatus =
+  | "pending"
+  | "active"
+  | "locked"
+  | "hidden"
+  | "deleted";
+export type ForumPostStatus = "pending" | "active" | "hidden" | "deleted";
+export type ForumReportStatus = "open" | "reviewed" | "dismissed";
+export type ForumReportEntityType = "thread" | "post" | "privateMessage";
+export type ForumContentReportEntityType = Extract<
+  ForumReportEntityType,
+  "thread" | "post"
+>;
+export type ForumReputationTargetType = "thread" | "post";
+export type ForumReputationHistoryDirection = "received" | "given";
+export type ForumWarningStatus = "active" | "revoked" | "expired";
+export type ForumPollStatus = "open" | "closed";
+export type ForumNotificationStatus = "unread" | "read";
+export type ForumNotificationType = "reply" | "newThread";
+export type ForumPrivateMessageBox = "inbox" | "sent" | "trash";
+export type ForumMemberSortKey =
+  | "posts-desc"
+  | "threads-desc"
+  | "reputation-desc"
+  | "joined-desc"
+  | "joined-asc"
+  | "name-asc"
+  | "online-desc";
+export type ForumModerationEventEntityType =
+  | "forumThread"
+  | "forumPost"
+  | "forumReport"
+  | "forumPoll"
+  | "forumWarning"
+  | "forumCategory"
+  | "forumCategoryOrder"
+  | "forumThreadPrefix"
+  | "forumAnnouncement"
+  | "forumHelpDocument"
+  | "forumCalendarEvent"
+  | "forumBoardRules"
+  | "forumCategoryModerator";
+export type ForumModerationEventType =
+  | "forum_report_created"
+  | "forum_report_updated"
+  | "forum_poll_status_updated"
+  | "forum_category_created"
+  | "forum_category_updated"
+  | "forum_categories_reordered"
+  | "forum_default_categories_created"
+  | "forum_thread_prefix_created"
+  | "forum_thread_prefix_updated"
+  | "forum_announcement_created"
+  | "forum_announcement_updated"
+  | "forum_help_document_created"
+  | "forum_help_document_updated"
+  | "forum_calendar_event_created"
+  | "forum_calendar_event_updated"
+  | "forum_board_rules_created"
+  | "forum_board_rules_updated"
+  | "forum_category_moderator_assigned"
+  | "forum_category_moderator_removed"
+  | "forum_thread_submitted"
+  | "forum_post_submitted"
+  | "forum_thread_moderated"
+  | "forum_thread_moved"
+  | "forum_post_moderated"
+  | "forum_posts_moved"
+  | "forum_thread_deleted"
+  | "forum_post_deleted"
+  | "forum_warning_issued"
+  | "forum_warning_updated";
+
+export type ConvexPaginationOpts = {
+  numItems: number;
+  cursor: string | null;
+};
+
+export type ForumPaginationRecord = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  startItem: number;
+  endItem: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+  limited?: boolean;
+  actualTotalItems?: number;
+};
+
+export type ForumNavStateRecord = {
+  authenticated: boolean;
+  trusted: boolean;
+  canModerate: boolean;
+  canAdmin: boolean;
+  canManageBoards: boolean;
+  username: string | null;
+  rank: string | null;
+  postCount: number;
+  reputationScore: number;
+  unreadNotifications: number;
+  unreadNotificationsLimited: boolean;
+  unreadPrivateMessages: number;
+  unreadPrivateMessagesLimited: boolean;
+};
+
+export type ForumPresenceLocationType =
+  | "index"
+  | "board"
+  | "thread"
+  | "search"
+  | "members"
+  | "online"
+  | "newPosts"
+  | "help"
+  | "calendar"
+  | "userCp"
+  | "messages"
+  | "subscriptions";
+
+export type ForumPresenceLocationRecord = {
+  type: ForumPresenceLocationType;
+  label: string;
+  href?: string;
+};
+
+export type ForumOnlineMemberRecord = {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  customTitle?: string;
+  rank: string;
+  postCount: number;
+  reputationScore: number;
+  lastSeenAt: number;
+  location: ForumPresenceLocationRecord;
+};
+
+export type ForumOnlineSummaryRecord = {
+  activeSince: number;
+  registeredCount: number;
+  registeredCountLimited: boolean;
+  members: ForumOnlineMemberRecord[];
+};
+
+export type ForumOnlineMembersRecord = ForumOnlineSummaryRecord & {
+  pagination: ForumPaginationRecord;
+};
+
+export type ForumRecentThreadMode = "new" | "today";
+export type ForumSearchTarget = "all" | "titles" | "bodies";
+export type ForumSearchSortKey =
+  | "relevance"
+  | "newest"
+  | "oldest"
+  | "replies"
+  | "views";
+export type ForumThreadListSortKey =
+  | "lastPostAt"
+  | "createdAt"
+  | "replies"
+  | "views"
+  | "rating"
+  | "title";
+export type ForumThreadListSortOrder = "desc" | "asc";
+
+export type ForumRecentThreadsRecord = {
+  mode: ForumRecentThreadMode;
+  label: string;
+  since?: number;
+  visibleThreadCount: number;
+  unreadThreadCount?: number;
+  limited: boolean;
+  threads: ForumThreadRecord[];
+  pagination: ForumPaginationRecord;
+};
+
+export type ForumStatisticsMemberRecord = {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  customTitle?: string;
+  rank: string;
+  threadCount: number;
+  postCount: number;
+  reputationScore: number;
+  joinedAt: number;
+};
+
+export type ForumBoardStatisticsRecord = {
+  memberCount: number;
+  memberCountLimited: boolean;
+  newestMember: ForumStatisticsMemberRecord | null;
+  topPoster: ForumStatisticsMemberRecord | null;
+  reputationLeader: ForumStatisticsMemberRecord | null;
+};
+
+export type ForumCategoryLastThreadRecord = {
+  threadId: string;
+  slug: string;
+  title: string;
+  status: ForumThreadStatus;
+  pinned: boolean;
+  lastPostNumber?: number;
+  lastPostPage?: number;
+};
+
+export type ForumCategoryRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  name: string;
+  description: string;
+  kind: ForumCategoryKind;
+  parentCategoryId?: string;
+  isPostable: boolean;
+  status: ForumCategoryStatus;
+  viewAccess: ForumCategoryViewAccess;
+  threadAccess: ForumCategoryWriteAccess;
+  replyAccess: ForumCategoryWriteAccess;
+  pollAccess: ForumCategoryWriteAccess;
+  position: number;
+  threadCount: number;
+  postCount: number;
+  lastPostAt?: number;
+  viewerHasRead?: boolean;
+  viewerUnread?: boolean;
+  lastThread?: ForumCategoryLastThreadRecord;
+  viewerCanCreateThread?: boolean;
+  viewerCanReply?: boolean;
+  viewerCanCreatePoll?: boolean;
+  viewerSubscribedToCategory?: boolean;
+  ancestors?: ForumCategoryRecord[];
+  children?: ForumCategoryRecord[];
+};
+
+export type AdminForumCategoryRecord = ForumCategoryRecord & {
+  lastThreadId?: string;
+  lastPostId?: string;
+  moderators: ForumCategoryModeratorRecord[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ForumCategoryModeratorRecord = {
+  _id: string;
+  userId: string;
+  username?: string;
+  displayName: string;
+  assignedAt: number;
+  assignedBy?: string;
+  assignedByName: string;
+};
+
+export type ForumCategorySectionRecord = {
+  section: ForumCategoryRecord | null;
+  boards: ForumCategoryRecord[];
+  threadCount: number;
+  postCount: number;
+};
+
+export type ForumThreadPrefixRecord = {
+  _id?: string;
+  _creationTime?: number;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  slug: string;
+  label: string;
+  description?: string;
+  color?: string;
+  status?: ForumThreadPrefixStatus;
+  position?: number;
+};
+
+export type AdminForumThreadPrefixRecord = ForumThreadPrefixRecord & {
+  _id: string;
+  _creationTime: number;
+  status: ForumThreadPrefixStatus;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+  syncedThreads?: number;
+  syncTruncated?: boolean;
+};
+
+export type ForumAnnouncementRecord = {
+  _id: string;
+  _creationTime: number;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  slug: string;
+  title: string;
+  body: string;
+  status: ForumPageStatus;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AdminForumAnnouncementRecord = ForumAnnouncementRecord & {
+  key: string;
+  createdBy: string;
+  updatedBy: string;
+  createdByName: string;
+  updatedByName: string;
+};
+
+export type ForumHelpDocumentRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  title: string;
+  body: string;
+  status: ForumPageStatus;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ForumHelpDocumentSummaryRecord = Omit<
+  ForumHelpDocumentRecord,
+  "body"
+> & {
+  excerpt: string;
+};
+
+export type AdminForumHelpDocumentRecord = ForumHelpDocumentRecord & {
+  createdBy: string;
+  updatedBy: string;
+  createdByName: string;
+  updatedByName: string;
+};
+
+export type ForumCalendarEventRecord = {
+  _id: string;
+  _creationTime: number;
+  slug: string;
+  title: string;
+  body: string;
+  status: ForumCalendarEventStatus;
+  startsAt: number;
+  endsAt?: number;
+  allDay: boolean;
+  month: string;
+  day: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ForumCalendarEventSummaryRecord = Omit<
+  ForumCalendarEventRecord,
+  "body"
+> & {
+  excerpt: string;
+};
+
+export type AdminForumCalendarEventRecord = ForumCalendarEventRecord & {
+  createdBy: string;
+  updatedBy: string;
+  createdByName: string;
+  updatedByName: string;
+};
+
+export type ForumBoardRulesRecord = {
+  _id: string;
+  _creationTime: number;
+  categoryId: string;
+  categorySlug?: string;
+  categoryName?: string;
+  title: string;
+  body: string;
+  status: ForumPageStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AdminForumBoardRulesRecord = ForumBoardRulesRecord & {
+  createdBy: string;
+  updatedBy: string;
+  createdByName: string;
+  updatedByName: string;
+};
+
+export type ForumAttachmentRecord = {
+  _id: string;
+  _creationTime: number;
+  threadId: string;
+  postId?: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url: string;
+  createdAt: number;
+};
+
+export type ForumAttachmentInput = {
+  storageId: string;
+  filename: string;
+};
+
+export type ForumThreadRecord = {
+  _id: string;
+  _creationTime: number;
+  categoryId: string;
+  categorySlug: string;
+  prefixId?: string;
+  prefix: ForumThreadPrefixRecord | null;
+  slug: string;
+  title: string;
+  status: ForumThreadStatus;
+  pinned: boolean;
+  replyCount: number;
+  viewCount: number;
+  ratingCount: number;
+  ratingAverage: number;
+  createdAt: number;
+  updatedAt: number;
+  lastPostAt: number;
+  lastPostNumber?: number;
+  lastPostPage?: number;
+  author: string;
+  lastPostAuthor: string;
+  viewerHasRead?: boolean;
+  viewerUnread?: boolean;
+  firstUnreadPostNumber?: number;
+  firstUnreadPage?: number;
+  role?: string;
+  authorTitle?: string;
+  authorRank?: string;
+  authorPostCount?: number;
+  authorReputationScore?: number;
+  authorSignature?: string;
+  authorShowSignatures?: boolean;
+  authorDisplayName?: string;
+  authorUsername?: string;
+  authorImage?: string;
+  authorLocation?: string;
+  authorJoinedAt?: number;
+  lastEditedAt?: number;
+  lastEditedBy?: string;
+  lastEditedByName?: string;
+  lastEditReason?: string;
+  editCount?: number;
+  attachments?: ForumAttachmentRecord[];
+};
+
+export type ForumThreadDetailRecord = ForumThreadRecord & {
+  body: string;
+  lastEditedAt?: number;
+  lastEditedBy?: string;
+  lastEditedByName?: string;
+  lastEditReason?: string;
+  editCount: number;
+  attachments: ForumAttachmentRecord[];
+  viewerCanReply: boolean;
+  viewerCanModerate: boolean;
+  viewerCanEdit: boolean;
+  viewerCanDelete: boolean;
+  viewerSubscribed: boolean;
+  viewerCanRateThread: boolean;
+  viewerRating: number;
+  viewerCanGiveReputation: boolean;
+  viewerReputationScore: number;
+};
+
+export type ForumPollOptionRecord = {
+  _id: string;
+  label: string;
+  position: number;
+  voteCount: number;
+  percent: number;
+};
+
+export type ForumPollRecord = {
+  _id: string;
+  _creationTime: number;
+  threadId: string;
+  categoryId: string;
+  question: string;
+  status: ForumPollStatus;
+  optionCount: number;
+  totalVotes: number;
+  createdAt: number;
+  updatedAt: number;
+  closedAt?: number;
+  viewerCanEdit: boolean;
+  viewerOptionId?: string;
+  viewerCanVote: boolean;
+  options: ForumPollOptionRecord[];
+};
+
+export type AdminForumThreadRecord = ForumThreadRecord & {
+  categoryName?: string;
+  lastPostId?: string;
+  lockedAt?: number;
+  lockedBy?: string;
+  deletedAt?: number;
+  deletedBy?: string;
+  moderationReason?: string;
+  body?: string;
+};
+
+export type ForumPostRecord = {
+  _id: string;
+  _creationTime: number;
+  threadId: string;
+  categoryId: string;
+  authorId: string;
+  body: string;
+  status: ForumPostStatus;
+  createdAt: number;
+  updatedAt: number;
+  author: string;
+  postNumber?: number;
+  postPage?: number;
+  viewerCanEdit: boolean;
+  viewerCanDelete: boolean;
+  viewerCanGiveReputation: boolean;
+  viewerReputationScore: number;
+  role?: string;
+  authorTitle?: string;
+  authorRank?: string;
+  authorPostCount?: number;
+  authorReputationScore?: number;
+  authorSignature?: string;
+  authorShowSignatures?: boolean;
+  authorDisplayName?: string;
+  authorUsername?: string;
+  authorImage?: string;
+  authorLocation?: string;
+  authorJoinedAt?: number;
+  lastEditedAt?: number;
+  lastEditedBy?: string;
+  lastEditedByName?: string;
+  lastEditReason?: string;
+  editCount?: number;
+  attachments?: ForumAttachmentRecord[];
+};
+
+export type MyForumProfileRecord = {
+  _id?: string;
+  userId: string;
+  username: string;
+  signature: string;
+  customTitle: string;
+  showSignatures: boolean;
+  avatarUrl?: string;
+  authAvatarUrl?: string;
+  bio: string;
+  birthday: string;
+  location: string;
+  timeZone: string;
+  websiteUrl: string;
+  threadCount: number;
+  postCount: number;
+  reputationScore: number;
+  rank: string;
+  trusted: boolean;
+  activeWarningCount: number;
+  activeWarningPoints: number;
+  updatedAt?: number;
+};
+
+export type ForumNotificationPreferencesRecord = {
+  _id?: string;
+  userId: string;
+  inAppReplies: boolean;
+  inAppNewThreads: boolean;
+  emailReplies: boolean;
+  emailNewThreads: boolean;
+  emailDestinationAvailable: boolean;
+  emailDeliveryEnabled: boolean;
+  emailDestinationLabel?: string;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type ForumRelationshipKind = "buddy" | "ignore";
+
+export type ForumRelationshipRecord = {
+  _id: string;
+  _creationTime: number;
+  targetUserId: string;
+  kind: ForumRelationshipKind;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  customTitle?: string;
+  rank: string;
+  postCount: number;
+  reputationScore: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MyForumRelationshipsRecord = {
+  buddies: ForumRelationshipRecord[];
+  ignored: ForumRelationshipRecord[];
+};
+
+export type MyForumReputationHistoryRecord = {
+  _id: string;
+  _creationTime: number;
+  fromUserId: string;
+  fromUsername: string;
+  toUserId: string;
+  toUsername: string;
+  targetType: ForumReputationTargetType;
+  score: -1 | 0 | 1;
+  comment?: string;
+  categoryId: string;
+  categorySlug: string;
+  categoryName: string;
+  threadId: string;
+  threadSlug: string;
+  threadTitle: string;
+  postId?: string;
+  postNumber?: number;
+  postPage?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MyForumWarningRecord = {
+  _id: string;
+  _creationTime: number;
+  status: ForumWarningStatus;
+  active: boolean;
+  points: number;
+  reason: string;
+  moderator: string;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  threadId?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  postId?: string;
+  postNumber?: number;
+  postPage?: number;
+  reportId?: string;
+  expiresAt?: number;
+  revokedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MyPendingForumThreadRecord = {
+  _id: string;
+  _creationTime: number;
+  type: "thread";
+  title: string;
+  excerpt: string;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MyPendingForumPostRecord = {
+  _id: string;
+  _creationTime: number;
+  type: "reply";
+  excerpt: string;
+  threadId?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MyPendingForumContentRecord = {
+  threads: MyPendingForumThreadRecord[];
+  posts: MyPendingForumPostRecord[];
+};
+
+export type ForumMemberRecord = {
+  _id: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  customTitle?: string;
+  location?: string;
+  rank: string;
+  threadCount: number;
+  postCount: number;
+  reputationScore: number;
+  joinedAt: number;
+  isOnline: boolean;
+  lastSeenAt?: number;
+  onlineLocation?: ForumPresenceLocationRecord;
+};
+
+export type ForumNotificationRecord = {
+  _id: string;
+  _creationTime: number;
+  type: ForumNotificationType;
+  status: ForumNotificationStatus;
+  threadId: string;
+  threadSlug: string;
+  threadTitle: string;
+  categoryId: string;
+  categorySlug: string;
+  categoryName: string;
+  postId?: string;
+  postNumber?: number;
+  postPage?: number;
+  actor: string;
+  createdAt: number;
+  readAt?: number;
+};
+
+export type ForumPrivateMessageRecord = {
+  _id: string;
+  _creationTime: number;
+  senderUserId: string;
+  recipientUserId: string;
+  senderUsername: string;
+  recipientUsername: string;
+  otherUsername: string;
+  box: ForumPrivateMessageBox;
+  sourceBox: Exclude<ForumPrivateMessageBox, "trash">;
+  subject: string;
+  body?: string;
+  excerpt?: string;
+  readAt?: number;
+  unread: boolean;
+  trashedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AdminForumPostRecord = ForumPostRecord & {
+  deletedAt?: number;
+  deletedBy?: string;
+  moderationReason?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  categorySlug?: string;
+  excerpt?: string;
+};
+
+export type AdminForumContentEditRecord = {
+  _id: string;
+  _creationTime: number;
+  entityType: "thread" | "post";
+  threadId: string;
+  postId?: string;
+  actorUserId: string;
+  actor: string;
+  targetUserId: string;
+  target: string;
+  previousTitle?: string;
+  nextTitle?: string;
+  previousPrefixId?: string;
+  nextPrefixId?: string;
+  previousPrefixLabel?: string;
+  nextPrefixLabel?: string;
+  previousBody: string;
+  nextBody: string;
+  editReason?: string;
+  createdAt: number;
+};
+
+export type AdminForumReportRecord = {
+  _id: string;
+  _creationTime: number;
+  reporterId: string;
+  reporter: string;
+  entityType: ForumReportEntityType;
+  threadId?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  threadPrefix: ForumThreadPrefixRecord | null;
+  postId?: string;
+  messageId?: string;
+  targetUserId?: string;
+  targetUser?: string;
+  targetActiveWarningCount: number;
+  targetActiveWarningPoints: number;
+  postNumber?: number;
+  postPage?: number;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  reason: string;
+  details?: string;
+  status: ForumReportStatus;
+  excerpt: string;
+  snapshotTitle?: string;
+  snapshotPrefixSlug?: string;
+  snapshotPrefixLabel?: string;
+  snapshotPrefixColor?: string;
+  snapshotBody?: string;
+  snapshotAuthor?: string;
+  snapshotPostNumber?: number;
+  snapshotCreatedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+  reviewedAt?: number;
+  reviewedBy?: string;
+  reviewer?: string;
+  moderationNote?: string;
+};
+
+export type AdminForumWarningRecord = {
+  _id: string;
+  _creationTime: number;
+  targetUserId: string;
+  targetUser: string;
+  actorUserId: string;
+  actor: string;
+  status: ForumWarningStatus;
+  points: number;
+  reason: string;
+  moderationNote?: string;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  threadId?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  postId?: string;
+  postNumber?: number;
+  postPage?: number;
+  reportId?: string;
+  reportStatus?: ForumReportStatus;
+  expiresAt?: number;
+  revokedAt?: number;
+  revokedBy?: string;
+  revokedByName?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AdminForumModerationEventRecord = {
+  _id: string;
+  _creationTime: number;
+  actorUserId: string;
+  actor: string;
+  entityType: ForumModerationEventEntityType;
+  entityId: string;
+  eventType: ForumModerationEventType;
+  message: string;
+  categoryId?: string;
+  categorySlug?: string;
+  categoryName?: string;
+  threadId?: string;
+  threadSlug?: string;
+  threadTitle?: string;
+  postId?: string;
+  reportId?: string;
+  warningId?: string;
+  pollId?: string;
+  metadataJson: string;
+  createdAt: number;
+};
+
+export type ForumOverviewRecord = {
+  categories: ForumCategoryRecord[];
+  sections: ForumCategorySectionRecord[];
+  announcements: ForumAnnouncementRecord[];
+  newestThreads: ForumThreadRecord[];
+  online: ForumOnlineSummaryRecord;
+  statistics: ForumBoardStatisticsRecord;
+  totals: {
+    categories: number;
+    threads: number;
+    posts: number;
+  };
+};
+
+export type AdminForumOverviewRecord = {
+  categories: AdminForumCategoryRecord[];
+  recentThreads: AdminForumThreadRecord[];
+  recentPosts: AdminForumPostRecord[];
+  totals: {
+    categories: number;
+    threads: number;
+    posts: number;
+    pendingThreads: number;
+    pendingPosts: number;
+    hiddenThreads: number;
+    hiddenPosts: number;
+    pinnedThreads: number;
+    lockedThreads: number;
+  };
+};
 
 export type ConvexPostRecord = {
   _id: string;
@@ -73,9 +987,22 @@ export type AdminUserRecord = {
   role?: UserRole;
   roleAssignedAt?: number;
   roleAssignedBy?: string;
+  forumRole?: ForumRole;
+  forumRoleAssignedAt?: number;
+  forumRoleAssignedBy?: string;
   contactEmail?: string;
   bio?: string;
   onboardedAt?: number;
+  forumTrustedAt?: number;
+  forumTrustedBy?: string;
+  forumTrustRevokedAt?: number;
+  forumTrustRevokedBy?: string;
+  forumSuspendedUntil?: number;
+  forumSuspendedReason?: string;
+  forumSuspendedBy?: string;
+  forumBannedAt?: number;
+  forumBannedReason?: string;
+  forumBannedBy?: string;
 };
 
 export type ViewerUserRecord = {
@@ -87,6 +1014,7 @@ export type ViewerUserRecord = {
   usernameNormalized?: string;
   usernameSource?: "auto" | "chosen";
   role?: UserRole;
+  forumRole?: ForumRole;
   contactEmail?: string;
   bio?: string;
   onboardedAt?: number;
@@ -100,6 +1028,53 @@ export type PublicProfileCommentRecord = {
   createdAt: number;
 };
 
+export type PublicProfileForumThreadRecord = {
+  _id: string;
+  categorySlug: string;
+  prefix: ForumThreadPrefixRecord | null;
+  slug: string;
+  title: string;
+  replyCount: number;
+  createdAt: number;
+  lastPostAt: number;
+};
+
+export type PublicProfileForumReplyRecord = {
+  _id: string;
+  categorySlug: string;
+  threadSlug: string;
+  threadTitle: string;
+  prefix: ForumThreadPrefixRecord | null;
+  excerpt: string;
+  postNumber?: number;
+  postPage?: number;
+  createdAt: number;
+};
+
+export type PublicForumProfileRecord = {
+  bio?: string;
+  birthday?: string;
+  customTitle?: string;
+  location?: string;
+  signature?: string;
+  showSignatures: boolean;
+  timeZone?: string;
+  threadCount: number;
+  postCount: number;
+  reputationScore: number;
+  rank: string;
+  trusted: boolean;
+  avatarUrl?: string;
+  websiteUrl?: string;
+  joinedAt: number;
+  isOnline: boolean;
+  lastSeenAt?: number;
+  onlineLocation?: {
+    label: string;
+    href?: string;
+  };
+};
+
 export type PublicProfileRecord = {
   user: {
     _creationTime: number;
@@ -110,8 +1085,11 @@ export type PublicProfileRecord = {
     usernameSource?: "auto" | "chosen";
     onboardedAt?: number;
   };
+  forumProfile: PublicForumProfileRecord;
   isCurrentUser: boolean;
   recentComments: PublicProfileCommentRecord[];
+  recentForumThreads: PublicProfileForumThreadRecord[];
+  recentForumReplies: PublicProfileForumReplyRecord[];
 };
 
 export type InteractionSummaryRecord = {
@@ -226,12 +1204,7 @@ export type DailyNewsletterRunRecord = {
   _creationTime: number;
   runDate: string;
   snapshotDate?: string;
-  status:
-    | "running"
-    | "generated"
-    | "sent"
-    | "skipped"
-    | "failed";
+  status: "running" | "generated" | "sent" | "skipped" | "failed";
   mode: "cron" | "manual" | "test";
   sendEnabled: boolean;
   startedAt: number;
@@ -409,6 +1382,8 @@ export const convexRefs = {
       {
         user: AdminUserRecord | null;
         isOwner: boolean;
+        canModerateForum: boolean;
+        canAdminForum: boolean;
         ownerExists: boolean;
       }
     >("admin:viewer"),
@@ -419,7 +1394,7 @@ export const convexRefs = {
     >("admin:overview"),
     claimInitialOwner: makeFunctionReference<
       "mutation",
-      Record<string, never>,
+      { bootstrapToken: string },
       AdminUserRecord
     >("admin:claimInitialOwner"),
     listUsers: makeFunctionReference<
@@ -432,6 +1407,26 @@ export const convexRefs = {
       { userId: string; role: UserRole },
       AdminUserRecord
     >("admin:updateUserRole"),
+    updateUserForumRole: makeFunctionReference<
+      "mutation",
+      { userId: string; forumRole: ForumRole | null },
+      AdminUserRecord
+    >("admin:updateUserForumRole"),
+    updateUserForumTrust: makeFunctionReference<
+      "mutation",
+      { userId: string; trusted: boolean },
+      AdminUserRecord
+    >("admin:updateUserForumTrust"),
+    updateUserForumStatus: makeFunctionReference<
+      "mutation",
+      {
+        userId: string;
+        status: ForumAccountStatus;
+        reason?: string;
+        suspendedUntil?: number;
+      },
+      AdminUserRecord
+    >("admin:updateUserForumStatus"),
     listPosts: makeFunctionReference<
       "query",
       Record<string, never>,
@@ -582,6 +1577,336 @@ export const convexRefs = {
       { requestId: string; status: ContactRequestStatus },
       { updated: boolean }
     >("admin:updateContactRequestStatus"),
+    listForumCategories: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean },
+      AdminForumCategoryRecord[]
+    >("forum:listCategoriesAdmin"),
+    listForumCategoryModerators: makeFunctionReference<
+      "query",
+      { categoryId?: string },
+      ForumCategoryModeratorRecord[]
+    >("forum:listCategoryModeratorsAdmin"),
+    listForumThreadPrefixes: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean; categoryId?: string },
+      AdminForumThreadPrefixRecord[]
+    >("forum:listThreadPrefixesAdmin"),
+    listForumAnnouncements: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean; categoryId?: string },
+      AdminForumAnnouncementRecord[]
+    >("forum:listAnnouncementsAdmin"),
+    listForumHelpDocuments: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean },
+      AdminForumHelpDocumentRecord[]
+    >("forum:listHelpDocumentsAdmin"),
+    listForumCalendarEvents: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean; month?: string },
+      AdminForumCalendarEventRecord[]
+    >("forum:listCalendarEventsAdmin"),
+    listForumBoardRules: makeFunctionReference<
+      "query",
+      { includeArchived?: boolean; categoryId?: string },
+      AdminForumBoardRulesRecord[]
+    >("forum:listBoardRulesAdmin"),
+    forumOverview: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      AdminForumOverviewRecord
+    >("forum:adminOverview"),
+    upsertForumCategory: makeFunctionReference<
+      "mutation",
+      {
+        categoryId?: string;
+        slug?: string;
+        name: string;
+        description?: string;
+        kind?: ForumCategoryKind;
+        parentCategoryId?: string;
+        status: ForumCategoryStatus;
+        viewAccess?: ForumCategoryViewAccess;
+        threadAccess?: ForumCategoryWriteAccess;
+        replyAccess?: ForumCategoryWriteAccess;
+        pollAccess?: ForumCategoryWriteAccess;
+        position?: number;
+      },
+      AdminForumCategoryRecord
+    >("forum:upsertForumCategory"),
+    assignForumCategoryModerator: makeFunctionReference<
+      "mutation",
+      { categoryId: string; username: string },
+      {
+        assigned: boolean;
+        moderator: ForumCategoryModeratorRecord;
+        category: AdminForumCategoryRecord;
+      }
+    >("forum:assignCategoryModerator"),
+    removeForumCategoryModerator: makeFunctionReference<
+      "mutation",
+      { moderatorId: string },
+      { removed: boolean; category: AdminForumCategoryRecord | null }
+    >("forum:removeCategoryModerator"),
+    reorderForumCategories: makeFunctionReference<
+      "mutation",
+      { categoryIds: string[] },
+      { updated: boolean }
+    >("forum:reorderForumCategories"),
+    ensureDefaultForumCategories: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      { created: boolean; categoryIds: string[] }
+    >("forum:ensureDefaultForumCategories"),
+    upsertForumThreadPrefix: makeFunctionReference<
+      "mutation",
+      {
+        prefixId?: string;
+        categoryId?: string;
+        slug: string;
+        label: string;
+        description?: string;
+        color?: string;
+        status: ForumThreadPrefixStatus;
+        position?: number;
+      },
+      AdminForumThreadPrefixRecord
+    >("forum:upsertThreadPrefixAdmin"),
+    upsertForumAnnouncement: makeFunctionReference<
+      "mutation",
+      {
+        announcementId?: string;
+        categoryId?: string;
+        slug: string;
+        title: string;
+        body: string;
+        status: ForumPageStatus;
+        position?: number;
+      },
+      AdminForumAnnouncementRecord
+    >("forum:upsertAnnouncementAdmin"),
+    upsertForumHelpDocument: makeFunctionReference<
+      "mutation",
+      {
+        helpDocumentId?: string;
+        slug: string;
+        title: string;
+        body: string;
+        status: ForumPageStatus;
+        position?: number;
+      },
+      AdminForumHelpDocumentRecord
+    >("forum:upsertHelpDocumentAdmin"),
+    upsertForumCalendarEvent: makeFunctionReference<
+      "mutation",
+      {
+        eventId?: string;
+        slug: string;
+        title: string;
+        body: string;
+        status: ForumCalendarEventStatus;
+        startsAt: number;
+        endsAt?: number;
+        allDay?: boolean;
+      },
+      AdminForumCalendarEventRecord
+    >("forum:upsertCalendarEventAdmin"),
+    upsertForumBoardRules: makeFunctionReference<
+      "mutation",
+      {
+        rulesId?: string;
+        categoryId: string;
+        title: string;
+        body: string;
+        status: ForumPageStatus;
+      },
+      AdminForumBoardRulesRecord
+    >("forum:upsertBoardRulesAdmin"),
+    listForumThreads: makeFunctionReference<
+      "query",
+      { categoryId?: string; status?: ForumThreadStatus; limit?: number },
+      AdminForumThreadRecord[]
+    >("forum:listForumThreads"),
+    listForumPosts: makeFunctionReference<
+      "query",
+      { threadId?: string; status?: ForumPostStatus; limit?: number },
+      AdminForumPostRecord[]
+    >("forum:listForumPosts"),
+    getForumThread: makeFunctionReference<
+      "query",
+      {
+        threadId: string;
+        paginationOpts: ConvexPaginationOpts;
+        focusPostId?: string;
+      },
+      {
+        category: AdminForumCategoryRecord;
+        thread: AdminForumThreadRecord;
+        poll: ForumPollRecord | null;
+        replies: {
+          page: AdminForumPostRecord[];
+          isDone: boolean;
+          continueCursor: string;
+        };
+        focusPost: AdminForumPostRecord | null;
+      }
+    >("forum:getForumThread"),
+    listForumContentEdits: makeFunctionReference<
+      "query",
+      { threadId: string; postId?: string; limit?: number },
+      AdminForumContentEditRecord[]
+    >("forum:listForumContentEdits"),
+    updateForumThreadModeration: makeFunctionReference<
+      "mutation",
+      {
+        threadId: string;
+        status?: ForumThreadStatus;
+        pinned?: boolean;
+        moderationReason?: string;
+      },
+      { updated: boolean; thread: AdminForumThreadRecord }
+    >("forum:updateForumThreadModeration"),
+    moveForumThread: makeFunctionReference<
+      "mutation",
+      {
+        threadId: string;
+        targetCategoryId: string;
+        moderationReason?: string;
+      },
+      {
+        updated: boolean;
+        thread: AdminForumThreadRecord;
+        previousCategorySlug: string;
+        nextCategorySlug: string;
+        threadSlug: string;
+      }
+    >("forum:moveForumThread"),
+    moveForumPosts: makeFunctionReference<
+      "mutation",
+      {
+        postIds: string[];
+        targetThreadId: string;
+        moderationReason?: string;
+      },
+      {
+        moved: number;
+        sourceThread: AdminForumThreadRecord;
+        targetThread: AdminForumThreadRecord;
+        postIds: string[];
+        nextPostNumbers: number[];
+      }
+    >("forum:moveForumPosts"),
+    splitForumPosts: makeFunctionReference<
+      "mutation",
+      {
+        postIds: string[];
+        targetCategoryId: string;
+        title: string;
+        prefixId?: string | null;
+        moderationReason?: string;
+      },
+      {
+        split: number;
+        sourceThread: AdminForumThreadRecord;
+        newThread: AdminForumThreadRecord;
+        promotedPostId: string;
+        postIds: string[];
+        nextPostNumbers: number[];
+      }
+    >("forum:splitForumPosts"),
+    mergeForumThread: makeFunctionReference<
+      "mutation",
+      {
+        sourceThreadId: string;
+        targetThreadId: string;
+        moderationReason?: string;
+      },
+      {
+        merged: number;
+        sourceThread: AdminForumThreadRecord;
+        targetThread: AdminForumThreadRecord;
+        sourceOpenerPostId: string;
+        postIds: string[];
+        nextPostNumbers: number[];
+      }
+    >("forum:mergeForumThread"),
+    updateForumPostModeration: makeFunctionReference<
+      "mutation",
+      {
+        postId: string;
+        status: ForumPostStatus;
+        moderationReason?: string;
+      },
+      { updated: boolean; post: AdminForumPostRecord }
+    >("forum:updateForumPostModeration"),
+    listForumReports: makeFunctionReference<
+      "query",
+      { status?: ForumReportStatus; limit?: number },
+      AdminForumReportRecord[]
+    >("forum:listForumReports"),
+    listForumModerationEvents: makeFunctionReference<
+      "query",
+      {
+        entityType?: ForumModerationEventEntityType;
+        entityId?: string;
+        categoryId?: string;
+        threadId?: string;
+        limit?: number;
+      },
+      AdminForumModerationEventRecord[]
+    >("forum:listForumModerationEvents"),
+    updateForumReportStatus: makeFunctionReference<
+      "mutation",
+      {
+        reportId: string;
+        status: ForumReportStatus;
+        moderationNote?: string;
+      },
+      { updated: boolean; report: AdminForumReportRecord }
+    >("forum:updateForumReportStatus"),
+    listForumWarnings: makeFunctionReference<
+      "query",
+      {
+        targetUserId?: string;
+        status?: ForumWarningStatus;
+        limit?: number;
+      },
+      AdminForumWarningRecord[]
+    >("forum:listForumWarnings"),
+    issueForumWarning: makeFunctionReference<
+      "mutation",
+      {
+        targetUserId: string;
+        points: number;
+        reason: string;
+        moderationNote?: string;
+        expiresAt?: number;
+        categoryId?: string;
+        threadId?: string;
+        postId?: string;
+        reportId?: string;
+      },
+      {
+        issued: boolean;
+        warning: AdminForumWarningRecord;
+        report: AdminForumReportRecord | null;
+      }
+    >("forum:issueForumWarning"),
+    updateForumWarningStatus: makeFunctionReference<
+      "mutation",
+      {
+        warningId: string;
+        status: ForumWarningStatus;
+        moderationNote?: string;
+      },
+      { updated: boolean; warning: AdminForumWarningRecord }
+    >("forum:updateForumWarningStatus"),
+    updateForumPollStatus: makeFunctionReference<
+      "mutation",
+      { pollId: string; status: ForumPollStatus },
+      { updated: boolean; poll: ForumPollRecord | null }
+    >("forum:updateForumPollStatus"),
     listNewsletterSubscribers: makeFunctionReference<
       "query",
       Record<string, never>,
@@ -784,6 +2109,527 @@ export const convexRefs = {
       },
       { logged: boolean; deduped: boolean; id: string | null }
     >("systemLogs:record"),
+  },
+  forum: {
+    overview: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ForumOverviewRecord
+    >("forum:overview"),
+    listCategories: makeFunctionReference<
+      "query",
+      { limit?: number },
+      ForumCategoryRecord[]
+    >("forum:listCategories"),
+    listThreadPrefixes: makeFunctionReference<
+      "query",
+      { categorySlug: string },
+      ForumThreadPrefixRecord[]
+    >("forum:listThreadPrefixes"),
+    routeStatus: makeFunctionReference<
+      "query",
+      { categorySlug: string; threadSlug?: string },
+      | { exists: false; kind: "missing" }
+      | { exists: true; kind: "category"; categorySlug: string }
+      | {
+          exists: true;
+          kind: "thread";
+          categorySlug: string;
+          threadSlug: string;
+        }
+    >("forum:routeStatus"),
+    listAnnouncements: makeFunctionReference<
+      "query",
+      {
+        categorySlug?: string;
+        includeBoardAnnouncements?: boolean;
+      },
+      ForumAnnouncementRecord[]
+    >("forum:listAnnouncements"),
+    getAnnouncement: makeFunctionReference<
+      "query",
+      { slug: string; categorySlug?: string },
+      ForumAnnouncementRecord | null
+    >("forum:getAnnouncement"),
+    listHelpDocuments: makeFunctionReference<
+      "query",
+      { limit?: number },
+      ForumHelpDocumentSummaryRecord[]
+    >("forum:listHelpDocuments"),
+    getHelpDocument: makeFunctionReference<
+      "query",
+      { slug: string },
+      ForumHelpDocumentRecord | null
+    >("forum:getHelpDocument"),
+    listCalendarEvents: makeFunctionReference<
+      "query",
+      { month: string },
+      ForumCalendarEventSummaryRecord[]
+    >("forum:listCalendarEvents"),
+    getCalendarEvent: makeFunctionReference<
+      "query",
+      { slug: string },
+      ForumCalendarEventRecord | null
+    >("forum:getCalendarEvent"),
+    listThreads: makeFunctionReference<
+      "query",
+      {
+        categorySlug: string;
+        limit?: number;
+        page?: number;
+        pageSize?: number;
+        prefixId?: string | null;
+        sortKey?: ForumThreadListSortKey;
+        sortOrder?: ForumThreadListSortOrder;
+        days?: number;
+      },
+      {
+        category: ForumCategoryRecord;
+        announcements: ForumAnnouncementRecord[];
+        rules: ForumBoardRulesRecord | null;
+        activityThreads: ForumThreadRecord[];
+        threads: ForumThreadRecord[];
+        pagination: ForumPaginationRecord;
+      }
+    >("forum:listThreads"),
+    listRecentThreads: makeFunctionReference<
+      "query",
+      {
+        mode: ForumRecentThreadMode;
+        limit?: number;
+        page?: number;
+        pageSize?: number;
+      },
+      ForumRecentThreadsRecord
+    >("forum:listRecentThreads"),
+    getThread: makeFunctionReference<
+      "query",
+      {
+        categorySlug: string;
+        threadSlug: string;
+        paginationOpts?: ConvexPaginationOpts;
+        page?: number;
+        pageSize?: number;
+      },
+      {
+        category: ForumCategoryRecord;
+        announcements: ForumAnnouncementRecord[];
+        rules: ForumBoardRulesRecord | null;
+        thread: ForumThreadDetailRecord;
+        poll: ForumPollRecord | null;
+        replies: {
+          page: ForumPostRecord[];
+          isDone: boolean;
+          continueCursor: string;
+          pagination: ForumPaginationRecord;
+        };
+      }
+    >("forum:getThread"),
+    search: makeFunctionReference<
+      "query",
+      {
+        query?: string;
+        categorySlug?: string;
+        limit?: number;
+        page?: number;
+        threadPage?: number;
+        replyPage?: number;
+        pageSize?: number;
+        resultType?: "all" | "threads" | "replies";
+        author?: string;
+        target?: ForumSearchTarget;
+        sortKey?: ForumSearchSortKey;
+        days?: number;
+      },
+      {
+        threads: Array<{
+          _id: string;
+          threadId: string;
+          categoryId: string;
+          categorySlug: string;
+          prefixId?: string;
+          prefix: ForumThreadPrefixRecord | null;
+          slug: string;
+          title: string;
+          excerpt: string;
+          status: ForumThreadStatus;
+          pinned: boolean;
+          replyCount: number;
+          viewCount: number;
+          createdAt: number;
+          lastPostAt: number;
+          author: string;
+          lastPostAuthor: string;
+        }>;
+        posts: Array<{
+          _id: string;
+          postId: string;
+          threadId: string;
+          categoryId: string;
+          categorySlug: string;
+          prefixId?: string;
+          prefix: ForumThreadPrefixRecord | null;
+          threadSlug: string;
+          threadTitle: string;
+          body: string;
+          excerpt: string;
+          createdAt: number;
+          threadLastPostAt: number;
+          threadReplyCount: number;
+          threadViewCount: number;
+          author: string;
+          postNumber?: number;
+          postPage?: number;
+        }>;
+        pagination: ForumPaginationRecord;
+        threadPagination: ForumPaginationRecord;
+        postPagination: ForumPaginationRecord;
+        limited: boolean;
+        threadResultsLimited: boolean;
+        postResultsLimited: boolean;
+        filters: {
+          resultType: "all" | "threads" | "replies";
+          author: string | null;
+          target: ForumSearchTarget;
+          sortKey: ForumSearchSortKey;
+          days?: number;
+        };
+      }
+    >("forum:search"),
+    listMyThreadSubscriptions: makeFunctionReference<
+      "query",
+      { limit?: number },
+      { threads: ForumThreadRecord[] }
+    >("forum:listMyThreadSubscriptions"),
+    listMyCategorySubscriptions: makeFunctionReference<
+      "query",
+      { limit?: number },
+      { categories: ForumCategoryRecord[] }
+    >("forum:listMyCategorySubscriptions"),
+    listMyNotifications: makeFunctionReference<
+      "query",
+      { limit?: number; status?: ForumNotificationStatus },
+      {
+        unreadCount: number;
+        unreadCountLimited: boolean;
+        notificationsLimited: boolean;
+        notifications: ForumNotificationRecord[];
+      }
+    >("forum:listMyNotifications"),
+    getMyForumNavState: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ForumNavStateRecord
+    >("forum:getMyForumNavState"),
+    recordPresence: makeFunctionReference<
+      "mutation",
+      {
+        locationType: ForumPresenceLocationType;
+        path: string;
+        label: string;
+      },
+      { recorded: boolean; presenceId?: string; lastSeenAt: number }
+    >("forum:recordPresence"),
+    markNotificationRead: makeFunctionReference<
+      "mutation",
+      { notificationId?: string; markAll?: boolean },
+      { marked: number }
+    >("forum:markNotificationRead"),
+    listPrivateMessages: makeFunctionReference<
+      "query",
+      {
+        box?: ForumPrivateMessageBox;
+        limit?: number;
+        page?: number;
+        pageSize?: number;
+        query?: string;
+      },
+      {
+        box: ForumPrivateMessageBox;
+        query: string;
+        unreadCount: number;
+        unreadCountLimited: boolean;
+        messagesLimited: boolean;
+        pagination: ForumPaginationRecord;
+        quota: {
+          used: number;
+          limit: number;
+          percent: number;
+          limited: boolean;
+        };
+        messages: ForumPrivateMessageRecord[];
+      }
+    >("forum:listPrivateMessages"),
+    getPrivateMessage: makeFunctionReference<
+      "query",
+      { messageId: string; box?: ForumPrivateMessageBox },
+      ForumPrivateMessageRecord
+    >("forum:getPrivateMessage"),
+    sendPrivateMessage: makeFunctionReference<
+      "mutation",
+      { recipientUsername: string; subject: string; body: string },
+      { messageId: string; createdAt: number }
+    >("forum:sendPrivateMessage"),
+    markPrivateMessageRead: makeFunctionReference<
+      "mutation",
+      { messageId: string },
+      { marked: boolean }
+    >("forum:markPrivateMessageRead"),
+    deletePrivateMessage: makeFunctionReference<
+      "mutation",
+      { messageId: string; box: ForumPrivateMessageBox },
+      { deleted: boolean }
+    >("forum:deletePrivateMessage"),
+    restorePrivateMessage: makeFunctionReference<
+      "mutation",
+      { messageId: string },
+      { restored: boolean; box: Exclude<ForumPrivateMessageBox, "trash"> }
+    >("forum:restorePrivateMessage"),
+    listMembers: makeFunctionReference<
+      "query",
+      {
+        limit?: number;
+        page?: number;
+        pageSize?: number;
+        query?: string;
+        sortKey?: ForumMemberSortKey;
+      },
+      {
+        members: ForumMemberRecord[];
+        pagination: ForumPaginationRecord;
+        limited: boolean;
+        filters: {
+          query: string;
+          sortKey: ForumMemberSortKey;
+        };
+      }
+    >("forum:listMembers"),
+    listOnlineMembers: makeFunctionReference<
+      "query",
+      { limit?: number; page?: number; pageSize?: number },
+      ForumOnlineMembersRecord
+    >("forum:listOnlineMembers"),
+    getMyForumProfile: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      MyForumProfileRecord
+    >("forum:getMyForumProfile"),
+    getMyForumNotificationPreferences: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ForumNotificationPreferencesRecord
+    >("forum:getMyForumNotificationPreferences"),
+    listMyForumWarnings: makeFunctionReference<
+      "query",
+      { limit?: number },
+      MyForumWarningRecord[]
+    >("forum:listMyForumWarnings"),
+    listMyForumReputationHistory: makeFunctionReference<
+      "query",
+      { direction: ForumReputationHistoryDirection; limit?: number },
+      MyForumReputationHistoryRecord[]
+    >("forum:listMyForumReputationHistory"),
+    listMyPendingForumContent: makeFunctionReference<
+      "query",
+      { limit?: number },
+      MyPendingForumContentRecord
+    >("forum:listMyPendingForumContent"),
+    listMyForumRelationships: makeFunctionReference<
+      "query",
+      { limit?: number },
+      MyForumRelationshipsRecord
+    >("forum:listMyForumRelationships"),
+    createThread: makeFunctionReference<
+      "mutation",
+      {
+        categorySlug: string;
+        prefixId?: string | null;
+        title: string;
+        body: string;
+        attachments?: ForumAttachmentInput[];
+        poll?: { question: string; options: string[] };
+      },
+      {
+        threadId: string;
+        categoryId: string;
+        categorySlug: string;
+        threadSlug: string;
+        status: ForumThreadStatus;
+        createdAt: number;
+      }
+    >("forum:createThread"),
+    updateMyForumProfile: makeFunctionReference<
+      "mutation",
+      {
+        avatarUrl?: string;
+        bio?: string;
+        birthday?: string;
+        signature?: string;
+        customTitle?: string;
+        location?: string;
+        showSignatures: boolean;
+        timeZone?: string;
+        websiteUrl?: string;
+      },
+      MyForumProfileRecord
+    >("forum:updateMyForumProfile"),
+    updateMyForumNotificationPreferences: makeFunctionReference<
+      "mutation",
+      {
+        inAppReplies: boolean;
+        inAppNewThreads: boolean;
+        emailReplies: boolean;
+        emailNewThreads: boolean;
+      },
+      ForumNotificationPreferencesRecord
+    >("forum:updateMyForumNotificationPreferences"),
+    updateForumRelationship: makeFunctionReference<
+      "mutation",
+      { username: string; kind: ForumRelationshipKind; enabled: boolean },
+      {
+        enabled: boolean;
+        kind: ForumRelationshipKind;
+        record?: ForumRelationshipRecord;
+        targetUserId?: string;
+        username?: string;
+      }
+    >("forum:updateForumRelationship"),
+    createReply: makeFunctionReference<
+      "mutation",
+      { threadId: string; body: string; attachments?: ForumAttachmentInput[] },
+      {
+        postId: string;
+        threadId: string;
+        postNumber: number;
+        postPage: number;
+        status: ForumPostStatus;
+        createdAt: number;
+      }
+    >("forum:createReply"),
+    markThreadRead: makeFunctionReference<
+      "mutation",
+      { threadId: string; lastReadPostNumber?: number },
+      { marked: boolean; readId: string; lastReadAt: number }
+    >("forum:markThreadRead"),
+    markCategoryRead: makeFunctionReference<
+      "mutation",
+      { categorySlug: string },
+      { marked: boolean; threadCount: number; markedAt: number }
+    >("forum:markCategoryRead"),
+    markAllForumsRead: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      { marked: boolean; categoryCount: number; markedAt: number }
+    >("forum:markAllForumsRead"),
+    toggleThreadSubscription: makeFunctionReference<
+      "mutation",
+      { threadId: string },
+      { subscribed: boolean; subscriptionId: string }
+    >("forum:toggleThreadSubscription"),
+    toggleCategorySubscription: makeFunctionReference<
+      "mutation",
+      { categorySlug: string },
+      { subscribed: boolean; subscriptionId: string }
+    >("forum:toggleCategorySubscription"),
+    votePoll: makeFunctionReference<
+      "mutation",
+      { pollId: string; optionId: string },
+      { voted: boolean; poll: ForumPollRecord | null }
+    >("forum:votePoll"),
+    updatePollContent: makeFunctionReference<
+      "mutation",
+      { pollId: string; question: string; options: string[] },
+      { updated: boolean; poll: ForumPollRecord | null }
+    >("forum:updatePollContent"),
+    setForumReputation: makeFunctionReference<
+      "mutation",
+      {
+        targetType: ForumReputationTargetType;
+        threadId: string;
+        postId?: string;
+        score: -1 | 0 | 1;
+        comment?: string;
+      },
+      {
+        targetType: ForumReputationTargetType;
+        threadId: string;
+        postId?: string;
+        viewerScore: -1 | 0 | 1;
+        reputationScore: number;
+      }
+    >("forum:setForumReputation"),
+    rateThread: makeFunctionReference<
+      "mutation",
+      {
+        threadId: string;
+        score: 1 | 2 | 3 | 4 | 5 | null;
+      },
+      {
+        threadId: string;
+        viewerRating: number;
+        ratingCount: number;
+        ratingAverage: number;
+      }
+    >("forum:rateThread"),
+    updateThreadContent: makeFunctionReference<
+      "mutation",
+      {
+        threadId: string;
+        prefixId?: string | null;
+        title: string;
+        body: string;
+        attachments?: ForumAttachmentInput[];
+        attachmentIdsToKeep?: string[];
+        editReason?: string;
+      },
+      { updated: boolean; thread: ForumThreadDetailRecord }
+    >("forum:updateThreadContent"),
+    updatePostContent: makeFunctionReference<
+      "mutation",
+      {
+        postId: string;
+        body: string;
+        attachments?: ForumAttachmentInput[];
+        attachmentIdsToKeep?: string[];
+        editReason?: string;
+      },
+      { updated: boolean; post: ForumPostRecord }
+    >("forum:updatePostContent"),
+    deleteThread: makeFunctionReference<
+      "mutation",
+      { threadId: string },
+      { deleted: boolean; categorySlug: string }
+    >("forum:deleteThread"),
+    deletePost: makeFunctionReference<
+      "mutation",
+      { postId: string },
+      { deleted: boolean; threadId: string }
+    >("forum:deletePost"),
+    createReport: makeFunctionReference<
+      "mutation",
+      {
+        entityType: ForumContentReportEntityType;
+        threadId: string;
+        postId?: string;
+        reason: string;
+        details?: string;
+      },
+      { reportId: string; created: boolean }
+    >("forum:createReport"),
+    createPrivateMessageReport: makeFunctionReference<
+      "mutation",
+      {
+        messageId: string;
+        reason: string;
+        details?: string;
+      },
+      { reportId: string; created: boolean }
+    >("forum:createPrivateMessageReport"),
+    recordThreadView: makeFunctionReference<
+      "mutation",
+      { threadId: string },
+      { recorded: boolean; viewCount: number | null }
+    >("forum:recordThreadView"),
   },
   comments: {
     list: makeFunctionReference<
