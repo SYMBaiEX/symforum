@@ -5,12 +5,9 @@ import {
   formatForumCount,
   formatForumDateTime,
   forumMemberProfilePath,
-  forumPath,
-  forumPostPath,
   forumRefs,
   type ForumOnlineSummaryRecord,
   type ForumOverviewRecord,
-  type ForumSearchRecord,
 } from "@/components/forum/forum-refs";
 import {
   ForumAvatar,
@@ -18,17 +15,14 @@ import {
   ForumLink,
   ForumIndexTable,
   ForumLoading,
-  ForumMetricBar,
   ForumNewestThreads,
   ForumStatusBox,
-  ForumThreadPrefixBadge,
 } from "@/components/forum/forum-primitives";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useDeferredValue, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 export function ForumIndex({ enabled }: { enabled: boolean }) {
@@ -56,12 +50,7 @@ function LiveForumIndex() {
 }
 
 function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [markAllReadPending, setMarkAllReadPending] = useState(false);
-  const deferredQuery = useDeferredValue(searchQuery.trim());
-  const searchArgs =
-    deferredQuery.length >= 2 ? { query: deferredQuery } : "skip";
-  const searchResult = useQuery(forumRefs.search, searchArgs);
   const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
 
@@ -96,9 +85,9 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section className="min-w-0">
-        <div className="mb-3 flex flex-col gap-3 border-b border-row-border pb-3 md:flex-row md:items-end md:justify-between">
+        <div className="mb-4 flex flex-col gap-4 border-b border-row-border pb-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Board index
@@ -106,29 +95,12 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
             <h2 className="mt-2 text-2xl font-semibold md:text-3xl">
               Public categories
             </h2>
+            <ForumIndexSnapshot overview={overview} />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              asChild
-              className="rounded-none font-mono text-[10px] uppercase"
-              variant="outline"
-            >
-              <ForumLink href="/forum/control-panel" prefetch>
-                User CP
-              </ForumLink>
-            </Button>
-            <Button
-              asChild
-              className="rounded-none font-mono text-[10px] uppercase"
-              variant="outline"
-            >
-              <ForumLink href="/forum/subscriptions" prefetch>
-                Subscriptions
-              </ForumLink>
-            </Button>
+          <div className="flex flex-wrap gap-2 xl:justify-end">
             <Button
               aria-busy={markAllReadPending}
-              className="rounded-none font-mono text-[10px] uppercase"
+              className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
               disabled={authLoading || markAllReadPending}
               type="button"
               variant="outline"
@@ -146,37 +118,17 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
 
       <ForumAnnouncementPanel announcements={overview.announcements} />
 
-      <section className="border-y border-row-border py-4">
-        <label className="grid gap-2">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            Search all boards
-          </span>
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search thread titles and replies"
-            className="rounded-none border-row-border font-mono text-[11px] uppercase"
-          />
-        </label>
-        {deferredQuery.length >= 2 ? (
-          <ForumGlobalSearchResults
-            query={deferredQuery}
-            searchResult={searchResult}
-          />
-        ) : null}
-      </section>
-
-      <ForumMetricBar
-        items={[
-          { label: "Categories", value: overview.totals.categories },
-          { label: "Threads", value: overview.totals.threads },
-          { label: "Posts", value: overview.totals.posts },
-        ]}
-      />
-
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.85fr)]">
-        <ForumNewestThreads threads={overview.newestThreads} />
-        <div className="grid content-start gap-5">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.85fr)]">
+        <div className="min-w-0">
+          {overview.newestThreads.length > 0 ? (
+            <ForumNewestThreads threads={overview.newestThreads} />
+          ) : (
+            <ForumQuietStatus label="Newest threads">
+              No active threads yet.
+            </ForumQuietStatus>
+          )}
+        </div>
+        <div className="grid content-start gap-4">
           <ForumOnlineNowPanel online={overview.online} />
           <ForumBoardStatisticsPanel
             statistics={overview.statistics}
@@ -188,18 +140,54 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
   );
 }
 
+function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
+  const items = [
+    { label: "Categories", value: overview.totals.categories },
+    { label: "Threads", value: overview.totals.threads },
+    { label: "Posts", value: overview.totals.posts },
+  ];
+
+  return (
+    <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+      {items.map((item) => (
+        <div className="inline-flex items-baseline gap-1.5" key={item.label}>
+          <dt>{item.label}</dt>
+          <dd className="text-foreground">{formatForumCount(item.value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ForumQuietStatus({
+  children,
+  label,
+}: {
+  children: string;
+  label: string;
+}) {
+  return (
+    <section className="border-y border-row-border py-4">
+      <p className="font-mono text-[10px] uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-sm text-muted-foreground">{children}</p>
+    </section>
+  );
+}
+
 function ForumOnlineNowPanel({ online }: { online: ForumOnlineSummaryRecord }) {
   const countLabel = `${formatForumCount(online.registeredCount)}${
     online.registeredCountLimited ? "+" : ""
   }`;
 
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3">
+    <section className="border-y border-row-border py-4">
+      <div>
         <p className="font-mono text-[10px] uppercase text-muted-foreground">
           Who&apos;s online
         </p>
-        <h2 className="mt-2 text-xl font-semibold">
+        <h2 className="mt-2 text-lg font-semibold">
           {countLabel} registered member
           {online.registeredCount === 1 ? "" : "s"}
         </h2>
@@ -208,10 +196,10 @@ function ForumOnlineNowPanel({ online }: { online: ForumOnlineSummaryRecord }) {
         </p>
       </div>
       {online.members.length > 0 ? (
-        <div className="divide-y divide-row-border">
+        <div className="mt-3 divide-y divide-row-border border-t border-row-border">
           {online.members.map((member) => (
             <div
-              className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 px-4 py-3"
+              className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 py-3"
               key={member.userId}
             >
               <ForumAvatar
@@ -246,7 +234,7 @@ function ForumOnlineNowPanel({ online }: { online: ForumOnlineSummaryRecord }) {
           ))}
         </div>
       ) : (
-        <p className="px-4 py-4 text-sm leading-6 text-muted-foreground">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           No registered members are active in the forum window.
         </p>
       )}
@@ -266,18 +254,18 @@ function ForumBoardStatisticsPanel({
   }`;
 
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3">
+    <section className="border-y border-row-border py-4">
+      <div>
         <p className="font-mono text-[10px] uppercase text-muted-foreground">
           Board statistics
         </p>
-        <h2 className="mt-2 text-xl font-semibold">
+        <h2 className="mt-2 text-lg font-semibold">
           {formatForumCount(totals.threads)} threads /{" "}
           {formatForumCount(totals.posts)} posts
         </h2>
       </div>
-      <dl className="divide-y divide-row-border">
-        <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 px-4 py-3">
+      <dl className="mt-3 divide-y divide-row-border border-t border-row-border">
+        <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-3">
           <dt className="font-mono text-[10px] uppercase text-muted-foreground">
             Members
           </dt>
@@ -327,7 +315,7 @@ function ForumStatisticMemberRow({
   value?: string;
 }) {
   return (
-    <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 px-4 py-3">
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-3">
       <dt className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </dt>
@@ -359,89 +347,6 @@ function ForumStatisticMemberRow({
           <span className="text-sm text-muted-foreground">No members yet.</span>
         )}
       </dd>
-    </div>
-  );
-}
-
-function ForumGlobalSearchResults({
-  query,
-  searchResult,
-}: {
-  query: string;
-  searchResult: ForumSearchRecord | undefined;
-}) {
-  if (searchResult === undefined) {
-    return <ForumLoading label={`Searching ${query}`} />;
-  }
-
-  if (searchResult.threads.length === 0 && searchResult.posts.length === 0) {
-    return (
-      <div className="mt-4">
-        <ForumStatusBox
-          title="Search"
-          body={`No public matches for "${query}".`}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 border border-row-border">
-      <div className="border-b border-row-border px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground">
-        Matches for {query}
-      </div>
-      <div className="divide-y divide-row-border">
-        {searchResult.threads.map((thread) => (
-          <div
-            key={`thread-${thread.threadId ?? thread._id}`}
-            className="px-4 py-4"
-          >
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Thread / {thread.categorySlug}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <ForumThreadPrefixBadge thread={thread} />
-              <ForumLink
-                href={forumPath(thread.categorySlug, thread.slug)}
-                prefetch
-                className="focus-ring text-base font-semibold hover:text-primary"
-              >
-                {thread.title}
-              </ForumLink>
-            </div>
-            {thread.excerpt ? (
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                {thread.excerpt}
-              </p>
-            ) : null}
-          </div>
-        ))}
-        {searchResult.posts.map((post) => (
-          <div key={`post-${post.postId ?? post._id}`} className="px-4 py-4">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Reply / {post.categorySlug}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <ForumThreadPrefixBadge thread={post} />
-              <ForumLink
-                href={forumPostPath(
-                  post.categorySlug,
-                  post.threadSlug,
-                  post.postNumber,
-                  post.postPage,
-                )}
-                prefetch
-                className="focus-ring text-base font-semibold hover:text-primary"
-              >
-                {post.threadTitle}
-              </ForumLink>
-            </div>
-            <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-              {post.excerpt ?? post.body}
-            </p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
