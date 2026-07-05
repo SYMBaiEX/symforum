@@ -339,57 +339,35 @@ export function ForumChrome({
   const routeLabel = forumChromeRouteLabel(pathname);
 
   return (
-    <header className={cn("border border-row-border bg-background", className)}>
+    <header className={cn("space-y-4", className)}>
       <ForumPresenceHeartbeat pathname={pathname} />
-      <div className="grid border-b border-row-border bg-foreground text-background lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <ForumLink
-          href="/forum"
-          prefetch
-          className="focus-ring block min-w-0 px-4 py-4 hover:text-accent-canary md:px-5"
-        >
-          <p className="font-mono text-[10px] uppercase text-background/65">
-            forum.symbaiex.com
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-none md:text-5xl">
-            SYMBaiEX forum
-          </h1>
-        </ForumLink>
-        <div className="grid grid-cols-3 border-t border-background/25 font-mono text-[10px] uppercase lg:border-l lg:border-t-0">
-          <div className="border-r border-background/25 px-3 py-3">
-            <span className="block text-background/55">Route</span>
-            <span className="mt-1 block text-accent-canary">{routeLabel}</span>
+      <ForumLink
+        href="/forum"
+        prefetch
+        className="focus-ring inline-block min-w-0 hover:text-muted-foreground"
+      >
+        <h1 className="text-4xl font-semibold leading-none md:text-6xl">
+          SYMBaiEX forum
+        </h1>
+      </ForumLink>
+      <div className="border border-row-border bg-background">
+        <ForumWelcomeStrip />
+        <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
+          <div className="bg-background px-4 py-3 md:px-5">
+            <p className="font-mono text-[10px] uppercase text-muted-foreground">
+              SYMBaiEX forum / {routeLabel}
+            </p>
           </div>
-          <div className="border-r border-background/25 px-3 py-3">
-            <span className="block text-background/55">Host</span>
-            <span className="mt-1 block text-accent-cyan">Forum</span>
-          </div>
-          <div className="px-3 py-3">
-            <span className="block text-background/55">Build</span>
-            <span className="mt-1 block text-primary">2026</span>
+          <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
+            Convex board
           </div>
         </div>
+        {children ? (
+          <div className="border-t border-row-border bg-background px-2 py-2">
+            {children}
+          </div>
+        ) : null}
       </div>
-      <div aria-hidden className="grid h-1 grid-cols-3">
-        <span className="bg-primary" />
-        <span className="bg-accent-cyan" />
-        <span className="bg-accent-canary" />
-      </div>
-      <ForumWelcomeStrip />
-      <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="bg-background px-4 py-3 md:px-5">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            SYMBaiEX forum / {routeLabel}
-          </p>
-        </div>
-        <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
-          Convex board
-        </div>
-      </div>
-      {children ? (
-        <div className="border-t border-row-border bg-background px-2 py-2">
-          {children}
-        </div>
-      ) : null}
     </header>
   );
 }
