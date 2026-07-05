@@ -339,35 +339,24 @@ export function ForumChrome({
   const routeLabel = forumChromeRouteLabel(pathname);
 
   return (
-    <header className={cn("space-y-4", className)}>
+    <header className={cn("border border-row-border bg-background", className)}>
       <ForumPresenceHeartbeat pathname={pathname} />
-      <ForumLink
-        href="/forum"
-        prefetch
-        className="focus-ring inline-block min-w-0 hover:text-muted-foreground"
-      >
-        <h1 className="text-4xl font-semibold leading-none md:text-6xl">
-          SYMBaiEX forum
-        </h1>
-      </ForumLink>
-      <div className="border border-row-border bg-background">
-        <ForumWelcomeStrip />
-        <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
-          <div className="bg-background px-4 py-3 md:px-5">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              SYMBaiEX forum / {routeLabel}
-            </p>
-          </div>
-          <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
-            Convex board
-          </div>
+      <ForumWelcomeStrip />
+      <div className="grid gap-px bg-row-border md:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="bg-background px-4 py-3 md:px-5">
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            SYMBaiEX forum / {routeLabel}
+          </p>
         </div>
-        {children ? (
-          <div className="border-t border-row-border bg-background px-2 py-2">
-            {children}
-          </div>
-        ) : null}
+        <div className="bg-background px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground md:px-5 md:text-right">
+          Convex board
+        </div>
       </div>
+      {children ? (
+        <div className="border-t border-row-border bg-background px-2 py-2">
+          {children}
+        </div>
+      ) : null}
     </header>
   );
 }
