@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { primarySiteHrefForPath } from "@/components/forum/forum-host-url";
 import { useForumShellContext } from "@/components/forum/forum-shell-context";
 import { Button } from "@/components/ui/button";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
@@ -75,6 +76,14 @@ const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum/members", label: "Members" },
   { href: "/forum/online", label: "Who's online" },
   { href: "/forum/announcements", label: "Announcements" },
+];
+const PRIMARY_SITE_NAV_ITEMS = [
+  { href: "/", label: "Main" },
+  { href: "/news", label: "News" },
+  { href: "/blog", label: "Blog" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
 ];
 const GUEST_FORUM_NAV_STATE: ForumWelcomeNavState = {
   authenticated: false,
@@ -546,20 +555,34 @@ function ForumWelcomeStripLayout({
             <ForumMastheadLink href="/forum" label="Browse" />
           </>
         )}
+        <ForumPrimarySiteNav primarySiteHref={primarySiteHref} />
         <ForumQuickSearch pathname={pathname} />
-        <Button
-          asChild
-          className="h-7 rounded-none border-row-border px-2 font-mono text-[10px] uppercase shadow-none"
-          size="sm"
-          variant="outline"
-        >
-          <Link href={primarySiteHref} prefetch={primarySiteHref === "/"}>
-            Main site
-          </Link>
-        </Button>
         <ThemeToggle />
       </div>
     </div>
+  );
+}
+
+function ForumPrimarySiteNav({ primarySiteHref }: { primarySiteHref: string }) {
+  return (
+    <nav aria-label="SYMBiEX site" className="contents">
+      {PRIMARY_SITE_NAV_ITEMS.map((item) => {
+        const href = primarySiteHrefForPath(primarySiteHref, item.href);
+        return (
+          <Button
+            asChild
+            className="h-7 rounded-none border-row-border px-2 font-mono text-[10px] uppercase shadow-none"
+            key={item.href}
+            size="sm"
+            variant="outline"
+          >
+            <Link href={href} prefetch={href.startsWith("/")}>
+              {item.label}
+            </Link>
+          </Button>
+        );
+      })}
+    </nav>
   );
 }
 

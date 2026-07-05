@@ -9,6 +9,8 @@ import { NextResponse } from "next/server";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
+const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
 const SONNER_STYLE_HASHES = [
   "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
   "'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='",
@@ -97,7 +99,7 @@ function forumSubdomainRoute(request: NextRequest) {
     if (route.primaryHost) {
       const primaryHost = primaryHostForForumHost(request.headers.get("host"));
       if (primaryHost !== null) {
-        url.host = primaryHost;
+        applyHost(url, primaryHost);
       }
     }
     return {
@@ -121,11 +123,20 @@ function primaryHostForForumHost(host: string | null) {
   if (!normalizedHostname.startsWith("forum.")) {
     return null;
   }
+  if (normalizedHostname === FORUM_PRODUCTION_HOSTNAME) {
+    return PRIMARY_PRODUCTION_HOSTNAME;
+  }
   if (normalizedHostname === "forum.localhost") {
     return `symbaiex.localhost${port ? `:${port}` : ""}`;
   }
   const primaryHostname = hostname.slice("forum.".length);
   return `${primaryHostname}${port ? `:${port}` : ""}`;
+}
+
+function applyHost(url: { hostname: string; port: string }, host: string) {
+  const [hostname, port = ""] = host.split(":");
+  url.hostname = hostname;
+  url.port = port;
 }
 
 function absoluteRedirect(url: URL) {
@@ -161,7 +172,7 @@ function contentSecurityPolicy(): SecurityPolicy {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
-    `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
+    `connect-src 'self' https://symbaiex.com https://${PRIMARY_PRODUCTION_HOSTNAME} https://*.convex.cloud wss://*.convex.cloud https://*.convex.site${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

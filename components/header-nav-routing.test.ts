@@ -26,9 +26,9 @@ describe("header nav routing", () => {
         forumHost: true,
         href: "/about",
         pathname: "/admin",
-        primarySiteHref: "https://symbaiex.com/",
+        primarySiteHref: "https://www.symbaiex.com/",
       }),
-    ).toBe("https://symbaiex.com/about");
+    ).toBe("https://www.symbaiex.com/about");
     expect(
       resolveHeaderNavHref({
         forumHost: true,
@@ -36,7 +36,7 @@ describe("header nav routing", () => {
         location: productionForumLocation,
         pathname: "/search",
       }),
-    ).toBe("https://symbaiex.com/about");
+    ).toBe("https://www.symbaiex.com/about");
     expect(
       resolveHeaderNavHref({
         forumHost: true,
