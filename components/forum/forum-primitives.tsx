@@ -1538,7 +1538,6 @@ export function ForumIndexTable({
         <ForumIndexSection
           key={group.section?.slug ?? `root-${index}`}
           group={group}
-          index={index}
         />
       ))}
       <ForumLegendStatStrip
@@ -1611,41 +1610,15 @@ export function ForumLegendStatStrip({
 
 function ForumIndexSection({
   group,
-  index,
 }: {
   group: ForumCategorySectionRecord;
-  index: number;
 }) {
   const heading = group.section
     ? getCategoryTitle(group.section)
     : "Main boards";
-  const description = group.section
-    ? getCategoryDescription(group.section)
-    : "";
 
   return (
     <section className="border border-row-border">
-      <div className="border-b border-row-border bg-foreground px-4 py-3 text-background">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase opacity-70">
-              Section {index + 1}
-            </p>
-            <h3 className="mt-1 text-lg font-semibold leading-tight md:text-xl">
-              {heading}
-            </h3>
-            {description ? (
-              <p className="mt-1 max-w-3xl text-sm leading-6 opacity-75">
-                {description}
-              </p>
-            ) : null}
-          </div>
-          <p className="font-mono text-[10px] uppercase opacity-70">
-            {formatForumCount(group.threadCount)} threads /{" "}
-            {formatForumCount(group.postCount)} posts
-          </p>
-        </div>
-      </div>
       {group.boards.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted-foreground">
           No boards in this section yet.
