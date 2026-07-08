@@ -68,21 +68,34 @@ async function sendResendEmail({
   request: Doc<"contactRequests">;
   to: string;
 }) {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      reply_to: request.email,
-      subject: contactSubject(request.subject),
-      text: contactText(request),
-      html: contactHtml(request),
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        reply_to: request.email,
+        subject: contactSubject(request.subject),
+        text: contactText(request),
+        html: contactHtml(request),
+      }),
+    });
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: limitText(
+        error instanceof Error
+          ? error.message
+          : "Network error while sending contact email",
+        900,
+      ),
+    };
+  }
 
   if (response.ok) {
     return { ok: true as const };

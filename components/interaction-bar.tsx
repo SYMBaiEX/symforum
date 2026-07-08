@@ -107,7 +107,9 @@ export function InteractionBar({
           {summary?.saves ?? 0}
         </Button>
         {error ? (
-          <span className="text-[10px] text-muted-foreground">{error}</span>
+          <span role="alert" className="text-[10px] text-muted-foreground">
+            {error}
+          </span>
         ) : null}
       </div>
       <AuthRequiredDialog

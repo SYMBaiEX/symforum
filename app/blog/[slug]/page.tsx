@@ -2,11 +2,13 @@ import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
 import { MarkdownContent } from "@/components/markdown-content";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { Button } from "@/components/ui/button";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
 import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export async function generateMetadata({
@@ -46,13 +48,24 @@ export default async function BlogPostPage({
             <span>{formatDate(post.publishedAt)}</span>
             <span>{post.readingMinutes} min read</span>
             {post.tags.map((tag) => (
-              <span key={tag}>{tag}</span>
+              <Link
+                key={tag}
+                href={`/blog?tag=${encodeURIComponent(tag)}`}
+                className="underline-offset-2 transition-colors hover:text-foreground hover:underline"
+              >
+                {tag}
+              </Link>
             ))}
           </div>
           <p className="page-lede mt-5">
             {post.excerpt}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/blog" prefetch>
+                Back to blog
+              </Link>
+            </Button>
             {convexEnabled ? (
               <InteractionBar entityType="post" entityId={post.slug} />
             ) : (

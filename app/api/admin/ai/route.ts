@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const ADMIN_AI_MODEL = (process.env.ADMIN_AI_MODEL ??
-  "openai/gpt-5.4") as LanguageModel;
+  "anthropic/claude-sonnet-5") as LanguageModel;
 
 export async function POST(request: Request) {
   try {

@@ -7,7 +7,7 @@ import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
 import { useMutation, useQuery } from "convex/react";
 import { Send } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 export function ProfileNewsletterPreferences() {
@@ -17,26 +17,32 @@ export function ProfileNewsletterPreferences() {
   );
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
+  const prefilled = useRef(false);
 
   useEffect(() => {
-    if (!email && preferences?.userEmail) {
+    if (!prefilled.current && preferences?.userEmail) {
+      prefilled.current = true;
       setEmail(preferences.userEmail);
     }
-  }, [email, preferences?.userEmail]);
+  }, [preferences?.userEmail]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     try {
       const token = createClientNewsletterToken();
-      await requestSubscription({
+      const subscriber = await requestSubscription({
         email,
         source: "profile",
         token,
         tokenHash: await sha256Hex(token),
         siteUrl: window.location.origin,
       });
-      toast.success("Confirmation email queued");
+      toast.success(
+        subscriber.status === "confirmed"
+          ? "You are already subscribed."
+          : "Confirmation email queued",
+      );
     } catch (error) {
       reportAppError(error, {
         scope: "newsletter",
@@ -72,17 +78,22 @@ export function ProfileNewsletterPreferences() {
         Newsletter
       </p>
       <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <label className="sr-only" htmlFor="profile-newsletter-email">
+          Email address
+        </label>
         <Input
+          id="profile-newsletter-email"
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="Sign up for Newsletter"
+          autoComplete="email"
           className="rounded-none"
           required
         />
         <Button type="submit" disabled={pending}>
           <Send aria-hidden="true" />
-          {pending ? "Sending" : "Confirm"}
+          {pending ? "Sending" : "Subscribe"}
         </Button>
       </form>
       <div className="mt-4 grid gap-2">

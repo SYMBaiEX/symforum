@@ -38,6 +38,7 @@ export default async function HomePage() {
 
           <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
             <div
+              role="img"
               className="overflow-x-auto whitespace-nowrap text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl"
               aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
               dangerouslySetInnerHTML={{ __html: identityEquation }}
@@ -58,6 +59,13 @@ export default async function HomePage() {
               No published posts yet.
             </div>
           )}
+        </div>
+        <div className="mt-5">
+          <Button asChild variant="outline">
+            <Link href="/blog" prefetch>
+              All posts
+            </Link>
+          </Button>
         </div>
       </section>
 

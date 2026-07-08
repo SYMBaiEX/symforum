@@ -8,6 +8,7 @@ import { Star } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Fragment,
   ReactNode,
   forwardRef,
   useEffect,
@@ -1076,12 +1077,16 @@ export function ForumPaginationBar({
   buildHref,
   className,
   label,
+  nextLabel = "Older",
   pagination,
+  previousLabel = "Newer",
 }: {
   buildHref: (page: number) => string;
   className?: string;
   label: string;
+  nextLabel?: string;
   pagination: ForumPaginationRecord;
+  previousLabel?: string;
 }) {
   const pages = visiblePages(pagination.page, pagination.totalPages);
 
@@ -1112,32 +1117,38 @@ export function ForumPaginationBar({
         >
           {pagination.hasPreviousPage ? (
             <ForumLink href={buildHref(pagination.page - 1)} prefetch>
-              Newer
+              {previousLabel}
             </ForumLink>
           ) : (
-            <span>Newer</span>
+            <span>{previousLabel}</span>
           )}
         </Button>
-        {pages.map((page) => (
-          <Button
-            asChild={page !== pagination.page}
-            className={cn(
-              "h-7 min-w-7 rounded-none px-2 font-mono text-[10px] uppercase",
-              page === pagination.page && "border-primary text-primary",
-            )}
-            disabled={page === pagination.page}
-            key={page}
-            size="sm"
-            variant="outline"
-          >
-            {page === pagination.page ? (
-              <span aria-current="page">{page}</span>
-            ) : (
-              <ForumLink href={buildHref(page)} prefetch>
-                {page}
-              </ForumLink>
-            )}
-          </Button>
+        {pages.map((page, index) => (
+          <Fragment key={page}>
+            {index > 0 && page - pages[index - 1] > 1 ? (
+              <span aria-hidden="true" className="px-0.5 text-muted-foreground">
+                …
+              </span>
+            ) : null}
+            <Button
+              asChild={page !== pagination.page}
+              className={cn(
+                "h-7 min-w-7 rounded-none px-2 font-mono text-[10px] uppercase",
+                page === pagination.page && "border-primary text-primary",
+              )}
+              disabled={page === pagination.page}
+              size="sm"
+              variant="outline"
+            >
+              {page === pagination.page ? (
+                <span aria-current="page">{page}</span>
+              ) : (
+                <ForumLink href={buildHref(page)} prefetch>
+                  {page}
+                </ForumLink>
+              )}
+            </Button>
+          </Fragment>
         ))}
         <Button
           asChild={pagination.hasNextPage}
@@ -1148,10 +1159,10 @@ export function ForumPaginationBar({
         >
           {pagination.hasNextPage ? (
             <ForumLink href={buildHref(pagination.page + 1)} prefetch>
-              Older
+              {nextLabel}
             </ForumLink>
           ) : (
-            <span>Older</span>
+            <span>{nextLabel}</span>
           )}
         </Button>
         {pagination.totalPages > 1 ? (

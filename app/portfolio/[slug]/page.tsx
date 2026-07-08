@@ -124,14 +124,21 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
               <dd className="mt-1 text-foreground">{project.role}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Window</dt>
+              <dt className="text-muted-foreground">Scope</dt>
               <dd className="mt-1 text-foreground">{project.timeframe}</dd>
             </div>
             {repoPath ? (
               <div>
                 <dt className="text-muted-foreground">Source</dt>
-                <dd className="mt-1 truncate text-foreground">
-                  {repoPath}
+                <dd className="mt-1 text-foreground">
+                  <a
+                    href={safeExternalUrl(project.repoUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-ring block truncate hover:text-primary"
+                  >
+                    {repoPath}
+                  </a>
                 </dd>
               </div>
             ) : null}
@@ -304,6 +311,7 @@ function ProjectMark({
   return (
     <div
       aria-label={`${name} project mark`}
+      role="img"
       className="relative grid size-20 place-items-center overflow-hidden bg-foreground font-mono text-lg font-semibold uppercase text-background"
     >
       <span className="relative z-10">{projectInitials(name)}</span>

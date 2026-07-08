@@ -76,9 +76,14 @@ export const defaultSitePages: SitePageRecord[] = [
     subtitle: "Selected contributions, systems, and open-source work",
     heroHeading: "Portfolio",
     heroBody:
-      "",
+      "This is a working record of the systems I have built, contributed to, and shipped: open-source agent infrastructure, protocol-facing product engineering, and personal tooling built around orchestration, memory, and legibility.",
     body: [
-      "",
+      "## What is in here",
+      "Each entry below is a real project, not a case study written after the fact. Some are high-volume contribution work on protocols and products other people run in production. Others are personal projects I started to solve a problem I kept running into, or to test an idea about how agents, control surfaces, and observability should behave. A few are formal, proof-level work where correctness is the whole point.",
+      "## How to read a project card",
+      "Every project follows the same shape: what it is, the problem it responds to, the approach I took, and the outcome. That structure is intentional. I care less about listing technologies and more about showing the reasoning, so you can judge the work the way I judge it myself: does it hold up under real use, and does it stay legible once the first version is no longer new.",
+      "## Where to go from here",
+      "If you want the origin story behind this body of work, the About page covers how I got here. If you want to go straight to the source, most entries link out to the live homepage, the repository, or both, so you can see the code and the running system for yourself.",
     ].join("\n\n"),
     status: "published",
     updatedAt: UPDATED_AT,

@@ -1529,7 +1529,6 @@ export const getThread = query({
           }),
         ),
         isDone: page >= totalPages,
-        continueCursor: "",
         pagination: paginationRecord({
           page,
           pageSize,

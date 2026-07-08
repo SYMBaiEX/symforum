@@ -61,7 +61,14 @@ export default async function NewsStoryPage({ params }: PageProps) {
             {story.title}
           </h1>
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
-            <span>HN #{story.hnItemId}</span>
+            <Link
+              href={`https://news.ycombinator.com/item?id=${story.hnItemId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+            >
+              HN #{story.hnItemId}
+            </Link>
             {story.rank ? <span>Rank {story.rank}</span> : null}
             {story.timePosted ? (
               <span>{formatDate(story.timePosted * 1000)}</span>
@@ -102,8 +109,8 @@ export default async function NewsStoryPage({ params }: PageProps) {
           <section className="page-content-readable mt-8">
             {body ? (
               <div className="flex flex-col gap-4">
-                {body.split(/\n{2,}/).map((paragraph) => (
-                  <p key={paragraph} className="text-sm leading-7 md:text-base">
+                {body.split(/\n{2,}/).map((paragraph, index) => (
+                  <p key={index} className="text-sm leading-7 md:text-base">
                     {paragraph}
                   </p>
                 ))}

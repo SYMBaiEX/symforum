@@ -198,7 +198,6 @@ export type ForumThreadDetailRecord = {
   replies: {
     page: ForumPostRecord[];
     isDone: boolean;
-    continueCursor: string;
     pagination: ForumPaginationRecord;
   };
 };

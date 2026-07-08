@@ -10,12 +10,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { BlogPost } from "@/lib/content";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 
 const ALL_TAGS_VALUE = "__all";
 
 export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
-  const [selectedTag, setSelectedTag] = useState(ALL_TAGS_VALUE);
+  const router = useRouter();
+  const tagParam = useSearchParams().get("tag");
   const tags = useMemo(
     () =>
       Array.from(new Set(posts.flatMap((post) => post.tags)))
@@ -23,6 +25,8 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
         .sort((left, right) => left.localeCompare(right)),
     [posts],
   );
+  const selectedTag =
+    tagParam && tags.includes(tagParam) ? tagParam : ALL_TAGS_VALUE;
   const visiblePosts = useMemo(() => {
     if (selectedTag === ALL_TAGS_VALUE) {
       return posts;
@@ -30,6 +34,15 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
 
     return posts.filter((post) => post.tags.includes(selectedTag));
   }, [posts, selectedTag]);
+
+  function handleTagChange(value: string) {
+    router.replace(
+      value === ALL_TAGS_VALUE
+        ? "/blog"
+        : `/blog?tag=${encodeURIComponent(value)}`,
+      { scroll: false },
+    );
+  }
 
   if (posts.length === 0) {
     return (
@@ -43,7 +56,7 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
     <div>
       <div className="mb-6 flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
         <span id="blog-tag-filter-label">Tag</span>
-        <Select onValueChange={setSelectedTag} value={selectedTag}>
+        <Select onValueChange={handleTagChange} value={selectedTag}>
           <SelectTrigger
             aria-labelledby="blog-tag-filter-label"
             className="h-7 w-[12rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
@@ -89,6 +102,12 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
           />
         ))}
       </div>
+      {/* 50 mirrors the .take(50) cap in convex/posts.ts listPublished */}
+      {posts.length >= 50 && (
+        <div className="mt-6 font-mono text-[10px] uppercase text-muted-foreground">
+          Showing the latest 50 posts
+        </div>
+      )}
     </div>
   );
 }

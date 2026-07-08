@@ -9,6 +9,7 @@ import {
   Hr,
   Html,
   Link,
+  Markdown,
   Preview,
   Section,
   Text,
@@ -170,6 +171,59 @@ export const sendConfirmationEmail = internalAction({
       from: fromEmail(),
       to: subscriber.email,
       subject: "Confirm SYMBaiEX newsletter",
+      html,
+      text,
+      replyTo: replyToEmails(),
+    });
+    return null;
+  },
+});
+
+export const sendManageSubscriptionEmail = internalAction({
+  args: {
+    subscriberId: v.id("newsletterSubscribers"),
+    token: v.string(),
+    siteUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!isResendConfigured()) {
+      return null;
+    }
+
+    const subscriber = await ctx.runQuery(readSubscriberRef, {
+      subscriberId: args.subscriberId,
+    });
+    if (subscriber === null || subscriber.status !== "confirmed") {
+      return null;
+    }
+
+    const unsubscribeUrl = `${args.siteUrl}/newsletter/unsubscribe?token=${encodeURIComponent(args.token)}`;
+    const preferencesUrl = `${args.siteUrl}/newsletter/preferences`;
+    const { html, text } = await renderEmail(
+      <BaseEmail preview="Manage your SYMBaiEX newsletter subscription.">
+        <Heading style={styles.heading}>Manage your subscription</Heading>
+        <Text style={styles.copy}>
+          This inbox is already confirmed for SYMBaiEX notes. Use the button
+          below to unsubscribe instantly, or ignore this email to keep
+          receiving issues.
+        </Text>
+        <Button href={unsubscribeUrl} style={styles.button}>
+          Unsubscribe
+        </Button>
+        <Text style={styles.small}>
+          Manage newsletter preferences at{" "}
+          <Link href={preferencesUrl} style={styles.link}>
+            symbaiex.com/newsletter/preferences
+          </Link>
+          .
+        </Text>
+      </BaseEmail>,
+    );
+
+    await resend.sendEmail(ctx, {
+      from: fromEmail(),
+      to: subscriber.email,
+      subject: "Manage your SYMBaiEX newsletter",
       html,
       text,
       replyTo: replyToEmails(),
@@ -594,7 +648,16 @@ async function renderIssueEmail(
       <Heading style={styles.heading}>{issue.subject}</Heading>
       <Text style={styles.copy}>{issue.previewText}</Text>
       <Hr style={styles.hr} />
-      <Text style={styles.body}>{issue.body}</Text>
+      <Markdown
+        markdownContainerStyles={{
+          color: styles.body.color,
+          fontSize: styles.body.fontSize,
+          lineHeight: styles.body.lineHeight,
+          margin: styles.body.margin,
+        }}
+      >
+        {issue.body}
+      </Markdown>
       <Hr style={styles.hr} />
       <Text style={styles.small}>
         Manage newsletter preferences or unsubscribe at{" "}
@@ -645,6 +708,7 @@ async function renderDailyNewsletterEmail(
           <Text style={styles.storyMeta}>
             #{String(index + 1).padStart(2, "0")} / {story.theme}
             {story.host ? ` / ${story.host}` : ""}
+            {story.by ? ` / by ${story.by}` : ""}
           </Text>
           <Link href={story.siteUrl} style={styles.storyTitle}>
             {story.title}
@@ -655,21 +719,28 @@ async function renderDailyNewsletterEmail(
           </Button>
         </Section>
       ))}
-      <Hr style={styles.hr} />
-      <Text style={styles.sectionLabel}>Five more worth opening</Text>
-      {payload.additionalStories.map((story) => (
-        <Section key={story.hnItemId} style={styles.storyCompact}>
-          <Link href={story.siteUrl} style={styles.compactTitle}>
-            {story.title}
-          </Link>
-          <Text style={styles.compactMeta}>
-            {story.host ?? "news.ycombinator.com"}
-            {typeof story.comments === "number"
-              ? ` / ${story.comments} HN comments`
-              : ""}
+      {payload.additionalStories.length > 0 && (
+        <>
+          <Hr style={styles.hr} />
+          <Text style={styles.sectionLabel}>
+            {payload.additionalStories.length} more worth opening
           </Text>
-        </Section>
-      ))}
+          {payload.additionalStories.map((story) => (
+            <Section key={story.hnItemId} style={styles.storyCompact}>
+              <Link href={story.siteUrl} style={styles.compactTitle}>
+                {story.title}
+              </Link>
+              <Text style={styles.compactMeta}>
+                {story.host ?? "news.ycombinator.com"}
+                {story.by ? ` / by ${story.by}` : ""}
+                {typeof story.comments === "number"
+                  ? ` / ${story.comments} HN comments`
+                  : ""}
+              </Text>
+            </Section>
+          ))}
+        </>
+      )}
       <Hr style={styles.hr} />
       <Text style={styles.small}>
         This email links to the SYMBaiEX index first so you can read the source,

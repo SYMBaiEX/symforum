@@ -1135,7 +1135,7 @@ function timestampToLocalInput(value: number) {
 }
 
 function formatDateTime(value: number) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value);

@@ -105,6 +105,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   const prefixParam = searchParams.get("prefix");
   const selectedSortKey = resolveThreadSortKey(searchParams.get("sort"));
   const selectedSortOrder = resolveThreadSortOrder(searchParams.get("order"));
+  const isNewestFirstOrder =
+    selectedSortKey === DEFAULT_THREAD_SORT_KEY &&
+    selectedSortOrder !== "asc";
   const selectedDayFilter = resolveThreadDayFilter(searchParams.get("days"));
   const selectedDays =
     selectedDayFilter === THREAD_DAY_FILTER_ALL
@@ -582,7 +585,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
           <ForumPaginationBar
             buildHref={boardPageHref}
             label="Threads"
+            nextLabel={isNewestFirstOrder ? undefined : "Next"}
             pagination={listResult.pagination}
+            previousLabel={isNewestFirstOrder ? undefined : "Prev"}
           />
           <ForumBoardTools
             activePrefixes={activePrefixOptions}
@@ -618,7 +623,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
           <ForumPaginationBar
             buildHref={boardPageHref}
             label="Threads"
+            nextLabel={isNewestFirstOrder ? undefined : "Next"}
             pagination={listResult.pagination}
+            previousLabel={isNewestFirstOrder ? undefined : "Prev"}
           />
         </div>
 

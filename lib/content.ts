@@ -82,7 +82,7 @@ For this site, the ASCII layer is a signature mark: present, moving, and then qu
 
 They are quiet systems: curated, indexed, and unmistakably owned. A homepage can hold identity, recent work, public notes, and a few weird artifacts that make it human.
 
-A blog is not just a place to publish. It is a place to keep promises with yourself in public.
+A blog is not just a place to publish. It is a place to keep promises with yourself in public.[^promise]
 
 [^promise]: The promise is mostly to keep showing up with enough clarity that future-you can understand what present-you meant.`,
   },

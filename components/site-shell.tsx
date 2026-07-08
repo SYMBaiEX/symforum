@@ -110,6 +110,12 @@ export function SiteShell({
           : undefined
       }
     >
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:font-mono focus:text-sm focus:uppercase focus-ring"
+      >
+        Skip to content
+      </a>
       <SiteHeader
         brandHref={primarySiteHref}
         brandLabel="SYMBaiEX"
@@ -117,7 +123,11 @@ export function SiteShell({
         initialForumHost={initialForumHost}
         initialPrimarySiteHref={initialPrimarySiteHref}
       />
-      <main className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="fixed inset-x-0 bottom-[var(--site-footer-offset)] top-[var(--site-header-offset)] z-10 overflow-y-auto overscroll-contain outline-none"
+      >
         {children}
       </main>
       <Suspense fallback={null}>
@@ -172,6 +182,12 @@ function ForumSiteShell({
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
       <div className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:font-mono focus:text-sm focus:uppercase focus-ring"
+        >
+          Skip to content
+        </a>
         <SiteHeader
           brandHref={forumBrandHref}
           brandLabel="SYMBaiEX Forum"
@@ -179,7 +195,11 @@ function ForumSiteShell({
           initialForumHost={forumHost}
           initialPrimarySiteHref={primarySiteHref}
         />
-        <main className="min-h-dvh pt-[var(--site-header-offset)]">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-dvh pt-[var(--site-header-offset)] outline-none"
+        >
           {children}
         </main>
         <Suspense fallback={null}>

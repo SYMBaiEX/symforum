@@ -22,14 +22,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const description =
+  "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://symbaiex.com"),
+  metadataBase: new URL("https://www.symbaiex.com"),
   title: {
     default: "Austin Hamilton (SYMBiEX)",
     template: "%s | Austin Hamilton",
   },
-  description:
-    "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.",
+  description,
+  openGraph: {
+    siteName: "Austin Hamilton (SYMBiEX)",
+    title: "Austin Hamilton (SYMBiEX)",
+    description,
+    type: "website",
+    url: "./",
+  },
+  twitter: {
+    card: "summary",
+    title: "Austin Hamilton (SYMBiEX)",
+    description,
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

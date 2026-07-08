@@ -25,6 +25,7 @@ import { FormEvent, useMemo, useState } from "react";
 const ROOT_REPLY_PREVIEW = 6;
 const NESTED_REPLY_PREVIEW = 4;
 const MAX_INLINE_DEPTH = 5;
+const COMMENT_MAX_LENGTH = 1200;
 
 type CommentRecord = {
   _id: string;
@@ -210,21 +211,33 @@ function LiveComments({
           onChange={(event) => setBody(event.target.value)}
           placeholder="Start the thread..."
           rows={3}
+          maxLength={COMMENT_MAX_LENGTH}
+          aria-label="Add a comment"
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             Threaded replies attach to your SYM handle.
           </p>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={authLoading || pending || body.trim().length < 2}
-          >
-            Post comment
-          </Button>
+          <div className="flex items-center gap-3">
+            {body.length > 1000 ? (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {body.length} / {COMMENT_MAX_LENGTH}
+              </span>
+            ) : null}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={authLoading || pending || body.trim().length < 2}
+            >
+              Post comment
+            </Button>
+          </div>
         </div>
         {error ? (
-          <p className="border border-row-border p-2.5 text-sm text-muted-foreground">
+          <p
+            role="alert"
+            className="border border-row-border p-2.5 text-sm text-muted-foreground"
+          >
             {error}
           </p>
         ) : null}
@@ -405,8 +418,16 @@ function CommentThread({
               }
               placeholder={`Reply to ${comment.author}...`}
               rows={2}
+              maxLength={COMMENT_MAX_LENGTH}
+              aria-label={`Reply to ${comment.author}`}
+              autoFocus
             />
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-3">
+              {replyBody.length > 1000 ? (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {replyBody.length} / {COMMENT_MAX_LENGTH}
+                </span>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -424,7 +445,10 @@ function CommentThread({
               </Button>
             </div>
             {replyError ? (
-              <p className="border border-row-border p-2.5 text-sm text-muted-foreground">
+              <p
+                role="alert"
+                className="border border-row-border p-2.5 text-sm text-muted-foreground"
+              >
                 {replyError}
               </p>
             ) : null}

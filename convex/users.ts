@@ -258,7 +258,15 @@ export const maybeViewer = query({
     if (userId === null) {
       return null;
     }
-    return await ctx.db.get(userId);
+    const user = await ctx.db.get(userId);
+    if (user === null) {
+      return null;
+    }
+    const forumProfile = await ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    return { ...user, bio: user.bio ?? forumProfile?.bio };
   },
 });
 

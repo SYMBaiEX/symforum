@@ -103,6 +103,9 @@ export function CurrentProfilePanel() {
             value={viewer.bio?.trim() || "No bio saved for this account yet."}
           />
         </dl>
+        <Button asChild size="sm" variant="outline" className="mt-4">
+          <Link href="/forum/control-panel">Edit forum profile</Link>
+        </Button>
         <ProfileNewsletterPreferences />
       </aside>
     </div>

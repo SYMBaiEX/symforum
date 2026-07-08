@@ -7,6 +7,7 @@ export default function GlobalError({
   error,
 }: {
   error: Error & { digest?: string };
+  reset: () => void;
 }) {
   useEffect(() => {
     reportAppError(error, {
@@ -24,6 +25,25 @@ export default function GlobalError({
           <p>SYMBaiEX / global error</p>
           <h1>Something failed before the shell could recover.</h1>
           <p>The issue was logged for review.</p>
+          <p style={{ marginTop: "1.5rem" }}>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                cursor: "pointer",
+                fontFamily: "monospace",
+                padding: "0.5rem 1rem",
+                marginRight: "1rem",
+              }}
+            >
+              Reload
+            </button>
+            {/* Global error replaces the root layout, so the router (and <Link/>) may be broken; a full-page navigation is the reliable escape hatch. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a href="/" style={{ fontFamily: "monospace" }}>
+              Back to home
+            </a>
+          </p>
         </main>
       </body>
     </html>

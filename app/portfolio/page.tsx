@@ -82,10 +82,6 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
       : metrics.contributionActivity;
   const metricItems = [
     {
-      detail:
-        primaryMetric === metrics.contributionActivity
-          ? "Live visible GitHub contribution graph."
-          : metrics.commitMetric.detail,
       label:
         primaryMetric === metrics.contributionActivity ? "Activity" : "Commits",
       value: formatCount(primaryMetric.value),
@@ -94,6 +90,18 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
     { label: "Repos", value: formatCount(metrics.totals.publicRepos) },
     { label: "Followers", value: formatCount(metrics.totals.followers) },
   ];
+  const updatedAtMs = Date.parse(metrics.updatedAt);
+  const isStale =
+    primaryMetric.live &&
+    !Number.isNaN(updatedAtMs) &&
+    Date.now() - updatedAtMs > 24 * 60 * 60 * 1000;
+  const detailText = isStale ? "GitHub snapshot" : primaryMetric.detail;
+  const updatedLabel = Number.isNaN(updatedAtMs)
+    ? null
+    : new Intl.DateTimeFormat("en", {
+        dateStyle: "medium",
+        timeZone: "UTC",
+      }).format(new Date(updatedAtMs));
 
   return (
     <section className="w-full max-w-xl md:ml-auto">
@@ -109,9 +117,11 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
           </div>
         ))}
       </div>
-      {primaryMetric.detail ? (
+      {detailText || updatedLabel ? (
         <p className="mt-4 max-w-md font-mono text-[10px] uppercase leading-5 text-muted-foreground md:ml-auto md:text-right">
-          {primaryMetric.detail}
+          {detailText}
+          {detailText && updatedLabel ? " · " : ""}
+          {updatedLabel ? `Updated ${updatedLabel}` : ""}
         </p>
       ) : null}
     </section>
@@ -213,7 +223,7 @@ function ProjectMark({
 
   return (
     <div
-      aria-label={`${name} project mark`}
+      aria-hidden="true"
       className="relative grid size-8 shrink-0 place-items-center overflow-hidden bg-foreground font-mono text-[10px] font-semibold uppercase text-background"
     >
       <span className="relative z-10">{projectInitials(name)}</span>

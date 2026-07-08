@@ -26,6 +26,12 @@ const sendConfirmationEmailRef = makeFunctionReference<
   null
 >("newsletterEmails:sendConfirmationEmail");
 
+const sendManageSubscriptionEmailRef = makeFunctionReference<
+  "action",
+  { subscriberId: Id<"newsletterSubscribers">; token: string; siteUrl: string },
+  null
+>("newsletterEmails:sendManageSubscriptionEmail");
+
 const sendWelcomeEmailRef = makeFunctionReference<
   "action",
   { subscriberId: Id<"newsletterSubscribers">; siteUrl: string },
@@ -59,18 +65,30 @@ export const subscribe = mutation({
     siteUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const subscriber = await upsertPendingSubscriber(ctx, {
+    const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
       email: args.email,
       source: args.source,
       tokenHash: args.tokenHash,
     });
 
-    if (subscriber.status !== "confirmed") {
-      await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
-        subscriberId: subscriber._id,
-        token: args.token,
-        siteUrl: normalizeSiteUrl(args.siteUrl),
-      });
+    // Only email links built from args.token when that token was actually
+    // stored (tokenStored), otherwise the recipient would get a dead link.
+    if (tokenStored) {
+      if (subscriber.status === "confirmed") {
+        // Already confirmed: send a link that lets them manage/unsubscribe,
+        // since the recurring issue emails point at /newsletter/preferences.
+        await ctx.scheduler.runAfter(0, sendManageSubscriptionEmailRef, {
+          subscriberId: subscriber._id,
+          token: args.token,
+          siteUrl: normalizeSiteUrl(args.siteUrl),
+        });
+      } else {
+        await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
+          subscriberId: subscriber._id,
+          token: args.token,
+          siteUrl: normalizeSiteUrl(args.siteUrl),
+        });
+      }
     }
 
     return publicSubscriber(subscriber);
@@ -91,14 +109,14 @@ export const requestViewerSubscription = mutation({
       throw new Error("Sign in to manage newsletter preferences");
     }
 
-    const subscriber = await upsertPendingSubscriber(ctx, {
+    const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
       email: args.email,
       source: args.source ?? "profile",
       tokenHash: args.tokenHash,
       userId,
     });
 
-    if (subscriber.status !== "confirmed") {
+    if (subscriber.status !== "confirmed" && tokenStored) {
       await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
         subscriberId: subscriber._id,
         token: args.token,
@@ -525,16 +543,10 @@ export const handleEmailEvent = internalMutation({
   },
 });
 
-export const apiListSubscribers = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db
-      .query("newsletterSubscribers")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(200);
-  },
-});
+// A pending subscriber who re-submits within this window keeps their existing
+// token instead of rotating it, so the confirmation email that is still in
+// flight stays valid instead of showing "link not recognized".
+const RESUBSCRIBE_TOKEN_THROTTLE_MS = 3 * 60 * 1000;
 
 async function upsertPendingSubscriber(
   ctx: MutationCtx,
@@ -544,7 +556,7 @@ async function upsertPendingSubscriber(
     tokenHash: string;
     userId?: Id<"users">;
   },
-) {
+): Promise<{ subscriber: Doc<"newsletterSubscribers">; tokenStored: boolean }> {
   const email = normalizeEmail(args.email);
   const tokenHash = normalizeTokenHash(args.tokenHash);
   const existing = await ctx.db
@@ -569,7 +581,17 @@ async function upsertPendingSubscriber(
     if (created === null) {
       throw new Error("Could not create newsletter subscription");
     }
-    return created;
+    return { subscriber: created, tokenStored: true };
+  }
+
+  // Throttle token rotation for rapid re-subscribes while still pending. The
+  // caller-supplied token was NOT stored, so its links would be dead — signal
+  // tokenStored: false so the caller skips sending an email with those links.
+  if (
+    existing.status === "pending" &&
+    now - existing.updatedAt < RESUBSCRIBE_TOKEN_THROTTLE_MS
+  ) {
+    return { subscriber: existing, tokenStored: false };
   }
 
   await ctx.db.patch(existing._id, {
@@ -588,7 +610,7 @@ async function upsertPendingSubscriber(
   if (updated === null) {
     throw new Error("Could not update newsletter subscription");
   }
-  return updated;
+  return { subscriber: updated, tokenStored: true };
 }
 
 async function requireOwner(ctx: MutationCtx | QueryCtx) {

@@ -1,5 +1,5 @@
 import { makeFunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -82,16 +82,28 @@ export const submit = mutation({
       : undefined;
 
     if (name.length < 2) {
-      throw new Error("Name must be at least 2 characters");
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "Name must be at least 2 characters",
+      });
     }
     if (!isValidEmail(emailNormalized)) {
-      throw new Error("Enter a valid email address");
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "Enter a valid email address",
+      });
     }
     if (subject.length < 3) {
-      throw new Error("Subject must be at least 3 characters");
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "Subject must be at least 3 characters",
+      });
     }
     if (description.length < 12) {
-      throw new Error("Description must be at least 12 characters");
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "Description must be at least 12 characters",
+      });
     }
 
     const recentFromEmail = await ctx.db
@@ -104,7 +116,10 @@ export const submit = mutation({
     if (
       recentFromEmail.some((request) => request.createdAt > now - 5 * 60 * 1000)
     ) {
-      throw new Error("Please wait a few minutes before sending another note");
+      throw new ConvexError({
+        code: "RATE_LIMITED",
+        message: "Please wait a few minutes before sending another note",
+      });
     }
 
     const requestId = await ctx.db.insert("contactRequests", {

@@ -36,7 +36,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useTransition,
   type ReactNode,
 } from "react";
 
@@ -90,11 +89,11 @@ function LiveNewsFeed({
   const [visibleData, setVisibleData] = useState<NewsTimelineRecord | null>(
     initialTimeline,
   );
-  const [, startTransition] = useTransition();
   const data = useQuery(
     convexRefs.news.timeline,
     selectedDate ? { snapshotDate: selectedDate } : {},
   );
+  const pending = selectedDate !== undefined && data === undefined;
 
   useEffect(() => {
     if (data !== undefined) {
@@ -103,12 +102,17 @@ function LiveNewsFeed({
   }, [data]);
 
   function onSnapshotChange(snapshotDate: string) {
-    startTransition(() => {
-      setSelectedDate(snapshotDate);
-    });
+    setSelectedDate(snapshotDate);
   }
 
   if (visibleData === null) {
+    if (initialStories.length === 0) {
+      return (
+        <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
+          Loading stories…
+        </div>
+      );
+    }
     return <NewsRows interactive stories={initialStories} />;
   }
 
@@ -119,6 +123,7 @@ function LiveNewsFeed({
     <NewsRows
       interactive
       onSnapshotChange={onSnapshotChange}
+      pending={pending}
       selectedSnapshotDate={selectedSnapshotDate}
       snapshots={visibleData.snapshots}
       stories={visibleData.stories}
@@ -129,12 +134,14 @@ function LiveNewsFeed({
 function NewsRows({
   interactive,
   onSnapshotChange,
+  pending,
   selectedSnapshotDate,
   snapshots = [],
   stories,
 }: {
   interactive: boolean;
   onSnapshotChange?: (snapshotDate: string) => void;
+  pending?: boolean;
   selectedSnapshotDate?: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
@@ -143,6 +150,7 @@ function NewsRows({
     return (
       <InteractiveNewsRows
         onSnapshotChange={onSnapshotChange}
+        pending={pending}
         selectedSnapshotDate={selectedSnapshotDate}
         snapshots={snapshots}
         stories={stories}
@@ -156,6 +164,7 @@ function NewsRows({
       interactive={false}
       isAuthenticated={false}
       onSnapshotChange={onSnapshotChange}
+      pending={pending}
       selectedSnapshotDate={selectedSnapshotDate}
       snapshots={snapshots}
       stories={stories}
@@ -166,11 +175,13 @@ function NewsRows({
 
 function InteractiveNewsRows({
   onSnapshotChange,
+  pending,
   selectedSnapshotDate,
   snapshots = [],
   stories,
 }: {
   onSnapshotChange?: (snapshotDate: string) => void;
+  pending?: boolean;
   selectedSnapshotDate?: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
@@ -191,6 +202,7 @@ function InteractiveNewsRows({
       interactive
       isAuthenticated={isAuthenticated}
       onSnapshotChange={onSnapshotChange}
+      pending={pending}
       selectedSnapshotDate={selectedSnapshotDate}
       snapshots={snapshots}
       stories={stories}
@@ -204,6 +216,7 @@ function NewsRowsView({
   interactive,
   isAuthenticated,
   onSnapshotChange,
+  pending,
   selectedSnapshotDate,
   snapshots = [],
   stories,
@@ -213,6 +226,7 @@ function NewsRowsView({
   interactive: boolean;
   isAuthenticated: boolean;
   onSnapshotChange?: (snapshotDate: string) => void;
+  pending?: boolean;
   selectedSnapshotDate?: string;
   snapshots?: NewsSnapshotRecord[];
   stories: HnStory[];
@@ -236,7 +250,12 @@ function NewsRowsView({
           )}
         </NewsFilterBar>
       ) : null}
-      <div className="grid gap-0.5">
+      <div
+        aria-busy={pending}
+        className={`grid gap-0.5 transition-opacity${
+          pending ? " opacity-50" : ""
+        }`}
+      >
         {stories.length === 0 ? (
           <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
             No indexed stories for this snapshot yet.
@@ -498,7 +517,10 @@ function NewsVoteControl({
         </Button>
       </div>
       {error ? (
-        <span className="sr-only" role="status">
+        <span
+          className="font-mono text-[10px] text-muted-foreground"
+          role="status"
+        >
           {error}
         </span>
       ) : null}

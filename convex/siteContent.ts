@@ -26,3 +26,18 @@ export const listPortfolioProjects = query({
       .take(50);
   },
 });
+
+export const listHiddenPortfolioSlugs = query({
+  args: {},
+  handler: async (ctx) => {
+    const draft = await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_status_and_order", (q) => q.eq("status", "draft"))
+      .take(50);
+    const archived = await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_status_and_order", (q) => q.eq("status", "archived"))
+      .take(50);
+    return [...draft, ...archived].map((project) => project.slug);
+  },
+});

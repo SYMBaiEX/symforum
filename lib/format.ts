@@ -1,9 +1,11 @@
 export function formatDate(value: string | number) {
-  const date = typeof value === "number" ? new Date(value) : new Date(value);
+  const isDateOnly = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const date = new Date(value);
   return new Intl.DateTimeFormat("en", {
     month: "short",
     day: "2-digit",
     year: "numeric",
+    ...(isDateOnly ? { timeZone: "UTC" } : {}),
   }).format(date);
 }
 

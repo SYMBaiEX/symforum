@@ -2220,7 +2220,6 @@ export const convexRefs = {
         replies: {
           page: ForumPostRecord[];
           isDone: boolean;
-          continueCursor: string;
           pagination: ForumPaginationRecord;
         };
       }

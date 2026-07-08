@@ -155,6 +155,11 @@ function NavRow({
   const resolveActive = (href: string) => {
     return resolveHeaderNavActive({ forumHost, href, pathname });
   };
+  const resolvedAuthHref = authHref ? resolveHref(authHref) : undefined;
+  const authLinkHref =
+    resolvedAuthHref && authHref === "/signin" && pathname !== "/signin"
+      ? `${resolvedAuthHref}?redirectTo=${encodeURIComponent(pathname)}`
+      : resolvedAuthHref;
 
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
@@ -172,12 +177,15 @@ function NavRow({
           {authPending ? (
             <span
               aria-hidden="true"
-              className="inline-flex h-7 w-full items-center justify-center border border-transparent px-2.5 font-mono text-[10px] uppercase text-muted-foreground"
+              className="inline-flex h-7 w-full items-center justify-center border border-transparent px-2.5"
             >
-              Auth
+              <span className="h-3.5 w-12 animate-pulse rounded-none bg-muted" />
             </span>
           ) : authHref && authLabel ? (
-            <DesktopNavLink active={authIsActive} href={resolveHref(authHref)}>
+            <DesktopNavLink
+              active={authIsActive}
+              href={authLinkHref ?? resolveHref(authHref)}
+            >
               {authLabel}
             </DesktopNavLink>
           ) : null}
@@ -188,6 +196,7 @@ function NavRow({
           authHref={authHref}
           authIsActive={authIsActive}
           authLabel={authLabel}
+          authLinkHref={authLinkHref}
           authPending={authPending}
           resolveActive={resolveActive}
           resolveHref={resolveHref}
@@ -233,6 +242,7 @@ function MobileNavMenu({
   authHref,
   authIsActive,
   authLabel,
+  authLinkHref,
   authPending,
   resolveActive,
   resolveHref,
@@ -240,6 +250,7 @@ function MobileNavMenu({
   authHref?: string;
   authIsActive: boolean;
   authLabel?: string;
+  authLinkHref?: string;
   authPending: boolean;
   resolveActive: (href: string) => boolean;
   resolveHref: (href: string) => string;
@@ -277,15 +288,18 @@ function MobileNavMenu({
         <DropdownMenuGroup>
           {authPending ? (
             <DropdownMenuItem
-              className="h-10 rounded-none px-3 font-mono text-[10px] uppercase text-muted-foreground"
+              className="h-10 rounded-none px-3"
               disabled
             >
-              Auth
+              <span
+                aria-hidden="true"
+                className="h-3 w-16 animate-pulse rounded-none bg-muted"
+              />
             </DropdownMenuItem>
           ) : authHref && authLabel ? (
             <MobileNavItem
               active={authIsActive}
-              href={resolveHref(authHref)}
+              href={authLinkHref ?? resolveHref(authHref)}
               label={authLabel}
             />
           ) : null}

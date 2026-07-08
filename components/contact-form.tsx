@@ -4,6 +4,7 @@ import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { userFacingError } from "@/lib/auth-errors";
 import { convexRefs } from "@/lib/convex-refs";
 import { useMutation } from "convex/react";
 import { Send } from "lucide-react";
@@ -36,14 +37,33 @@ export function ContactForm() {
       return;
     }
 
+    const name = form.name.replace(/\s+/g, " ").trim();
+    const email = form.email.trim();
+    const subject = form.subject.replace(/\s+/g, " ").trim();
+    const description = form.description.replace(/\r\n/g, "\n").trim();
+
+    if (name.length < 2) {
+      toast.error("Name must be at least 2 characters");
+      return;
+    }
+    if (subject.length < 3) {
+      toast.error("Subject must be at least 3 characters");
+      return;
+    }
+    if (description.length < 12) {
+      toast.error("Description must be at least 12 characters");
+      return;
+    }
+
     setIsSubmitting(true);
+    setSentAt(null);
     try {
       await submitContact({
         request: {
-          name: form.name,
-          email: form.email,
-          subject: form.subject,
-          description: form.description,
+          name,
+          email,
+          subject,
+          description,
           source: "contact-page",
           userAgent:
             typeof navigator === "undefined" ? undefined : navigator.userAgent,
@@ -57,9 +77,7 @@ export function ContactForm() {
         action: "contact.submit",
         component: "ContactForm",
       });
-      toast.error(
-        error instanceof Error ? error.message : "Contact request failed",
-      );
+      toast.error(userFacingError(error, "Contact request failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -134,7 +152,7 @@ export function ContactForm() {
           aria-live="polite"
           className="min-h-5 font-mono text-[11px] uppercase text-muted-foreground"
         >
-          {sentAt ? "Sent. I will see it in the admin console." : ""}
+          {sentAt ? "Sent. I read every note and reply by email." : ""}
         </p>
         <Button className="rounded-none" disabled={isSubmitting} type="submit">
           <Send aria-hidden="true" />

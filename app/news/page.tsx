@@ -5,13 +5,18 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "News",
+  description:
+    "Daily index of top Hacker News stories with on-site votes, saves, and comments.",
 };
 
 export default async function NewsPage() {
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
   const [initialTimeline, initialStories] = await Promise.all([
     convexEnabled ? getNewsTimeline() : Promise.resolve(null),
-    convexEnabled ? Promise.resolve([]) : getLiveHnFallback(30),
+    getLiveHnFallback(30).catch((error) => {
+      console.warn("Unable to load live HN stories", error);
+      return [];
+    }),
   ]);
 
   return (

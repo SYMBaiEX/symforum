@@ -31,19 +31,23 @@ export default async function AboutPage() {
                 {lightImageUrl ? (
                   <Image
                     src={lightImageUrl}
-                    alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
                     fill
                     priority
                     sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
                     unoptimized={isLocalImageUrl(lightImageUrl)}
-                    className="h-full w-full object-cover object-[center_10%] dark:hidden md:object-center"
+                    className={
+                      darkImageUrl
+                        ? "h-full w-full object-cover object-[center_10%] dark:hidden md:object-center"
+                        : "h-full w-full object-cover object-[center_10%] md:object-center"
+                    }
                     decoding="async"
                   />
                 ) : null}
                 {darkImageUrl ? (
                   <Image
                     src={darkImageUrl}
-                    alt={page?.imageAlt ?? "Austin Hamilton GitHub avatar"}
+                    alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
                     fill
                     priority
                     sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"

@@ -47,6 +47,9 @@ export function MarkdownContent({
         components={{
           a({ href, children }) {
             const cleanHref = normalizeMarkdownHref(href);
+            if (!cleanHref) {
+              return <span>{children}</span>;
+            }
             if (cleanHref.startsWith("/")) {
               return (
                 <Link href={cleanHref} prefetch>
@@ -331,12 +334,20 @@ function normalizeMarkdownImageSrc(src: string | Blob | undefined) {
 
 function normalizeMarkdownHref(href: string | undefined) {
   if (!href) {
-    return "#";
+    return null;
   }
   if (href.startsWith("/") || href.startsWith("#")) {
     return href;
   }
-  return safeExternalUrl(href) ?? "#";
+  try {
+    const url = new URL(href);
+    if (url.protocol === "mailto:") {
+      return url.toString();
+    }
+  } catch {
+    // Not an absolute URL (e.g. a relative link) — fall through.
+  }
+  return safeExternalUrl(href) ?? null;
 }
 
 function isExternalHref(href: string) {

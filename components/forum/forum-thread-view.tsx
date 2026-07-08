@@ -1197,7 +1197,9 @@ function LiveForumThreadView({
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
+          nextLabel="Later"
           pagination={detail.replies.pagination}
+          previousLabel="Earlier"
         />
         {posts.length === 0 ? (
           <ForumStatusBox
@@ -1349,7 +1351,9 @@ function LiveForumThreadView({
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
+          nextLabel="Later"
           pagination={detail.replies.pagination}
+          previousLabel="Earlier"
         />
       </section>
 

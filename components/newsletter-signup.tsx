@@ -17,13 +17,15 @@ export function NewsletterSignup({
   variant?: "default" | "footer";
 }) {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<{ text: string; isError: boolean } | null>(
+    null,
+  );
   const [pending, setPending] = useState(false);
 
   async function subscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
-    setMessage(null);
+    setResult(null);
     try {
       const response = await fetch("/api/newsletter/subscribe", {
         method: "POST",
@@ -38,7 +40,10 @@ export function NewsletterSignup({
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error ?? "Could not subscribe");
       }
-      setMessage(payload.message ?? "Check your inbox to confirm.");
+      setResult({
+        text: payload.message ?? "Check your inbox to confirm.",
+        isError: false,
+      });
       setEmail("");
     } catch (error) {
       reportAppError(error, {
@@ -49,7 +54,10 @@ export function NewsletterSignup({
         metadata: { source },
         notify: false,
       });
-      setMessage(error instanceof Error ? error.message : "Could not subscribe");
+      setResult({
+        text: error instanceof Error ? error.message : "Could not subscribe",
+        isError: true,
+      });
     } finally {
       setPending(false);
     }
@@ -88,16 +96,17 @@ export function NewsletterSignup({
         <Send aria-hidden="true" />
         {pending ? "Sending" : "Subscribe"}
       </Button>
-      {message ? (
-        <p
-          className={cn(
-            "font-mono text-[10px] uppercase text-muted-foreground",
-            variant === "footer" ? "col-span-2" : "sm:col-span-2",
-          )}
-        >
-          {message}
-        </p>
-      ) : null}
+      <p
+        role="status"
+        aria-live="polite"
+        className={cn(
+          "min-h-4 font-mono text-[10px] uppercase",
+          result?.isError ? "text-destructive" : "text-muted-foreground",
+          variant === "footer" ? "col-span-2" : "sm:col-span-2",
+        )}
+      >
+        {result?.text ?? ""}
+      </p>
     </form>
   );
 }

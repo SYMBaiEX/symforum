@@ -46,7 +46,7 @@ export async function POST(request: Request) {
         subscriber,
         message:
           subscriber.status === "confirmed"
-            ? "You are already subscribed."
+            ? "Check your inbox for a link to manage your subscription."
             : "Check your inbox to confirm.",
       },
       { headers: { "Cache-Control": "no-store" } },

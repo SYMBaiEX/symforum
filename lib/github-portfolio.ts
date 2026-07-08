@@ -342,6 +342,9 @@ async function getAuthenticatedCommitMetric(
 ): Promise<CommitMetric | null> {
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
   if (!token) {
+    console.warn(
+      "GITHUB_TOKEN/GH_TOKEN not set; commit metric covers public commits only",
+    );
     return null;
   }
 
@@ -487,8 +490,7 @@ function publicCommitMetric(value: number): CommitMetric {
   return {
     value,
     label: "Public commits",
-    detail:
-      "Live GitHub REST commit search. Add GITHUB_TOKEN or GH_TOKEN for private + public commit contributions.",
+    detail: "Live GitHub REST search of public commits.",
     source: "github-rest-search",
     includesPrivate: false,
     live: true,
