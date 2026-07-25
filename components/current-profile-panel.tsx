@@ -5,10 +5,12 @@ import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
 import { ProfileNewsletterPreferences } from "@/components/profile-newsletter-preferences";
 import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 
 export function CurrentProfilePanel() {
+  const { signOut } = useAuthActions();
   const viewer = useQuery(convexRefs.users.maybeViewer, {});
 
   if (viewer === undefined) {
@@ -66,6 +68,14 @@ export function CurrentProfilePanel() {
               <Link href="/admin">Open admin</Link>
             </Button>
           ) : null}
+          <Button
+            onClick={() => void signOut()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Sign out
+          </Button>
         </div>
         <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2">
           <MetaItem
