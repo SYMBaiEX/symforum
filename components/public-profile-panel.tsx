@@ -59,7 +59,13 @@ export function PublicProfilePanel({ username }: { username: string }) {
           />
           <MetaItem
             label="Role"
-            value={profile.user.role === "owner" ? "Owner" : "Reader"}
+            value={
+              profile.user.role === "owner"
+                ? "Owner"
+                : profile.user.role === "admin"
+                  ? "Administrator"
+                  : "Reader"
+            }
           />
           <MetaItem
             label="Handle"

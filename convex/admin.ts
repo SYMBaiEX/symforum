@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -8,6 +7,12 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import {
+  getCurrentUser,
+  hasSiteAdminAccess,
+  requireOwner,
+  requireSiteAdmin,
+} from "./authz";
 import { normalizePostInput, postInputValidator } from "./postModel";
 import {
   normalizePortfolioProjectInput,
@@ -39,25 +44,6 @@ const forumRoleValidator = v.union(v.literal("moderator"), v.literal("admin"));
 
 const FORUM_STATUS_REASON_MAX_LENGTH = 180;
 const FORUM_DEFAULT_SUSPENSION_MS = 7 * 24 * 60 * 60 * 1_000;
-
-async function currentUser(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    return null;
-  }
-  return await ctx.db.get(userId);
-}
-
-async function requireOwner(ctx: QueryCtx | MutationCtx) {
-  const user = await currentUser(ctx);
-  if (user === null) {
-    throw new Error("Not authenticated");
-  }
-  if (user.role !== "owner") {
-    throw new Error("Unauthorized");
-  }
-  return user;
-}
 
 async function firstOwner(ctx: QueryCtx | MutationCtx) {
   const owners = await ctx.db
@@ -224,7 +210,7 @@ function canAdminForum(user: Doc<"users"> | null | undefined) {
 export const viewer = query({
   args: {},
   handler: async (ctx) => {
-    const user = await currentUser(ctx);
+    const user = await getCurrentUser(ctx);
     const owner = await firstOwner(ctx);
     const hasBoardModeratorAssignment =
       user !== null &&
@@ -240,6 +226,7 @@ export const viewer = query({
     return {
       user,
       isOwner: user?.role === "owner",
+      canAccessAdmin: hasSiteAdminAccess(user),
       canModerateForum: canModerateForum(user) || hasBoardModeratorAssignment,
       canAdminForum: canAdminForum(user),
       ownerExists: owner !== null,
@@ -252,7 +239,7 @@ export const claimInitialOwner = mutation({
     bootstrapToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await currentUser(ctx);
+    const user = await getCurrentUser(ctx);
     if (user === null) {
       throw new Error("Not authenticated");
     }
@@ -303,7 +290,7 @@ export const claimInitialOwner = mutation({
 export const overview = query({
   args: {},
   handler: async (ctx) => {
-    const user = await requireOwner(ctx);
+    const user = await requireSiteAdmin(ctx);
     const [
       posts,
       recentComments,
@@ -322,11 +309,7 @@ export const overview = query({
       analyticsEvents,
     ] = await Promise.all([
       ctx.db.query("posts").withIndex("by_publishedAt").order("desc").take(100),
-      ctx.db
-        .query("comments")
-        .withIndex("by_createdAt")
-        .order("desc")
-        .take(20),
+      ctx.db.query("comments").withIndex("by_createdAt").order("desc").take(20),
       ctx.db
         .query("interactions")
         .withIndex("by_updatedAt")
@@ -563,8 +546,10 @@ export const updateUserForumTrust = mutation({
 
     const now = Date.now();
     await ctx.db.patch(args.userId, {
-      forumTrustedAt: args.trusted ? user.forumTrustedAt ?? now : undefined,
-      forumTrustedBy: args.trusted ? user.forumTrustedBy ?? actor._id : undefined,
+      forumTrustedAt: args.trusted ? (user.forumTrustedAt ?? now) : undefined,
+      forumTrustedBy: args.trusted
+        ? (user.forumTrustedBy ?? actor._id)
+        : undefined,
       forumTrustRevokedAt: args.trusted ? undefined : now,
       forumTrustRevokedBy: args.trusted ? undefined : actor._id,
     });
@@ -623,16 +608,25 @@ export const updateUserForumStatus = mutation({
       args.status !== "active" &&
       (user.role === "owner" || user.role === "admin")
     ) {
-      throw new Error("Owner and admin accounts cannot be forum suspended here");
+      throw new Error(
+        "Owner and admin accounts cannot be forum suspended here",
+      );
     }
 
     const now = Date.now();
-    const reason = cleanOptionalText(args.reason, FORUM_STATUS_REASON_MAX_LENGTH);
+    const reason = cleanOptionalText(
+      args.reason,
+      FORUM_STATUS_REASON_MAX_LENGTH,
+    );
     const suspendedUntil =
       args.status === "suspended"
-        ? Math.max(args.suspendedUntil ?? now + FORUM_DEFAULT_SUSPENSION_MS, now + 60_000)
+        ? Math.max(
+            args.suspendedUntil ?? now + FORUM_DEFAULT_SUSPENSION_MS,
+            now + 60_000,
+          )
         : undefined;
-    const clearingStaffRole = args.status !== "active" && user.forumRole !== undefined;
+    const clearingStaffRole =
+      args.status !== "active" && user.forumRole !== undefined;
 
     await ctx.db.patch(args.userId, {
       forumRole: clearingStaffRole ? undefined : user.forumRole,
@@ -642,7 +636,8 @@ export const updateUserForumStatus = mutation({
       forumRoleAssignedBy: clearingStaffRole
         ? undefined
         : user.forumRoleAssignedBy,
-      forumSuspendedUntil: args.status === "suspended" ? suspendedUntil : undefined,
+      forumSuspendedUntil:
+        args.status === "suspended" ? suspendedUntil : undefined,
       forumSuspendedReason: args.status === "suspended" ? reason : undefined,
       forumSuspendedBy: args.status === "suspended" ? actor._id : undefined,
       forumBannedAt: args.status === "banned" ? now : undefined,
@@ -698,7 +693,7 @@ export const updateUserForumStatus = mutation({
 export const listPosts = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("posts")
       .withIndex("by_publishedAt")
@@ -710,7 +705,7 @@ export const listPosts = query({
 export const getPost = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("posts")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -721,7 +716,7 @@ export const getPost = query({
 export const upsertPost = mutation({
   args: { post: postInputValidator },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const post = normalizePostInput(args.post);
     const existing = await ctx.db
       .query("posts")
@@ -741,7 +736,7 @@ export const upsertPost = mutation({
 export const deletePost = mutation({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const existing = await ctx.db
       .query("posts")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -757,7 +752,7 @@ export const deletePost = mutation({
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -765,7 +760,7 @@ export const generateUploadUrl = mutation({
 export const resolveStorageUrl = mutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.storage.getUrl(args.storageId);
   },
 });
@@ -773,7 +768,7 @@ export const resolveStorageUrl = mutation({
 export const listSitePages = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("sitePages")
       .withIndex("by_slug")
@@ -785,7 +780,7 @@ export const listSitePages = query({
 export const upsertSitePage = mutation({
   args: { page: sitePageInputValidator },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const page = normalizeSitePageInput(args.page);
     const existing = await ctx.db
       .query("sitePages")
@@ -812,7 +807,7 @@ export const upsertSitePage = mutation({
 export const deleteSitePage = mutation({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const existing = await ctx.db
       .query("sitePages")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -828,7 +823,7 @@ export const deleteSitePage = mutation({
 export const listPortfolioProjects = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("portfolioProjects")
       .withIndex("by_order")
@@ -840,7 +835,7 @@ export const listPortfolioProjects = query({
 export const upsertPortfolioProject = mutation({
   args: { project: portfolioProjectInputValidator },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const project = normalizePortfolioProjectInput(args.project);
     const existing = await ctx.db
       .query("portfolioProjects")
@@ -860,7 +855,7 @@ export const upsertPortfolioProject = mutation({
 export const deletePortfolioProject = mutation({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const existing = await ctx.db
       .query("portfolioProjects")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -879,7 +874,7 @@ export const listComments = query({
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const comments =
       args.entityType && args.entityId
         ? await ctx.db
@@ -902,7 +897,9 @@ export const listComments = query({
         ...comment,
         status: commentStatus(comment),
         body:
-          commentStatus(comment) === "active" ? comment.body : "Comment deleted",
+          commentStatus(comment) === "active"
+            ? comment.body
+            : "Comment deleted",
         author: await authorName(ctx, comment.userId),
       })),
     );
@@ -912,7 +909,7 @@ export const listComments = query({
 export const deleteComment = mutation({
   args: { commentId: v.id("comments") },
   handler: async (ctx, args) => {
-    const user = await requireOwner(ctx);
+    const user = await requireSiteAdmin(ctx);
     return await softDeleteComment(ctx, args.commentId, user._id);
   },
 });
@@ -923,7 +920,7 @@ export const listInteractions = query({
     entityId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const interactions =
       args.entityType && args.entityId
         ? await ctx.db
@@ -952,7 +949,7 @@ export const listInteractions = query({
 export const deleteInteraction = mutation({
   args: { interactionId: v.id("interactions") },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     await ctx.db.delete(args.interactionId);
     return { deleted: true };
   },
@@ -1020,7 +1017,7 @@ export const revokeApiKey = mutation({
 export const listContactRequests = query({
   args: { status: v.optional(contactRequestStatusValidator) },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     if (args.status !== undefined) {
       return await ctx.db
         .query("contactRequests")
@@ -1044,7 +1041,7 @@ export const updateContactRequestStatus = mutation({
     status: contactRequestStatusValidator,
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     await ctx.db.patch(args.requestId, {
       status: args.status,
       updatedAt: Date.now(),

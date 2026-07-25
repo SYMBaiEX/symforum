@@ -39,6 +39,7 @@ type Env = {
   readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
+  readonly SITE_URL: string | undefined;
 };
 
 /**

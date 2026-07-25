@@ -1,13 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { requireSiteAdmin } from "./authz";
 
-const logLevel = v.union(v.literal("info"), v.literal("warn"), v.literal("error"));
+const logLevel = v.union(
+  v.literal("info"),
+  v.literal("warn"),
+  v.literal("error"),
+);
 const logStatus = v.union(
   v.literal("open"),
   v.literal("reviewed"),
@@ -25,31 +25,6 @@ const STACK_LIMIT = 2_400;
 const SHORT_LIMIT = 220;
 const METADATA_LIMIT = 2_000;
 const DEDUPE_WINDOW_MS = 60_000;
-
-async function currentUser(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    return null;
-  }
-  return await ctx.db.get(userId);
-}
-
-async function requireOwner(ctx: QueryCtx | MutationCtx) {
-  const user = await currentUser(ctx);
-  if (user === null) {
-    throw new ConvexError({
-      code: "AUTH_REQUIRED",
-      message: "Sign in as the owner to view system logs.",
-    });
-  }
-  if (user.role !== "owner") {
-    throw new ConvexError({
-      code: "UNAUTHORIZED",
-      message: "Owner access is required.",
-    });
-  }
-  return user;
-}
 
 export const record = mutation({
   args: {
@@ -85,13 +60,17 @@ export const record = mutation({
 
     const level = args.level ?? "error";
     const source = args.source ?? "client";
-    const scope = clean(args.scope ?? "application", SHORT_LIMIT) || "application";
+    const scope =
+      clean(args.scope ?? "application", SHORT_LIMIT) || "application";
     const eventType =
       clean(args.eventType ?? "runtime_error", SHORT_LIMIT) || "runtime_error";
     const path = optionalClean(stripQuery(args.path), SHORT_LIMIT);
     const fingerprint =
       optionalClean(args.fingerprint, SHORT_LIMIT) ??
-      clean([source, scope, eventType, path, message.slice(0, 160)].join("|"), 500);
+      clean(
+        [source, scope, eventType, path, message.slice(0, 160)].join("|"),
+        500,
+      );
     const recent = await ctx.db
       .query("systemLogs")
       .withIndex("by_fingerprint_and_createdAt", (q) =>
@@ -157,13 +136,15 @@ export const listAdmin = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 60), 120));
 
     if (args.status !== undefined) {
       return await ctx.db
         .query("systemLogs")
-        .withIndex("by_status_and_createdAt", (q) => q.eq("status", args.status!))
+        .withIndex("by_status_and_createdAt", (q) =>
+          q.eq("status", args.status!),
+        )
         .order("desc")
         .take(limit);
     }
@@ -179,7 +160,9 @@ export const listAdmin = query({
     if (args.source !== undefined) {
       return await ctx.db
         .query("systemLogs")
-        .withIndex("by_source_and_createdAt", (q) => q.eq("source", args.source!))
+        .withIndex("by_source_and_createdAt", (q) =>
+          q.eq("source", args.source!),
+        )
         .order("desc")
         .take(limit);
     }
@@ -195,7 +178,7 @@ export const listAdmin = query({
 export const summaryAdmin = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const [open, reviewed, resolved, recentErrors, recentWarnings] =
       await Promise.all([
         ctx.db
@@ -205,12 +188,16 @@ export const summaryAdmin = query({
           .take(100),
         ctx.db
           .query("systemLogs")
-          .withIndex("by_status_and_createdAt", (q) => q.eq("status", "reviewed"))
+          .withIndex("by_status_and_createdAt", (q) =>
+            q.eq("status", "reviewed"),
+          )
           .order("desc")
           .take(100),
         ctx.db
           .query("systemLogs")
-          .withIndex("by_status_and_createdAt", (q) => q.eq("status", "resolved"))
+          .withIndex("by_status_and_createdAt", (q) =>
+            q.eq("status", "resolved"),
+          )
           .order("desc")
           .take(100),
         ctx.db
@@ -244,7 +231,7 @@ export const updateStatusAdmin = mutation({
     status: logStatus,
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const existing = await ctx.db.get(args.logId);
     if (existing === null) {
       throw new ConvexError({
@@ -265,7 +252,7 @@ export const updateStatusAdmin = mutation({
 export const deleteAdmin = mutation({
   args: { logId: v.id("systemLogs") },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const existing = await ctx.db.get(args.logId);
     if (existing === null) {
       return { deleted: false };

@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requirePublicEntity } from "./contentAccess";
 
 const entityType = v.union(v.literal("post"), v.literal("hnStory"));
 
@@ -19,6 +20,7 @@ export const summary = query({
     entityId: v.string(),
   },
   handler: async (ctx, args) => {
+    await requirePublicEntity(ctx, args.entityType, args.entityId);
     const rows = await ctx.db
       .query("interactions")
       .withIndex("by_entityType_and_entityId", (q) =>
@@ -61,6 +63,7 @@ export const summaries = query({
     > = {};
 
     for (const entityId of entityIds) {
+      await requirePublicEntity(ctx, args.entityType, entityId);
       const rows = await ctx.db
         .query("interactions")
         .withIndex("by_entityType_and_entityId", (q) =>
@@ -98,6 +101,7 @@ export const set = mutation({
     if (userId === null) {
       throw new Error("Not authenticated");
     }
+    await requirePublicEntity(ctx, args.entityType, args.entityId);
     const existing = await ctx.db
       .query("interactions")
       .withIndex("by_userId_and_entityType_and_entityId", (q) =>

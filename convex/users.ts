@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
+import { getPublicEntity } from "./contentAccess";
 
 const USERNAME_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/;
 const FORUM_POST_PAGE_SIZE = 20;
@@ -139,8 +140,23 @@ async function recentComments(ctx: QueryCtx, userId: Id<"users">) {
     .withIndex("by_userId_and_createdAt", (q) => q.eq("userId", userId))
     .order("desc")
     .take(20);
-  return rows
-    .filter((comment) => (comment.status ?? "active") === "active")
+  const publicRows = await Promise.all(
+    rows.map(async (comment) => {
+      if ((comment.status ?? "active") !== "active") {
+        return null;
+      }
+      const target = await getPublicEntity(
+        ctx,
+        comment.entityType,
+        comment.entityId,
+      );
+      return target === null ? null : comment;
+    }),
+  );
+  return publicRows
+    .filter(
+      (comment): comment is NonNullable<typeof comment> => comment !== null,
+    )
     .slice(0, 5);
 }
 

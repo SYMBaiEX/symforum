@@ -1,7 +1,12 @@
 import { getGithubPortfolioMetrics } from "../lib/github-portfolio";
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+} from "./_generated/server";
 
 const SNAPSHOT_KEY = "symbaiex";
 const MIN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -54,7 +59,7 @@ export const latestForRefresh = internalQuery({
   },
 });
 
-export const refreshPortfolioMetrics = action({
+export const refreshPortfolioMetrics = internalAction({
   args: {
     force: v.optional(v.boolean()),
     source: v.optional(v.union(v.literal("cron"), v.literal("manual"))),

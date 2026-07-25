@@ -1382,6 +1382,7 @@ export const convexRefs = {
       {
         user: AdminUserRecord | null;
         isOwner: boolean;
+        canAccessAdmin: boolean;
         canModerateForum: boolean;
         canAdminForum: boolean;
         ownerExists: boolean;
@@ -2075,12 +2076,6 @@ export const convexRefs = {
       Record<string, never>,
       GithubPortfolioSnapshotRecord | null
     >("githubPortfolio:latest"),
-    refreshPortfolioMetrics: makeFunctionReference<
-      "action",
-      { force?: boolean; source?: "cron" | "manual" },
-      | { ok: true; skipped: boolean; refreshedAt: number }
-      | { ok: false; errorMessage: string }
-    >("githubPortfolio:refreshPortfolioMetrics"),
   },
   systemLogs: {
     record: makeFunctionReference<

@@ -11,6 +11,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { requireSiteAdmin } from "./authz";
 import {
   newsletterIssueInputValidator,
   normalizeEmail,
@@ -221,7 +222,7 @@ export const unsubscribe = mutation({
 export const listAdminSubscribers = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const subscribers = await ctx.db
       .query("newsletterSubscribers")
       .withIndex("by_createdAt")
@@ -234,7 +235,7 @@ export const listAdminSubscribers = query({
 export const listAdminIssues = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("newsletterIssues")
       .withIndex("by_updatedAt")
@@ -246,7 +247,7 @@ export const listAdminIssues = query({
 export const upsertAdminIssue = mutation({
   args: { issue: newsletterIssueInputValidator },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await upsertIssue(ctx, args.issue);
   },
 });
@@ -254,13 +255,13 @@ export const upsertAdminIssue = mutation({
 export const sendAdminIssueTest = mutation({
   args: { slug: v.string(), to: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const admin = await requireSiteAdmin(ctx);
     const issue = await issueBySlug(ctx, args.slug);
     if (issue === null) {
       throw new Error("Newsletter issue not found");
     }
     const to = normalizeEmail(
-      args.to ?? owner.email ?? "solsymbaiex@gmail.com",
+      args.to ?? admin.email ?? admin.contactEmail ?? "solsymbaiex@gmail.com",
     );
     await ctx.scheduler.runAfter(0, sendIssueTestRef, {
       issueId: issue._id,
@@ -273,7 +274,7 @@ export const sendAdminIssueTest = mutation({
 export const sendAdminIssueNow = mutation({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const issue = await issueBySlug(ctx, args.slug);
     if (issue === null) {
       throw new Error("Newsletter issue not found");
@@ -295,7 +296,7 @@ export const sendAdminIssueNow = mutation({
 export const scheduleAdminIssue = mutation({
   args: { slug: v.string(), scheduledAt: v.number() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const issue = await issueBySlug(ctx, args.slug);
     if (issue === null) {
       throw new Error("Newsletter issue not found");
@@ -318,7 +319,7 @@ export const scheduleAdminIssue = mutation({
 export const cancelAdminIssue = mutation({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const issue = await issueBySlug(ctx, args.slug);
     if (issue === null) {
       throw new Error("Newsletter issue not found");
@@ -611,18 +612,6 @@ async function upsertPendingSubscriber(
     throw new Error("Could not update newsletter subscription");
   }
   return { subscriber: updated, tokenStored: true };
-}
-
-async function requireOwner(ctx: MutationCtx | QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    throw new Error("Not authenticated");
-  }
-  const user = await ctx.db.get(userId);
-  if (user?.role !== "owner") {
-    throw new Error("Unauthorized");
-  }
-  return user;
 }
 
 async function subscriberByTokenHash(

@@ -19,10 +19,12 @@ export const featured = query({
   handler: async (ctx) => {
     const posts = await ctx.db
       .query("posts")
-      .withIndex("by_featured_and_publishedAt", (q) => q.eq("featured", true))
+      .withIndex("by_status_and_publishedAt", (q) =>
+        q.eq("status", "published"),
+      )
       .order("desc")
-      .take(1);
-    return posts[0] ?? null;
+      .take(50);
+    return posts.find((post) => post.featured) ?? null;
   },
 });
 

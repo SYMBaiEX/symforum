@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
 const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
 const SONNER_STYLE_HASHES = [
@@ -35,7 +36,10 @@ export default convexConfigured
           policy,
         );
       },
-      { convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL },
+      {
+        convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
+        cookieConfig: { maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
+      },
     )
   : function middleware(request: NextRequest) {
       const policy = contentSecurityPolicy();

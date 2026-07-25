@@ -3,24 +3,29 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const authState = vi.hoisted(() => ({
   authenticated: false,
+  middlewareOptions: null as {
+    cookieConfig?: { maxAge: number | null };
+  } | null,
 }));
 
 vi.mock("@convex-dev/auth/nextjs/server", () => ({
   createRouteMatcher: (patterns: string[]) => (request: NextRequest) =>
     patterns.includes(request.nextUrl.pathname),
-  convexAuthNextjsMiddleware:
-    (
-      handler: (
-        request: NextRequest,
-        context: { convexAuth: { isAuthenticated: () => Promise<boolean> } },
-      ) => Promise<Response> | Response,
-    ) =>
-    (request: NextRequest) =>
+  convexAuthNextjsMiddleware: (
+    handler: (
+      request: NextRequest,
+      context: { convexAuth: { isAuthenticated: () => Promise<boolean> } },
+    ) => Promise<Response> | Response,
+    options: { cookieConfig?: { maxAge: number | null } },
+  ) => {
+    authState.middlewareOptions = options;
+    return (request: NextRequest) =>
       handler(request, {
         convexAuth: {
           isAuthenticated: async () => authState.authenticated,
         },
-      }),
+      });
+  },
   nextjsMiddlewareRedirect: (request: NextRequest, redirectTo: string) =>
     new Response(null, {
       status: 302,
@@ -34,7 +39,18 @@ describe("middleware forum routing", () => {
   beforeEach(() => {
     vi.resetModules();
     authState.authenticated = false;
+    authState.middlewareOptions = null;
     delete process.env.NEXT_PUBLIC_CONVEX_URL;
+  });
+
+  test("keeps auth cookies after the browser session closes", async () => {
+    process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
+
+    await loadMiddleware();
+
+    expect(authState.middlewareOptions?.cookieConfig?.maxAge).toBe(
+      30 * 24 * 60 * 60,
+    );
   });
 
   test("rewrites bare forum subdomain paths and attaches security headers", async () => {

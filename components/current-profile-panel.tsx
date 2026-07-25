@@ -61,7 +61,7 @@ export function CurrentProfilePanel() {
               </Link>
             </Button>
           ) : null}
-          {viewer.role === "owner" ? (
+          {viewer.role === "owner" || viewer.role === "admin" ? (
             <Button asChild size="sm" variant="outline">
               <Link href="/admin">Open admin</Link>
             </Button>
@@ -74,7 +74,13 @@ export function CurrentProfilePanel() {
           />
           <MetaItem
             label="Role"
-            value={viewer.role === "owner" ? "Owner" : "Reader"}
+            value={
+              viewer.role === "owner"
+                ? "Owner"
+                : viewer.role === "admin"
+                  ? "Administrator"
+                  : "Reader"
+            }
           />
           <MetaItem
             label="Handle source"

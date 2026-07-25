@@ -12,15 +12,11 @@ export default function SignInPage() {
     <>
       <section className="page-frame page-frame-spacious grid gap-10 md:grid-cols-12">
         <div className="md:col-span-5">
-          <p className="page-kicker">
-            Reader identity
-          </p>
-          <h1 className="page-title-display mt-5">
-            Sign in with a SYM handle.
-          </h1>
+          <p className="page-kicker">Reader identity</p>
+          <h1 className="page-title-display mt-5">Sign in your way.</h1>
           <p className="page-lede mt-6">
-            Accounts start with a random SYM number, and can also use a chosen
-            handle. Comments, saves, and votes all attach to this identity.
+            Continue with Google, choose your own handle, or start with a random
+            SYM number. Comments, saves, and votes all attach to this identity.
           </p>
         </div>
         <div className="md:col-span-5 md:col-start-8">

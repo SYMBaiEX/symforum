@@ -1,12 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { requireSiteAdmin } from "./authz";
 
 const analyticsSource = v.union(
   v.literal("client"),
@@ -99,7 +95,7 @@ export const listAdmin = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 80), 200));
     const name = args.name ? cleanEventName(args.name) : undefined;
 
@@ -114,7 +110,9 @@ export const listAdmin = query({
     if (args.source !== undefined) {
       return await ctx.db
         .query("analyticsEvents")
-        .withIndex("by_source_and_createdAt", (q) => q.eq("source", args.source!))
+        .withIndex("by_source_and_createdAt", (q) =>
+          q.eq("source", args.source!),
+        )
         .order("desc")
         .take(limit);
     }
@@ -132,7 +130,7 @@ export const summaryAdmin = query({
     days: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const days = Math.max(1, Math.min(Math.floor(args.days ?? 14), 90));
     const now = Date.now();
     const start = now - days * 24 * 60 * 60 * 1000;
@@ -153,10 +151,12 @@ export const summaryAdmin = query({
         pageViews: pageViews.length,
         visitors: uniqueCount(events.map((event) => event.visitorId)),
         sessions: uniqueCount(events.map((event) => event.sessionId)),
-        signedInEvents: events.filter((event) => event.actorUserId !== undefined)
-          .length,
-        todayEvents: events.filter((event) => dayKey(event.createdAt) === todayKey)
-          .length,
+        signedInEvents: events.filter(
+          (event) => event.actorUserId !== undefined,
+        ).length,
+        todayEvents: events.filter(
+          (event) => dayKey(event.createdAt) === todayKey,
+        ).length,
       },
       topEvents: ranked(events, (event) => event.name, 8),
       topPages: ranked(pageViews, (event) => event.path ?? "(unknown)", 10),
@@ -175,36 +175,7 @@ export const summaryAdmin = query({
   },
 });
 
-async function currentUser(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    return null;
-  }
-  return await ctx.db.get(userId);
-}
-
-async function requireOwner(ctx: QueryCtx | MutationCtx) {
-  const user = await currentUser(ctx);
-  if (user === null) {
-    throw new ConvexError({
-      code: "AUTH_REQUIRED",
-      message: "Sign in as the owner to view analytics.",
-    });
-  }
-  if (user.role !== "owner") {
-    throw new ConvexError({
-      code: "UNAUTHORIZED",
-      message: "Owner access is required.",
-    });
-  }
-  return user;
-}
-
-function ranked<T>(
-  rows: T[],
-  keyForRow: (row: T) => string,
-  limit: number,
-) {
+function ranked<T>(rows: T[], keyForRow: (row: T) => string, limit: number) {
   const counts = new Map<string, number>();
   for (const row of rows) {
     const key = keyForRow(row).trim() || "(unknown)";
@@ -212,7 +183,10 @@ function ranked<T>(
   }
   return [...counts.entries()]
     .map(([key, count]) => ({ key, count }))
-    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+    .sort(
+      (left, right) =>
+        right.count - left.count || left.key.localeCompare(right.key),
+    )
     .slice(0, limit);
 }
 

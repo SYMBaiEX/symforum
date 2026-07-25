@@ -7,6 +7,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { requirePublicEntity } from "./contentAccess";
 
 const entityType = v.union(
   v.literal("post"),
@@ -19,9 +20,6 @@ const COMMENT_MIN_LENGTH = 2;
 const COMMENT_MAX_LENGTH = 1200;
 const RATE_LIMIT_MS = 2_500;
 const DUPLICATE_WINDOW_MS = 15_000;
-const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,159}$/;
-
-type CommentEntityType = Doc<"comments">["entityType"];
 type CommentStatus = NonNullable<Doc<"comments">["status"]>;
 type UserDoc = Doc<"users">;
 
@@ -31,7 +29,7 @@ export const list = query({
     entityId: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireReadableTarget(ctx, args.entityType, args.entityId);
+    await requirePublicEntity(ctx, args.entityType, args.entityId);
 
     const rows = await ctx.db
       .query("comments")
@@ -68,7 +66,7 @@ export const list = query({
         deletedAt: comment.deletedAt,
         createdAt: comment.createdAt,
         author: isVisible
-          ? user?.username ?? user?.name ?? "SYM-UNKNOWN"
+          ? (user?.username ?? user?.name ?? "SYM-UNKNOWN")
           : "Deleted",
         viewerCanDelete:
           isVisible &&
@@ -89,7 +87,7 @@ export const add = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireSignedInUserId(ctx);
-    await requireReadableTarget(ctx, args.entityType, args.entityId);
+    await requirePublicEntity(ctx, args.entityType, args.entityId);
 
     const body = args.body.trim();
     if (body.length < COMMENT_MIN_LENGTH || body.length > COMMENT_MAX_LENGTH) {
@@ -123,7 +121,10 @@ export const add = mutation({
       .take(5);
     const now = Date.now();
     const lastComment = recent[0];
-    if (lastComment !== undefined && now - lastComment.createdAt < RATE_LIMIT_MS) {
+    if (
+      lastComment !== undefined &&
+      now - lastComment.createdAt < RATE_LIMIT_MS
+    ) {
       throw new ConvexError({
         code: "COMMENT_RATE_LIMITED",
         message: "Give the thread a breath, then try again.",
@@ -220,64 +221,9 @@ async function requireSignedInUserId(ctx: QueryCtx | MutationCtx) {
   return userId;
 }
 
-async function requireReadableTarget(
-  ctx: QueryCtx | MutationCtx,
-  targetType: CommentEntityType,
-  entityId: string,
-) {
-  const cleanEntityId = entityId.trim();
-  if (cleanEntityId.length === 0 || cleanEntityId.length > 180) {
-    throw new ConvexError({
-      code: "INVALID_TARGET",
-      message: "That thread is not available.",
-    });
-  }
-
-  if (targetType === "hnStory") {
-    const hnItemId = Number.parseInt(cleanEntityId, 10);
-    if (!Number.isSafeInteger(hnItemId) || hnItemId <= 0) {
-      throw new ConvexError({
-        code: "INVALID_TARGET",
-        message: "That news thread is not available.",
-      });
-    }
-    return;
-  }
-
-  if (!SLUG_PATTERN.test(cleanEntityId)) {
-    throw new ConvexError({
-      code: "INVALID_TARGET",
-      message: "That thread is not available.",
-    });
-  }
-
-  if (targetType === "post") {
-    const post = await ctx.db
-      .query("posts")
-      .withIndex("by_slug", (q) => q.eq("slug", cleanEntityId))
-      .unique();
-    if (post !== null && post.status !== "published") {
-      throw new ConvexError({
-        code: "TARGET_NOT_PUBLIC",
-        message: "That blog thread is not public.",
-      });
-    }
-    return;
-  }
-
-  const project = await ctx.db
-    .query("portfolioProjects")
-    .withIndex("by_slug", (q) => q.eq("slug", cleanEntityId))
-    .unique();
-  if (project !== null && project.status !== "published") {
-    throw new ConvexError({
-      code: "TARGET_NOT_PUBLIC",
-      message: "That project thread is not public.",
-    });
-  }
-}
-
-function commentStatus(comment: Pick<Doc<"comments">, "status">): CommentStatus {
+function commentStatus(
+  comment: Pick<Doc<"comments">, "status">,
+): CommentStatus {
   return comment.status ?? "active";
 }
 

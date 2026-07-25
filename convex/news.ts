@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import {
-  action,
+  internalAction,
   internalMutation,
   internalQuery,
   query,
@@ -248,7 +248,7 @@ export const getStory = query({
   },
 });
 
-export const refreshTopStories = action({
+export const refreshTopStories = internalAction({
   args: {
     limit: v.optional(v.number()),
   },

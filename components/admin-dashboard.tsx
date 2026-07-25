@@ -200,12 +200,12 @@ export function AdminDashboard() {
     return (
       <AdminGate
         title="Sign in required"
-        body="Use the owner username to manage posts, activity, and API keys."
+        body="Use an administrator account to manage site content and operations."
       />
     );
   }
 
-  if (!viewer.isOwner) {
+  if (!viewer.canAccessAdmin) {
     if (!viewer.ownerExists) {
       return (
         <AdminGate
@@ -256,13 +256,13 @@ export function AdminDashboard() {
     }
     return (
       <AdminGate
-        title="Owner access required"
-        body="This account is signed in, but it is not the blog owner or a forum moderator."
+        title="Administrator access required"
+        body="This account is signed in, but it is not a site administrator or forum moderator."
       />
     );
   }
 
-  return <OwnerDashboard />;
+  return <SiteAdminDashboard isOwner={viewer.isOwner} />;
 }
 
 function ForumStaffDashboard({ mode }: { mode: "full" | "moderation" }) {
@@ -287,11 +287,11 @@ function ForumStaffDashboard({ mode }: { mode: "full" | "moderation" }) {
   );
 }
 
-function OwnerDashboard() {
+function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
   const overview = useQuery(convexRefs.admin.overview, {});
   const forumOverview = useQuery(adminForumOverviewRef, {});
   const posts = useQuery(convexRefs.admin.listPosts, {});
-  const apiKeys = useQuery(convexRefs.admin.listApiKeys, {});
+  const apiKeys = useQuery(convexRefs.admin.listApiKeys, isOwner ? {} : "skip");
   const adminComments = useQuery(convexRefs.admin.listComments, {});
   const adminInteractions = useQuery(convexRefs.admin.listInteractions, {});
   const upsertPost = useMutation(convexRefs.admin.upsertPost);
@@ -417,109 +417,114 @@ function OwnerDashboard() {
     interactionStateFilter,
   ]);
   const tabs = useMemo<AdminTab[]>(
-    () => [
-      {
-        id: "overview",
-        label: "Overview",
-        note: "Command desk",
-        count: overview?.totals.openSystemLogs ?? 0,
-        icon: PanelsTopLeft,
-      },
-      {
-        id: "forum",
-        label: "Forum",
-        note: "Boards + mods",
-        count:
-          forumOverview?.totals?.threads ??
-          forumOverview?.recentThreads.length ??
-          forumOverview?.totals?.categories ??
-          0,
-        icon: MessageSquare,
-      },
-      {
-        id: "posts",
-        label: "Posts",
-        note: "Write archive",
-        count: overview?.totals.posts ?? sortedPosts.length,
-        icon: FileText,
-      },
-      {
-        id: "api",
-        label: "API",
-        note: "Keys + routes",
-        count: apiKeys?.filter((key) => !key.revokedAt).length ?? 0,
-        icon: KeyRound,
-      },
-      {
-        id: "comments",
-        label: "Comments",
-        note: "Moderation",
-        count: comments.length,
-        icon: MessageSquare,
-      },
-      {
-        id: "interactions",
-        label: "Interactions",
-        note: "Votes + saves",
-        count: activity.length,
-        icon: MousePointer2,
-      },
-      {
-        id: "analytics",
-        label: "Analytics",
-        note: "Convex events",
-        count: overview?.totals.analyticsEventsSample ?? 0,
-        icon: BarChart3,
-      },
-      {
-        id: "users",
-        label: "Users",
-        note: "Roles",
-        count: overview?.totals.users ?? 0,
-        icon: UsersRound,
-      },
-      {
-        id: "logs",
-        label: "Logs",
-        note: "Errors",
-        count: overview?.totals.openSystemLogs ?? 0,
-        icon: Activity,
-      },
-      {
-        id: "newsletter",
-        label: "Newsletter",
-        note: "Issues + subs",
-        count: overview?.totals.confirmedSubscribers ?? 0,
-        icon: Mail,
-      },
-      {
-        id: "contact",
-        label: "Contact",
-        note: "Inbound",
-        count: overview?.totals.openContactRequests ?? 0,
-        icon: Mail,
-      },
-      {
-        id: "content",
-        label: "Content",
-        note: "Pages + projects",
-        count:
-          (overview?.totals.sitePages ?? 0) +
-          (overview?.totals.portfolioProjects ?? 0),
-        icon: Wrench,
-      },
-      {
-        id: "ai",
-        label: "AI",
-        note: "Operator",
-        icon: Wrench,
-      },
-    ],
+    () =>
+      [
+        {
+          id: "overview",
+          label: "Overview",
+          note: "Command desk",
+          count: overview?.totals.openSystemLogs ?? 0,
+          icon: PanelsTopLeft,
+        },
+        {
+          id: "forum",
+          label: "Forum",
+          note: "Boards + mods",
+          count:
+            forumOverview?.totals?.threads ??
+            forumOverview?.recentThreads.length ??
+            forumOverview?.totals?.categories ??
+            0,
+          icon: MessageSquare,
+        },
+        {
+          id: "posts",
+          label: "Posts",
+          note: "Write archive",
+          count: overview?.totals.posts ?? sortedPosts.length,
+          icon: FileText,
+        },
+        {
+          id: "api",
+          label: "API",
+          note: "Keys + routes",
+          count: apiKeys?.filter((key) => !key.revokedAt).length ?? 0,
+          icon: KeyRound,
+        },
+        {
+          id: "comments",
+          label: "Comments",
+          note: "Moderation",
+          count: comments.length,
+          icon: MessageSquare,
+        },
+        {
+          id: "interactions",
+          label: "Interactions",
+          note: "Votes + saves",
+          count: activity.length,
+          icon: MousePointer2,
+        },
+        {
+          id: "analytics",
+          label: "Analytics",
+          note: "Convex events",
+          count: overview?.totals.analyticsEventsSample ?? 0,
+          icon: BarChart3,
+        },
+        {
+          id: "users",
+          label: "Users",
+          note: "Roles",
+          count: overview?.totals.users ?? 0,
+          icon: UsersRound,
+        },
+        {
+          id: "logs",
+          label: "Logs",
+          note: "Errors",
+          count: overview?.totals.openSystemLogs ?? 0,
+          icon: Activity,
+        },
+        {
+          id: "newsletter",
+          label: "Newsletter",
+          note: "Issues + subs",
+          count: overview?.totals.confirmedSubscribers ?? 0,
+          icon: Mail,
+        },
+        {
+          id: "contact",
+          label: "Contact",
+          note: "Inbound",
+          count: overview?.totals.openContactRequests ?? 0,
+          icon: Mail,
+        },
+        {
+          id: "content",
+          label: "Content",
+          note: "Pages + projects",
+          count:
+            (overview?.totals.sitePages ?? 0) +
+            (overview?.totals.portfolioProjects ?? 0),
+          icon: Wrench,
+        },
+        {
+          id: "ai",
+          label: "AI",
+          note: "Operator",
+          icon: Wrench,
+        },
+      ].filter(
+        (tab): tab is AdminTab =>
+          isOwner || !["api", "users", "ai"].includes(tab.id),
+      ),
     [
       activity.length,
       apiKeys,
       comments.length,
       forumOverview,
+      isOwner,
       overview,
       sortedPosts.length,
     ],
@@ -1024,7 +1029,7 @@ function OwnerDashboard() {
           </div>
         ) : null}
 
-        {activeTab === "api" ? (
+        {isOwner && activeTab === "api" ? (
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
             <section className="py-3">
               <div className="flex items-center justify-between gap-2">
@@ -1442,12 +1447,12 @@ function OwnerDashboard() {
         ) : null}
 
         {activeTab === "analytics" ? <AdminAnalytics /> : null}
-        {activeTab === "users" ? <AdminUsers /> : null}
+        {isOwner && activeTab === "users" ? <AdminUsers /> : null}
         {activeTab === "logs" ? <AdminSystemLogs /> : null}
         {activeTab === "newsletter" ? <AdminNewsletter /> : null}
         {activeTab === "contact" ? <AdminContactRequests /> : null}
         {activeTab === "content" ? <AdminSiteContent /> : null}
-        {activeTab === "ai" ? <AdminAiChat /> : null}
+        {isOwner && activeTab === "ai" ? <AdminAiChat /> : null}
       </div>
     </>
   );

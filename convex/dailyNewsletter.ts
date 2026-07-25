@@ -1,6 +1,6 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
@@ -11,6 +11,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { requireSiteAdmin } from "./authz";
 
 type NewsStory = Pick<
   Doc<"hnStories">,
@@ -84,12 +85,6 @@ const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
 const DAILY_CAMPAIGN = "daily_hn_newsletter";
 const NEWSLETTER_SUBJECT_MAX_LENGTH = 70;
-
-const refreshTopStoriesRef = makeFunctionReference<
-  "action",
-  { limit?: number },
-  { snapshotDate: string; storyCount: number }
->("news:refreshTopStories");
 
 const readIndexedSnapshotRef = makeFunctionReference<
   "query",
@@ -389,7 +384,7 @@ type DailyNewsletterAdminSettings = {
 export const adminSettings = query({
   args: {},
   handler: async (ctx): Promise<DailyNewsletterAdminSettings> => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await readAdminSettings(ctx);
   },
 });
@@ -405,7 +400,7 @@ export const updateAdminSettings = mutation({
     siteUrl: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<DailyNewsletterAdminSettings> => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const updates: Array<{ key: string; value: string }> = [];
 
     if (args.enabled !== undefined) {
@@ -555,9 +550,10 @@ export const runDailyNewsletter = internalAction({
     }
 
     try {
-      const refreshed = await ctx.runAction(refreshTopStoriesRef, {
-        limit: config.maxIndexedArticles,
-      });
+      const refreshed: { snapshotDate: string; storyCount: number } =
+        await ctx.runAction(internal.news.refreshTopStories, {
+          limit: config.maxIndexedArticles,
+        });
       const indexed = await ctx.runQuery(readIndexedSnapshotRef, {
         snapshotDate: refreshed.snapshotDate,
         limit: config.maxIndexedArticles,
@@ -663,7 +659,7 @@ export const queueAdminDailyNewsletter = mutation({
     testMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     await ctx.scheduler.runAfter(0, runDailyNewsletterRef, {
       runDate: args.runDate,
       force: args.force,
@@ -678,7 +674,7 @@ export const queueAdminDailyNewsletter = mutation({
 export const listAdminRuns = query({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     return await ctx.db
       .query("dailyNewsletterRuns")
       .withIndex("by_startedAt")
@@ -692,7 +688,7 @@ export const listAdminSendLogs = query({
     runDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
+    await requireSiteAdmin(ctx);
     const runDate = args.runDate;
     if (runDate) {
       return await ctx.db
@@ -1016,10 +1012,7 @@ async function readAdminSettings(
   const siteUrl =
     (await getSettingDirect(ctx, "newsletter.siteUrl")) ??
     "https://symbaiex.com";
-  const enabledSetting = await getSettingDirect(
-    ctx,
-    "dailyNewsletter.enabled",
-  );
+  const enabledSetting = await getSettingDirect(ctx, "dailyNewsletter.enabled");
   const testModeSetting = await getSettingDirect(
     ctx,
     "dailyNewsletter.testMode",
@@ -1048,8 +1041,7 @@ async function readAdminSettings(
       sendTimeSetting ?? DEFAULT_SEND_TIME_LOCAL,
     ),
     enabled: enabledSetting === null ? true : enabledSetting !== "false",
-    testMode:
-      testModeSetting === null ? false : testModeSetting === "true",
+    testMode: testModeSetting === null ? false : testModeSetting === "true",
     maxIndexedArticles: clampNumber(
       numberFromSetting(maxIndexedSetting),
       5,
@@ -1314,9 +1306,7 @@ function isPastConfiguredSendTime(
 ) {
   const [targetHour, targetMinute] = sendTimeLocal.split(":").map(Number);
   const current = timePartsInZone(timestamp, timeZone);
-  return (
-    current.hour * 60 + current.minute >= targetHour * 60 + targetMinute
-  );
+  return current.hour * 60 + current.minute >= targetHour * 60 + targetMinute;
 }
 
 function timePartsInZone(timestamp: number, timeZone: string) {
@@ -1375,16 +1365,4 @@ function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message.slice(0, 1000)
     : "Unknown error";
-}
-
-async function requireOwner(ctx: MutationCtx | QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    throw new Error("Not authenticated");
-  }
-  const user = await ctx.db.get(userId);
-  if (user?.role !== "owner") {
-    throw new Error("Unauthorized");
-  }
-  return user;
 }
