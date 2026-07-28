@@ -38,10 +38,13 @@ export default defineSchema({
     forumBannedAt: v.optional(v.number()),
     forumBannedReason: v.optional(v.string()),
     forumBannedBy: v.optional(v.id("users")),
+    isAgent: v.optional(v.boolean()),
+    agentSlug: v.optional(v.string()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"])
     .index("by_usernameNormalized", ["usernameNormalized"])
+    .index("by_agentSlug", ["agentSlug"])
     .index("by_role", ["role"])
     .index("by_forumRole", ["forumRole"]),
   posts: defineTable({
@@ -661,6 +664,9 @@ export default defineSchema({
     filename: v.string(),
     contentType: v.string(),
     size: v.number(),
+    altText: v.optional(v.string()),
+    credit: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("deleted")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -686,6 +692,93 @@ export default defineSchema({
     ])
     .index("by_authorId_and_createdAt", ["authorId", "createdAt"])
     .index("by_storageId", ["storageId"]),
+  forumAgents: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    userId: v.id("users"),
+    persona: v.string(),
+    model: v.string(),
+    dailyPostTarget: v.number(),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_userId", ["userId"]),
+  forumAgentRuns: defineTable({
+    runKey: v.string(),
+    agentSlug: v.string(),
+    runDate: v.string(),
+    slot: v.number(),
+    attempt: v.number(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("published"),
+      v.literal("skipped"),
+      v.literal("failed"),
+    ),
+    model: v.string(),
+    candidateCount: v.optional(v.number()),
+    categoryId: v.optional(v.id("forumCategories")),
+    categorySlug: v.optional(v.string()),
+    threadId: v.optional(v.id("forumThreads")),
+    title: v.optional(v.string()),
+    sourceUrls: v.array(v.string()),
+    imageSourceUrl: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_runKey", ["runKey"])
+    .index("by_agentSlug_and_runDate_and_slot", [
+      "agentSlug",
+      "runDate",
+      "slot",
+    ])
+    .index("by_agentSlug_and_status_and_startedAt", [
+      "agentSlug",
+      "status",
+      "startedAt",
+    ])
+    .index("by_runDate", ["runDate"]),
+  forumAgentResearchCache: defineTable({
+    cacheKey: v.string(),
+    sourceName: v.string(),
+    feedUrl: v.string(),
+    payloadJson: v.string(),
+    fetchedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_cacheKey", ["cacheKey"])
+    .index("by_expiresAt", ["expiresAt"]),
+  forumAgentSourceUses: defineTable({
+    sourceKey: v.string(),
+    sourceUrl: v.string(),
+    agentSlug: v.string(),
+    categoryId: v.id("forumCategories"),
+    threadId: v.id("forumThreads"),
+    usedAt: v.number(),
+  })
+    .index("by_sourceKey", ["sourceKey"])
+    .index("by_agentSlug_and_usedAt", ["agentSlug", "usedAt"])
+    .index("by_threadId", ["threadId"]),
+  forumAgentMediaCache: defineTable({
+    sourceKey: v.string(),
+    sourceUrl: v.string(),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    altText: v.optional(v.string()),
+    credit: v.optional(v.string()),
+    fetchedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_sourceKey", ["sourceKey"])
+    .index("by_expiresAt", ["expiresAt"]),
   forumPendingUploads: defineTable({
     userId: v.id("users"),
     storageId: v.id("_storage"),

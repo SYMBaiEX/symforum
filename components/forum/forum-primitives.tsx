@@ -2694,6 +2694,49 @@ export function ForumAttachmentList({
       <div className="grid gap-2">
         {attachments.map((attachment) => {
           const isImage = attachment.contentType.startsWith("image/");
+          if (isImage) {
+            return (
+              <figure
+                className="border border-row-border bg-muted/10 p-3"
+                key={attachment._id}
+              >
+                <a
+                  className="focus-ring block"
+                  href={attachment.url}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Convex attachment URLs are signed runtime URLs. */}
+                  <img
+                    alt={attachment.altText ?? ""}
+                    className="max-h-[34rem] w-full object-contain"
+                    loading="lazy"
+                    src={safeImageUrl(attachment.url) ?? attachment.url}
+                  />
+                </a>
+                <figcaption className="mt-3 flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {attachment.altText || attachment.filename} ·{" "}
+                    {formatFileSize(attachment.size)}
+                  </span>
+                  {attachment.sourceUrl ? (
+                    <a
+                      className="font-mono text-[10px] uppercase text-primary hover:underline"
+                      href={attachment.sourceUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {attachment.credit || "Image source"}
+                    </a>
+                  ) : attachment.credit ? (
+                    <span className="font-mono text-[10px] uppercase">
+                      {attachment.credit}
+                    </span>
+                  ) : null}
+                </figcaption>
+              </figure>
+            );
+          }
           return (
             <a
               className="focus-ring grid gap-3 border border-row-border p-3 hover:border-foreground sm:grid-cols-[4.5rem_minmax(0,1fr)]"
@@ -2703,17 +2746,7 @@ export function ForumAttachmentList({
               target="_blank"
             >
               <span className="flex aspect-square items-center justify-center border border-row-border bg-muted/20 font-mono text-[10px] uppercase text-muted-foreground">
-                {isImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- Convex attachment URLs are signed runtime URLs.
-                  <img
-                    alt=""
-                    className="size-full object-cover"
-                    loading="lazy"
-                    src={safeImageUrl(attachment.url) ?? attachment.url}
-                  />
-                ) : (
-                  "File"
-                )}
+                File
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-foreground">

@@ -417,6 +417,9 @@ export type ForumAttachmentRecord = {
   filename: string;
   contentType: string;
   size: number;
+  altText?: string;
+  credit?: string;
+  sourceUrl?: string;
   url: string;
   createdAt: number;
 };

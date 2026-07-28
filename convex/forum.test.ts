@@ -752,8 +752,8 @@ describe("forum notification preferences", () => {
     );
 
     expect(first.created).toBe(true);
-    expect(first.createdCategoryIds).toHaveLength(4);
-    expect(first.createdPrefixIds).toHaveLength(4);
+    expect(first.createdCategoryIds).toHaveLength(40);
+    expect(first.createdPrefixIds).toHaveLength(8);
     expect(first.createdAnnouncementIds).toHaveLength(1);
     expect(first.createdHelpDocumentIds).toHaveLength(3);
     expect(first.createdBoardRulesIds).toHaveLength(3);
@@ -783,15 +783,55 @@ describe("forum notification preferences", () => {
     });
 
     expect(seeded.categorySlugs).toEqual([
+      "ai",
+      "ai-agents",
+      "ai-frameworks",
+      "ai-local",
+      "ai-models",
+      "ai-prompts",
+      "ai-skills",
+      "gaming",
+      "gaming-downloads",
+      "gaming-guides",
+      "gaming-hacks",
+      "gaming-hosting",
       "general",
+      "general-help-feedback",
+      "general-introductions",
+      "general-lounge",
+      "hacking",
+      "hacking-ctf",
+      "hacking-privacy-opsec",
+      "hacking-reverse-engineering",
+      "hacking-security-news",
+      "hacking-tools",
+      "hacking-web-security",
+      "music",
+      "music-gear",
+      "music-new-releases",
+      "music-playlists",
+      "music-production",
+      "music-scenes",
       "projects",
+      "projects-build-logs",
+      "projects-collaboration",
+      "projects-releases",
+      "projects-show-tell",
       "research",
+      "research-data",
+      "research-experiments",
+      "research-papers",
+      "research-reading-list",
       "symbaiex",
     ]);
     expect(seeded.prefixSlugs).toEqual([
+      "discussion",
+      "guide",
+      "news",
       "question",
       "release",
       "research",
+      "resource",
       "showcase",
     ]);
     expect(seeded.announcementSlugs).toEqual(["welcome"]);
@@ -812,12 +852,174 @@ describe("forum notification preferences", () => {
     );
 
     expect(second.created).toBe(false);
-    expect(second.categoryIds).toHaveLength(4);
+    expect(second.categoryIds).toHaveLength(40);
     expect(second.createdCategoryIds).toHaveLength(0);
     expect(second.createdPrefixIds).toHaveLength(0);
     expect(second.createdAnnouncementIds).toHaveLength(0);
     expect(second.createdHelpDocumentIds).toHaveLength(0);
     expect(second.createdBoardRulesIds).toHaveLength(0);
+  });
+
+  test("Suki infrastructure is idempotent and publishes attributed forum topics", async () => {
+    const t = setup();
+
+    const first = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    expect(first.createdCategoryIds).toHaveLength(40);
+    expect(first.createdPrefixIds).toHaveLength(8);
+
+    const second = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    expect(second.agentUserId).toBe(first.agentUserId);
+    expect(second.createdCategoryIds).toHaveLength(0);
+    expect(second.createdPrefixIds).toHaveLength(0);
+
+    const context = await t.query(internal.forum.readSukiForumContext, {});
+    expect(context.agent).toMatchObject({
+      dailyPostTarget: 10,
+      enabled: true,
+      model: "deepseek/deepseek-v4-flash",
+      name: "Suki",
+      slug: "suki",
+    });
+    expect(context.categories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Hacks",
+          parentName: "Gaming",
+          slug: "gaming-hacks",
+        }),
+        expect.objectContaining({
+          name: "Prompts",
+          parentName: "AI",
+          slug: "ai-prompts",
+        }),
+      ]),
+    );
+
+    const claim = await t.mutation(internal.sukiForumAgentData.claimRun, {
+      attempt: 0,
+      runDate: "2026-07-28",
+      slot: 0,
+    });
+    expect(claim.claimed).toBe(true);
+
+    const published = await t.mutation(internal.forum.publishSukiForumThread, {
+      body: [
+        "[b]Why this matters[/b]",
+        "A sourced release is more useful when the thread also gives readers a practical way to evaluate it.",
+        "",
+        "[b]What to check[/b]",
+        "[list][*]Read the original notes.[*]Verify the documented tradeoffs.[*]Share a reproducible result.[/list]",
+        "",
+        "[b]Sources and further reading[/b]",
+        "[list][*][url=https://example.com/research]Primary research[/url] — Example Research[/list]",
+      ].join("\n"),
+      candidateCount: 12,
+      categorySlug: "ai-prompts",
+      inputTokens: 900,
+      outputTokens: 500,
+      poll: {
+        question: "Which evaluation would help you most?",
+        options: ["Quality", "Latency", "Cost"],
+      },
+      prefixSlug: "guide",
+      runKey: claim.runKey,
+      sources: [
+        {
+          sourceKey: "example-primary-source",
+          sourceUrl: "https://example.com/research",
+        },
+      ],
+      title: "A practical checklist for evaluating a new prompt technique",
+    });
+    expect(published.categorySlug).toBe("ai-prompts");
+
+    const stored = await t.run(async (ctx) => {
+      const [thread, run, source, profile, poll] = await Promise.all([
+        ctx.db.get(published.threadId),
+        ctx.db
+          .query("forumAgentRuns")
+          .withIndex("by_runKey", (q) => q.eq("runKey", claim.runKey))
+          .unique(),
+        ctx.db
+          .query("forumAgentSourceUses")
+          .withIndex("by_sourceKey", (q) =>
+            q.eq("sourceKey", "example-primary-source"),
+          )
+          .unique(),
+        ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", first.agentUserId))
+          .unique(),
+        ctx.db
+          .query("forumPolls")
+          .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
+          .unique(),
+      ]);
+      return { poll, profile, run, source, thread };
+    });
+    expect(stored.thread).toMatchObject({
+      authorId: first.agentUserId,
+      categorySlug: "ai-prompts",
+      prefixSlug: "guide",
+      status: "active",
+    });
+    expect(stored.run).toMatchObject({
+      status: "published",
+      threadId: published.threadId,
+    });
+    expect(stored.source?.threadId).toBe(published.threadId);
+    expect(stored.profile).toMatchObject({
+      customTitle: "Waifu Space Pirate",
+      postCount: 1,
+      threadCount: 1,
+    });
+    expect(stored.poll).toMatchObject({
+      optionCount: 3,
+      status: "open",
+    });
+
+    const duplicateClaim = await t.mutation(
+      internal.sukiForumAgentData.claimRun,
+      {
+        attempt: 1,
+        runDate: "2026-07-28",
+        slot: 0,
+      },
+    );
+    expect(duplicateClaim).toMatchObject({
+      claimed: false,
+      reason: "published",
+    });
+
+    await t.run(async (ctx) => {
+      const agent = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+        .unique();
+      if (agent === null) {
+        throw new Error("Expected Suki's agent record");
+      }
+      await ctx.db.patch(agent._id, { enabled: false });
+    });
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const disabledClaim = await t.mutation(
+      internal.sukiForumAgentData.claimRun,
+      {
+        attempt: 0,
+        runDate: "2026-07-28",
+        slot: 1,
+      },
+    );
+    expect(disabledClaim).toMatchObject({
+      claimed: false,
+      reason: "disabled",
+    });
   });
 
   test("returns safe defaults for signed-in users and rejects guests", async () => {

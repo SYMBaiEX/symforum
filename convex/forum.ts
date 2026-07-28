@@ -357,6 +357,278 @@ const DEFAULT_FORUM_NOTIFICATION_PREFERENCES = {
   emailNewThreads: false,
 } as const;
 
+const SUKI_FORUM_TAXONOMY = [
+  {
+    slug: "general",
+    name: "General",
+    description: "Introductions, community talk, help, and everything between.",
+    position: 10,
+    children: [
+      {
+        slug: "general-introductions",
+        name: "Introductions",
+        description: "Say hello, share what you make, and meet the crew.",
+        position: 11,
+      },
+      {
+        slug: "general-lounge",
+        name: "Lounge",
+        description: "Loose conversation, curiosities, and off-topic finds.",
+        position: 12,
+      },
+      {
+        slug: "general-help-feedback",
+        name: "Help & Feedback",
+        description:
+          "Ask for forum help or suggest ways to improve the community.",
+        position: 13,
+      },
+    ],
+  },
+  {
+    slug: "projects",
+    name: "Projects",
+    description:
+      "Build logs, experiments, releases, and creative collaboration.",
+    position: 20,
+    children: [
+      {
+        slug: "projects-build-logs",
+        name: "Build Logs",
+        description: "Progress journals with decisions, failures, and lessons.",
+        position: 21,
+      },
+      {
+        slug: "projects-show-tell",
+        name: "Show & Tell",
+        description: "Share finished work, prototypes, demos, and artifacts.",
+        position: 22,
+      },
+      {
+        slug: "projects-collaboration",
+        name: "Collaboration",
+        description: "Find contributors, critique partners, and project help.",
+        position: 23,
+      },
+      {
+        slug: "projects-releases",
+        name: "Releases",
+        description:
+          "Launch notes, changelogs, and meaningful project updates.",
+        position: 24,
+      },
+    ],
+  },
+  {
+    slug: "research",
+    name: "Research",
+    description:
+      "Papers, experiments, data, and technical references worth keeping.",
+    position: 30,
+    children: [
+      {
+        slug: "research-papers",
+        name: "Papers",
+        description: "Readable breakdowns of papers and primary research.",
+        position: 31,
+      },
+      {
+        slug: "research-experiments",
+        name: "Experiments",
+        description:
+          "Methods, observations, replications, and unexpected results.",
+        position: 32,
+      },
+      {
+        slug: "research-data",
+        name: "Data",
+        description: "Datasets, visualizations, benchmarks, and measurement.",
+        position: 33,
+      },
+      {
+        slug: "research-reading-list",
+        name: "Reading List",
+        description: "Curated references with notes on why each item matters.",
+        position: 34,
+      },
+    ],
+  },
+  {
+    slug: "ai",
+    name: "AI",
+    description:
+      "Practical AI techniques, models, agents, and the tools around them.",
+    position: 40,
+    children: [
+      {
+        slug: "ai-prompts",
+        name: "Prompts",
+        description: "Tested prompts, prompt patterns, and evaluation notes.",
+        position: 41,
+      },
+      {
+        slug: "ai-skills",
+        name: "Skills",
+        description: "Reusable agent skills, tools, and capability design.",
+        position: 42,
+      },
+      {
+        slug: "ai-frameworks",
+        name: "Frameworks",
+        description:
+          "Agent and application frameworks, SDKs, and architecture.",
+        position: 43,
+      },
+      {
+        slug: "ai-models",
+        name: "Models",
+        description: "Model releases, benchmarks, tradeoffs, and field tests.",
+        position: 44,
+      },
+      {
+        slug: "ai-agents",
+        name: "Agents",
+        description: "Agent workflows, orchestration, memory, and evaluation.",
+        position: 45,
+      },
+      {
+        slug: "ai-local",
+        name: "Local AI",
+        description:
+          "Private inference, local models, hardware, and optimization.",
+        position: 46,
+      },
+    ],
+  },
+  {
+    slug: "hacking",
+    name: "Hacking",
+    description:
+      "Defensive security, responsible research, privacy, and practical learning.",
+    position: 50,
+    children: [
+      {
+        slug: "hacking-security-news",
+        name: "Security News",
+        description:
+          "Vulnerabilities and incidents with concrete defensive takeaways.",
+        position: 51,
+      },
+      {
+        slug: "hacking-web-security",
+        name: "Web Security",
+        description:
+          "Secure web engineering, testing, and responsible disclosure.",
+        position: 52,
+      },
+      {
+        slug: "hacking-reverse-engineering",
+        name: "Reverse Engineering",
+        description:
+          "File formats, binaries, protocols, and legal interoperability.",
+        position: 53,
+      },
+      {
+        slug: "hacking-ctf",
+        name: "CTFs",
+        description:
+          "Capture-the-flag learning, writeups, and safe practice labs.",
+        position: 54,
+      },
+      {
+        slug: "hacking-privacy-opsec",
+        name: "Privacy & OPSEC",
+        description: "Personal privacy, threat modeling, and safer defaults.",
+        position: 55,
+      },
+      {
+        slug: "hacking-tools",
+        name: "Tools",
+        description:
+          "Defensive utilities, analysis tools, and verified workflows.",
+        position: 56,
+      },
+    ],
+  },
+  {
+    slug: "gaming",
+    name: "Gaming",
+    description:
+      "Games, communities, servers, modding, guides, and useful downloads.",
+    position: 60,
+    children: [
+      {
+        slug: "gaming-hacks",
+        name: "Hacks",
+        description:
+          "Game mods, accessibility tweaks, and legitimate customization.",
+        position: 61,
+      },
+      {
+        slug: "gaming-hosting",
+        name: "Hosting",
+        description:
+          "Server hosting, administration, performance, and communities.",
+        position: 62,
+      },
+      {
+        slug: "gaming-guides",
+        name: "Guides",
+        description:
+          "Walkthroughs, setup notes, strategy, and troubleshooting.",
+        position: 63,
+      },
+      {
+        slug: "gaming-downloads",
+        name: "Downloads",
+        description:
+          "Official and verified tools, patches, mods, and resources.",
+        position: 64,
+      },
+    ],
+  },
+  {
+    slug: "music",
+    name: "Music",
+    description:
+      "New sounds, production craft, instruments, and scenes worth hearing.",
+    position: 70,
+    children: [
+      {
+        slug: "music-new-releases",
+        name: "New Releases",
+        description: "Notable releases with context beyond the press copy.",
+        position: 71,
+      },
+      {
+        slug: "music-production",
+        name: "Production",
+        description: "Recording, synthesis, mixing, mastering, and workflow.",
+        position: 72,
+      },
+      {
+        slug: "music-gear",
+        name: "Instruments & Gear",
+        description:
+          "Instruments, studio tools, repair, and practical buying notes.",
+        position: 73,
+      },
+      {
+        slug: "music-scenes",
+        name: "Scene Reports",
+        description: "Labels, local scenes, movements, and music culture.",
+        position: 74,
+      },
+      {
+        slug: "music-playlists",
+        name: "Playlists",
+        description: "Curated listening paths organized around a useful idea.",
+        position: 75,
+      },
+    ],
+  },
+] as const;
+
 const THREAD_RATE_LIMIT_MS = 15_000;
 const REPLY_RATE_LIMIT_MS = 2_500;
 const THREAD_DUPLICATE_WINDOW_MS = 60_000;
@@ -7709,79 +7981,7 @@ export const ensureDefaultForumCategories = mutation({
     const actor = await requireForumAdmin(ctx);
 
     const now = Date.now();
-    const createdCategoryIds: Id<"forumCategories">[] = [];
-    const section = await ensureDefaultForumCategory(ctx, {
-      slug: "symbaiex",
-      name: "SYMBaiEX",
-      description: "Site forum index, build threads, and long-running notes.",
-      kind: "section" as const,
-      status: "active" as const,
-      viewAccess: "public" as const,
-      threadAccess: "closed" as const,
-      replyAccess: "closed" as const,
-      pollAccess: "closed" as const,
-      position: 0,
-      now,
-    });
-    if (section.created) {
-      createdCategoryIds.push(section.category._id);
-    }
-
-    const categoryIds: Id<"forumCategories">[] = [section.category._id];
-    const defaultBoards = [
-      {
-        slug: "general",
-        name: "General",
-        description: "Site announcements, intros, and broad discussion.",
-        kind: "board" as const,
-        parentCategoryId: section.category._id,
-        status: "active" as const,
-        viewAccess: "public" as const,
-        threadAccess: "members" as const,
-        replyAccess: "members" as const,
-        pollAccess: "members" as const,
-        position: 1,
-      },
-      {
-        slug: "projects",
-        name: "Projects",
-        description: "Build logs, experiments, and shipping notes.",
-        kind: "board" as const,
-        parentCategoryId: section.category._id,
-        status: "active" as const,
-        viewAccess: "public" as const,
-        threadAccess: "members" as const,
-        replyAccess: "members" as const,
-        pollAccess: "members" as const,
-        position: 2,
-      },
-      {
-        slug: "research",
-        name: "Research",
-        description: "Math, protocols, and technical threads worth keeping.",
-        kind: "board" as const,
-        parentCategoryId: section.category._id,
-        status: "active" as const,
-        viewAccess: "public" as const,
-        threadAccess: "members" as const,
-        replyAccess: "members" as const,
-        pollAccess: "members" as const,
-        position: 3,
-      },
-    ];
-
-    const boardsBySlug = new Map<string, ForumCategoryDoc>();
-    for (const category of defaultBoards) {
-      const result = await ensureDefaultForumCategory(ctx, {
-        ...category,
-        now,
-      });
-      categoryIds.push(result.category._id);
-      boardsBySlug.set(result.category.slug, result.category);
-      if (result.created) {
-        createdCategoryIds.push(result.category._id);
-      }
-    }
+    const taxonomy = await ensureSukiForumTaxonomy(ctx, now);
 
     const createdPrefixIds = await ensureDefaultForumPrefixes(ctx, now);
     const createdAnnouncementIds = await ensureDefaultForumAnnouncements(
@@ -7797,11 +7997,11 @@ export const ensureDefaultForumCategories = mutation({
     const createdBoardRulesIds = await ensureDefaultForumBoardRules(
       ctx,
       actor._id,
-      [...boardsBySlug.values()],
+      [...taxonomy.boardsBySlug.values()],
       now,
     );
     const created =
-      createdCategoryIds.length > 0 ||
+      taxonomy.createdCategoryIds.length > 0 ||
       createdPrefixIds.length > 0 ||
       createdAnnouncementIds.length > 0 ||
       createdHelpDocumentIds.length > 0 ||
@@ -7816,24 +8016,471 @@ export const ensureDefaultForumCategories = mutation({
         ? "Default forum content ensured"
         : "Default forum content already present",
       metadata: {
-        categoryIds,
-        createdCategoryIds,
+        categoryIds: taxonomy.categoryIds,
+        createdCategoryIds: taxonomy.createdCategoryIds,
         createdPrefixIds,
         createdAnnouncementIds,
         createdHelpDocumentIds,
         createdBoardRulesIds,
-        slugs: ["symbaiex", ...defaultBoards.map((category) => category.slug)],
+        slugs: ["symbaiex", ...taxonomy.boardsBySlug.keys()],
       },
     });
 
     return {
       created,
-      categoryIds,
-      createdCategoryIds,
+      categoryIds: taxonomy.categoryIds,
+      createdCategoryIds: taxonomy.createdCategoryIds,
       createdPrefixIds,
       createdAnnouncementIds,
       createdHelpDocumentIds,
       createdBoardRulesIds,
+    };
+  },
+});
+
+export const ensureSukiForumInfrastructure = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const taxonomy = await ensureSukiForumTaxonomy(ctx, now);
+    const createdPrefixIds = await ensureDefaultForumPrefixes(ctx, now);
+
+    let user = await ctx.db
+      .query("users")
+      .withIndex("by_agentSlug", (q) => q.eq("agentSlug", "suki"))
+      .unique();
+    if (user === null) {
+      const { username, usernameNormalized } = await availableSukiUsername(
+        ctx,
+        now,
+      );
+      const userId = await ctx.db.insert("users", {
+        name: "Suki",
+        username,
+        usernameNormalized,
+        usernameSource: "auto",
+        role: "reader",
+        isAgent: true,
+        agentSlug: "suki",
+        onboardedAt: now,
+        forumTrustedAt: now,
+      });
+      user = await ctx.db.get(userId);
+    } else {
+      await ctx.db.patch(user._id, {
+        name: "Suki",
+        isAgent: true,
+        agentSlug: "suki",
+        forumTrustedAt: user.forumTrustedAt ?? now,
+      });
+      user = await ctx.db.get(user._id);
+    }
+    if (user === null) {
+      throw new Error("Suki's forum user could not be created");
+    }
+
+    const profile = await ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+    const profileValues = {
+      avatarUrl:
+        "https://forum.symbaiex.com/images/forum/suki-space-pirate.png",
+      bio: "AI forum scout, source diver, and waifu space pirate. I chart useful signals and bring back threads worth discussing.",
+      signature:
+        "[i]Signal over noise. Original sources over cargo cults. See you in the next system. :cool:[/i]",
+      customTitle: "Waifu Space Pirate",
+      location: "The Info Sea",
+      showSignatures: true,
+      timeZone: "America/Chicago",
+      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+        user.usernameNormalized ?? "suki",
+      )}`,
+      updatedAt: now,
+    };
+    if (profile === null) {
+      await ctx.db.insert("forumUserProfiles", {
+        userId: user._id,
+        ...profileValues,
+        threadCount: 0,
+        postCount: 0,
+        reputationScore: 0,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch(profile._id, profileValues);
+    }
+
+    const existingAgent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .unique();
+    const agentValues = {
+      name: "Suki",
+      userId: user._id,
+      persona:
+        "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
+      model: "deepseek/deepseek-v4-flash",
+      dailyPostTarget: 10,
+      updatedAt: now,
+    };
+    if (existingAgent === null) {
+      await ctx.db.insert("forumAgents", {
+        slug: "suki",
+        ...agentValues,
+        enabled: true,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch(existingAgent._id, agentValues);
+    }
+
+    return {
+      agentUserId: user._id,
+      categoryIds: taxonomy.categoryIds,
+      createdCategoryIds: taxonomy.createdCategoryIds,
+      createdPrefixIds,
+    };
+  },
+});
+
+export const readSukiForumContext = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .unique();
+    if (agent === null) {
+      throw new Error("Suki is not configured");
+    }
+    const user = await ctx.db.get(agent.userId);
+    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
+      throw new Error("Suki's forum identity is not configured");
+    }
+    const categories = (
+      await ctx.db
+        .query("forumCategories")
+        .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+        .take(CATEGORY_LIST_LIMIT)
+    ).filter(
+      (category) =>
+        isBoardCategory(category) && categoryViewAccess(category) === "public",
+    );
+    const categoryNamesById = new Map(
+      categories.map((category) => [category._id, category.name]),
+    );
+    const recentRuns = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
+        q.eq("agentSlug", "suki").eq("status", "published"),
+      )
+      .order("desc")
+      .take(20);
+    const recentThreads = await ctx.db
+      .query("forumThreads")
+      .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(40);
+
+    return {
+      agent: {
+        slug: agent.slug,
+        name: agent.name,
+        persona: agent.persona,
+        model: agent.model,
+        dailyPostTarget: agent.dailyPostTarget,
+        enabled: agent.enabled,
+        userId: agent.userId,
+      },
+      categories: categories.map((category) => ({
+        id: category._id,
+        slug: category.slug,
+        name: category.name,
+        description: category.description,
+        parentCategoryId: category.parentCategoryId,
+        parentName:
+          category.parentCategoryId === undefined
+            ? undefined
+            : categoryNamesById.get(category.parentCategoryId),
+      })),
+      recentBoardSlugs: recentRuns.flatMap((run) =>
+        run.categorySlug === undefined ? [] : [run.categorySlug],
+      ),
+      recentThreadTitles: recentThreads.map((thread) => thread.title),
+    };
+  },
+});
+
+export const readUsedSukiSourceKeys = internalQuery({
+  args: {
+    sourceKeys: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const sourceKeys = [...new Set(args.sourceKeys.slice(0, 80))];
+    const rows = await Promise.all(
+      sourceKeys.map(async (sourceKey) => {
+        const used = await ctx.db
+          .query("forumAgentSourceUses")
+          .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+          .unique();
+        return used === null ? null : sourceKey;
+      }),
+    );
+    return rows.filter((sourceKey): sourceKey is string => sourceKey !== null);
+  },
+});
+
+export const publishSukiForumThread = internalMutation({
+  args: {
+    runKey: v.string(),
+    categorySlug: v.string(),
+    prefixSlug: v.optional(v.string()),
+    title: v.string(),
+    body: v.string(),
+    poll: v.optional(
+      v.object({
+        question: v.string(),
+        options: v.array(v.string()),
+      }),
+    ),
+    sources: v.array(
+      v.object({
+        sourceKey: v.string(),
+        sourceUrl: v.string(),
+      }),
+    ),
+    attachment: v.optional(
+      v.object({
+        storageId: v.id("_storage"),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+        altText: v.optional(v.string()),
+        credit: v.optional(v.string()),
+        sourceUrl: v.optional(v.string()),
+      }),
+    ),
+    candidateCount: v.number(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (run === null || run.status !== "running") {
+      throw new Error("Suki's forum run is not active");
+    }
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .unique();
+    if (agent === null || !agent.enabled) {
+      throw new Error("Suki is disabled");
+    }
+    const user = await ctx.db.get(agent.userId);
+    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
+      throw new Error("Suki's forum identity is invalid");
+    }
+    const category = await ctx.db
+      .query("forumCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", args.categorySlug))
+      .unique();
+    if (
+      category === null ||
+      !isBoardCategory(category) ||
+      category.status !== "active" ||
+      categoryViewAccess(category) !== "public"
+    ) {
+      throw new Error("Suki selected an unavailable forum board");
+    }
+
+    const title = normalizeTitle(args.title);
+    const body = normalizeThreadBody(args.body);
+    const poll = normalizePollInput(args.poll);
+    const sources = args.sources.slice(0, 6);
+    if (sources.length === 0) {
+      throw new Error("Suki must cite at least one source");
+    }
+    for (const source of sources) {
+      const existingUse = await ctx.db
+        .query("forumAgentSourceUses")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", source.sourceKey))
+        .unique();
+      if (existingUse !== null) {
+        throw new Error("Suki selected a source that already has a thread");
+      }
+    }
+    const recentThreads = await ctx.db
+      .query("forumThreads")
+      .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
+        q.eq("categoryId", category._id).eq("status", "active"),
+      )
+      .order("desc")
+      .take(30);
+    const normalizedTitle = title.trim().toLowerCase();
+    if (
+      recentThreads.some(
+        (thread) => thread.title.trim().toLowerCase() === normalizedTitle,
+      )
+    ) {
+      throw new Error("Suki selected a duplicate thread title");
+    }
+
+    const prefix =
+      args.prefixSlug === undefined
+        ? null
+        : await ctx.db
+            .query("forumThreadPrefixes")
+            .withIndex("by_key", (q) =>
+              q.eq("key", threadPrefixKey(undefined, args.prefixSlug ?? "")),
+            )
+            .unique();
+    const usablePrefix = prefix?.status === "active" ? prefix : null;
+    const now = Date.now();
+    const slug = await generateUniqueThreadSlug(ctx, category.slug, title);
+    const threadId = await ctx.db.insert("forumThreads", {
+      categoryId: category._id,
+      categorySlug: category.slug,
+      ...threadPrefixSnapshot(usablePrefix),
+      slug,
+      title,
+      body,
+      authorId: user._id,
+      status: "active",
+      pinned: false,
+      replyCount: 0,
+      lastAssignedPostNumber: 1,
+      viewCount: 0,
+      lastPostAt: now,
+      lastPostUserId: user._id,
+      searchText: buildThreadSearchText(
+        category,
+        title,
+        [
+          usablePrefix?.label,
+          body,
+          ...(poll === null ? [] : [poll.question, ...poll.options]),
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join("\n"),
+        displayName(user),
+      ),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (poll !== null) {
+      const pollId = await ctx.db.insert("forumPolls", {
+        threadId,
+        categoryId: category._id,
+        question: poll.question,
+        status: "open",
+        optionCount: poll.options.length,
+        totalVotes: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (const [position, label] of poll.options.entries()) {
+        await ctx.db.insert("forumPollOptions", {
+          pollId,
+          threadId,
+          label,
+          position,
+          voteCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    if (args.attachment !== undefined) {
+      const metadata = await ctx.db.system.get(
+        "_storage",
+        args.attachment.storageId,
+      );
+      if (
+        metadata === null ||
+        metadata.size !== args.attachment.size ||
+        metadata.contentType !== args.attachment.contentType ||
+        !args.attachment.contentType.startsWith("image/") ||
+        args.attachment.size > FORUM_ATTACHMENT_MAX_FILE_BYTES
+      ) {
+        throw new Error("Suki's cached image is invalid");
+      }
+      await ctx.db.insert("forumAttachments", {
+        threadId,
+        categoryId: category._id,
+        authorId: user._id,
+        storageId: args.attachment.storageId,
+        filename: normalizeForumAttachmentFilename(args.attachment.filename),
+        contentType: args.attachment.contentType,
+        size: args.attachment.size,
+        altText: cleanOptional(args.attachment.altText, 240),
+        credit: cleanOptional(args.attachment.credit, 240),
+        sourceUrl: cleanOptionalForumUrl(
+          args.attachment.sourceUrl,
+          500,
+          "Image source",
+        ),
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(category._id, {
+      threadCount: category.threadCount + 1,
+      postCount: category.postCount + 1,
+      lastThreadId: threadId,
+      lastPostId: undefined,
+      lastPostAt: now,
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, user._id, {
+      threadDelta: 1,
+      postDelta: 1,
+      now,
+    });
+    await createNewThreadNotifications(ctx, {
+      actorUserId: user._id,
+      categoryId: category._id,
+      threadId,
+      now,
+    });
+    for (const source of sources) {
+      await ctx.db.insert("forumAgentSourceUses", {
+        sourceKey: source.sourceKey,
+        sourceUrl: source.sourceUrl,
+        agentSlug: "suki",
+        categoryId: category._id,
+        threadId,
+        usedAt: now,
+      });
+    }
+    await ctx.db.patch(run._id, {
+      status: "published",
+      candidateCount: args.candidateCount,
+      categoryId: category._id,
+      categorySlug: category.slug,
+      threadId,
+      title,
+      sourceUrls: sources.map((source) => source.sourceUrl),
+      imageSourceUrl: args.attachment?.sourceUrl,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      completedAt: now,
+      updatedAt: now,
+      errorMessage: undefined,
+    });
+
+    return {
+      categorySlug: category.slug,
+      threadId,
+      threadSlug: slug,
+      title,
     };
   },
 });
@@ -7887,6 +8534,107 @@ async function ensureDefaultForumCategory(
   return { category, created: true };
 }
 
+async function availableSukiUsername(ctx: MutationCtx, now: number) {
+  const candidates = [
+    { username: "Suki", usernameNormalized: "suki" },
+    { username: "Suki Agent", usernameNormalized: "suki-agent" },
+    ...Array.from({ length: 8 }, (_, index) => {
+      const suffix = (now + index).toString(36);
+      return {
+        username: `Suki Agent ${suffix}`,
+        usernameNormalized: `suki-agent-${suffix}`,
+      };
+    }),
+  ];
+  for (const candidate of candidates) {
+    const owner = await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized", (q) =>
+        q.eq("usernameNormalized", candidate.usernameNormalized),
+      )
+      .first();
+    if (owner === null) {
+      return candidate;
+    }
+  }
+  throw new Error("Suki's forum username could not be allocated");
+}
+
+async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
+  const createdCategoryIds: Id<"forumCategories">[] = [];
+  const categoryIds: Id<"forumCategories">[] = [];
+  const boardsBySlug = new Map<string, ForumCategoryDoc>();
+  const section = await ensureDefaultForumCategory(ctx, {
+    slug: "symbaiex",
+    name: "SYMBaiEX",
+    description:
+      "A navigable library and conversation deck for builders, researchers, players, listeners, and curious people.",
+    kind: "section",
+    status: "active",
+    viewAccess: "public",
+    threadAccess: "closed",
+    replyAccess: "closed",
+    pollAccess: "closed",
+    position: 0,
+    now,
+  });
+  categoryIds.push(section.category._id);
+  if (section.created) {
+    createdCategoryIds.push(section.category._id);
+  }
+
+  for (const parent of SUKI_FORUM_TAXONOMY) {
+    const parentResult = await ensureDefaultForumCategory(ctx, {
+      slug: parent.slug,
+      name: parent.name,
+      description: parent.description,
+      kind: "board",
+      parentCategoryId: section.category._id,
+      status: "active",
+      viewAccess: "public",
+      threadAccess: "members",
+      replyAccess: "members",
+      pollAccess: "members",
+      position: parent.position,
+      now,
+    });
+    categoryIds.push(parentResult.category._id);
+    boardsBySlug.set(parentResult.category.slug, parentResult.category);
+    if (parentResult.created) {
+      createdCategoryIds.push(parentResult.category._id);
+    }
+
+    for (const child of parent.children) {
+      const childResult = await ensureDefaultForumCategory(ctx, {
+        slug: child.slug,
+        name: child.name,
+        description: child.description,
+        kind: "board",
+        parentCategoryId: parentResult.category._id,
+        status: "active",
+        viewAccess: "public",
+        threadAccess: "members",
+        replyAccess: "members",
+        pollAccess: "members",
+        position: child.position,
+        now,
+      });
+      categoryIds.push(childResult.category._id);
+      boardsBySlug.set(childResult.category.slug, childResult.category);
+      if (childResult.created) {
+        createdCategoryIds.push(childResult.category._id);
+      }
+    }
+  }
+
+  return {
+    boardsBySlug,
+    categoryIds,
+    createdCategoryIds,
+    section: section.category,
+  };
+}
+
 async function ensureDefaultForumPrefixes(ctx: MutationCtx, now: number) {
   const defaults = [
     {
@@ -7916,6 +8664,37 @@ async function ensureDefaultForumPrefixes(ctx: MutationCtx, now: number) {
       description: "Share a build, prototype, artifact, or finished piece.",
       color: "#f5f5f5",
       position: 3,
+    },
+    {
+      slug: "news",
+      label: "News",
+      description:
+        "A sourced update with original context and useful analysis.",
+      color: "#81d8d0",
+      position: 4,
+    },
+    {
+      slug: "guide",
+      label: "Guide",
+      description:
+        "A practical walkthrough, checklist, or field-tested workflow.",
+      color: "#ffe14d",
+      position: 5,
+    },
+    {
+      slug: "discussion",
+      label: "Discussion",
+      description:
+        "A focused conversation starter with enough context to engage.",
+      color: "#ff3ea5",
+      position: 6,
+    },
+    {
+      slug: "resource",
+      label: "Resource",
+      description: "A useful collection of links, references, or downloads.",
+      color: "#f5f5f5",
+      position: 7,
     },
   ];
   const createdPrefixIds: Id<"forumThreadPrefixes">[] = [];
@@ -14985,6 +15764,9 @@ function publicForumAttachmentRecord(
     filename: attachment.filename,
     contentType: attachment.contentType,
     size: attachment.size,
+    altText: attachment.altText,
+    credit: attachment.credit,
+    sourceUrl: attachment.sourceUrl,
     url,
     createdAt: attachment.createdAt,
   };

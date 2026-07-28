@@ -46,6 +46,13 @@ AUTH_GOOGLE_ID=
 AUTH_GOOGLE_SECRET=
 ```
 
+Suki's forum research action needs a Vercel AI Gateway key in each Convex
+deployment. Keep it in Convex environment variables, not `.env.local`:
+
+```bash
+AI_GATEWAY_API_KEY=
+```
+
 Create Google OAuth credentials as a **Web application**. For the current
 deployments, configure:
 
@@ -70,6 +77,8 @@ Google sign-in returns to the same approved site origin that started the flow.
   starter `SYM-########` handles.
 - Comments and simple interactions for signed-in readers.
 - Internal Convex cron jobs for news, portfolio metrics, and daily newsletters.
+- Suki, an AI forum research agent that uses Vercel AI Gateway to publish up to
+  10 sourced, formatted, image-supported forum topics per local day.
 - Role-based admin dashboard at `/admin`: owners manage identities and API keys;
   administrators manage content and operations.
 
@@ -110,6 +119,9 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
 - Set `NEXT_PUBLIC_CONVEX_URL` from the Convex deployment.
 - Set `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` separately in the
   development and production Convex deployments.
+- Set `AI_GATEWAY_API_KEY` in Convex before enabling the Suki cron jobs. Suki
+  uses `deepseek/deepseek-v4-flash`; research feeds and source images are cached
+  in Convex, and every published topic records its run and source URLs.
 - Keep `npx convex dev` running locally while editing Convex functions.
 
 ## Verification

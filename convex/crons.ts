@@ -30,4 +30,33 @@ crons.interval(
   {},
 );
 
+const sukiForumPostSchedules = [
+  "5 12 * * *",
+  "35 13 * * *",
+  "5 15 * * *",
+  "35 16 * * *",
+  "5 18 * * *",
+  "35 19 * * *",
+  "5 21 * * *",
+  "35 22 * * *",
+  "5 0 * * *",
+  "5 2 * * *",
+] as const;
+
+sukiForumPostSchedules.forEach((schedule, slot) => {
+  crons.cron(
+    `Suki forum post ${slot + 1}`,
+    schedule,
+    internal.sukiForumAgent.runDailySlot,
+    { slot },
+  );
+});
+
+crons.cron(
+  "cleanup Suki caches",
+  "25 6 * * *",
+  internal.sukiForumAgentData.cleanupExpiredResearchCache,
+  {},
+);
+
 export default crons;

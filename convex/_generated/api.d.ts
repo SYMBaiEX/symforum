@@ -33,6 +33,8 @@ import type * as posts from "../posts.js";
 import type * as resendClient from "../resendClient.js";
 import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
+import type * as sukiForumAgent from "../sukiForumAgent.js";
+import type * as sukiForumAgentData from "../sukiForumAgentData.js";
 import type * as systemLogs from "../systemLogs.js";
 import type * as users from "../users.js";
 
@@ -68,6 +70,8 @@ declare const fullApi: ApiFromModules<{
   resendClient: typeof resendClient;
   siteContent: typeof siteContent;
   siteContentModel: typeof siteContentModel;
+  sukiForumAgent: typeof sukiForumAgent;
+  sukiForumAgentData: typeof sukiForumAgentData;
   systemLogs: typeof systemLogs;
   users: typeof users;
 }>;
