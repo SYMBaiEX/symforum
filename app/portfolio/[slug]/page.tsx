@@ -1,7 +1,5 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { safeExternalUrl } from "@/lib/safe-url";
 import { getPortfolioProject, getPortfolioProjects } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
@@ -60,7 +58,7 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
     <article className="page-frame page-frame-dense">
       <nav
         aria-label="Portfolio breadcrumb"
-        className="mb-4 flex items-center justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+        className="mb-4 flex items-center justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground"
       >
         <Link
           href="/portfolio"
@@ -68,7 +66,7 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
           className="focus-ring inline-flex items-center gap-2 hover:text-foreground"
         >
           <ArrowLeft aria-hidden="true" className="size-3.5" />
-          Work index
+          Portfolio
         </Link>
         <span>
           {String(projectIndex + 1).padStart(2, "0")} /{" "}
@@ -76,113 +74,71 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
         </span>
       </nav>
 
-      <header className="relative overflow-hidden border-y border-row-border">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.045] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:2.5rem_2.5rem]"
-        />
-        <div className="relative grid md:grid-cols-12">
-          <div className="flex min-h-[24rem] flex-col justify-between px-1 py-7 md:col-span-8 md:min-h-[30rem] md:px-7 md:py-10">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              <span className="inline-flex items-center gap-2">
-                <span className="h-2 w-2 bg-[var(--accent-magenta)]" />
-                Project dossier
-              </span>
-              <span>{project.type}</span>
-            </div>
-
-            <div className="pt-14">
-              <h1 className="max-w-5xl break-words text-[clamp(3.4rem,9vw,8rem)] font-bold leading-[0.8] tracking-[-0.07em]">
-                {project.name}
-              </h1>
-              <p className="mt-7 max-w-3xl text-lg leading-8 text-muted-foreground text-balance md:text-xl md:leading-9">
-                {project.summary}
-              </p>
-            </div>
-          </div>
-
-          <aside className="flex flex-col justify-between border-t border-row-border bg-background/75 p-5 backdrop-blur-sm md:col-span-4 md:border-l md:border-t-0 md:p-7">
-            <PortfolioProjectMark
-              name={project.name}
-              imageUrl={project.imageUrl}
-              imageAlt={project.imageAlt}
-              order={project.order}
-              size="hero"
-            />
-
-            <div className="mt-10">
-              <ProjectLinks project={project} />
-              <dl className="mt-7 grid grid-cols-2 gap-x-5 gap-y-6 border-t border-row-border pt-5">
-                <ProjectFact label="Role" value={project.role} />
-                <ProjectFact label="Scope" value={project.timeframe} />
-                {repoPath ? (
-                  <div className="col-span-2 min-w-0">
-                    <dt className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-                      Source
-                    </dt>
-                    <dd className="mt-2 truncate font-mono text-[10px] uppercase">
-                      {repoPath}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            </div>
-          </aside>
+      <header className="grid border-y border-row-border md:grid-cols-12">
+        <div className="py-7 md:col-span-8 md:py-9 md:pr-8">
+          <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="size-2 bg-[var(--accent-magenta)]" />
+            {project.type}
+          </p>
+          <h1 className="mt-5 max-w-4xl break-words text-5xl font-bold leading-none tracking-[-0.055em] sm:text-6xl">
+            {project.name}
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+            {project.summary}
+          </p>
+          <ProjectLinks className="mt-6" project={project} />
         </div>
+
+        <aside className="border-t border-row-border py-7 md:col-span-4 md:border-l md:border-t-0 md:py-9 md:pl-8">
+          <PortfolioProjectMark
+            name={project.name}
+            imageUrl={project.imageUrl}
+            imageAlt={project.imageAlt}
+            order={project.order}
+          />
+          <dl className="mt-6 grid grid-cols-2 gap-x-5 gap-y-5 border-t border-row-border pt-5">
+            <ProjectFact label="Role" value={project.role} />
+            <ProjectFact label="Scope" value={project.timeframe} />
+            {repoPath ? (
+              <div className="col-span-2 min-w-0">
+                <dt className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Source
+                </dt>
+                <dd className="mt-1.5 truncate font-mono text-[10px] uppercase">
+                  {repoPath}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </aside>
       </header>
 
       {project.tags.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 border-b border-row-border py-4">
-          <span className="mr-2 self-center font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-            Stack / focus
-          </span>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 border-b border-row-border py-3 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
           {project.tags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="outline"
-              className="rounded-none font-mono text-[9px] uppercase tracking-[0.08em]"
-            >
-              {tag}
-            </Badge>
+            <span key={tag}>#{tag}</span>
           ))}
         </div>
       ) : null}
 
-      <section className="pt-12 md:pt-16">
-        <div className="grid gap-4 md:grid-cols-12 md:items-end">
-          <div className="md:col-span-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Case file
-            </p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
-              From constraint to outcome.
-            </h2>
-          </div>
-          <p className="text-sm leading-6 text-muted-foreground md:col-span-5 md:col-start-8 md:text-base md:leading-7">
-            The useful story is the reasoning: what needed to change, how the
-            system was shaped, and what the work made possible.
-          </p>
-        </div>
-
-        <div className="mt-7 border-l border-t border-row-border">
-          <ProjectDetail index="01" label="Problem" value={project.problem} />
-          <ProjectDetail index="02" label="Approach" value={project.approach} />
-          <ProjectDetail index="03" label="Outcome" value={project.outcome} />
+      <section className="pt-9 md:pt-12">
+        <h2 className="mb-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          Project overview
+        </h2>
+        <div className="grid border-l border-t border-row-border md:grid-cols-3">
+          <ProjectDetail label="Problem" value={project.problem} />
+          <ProjectDetail label="Approach" value={project.approach} />
+          <ProjectDetail label="Outcome" value={project.outcome} />
         </div>
       </section>
 
       <ProjectPager previous={previousProject} next={nextProject} />
 
       {commentsEnabled ? (
-        <section className="mt-12 border-t border-row-border pt-7 md:mt-16">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Discussion
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold">Project thread</h2>
-            </div>
-          </div>
+        <section className="mt-10 border-t border-row-border pt-6">
+          <h2 className="mb-5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            Comments
+          </h2>
           <div className="max-w-3xl">
             <CommentsPanel
               entityType="portfolioProject"
@@ -210,7 +166,7 @@ function ProjectPager({
   return (
     <nav
       aria-label="Project navigation"
-      className="mt-12 grid border-l border-t border-row-border md:mt-16 md:grid-cols-2"
+      className="mt-10 grid border-l border-t border-row-border md:grid-cols-2"
     >
       {previous ? (
         <ProjectPagerLink
@@ -245,54 +201,41 @@ function ProjectPagerLink({
     <Link
       href={href}
       prefetch
-      className={`focus-ring group flex min-h-28 items-center gap-4 border-b border-r border-row-border p-5 transition-colors hover:bg-muted/40 ${
+      className={`focus-ring group flex items-center gap-3 border-b border-r border-row-border p-4 transition-colors hover:bg-muted/35 ${
         isPrevious ? "justify-start" : "justify-end text-right"
       }`}
     >
       {isPrevious ? (
         <ArrowLeft
           aria-hidden="true"
-          className="size-5 transition-transform group-hover:-translate-x-1"
+          className="size-4 transition-transform group-hover:-translate-x-0.5"
         />
       ) : null}
       <span className="min-w-0">
-        <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-          {isPrevious ? "Previous dossier" : "Next dossier"}
+        <span className="block font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+          {isPrevious ? "Previous project" : "Next project"}
         </span>
-        <span className="mt-2 block truncate text-lg font-semibold group-hover:text-primary">
+        <span className="mt-1 block truncate text-sm font-semibold group-hover:text-primary">
           {label}
         </span>
       </span>
       {!isPrevious ? (
         <ArrowRight
           aria-hidden="true"
-          className="size-5 transition-transform group-hover:translate-x-1"
+          className="size-4 transition-transform group-hover:translate-x-0.5"
         />
       ) : null}
     </Link>
   );
 }
 
-function ProjectDetail({
-  index,
-  label,
-  value,
-}: {
-  index: string;
-  label: string;
-  value: string;
-}) {
+function ProjectDetail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid border-b border-r border-row-border md:grid-cols-[8rem_minmax(0,1fr)]">
-      <div className="border-b border-row-border p-4 md:border-b-0 md:border-r md:p-5">
-        <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
-          {index}
-        </p>
-        <h3 className="mt-2 font-mono text-[11px] uppercase tracking-[0.12em]">
-          {label}
-        </h3>
-      </div>
-      <p className="max-w-4xl p-4 text-base leading-7 md:p-6 md:text-lg md:leading-8">
+    <div className="border-b border-r border-row-border p-5">
+      <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </h3>
+      <p className="mt-3 text-sm leading-6 md:text-base md:leading-7">
         {value}
       </p>
     </div>
@@ -302,15 +245,21 @@ function ProjectDetail({
 function ProjectFact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+      <dt className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </dt>
-      <dd className="mt-2 text-sm leading-6">{value}</dd>
+      <dd className="mt-1.5 text-sm leading-5">{value}</dd>
     </div>
   );
 }
 
-function ProjectLinks({ project }: { project: PortfolioProjectRecord }) {
+function ProjectLinks({
+  project,
+  className,
+}: {
+  project: PortfolioProjectRecord;
+  className?: string;
+}) {
   const links = [
     {
       href: safeExternalUrl(project.homepageUrl),
@@ -337,20 +286,18 @@ function ProjectLinks({ project }: { project: PortfolioProjectRecord }) {
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={`flex flex-wrap gap-1.5 ${className ?? ""}`}>
       {links.map(({ href, label, Icon }) => (
-        <Button
+        <a
           key={`${label}-${href}`}
-          asChild
-          size="sm"
-          variant="outline"
-          className="rounded-none"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="focus-ring inline-flex h-8 items-center gap-1.5 border border-row-border px-2.5 font-mono text-[10px] uppercase transition-colors hover:bg-muted/40 hover:text-primary"
         >
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            <Icon data-icon="inline-start" />
-            {label}
-          </a>
-        </Button>
+          <Icon aria-hidden="true" className="size-3.5" />
+          {label}
+        </a>
       ))}
     </div>
   );
