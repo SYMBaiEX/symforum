@@ -17,9 +17,10 @@ export function NewsletterSignup({
   variant?: "default" | "footer";
 }) {
   const [email, setEmail] = useState("");
-  const [result, setResult] = useState<{ text: string; isError: boolean } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    text: string;
+    isError: boolean;
+  } | null>(null);
   const [pending, setPending] = useState(false);
 
   async function subscribe(event: FormEvent<HTMLFormElement>) {
@@ -69,7 +70,7 @@ export function NewsletterSignup({
       className={cn(
         "grid gap-2",
         variant === "footer"
-          ? "grid-cols-[minmax(0,1fr)_auto]"
+          ? "relative grid-cols-[minmax(0,1fr)_auto]"
           : "sm:grid-cols-[1fr_auto]",
         className,
       )}
@@ -90,11 +91,17 @@ export function NewsletterSignup({
       <Button
         type="submit"
         size="sm"
-        className="h-9 rounded-none bg-pink-500 text-white hover:bg-pink-500/90"
+        className={cn(
+          "h-9 rounded-none bg-pink-500 text-white hover:bg-pink-500/90",
+          variant === "footer" && "w-9 px-0 sm:w-auto sm:px-2.5",
+        )}
         disabled={pending}
+        aria-label={pending ? "Sending subscription" : "Subscribe"}
       >
         <Send aria-hidden="true" />
-        {pending ? "Sending" : "Subscribe"}
+        <span className={cn(variant === "footer" && "hidden sm:inline")}>
+          {pending ? "Sending" : "Subscribe"}
+        </span>
       </Button>
       <p
         role="status"
@@ -102,7 +109,11 @@ export function NewsletterSignup({
         className={cn(
           "min-h-4 font-mono text-[10px] uppercase",
           result?.isError ? "text-destructive" : "text-muted-foreground",
-          variant === "footer" ? "col-span-2" : "sm:col-span-2",
+          variant === "footer"
+            ? result
+              ? "absolute bottom-[calc(100%+0.5rem)] left-0 z-10 max-w-full border border-row-border bg-background px-2 py-1 shadow-sm"
+              : "sr-only"
+            : "sm:col-span-2",
         )}
       >
         {result?.text ?? ""}

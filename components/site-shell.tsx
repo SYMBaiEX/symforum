@@ -90,10 +90,7 @@ export function SiteShell({
 
   if (forumShell) {
     return (
-      <ForumSiteShell
-        forumHost={forumHost}
-        primarySiteHref={primarySiteHref}
-      >
+      <ForumSiteShell forumHost={forumHost} primarySiteHref={primarySiteHref}>
         {children}
       </ForumSiteShell>
     );
@@ -139,25 +136,32 @@ export function SiteShell({
         ref={footerRef}
         className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
       >
-        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:grid-cols-12 md:px-8">
-          <div className="min-w-0 md:col-span-4">
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
+          <div className="min-w-0">
             <p className="font-mono uppercase">SYMBaiEX</p>
           </div>
-          <div className="col-span-2 md:col-span-5">
+          <div className="min-w-0">
             <NewsletterSignup source="footer" variant="footer" />
           </div>
-          <div className="flex flex-wrap items-end justify-end gap-1 md:col-span-3">
+          <div className="flex shrink-0 items-center justify-end">
             {socialItems.map(({ href, label, Icon }) => (
               <Button
                 key={href}
                 asChild
-                className="font-mono uppercase text-muted-foreground"
+                className="h-9 w-9 px-0 font-mono uppercase text-muted-foreground sm:w-auto sm:px-2.5"
                 size="sm"
                 variant="ghost"
               >
-                <Link href={href} target="_blank" rel="noopener noreferrer">
+                <Link
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                >
                   <Icon data-icon="inline-start" />
-                  {label}
+                  <span aria-hidden="true" className="hidden sm:inline">
+                    {label}
+                  </span>
                 </Link>
               </Button>
             ))}
