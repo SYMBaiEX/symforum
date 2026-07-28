@@ -17,6 +17,7 @@ import Link from "next/link";
 import {
   CSSProperties,
   ReactNode,
+  RefObject,
   Suspense,
   useEffect,
   useRef,
@@ -90,7 +91,12 @@ export function SiteShell({
 
   if (forumShell) {
     return (
-      <ForumSiteShell forumHost={forumHost} primarySiteHref={primarySiteHref}>
+      <ForumSiteShell
+        footerOffset={footerOffset}
+        footerRef={footerRef}
+        forumHost={forumHost}
+        primarySiteHref={primarySiteHref}
+      >
         {children}
       </ForumSiteShell>
     );
@@ -98,7 +104,7 @@ export function SiteShell({
 
   return (
     <div
-      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:8.75rem] [--site-header-offset:4rem] md:[--site-footer-offset:4.5rem] md:[--site-header-offset:3.75rem]"
+      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]"
       style={
         footerOffset
           ? ({
@@ -132,49 +138,21 @@ export function SiteShell({
       </Suspense>
       <RouteImagePreloader />
       <AppErrorSurface />
-      <footer
-        ref={footerRef}
-        className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
-      >
-        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
-          <div className="min-w-0">
-            <NewsletterSignup source="footer" variant="footer" />
-          </div>
-          <div className="flex shrink-0 items-center justify-end">
-            {socialItems.map(({ href, label, Icon }) => (
-              <Button
-                key={href}
-                asChild
-                className="h-9 w-9 px-0 font-mono uppercase text-muted-foreground sm:w-auto sm:px-2.5"
-                size="sm"
-                variant="ghost"
-              >
-                <Link
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={label}
-                >
-                  <Icon data-icon="inline-start" />
-                  <span aria-hidden="true" className="hidden sm:inline">
-                    {label}
-                  </span>
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div>
-      </footer>
+      <SiteFooter footerRef={footerRef} />
     </div>
   );
 }
 
 function ForumSiteShell({
   children,
+  footerOffset,
+  footerRef,
   forumHost,
   primarySiteHref,
 }: {
   children: ReactNode;
+  footerOffset: number | null;
+  footerRef: RefObject<HTMLElement | null>;
   forumHost: boolean;
   primarySiteHref: string;
 }) {
@@ -182,7 +160,16 @@ function ForumSiteShell({
 
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
-      <div className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]">
+      <div
+        className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]"
+        style={
+          footerOffset
+            ? ({
+                "--site-footer-offset": `${footerOffset}px`,
+              } as CSSProperties)
+            : undefined
+        }
+      >
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:font-mono focus:text-sm focus:uppercase focus-ring"
@@ -199,7 +186,7 @@ function ForumSiteShell({
         <main
           id="main-content"
           tabIndex={-1}
-          className="min-h-dvh pt-[var(--site-header-offset)] outline-none"
+          className="min-h-dvh pb-[var(--site-footer-offset)] pt-[var(--site-header-offset)] outline-none"
         >
           {children}
         </main>
@@ -208,30 +195,51 @@ function ForumSiteShell({
         </Suspense>
         <RouteImagePreloader />
         <AppErrorSurface />
-        <footer className="border-t border-row-border bg-background/95">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 font-mono text-[10px] uppercase text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
-            <p>SYMBaiEX Forum</p>
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              <Link
-                className="focus-ring hover:text-foreground"
-                href={primarySiteHref}
-                prefetch={primarySiteHref === "/"}
-              >
-                Main site
-              </Link>
-              <Link
-                className="focus-ring hover:text-foreground"
-                href="https://github.com/symbaiex"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                GitHub
-              </Link>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter footerRef={footerRef} />
       </div>
     </ForumShellContextProvider>
+  );
+}
+
+function SiteFooter({
+  footerRef,
+}: {
+  footerRef: RefObject<HTMLElement | null>;
+}) {
+  return (
+    <footer
+      ref={footerRef}
+      className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
+    >
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
+        <div className="min-w-0">
+          <NewsletterSignup source="footer" variant="footer" />
+        </div>
+        <div className="flex shrink-0 items-center justify-end">
+          {socialItems.map(({ href, label, Icon }) => (
+            <Button
+              key={href}
+              asChild
+              className="h-9 w-9 px-0 font-mono uppercase text-muted-foreground sm:w-auto sm:px-2.5"
+              size="sm"
+              variant="ghost"
+            >
+              <Link
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+              >
+                <Icon data-icon="inline-start" />
+                <span aria-hidden="true" className="hidden sm:inline">
+                  {label}
+                </span>
+              </Link>
+            </Button>
+          ))}
+        </div>
+      </div>
+    </footer>
   );
 }
 
