@@ -154,7 +154,7 @@ export const defaultPortfolioProjects: PortfolioProjectRecord[] = [
     tags: ["ai", "interaction", "product"],
     imageUrl: "https://avatars.githubusercontent.com/u/236725603?v=4",
     imageAlt: "PlayHyperia GitHub organization avatar",
-    homepageUrl: "https://hyperscapeai.github.io/hyperforge/",
+    homepageUrl: "https://github.com/PlayHyperia/hyperforge",
     repoUrl: "https://github.com/PlayHyperia/hyperforge",
   },
   {
