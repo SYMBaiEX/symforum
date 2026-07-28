@@ -136,10 +136,7 @@ export function SiteShell({
         ref={footerRef}
         className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
       >
-        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
-          <div className="min-w-0">
-            <p className="font-mono uppercase">SYMBaiEX</p>
-          </div>
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
           <div className="min-w-0">
             <NewsletterSignup source="footer" variant="footer" />
           </div>
