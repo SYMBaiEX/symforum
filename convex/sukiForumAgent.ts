@@ -294,8 +294,9 @@ export const runDailySlot = internalAction({
         model: gateway(context.agent.model as GatewayModelId),
         output: Output.object({ schema: topicSelectionSchema }),
         providerOptions,
+        reasoning: "none",
         temperature: 0.2,
-        maxOutputTokens: 1_200,
+        maxOutputTokens: 2_000,
         instructions: SUKI_TOPIC_SCOUT_INSTRUCTIONS,
       });
       const selectionResult = await topicScout.generate({
@@ -342,8 +343,9 @@ export const runDailySlot = internalAction({
             ],
           } satisfies GatewayProviderOptions,
         },
+        reasoning: "none",
         temperature: 0.45,
-        maxOutputTokens: 4_500,
+        maxOutputTokens: 6_500,
         instructions: SUKI_FORUM_WRITER_INSTRUCTIONS,
       });
       const draftResult = await forumWriter.generate({
