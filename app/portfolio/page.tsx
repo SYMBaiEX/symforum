@@ -1,23 +1,19 @@
 import { MarkdownContent } from "@/components/markdown-content";
-import { Button } from "@/components/ui/button";
+import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
 import {
   type GithubPortfolioMetrics,
   type GithubPortfolioProjectMetric,
 } from "@/lib/github-portfolio";
 import { getCachedGithubPortfolioMetrics } from "@/lib/portfolio-metrics";
-import {
-  isLocalImageUrl,
-  safeExternalUrl,
-  safeImageUrl,
-} from "@/lib/safe-url";
+import { safeExternalUrl } from "@/lib/safe-url";
 import { getPortfolioProjects, getSitePage } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
-import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowDownRight, ArrowUpRight, Plus } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 
-const PERSONAL_GITHUB_AVATAR_TOKEN = "/u/192078165";
 export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -36,42 +32,98 @@ export default async function PortfolioPage() {
   ]);
 
   return (
-    <>
-      <article className="page-frame page-frame-dense">
-        <section className="grid gap-7 md:grid-cols-[minmax(0,0.95fr)_minmax(20rem,0.55fr)] md:items-end">
-          <div className="max-w-3xl">
-            <h1 className="page-title">
+    <article className="page-frame page-frame-dense">
+      <header className="relative overflow-hidden border-y border-row-border">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.055] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:2.5rem_2.5rem]"
+        />
+        <div className="relative grid md:grid-cols-12">
+          <div className="flex min-h-[19rem] flex-col justify-between px-1 py-7 sm:min-h-[23rem] md:col-span-7 md:px-6 md:py-10 lg:col-span-8">
+            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="h-2 w-2 bg-[var(--accent-magenta)]" />
+              Selected systems / public work
+            </div>
+            <h1 className="mt-10 break-words text-[clamp(3.8rem,12vw,9.5rem)] font-bold leading-[0.76] tracking-[-0.075em]">
               {page?.heroHeading ?? "Portfolio"}
             </h1>
-            {page?.heroBody ? (
-              <p className="page-lede mt-4">
-                {page.heroBody}
+            <p className="mt-7 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              AI systems · open source · protocols · product engineering
+            </p>
+          </div>
+
+          <div className="flex flex-col justify-between border-t border-row-border bg-background/75 p-5 backdrop-blur-sm md:col-span-5 md:border-l md:border-t-0 md:p-7 lg:col-span-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Practice / 01
               </p>
-            ) : null}
-            <div className="mt-5">
+              <p className="mt-5 max-w-xl text-lg leading-8 text-balance md:text-xl">
+                {page?.heroBody ??
+                  "A working record of systems built, contributed to, and shipped."}
+              </p>
+            </div>
+            <a
+              href={githubMetrics.profile.profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="focus-ring mt-8 inline-flex items-center justify-between border-t border-row-border pt-4 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors hover:text-primary"
+            >
+              GitHub / {githubMetrics.profile.login}
+              <ArrowUpRight aria-hidden="true" className="size-4" />
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <GithubMetricStrip metrics={githubMetrics} />
+
+      <section className="pt-12 md:pt-16">
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              Work index
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
+              Selected systems
+            </h2>
+          </div>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            {String(projects.length).padStart(2, "0")} entries
+          </p>
+        </div>
+
+        <div className="grid border-l border-t border-row-border md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project, index) => (
+            <ProjectCard
+              featured={index === 0}
+              key={project.slug}
+              metric={metricForProject(project, githubMetrics)}
+              project={project}
+            />
+          ))}
+        </div>
+      </section>
+
+      {page?.body ? (
+        <details className="group mt-12 border-y border-row-border md:mt-16">
+          <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-4 py-5 font-mono text-[11px] uppercase tracking-[0.14em] marker:content-none">
+            Read the portfolio notes
+            <Plus
+              aria-hidden="true"
+              className="size-4 transition-transform duration-300 group-open:rotate-45"
+            />
+          </summary>
+          <div className="grid border-t border-row-border py-7 md:grid-cols-12 md:py-10">
+            <div className="md:col-span-8 md:col-start-3">
               <MarkdownContent
                 className="markdown-compact"
-                content={page?.body ?? ""}
+                content={page.body}
               />
             </div>
           </div>
-          <GithubMetricStrip metrics={githubMetrics} />
-        </section>
-
-        <section className="pt-7 md:pt-9">
-          <ProjectIndexHeader count={projects.length} />
-          <div className="grid gap-0.5">
-            {projects.map((project) => (
-              <ProjectListRow
-                key={project.slug}
-                project={project}
-                metric={metricForProject(project, githubMetrics)}
-              />
-            ))}
-          </div>
-        </section>
-      </article>
-    </>
+        </details>
+      ) : null}
+    </article>
   );
 }
 
@@ -85,17 +137,25 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
       label:
         primaryMetric === metrics.contributionActivity ? "Activity" : "Commits",
       value: formatCount(primaryMetric.value),
+      accent: "var(--accent-magenta)",
     },
-    { label: "PRs", value: formatCount(metrics.totals.authoredPrs) },
-    { label: "Repos", value: formatCount(metrics.totals.publicRepos) },
-    { label: "Followers", value: formatCount(metrics.totals.followers) },
+    {
+      label: "Authored PRs",
+      value: formatCount(metrics.totals.authoredPrs),
+      accent: "var(--accent-cyan)",
+    },
+    {
+      label: "Public repos",
+      value: formatCount(metrics.totals.publicRepos),
+      accent: "var(--accent-canary)",
+    },
+    {
+      label: "Followers",
+      value: formatCount(metrics.totals.followers),
+      accent: "currentColor",
+    },
   ];
   const updatedAtMs = Date.parse(metrics.updatedAt);
-  const isStale =
-    primaryMetric.live &&
-    !Number.isNaN(updatedAtMs) &&
-    Date.now() - updatedAtMs > 24 * 60 * 60 * 1000;
-  const detailText = isStale ? "GitHub snapshot" : primaryMetric.detail;
   const updatedLabel = Number.isNaN(updatedAtMs)
     ? null
     : new Intl.DateTimeFormat("en", {
@@ -104,140 +164,133 @@ function GithubMetricStrip({ metrics }: { metrics: GithubPortfolioMetrics }) {
       }).format(new Date(updatedAtMs));
 
   return (
-    <section className="w-full max-w-xl md:ml-auto">
-      <div className="grid grid-cols-4 gap-2 md:gap-4">
-        {metricItems.map((item) => (
-          <div key={item.label} className="min-w-0" data-portfolio-metric>
-            <div className="text-lg font-semibold leading-none sm:text-xl md:text-2xl">
-              {item.value}
-            </div>
-            <div className="mt-2 truncate font-mono text-[10px] uppercase text-muted-foreground md:text-[11px]">
-              {item.label}
-            </div>
-          </div>
-        ))}
-      </div>
-      {detailText || updatedLabel ? (
-        <p className="mt-4 max-w-md font-mono text-[10px] uppercase leading-5 text-muted-foreground md:ml-auto md:text-right">
-          {detailText}
-          {detailText && updatedLabel ? " · " : ""}
-          {updatedLabel ? `Updated ${updatedLabel}` : ""}
+    <section
+      aria-label="GitHub activity snapshot"
+      className="grid border-b border-row-border sm:grid-cols-2 md:grid-cols-[repeat(4,minmax(0,1fr))_minmax(13rem,1.35fr)]"
+    >
+      {metricItems.map((item) => (
+        <div
+          key={item.label}
+          className="relative min-w-0 border-r border-row-border px-3 py-5 md:px-4"
+        >
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-0 h-1 w-10"
+            style={{ backgroundColor: item.accent }}
+          />
+          <p className="text-2xl font-semibold leading-none tracking-tight md:text-3xl">
+            {item.value}
+          </p>
+          <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground md:text-[10px]">
+            {item.label}
+          </p>
+        </div>
+      ))}
+      <div className="col-span-2 flex min-w-0 flex-col justify-between gap-3 px-3 py-5 sm:col-span-2 md:col-span-1 md:px-4">
+        <p className="font-mono text-[9px] uppercase leading-5 tracking-[0.12em] text-muted-foreground md:text-[10px]">
+          {primaryMetric.detail}
         </p>
-      ) : null}
+        {updatedLabel ? (
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em]">
+            Snapshot / {updatedLabel}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }
 
-function ProjectIndexHeader({ count }: { count: number }) {
-  return (
-    <div className="mb-2 grid gap-2 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-[minmax(11rem,0.78fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:px-2">
-      <div className="md:hidden">Work index / {count} projects</div>
-      <div className="hidden md:block">Project</div>
-      <div className="hidden md:block">Focus</div>
-      <div className="hidden md:block md:text-right">Proof</div>
-      <div className="hidden md:block" />
-    </div>
-  );
-}
-
-function ProjectListRow({
+function ProjectCard({
   project,
   metric,
+  featured,
 }: {
   project: PortfolioProjectRecord;
   metric: GithubPortfolioProjectMetric | null;
+  featured: boolean;
 }) {
-  const imageUrl = safeImageUrl(project.imageUrl);
   const projectHref = `/portfolio/${project.slug}`;
-  const repoLabel = projectMetricLabel(project, metric);
+  const accent = projectAccent(project.order);
 
   return (
-    <article
-      className="group relative grid grid-cols-[minmax(0,1fr)_1.75rem] gap-x-2 gap-y-1 py-2 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-px before:bg-transparent hover:bg-muted/25 hover:before:bg-[var(--accent-magenta)] md:grid-cols-[minmax(11rem,0.78fr)_minmax(0,1.55fr)_minmax(11rem,0.72fr)_1.75rem] md:items-center md:gap-2 md:px-2 md:py-1.5"
-      data-portfolio-project-row
+    <Link
+      href={projectHref}
+      prefetch
+      aria-label={`Open ${project.name} project`}
+      className={cn(
+        "focus-ring group relative flex min-h-[22rem] flex-col overflow-hidden border-b border-r border-row-border bg-background/35 p-5 transition-colors duration-300 hover:bg-muted/45 md:p-6",
+        featured &&
+          "min-h-[26rem] md:col-span-2 md:grid md:grid-cols-[minmax(0,1fr)_minmax(13rem,0.48fr)] md:gap-10 lg:col-span-2",
+      )}
+      style={{ "--project-accent": accent } as CSSProperties}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <ProjectMark
-          name={project.name}
-          imageUrl={imageUrl ?? metric?.avatarUrl}
-          imageAlt={project.imageAlt ?? `${project.name} project asset`}
-          order={project.order}
-        />
-        <Link
-          href={projectHref}
-          prefetch
-          className="focus-ring inline-flex max-w-full text-[0.95rem] font-semibold leading-tight hover:text-primary md:text-base"
-        >
-          <span className="truncate">{project.name}</span>
-        </Link>
-      </div>
-      <p className="col-span-2 min-w-0 line-clamp-2 text-[0.8125rem] leading-5 text-muted-foreground md:col-auto md:line-clamp-1">
-        {project.summary}
-      </p>
-      <div className="hidden min-w-0 font-mono text-[10px] uppercase text-muted-foreground md:col-auto md:block md:text-right">
-        <p className="truncate">{project.role}</p>
-        <p className="mt-1 truncate">{repoLabel}</p>
-      </div>
-      <div className="col-start-2 row-start-1 flex items-center justify-end md:col-auto md:row-auto">
-        <Button
-          asChild
-          className="size-7 rounded-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted/40 group-hover:text-foreground"
-          size="icon"
-          variant="ghost"
-        >
-          <Link href={projectHref} prefetch aria-label={`Open ${project.name}`}>
-            <ArrowUpRight aria-hidden="true" />
-          </Link>
-        </Button>
-      </div>
-    </article>
-  );
-}
-
-function ProjectMark({
-  name,
-  imageUrl,
-  imageAlt,
-  order,
-}: {
-  name: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  order: number;
-}) {
-  if (imageUrl && !isPersonalProjectAvatar(imageUrl)) {
-    return (
-      <div className="grid size-8 shrink-0 place-items-center">
-        <Image
-          src={imageUrl}
-          alt={imageAlt ?? name}
-          width={24}
-          height={24}
-          sizes="1.5rem"
-          unoptimized={isLocalImageUrl(imageUrl)}
-          className="size-6 object-contain"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      aria-hidden="true"
-      className="relative grid size-8 shrink-0 place-items-center overflow-hidden bg-foreground font-mono text-[10px] font-semibold uppercase text-background"
-    >
-      <span className="relative z-10">{projectInitials(name)}</span>
-      <span className="absolute inset-x-0 bottom-0 h-1 bg-[var(--accent-magenta)]" />
       <span
-        className={`absolute right-0 top-0 h-full w-1 ${
-          order % 3 === 0
-            ? "bg-[var(--accent-canary)]"
-            : order % 2 === 0
-              ? "bg-[var(--accent-cyan)]"
-              : "bg-[var(--accent-magenta)]"
-        }`}
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-1 origin-left scale-x-[0.12] bg-[var(--project-accent)] transition-transform duration-500 group-hover:scale-x-100"
       />
-    </div>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-start justify-between gap-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {String(project.order).padStart(2, "0")} / {project.type}
+          </p>
+          <ArrowDownRight
+            aria-hidden="true"
+            className="size-5 shrink-0 transition-transform duration-300 group-hover:-rotate-45 group-hover:text-primary"
+          />
+        </div>
+
+        <div className="mt-auto pt-12">
+          <PortfolioProjectMark
+            name={project.name}
+            imageUrl={project.imageUrl ?? metric?.avatarUrl}
+            imageAlt={project.imageAlt}
+            order={project.order}
+          />
+          <h3
+            className={cn(
+              "mt-5 break-words text-3xl font-semibold leading-[0.92] tracking-[-0.04em] group-hover:text-primary",
+              featured && "sm:text-4xl md:text-5xl",
+            )}
+          >
+            {project.name}
+          </h3>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
+            {project.summary}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "mt-8 hidden min-w-0 flex-col justify-end border-t border-row-border pt-4 sm:flex",
+          featured && "md:mt-0 md:border-l md:border-t-0 md:pl-6 md:pt-0",
+        )}
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          Role
+        </p>
+        <p className="mt-2 text-sm leading-6">{project.role}</p>
+
+        <p className="mt-6 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          Proof
+        </p>
+        <p className="mt-2 truncate font-mono text-[10px] uppercase leading-5">
+          {projectProof(project, metric)}
+        </p>
+
+        <div className="mt-7 flex flex-wrap gap-1.5">
+          {project.tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="border border-row-border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -260,21 +313,31 @@ function metricForProject(
   );
 }
 
-function projectMetricLabel(
+function projectProof(
   project: PortfolioProjectRecord,
   metric: GithubPortfolioProjectMetric | null,
 ) {
-  const parts = metric
-    ? [
-        metric.fullName,
-        metric.language,
-        metric.prsAuthored ? `${metric.prsAuthored} PRs` : null,
-        metric.stars !== undefined ? `${formatCount(metric.stars)} stars` : null,
-        metric.forks ? `${formatCount(metric.forks)} forks` : null,
-      ]
-    : [repoPathLabel(project.repoUrl) ?? project.type];
+  if (metric?.prsAuthored) {
+    return `${formatCount(metric.prsAuthored)} authored ${
+      metric.prsAuthored === 1 ? "PR" : "PRs"
+    }`;
+  }
+  if (metric?.stars !== undefined) {
+    return `${formatCount(metric.stars)} GitHub ${
+      metric.stars === 1 ? "star" : "stars"
+    }`;
+  }
+  return repoPathLabel(project.repoUrl) ?? project.timeframe;
+}
 
-  return parts.filter(Boolean).join(" / ");
+function projectAccent(order: number) {
+  if (order % 3 === 0) {
+    return "var(--accent-canary)";
+  }
+  if (order % 2 === 0) {
+    return "var(--accent-cyan)";
+  }
+  return "var(--accent-magenta)";
 }
 
 function formatCount(value: number) {
@@ -291,19 +354,4 @@ function repoPathLabel(value: string | undefined) {
   }
 
   return new URL(safeUrl).pathname.replace(/^\//, "");
-}
-
-function isPersonalProjectAvatar(value: string) {
-  return value.includes(PERSONAL_GITHUB_AVATAR_TOKEN);
-}
-
-function projectInitials(name: string) {
-  const compact = name.replace(/[^a-zA-Z0-9]/g, "");
-  if (compact.length <= 2) {
-    return compact.toUpperCase();
-  }
-  const capitals = compact.match(/[A-Z0-9]/g)?.join("");
-  return (capitals && capitals.length >= 2 ? capitals : compact)
-    .slice(0, 2)
-    .toUpperCase();
 }
