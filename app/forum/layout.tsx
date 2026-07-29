@@ -9,5 +9,5 @@ export default function ForumLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return <div className="forum-surface">{children}</div>;
 }

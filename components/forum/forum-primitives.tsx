@@ -106,7 +106,7 @@ export function ForumStatusBox({
   return (
     <div
       className={cn(
-        "border border-row-border p-4",
+        "border border-row-border p-4 md:p-5",
         accent === "cyan" && "border-accent/70 bg-accent/10",
         accent === "canary" && "border-accent-canary/60 bg-accent-canary/10",
         accent === "magenta" && "border-primary/50 bg-primary/10",
@@ -258,7 +258,7 @@ export function ForumMetricBar({
   return (
     <dl
       className={cn(
-        "grid gap-px border border-row-border bg-row-border sm:grid-cols-3",
+        "grid grid-cols-2 gap-px border border-row-border bg-row-border sm:grid-cols-3",
         className,
       )}
     >
@@ -333,14 +333,14 @@ export function ForumChrome({
   return (
     <header
       className={cn(
-        "overflow-hidden border border-row-border bg-background",
+        "min-w-0 overflow-hidden border border-row-border bg-background",
         className,
       )}
     >
       <ForumPresenceHeartbeat pathname={pathname} />
       <ForumWelcomeStrip />
       {children ? (
-        <div className="border-t border-row-border bg-background px-3 py-3 md:px-4">
+        <div className="border-t border-row-border bg-background p-3 md:px-4">
           {children}
         </div>
       ) : null}
@@ -454,12 +454,12 @@ function ForumWelcomeStripLayout({
   );
 
   return (
-    <div className="px-4 py-3 md:px-5">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="px-4 py-4 md:px-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <p className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
           {forumWelcomeMessage(navState)}
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
           <nav
             aria-label="Forum account"
             className="flex flex-wrap items-center gap-1"
@@ -518,14 +518,15 @@ function ForumQuickSearch({ pathname }: { pathname: string | null }) {
   return (
     <form
       aria-label="Quick forum search"
-      className="grid h-7 w-full grid-cols-[minmax(8rem,1fr)_auto] sm:w-[18rem]"
+      className="grid min-h-10 w-full grid-cols-[minmax(8rem,1fr)_auto] sm:w-[19rem] lg:min-h-8"
       onSubmit={submitSearch}
     >
       <label className="sr-only" htmlFor="forum-masthead-search">
         Search forums
       </label>
       <input
-        className="focus-ring h-7 min-w-0 rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground outline-none placeholder:text-muted-foreground"
+        autoComplete="off"
+        className="focus-ring min-h-10 min-w-0 rounded-none border border-row-border bg-background px-3 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground lg:min-h-8 lg:px-2 lg:text-[10px] lg:uppercase"
         id="forum-masthead-search"
         maxLength={120}
         onChange={(event) => setQuery(event.target.value)}
@@ -533,7 +534,7 @@ function ForumQuickSearch({ pathname }: { pathname: string | null }) {
         value={query}
       />
       <Button
-        className="h-7 rounded-none border-l-0 border-row-border px-2 font-mono text-[10px] uppercase shadow-none"
+        className="min-h-10 rounded-none border-l-0 border-row-border px-3 font-mono text-[10px] uppercase shadow-none lg:min-h-8 lg:px-2"
         size="sm"
         type="submit"
         variant="outline"
@@ -556,7 +557,7 @@ function ForumMastheadLink({
   return (
     <Button
       asChild
-      className="h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground"
+      className="min-h-10 rounded-none border border-transparent px-3 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground lg:min-h-8 lg:px-2"
       size="sm"
       variant="ghost"
     >
@@ -703,13 +704,13 @@ function ForumUtilityLinks({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 md:flex-row md:items-center md:justify-between",
+        "flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between",
         className,
       )}
     >
       <nav
         aria-label="Forum tools"
-        className="flex min-w-0 flex-wrap items-center gap-1"
+        className="grid min-w-0 grid-cols-3 gap-1 md:flex md:flex-wrap md:items-center"
       >
         {items.map((item) => {
           const active =
@@ -722,7 +723,7 @@ function ForumUtilityLinks({
             <Button
               asChild
               className={cn(
-                "h-7 rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground",
+                "min-h-10 w-full rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground lg:min-h-8 lg:w-auto",
                 active &&
                   "border-foreground bg-foreground text-background hover:bg-foreground hover:text-background",
               )}
@@ -768,11 +769,11 @@ function ForumJumpSelect({
   const selectedValue = forumJumpSelectedValue(normalizedPathname, categories);
 
   return (
-    <label className="flex h-7 min-w-0 max-w-full items-center gap-1 font-mono text-[10px] uppercase md:ml-auto">
+    <label className="flex min-h-10 min-w-0 max-w-full items-center gap-2 font-mono text-[10px] uppercase md:ml-auto lg:min-h-8">
       <span className="shrink-0 text-muted-foreground">Jump</span>
       <select
         aria-label="Forum jump"
-        className="focus-ring h-7 w-[min(15rem,calc(100vw-3rem))] rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground outline-none disabled:text-muted-foreground"
+        className="focus-ring min-h-10 min-w-0 flex-1 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase text-foreground outline-none disabled:text-muted-foreground md:w-60 md:flex-none lg:min-h-8 lg:px-2 lg:text-[10px]"
         value={selectedValue}
         onChange={(event) => {
           const href = event.target.value;
@@ -976,7 +977,7 @@ export function ForumAnnouncementPanel({
           <Button
             aria-controls={FORUM_ANNOUNCEMENT_PANEL_ID}
             aria-expanded={!collapsed}
-            className="h-5 rounded-none px-0 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground"
+            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground lg:min-h-8"
             size="sm"
             type="button"
             variant="ghost"
@@ -986,7 +987,7 @@ export function ForumAnnouncementPanel({
           </Button>
           <Button
             asChild
-            className="h-5 rounded-none px-0 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground"
+            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase text-muted-foreground hover:bg-transparent hover:text-foreground lg:min-h-8"
             size="sm"
             variant="ghost"
           >
@@ -1048,7 +1049,7 @@ export function ForumUserCpShell({
                 <ForumLink
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "focus-ring whitespace-nowrap border border-row-border px-3 py-2 font-mono text-[10px] uppercase hover:text-primary lg:border-0 lg:bg-background",
+                    "focus-ring inline-flex min-h-10 items-center whitespace-nowrap border border-row-border px-3 py-2 font-mono text-[10px] uppercase hover:text-primary lg:border-0 lg:bg-background",
                     active &&
                       "border-foreground bg-foreground text-background lg:bg-foreground lg:text-background",
                   )}
@@ -1094,7 +1095,7 @@ export function ForumPaginationBar({
     <nav
       aria-label={`${label} pagination`}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 border border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground",
+        "flex flex-col gap-3 border border-row-border px-3 py-3 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
@@ -1107,10 +1108,10 @@ export function ForumPaginationBar({
           </span>
         ) : null}
       </p>
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto">
         <Button
           asChild={pagination.hasPreviousPage}
-          className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+          className="min-h-10 rounded-none px-3 font-mono text-[10px] uppercase lg:min-h-8 lg:px-2"
           disabled={!pagination.hasPreviousPage}
           size="sm"
           variant="outline"
@@ -1133,7 +1134,7 @@ export function ForumPaginationBar({
             <Button
               asChild={page !== pagination.page}
               className={cn(
-                "h-7 min-w-7 rounded-none px-2 font-mono text-[10px] uppercase",
+                "min-h-10 min-w-10 rounded-none px-2 font-mono text-[10px] uppercase lg:min-h-8 lg:min-w-8",
                 page === pagination.page && "border-primary text-primary",
               )}
               disabled={page === pagination.page}
@@ -1152,7 +1153,7 @@ export function ForumPaginationBar({
         ))}
         <Button
           asChild={pagination.hasNextPage}
-          className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+          className="min-h-10 rounded-none px-3 font-mono text-[10px] uppercase lg:min-h-8 lg:px-2"
           disabled={!pagination.hasNextPage}
           size="sm"
           variant="outline"
@@ -1168,7 +1169,7 @@ export function ForumPaginationBar({
         {pagination.totalPages > 1 ? (
           <Button
             asChild={pagination.page !== pagination.totalPages}
-            className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+            className="min-h-10 rounded-none px-3 font-mono text-[10px] uppercase lg:min-h-8 lg:px-2"
             disabled={pagination.page === pagination.totalPages}
             size="sm"
             variant="outline"
@@ -1629,7 +1630,18 @@ function ForumIndexSection({
     : "Main boards";
 
   return (
-    <section className="border border-row-border">
+    <section className="overflow-hidden border border-row-border">
+      <header className="flex flex-col gap-1 border-b border-row-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="font-mono text-[11px] uppercase text-foreground">
+          {heading}
+        </h3>
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">
+          {formatForumCount(group.boards.length)}{" "}
+          {group.boards.length === 1 ? "board" : "boards"} /{" "}
+          {formatForumCount(group.threadCount)} threads /{" "}
+          {formatForumCount(group.postCount)} posts
+        </p>
+      </header>
       {group.boards.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted-foreground">
           No boards in this section yet.
@@ -1692,7 +1704,7 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
   const statusState = categoryBoardStatusState(category);
 
   return (
-    <div className="grid gap-4 px-4 py-4 odd:bg-muted/15">
+    <article className="px-4 py-5 odd:bg-muted/15">
       <div className="min-w-0">
         <div className="flex items-start gap-2">
           <ForumStatusGlyph className="mt-1" state={statusState} />
@@ -1700,7 +1712,7 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
             <ForumLink
               href={categoryHref}
               prefetch
-              className="focus-ring text-lg font-semibold leading-tight hover:text-primary md:text-xl"
+              className="focus-ring inline-flex min-h-10 items-center text-xl font-semibold leading-tight hover:text-primary"
             >
               {getCategoryTitle(category)}
             </ForumLink>
@@ -1714,14 +1726,28 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
         ) : null}
         <ForumSubforumLinks category={category} />
       </div>
-      <ForumCell label="Threads">
-        {formatForumCount(getCategoryThreadCount(category))}
-      </ForumCell>
-      <ForumCell label="Posts">
-        {formatForumCount(getCategoryPostCount(category))}
-      </ForumCell>
-      <ForumLatestPostCell category={category} latestThread={latestThread} />
-    </div>
+      <dl className="mt-4 grid grid-cols-2 gap-px border border-row-border bg-row-border">
+        <div className="bg-background px-3 py-3">
+          <dt className="font-mono text-[10px] uppercase text-muted-foreground">
+            Threads
+          </dt>
+          <dd className="mt-1 text-base font-semibold">
+            {formatForumCount(getCategoryThreadCount(category))}
+          </dd>
+        </div>
+        <div className="bg-background px-3 py-3">
+          <dt className="font-mono text-[10px] uppercase text-muted-foreground">
+            Posts
+          </dt>
+          <dd className="mt-1 text-base font-semibold">
+            {formatForumCount(getCategoryPostCount(category))}
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-4 border-t border-row-border pt-3">
+        <ForumLatestPostCell category={category} latestThread={latestThread} />
+      </div>
+    </article>
   );
 }
 
@@ -1853,14 +1879,14 @@ function ForumSubforumLinks({ category }: { category: ForumCategoryRecord }) {
   }
 
   return (
-    <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[10px] uppercase leading-5">
-      <span className="text-muted-foreground">Subforums:</span>
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase leading-5">
+      <span className="py-2 text-muted-foreground">Subforums:</span>
       {children.map((child) => (
         <ForumLink
           key={child.slug}
           href={forumPath(child.slug)}
           prefetch
-          className="focus-ring text-primary hover:underline"
+          className="focus-ring inline-flex min-h-10 items-center text-primary underline-offset-4 hover:underline lg:min-h-0"
         >
           {getCategoryTitle(child)}
         </ForumLink>
@@ -2034,7 +2060,7 @@ export function ForumThreadTable({
                         <ForumLink
                           href={threadHref}
                           prefetch
-                          className="focus-ring block min-w-0 text-base font-semibold leading-tight hover:text-primary"
+                          className="focus-ring inline-flex min-h-10 min-w-0 items-center text-base font-semibold leading-tight hover:text-primary"
                         >
                           <ForumThreadPrefixBadge
                             className="mb-1 mr-2 inline-flex"
@@ -2085,13 +2111,25 @@ export function ForumThreadTable({
                       count={getThreadRatingCount(thread)}
                     />
                   </div>
-                  <ForumCell label="Replies">
-                    {formatForumCount(getThreadReplyCount(thread))}
-                  </ForumCell>
-                  <ForumCell label="Views">
-                    {formatForumCount(thread.viewCount)}
-                  </ForumCell>
-                  <div>
+                  <dl className="grid grid-cols-2 gap-px border border-row-border bg-row-border">
+                    <div className="bg-background px-3 py-3">
+                      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Replies
+                      </dt>
+                      <dd className="mt-1 text-base font-semibold">
+                        {formatForumCount(getThreadReplyCount(thread))}
+                      </dd>
+                    </div>
+                    <div className="bg-background px-3 py-3">
+                      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Views
+                      </dt>
+                      <dd className="mt-1 text-base font-semibold">
+                        {formatForumCount(thread.viewCount)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="border-t border-row-border pt-3">
                     <p className="font-mono text-[10px] uppercase text-muted-foreground">
                       Last post
                     </p>
@@ -2616,7 +2654,7 @@ function ForumAuthorRailShortcuts({
       {authorActions.map((action) =>
         action.kind === "forum" ? (
           <ForumLink
-            className="focus-ring bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:text-left"
+            className="focus-ring inline-flex min-h-10 items-center justify-center bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:text-left"
             href={action.href}
             key={action.label}
             prefetch
@@ -2625,7 +2663,7 @@ function ForumAuthorRailShortcuts({
           </ForumLink>
         ) : (
           <ForumLink
-            className="focus-ring bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:text-left"
+            className="focus-ring inline-flex min-h-10 items-center justify-center bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:text-left"
             href={action.href}
             key={action.label}
             prefetch
@@ -2825,23 +2863,6 @@ function forumAvatarInitials(name: string) {
     .map((part) => part[0])
     .join("");
   return (initials || cleaned.slice(0, 2)).toUpperCase();
-}
-
-function ForumCell({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <p className="font-mono text-[10px] uppercase text-muted-foreground md:hidden">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-medium md:mt-0">{children}</p>
-    </div>
-  );
 }
 
 type ForumStatusState =

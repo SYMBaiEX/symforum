@@ -1,6 +1,6 @@
 "use node";
 
-import { APICallError, Output, ToolLoopAgent } from "ai";
+import { APICallError, tool, ToolLoopAgent } from "ai";
 import {
   createGateway,
   type GatewayModelId,
@@ -292,7 +292,14 @@ export const runDailySlot = internalAction({
       const topicScout = new ToolLoopAgent({
         id: "suki-topic-scout",
         model: gateway(context.agent.model as GatewayModelId),
-        output: Output.object({ schema: topicSelectionSchema }),
+        tools: {
+          selectTopic: tool({
+            description:
+              "Submit the single forum topic and board Suki selected from the research packet.",
+            inputSchema: topicSelectionSchema,
+          }),
+        },
+        toolChoice: { type: "tool", toolName: "selectTopic" },
         providerOptions,
         reasoning: "none",
         temperature: 0.2,
@@ -309,7 +316,11 @@ export const runDailySlot = internalAction({
         }),
         abortSignal: AbortSignal.timeout(120_000),
       });
-      const selection = selectionResult.output;
+      const selectionCall = selectionResult.staticToolCalls[0];
+      if (selectionCall?.toolName !== "selectTopic") {
+        throw missingStructuredToolCallError("topic scout", selectionResult);
+      }
+      const selection = selectionCall.input;
       const category = context.categories.find(
         (candidate) => candidate.slug === selection.categorySlug,
       );
@@ -331,7 +342,14 @@ export const runDailySlot = internalAction({
       const forumWriter = new ToolLoopAgent({
         id: "suki-forum-writer",
         model: gateway(context.agent.model as GatewayModelId),
-        output: Output.object({ schema: forumDraftSchema }),
+        tools: {
+          submitForumDraft: tool({
+            description:
+              "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
+            inputSchema: forumDraftSchema,
+          }),
+        },
+        toolChoice: { type: "tool", toolName: "submitForumDraft" },
         providerOptions: {
           gateway: {
             ...providerOptions.gateway,
@@ -356,7 +374,11 @@ export const runDailySlot = internalAction({
         }),
         abortSignal: AbortSignal.timeout(180_000),
       });
-      const draft = draftResult.output;
+      const draftCall = draftResult.staticToolCalls[0];
+      if (draftCall?.toolName !== "submitForumDraft") {
+        throw missingStructuredToolCallError("forum writer", draftResult);
+      }
+      const draft = draftCall.input;
       const selectedImageCandidate =
         snapshots.find(
           (snapshot) =>
@@ -1259,6 +1281,22 @@ function hashKey(value: string) {
   return `${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0)
     .toString(16)
     .padStart(8, "0")}`;
+}
+
+function missingStructuredToolCallError(
+  stage: string,
+  result: {
+    readonly finishReason: string;
+    readonly rawFinishReason?: string;
+    readonly text: string;
+    readonly usage: { readonly outputTokens?: number };
+  },
+) {
+  return new Error(
+    `${stage} did not submit its structured tool call ` +
+      `(finish=${result.finishReason}, raw=${result.rawFinishReason ?? "unknown"}, ` +
+      `textChars=${result.text.length}, outputTokens=${result.usage.outputTokens ?? 0}).`,
+  );
 }
 
 function addOptionalNumbers(

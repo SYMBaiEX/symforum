@@ -204,6 +204,24 @@
     @apply max-w-6xl;
   }
 
+  .forum-surface {
+    @apply min-w-0 overflow-x-clip;
+  }
+
+  .forum-surface :where(img, video, iframe, pre, table) {
+    max-width: 100%;
+  }
+
+  .forum-surface
+    :where(
+      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+      select,
+      textarea
+    ) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .page-kicker {
     @apply font-mono text-[11px] uppercase text-muted-foreground;
   }
@@ -220,6 +238,31 @@
 
   .page-lede {
     @apply max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8;
+  }
+
+  @media (max-width: 767px) {
+    .forum-surface .page-frame {
+      @apply px-3 pb-8 pt-5;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .forum-surface
+      :where(
+        input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+        select,
+        textarea
+      ) {
+      font-size: 1rem;
+      min-height: 2.5rem !important;
+      touch-action: manipulation;
+    }
+
+    .forum-surface button {
+      min-width: 2.5rem !important;
+      min-height: 2.5rem !important;
+      touch-action: manipulation;
+    }
   }
 
   .signal-moth-track {

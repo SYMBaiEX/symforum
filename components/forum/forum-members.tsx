@@ -13,6 +13,7 @@ import {
   ForumLoading,
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
+import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -53,17 +54,19 @@ export function ForumMembers({ enabled }: { enabled: boolean }) {
 
 function LiveForumMembers() {
   return (
-    <div>
-      <section className="border border-row-border">
-        <div className="border-b border-row-border px-4 py-3">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Members
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold">Forum roster</h2>
-        </div>
-        <ForumMemberTable />
-      </section>
-    </div>
+    <section className="overflow-hidden border border-row-border">
+      <div className="border-b border-row-border px-4 py-4 md:px-5 md:py-5">
+        <p className="page-kicker">Community directory</p>
+        <h1 className="mt-2 text-3xl font-semibold leading-tight md:text-4xl">
+          Members
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
+          Find the people behind the threads, see who is active, and open a
+          member profile without digging through a dense roster.
+        </p>
+      </div>
+      <ForumMemberTable />
+    </section>
   );
 }
 
@@ -146,14 +149,15 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="border-b border-row-border bg-muted/10 px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_9rem] md:items-end">
-          <label className="grid gap-2">
+      <div className="border-b border-row-border bg-muted/10 px-4 py-4 md:px-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
+          <label className="grid gap-2 sm:col-span-2 lg:col-span-1">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Search members
             </span>
             <input
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
+              autoComplete="off"
+              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
                 const nextQuery = event.target.value;
                 setDraftQuery(nextQuery);
@@ -169,7 +173,7 @@ function ForumMemberTable() {
               Sort by
             </span>
             <select
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-[10px] uppercase outline-none"
+              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -190,7 +194,7 @@ function ForumMemberTable() {
               Per page
             </span>
             <select
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-[10px] uppercase outline-none"
+              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -243,15 +247,16 @@ function ForumMemberTable() {
       ) : null}
       {visibleMembers.length > 0 ? (
         <>
-          <div className="divide-y divide-row-border md:hidden">
+          <div className="divide-y divide-row-border lg:hidden">
             {visibleMembers.map((member) => (
-              <div
+              <article
                 key={member._id}
-                className="grid gap-4 px-4 py-4 odd:bg-muted/15"
+                className="px-4 py-5 odd:bg-muted/15 md:px-5"
               >
-                <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-3">
+                <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
                   <ForumAvatar
                     alt={`${member.displayName} avatar`}
+                    className="size-14"
                     name={member.displayName}
                     src={member.avatarUrl}
                   />
@@ -259,7 +264,7 @@ function ForumMemberTable() {
                     <ForumLink
                       href={forumMemberProfilePath(member.username)}
                       prefetch
-                      className="focus-ring text-lg font-semibold leading-tight hover:text-primary"
+                      className="focus-ring inline-flex min-h-10 items-center text-xl font-semibold leading-tight hover:text-primary"
                     >
                       {member.displayName}
                     </ForumLink>
@@ -278,31 +283,45 @@ function ForumMemberTable() {
                     ) : null}
                   </div>
                 </div>
-                <MemberCell label="Rank">{member.rank}</MemberCell>
-                <MemberCell label="Status">
-                  {member.isOnline ? "Online" : "Offline"}
-                  {member.isOnline && member.onlineLocation ? (
-                    <span className="mt-1 block truncate font-mono text-[10px] uppercase text-muted-foreground">
-                      {member.onlineLocation.label}
+                <dl className="mt-4 grid grid-cols-3 gap-px border border-row-border bg-row-border">
+                  <MemberMetric className="col-span-2" label="Rank">
+                    {member.rank}
+                  </MemberMetric>
+                  <MemberMetric label="Status">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className={
+                          member.isOnline
+                            ? "size-2 bg-primary"
+                            : "size-2 border border-row-border"
+                        }
+                      />
+                      {member.isOnline ? "Online" : "Offline"}
                     </span>
-                  ) : null}
-                </MemberCell>
-                <MemberCell label="Threads">
-                  {formatForumCount(member.threadCount)}
-                </MemberCell>
-                <MemberCell label="Posts">
-                  {formatForumCount(member.postCount)}
-                </MemberCell>
-                <MemberCell label="Reputation">
-                  {formatForumReputation(member.reputationScore)}
-                </MemberCell>
-                <MemberCell label="Joined">
-                  {formatForumDateTime(member.joinedAt)}
-                </MemberCell>
-              </div>
+                  </MemberMetric>
+                  <MemberMetric label="Threads">
+                    {formatForumCount(member.threadCount)}
+                  </MemberMetric>
+                  <MemberMetric label="Posts">
+                    {formatForumCount(member.postCount)}
+                  </MemberMetric>
+                  <MemberMetric label="Reputation">
+                    {formatForumReputation(member.reputationScore)}
+                  </MemberMetric>
+                  <MemberMetric className="col-span-3" label="Joined">
+                    {formatForumDateTime(member.joinedAt)}
+                    {member.isOnline && member.onlineLocation ? (
+                      <span className="mt-1 block truncate font-mono text-[10px] uppercase text-muted-foreground">
+                        Viewing {member.onlineLocation.label}
+                      </span>
+                    ) : null}
+                  </MemberMetric>
+                </dl>
+              </article>
             ))}
           </div>
-          <table className="hidden w-full table-fixed border-collapse md:table">
+          <table className="hidden w-full table-fixed border-collapse lg:table">
             <caption className="sr-only">Forum members</caption>
             <thead>
               <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
@@ -434,7 +453,7 @@ function ForumMemberTable() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-row-border px-4 py-3">
+          <div className="border-t border-row-border px-4 py-4 md:px-5">
             <ForumMemberPager
               currentPage={currentPage}
               endItem={endItem}
@@ -516,11 +535,11 @@ function ForumMemberPager({
 }) {
   const pages = visibleMemberPages(currentPage, pageCount);
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 font-mono text-[10px] uppercase text-muted-foreground">
+    <div className="mt-4 flex flex-col gap-3 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <p>
         Showing {startItem}-{endItem} of {matchedCount} matched
       </p>
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="grid grid-cols-5 gap-1 sm:flex sm:flex-wrap sm:items-center">
         <ForumMemberPagerButton
           disabled={currentPage === 1}
           onClick={() => onPageChange(1)}
@@ -575,8 +594,9 @@ function ForumMemberPagerButton({
     <button
       aria-current={ariaCurrent ? "page" : undefined}
       className={
-        "focus-ring h-7 min-w-7 border border-row-border bg-background px-2 text-foreground outline-none " +
-        "hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:border-row-border " +
+        "focus-ring min-h-10 min-w-10 border border-row-border bg-background px-2 text-foreground outline-none " +
+        "transition-colors duration-100 ease-out hover:border-primary hover:text-primary active:bg-muted/40 " +
+        "disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:border-row-border " +
         (ariaCurrent ? "border-primary text-primary " : "")
       }
       disabled={disabled}
@@ -601,19 +621,21 @@ function visibleMemberPages(currentPage: number, pageCount: number) {
     .sort((left, right) => left - right);
 }
 
-function MemberCell({
+function MemberMetric({
   children,
+  className,
   label,
 }: {
   children: ReactNode;
+  className?: string;
   label: string;
 }) {
   return (
-    <div>
-      <p className="font-mono text-[10px] uppercase text-muted-foreground md:hidden">
+    <div className={cn("min-w-0 bg-background px-3 py-3", className)}>
+      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
-      </p>
-      <p className="mt-1 text-sm font-medium md:mt-0">{children}</p>
+      </dt>
+      <dd className="mt-1 break-words text-sm font-medium">{children}</dd>
     </div>
   );
 }
