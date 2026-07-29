@@ -454,7 +454,7 @@ const SUKI_FORUM_TAXONOMY = [
     ],
   },
   {
-    slug: "news",
+    slug: "forum-news",
     name: "News",
     description:
       "Reported developments, daily briefings, and source-led analysis with a point of view.",
@@ -9361,6 +9361,7 @@ async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
   if (section.created) {
     createdCategoryIds.push(section.category._id);
   }
+  await migrateEmptyLegacyNewsBoardSlug(ctx, now);
 
   for (const parent of SUKI_FORUM_TAXONOMY) {
     const parentResult = await ensureDefaultForumCategory(ctx, {
@@ -9412,6 +9413,27 @@ async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
     createdCategoryIds,
     section: section.category,
   };
+}
+
+async function migrateEmptyLegacyNewsBoardSlug(ctx: MutationCtx, now: number) {
+  const canonical = await ctx.db
+    .query("forumCategories")
+    .withIndex("by_slug", (q) => q.eq("slug", "forum-news"))
+    .unique();
+  if (canonical !== null) {
+    return;
+  }
+  const legacy = await ctx.db
+    .query("forumCategories")
+    .withIndex("by_slug", (q) => q.eq("slug", "news"))
+    .unique();
+  if (legacy === null || legacy.threadCount !== 0 || legacy.postCount !== 0) {
+    return;
+  }
+  await ctx.db.patch(legacy._id, {
+    slug: "forum-news",
+    updatedAt: now,
+  });
 }
 
 async function ensureDefaultForumPrefixes(ctx: MutationCtx, now: number) {
