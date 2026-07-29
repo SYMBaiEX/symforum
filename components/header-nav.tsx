@@ -10,6 +10,7 @@ import {
   isHeaderRouteActive,
   resolveHeaderNavActive,
   resolveHeaderNavHref,
+  shouldUseHeaderDocumentNavigation,
 } from "@/components/header-nav-routing";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,15 +165,23 @@ function NavRow({
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
       <div className="hidden min-w-0 items-center gap-1 md:flex">
-        {navItems.map((item) => (
-          <DesktopNavLink
-            active={resolveActive(item.href)}
-            href={resolveHref(item.href)}
-            key={item.href}
-          >
-            {item.label}
-          </DesktopNavLink>
-        ))}
+        {navItems.map((item) => {
+          const href = resolveHref(item.href);
+          return (
+            <DesktopNavLink
+              active={resolveActive(item.href)}
+              documentNavigation={shouldUseHeaderDocumentNavigation({
+                forumHost,
+                href: item.href,
+                resolvedHref: href,
+              })}
+              href={href}
+              key={item.href}
+            >
+              {item.label}
+            </DesktopNavLink>
+          );
+        })}
         <span className="inline-flex w-[4.75rem] shrink-0 justify-center">
           {authPending ? (
             <span
@@ -198,6 +207,7 @@ function NavRow({
           authLabel={authLabel}
           authLinkHref={authLinkHref}
           authPending={authPending}
+          forumHost={forumHost}
           resolveActive={resolveActive}
           resolveHref={resolveHref}
         />
@@ -210,12 +220,28 @@ function NavRow({
 function DesktopNavLink({
   active,
   children,
+  documentNavigation = false,
   href,
 }: {
   active: boolean;
   children: string;
+  documentNavigation?: boolean;
   href: string;
 }) {
+  const linkContent = documentNavigation ? (
+    <a aria-current={active ? "page" : undefined} href={href}>
+      {children}
+    </a>
+  ) : (
+    <Link
+      aria-current={active ? "page" : undefined}
+      href={href}
+      prefetch={!isExternalHeaderHref(href)}
+    >
+      {children}
+    </Link>
+  );
+
   return (
     <Button
       asChild
@@ -227,13 +253,7 @@ function DesktopNavLink({
       size="sm"
       variant="ghost"
     >
-      <Link
-        aria-current={active ? "page" : undefined}
-        href={href}
-        prefetch={!isExternalHeaderHref(href)}
-      >
-        {children}
-      </Link>
+      {linkContent}
     </Button>
   );
 }
@@ -244,6 +264,7 @@ function MobileNavMenu({
   authLabel,
   authLinkHref,
   authPending,
+  forumHost,
   resolveActive,
   resolveHref,
 }: {
@@ -252,6 +273,7 @@ function MobileNavMenu({
   authLabel?: string;
   authLinkHref?: string;
   authPending: boolean;
+  forumHost: boolean;
   resolveActive: (href: string) => boolean;
   resolveHref: (href: string) => string;
 }) {
@@ -275,14 +297,22 @@ function MobileNavMenu({
           Menu
         </DropdownMenuLabel>
         <DropdownMenuGroup>
-          {navItems.map((item) => (
-            <MobileNavItem
-              active={resolveActive(item.href)}
-              href={resolveHref(item.href)}
-              key={item.href}
-              label={item.label}
-            />
-          ))}
+          {navItems.map((item) => {
+            const href = resolveHref(item.href);
+            return (
+              <MobileNavItem
+                active={resolveActive(item.href)}
+                documentNavigation={shouldUseHeaderDocumentNavigation({
+                  forumHost,
+                  href: item.href,
+                  resolvedHref: href,
+                })}
+                href={href}
+                key={item.href}
+                label={item.label}
+              />
+            );
+          })}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
@@ -311,13 +341,26 @@ function MobileNavMenu({
 
 function MobileNavItem({
   active,
+  documentNavigation = false,
   href,
   label,
 }: {
   active: boolean;
+  documentNavigation?: boolean;
   href: string;
   label: string;
 }) {
+  const content = (
+    <>
+      <span>{label}</span>
+      {active ? (
+        <span className="ml-auto font-mono text-[9px] uppercase opacity-70">
+          Current
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <DropdownMenuItem
       asChild
@@ -327,18 +370,19 @@ function MobileNavItem({
           "bg-foreground text-background focus:bg-foreground focus:text-background",
       )}
     >
-      <Link
-        aria-current={active ? "page" : undefined}
-        href={href}
-        prefetch={!isExternalHeaderHref(href)}
-      >
-        <span>{label}</span>
-        {active ? (
-          <span className="ml-auto font-mono text-[9px] uppercase opacity-70">
-            Current
-          </span>
-        ) : null}
-      </Link>
+      {documentNavigation ? (
+        <a aria-current={active ? "page" : undefined} href={href}>
+          {content}
+        </a>
+      ) : (
+        <Link
+          aria-current={active ? "page" : undefined}
+          href={href}
+          prefetch={!isExternalHeaderHref(href)}
+        >
+          {content}
+        </Link>
+      )}
     </DropdownMenuItem>
   );
 }

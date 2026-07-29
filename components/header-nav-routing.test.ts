@@ -5,6 +5,7 @@ import {
   isHeaderRouteActive,
   resolveHeaderNavActive,
   resolveHeaderNavHref,
+  shouldUseHeaderDocumentNavigation,
 } from "./header-nav-routing";
 
 const localForumLocation = {
@@ -130,5 +131,36 @@ describe("header nav routing", () => {
     expect(isHeaderRouteActive("/blogroll", "/blog")).toBe(false);
     expect(isExternalHeaderHref("https://github.com/symbaiex")).toBe(true);
     expect(isExternalHeaderHref("/forum")).toBe(false);
+  });
+
+  test("forces document navigation when leaving the forum host", () => {
+    expect(
+      shouldUseHeaderDocumentNavigation({
+        forumHost: true,
+        href: "/blog",
+        resolvedHref: "/blog",
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseHeaderDocumentNavigation({
+        forumHost: true,
+        href: "/blog",
+        resolvedHref: "https://www.symbaiex.com/blog",
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseHeaderDocumentNavigation({
+        forumHost: true,
+        href: "/forum",
+        resolvedHref: "/",
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseHeaderDocumentNavigation({
+        forumHost: false,
+        href: "/blog",
+        resolvedHref: "/blog",
+      }),
+    ).toBe(false);
   });
 });

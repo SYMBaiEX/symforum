@@ -67,3 +67,18 @@ export function isHeaderRouteActive(pathname: string, href: string) {
 export function isExternalHeaderHref(href: string) {
   return /^https?:\/\//i.test(href);
 }
+
+export function shouldUseHeaderDocumentNavigation({
+  forumHost,
+  href,
+  resolvedHref,
+}: {
+  forumHost: boolean;
+  href: string;
+  resolvedHref: string;
+}) {
+  return (
+    isExternalHeaderHref(resolvedHref) ||
+    (forumHost && shouldLeaveForumHostForHref(href))
+  );
+}
