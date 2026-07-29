@@ -187,7 +187,12 @@ function ForumIndexThreadPreview({
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Newest threads
           </p>
-          <h2 className="mt-2 text-xl font-semibold">Recent activity</h2>
+          <h2
+            className="mt-2 text-xl font-semibold"
+            id="forum-newest-threads-heading"
+          >
+            Recent activity
+          </h2>
         </div>
         <ForumLink
           className="focus-ring font-mono text-[10px] uppercase text-muted-foreground hover:text-foreground"
@@ -197,7 +202,12 @@ function ForumIndexThreadPreview({
           View new posts
         </ForumLink>
       </div>
-      <div className="mt-3 divide-y divide-row-border border-t border-row-border">
+      <div
+        aria-labelledby="forum-newest-threads-heading"
+        className="focus-ring mt-3 max-h-[min(28rem,60vh)] divide-y divide-row-border overflow-y-auto overscroll-contain border-y border-row-border pr-2 [scrollbar-gutter:stable] sm:max-h-[30rem] xl:max-h-[34rem]"
+        role="region"
+        tabIndex={0}
+      >
         {threads.map((thread) => (
           <article
             className="py-3"
