@@ -35,6 +35,7 @@ import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
 import type * as sukiForumAgent from "../sukiForumAgent.js";
 import type * as sukiForumAgentData from "../sukiForumAgentData.js";
+import type * as sukiForumReplyAgent from "../sukiForumReplyAgent.js";
 import type * as systemLogs from "../systemLogs.js";
 import type * as users from "../users.js";
 
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   siteContentModel: typeof siteContentModel;
   sukiForumAgent: typeof sukiForumAgent;
   sukiForumAgentData: typeof sukiForumAgentData;
+  sukiForumReplyAgent: typeof sukiForumReplyAgent;
   systemLogs: typeof systemLogs;
   users: typeof users;
 }>;

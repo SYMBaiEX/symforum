@@ -744,6 +744,35 @@ export default defineSchema({
       "startedAt",
     ])
     .index("by_runDate", ["runDate"]),
+  forumAgentReplyRuns: defineTable({
+    runKey: v.string(),
+    agentSlug: v.string(),
+    runDate: v.string(),
+    sourceKind: v.union(v.literal("thread"), v.literal("reply")),
+    sourcePostId: v.optional(v.id("forumPosts")),
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    authorId: v.id("users"),
+    attempt: v.number(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("replied"),
+      v.literal("ignored"),
+      v.literal("failed"),
+    ),
+    model: v.string(),
+    reason: v.optional(v.string()),
+    replyPostId: v.optional(v.id("forumPosts")),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_runKey", ["runKey"])
+    .index("by_sourcePostId", ["sourcePostId"])
+    .index("by_runDate", ["runDate"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   forumAgentResearchCache: defineTable({
     cacheKey: v.string(),
     sourceName: v.string(),

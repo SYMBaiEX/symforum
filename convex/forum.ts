@@ -641,6 +641,11 @@ const PRIVATE_MESSAGE_RATE_LIMIT_MS = 5_000;
 const PRIVATE_MESSAGE_RECIPIENT_RATE_LIMIT_MS = 60_000;
 const PRIVATE_MESSAGE_DUPLICATE_WINDOW_MS = 10 * 60 * 1_000;
 const REPUTATION_RATE_LIMIT_MS = 2_000;
+const SUKI_REPLY_DAILY_LIMIT = 12;
+const SUKI_REPLY_SCAN_LIMIT = 40;
+const SUKI_REPLY_MIN_AGE_MS = 2 * 60 * 1_000;
+const SUKI_REPLY_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
+const SUKI_REPLY_STALE_RUN_MS = 15 * 60 * 1_000;
 
 type UserDoc = Doc<"users">;
 type ForumCategoryDoc = Doc<"forumCategories">;
@@ -652,6 +657,7 @@ type ForumCalendarEventDoc = Doc<"forumCalendarEvents">;
 type ForumBoardRulesDoc = Doc<"forumBoardRules">;
 type ForumThreadDoc = Doc<"forumThreads">;
 type ForumPostDoc = Doc<"forumPosts">;
+type ForumAgentReplyRunDoc = Doc<"forumAgentReplyRuns">;
 type ForumAttachmentDoc = Doc<"forumAttachments">;
 type ForumStorageMetadata = {
   _id: Id<"_storage">;
@@ -693,6 +699,31 @@ type ForumWarningDoc = Doc<"forumWarnings">;
 type ForumPresenceDoc = Doc<"forumPresence">;
 type ForumModerationEventDoc = Doc<"forumModerationEvents">;
 type ForumThreadStatus = ForumThreadDoc["status"];
+type SukiReplySourceKind = ForumAgentReplyRunDoc["sourceKind"];
+type SukiReplyRunSource = Pick<
+  ForumAgentReplyRunDoc,
+  "authorId" | "categoryId" | "sourceKind" | "sourcePostId" | "threadId"
+>;
+type SukiReplyCandidate = {
+  sourceKind: SukiReplySourceKind;
+  sourcePostId?: Id<"forumPosts">;
+  sourcePostNumber: number;
+  sourceCreatedAt: number;
+  threadId: Id<"forumThreads">;
+  categoryId: Id<"forumCategories">;
+  authorId: Id<"users">;
+  authorName: string;
+  categoryName: string;
+  categorySlug: string;
+  threadTitle: string;
+  threadBody: string;
+  sourceBody: string;
+  recentPosts: Array<{
+    authorName: string;
+    body: string;
+    postNumber: number;
+  }>;
+};
 type ForumModerationEventType = ForumModerationEventDoc["eventType"];
 type ForumModerationEntityType = ForumModerationEventDoc["entityType"];
 type ForumCategoryKind = NonNullable<ForumCategoryDoc["kind"]>;
@@ -8230,6 +8261,503 @@ export const readUsedSukiSourceKeys = internalQuery({
     return rows.filter((sourceKey): sourceKey is string => sourceKey !== null);
   },
 });
+
+export const claimSukiForumReplyCandidate = internalMutation({
+  args: {
+    attempt: v.number(),
+    runDate: v.string(),
+    runId: v.optional(v.id("forumAgentReplyRuns")),
+  },
+  handler: async (ctx, args) => {
+    if (
+      !Number.isInteger(args.attempt) ||
+      args.attempt < 0 ||
+      args.attempt > 2 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(args.runDate)
+    ) {
+      throw new Error("Invalid Suki reply run request");
+    }
+
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .unique();
+    if (agent === null || !agent.enabled) {
+      return { claimed: false as const, reason: "disabled" };
+    }
+    const agentUser = await ctx.db.get(agent.userId);
+    if (
+      agentUser === null ||
+      agentUser.isAgent !== true ||
+      agentUser.agentSlug !== "suki"
+    ) {
+      throw new Error("Suki's forum identity is invalid");
+    }
+
+    const dailyRuns = await ctx.db
+      .query("forumAgentReplyRuns")
+      .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
+      .take(100);
+    if (
+      dailyRuns.filter((run) => run.status === "replied").length >=
+      SUKI_REPLY_DAILY_LIMIT
+    ) {
+      return { claimed: false as const, reason: "daily-limit" };
+    }
+
+    const now = Date.now();
+    if (args.runId !== undefined) {
+      const run = await ctx.db.get(args.runId);
+      if (
+        run === null ||
+        run.agentSlug !== "suki" ||
+        run.runDate !== args.runDate ||
+        run.status === "replied" ||
+        run.status === "ignored" ||
+        args.attempt <= run.attempt
+      ) {
+        return { claimed: false as const, reason: "retry-unavailable" };
+      }
+      if (
+        run.status === "running" &&
+        now - run.updatedAt < SUKI_REPLY_STALE_RUN_MS
+      ) {
+        return { claimed: false as const, reason: "already-running" };
+      }
+      const candidate = await loadSukiReplyCandidate(ctx, run, agent.userId);
+      if (candidate === null) {
+        await ctx.db.patch(run._id, {
+          status: "ignored",
+          reason: "source-unavailable",
+          completedAt: now,
+          updatedAt: now,
+        });
+        return { claimed: false as const, reason: "source-unavailable" };
+      }
+      await ctx.db.patch(run._id, {
+        attempt: args.attempt,
+        status: "running",
+        reason: undefined,
+        startedAt: now,
+        completedAt: undefined,
+        updatedAt: now,
+      });
+      return {
+        claimed: true as const,
+        runId: run._id,
+        candidate,
+      };
+    }
+
+    const [recentThreads, recentPosts] = await Promise.all([
+      ctx.db
+        .query("forumThreads")
+        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+        .order("desc")
+        .take(SUKI_REPLY_SCAN_LIMIT),
+      ctx.db
+        .query("forumPosts")
+        .withIndex("by_status_and_createdAt", (q) => q.eq("status", "active"))
+        .order("desc")
+        .take(SUKI_REPLY_SCAN_LIMIT),
+    ]);
+    const sources = [
+      ...recentThreads.map((thread) => ({
+        sourceKind: "thread" as const,
+        sourcePostId: undefined,
+        sourceId: thread._id as string,
+        sourceCreatedAt: thread.createdAt,
+        threadId: thread._id,
+        categoryId: thread.categoryId,
+        authorId: thread.authorId,
+      })),
+      ...recentPosts.map((post) => ({
+        sourceKind: "reply" as const,
+        sourcePostId: post._id,
+        sourceId: post._id as string,
+        sourceCreatedAt: post.createdAt,
+        threadId: post.threadId,
+        categoryId: post.categoryId,
+        authorId: post.authorId,
+      })),
+    ]
+      .filter(
+        (source) =>
+          now - source.sourceCreatedAt >= SUKI_REPLY_MIN_AGE_MS &&
+          now - source.sourceCreatedAt <= SUKI_REPLY_MAX_AGE_MS,
+      )
+      .sort((left, right) => right.sourceCreatedAt - left.sourceCreatedAt);
+
+    for (const source of sources) {
+      const runKey = `suki-reply:${source.sourceKind}:${source.sourceId}`;
+      const existing = await ctx.db
+        .query("forumAgentReplyRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique();
+      if (existing !== null) {
+        continue;
+      }
+      const provisionalRun: SukiReplyRunSource = {
+        sourceKind: source.sourceKind,
+        sourcePostId: source.sourcePostId,
+        threadId: source.threadId,
+        categoryId: source.categoryId,
+        authorId: source.authorId,
+      };
+      const candidate = await loadSukiReplyCandidate(
+        ctx,
+        provisionalRun,
+        agent.userId,
+      );
+      if (candidate === null) {
+        continue;
+      }
+      const runId = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey,
+        agentSlug: "suki",
+        runDate: args.runDate,
+        sourceKind: source.sourceKind,
+        sourcePostId: source.sourcePostId,
+        threadId: source.threadId,
+        categoryId: source.categoryId,
+        authorId: source.authorId,
+        attempt: args.attempt,
+        status: "running",
+        model: agent.model,
+        startedAt: now,
+        updatedAt: now,
+      });
+      return { claimed: true as const, runId, candidate };
+    }
+
+    return { claimed: false as const, reason: "no-candidate" };
+  },
+});
+
+export const markSukiForumReplyIgnored = internalMutation({
+  args: {
+    runId: v.id("forumAgentReplyRuns"),
+    reason: v.string(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
+      return { updated: false };
+    }
+    const now = Date.now();
+    await ctx.db.patch(run._id, {
+      status: "ignored",
+      reason: compactForumText(args.reason, 160),
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      completedAt: now,
+      updatedAt: now,
+    });
+    return { updated: true };
+  },
+});
+
+export const markSukiForumReplyFailed = internalMutation({
+  args: {
+    runId: v.id("forumAgentReplyRuns"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
+      return { updated: false };
+    }
+    const now = Date.now();
+    await ctx.db.patch(run._id, {
+      status: "failed",
+      reason: compactForumText(args.reason, 160),
+      completedAt: now,
+      updatedAt: now,
+    });
+    return { updated: true };
+  },
+});
+
+export const publishSukiForumReply = internalMutation({
+  args: {
+    runId: v.id("forumAgentReplyRuns"),
+    body: v.string(),
+    reason: v.string(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
+      throw new Error("Suki's reply run is not active");
+    }
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .unique();
+    if (agent === null || !agent.enabled) {
+      throw new Error("Suki is disabled");
+    }
+    const user = await ctx.db.get(agent.userId);
+    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
+      throw new Error("Suki's forum identity is invalid");
+    }
+    const candidate = await loadSukiReplyCandidate(ctx, run, user._id);
+    const now = Date.now();
+    if (candidate === null) {
+      await ctx.db.patch(run._id, {
+        status: "ignored",
+        reason: "source-unavailable",
+        completedAt: now,
+        updatedAt: now,
+      });
+      return { status: "ignored" as const, reason: "source-unavailable" };
+    }
+    const thread = await ctx.db.get(candidate.threadId);
+    const category = await ctx.db.get(candidate.categoryId);
+    if (
+      thread === null ||
+      thread.status !== "active" ||
+      category === null ||
+      category.status !== "active" ||
+      categoryViewAccess(category) !== "public"
+    ) {
+      await ctx.db.patch(run._id, {
+        status: "ignored",
+        reason: "thread-unavailable",
+        completedAt: now,
+        updatedAt: now,
+      });
+      return { status: "ignored" as const, reason: "thread-unavailable" };
+    }
+
+    const body = normalizeReplyBody(args.body);
+    const postNumber = await nextPostNumberForThread(ctx, thread);
+    const postId = await ctx.db.insert("forumPosts", {
+      threadId: thread._id,
+      categoryId: category._id,
+      authorId: user._id,
+      body,
+      postNumber,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(thread._id, {
+      replyCount: thread.replyCount + 1,
+      lastAssignedPostNumber: postNumber,
+      lastPostId: postId,
+      lastPostAt: now,
+      lastPostUserId: user._id,
+      updatedAt: now,
+    });
+    await ctx.db.patch(category._id, {
+      postCount: category.postCount + 1,
+      lastThreadId: thread._id,
+      lastPostId: postId,
+      lastPostAt: now,
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, user._id, {
+      postDelta: 1,
+      now,
+    });
+    await ensureThreadParticipantSubscription(ctx, {
+      userId: user._id,
+      threadId: thread._id,
+      categoryId: category._id,
+      now,
+    });
+    await createReplyNotifications(ctx, {
+      actorUserId: user._id,
+      categoryId: category._id,
+      postId,
+      threadId: thread._id,
+      now,
+    });
+    await ctx.db.patch(run._id, {
+      status: "replied",
+      reason: compactForumText(args.reason, 160),
+      replyPostId: postId,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      completedAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      status: "replied" as const,
+      categorySlug: category.slug,
+      threadSlug: thread.slug,
+      postId,
+      postNumber,
+      postPage: pageForPostNumber(postNumber, POST_PAGE_SIZE),
+    };
+  },
+});
+
+async function loadSukiReplyCandidate(
+  ctx: MutationCtx,
+  source: SukiReplyRunSource,
+  sukiUserId: Id<"users">,
+): Promise<SukiReplyCandidate | null> {
+  const thread = await ctx.db.get(source.threadId);
+  if (
+    thread === null ||
+    thread.status !== "active" ||
+    thread.categoryId !== source.categoryId
+  ) {
+    return null;
+  }
+  const category = await ctx.db.get(source.categoryId);
+  const sukiUser = await ctx.db.get(sukiUserId);
+  if (
+    category === null ||
+    category.status !== "active" ||
+    !isBoardCategory(category) ||
+    categoryViewAccess(category) !== "public" ||
+    !(await canViewCategoryWithAncestors(ctx, null, category)) ||
+    sukiUser === null ||
+    !canReplyInCategory(sukiUser, category, false)
+  ) {
+    return null;
+  }
+
+  let sourceBody: string;
+  let sourceCreatedAt: number;
+  let sourcePostNumber: number;
+  if (source.sourceKind === "thread") {
+    if (
+      source.sourcePostId !== undefined ||
+      thread.authorId !== source.authorId
+    ) {
+      return null;
+    }
+    sourceBody = thread.body;
+    sourceCreatedAt = thread.createdAt;
+    sourcePostNumber = 1;
+  } else {
+    if (source.sourcePostId === undefined) {
+      return null;
+    }
+    const post = await ctx.db.get(source.sourcePostId);
+    if (
+      post === null ||
+      post.status !== "active" ||
+      post.threadId !== thread._id ||
+      post.categoryId !== category._id ||
+      post.authorId !== source.authorId
+    ) {
+      return null;
+    }
+    sourceBody = post.body;
+    sourceCreatedAt = post.createdAt;
+    sourcePostNumber = post.postNumber ?? 2;
+  }
+
+  const author = await ctx.db.get(source.authorId);
+  if (
+    author === null ||
+    author._id === sukiUserId ||
+    author.isAgent === true ||
+    !isSukiReplyWorthReviewing(sourceBody)
+  ) {
+    return null;
+  }
+
+  const recentPosts = await ctx.db
+    .query("forumPosts")
+    .withIndex("by_threadId_and_status_and_createdAt", (q) =>
+      q.eq("threadId", thread._id).eq("status", "active"),
+    )
+    .order("desc")
+    .take(12);
+  if (
+    recentPosts.some(
+      (post) =>
+        post.authorId === sukiUserId && post.createdAt > sourceCreatedAt,
+    )
+  ) {
+    return null;
+  }
+  const contextualPosts = recentPosts
+    .filter(
+      (post) =>
+        source.sourceKind === "thread" || post.createdAt <= sourceCreatedAt,
+    )
+    .slice(0, 6)
+    .reverse();
+  const contextualAuthors = await Promise.all(
+    contextualPosts.map((post) => ctx.db.get(post.authorId)),
+  );
+
+  return {
+    sourceKind: source.sourceKind,
+    sourcePostId: source.sourcePostId,
+    sourcePostNumber,
+    sourceCreatedAt,
+    threadId: thread._id,
+    categoryId: category._id,
+    authorId: author._id,
+    authorName: displayName(author),
+    categoryName: category.name,
+    categorySlug: category.slug,
+    threadTitle: thread.title,
+    threadBody: compactForumText(thread.body, 4_000),
+    sourceBody: compactForumText(sourceBody, 3_000),
+    recentPosts: contextualPosts.map((post, index) => ({
+      authorName: displayName(contextualAuthors[index]),
+      body: compactForumText(post.body, 1_500),
+      postNumber: post.postNumber ?? 2,
+    })),
+  };
+}
+
+export function isSukiReplyWorthReviewing(body: string) {
+  const text = body
+    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length < 18 || /(.)\1{7,}/.test(text)) {
+    return false;
+  }
+  if (
+    /^(?:thanks?|thank you|cool|nice|great|awesome|lol|lmao|same|agreed|following|bump|first|ok(?:ay)?|yes|no)[.!?\s]*$/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(?:buy followers?|casino|crypto giveaway|dm me|guest post|promo code|seo services?|telegram\s*@|whatsapp|work from home)\b/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  const links = text.match(/https?:\/\/\S+/gi) ?? [];
+  if (links.length > 2) {
+    return false;
+  }
+  const words =
+    text.replace(/https?:\/\/\S+/gi, " ").match(/[a-z0-9][a-z0-9'_-]*/gi) ?? [];
+  if (links.length > 0 && words.length < 8) {
+    return false;
+  }
+  if (text.includes("?")) {
+    return words.length >= 4;
+  }
+  return text.length >= 45 && words.length >= 7;
+}
+
+function compactForumText(value: string, maximumLength: number) {
+  const normalized = value.replace(/\u0000/g, "").trim();
+  return normalized.length <= maximumLength
+    ? normalized
+    : `${normalized.slice(0, maximumLength - 1).trimEnd()}…`;
+}
 
 export const publishSukiForumThread = internalMutation({
   args: {

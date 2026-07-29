@@ -52,6 +52,13 @@ sukiForumPostSchedules.forEach((schedule, slot) => {
   );
 });
 
+crons.interval(
+  "Suki relevant forum replies",
+  { minutes: 10 },
+  internal.sukiForumReplyAgent.runReplySweep,
+  {},
+);
+
 crons.cron(
   "cleanup Suki caches",
   "25 6 * * *",

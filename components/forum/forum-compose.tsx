@@ -14,14 +14,20 @@ import { useAuthToken } from "@convex-dev/auth/react";
 import {
   Bold,
   Code2,
+  EyeOff,
+  Heading2,
   ImageIcon,
+  Info,
   Italic,
   LinkIcon,
   List,
+  ListOrdered,
+  Minus,
   Paperclip,
   Quote,
   Smile,
   Strikethrough,
+  Table2,
   Underline,
   Upload,
   X,
@@ -86,6 +92,7 @@ export function ForumCompose({
   onSubmit: () => void | Promise<void>;
   onTitleChange?: (value: string) => void;
 }) {
+  const bodyInputId = useId();
   const titleEnabled =
     typeof title === "string" && typeof onTitleChange === "function";
   function appendMarkup(open: string, close: string, sample: string) {
@@ -115,11 +122,24 @@ export function ForumCompose({
           />
         </label>
       ) : null}
-      <label className={`block ${titleEnabled ? "mt-4" : ""}`}>
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+      <div className={`block ${titleEnabled ? "mt-4" : ""}`}>
+        <label
+          className="font-mono text-[10px] uppercase text-muted-foreground"
+          htmlFor={bodyInputId}
+        >
           {bodyLabel}
-        </span>
-        <div className="mt-2 flex flex-wrap gap-2">
+        </label>
+        <div
+          aria-label="Forum formatting toolbar"
+          className="mt-2 flex flex-wrap gap-2"
+          role="toolbar"
+        >
+          <ToolbarButton
+            ariaLabel="Insert section heading"
+            disabled={disabled}
+            label={<Heading2 className="size-3.5" />}
+            onClick={() => appendMarkup("[h2]", "[/h2]", "Section heading")}
+          />
           <ToolbarButton
             ariaLabel="Insert bold markup"
             disabled={disabled}
@@ -187,6 +207,56 @@ export function ForumCompose({
             }
           />
           <ToolbarButton
+            ariaLabel="Insert numbered list markup"
+            disabled={disabled}
+            label={<ListOrdered className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[list=1]\n",
+                "\n[/list]",
+                "[*] First step\n[*] Second step",
+              )
+            }
+          />
+          <ToolbarButton
+            ariaLabel="Insert note markup"
+            disabled={disabled}
+            label={<Info className="size-3.5" />}
+            onClick={() =>
+              appendMarkup("[note]\n", "\n[/note]", "Useful context")
+            }
+          />
+          <ToolbarButton
+            ariaLabel="Insert spoiler markup"
+            disabled={disabled}
+            label={<EyeOff className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[spoiler=Show details]\n",
+                "\n[/spoiler]",
+                "Hidden details",
+              )
+            }
+          />
+          <ToolbarButton
+            ariaLabel="Insert comparison table markup"
+            disabled={disabled}
+            label={<Table2 className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[table]\n",
+                "\n[/table]",
+                "[tr][th]Option[/th][th]Notes[/th][/tr]\n[tr][td]A[/td][td]Details[/td][/tr]",
+              )
+            }
+          />
+          <ToolbarButton
+            ariaLabel="Insert horizontal rule"
+            disabled={disabled}
+            label={<Minus className="size-3.5" />}
+            onClick={() => appendMarkup("", "", "[hr]")}
+          />
+          <ToolbarButton
             ariaLabel="Insert smilie"
             disabled={disabled}
             label={<Smile className="size-3.5" />}
@@ -195,6 +265,7 @@ export function ForumCompose({
         </div>
         <Textarea
           ref={bodyTextareaRef}
+          id={bodyInputId}
           aria-describedby={bodyAriaDescribedBy}
           aria-invalid={bodyAriaInvalid}
           disabled={disabled}
@@ -205,7 +276,21 @@ export function ForumCompose({
           rows={bodyRows}
           className="mt-2 rounded-none border-row-border"
         />
-      </label>
+        <details className="mt-2 border border-row-border bg-muted/15">
+          <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground marker:content-none">
+            Formatting help
+            <span aria-hidden="true" className="text-primary">
+              +
+            </span>
+          </summary>
+          <p className="border-t border-row-border px-3 py-3 text-xs leading-6 text-muted-foreground">
+            Use headings, bold, italic, quotes, code, links, images, bullet or
+            numbered lists, notes, warnings, spoilers, tables, keyboard keys,
+            highlights, and horizontal rules. Preview before posting to check
+            the final layout.
+          </p>
+        </details>
+      </div>
       {children ? <div className="mt-4">{children}</div> : null}
       {note ? (
         <p className="mt-3 text-xs leading-6 text-muted-foreground">{note}</p>

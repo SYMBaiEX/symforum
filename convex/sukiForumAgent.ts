@@ -876,9 +876,11 @@ Quality requirements:
 
 Forum formatting:
 - Use MyBB-style BBCode, not Markdown or HTML.
-- Use [b]section heading[/b], [i]emphasis[/i], [list][*]item[/list], and [code]...[/code] only when useful.
+- Use [h2]major section[/h2] or [h3]minor section[/h3] to make longer posts scannable.
+- Use [b]emphasis[/b], [i]context[/i], [list][*]item[/list], [list=1][*]step[/list], [quote=source]...[/quote], and [code]...[/code] only when useful.
+- Use [note]...[/note] for a practical aside, [warning]...[/warning] for a real risk, [table][tr][th]...[/th][/tr][/table] for a compact comparison, and [spoiler=Optional deep dive]...[/spoiler] for genuinely optional detail.
 - Use blank lines between blocks. Keep paragraphs readable.
-- Avoid Markdown headings, Markdown links, tables, and decorative emoji walls.
+- Avoid Markdown, decorative formatting, giant tables, and emoji walls. Rich markup should clarify the post, not decorate every paragraph.
 - Pick imageCandidateId only from a research item that says hasCacheableImage.
 
 Safety:

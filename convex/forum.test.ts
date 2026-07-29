@@ -1022,6 +1022,138 @@ describe("forum notification preferences", () => {
     });
   });
 
+  test("Suki claims substantive human posts once and publishes a normal forum reply", async () => {
+    const t = setup();
+    const infrastructure = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    const seeded = await t.run(async (ctx) => {
+      const category = await ctx.db
+        .query("forumCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", "ai-prompts"))
+        .unique();
+      if (category === null) {
+        throw new Error("Expected the AI prompts board");
+      }
+      const now = Date.now() - 3 * 60 * 1_000;
+      const authorId = await ctx.db.insert("users", {
+        name: "Curious Human",
+        username: "curioushuman",
+        usernameNormalized: "curioushuman",
+        forumTrustedAt: now,
+      });
+      const threadId = await insertThread(ctx, {
+        categoryId: category._id,
+        categorySlug: category.slug,
+        slug: "debugging-a-repeatable-prompt",
+        title: "Debugging a repeatable prompt",
+        body: "My prompt works in the first run, but why does the structured result drift after the conversation grows?",
+        authorId,
+        now,
+      });
+      await ctx.db.patch(threadId, {
+        replyCount: 0,
+        lastAssignedPostNumber: 1,
+      });
+      return { authorId, categoryId: category._id, threadId };
+    });
+
+    const claim = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        attempt: 0,
+        runDate: "2026-07-28",
+      },
+    );
+    if (!claim.claimed) {
+      throw new Error(`Expected a candidate, received ${claim.reason}`);
+    }
+    expect(claim.candidate).toMatchObject({
+      authorName: "curioushuman",
+      sourceKind: "thread",
+      threadId: seeded.threadId,
+    });
+
+    const published = await t.mutation(internal.forum.publishSukiForumReply, {
+      runId: claim.runId,
+      reason: "useful-technical-followup",
+      body: `[b]Start with the changing input[/b]
+
+[list]
+[*]Log the complete prompt at each turn.
+[*]Compare the schema and context window before changing the model.
+[/list]`,
+      inputTokens: 240,
+      outputTokens: 90,
+    });
+    expect(published).toMatchObject({
+      status: "replied",
+      postNumber: 2,
+    });
+
+    const stored = await t.run(async (ctx) => {
+      const [thread, category, run, profile] = await Promise.all([
+        ctx.db.get(seeded.threadId),
+        ctx.db.get(seeded.categoryId),
+        ctx.db.get(claim.runId),
+        ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) =>
+            q.eq("userId", infrastructure.agentUserId),
+          )
+          .unique(),
+      ]);
+      const posts = await ctx.db
+        .query("forumPosts")
+        .withIndex("by_threadId_and_status_and_postNumber", (q) =>
+          q.eq("threadId", seeded.threadId).eq("status", "active"),
+        )
+        .collect();
+      return { category, posts, profile, run, thread };
+    });
+    expect(stored.thread).toMatchObject({
+      lastPostUserId: infrastructure.agentUserId,
+      replyCount: 1,
+    });
+    expect(stored.category?.postCount).toBe(1);
+    expect(stored.posts).toEqual([
+      expect.objectContaining({
+        authorId: infrastructure.agentUserId,
+        postNumber: 2,
+      }),
+    ]);
+    expect(stored.profile?.postCount).toBe(1);
+    expect(stored.run).toMatchObject({
+      replyPostId: stored.posts[0]?._id,
+      status: "replied",
+    });
+
+    await t.run(async (ctx) => {
+      const now = Date.now() - 3 * 60 * 1_000;
+      await insertThread(ctx, {
+        categoryId: seeded.categoryId,
+        categorySlug: "ai-prompts",
+        slug: "definitely-not-spam",
+        title: "Definitely not spam",
+        body: "Crypto giveaway! DM me on Telegram @signal for a promo code.",
+        authorId: seeded.authorId,
+        now,
+      });
+    });
+    const afterSpam = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        attempt: 0,
+        runDate: "2026-07-28",
+      },
+    );
+    expect(afterSpam).toMatchObject({
+      claimed: false,
+      reason: "no-candidate",
+    });
+  });
+
   test("returns safe defaults for signed-in users and rejects guests", async () => {
     const t = setup();
     const seed = await seedForum(t);

@@ -1,7 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
+import { safeImageUrl } from "@/lib/safe-url";
+import { ForumBbcodeBody } from "@/components/forum/forum-bbcode";
 import { cn } from "@/lib/utils";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Star } from "lucide-react";
@@ -52,16 +53,6 @@ import {
 } from "@/components/forum/forum-refs";
 
 const FORUM_PRESENCE_HEARTBEAT_MS = 120_000;
-const FORUM_SMILIES = new Map([
-  [":)", ":)"],
-  [":D", ":D"],
-  [";)", ";)"],
-  [":P", ":P"],
-  [":(", ":("],
-  [":o", ":o"],
-  [":cool:", "cool"],
-  [":heart:", "<3"],
-]);
 const FORUM_JUMP_PLACEHOLDER_VALUE = "__forum_jump__";
 const FORUM_ANNOUNCEMENT_COLLAPSE_KEY =
   "symbaiex:forum:announcement-collapse";
@@ -1195,12 +1186,7 @@ export function ForumBody({
   body: string;
   className?: string;
 }) {
-  const blocks = body
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (blocks.length === 0) {
+  if (body.trim().length === 0) {
     return (
       <p className={cn("text-sm leading-7 text-muted-foreground", className)}>
         No message body yet.
@@ -1210,9 +1196,7 @@ export function ForumBody({
 
   return (
     <div className={cn("space-y-4 text-sm leading-7 md:text-base", className)}>
-      {blocks.map((block, index) => (
-        <ForumBodyBlock key={`${index}-${block.slice(0, 24)}`} block={block} />
-      ))}
+      <ForumBbcodeBody body={body} />
     </div>
   );
 }
@@ -1227,171 +1211,6 @@ function visiblePages(currentPage: number, totalPages: number) {
     pages.add(page);
   }
   return [...pages].sort((left, right) => left - right);
-}
-
-function ForumBodyBlock({ block }: { block: string }) {
-  const quote = block.match(
-    /^\[quote(?:=([^\]]+))?\]\n?([\s\S]*?)\[\/quote\]$/i,
-  );
-  if (quote) {
-    const author = quote[1]?.trim();
-    const quotedBody = quote[2]?.trim() ?? "";
-
-    return (
-      <blockquote className="border-l-2 border-primary/60 bg-muted/35 px-4 py-3">
-        {author ? (
-          <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
-            {author} wrote
-          </p>
-        ) : null}
-        <p className="whitespace-pre-wrap break-words text-muted-foreground">
-          {quotedBody}
-        </p>
-      </blockquote>
-    );
-  }
-
-  const code = block.match(/^\[code\]\n?([\s\S]*?)\[\/code\]$/i);
-  if (code) {
-    return (
-      <pre className="overflow-x-auto border border-row-border bg-muted/35 p-3 font-mono text-xs leading-6">
-        <code>{code[1]?.trim() ?? ""}</code>
-      </pre>
-    );
-  }
-
-  const list = block.match(/^\[list\]\n?([\s\S]*?)\[\/list\]$/i);
-  if (list) {
-    const items = (list[1] ?? "")
-      .split(/\[\*\]/g)
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (items.length > 0) {
-      return (
-        <ul className="list-disc space-y-2 pl-5">
-          {items.map((item, index) => (
-            <li key={`${index}-${item.slice(0, 24)}`}>
-              {renderInlineBbcode(item)}
-            </li>
-          ))}
-        </ul>
-      );
-    }
-  }
-
-  return (
-    <p className="whitespace-pre-wrap break-words">
-      {renderInlineBbcode(block)}
-    </p>
-  );
-}
-
-function renderInlineBbcode(text: string): ReactNode[] {
-  const pattern =
-    /(\[b\][\s\S]*?\[\/b\]|\[i\][\s\S]*?\[\/i\]|\[u\][\s\S]*?\[\/u\]|\[s\][\s\S]*?\[\/s\]|\[code\][\s\S]*?\[\/code\]|\[url(?:=[^\]]+)?\][\s\S]*?\[\/url\]|\[img\][\s\S]*?\[\/img\])/gi;
-  const parts = text.split(pattern).filter((part) => part.length > 0);
-
-  return parts.map((part, index) => {
-    const bold = part.match(/^\[b\]([\s\S]*?)\[\/b\]$/i);
-    if (bold) {
-      return (
-        <strong key={`${index}-b`}>{renderInlineBbcode(bold[1] ?? "")}</strong>
-      );
-    }
-
-    const italic = part.match(/^\[i\]([\s\S]*?)\[\/i\]$/i);
-    if (italic) {
-      return <em key={`${index}-i`}>{renderInlineBbcode(italic[1] ?? "")}</em>;
-    }
-
-    const underline = part.match(/^\[u\]([\s\S]*?)\[\/u\]$/i);
-    if (underline) {
-      return (
-        <span key={`${index}-u`} className="underline underline-offset-2">
-          {renderInlineBbcode(underline[1] ?? "")}
-        </span>
-      );
-    }
-
-    const strike = part.match(/^\[s\]([\s\S]*?)\[\/s\]$/i);
-    if (strike) {
-      return <s key={`${index}-s`}>{renderInlineBbcode(strike[1] ?? "")}</s>;
-    }
-
-    const code = part.match(/^\[code\]([\s\S]*?)\[\/code\]$/i);
-    if (code) {
-      return (
-        <code
-          key={`${index}-code`}
-          className="border border-row-border bg-muted/35 px-1 py-0.5 font-mono text-[0.9em]"
-        >
-          {code[1] ?? ""}
-        </code>
-      );
-    }
-
-    const url = part.match(/^\[url(?:=([^\]]+))?\]([\s\S]*?)\[\/url\]$/i);
-    if (url) {
-      const href = safeExternalUrl(url[1] ?? url[2]);
-      const label = (url[2] ?? "").trim() || href;
-      if (href && label) {
-        return (
-          <a
-            key={`${index}-url`}
-            className="underline underline-offset-2 hover:text-primary"
-            href={href}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {renderInlineBbcode(label)}
-          </a>
-        );
-      }
-      return `[url]${url[2] ?? ""}[/url]`;
-    }
-
-    const image = part.match(/^\[img\]([\s\S]*?)\[\/img\]$/i);
-    if (image) {
-      const src = safeImageUrl(image[1]);
-      if (src) {
-        return (
-          // eslint-disable-next-line @next/next/no-img-element -- Forum BBCode images can be external user content.
-          <img
-            key={`${index}-img`}
-            alt=""
-            className="my-2 max-h-96 max-w-full border border-row-border object-contain"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            src={src}
-          />
-        );
-      }
-      return `[img]${image[1] ?? ""}[/img]`;
-    }
-
-    return renderForumSmilies(part, index);
-  });
-}
-
-function renderForumSmilies(text: string, partIndex: number): ReactNode[] {
-  const pattern = /(:\)|:D|;\)|:P|:\(|:o|:cool:|:heart:)/g;
-  const parts = text.split(pattern).filter((part) => part.length > 0);
-
-  return parts.map((part, index) => {
-    const label = FORUM_SMILIES.get(part);
-    if (!label) {
-      return part;
-    }
-    return (
-      <span
-        key={`${partIndex}-smilie-${index}`}
-        aria-label="smilie"
-        className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center border border-row-border bg-muted/35 px-1 font-mono text-[10px] uppercase leading-none text-muted-foreground"
-      >
-        {label}
-      </span>
-    );
-  });
 }
 
 export function ForumThreadStateBadges({
