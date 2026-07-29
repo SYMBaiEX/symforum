@@ -4,6 +4,7 @@ import {
   adjacentForumCalendarMonth,
   forumCalendarMonthFromDate,
   forumMemberProfilePath,
+  getRenderablePosts,
   normalizeForumCalendarMonthParam,
 } from "./forum-refs";
 
@@ -36,5 +37,28 @@ describe("forum calendar refs", () => {
     expect(forumMemberProfilePath("Austin Hamilton")).toBe(
       "/forum/members/Austin%20Hamilton",
     );
+  });
+
+  test("preserves root-post author presentation details", () => {
+    const [rootPost] = getRenderablePosts(
+      {
+        _id: "thread-1",
+        slug: "signal-log",
+        title: "Signal log",
+        body: "Thread body",
+        author: "Suki",
+        authorImage: "/images/forum/suki-space-pirate.png",
+        authorLocation: "The Info Sea",
+        authorJoinedAt: 1_754_000_000_000,
+        createdAt: 1_754_000_000_000,
+      },
+      [],
+    );
+
+    expect(rootPost).toMatchObject({
+      author: "Suki",
+      authorImage: "/images/forum/suki-space-pirate.png",
+      authorLocation: "The Info Sea",
+    });
   });
 });

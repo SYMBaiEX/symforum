@@ -678,6 +678,8 @@ export function getRenderablePosts(
     authorSignature: thread.authorSignature,
     authorShowSignatures: thread.authorShowSignatures,
     authorDisplayName: thread.authorDisplayName,
+    authorImage: thread.authorImage,
+    authorLocation: thread.authorLocation,
     authorJoinedAt: thread.authorJoinedAt,
     lastEditedAt: thread.lastEditedAt,
     lastEditedBy: thread.lastEditedBy,
