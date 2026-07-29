@@ -24,6 +24,7 @@ const MESSAGE_LIMIT = 700;
 const STACK_LIMIT = 2_400;
 const SHORT_LIMIT = 220;
 const METADATA_LIMIT = 2_000;
+const FINGERPRINT_LIMIT = 500;
 const DEDUPE_WINDOW_MS = 60_000;
 
 export const record = mutation({
@@ -66,10 +67,9 @@ export const record = mutation({
       clean(args.eventType ?? "runtime_error", SHORT_LIMIT) || "runtime_error";
     const path = optionalClean(stripQuery(args.path), SHORT_LIMIT);
     const fingerprint =
-      optionalClean(args.fingerprint, SHORT_LIMIT) ??
-      clean(
+      optionalFingerprint(args.fingerprint) ??
+      cleanFingerprint(
         [source, scope, eventType, path, message.slice(0, 160)].join("|"),
-        500,
       );
     const recent = await ctx.db
       .query("systemLogs")
@@ -278,6 +278,21 @@ function optionalClean(value: string | undefined, limit: number) {
 
 function clean(value: string, limit: number) {
   return redact(value).replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
+function optionalFingerprint(value: string | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+  const fingerprint = cleanFingerprint(value);
+  return fingerprint.length > 0 ? fingerprint : undefined;
+}
+
+function cleanFingerprint(value: string) {
+  return clean(
+    value.replace(/\[Request ID:\s*[^\]]+\]/gi, "[Request ID]"),
+    FINGERPRINT_LIMIT,
+  );
 }
 
 function stripQuery(value: string | undefined) {

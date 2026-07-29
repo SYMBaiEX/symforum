@@ -25,6 +25,33 @@ export function userFacingError(error: unknown, fallback: string) {
   return errorMessage(error) || fallback;
 }
 
+export function convexErrorCode(error: unknown) {
+  const data = convexErrorData(error);
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("code" in data) ||
+    typeof data.code !== "string"
+  ) {
+    return null;
+  }
+  const code = data.code.trim();
+  return code.length > 0 ? code : null;
+}
+
+export function hasConvexErrorCode(
+  error: unknown,
+  ...expectedCodes: readonly string[]
+) {
+  const code = convexErrorCode(error)?.toUpperCase();
+  if (!code) {
+    return false;
+  }
+  return expectedCodes.some(
+    (expectedCode) => expectedCode.toUpperCase() === code,
+  );
+}
+
 function errorMessage(error: unknown) {
   const data = convexErrorData(error);
   if (typeof data === "string" && data.trim().length > 0) {

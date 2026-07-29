@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { userFacingError } from "@/lib/auth-errors";
+import { isExpectedContactSubmissionError } from "@/lib/contact-errors";
 import { convexRefs } from "@/lib/convex-refs";
 import { useMutation } from "convex/react";
 import { Send } from "lucide-react";
@@ -73,10 +74,12 @@ export function ContactForm() {
       setSentAt(Date.now());
       toast.success("Contact request sent");
     } catch (error) {
-      reportAppError(error, {
-        action: "contact.submit",
-        component: "ContactForm",
-      });
+      if (!isExpectedContactSubmissionError(error)) {
+        reportAppError(error, {
+          action: "contact.submit",
+          component: "ContactForm",
+        });
+      }
       toast.error(userFacingError(error, "Contact request failed"));
     } finally {
       setIsSubmitting(false);
