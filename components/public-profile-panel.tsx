@@ -38,12 +38,12 @@ export function PublicProfilePanel({ username }: { username: string }) {
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-12">
-      <section className="md:col-span-5">
+    <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
+      <section className="lg:col-span-5">
         <p className="font-mono text-xs uppercase text-muted-foreground">
           Public profile
         </p>
-        <h2 className="mt-3 break-words text-3xl font-bold md:text-5xl">
+        <h2 className="mt-2 break-words text-3xl font-semibold md:text-4xl">
           {profile.user.username}
         </h2>
         <p className="mt-4 text-sm leading-7 text-muted-foreground md:text-base">
@@ -89,7 +89,7 @@ export function PublicProfilePanel({ username }: { username: string }) {
         ) : null}
       </section>
 
-      <section className="md:col-span-7">
+      <section className="lg:col-span-7">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">

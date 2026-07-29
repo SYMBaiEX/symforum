@@ -42,8 +42,8 @@ function LiveForumHelpPage() {
           Help / FAQ
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
-          Read the board customs, account notes, and posting lore before opening
-          a new thread.
+          Read posting guidelines, account information, and forum policies
+          before opening a new thread.
         </p>
       </div>
 

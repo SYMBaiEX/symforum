@@ -23,7 +23,7 @@ export function ForumModerationPage({ enabled }: { enabled: boolean }) {
         <h1 className="mt-3 text-3xl font-semibold">Forum moderation</h1>
         <p className="mt-3 max-w-2xl leading-7 text-muted-foreground">
           Review reports, pending threads and replies, warnings, move tools, and
-          the forum audit trail from the board side.
+          the forum audit trail in one place.
         </p>
       </section>
       {enabled ? (

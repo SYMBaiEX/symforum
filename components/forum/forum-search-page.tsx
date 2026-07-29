@@ -239,9 +239,9 @@ function LiveForumSearchPage() {
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Search
           </p>
-          <h2 className="mt-1 text-xl font-semibold md:text-2xl">
+          <h1 className="mt-1 text-xl font-semibold md:text-2xl">
             Find threads and replies
-          </h2>
+          </h1>
         </div>
         <form className="space-y-3 p-3" onSubmit={submitSearch}>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_14rem_10rem_11rem] xl:items-end">

@@ -97,9 +97,9 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Board index
             </p>
-            <h2 className="mt-1 text-lg font-semibold md:text-xl">
+            <h1 className="mt-1 text-lg font-semibold md:text-xl">
               Find a useful thread
-            </h2>
+            </h1>
             <ForumIndexSnapshot overview={overview} />
           </div>
           <div className="flex flex-wrap gap-2 xl:justify-end">
@@ -173,8 +173,8 @@ function ForumIndexThreadPreview({
           No active threads yet.
         </h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          The first public conversation will land here. Until then, the board
-          index above is the clean map of where threads will live.
+          No public threads are active yet. Choose a board above when you are
+          ready to start the first discussion.
         </p>
       </div>
     );

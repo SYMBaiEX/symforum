@@ -63,7 +63,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
               {forumCalendarMonthLabel(month)}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
-              Old-school board events, meetups, publish windows, and forum
+              Community events, meetups, publishing windows, and forum
               reminders.
             </p>
           </div>
@@ -106,50 +106,86 @@ function LiveForumCalendarPage({ month }: { month: string }) {
       </div>
 
       <section className="border border-row-border">
-        <div className="overflow-x-auto">
-          <div className="min-w-[42rem] sm:min-w-0">
-            <div className="grid grid-cols-7 border-b border-row-border bg-muted/35 font-mono text-[10px] uppercase text-muted-foreground">
-              {WEEKDAY_LABELS.map((label) => (
-                <div
-                  className="border-r border-row-border px-2 py-2 last:border-r-0"
-                  key={label}
-                >
-                  {label}
+        <div className="md:hidden">
+          <div className="grid grid-cols-7 border-b border-row-border bg-muted/35 text-center font-mono text-[10px] uppercase text-muted-foreground">
+            {WEEKDAY_LABELS.map((label) => (
+              <div
+                aria-label={label}
+                className="border-r border-row-border px-1 py-2 last:border-r-0"
+                key={label}
+              >
+                {label.slice(0, 1)}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {calendar.days.map((day) => (
+              <div
+                className={cn(
+                  "min-h-14 border-r border-t border-row-border p-1.5 last:border-r-0",
+                  !day.inMonth && "bg-muted/20 text-muted-foreground",
+                )}
+                key={day.key}
+              >
+                <p className="font-mono text-[10px] uppercase">
+                  {day.dayNumber}
+                </p>
+                {day.events.length > 0 ? (
+                  <span
+                    aria-label={`${day.events.length} ${
+                      day.events.length === 1 ? "event" : "events"
+                    }`}
+                    className="mt-1 inline-flex min-w-5 items-center justify-center border border-primary/60 px-1 font-mono text-[10px] text-primary"
+                  >
+                    {day.events.length}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="hidden md:block">
+          <div className="grid grid-cols-7 border-b border-row-border bg-muted/35 font-mono text-[10px] uppercase text-muted-foreground">
+            {WEEKDAY_LABELS.map((label) => (
+              <div
+                className="border-r border-row-border px-2 py-2 last:border-r-0"
+                key={label}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {calendar.days.map((day) => (
+              <div
+                className={cn(
+                  "min-h-28 border-r border-t border-row-border p-2 last:border-r-0",
+                  !day.inMonth && "bg-muted/20 text-muted-foreground",
+                )}
+                key={day.key}
+              >
+                <p className="font-mono text-[10px] uppercase">
+                  {day.dayNumber}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {day.events.slice(0, 3).map((event) => (
+                    <ForumLink
+                      className="block truncate border border-row-border bg-background px-1.5 py-1 font-mono text-[10px] uppercase hover:border-foreground"
+                      href={forumCalendarEventPath(event)}
+                      key={event._id}
+                      prefetch
+                    >
+                      {event.title}
+                    </ForumLink>
+                  ))}
+                  {day.events.length > 3 ? (
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                      +{day.events.length - 3} more
+                    </p>
+                  ) : null}
                 </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {calendar.days.map((day) => (
-                <div
-                  className={cn(
-                    "min-h-28 border-r border-t border-row-border p-2 last:border-r-0",
-                    !day.inMonth && "bg-muted/20 text-muted-foreground",
-                  )}
-                  key={day.key}
-                >
-                  <p className="font-mono text-[10px] uppercase">
-                    {day.dayNumber}
-                  </p>
-                  <div className="mt-2 space-y-1">
-                    {day.events.slice(0, 3).map((event) => (
-                      <ForumLink
-                        className="block truncate border border-row-border bg-background px-1.5 py-1 font-mono text-[10px] uppercase hover:border-foreground"
-                        href={forumCalendarEventPath(event)}
-                        key={event._id}
-                        prefetch
-                      >
-                        {event.title}
-                      </ForumLink>
-                    ))}
-                    {day.events.length > 3 ? (
-                      <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                        +{day.events.length - 3} more
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

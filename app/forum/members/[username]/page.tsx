@@ -1,4 +1,5 @@
 import { PublicProfilePanel } from "@/components/public-profile-panel";
+import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import type { Metadata } from "next";
 
 type PageProps = {
@@ -25,7 +26,8 @@ export default async function ForumMemberProfilePage({ params }: PageProps) {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <section className="page-frame page-frame-dense space-y-5">
+    <section className="page-frame page-frame-dense space-y-4">
+      <ForumUtilityNav />
       <div className="border-y border-row-border py-3">
         <p className="page-kicker">Forum member</p>
         <h1 className="mt-2 text-2xl font-semibold md:text-3xl">

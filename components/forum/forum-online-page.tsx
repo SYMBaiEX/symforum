@@ -71,7 +71,7 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Who&apos;s online
           </p>
-          <h2 className="mt-2 text-2xl font-semibold">Active members</h2>
+          <h1 className="mt-2 text-2xl font-semibold">Active members</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             Registered forum members active since{" "}
             {formatForumDateTime(online.activeSince)}.

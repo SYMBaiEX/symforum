@@ -431,7 +431,7 @@ function ForumWelcomeStripLayout({
 
   return (
     <div className="px-3 py-2.5 md:px-4">
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-1 sm:items-stretch xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
         <p className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
           <span className="md:hidden">
             {forumCompactWelcomeMessage(navState)}
@@ -440,10 +440,10 @@ function ForumWelcomeStripLayout({
             {forumWelcomeMessage(navState)}
           </span>
         </p>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(12rem,19rem)] sm:items-center sm:justify-end">
+        <div className="min-w-0 sm:grid sm:grid-cols-[auto_minmax(12rem,19rem)] sm:items-center sm:justify-end sm:gap-2">
           <nav
             aria-label="Forum account"
-            className="flex min-w-0 items-center gap-1 overflow-x-auto"
+            className="flex min-w-0 flex-wrap items-center justify-end gap-1"
           >
             {navState === undefined ? null : navState.authenticated ? (
               <>
@@ -476,7 +476,9 @@ function ForumWelcomeStripLayout({
               <ForumMastheadLink href={signInHref} label="Sign in" />
             )}
           </nav>
-          <ForumQuickSearch pathname={pathname} />
+          <div className="hidden sm:block">
+            <ForumQuickSearch pathname={pathname} />
+          </div>
         </div>
       </div>
     </div>
@@ -561,7 +563,7 @@ function ForumMastheadLink({
 
 function forumWelcomeMessage(navState: ForumWelcomeNavState | undefined) {
   if (navState === undefined) {
-    return "Checking session / forum tools loading";
+    return "Checking forum session";
   }
   if (!navState.authenticated) {
     return "Welcome, Guest. Public boards are readable; sign in for posting, private messages, and subscriptions.";
@@ -712,7 +714,7 @@ function ForumUtilityLinks({
     >
       <nav
         aria-label="Forum tools"
-        className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:p-0"
+        className="grid min-w-0 grid-cols-3 gap-px bg-row-border md:flex md:flex-wrap md:items-center md:gap-1 md:bg-transparent"
       >
         {items.map((item) => {
           const active =
@@ -725,7 +727,7 @@ function ForumUtilityLinks({
             <Button
               asChild
               className={cn(
-                "min-h-10 w-auto shrink-0 whitespace-nowrap rounded-none border border-transparent px-2.5 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground lg:min-h-8 lg:px-2",
+                "min-h-10 min-w-0 whitespace-nowrap rounded-none border-0 bg-background px-1.5 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:bg-muted/40 hover:text-foreground md:w-auto md:shrink-0 md:border md:border-transparent md:px-2.5 md:hover:border-row-border md:hover:bg-transparent lg:min-h-8 lg:px-2",
                 active &&
                   "border-foreground bg-foreground text-background hover:bg-foreground hover:text-background",
               )}
@@ -1038,7 +1040,7 @@ export function ForumUserCpShell({
           </p>
           <nav
             aria-label="Forum user control panel"
-            className="mt-3 flex gap-1 overflow-x-auto lg:grid lg:gap-px lg:bg-row-border"
+            className="mt-3 grid grid-cols-3 gap-px bg-row-border lg:grid-cols-1"
           >
             {items.map((item) => {
               const active = normalizedPathname === item.href;
@@ -1046,9 +1048,9 @@ export function ForumUserCpShell({
                 <ForumLink
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "focus-ring inline-flex min-h-10 items-center whitespace-nowrap border border-row-border px-3 py-2 font-mono text-[10px] uppercase hover:text-primary lg:border-0 lg:bg-background",
+                    "focus-ring inline-flex min-h-10 min-w-0 items-center justify-center whitespace-nowrap bg-background px-2 py-2 text-center font-mono text-[10px] uppercase hover:text-primary lg:justify-start lg:px-3",
                     active &&
-                      "border-foreground bg-foreground text-background lg:bg-foreground lg:text-background",
+                      "bg-foreground text-background",
                   )}
                   href={item.href}
                   key={item.href}
@@ -1061,9 +1063,9 @@ export function ForumUserCpShell({
           </nav>
         </aside>
         <div className="min-w-0 bg-background p-3 md:p-4">
-          <h2 className="font-mono text-[11px] uppercase text-muted-foreground">
+          <h1 className="font-mono text-[11px] uppercase text-muted-foreground">
             {title}
-          </h2>
+          </h1>
           <div className="mt-3">{children}</div>
         </div>
       </section>
