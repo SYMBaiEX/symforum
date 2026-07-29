@@ -1461,17 +1461,6 @@ function ForumIndexSection({ group }: { group: ForumCategorySectionRecord }) {
 
   return (
     <section className="overflow-hidden border-y border-row-border">
-      <header className="flex flex-col gap-1 border-b border-row-border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="font-mono text-[11px] uppercase text-foreground">
-          {heading}
-        </h3>
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          {formatForumCount(group.boards.length)}{" "}
-          {group.boards.length === 1 ? "board" : "boards"} /{" "}
-          {formatForumCount(group.threadCount)} threads /{" "}
-          {formatForumCount(group.postCount)} posts
-        </p>
-      </header>
       {group.boards.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted-foreground">
           No boards in this section yet.
@@ -1488,28 +1477,28 @@ function ForumIndexSection({ group }: { group: ForumCategorySectionRecord }) {
             <thead>
               <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
                 <th
-                  className="w-14 px-4 py-3 text-left font-normal"
+                  className="w-12 px-2 py-2 text-left font-normal"
                   scope="col"
                 >
                   Status
                 </th>
-                <th className="px-4 py-3 text-left font-normal" scope="col">
+                <th className="px-2 py-2 text-left font-normal" scope="col">
                   Board
                 </th>
                 <th
-                  className="w-28 px-4 py-3 text-left font-normal"
+                  className="w-20 px-2 py-2 text-center font-normal"
                   scope="col"
                 >
                   Threads
                 </th>
                 <th
-                  className="w-28 px-4 py-3 text-left font-normal"
+                  className="w-20 px-2 py-2 text-center font-normal"
                   scope="col"
                 >
                   Posts
                 </th>
                 <th
-                  className="w-56 px-4 py-3 text-left font-normal"
+                  className="w-72 px-2 py-2 text-left font-normal xl:w-80 2xl:w-96"
                   scope="col"
                 >
                   Latest thread
@@ -1534,29 +1523,29 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
   const statusState = categoryBoardStatusState(category);
 
   return (
-    <article className="px-3 py-3 odd:bg-muted/15">
+    <article className="px-3 py-2.5 odd:bg-muted/15">
       <div className="min-w-0">
         <div className="flex items-start gap-2">
-          <ForumStatusGlyph className="mt-1" state={statusState} />
+          <ForumStatusGlyph className="mt-1 size-7" state={statusState} />
           <div className="min-w-0">
             <ForumLink
               href={categoryHref}
               prefetch
-              className="focus-ring inline-flex min-h-10 items-center text-base font-semibold leading-tight hover:text-primary"
+              className="focus-ring inline-flex min-h-9 items-center text-sm font-semibold leading-tight hover:text-primary"
             >
               {getCategoryTitle(category)}
             </ForumLink>
-            <ForumCategoryAccessBadges category={category} className="mt-2" />
+            <ForumCategoryAccessBadges category={category} className="mt-1" />
           </div>
         </div>
         {getCategoryDescription(category) ? (
-          <p className="mt-1 line-clamp-2 max-w-2xl text-xs leading-5 text-muted-foreground">
+          <p className="mt-0.5 line-clamp-2 max-w-2xl text-xs leading-4 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
         <ForumSubforumLinks category={category} />
       </div>
-      <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+      <dl className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
         <div className="inline-flex items-baseline gap-1.5">
           <dt>Threads</dt>
           <dd className="text-foreground">
@@ -1571,7 +1560,7 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
         </div>
       </dl>
       {latestThread ? (
-        <div className="mt-2 border-t border-row-border pt-2">
+        <div className="mt-1.5 border-t border-row-border pt-1.5">
           <ForumLatestPostCell
             category={category}
             latestThread={latestThread}
@@ -1589,36 +1578,36 @@ function ForumDesktopBoardRow({ category }: { category: ForumCategoryRecord }) {
 
   return (
     <tr className="odd:bg-muted/15">
-      <td className="px-3 py-3 align-middle">
-        <ForumStatusGlyph state={statusState} />
+      <td className="px-2 py-2 align-middle">
+        <ForumStatusGlyph className="size-7" state={statusState} />
       </td>
-      <th className="px-3 py-3 text-left align-middle font-normal" scope="row">
+      <th className="px-2 py-2 text-left align-middle font-normal" scope="row">
         <ForumLink
           href={categoryHref}
           prefetch
-          className="focus-ring text-base font-semibold leading-tight hover:text-primary"
+          className="focus-ring text-sm font-semibold leading-5 hover:text-primary"
         >
           {getCategoryTitle(category)}
         </ForumLink>
-        <ForumCategoryAccessBadges category={category} className="mt-2" />
+        <ForumCategoryAccessBadges category={category} className="mt-1" />
         {getCategoryDescription(category) ? (
-          <p className="mt-1 line-clamp-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+          <p className="mt-0.5 line-clamp-1 max-w-2xl text-xs leading-4 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
         <ForumSubforumLinks category={category} />
       </th>
-      <td className="px-3 py-3 align-middle">
+      <td className="px-2 py-2 text-center align-middle">
         <p className="text-sm font-medium">
           {formatForumCount(getCategoryThreadCount(category))}
         </p>
       </td>
-      <td className="px-3 py-3 align-middle">
+      <td className="px-2 py-2 text-center align-middle">
         <p className="text-sm font-medium">
           {formatForumCount(getCategoryPostCount(category))}
         </p>
       </td>
-      <td className="px-3 py-3 align-middle">
+      <td className="px-2 py-2 align-middle">
         <ForumLatestPostCell category={category} latestThread={latestThread} />
       </td>
     </tr>
@@ -1673,30 +1662,32 @@ function ForumLatestPostCell({
         Latest thread
       </p>
       {latestThread ? (
-        <div className="mt-1 flex min-w-0 flex-wrap items-start gap-2 md:mt-0">
-          <ForumLink
-            href={forumPath(latestThreadCategorySlug, latestThread.slug)}
-            prefetch
-            className="focus-ring min-w-0 flex-1 basis-36 text-sm font-semibold hover:text-primary"
-          >
-            {latestThread.title}
-          </ForumLink>
-          {latestPostHref ? (
-            <ForumJumpLink
-              ariaLabel={`Go to last post in ${latestThread.title}`}
-              className="px-2"
-              href={latestPostHref}
+        <div className="mt-1 min-w-0 md:mt-0">
+          <div className="flex min-w-0 items-start gap-1.5">
+            <ForumLink
+              href={forumPath(latestThreadCategorySlug, latestThread.slug)}
+              prefetch
+              className="focus-ring line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-5 hover:text-primary"
             >
-              Last »
-            </ForumJumpLink>
-          ) : null}
-          <p className="w-full text-xs leading-5 text-muted-foreground">
+              {latestThread.title}
+            </ForumLink>
+            {latestPostHref ? (
+              <ForumJumpLink
+                ariaLabel={`Go to last post in ${latestThread.title}`}
+                className="min-h-9 shrink-0 px-2 md:min-h-7"
+                href={latestPostHref}
+              >
+                Last »
+              </ForumJumpLink>
+            ) : null}
+          </div>
+          <p className="mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground">
             {getThreadLastAuthor(latestThread)} ·{" "}
             {formatForumDateTime(getThreadLastActivityAt(latestThread))}
           </p>
         </div>
       ) : (
-        <p className="mt-1 text-sm text-muted-foreground md:mt-0">
+        <p className="mt-1 text-xs text-muted-foreground md:mt-0">
           No posts yet.
         </p>
       )}
@@ -1711,14 +1702,14 @@ function ForumSubforumLinks({ category }: { category: ForumCategoryRecord }) {
   }
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1 font-mono text-[10px] uppercase leading-5">
-      <span className="mr-1 text-muted-foreground">Sub-boards</span>
+    <div className="mt-1.5 flex flex-wrap items-center gap-1 font-mono text-[10px] uppercase leading-4">
+      <span className="mr-0.5 text-muted-foreground">Sub-boards</span>
       {children.map((child) => (
         <ForumLink
           key={child.slug}
           href={forumPath(child.slug)}
           prefetch
-          className="focus-ring inline-flex min-h-8 items-center gap-1 border border-row-border px-2 text-foreground hover:border-primary hover:text-primary"
+          className="focus-ring inline-flex min-h-8 items-center gap-1 border border-row-border px-2 text-foreground hover:border-primary hover:text-primary md:min-h-6 md:px-1.5"
         >
           <span>{getCategoryTitle(child)}</span>
           <span className="text-muted-foreground">
