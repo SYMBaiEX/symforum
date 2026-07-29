@@ -1400,7 +1400,7 @@ export const listThreads = query({
       activeBoardRulesForCategory(ctx, category._id),
     ]);
     return {
-      category: await publicCategoryRecordWithAncestors(ctx, category, viewer),
+      category: await publicCategoryRecordWithNavigation(ctx, category, viewer),
       announcements: announcements.map((announcement) =>
         publicForumAnnouncementRecord(
           announcement,
@@ -16059,6 +16059,33 @@ async function publicCategoryRecordWithAncestors(
       user === null ? undefined : subscription?.status === "active",
   };
   return ancestors.length > 0 ? { ...record, ancestors } : record;
+}
+
+async function publicCategoryRecordWithNavigation(
+  ctx: QueryCtx | MutationCtx,
+  category: ForumCategoryDoc,
+  user: UserDoc | null,
+) {
+  const [record, childRows] = await Promise.all([
+    publicCategoryRecordWithAncestors(ctx, category, user),
+    ctx.db
+      .query("forumCategories")
+      .withIndex("by_parentCategoryId_and_position", (q) =>
+        q.eq("parentCategoryId", category._id),
+      )
+      .take(CATEGORY_LIST_LIMIT),
+  ]);
+  const children = (
+    await visibleCategoriesForUser(
+      ctx,
+      childRows.filter(
+        (child) => child.status === "active" && isBoardCategory(child),
+      ),
+      user,
+    )
+  ).map((child) => publicCategoryRecord(child));
+
+  return { ...record, children };
 }
 
 function buildPublicCategorySections(categories: PublicForumCategoryRecord[]) {

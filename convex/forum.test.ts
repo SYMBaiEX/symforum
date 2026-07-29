@@ -2415,6 +2415,58 @@ describe("forum privacy regressions", () => {
     );
   });
 
+  test("board pages expose visible child boards as navigation choices", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+
+    await t.run(async (ctx) => {
+      const now = 1_800_000_020_000;
+      const publicChildId = await insertCategory(ctx, {
+        slug: "public-guides",
+        name: "Guides",
+        viewAccess: "public",
+        position: 10,
+        now,
+      });
+      const trustedChildId = await insertCategory(ctx, {
+        slug: "trusted-downloads",
+        name: "Downloads",
+        viewAccess: "trusted",
+        position: 20,
+        now: now + 1,
+      });
+      await Promise.all([
+        ctx.db.patch(publicChildId, {
+          parentCategoryId: seed.publicCategoryId,
+        }),
+        ctx.db.patch(trustedChildId, {
+          parentCategoryId: seed.publicCategoryId,
+        }),
+      ]);
+    });
+
+    const guestBoard = await t.query(api.forum.listThreads, {
+      categorySlug: "public-square",
+    });
+    expect(guestBoard.category.children).toEqual([
+      expect.objectContaining({
+        slug: "public-guides",
+        name: "Guides",
+      }),
+    ]);
+
+    const asTrusted = t.withIdentity({
+      subject: seed.trustedUserId,
+      name: "Trusted Author",
+    });
+    const trustedBoard = await asTrusted.query(api.forum.listThreads, {
+      categorySlug: "public-square",
+    });
+    expect(
+      trustedBoard.category.children?.map((category) => category.slug),
+    ).toEqual(["public-guides", "trusted-downloads"]);
+  });
+
   test("board display controls sort and date-prune threads", async () => {
     vi.useFakeTimers();
     try {

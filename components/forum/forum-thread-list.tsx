@@ -454,6 +454,11 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
         </div>
       </div>
 
+      <ForumSubboardSelector
+        boards={category.children ?? []}
+        parentTitle={getCategoryTitle(category)}
+      />
+
       <ForumAnnouncementPanel announcements={listResult.announcements} />
 
       <section
@@ -650,6 +655,69 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
         setOpen={setAuthOpen}
       />
     </div>
+  );
+}
+
+function ForumSubboardSelector({
+  boards,
+  parentTitle,
+}: {
+  boards: ForumCategoryRecord[];
+  parentTitle: string;
+}) {
+  if (boards.length === 0) {
+    return null;
+  }
+
+  return (
+    <nav
+      aria-label={`${parentTitle} sub-boards`}
+      className="border border-row-border"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-4 py-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase text-primary">
+            Choose a sub-board
+          </p>
+          <h2 className="mt-1 text-base font-semibold">
+            Explore {parentTitle}
+          </h2>
+        </div>
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">
+          {boards.length} {boards.length === 1 ? "destination" : "destinations"}
+        </p>
+      </div>
+      <div className="grid gap-px bg-row-border sm:grid-cols-2 xl:grid-cols-4">
+        {boards.map((board) => (
+          <ForumLink
+            className="focus-ring group flex min-h-28 min-w-0 flex-col justify-between bg-background px-4 py-4 hover:bg-muted/30"
+            href={forumPath(board.slug)}
+            key={board.slug}
+            prefetch
+          >
+            <span>
+              <span className="block text-base font-semibold leading-tight group-hover:text-primary">
+                {getCategoryTitle(board)}
+              </span>
+              {getCategoryDescription(board) ? (
+                <span className="mt-2 line-clamp-2 block text-sm leading-5 text-muted-foreground">
+                  {getCategoryDescription(board)}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] uppercase text-muted-foreground">
+              <span>
+                {getCategoryThreadCount(board)} threads ·{" "}
+                {getCategoryPostCount(board)} posts
+              </span>
+              <span aria-hidden="true" className="text-primary">
+                →
+              </span>
+            </span>
+          </ForumLink>
+        ))}
+      </div>
+    </nav>
   );
 }
 
