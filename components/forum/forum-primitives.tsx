@@ -1821,9 +1821,11 @@ export function ForumNewestThreads({
 
 export function ForumThreadTable({
   category,
+  showFooter = true,
   threads,
 }: {
   category: ForumCategoryRecord | null;
+  showFooter?: boolean;
   threads: ForumThreadSummaryRecord[];
 }) {
   const threadSections = getForumThreadSections(threads);
@@ -1839,7 +1841,7 @@ export function ForumThreadTable({
 
   return (
     <div className="border border-row-border">
-      <div className="lg:hidden">
+      <div className="xl:hidden">
         {threadSections.map((section) => (
           <div
             key={section.key}
@@ -1879,7 +1881,7 @@ export function ForumThreadTable({
                 <div
                   key={thread._id}
                   className={cn(
-                    "grid gap-2 border-l-2 border-transparent px-3 py-3",
+                    "grid gap-2 border-l-2 border-transparent px-3 py-2.5",
                     section.showHeader
                       ? index % 2 === 0 && "bg-muted/15"
                       : "odd:bg-muted/15",
@@ -1893,17 +1895,17 @@ export function ForumThreadTable({
                         <ForumLink
                           href={threadHref}
                           prefetch
-                          className="focus-ring inline-flex min-h-10 min-w-0 items-center text-base font-semibold leading-tight hover:text-primary"
+                          className="focus-ring inline-flex min-h-10 min-w-0 flex-col items-start justify-center text-sm font-semibold leading-tight hover:text-primary sm:text-base"
                         >
                           <ForumThreadPrefixBadge
-                            className="mb-1 mr-2 inline-flex"
+                            className="mb-1 inline-flex"
                             thread={thread}
                           />
-                          {thread.title}
+                          <span>{thread.title}</span>
                         </ForumLink>
                         <ForumThreadStateBadges
                           thread={thread}
-                          className="mt-2"
+                          className="mt-1"
                         />
                       </div>
                     </div>
@@ -1916,10 +1918,6 @@ export function ForumThreadTable({
                         New / First unread »
                       </ForumJumpLink>
                     ) : null}
-                    <p className="mt-2 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
-                      Starter: {getThreadAuthor(thread)} /{" "}
-                      {formatForumDateTime(getThreadStartedAt(thread))}
-                    </p>
                     {category === null && thread.categorySlug ? (
                       <p className="mt-1 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
                         Board:{" "}
@@ -1938,47 +1936,38 @@ export function ForumThreadTable({
                         {thread.excerpt}
                       </p>
                     ) : null}
-                    <ForumThreadRatingSummary
-                      average={getThreadRatingAverage(thread)}
-                      className="mt-2"
-                      count={getThreadRatingCount(thread)}
-                    />
+                    <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs uppercase leading-5 text-muted-foreground">
+                      <span>
+                        {getThreadAuthor(thread)} ·{" "}
+                        {formatForumDateTime(getThreadStartedAt(thread))}
+                      </span>
+                      <span>
+                        {formatForumCount(getThreadReplyCount(thread))} replies
+                      </span>
+                      <span>{formatForumCount(thread.viewCount)} views</span>
+                      {getThreadRatingCount(thread) > 0 ? (
+                        <ForumThreadRatingSummary
+                          average={getThreadRatingAverage(thread)}
+                          count={getThreadRatingCount(thread)}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                  <dl className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
-                    <div className="inline-flex items-baseline gap-1.5">
-                      <dt>Replies</dt>
-                      <dd className="text-foreground">
-                        {formatForumCount(getThreadReplyCount(thread))}
-                      </dd>
-                    </div>
-                    <div className="inline-flex items-baseline gap-1.5">
-                      <dt>Views</dt>
-                      <dd className="text-foreground">
-                        {formatForumCount(thread.viewCount)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="border-t border-row-border pt-2">
-                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                      Last post
+                  <div className="flex min-w-0 items-center justify-between gap-2 border-t border-row-border pt-2">
+                    <p className="min-w-0 truncate text-xs text-muted-foreground">
+                      Last by{" "}
+                      <span className="font-medium text-foreground">
+                        {getThreadLastAuthor(thread)}
+                      </span>{" "}
+                      · {formatForumDateTime(getThreadLastActivityAt(thread))}
                     </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <ForumJumpLink
-                        ariaLabel={`Go to last post in ${thread.title}`}
-                        className="px-2"
-                        href={lastPostHref}
-                      >
-                        Last »
-                      </ForumJumpLink>
-                      <div className="min-w-0">
-                        <span className="block text-sm font-medium">
-                          {getThreadLastAuthor(thread)}
-                        </span>
-                        <span className="block text-xs leading-5 text-muted-foreground">
-                          {formatForumDateTime(getThreadLastActivityAt(thread))}
-                        </span>
-                      </div>
-                    </div>
+                    <ForumJumpLink
+                      ariaLabel={`Go to last post in ${thread.title}`}
+                      className="shrink-0 px-2"
+                      href={lastPostHref}
+                    >
+                      Last »
+                    </ForumJumpLink>
                   </div>
                 </div>
               );
@@ -1986,7 +1975,7 @@ export function ForumThreadTable({
           </div>
         ))}
       </div>
-      <table className="hidden w-full table-fixed border-collapse lg:table">
+      <table className="hidden w-full table-fixed border-collapse xl:table">
         <caption className="sr-only">
           {category ? `${getCategoryTitle(category)} threads` : "Forum threads"}
         </caption>
@@ -2155,7 +2144,7 @@ export function ForumThreadTable({
           </tbody>
         ))}
       </table>
-      <ForumThreadTableFooter threads={threads} />
+      {showFooter ? <ForumThreadTableFooter threads={threads} /> : null}
     </div>
   );
 }

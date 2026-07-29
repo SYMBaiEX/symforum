@@ -26,8 +26,6 @@ import {
   ForumBreadcrumbs,
   ForumLink,
   ForumLoading,
-  ForumMetricBar,
-  ForumNewestThreads,
   ForumPaginationBar,
   ForumStatusBox,
   ForumThreadPrefixBadge,
@@ -184,10 +182,6 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
     activePrefixOptions,
   );
 
-  const sortedNewestThreads = useMemo(() => {
-    return listResult?.activityThreads ?? currentPageThreads.slice(0, 5);
-  }, [currentPageThreads, listResult?.activityThreads]);
-  const hasBoardActivity = sortedNewestThreads.length > 0;
   const viewerCanCreatePoll =
     listResult?.category?.viewerCanCreatePoll === true;
 
@@ -366,6 +360,10 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
     router.push(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`);
   }
 
+  function resetBoardView() {
+    router.push(forumPath(categorySlug));
+  }
+
   if (listResult === undefined) {
     return <ForumLoading label={`Syncing ${categorySlug}`} variant="threads" />;
   }
@@ -408,6 +406,17 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
     category,
     isAuthenticated,
   );
+  const boardFiltersActive =
+    selectedPrefixFilter !== PREFIX_FILTER_ALL ||
+    selectedSortKey !== DEFAULT_THREAD_SORT_KEY ||
+    selectedSortOrder !== DEFAULT_THREAD_SORT_ORDER ||
+    selectedDayFilter !== THREAD_DAY_FILTER_ALL;
+  const showBoardTools =
+    currentPageThreads.length > 0 || boardFiltersActive;
+  const showPagination = listResult.pagination.totalPages > 1;
+  const boardIsEmpty =
+    currentPageThreads.length === 0 && !boardFiltersActive;
+  const hasSubboards = (category.children?.length ?? 0) > 0;
 
   function toggleThreadComposer() {
     setError("");
@@ -432,25 +441,30 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
     <div className="space-y-5">
       <div className="border-y border-row-border py-3">
         <ForumBreadcrumbs category={category} />
-        <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
-          <div>
-            <p className="page-kicker">Public board</p>
-            <h1 className="mt-1 text-2xl font-semibold md:text-3xl">
-              {getCategoryTitle(category)}
-            </h1>
-            {getCategoryDescription(category) ? (
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {getCategoryDescription(category)}
-              </p>
-            ) : null}
-          </div>
-          <ForumMetricBar
-            items={[
-              { label: "Threads", value: getCategoryThreadCount(category) },
-              { label: "Posts", value: getCategoryPostCount(category) },
-            ]}
-            className="sm:grid-cols-2"
-          />
+        <div className="mt-2">
+          <p className="page-kicker">Public board</p>
+          <h1 className="mt-1 text-2xl font-semibold md:text-3xl">
+            {getCategoryTitle(category)}
+          </h1>
+          {getCategoryDescription(category) ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {getCategoryDescription(category)}
+            </p>
+          ) : null}
+          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs uppercase text-muted-foreground">
+            <div className="inline-flex items-baseline gap-1.5">
+              <dt>Threads</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {getCategoryThreadCount(category)}
+              </dd>
+            </div>
+            <div className="inline-flex items-baseline gap-1.5">
+              <dt>Posts</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {getCategoryPostCount(category)}
+              </dd>
+            </div>
+          </dl>
         </div>
       </div>
 
@@ -461,55 +475,51 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
 
       <ForumAnnouncementPanel announcements={listResult.announcements} />
 
-      <section
-        className={`grid gap-5 ${
-          hasBoardActivity
-            ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.8fr)]"
-            : ""
-        }`}
-      >
+      <section>
         <div className="min-w-0 space-y-4">
-          <div className="grid gap-2 border-y border-row-border py-3 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
+          <div className="grid gap-2 border-y border-row-border py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Search this board</span>
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search threads or post copy in this board"
-                className="rounded-none border-row-border font-mono text-[11px] uppercase"
+                placeholder="Search this board"
+                className="h-10 rounded-none border-row-border font-mono text-xs uppercase"
                 aria-label="Search this board"
               />
             </label>
-            <Button
-              className="rounded-none font-mono text-[10px] uppercase"
-              type="button"
-              disabled={authLoading || pending}
-              onClick={toggleThreadComposer}
-            >
-              {composeOpen ? "Close thread form" : "New thread"}
-            </Button>
-            <Button
-              className="rounded-none font-mono text-[10px] uppercase"
-              type="button"
-              variant="outline"
-              disabled={authLoading || categorySubscriptionPending}
-              onClick={toggleBoardSubscription}
-            >
-              {categorySubscriptionPending
-                ? "Saving..."
-                : categorySubscribed
-                  ? "Unsubscribe board"
-                  : "Subscribe board"}
-            </Button>
-            <Button
-              className="rounded-none font-mono text-[10px] uppercase"
-              type="button"
-              variant="outline"
-              disabled={authLoading || markReadPending}
-              onClick={markBoardRead}
-            >
-              {markReadPending ? "Marking..." : "Mark board read"}
-            </Button>
+            <div className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:justify-end md:overflow-visible md:p-0">
+              <Button
+                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                type="button"
+                disabled={authLoading || pending}
+                onClick={toggleThreadComposer}
+              >
+                {composeOpen ? "Close thread form" : "New thread"}
+              </Button>
+              <Button
+                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                type="button"
+                variant="outline"
+                disabled={authLoading || categorySubscriptionPending}
+                onClick={toggleBoardSubscription}
+              >
+                {categorySubscriptionPending
+                  ? "Saving..."
+                  : categorySubscribed
+                    ? "Unsubscribe"
+                    : "Subscribe"}
+              </Button>
+              <Button
+                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                type="button"
+                variant="outline"
+                disabled={authLoading || markReadPending}
+                onClick={markBoardRead}
+              >
+                {markReadPending ? "Marking..." : "Mark read"}
+              </Button>
+            </div>
           </div>
           {boardActionError ? (
             <p
@@ -587,65 +597,97 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
             />
           ) : null}
 
-          <ForumPaginationBar
-            buildHref={boardPageHref}
-            label="Threads"
-            nextLabel={isNewestFirstOrder ? undefined : "Next"}
-            pagination={listResult.pagination}
-            previousLabel={isNewestFirstOrder ? undefined : "Prev"}
-          />
-          <ForumBoardTools
-            activePrefixes={activePrefixOptions}
-            filterSummary={prefixFilterSummary}
-            dayFilter={selectedDayFilter}
-            onPrefixFilterChange={updatePrefixFilter}
-            onSortKeyChange={(value) =>
-              updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
-            }
-            onSortOrderChange={(value) =>
-              updateBoardListParam("order", value, DEFAULT_THREAD_SORT_ORDER)
-            }
-            onDayFilterChange={(value) =>
-              updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
-            }
-            prefixFilter={selectedPrefixFilter}
-            sortKey={selectedSortKey}
-            sortOrder={selectedSortOrder}
-            visibleThreadCount={currentPageThreads.length}
-          />
-          {currentPageThreads.length === 0 &&
-          selectedPrefixFilter !== PREFIX_FILTER_ALL ? (
+          {showBoardTools ? (
+            <ForumBoardTools
+              activePrefixes={activePrefixOptions}
+              dayFilter={selectedDayFilter}
+              filterSummary={prefixFilterSummary}
+              filtersActive={boardFiltersActive}
+              onDayFilterChange={(value) =>
+                updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
+              }
+              onPrefixFilterChange={updatePrefixFilter}
+              onSortKeyChange={(value) =>
+                updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
+              }
+              onSortOrderChange={(value) =>
+                updateBoardListParam("order", value, DEFAULT_THREAD_SORT_ORDER)
+              }
+              prefixFilter={selectedPrefixFilter}
+              sortKey={selectedSortKey}
+              sortOrder={selectedSortOrder}
+              visibleThreadCount={currentPageThreads.length}
+            />
+          ) : null}
+          {showPagination ? (
+            <ForumPaginationBar
+              buildHref={boardPageHref}
+              label="Threads"
+              nextLabel={isNewestFirstOrder ? undefined : "Next"}
+              pagination={listResult.pagination}
+              previousLabel={isNewestFirstOrder ? undefined : "Prev"}
+            />
+          ) : null}
+          {boardIsEmpty ? (
+            <ForumStatusBox
+              title={
+                hasSubboards
+                  ? `No direct threads in ${getCategoryTitle(category)}`
+                  : `No threads in ${getCategoryTitle(category)}`
+              }
+              body={
+                !isAuthenticated || viewerCanCreateThread
+                  ? hasSubboards
+                    ? "Start a broad discussion here, or choose a focused sub-board above."
+                    : "Start the first useful discussion for this board."
+                  : threadCreationMessage
+              }
+              action={
+                !isAuthenticated || viewerCanCreateThread ? (
+                  <Button
+                    className="min-h-10 rounded-none font-mono text-xs uppercase"
+                    type="button"
+                    onClick={toggleThreadComposer}
+                  >
+                    {hasSubboards
+                      ? "Start a thread here"
+                      : "Start the first thread"}
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : currentPageThreads.length === 0 ? (
             <ForumStatusBox
               title="No matching threads"
-              body={`No threads in this board match ${prefixFilterSummary}. Switch back to all prefixes or choose another filter.`}
+              body={`No threads match ${prefixFilterSummary} with the current board filters.`}
+              action={
+                <Button
+                  className="min-h-10 rounded-none font-mono text-xs uppercase"
+                  type="button"
+                  variant="outline"
+                  onClick={resetBoardView}
+                >
+                  Clear filters
+                </Button>
+              }
             />
           ) : (
             <ForumThreadTable
               category={category}
+              showFooter={false}
               threads={currentPageThreads}
             />
           )}
-          <ForumPaginationBar
-            buildHref={boardPageHref}
-            label="Threads"
-            nextLabel={isNewestFirstOrder ? undefined : "Next"}
-            pagination={listResult.pagination}
-            previousLabel={isNewestFirstOrder ? undefined : "Prev"}
-          />
-        </div>
-
-        {hasBoardActivity ? (
-          <div className="space-y-4">
-            <ForumNewestThreads
-              threads={sortedNewestThreads}
-              heading={
-                selectedPrefixFilter === PREFIX_FILTER_ALL
-                  ? "Board activity"
-                  : `Board activity: ${prefixFilterSummary}`
-              }
+          {showPagination ? (
+            <ForumPaginationBar
+              buildHref={boardPageHref}
+              label="Threads"
+              nextLabel={isNewestFirstOrder ? undefined : "Next"}
+              pagination={listResult.pagination}
+              previousLabel={isNewestFirstOrder ? undefined : "Prev"}
             />
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </section>
 
       <AuthRequiredDialog
@@ -672,43 +714,45 @@ function ForumSubboardSelector({
   return (
     <nav
       aria-label={`${parentTitle} sub-boards`}
-      className="border border-row-border"
+      className="border-y border-row-border"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-3 py-2.5">
-        <div>
-          <p className="font-mono text-[10px] uppercase text-primary">
-            Choose a sub-board
-          </p>
-          <h2 className="mt-1 text-base font-semibold">
-            Explore {parentTitle}
-          </h2>
-        </div>
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          {boards.length} {boards.length === 1 ? "destination" : "destinations"}
+      <div className="flex min-h-10 items-baseline justify-between gap-3 border-b border-row-border px-3 py-2">
+        <h2 className="font-mono text-xs uppercase text-primary">
+          Sub-boards
+        </h2>
+        <p className="font-mono text-xs uppercase text-muted-foreground">
+          {boards.length}
         </p>
       </div>
-      <div className="grid gap-px bg-row-border sm:grid-cols-2 xl:grid-cols-3">
+      <div
+        className={`grid grid-cols-2 gap-px bg-row-border ${
+          boards.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3"
+        } xl:grid-cols-6`}
+      >
         {boards.map((board) => (
           <ForumLink
-            className="focus-ring group flex min-h-20 min-w-0 flex-col justify-between bg-background px-3 py-3 hover:bg-muted/30"
+            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2.5 hover:bg-muted/30 md:min-h-28 md:px-3 md:py-3"
             href={forumPath(board.slug)}
             key={board.slug}
             prefetch
           >
             <span>
-              <span className="block text-base font-semibold leading-tight group-hover:text-primary">
+              <span className="block text-sm font-semibold leading-tight group-hover:text-primary md:text-base">
                 {getCategoryTitle(board)}
               </span>
               {getCategoryDescription(board) ? (
-                <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">
+                <span className="mt-1 hidden line-clamp-2 text-xs leading-5 text-muted-foreground md:block">
                   {getCategoryDescription(board)}
                 </span>
               ) : null}
             </span>
-            <span className="mt-2 flex items-center justify-between gap-3 font-mono text-[10px] uppercase text-muted-foreground">
-              <span>
-                {getCategoryThreadCount(board)} threads ·{" "}
-                {getCategoryPostCount(board)} posts
+            <span className="mt-2 flex items-center justify-between gap-2 font-mono text-xs uppercase text-muted-foreground">
+              <span className="truncate">
+                {forumItemCount(getCategoryThreadCount(board), "thread")}
+                <span className="hidden sm:inline">
+                  {" "}
+                  · {forumItemCount(getCategoryPostCount(board), "post")}
+                </span>
               </span>
               <span aria-hidden="true" className="text-primary">
                 →
@@ -719,6 +763,10 @@ function ForumSubboardSelector({
       </div>
     </nav>
   );
+}
+
+function forumItemCount(count: number, singular: string) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
 
 function threadCreationUnavailableMessage(
@@ -744,6 +792,7 @@ function ForumBoardTools({
   activePrefixes,
   dayFilter,
   filterSummary,
+  filtersActive,
   onDayFilterChange,
   onPrefixFilterChange,
   onSortKeyChange,
@@ -756,6 +805,7 @@ function ForumBoardTools({
   activePrefixes: ForumThreadPrefixOption[];
   dayFilter: string;
   filterSummary: string;
+  filtersActive: boolean;
   onDayFilterChange: (value: string) => void;
   onPrefixFilterChange: (value: string) => void;
   onSortKeyChange: (value: ThreadSortKey) => void;
@@ -770,86 +820,98 @@ function ForumBoardTools({
   const dayLabel = getThreadDayFilterLabel(dayFilter);
 
   return (
-    <section className="grid gap-px border border-row-border bg-row-border font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-2 xl:grid-cols-[7rem_repeat(4,minmax(8rem,1fr))_minmax(12rem,1.2fr)]">
-      <div className="bg-background px-3 py-2 text-foreground">Board tools</div>
-      <label className="grid gap-1 bg-background px-3 py-2">
-        <span>Prefix filter</span>
-        <select
-          aria-label="Filter board by thread prefix"
-          className="min-h-8 rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground"
-          value={prefixFilter}
-          onChange={(event) => onPrefixFilterChange(event.target.value)}
-        >
-          <option value={PREFIX_FILTER_ALL}>All prefixes</option>
-          <option value={PREFIX_FILTER_NONE}>No prefix</option>
-          {activePrefixes.length > 0 ? (
-            <optgroup label="Board prefixes">
-              {activePrefixes.map((option) => (
-                <option key={option.value} value={option.value}>
-                  [{option.prefix.label}]
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-      </label>
-      <label className="grid gap-1 bg-background px-3 py-2">
-        <span>Sort by</span>
-        <select
-          aria-label="Sort board threads"
-          className="min-h-8 rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground"
-          value={sortKey}
-          onChange={(event) =>
-            onSortKeyChange(event.target.value as ThreadSortKey)
-          }
-        >
-          {THREAD_SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1 bg-background px-3 py-2">
-        <span>Order</span>
-        <select
-          aria-label="Set board thread sort order"
-          className="min-h-8 rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground"
-          value={sortOrder}
-          onChange={(event) =>
-            onSortOrderChange(event.target.value as ThreadSortOrder)
-          }
-        >
-          {THREAD_SORT_ORDER_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1 bg-background px-3 py-2">
-        <span>Date window</span>
-        <select
-          aria-label="Limit board threads by recent activity"
-          className="min-h-8 rounded-none border border-row-border bg-background px-2 font-mono text-[10px] uppercase text-foreground"
-          value={dayFilter}
-          onChange={(event) => onDayFilterChange(event.target.value)}
-        >
-          {THREAD_DAY_FILTER_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="bg-background px-3 py-2">
-        <p className="text-foreground">{filterSummary}</p>
-        <p className="mt-1">
-          {sortLabel} / {orderLabel} / {dayLabel} / showing {visibleThreadCount}{" "}
-          loaded {visibleThreadCount === 1 ? "thread" : "threads"}.
-        </p>
+    <details
+      className="group border-y border-row-border"
+      open={filtersActive || undefined}
+    >
+      <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-mono text-xs uppercase text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 truncate">
+          <span className="text-foreground">Filter & sort</span>
+          <span className="px-2">/</span>
+          {filterSummary} · {sortLabel} · {orderLabel} · {dayLabel}
+        </span>
+        <span className="shrink-0 text-primary">
+          <span className="group-open:hidden">Open</span>
+          <span className="hidden group-open:inline">Close</span>
+        </span>
+      </summary>
+      <div className="grid gap-px border-t border-row-border bg-row-border font-mono text-xs uppercase text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+        <label className="grid gap-1 bg-background px-3 py-2">
+          <span>Prefix</span>
+          <select
+            aria-label="Filter board by thread prefix"
+            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            value={prefixFilter}
+            onChange={(event) => onPrefixFilterChange(event.target.value)}
+          >
+            <option value={PREFIX_FILTER_ALL}>All prefixes</option>
+            <option value={PREFIX_FILTER_NONE}>No prefix</option>
+            {activePrefixes.length > 0 ? (
+              <optgroup label="Board prefixes">
+                {activePrefixes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    [{option.prefix.label}]
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+        <label className="grid gap-1 bg-background px-3 py-2">
+          <span>Sort by</span>
+          <select
+            aria-label="Sort board threads"
+            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            value={sortKey}
+            onChange={(event) =>
+              onSortKeyChange(event.target.value as ThreadSortKey)
+            }
+          >
+            {THREAD_SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 bg-background px-3 py-2">
+          <span>Order</span>
+          <select
+            aria-label="Set board thread sort order"
+            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            value={sortOrder}
+            onChange={(event) =>
+              onSortOrderChange(event.target.value as ThreadSortOrder)
+            }
+          >
+            {THREAD_SORT_ORDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 bg-background px-3 py-2">
+          <span>Date window</span>
+          <select
+            aria-label="Limit board threads by recent activity"
+            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            value={dayFilter}
+            onChange={(event) => onDayFilterChange(event.target.value)}
+          >
+            {THREAD_DAY_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-    </section>
+      <p className="border-t border-row-border px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
+        Showing {visibleThreadCount} loaded{" "}
+        {visibleThreadCount === 1 ? "thread" : "threads"}.
+      </p>
+    </details>
   );
 }
 
