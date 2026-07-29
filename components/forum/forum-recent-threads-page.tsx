@@ -10,7 +10,6 @@ import {
 } from "@/components/forum/forum-refs";
 import {
   ForumLoading,
-  ForumMetricBar,
   ForumPaginationBar,
   ForumStatusBox,
   ForumThreadTable,
@@ -33,7 +32,7 @@ export function ForumRecentThreadsPage({
   title: string;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <ForumRecentThreadsHeader
         description={description}
         mode={mode}
@@ -93,12 +92,14 @@ function ForumRecentThreadsHeader({
   title: string;
 }) {
   return (
-    <section className="border-y border-row-border py-2">
-      <p className="page-kicker">
-        {mode === "new" ? "Unread activity" : "Daily activity"}
-      </p>
-      <h1 className="mt-1 text-xl font-semibold md:text-2xl">{title}</h1>
-      <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+    <section className="grid gap-1.5 border-y border-row-border py-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-4">
+      <div>
+        <p className="page-kicker">
+          {mode === "new" ? "Unread activity" : "Daily activity"}
+        </p>
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">{title}</h1>
+      </div>
+      <p className="max-w-2xl text-sm leading-5 text-muted-foreground md:text-right">
         {description}
       </p>
     </section>
@@ -118,35 +119,8 @@ function ForumRecentThreadsResults({
   const hasThreads = threads.length > 0;
 
   return (
-    <div className="space-y-3">
-      <ForumMetricBar
-        className="sm:grid-cols-4"
-        items={[
-          {
-            label: "Matching",
-            value: formatLimitedCount(
-              recentThreads.pagination.actualTotalItems ??
-                recentThreads.pagination.totalItems,
-              recentThreads.limited || recentThreads.pagination.limited,
-            ),
-          },
-          { label: "Visible", value: recentThreads.visibleThreadCount },
-          {
-            label: "Unread",
-            value:
-              typeof recentThreads.unreadThreadCount === "number"
-                ? recentThreads.unreadThreadCount
-                : "n/a",
-          },
-          { label: "Scope", value: recentThreads.label },
-        ]}
-      />
-
-      {recentThreads.since ? (
-        <p className="font-mono text-[10px] uppercase leading-5 text-muted-foreground">
-          Since {formatForumDateTime(recentThreads.since)}
-        </p>
-      ) : null}
+    <div className="space-y-2.5">
+      <ForumRecentActivitySummary recentThreads={recentThreads} />
 
       {recentThreads.limited ? (
         <ForumStatusBox
@@ -156,14 +130,12 @@ function ForumRecentThreadsResults({
         />
       ) : null}
 
-      <ForumPaginationBar
-        buildHref={buildPageHref}
-        label="Threads"
-        pagination={recentThreads.pagination}
-      />
-
       {hasThreads ? (
-        <ForumThreadTable category={null} threads={threads} />
+        <ForumThreadTable
+          category={null}
+          showFooter={false}
+          threads={threads}
+        />
       ) : (
         <ForumStatusBox
           title={mode === "new" ? "No new posts" : "No posts today"}
@@ -175,12 +147,62 @@ function ForumRecentThreadsResults({
         />
       )}
 
-      <ForumPaginationBar
-        buildHref={buildPageHref}
-        label="Threads"
-        pagination={recentThreads.pagination}
-      />
+      {recentThreads.pagination.totalPages > 1 ? (
+        <ForumPaginationBar
+          buildHref={buildPageHref}
+          label="Threads"
+          pagination={recentThreads.pagination}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function ForumRecentActivitySummary({
+  recentThreads,
+}: {
+  recentThreads: ForumRecentThreadsRecord;
+}) {
+  const matching =
+    recentThreads.pagination.actualTotalItems ??
+    recentThreads.pagination.totalItems;
+  const unread =
+    typeof recentThreads.unreadThreadCount === "number"
+      ? formatForumCount(recentThreads.unreadThreadCount)
+      : "n/a";
+
+  return (
+    <section className="flex flex-col gap-1.5 border-y border-row-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+        <div className="inline-flex items-baseline gap-1.5">
+          <dt>Matching</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {formatLimitedCount(
+              matching,
+              recentThreads.limited || recentThreads.pagination.limited,
+            )}
+          </dd>
+        </div>
+        <div className="inline-flex items-baseline gap-1.5">
+          <dt>Visible</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {formatForumCount(recentThreads.visibleThreadCount)}
+          </dd>
+        </div>
+        <div className="inline-flex items-baseline gap-1.5">
+          <dt>Unread</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {unread}
+          </dd>
+        </div>
+      </dl>
+      <p className="font-mono text-[10px] uppercase leading-5 text-muted-foreground">
+        {recentThreads.label}
+        {recentThreads.since
+          ? ` / Since ${formatForumDateTime(recentThreads.since)}`
+          : ""}
+      </p>
+    </section>
   );
 }
 
