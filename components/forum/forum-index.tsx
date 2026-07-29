@@ -90,7 +90,7 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <section className="min-w-0">
         <div className="mb-2 flex flex-col gap-2 border-b border-row-border pb-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -149,8 +149,8 @@ function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
 
 function ForumIndexPulse({ overview }: { overview: ForumOverviewRecord }) {
   return (
-    <section className="border-y border-row-border py-3">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.8fr)]">
+    <section className="border-y border-row-border py-2">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.65fr)]">
         <ForumIndexThreadPreview threads={overview.newestThreads} />
         <ForumPulseSummary overview={overview} />
       </div>
@@ -182,13 +182,13 @@ function ForumIndexThreadPreview({
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Newest threads
           </p>
           <h2
-            className="mt-2 text-xl font-semibold"
+            className="mt-1 text-lg font-semibold"
             id="forum-newest-threads-heading"
           >
             Recent activity
@@ -204,19 +204,19 @@ function ForumIndexThreadPreview({
       </div>
       <div
         aria-labelledby="forum-newest-threads-heading"
-        className="focus-ring mt-3 max-h-[min(28rem,60vh)] divide-y divide-row-border overflow-y-auto overscroll-contain border-y border-row-border pr-2 [scrollbar-gutter:stable] sm:max-h-[30rem] xl:max-h-[34rem]"
+        className="focus-ring mt-2 max-h-[min(24rem,55vh)] divide-y divide-row-border overflow-y-auto overscroll-contain border-y border-row-border pr-2 [scrollbar-gutter:stable] sm:max-h-[26rem] xl:max-h-[28rem]"
         role="region"
         tabIndex={0}
       >
         {threads.map((thread) => (
           <article
-            className="py-3"
+            className="py-2"
             key={`${thread.categorySlug ?? "forum"}-${thread.slug}`}
           >
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <ForumThreadPrefixBadge thread={thread} />
               <ForumLink
-                className="focus-ring min-w-0 text-base font-semibold hover:text-primary md:text-lg"
+                className="focus-ring min-w-0 text-sm font-semibold leading-5 hover:text-primary md:text-base"
                 href={forumPath(thread.categorySlug, thread.slug)}
                 prefetch
               >
@@ -224,7 +224,7 @@ function ForumIndexThreadPreview({
               </ForumLink>
               <ForumThreadStateBadges thread={thread} />
             </div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {thread.categoryName ?? "General"} / {getThreadAuthor(thread)} /{" "}
               {formatForumDateTime(getThreadStartedAt(thread))}
             </p>
@@ -260,27 +260,27 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
     showNewestMember || topPoster !== null || reputationLeader !== null;
 
   return (
-    <aside className="border-t border-row-border pt-5 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+    <aside className="border-t border-row-border pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
       <p className="font-mono text-[10px] uppercase text-muted-foreground">
         Board pulse
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
+      <dl className="mt-2 grid grid-cols-4 gap-x-3">
         {pulseStats.map((item) => (
-          <div key={item.label}>
+          <div className="min-w-0" key={item.label}>
             <dt className="font-mono text-[10px] uppercase text-muted-foreground">
               {item.label}
             </dt>
-            <dd className="mt-1 text-lg font-semibold">{item.value}</dd>
+            <dd className="mt-0.5 text-base font-semibold">{item.value}</dd>
           </div>
         ))}
       </dl>
 
       {online.members.length > 0 ? (
-        <div className="mt-5 border-t border-row-border pt-4">
+        <div className="mt-3 border-t border-row-border pt-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Active since {formatForumDateTime(online.activeSince)}
           </p>
-          <div className="mt-3 flex flex-wrap gap-3">
+          <div className="mt-2 flex flex-wrap gap-2">
             {online.members.slice(0, 6).map((member) => (
               <ForumOnlineMemberChip key={member.userId} member={member} />
             ))}
@@ -289,7 +289,7 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
       ) : null}
 
       {hasMemberHighlights ? (
-        <div className="mt-5 border-t border-row-border pt-4">
+        <div className="mt-3 grid gap-3 border-t border-row-border pt-3 sm:grid-cols-3 xl:grid-cols-1">
           {showNewestMember ? (
             <ForumPulseMember
               label="Newest member"
@@ -298,7 +298,6 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
             />
           ) : null}
           <ForumPulseMember
-            className={showNewestMember ? "mt-4" : undefined}
             label="Top poster"
             member={topPoster}
             value={
@@ -308,9 +307,6 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
             }
           />
           <ForumPulseMember
-            className={
-              showNewestMember || topPoster !== null ? "mt-4" : undefined
-            }
             label="Reputation"
             member={reputationLeader}
             value={
@@ -331,10 +327,10 @@ function ForumOnlineMemberChip({
   member: ForumOnlineSummaryRecord["members"][number];
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] gap-2">
+    <div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
       <ForumAvatar
         alt={`${member.displayName} avatar`}
-        className="size-8"
+        className="size-7"
         name={member.displayName}
         src={member.avatarUrl}
       />
@@ -346,7 +342,7 @@ function ForumOnlineMemberChip({
         >
           {member.displayName}
         </ForumLink>
-        <p className="mt-1 truncate font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
           {member.location.href ? (
             <Link
               className="focus-ring hover:text-foreground"
@@ -384,10 +380,10 @@ function ForumPulseMember({
       <p className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </p>
-      <div className="mt-2 grid grid-cols-[2.25rem_minmax(0,1fr)] gap-2">
+      <div className="mt-1 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
         <ForumAvatar
           alt={`${member.displayName} avatar`}
-          className="size-8"
+          className="size-7"
           name={member.displayName}
           src={member.avatarUrl}
         />
@@ -400,7 +396,7 @@ function ForumPulseMember({
             {member.displayName}
           </ForumLink>
           {value ? (
-            <p className="mt-1 truncate font-mono text-[10px] uppercase text-muted-foreground">
+            <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
               {value}
             </p>
           ) : null}

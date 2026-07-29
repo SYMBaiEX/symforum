@@ -916,8 +916,8 @@ export function ForumAnnouncementPanel({
   }
 
   return (
-    <section className="border-y border-row-border py-2">
-      <div className="grid gap-x-3 gap-y-1 lg:grid-cols-[7.5rem_minmax(0,1fr)_auto] lg:items-start">
+    <section className="border-y border-row-border py-1.5">
+      <div className="grid gap-x-3 gap-y-1 lg:grid-cols-[7.5rem_minmax(0,1fr)_auto] lg:items-center">
         <h2 className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
           {title}
         </h2>
@@ -1372,7 +1372,7 @@ export function ForumIndexTable({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {groups.map((group, index) => (
         <ForumIndexSection
           key={group.section?.slug ?? `root-${index}`}
@@ -1409,32 +1409,39 @@ export function ForumLegendStatStrip({
   return (
     <div
       className={cn(
-        "grid gap-px border border-row-border bg-row-border xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.45fr)]",
+        "grid gap-px border border-row-border bg-row-border xl:grid-cols-[minmax(0,1fr)_auto]",
         className,
       )}
     >
-      <div className="bg-background px-3 py-3">
+      <div className="bg-background px-3 py-2">
         <p className="sr-only">Forum legend</p>
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5">
           {legendItems.map((item) => (
             <div
-              className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground"
+              className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-muted-foreground"
               key={item.label}
             >
-              <ForumStatusGlyph decorative state={item.state} />
+              <ForumStatusGlyph
+                className="size-7"
+                decorative
+                state={item.state}
+              />
               <span>{item.label}</span>
             </div>
           ))}
         </div>
       </div>
       {stats.length > 0 ? (
-        <dl className="grid grid-cols-2 gap-px bg-row-border sm:grid-cols-4 xl:grid-cols-2">
+        <dl className="grid grid-cols-2 gap-px bg-row-border sm:grid-cols-4">
           {stats.map((item) => (
-            <div className="bg-background px-3 py-3" key={item.label}>
+            <div
+              className="min-w-20 bg-background px-3 py-2"
+              key={item.label}
+            >
               <dt className="font-mono text-[10px] uppercase text-muted-foreground">
                 {item.label}
               </dt>
-              <dd className="mt-1 text-sm font-semibold">
+              <dd className="mt-0.5 text-sm font-semibold">
                 {typeof item.value === "number"
                   ? formatForumCount(item.value)
                   : item.value}
