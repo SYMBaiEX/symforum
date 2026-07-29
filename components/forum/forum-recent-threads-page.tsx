@@ -133,6 +133,7 @@ function ForumRecentThreadsResults({
       {hasThreads ? (
         <ForumThreadTable
           category={null}
+          density="compact"
           showFooter={false}
           threads={threads}
         />

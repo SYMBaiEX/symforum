@@ -1224,9 +1224,11 @@ function visiblePages(currentPage: number, totalPages: number) {
 export function ForumThreadStateBadges({
   thread,
   className,
+  showUnread = true,
 }: {
   thread: ForumThreadSummaryRecord | null;
   className?: string;
+  showUnread?: boolean;
 }) {
   if (!thread) {
     return null;
@@ -1234,7 +1236,7 @@ export function ForumThreadStateBadges({
 
   const pinned = isPinnedThread(thread);
   const locked = isLockedThread(thread);
-  const unread = thread.viewerUnread === true;
+  const unread = showUnread && thread.viewerUnread === true;
 
   if (!pinned && !locked && !unread) {
     return null;
@@ -1812,10 +1814,12 @@ export function ForumNewestThreads({
 
 export function ForumThreadTable({
   category,
+  density = "standard",
   showFooter = true,
   threads,
 }: {
   category: ForumCategoryRecord | null;
+  density?: "compact" | "standard";
   showFooter?: boolean;
   threads: ForumThreadSummaryRecord[];
 }) {
@@ -1826,6 +1830,16 @@ export function ForumThreadTable({
       <ForumStatusBox
         title={category ? getCategoryTitle(category) : "Threads"}
         body="This board has no public threads yet."
+      />
+    );
+  }
+
+  if (density === "compact") {
+    return (
+      <ForumCompactThreadTable
+        category={category}
+        showFooter={showFooter}
+        threads={threads}
       />
     );
   }
@@ -2137,6 +2151,322 @@ export function ForumThreadTable({
       </table>
       {showFooter ? <ForumThreadTableFooter threads={threads} /> : null}
     </div>
+  );
+}
+
+function ForumCompactThreadTable({
+  category,
+  showFooter,
+  threads,
+}: {
+  category: ForumCategoryRecord | null;
+  showFooter: boolean;
+  threads: ForumThreadSummaryRecord[];
+}) {
+  const threadSections = getForumThreadSections(threads);
+
+  return (
+    <div className="overflow-hidden border border-row-border">
+      <div className="lg:hidden">
+        {threadSections.map((section) => (
+          <div
+            className={cn(
+              "divide-y divide-row-border",
+              section.showHeader &&
+                "border-t border-row-border first:border-t-0",
+            )}
+            key={section.key}
+          >
+            {section.showHeader ? (
+              <div
+                className={cn(
+                  "border-b border-row-border px-3 py-1.5 font-mono text-[10px] uppercase",
+                  section.emphasized
+                    ? "bg-foreground text-background"
+                    : "bg-muted/25 text-muted-foreground",
+                )}
+              >
+                <ForumThreadSectionLabel section={section} />
+              </div>
+            ) : null}
+            {section.threads.map((thread, index) => (
+              <ForumCompactMobileThreadRow
+                category={category}
+                key={thread._id}
+                striped={section.showHeader ? index % 2 === 0 : index % 2 === 1}
+                thread={thread}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <table className="hidden w-full table-fixed border-collapse lg:table">
+        <caption className="sr-only">
+          {category ? `${getCategoryTitle(category)} threads` : "Forum threads"}
+        </caption>
+        <thead>
+          <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
+            <th className="w-11 px-2 py-1.5 text-left font-normal" scope="col">
+              Status
+            </th>
+            <th className="px-2 py-1.5 text-left font-normal" scope="col">
+              Topic
+            </th>
+            <th className="w-36 px-2 py-1.5 text-left font-normal" scope="col">
+              Activity
+            </th>
+            <th
+              className="w-64 px-2 py-1.5 text-left font-normal xl:w-72"
+              scope="col"
+            >
+              Latest post
+            </th>
+          </tr>
+        </thead>
+        {threadSections.map((section) => (
+          <tbody className="divide-y divide-row-border" key={section.key}>
+            {section.showHeader ? (
+              <tr
+                className={cn(
+                  "border-y border-row-border font-mono text-[10px] uppercase",
+                  section.emphasized
+                    ? "bg-foreground text-background"
+                    : "bg-muted/25 text-muted-foreground",
+                )}
+              >
+                <th
+                  className="px-2 py-1.5 text-left font-normal"
+                  colSpan={4}
+                  scope="rowgroup"
+                >
+                  <ForumThreadSectionLabel section={section} />
+                </th>
+              </tr>
+            ) : null}
+            {section.threads.map((thread, index) => (
+              <ForumCompactDesktopThreadRow
+                category={category}
+                key={thread._id}
+                striped={section.showHeader ? index % 2 === 0 : index % 2 === 1}
+                thread={thread}
+              />
+            ))}
+          </tbody>
+        ))}
+      </table>
+      {showFooter ? <ForumThreadTableFooter threads={threads} /> : null}
+    </div>
+  );
+}
+
+function ForumCompactMobileThreadRow({
+  category,
+  striped,
+  thread,
+}: {
+  category: ForumCategoryRecord | null;
+  striped: boolean;
+  thread: ForumThreadSummaryRecord;
+}) {
+  const categorySlug = thread.categorySlug ?? category?.slug;
+  const threadHref = forumPath(categorySlug, thread.slug);
+  const firstUnreadHref =
+    thread.viewerUnread === true && thread.firstUnreadPostNumber
+      ? forumPostPath(
+          categorySlug,
+          thread.slug,
+          thread.firstUnreadPostNumber,
+          thread.firstUnreadPage,
+        )
+      : null;
+  const lastPostHref = getThreadLastPostHref(thread, categorySlug);
+
+  return (
+    <article
+      className={cn(
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-l-2 border-transparent px-2.5 py-2",
+        striped && "bg-muted/15",
+        thread.viewerUnread === true && "border-l-primary",
+      )}
+    >
+      <ForumStatusGlyph className="mt-0.5 size-7" thread={thread} />
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-1.5">
+          <ForumThreadPrefixBadge className="mt-px" thread={thread} />
+          <ForumLink
+            className="focus-ring line-clamp-2 min-w-0 text-sm font-semibold leading-4 hover:text-primary"
+            href={threadHref}
+            prefetch
+          >
+            {thread.title}
+          </ForumLink>
+        </div>
+        <ForumThreadStateBadges
+          className="mt-1"
+          showUnread={false}
+          thread={thread}
+        />
+        <p className="mt-1 line-clamp-1 font-mono text-[10px] uppercase leading-4 text-muted-foreground">
+          {category === null && thread.categorySlug ? (
+            <>
+              <ForumLink
+                className="focus-ring hover:text-foreground"
+                href={forumPath(thread.categorySlug)}
+                prefetch
+              >
+                {thread.categoryName ?? humanizeSlug(thread.categorySlug)}
+              </ForumLink>
+              {" · "}
+            </>
+          ) : null}
+          Last {getThreadLastAuthor(thread)} ·{" "}
+          {formatForumDateTime(getThreadLastActivityAt(thread))}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase leading-4 text-muted-foreground">
+          <span>{formatForumCount(getThreadReplyCount(thread))} replies</span>
+          <span>{formatForumCount(thread.viewCount)} views</span>
+          {firstUnreadHref ? (
+            <ForumLink
+              aria-label={`Go to first unread post in ${thread.title}`}
+              className="focus-ring text-primary hover:underline"
+              href={firstUnreadHref}
+              prefetch
+            >
+              First unread »
+            </ForumLink>
+          ) : null}
+        </div>
+      </div>
+      <ForumJumpLink
+        ariaLabel={`Go to last post in ${thread.title}`}
+        className="min-h-8 px-2"
+        href={lastPostHref}
+      >
+        Last »
+      </ForumJumpLink>
+    </article>
+  );
+}
+
+function ForumCompactDesktopThreadRow({
+  category,
+  striped,
+  thread,
+}: {
+  category: ForumCategoryRecord | null;
+  striped: boolean;
+  thread: ForumThreadSummaryRecord;
+}) {
+  const categorySlug = thread.categorySlug ?? category?.slug;
+  const threadHref = forumPath(categorySlug, thread.slug);
+  const firstUnreadHref =
+    thread.viewerUnread === true && thread.firstUnreadPostNumber
+      ? forumPostPath(
+          categorySlug,
+          thread.slug,
+          thread.firstUnreadPostNumber,
+          thread.firstUnreadPage,
+        )
+      : null;
+  const lastPostHref = getThreadLastPostHref(thread, categorySlug);
+  const ratingCount = getThreadRatingCount(thread);
+
+  return (
+    <tr
+      className={cn(
+        "border-l-2 border-transparent",
+        striped && "bg-muted/15",
+        thread.viewerUnread === true && "border-l-primary",
+      )}
+    >
+      <td className="px-2 py-1.5 align-middle">
+        <ForumStatusGlyph className="size-7" thread={thread} />
+      </td>
+      <th
+        className="px-2 py-1.5 text-left align-middle font-normal"
+        scope="row"
+      >
+        <div className="flex min-w-0 items-center gap-1.5">
+          <ForumThreadPrefixBadge thread={thread} />
+          <ForumLink
+            className="focus-ring min-w-0 flex-1 truncate text-sm font-semibold leading-5 hover:text-primary"
+            href={threadHref}
+            prefetch
+          >
+            {thread.title}
+          </ForumLink>
+          <ForumThreadStateBadges showUnread={false} thread={thread} />
+        </div>
+        <p className="mt-0.5 truncate font-mono text-[10px] uppercase leading-4 text-muted-foreground">
+          {category === null && thread.categorySlug ? (
+            <>
+              <ForumLink
+                className="focus-ring hover:text-foreground"
+                href={forumPath(thread.categorySlug)}
+                prefetch
+              >
+                {thread.categoryName ?? humanizeSlug(thread.categorySlug)}
+              </ForumLink>
+              {" · "}
+            </>
+          ) : null}
+          {getThreadAuthor(thread)} ·{" "}
+          {formatForumDateTime(getThreadStartedAt(thread))}
+          {firstUnreadHref ? (
+            <>
+              {" · "}
+              <ForumLink
+                aria-label={`Go to first unread post in ${thread.title}`}
+                className="focus-ring text-primary hover:underline"
+                href={firstUnreadHref}
+                prefetch
+              >
+                First unread »
+              </ForumLink>
+            </>
+          ) : null}
+        </p>
+      </th>
+      <td className="px-2 py-1.5 align-middle">
+        <p className="whitespace-nowrap font-mono text-[10px] uppercase leading-4 text-muted-foreground">
+          <span className="font-semibold text-foreground">
+            {formatForumCount(getThreadReplyCount(thread))}
+          </span>{" "}
+          replies ·{" "}
+          <span className="font-semibold text-foreground">
+            {formatForumCount(thread.viewCount)}
+          </span>{" "}
+          views
+        </p>
+        {ratingCount > 0 ? (
+          <ForumThreadRatingSummary
+            average={getThreadRatingAverage(thread)}
+            className="mt-0.5 gap-1 [&_svg]:size-2.5"
+            count={ratingCount}
+          />
+        ) : null}
+      </td>
+      <td className="px-2 py-1.5 align-middle">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold">
+              {getThreadLastAuthor(thread)}
+            </p>
+            <p className="truncate font-mono text-[10px] uppercase leading-4 text-muted-foreground">
+              {formatForumDateTime(getThreadLastActivityAt(thread))}
+            </p>
+          </div>
+          <ForumJumpLink
+            ariaLabel={`Go to last post in ${thread.title}`}
+            className="min-h-7 shrink-0 px-2"
+            href={lastPostHref}
+          >
+            Last »
+          </ForumJumpLink>
+        </div>
+      </td>
+    </tr>
   );
 }
 
