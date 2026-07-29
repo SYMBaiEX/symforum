@@ -90,15 +90,15 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <section className="min-w-0">
-        <div className="mb-3 flex flex-col gap-2 border-b border-row-border pb-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-2 flex flex-col gap-2 border-b border-row-border pb-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Board index
             </p>
-            <h2 className="mt-1 text-xl font-semibold md:text-2xl">
-              Public categories
+            <h2 className="mt-1 text-lg font-semibold md:text-xl">
+              Find a useful thread
             </h2>
             <ForumIndexSnapshot overview={overview} />
           </div>
@@ -136,7 +136,7 @@ function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
   ];
 
   return (
-    <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
       {items.map((item) => (
         <div className="inline-flex items-baseline gap-1.5" key={item.label}>
           <dt>{item.label}</dt>
@@ -244,9 +244,7 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
   const reputationLeader = statistics.reputationLeader ?? null;
   const newestIsOnline =
     newestMember !== null &&
-    online.members.some(
-      (member) => member.username === newestMember.username,
-    );
+    online.members.some((member) => member.username === newestMember.username);
   const showNewestMember = newestMember !== null && !newestIsOnline;
   const hasMemberHighlights =
     showNewestMember || topPoster !== null || reputationLeader !== null;
@@ -301,9 +299,7 @@ function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
           />
           <ForumPulseMember
             className={
-              showNewestMember || topPoster !== null
-                ? "mt-4"
-                : undefined
+              showNewestMember || topPoster !== null ? "mt-4" : undefined
             }
             label="Reputation"
             member={reputationLeader}

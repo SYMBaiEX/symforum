@@ -30,24 +30,32 @@ crons.interval(
   {},
 );
 
-const sukiForumPostSchedules = [
-  "5 12 * * *",
-  "35 13 * * *",
-  "5 15 * * *",
-  "35 16 * * *",
-  "5 18 * * *",
-  "35 19 * * *",
-  "5 21 * * *",
-  "35 22 * * *",
-  "5 0 * * *",
-  "5 2 * * *",
-] as const;
+function dailyCronAtMinute(minuteOfDay: number) {
+  const hour = Math.floor(minuteOfDay / 60);
+  const minute = minuteOfDay % 60;
+  return `${minute} ${hour} * * *`;
+}
 
-sukiForumPostSchedules.forEach((schedule, slot) => {
+Array.from({ length: 30 }, (_, slot) => ({
+  schedule: dailyCronAtMinute(5 + slot * 48),
+  slot,
+})).forEach(({ schedule, slot }) => {
   crons.cron(
     `Suki forum post ${slot + 1}`,
     schedule,
     internal.sukiForumAgent.runDailySlot,
+    { slot },
+  );
+});
+
+Array.from({ length: 15 }, (_, index) => ({
+  schedule: dailyCronAtMinute(29 + index * 96),
+  slot: index + 1,
+})).forEach(({ schedule, slot }) => {
+  crons.cron(
+    `Belle forum post ${slot}`,
+    schedule,
+    internal.belleForumAgent.runDailySlot,
     { slot },
   );
 });
@@ -60,7 +68,7 @@ crons.interval(
 );
 
 crons.cron(
-  "cleanup Suki caches",
+  "cleanup forum agent caches",
   "25 6 * * *",
   internal.sukiForumAgentData.cleanupExpiredResearchCache,
   {},

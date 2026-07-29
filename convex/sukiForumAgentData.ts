@@ -7,34 +7,37 @@ const SUKI_CACHE_CLEANUP_BATCH_SIZE = 100;
 
 export const claimRun = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     runDate: v.string(),
     slot: v.number(),
     attempt: v.number(),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? SUKI_AGENT_SLUG;
+    const maximumSlot = agentSlug === "suki" ? 29 : 15;
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(args.runDate) ||
       !Number.isInteger(args.slot) ||
       args.slot < 0 ||
-      args.slot > 9 ||
+      args.slot > maximumSlot ||
       !Number.isInteger(args.attempt) ||
       args.attempt < 0 ||
       args.attempt > 2
     ) {
-      throw new Error("Invalid Suki run coordinates");
+      throw new Error(`Invalid ${agentSlug} run coordinates`);
     }
     const agent = await ctx.db
       .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", SUKI_AGENT_SLUG))
+      .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
       .unique();
     if (agent === null || !agent.enabled) {
       return {
         claimed: false as const,
         reason: "disabled" as const,
-        runKey: `${SUKI_AGENT_SLUG}:${args.runDate}:${args.slot}`,
+        runKey: `${agentSlug}:${args.runDate}:${args.slot}`,
       };
     }
-    const runKey = `${SUKI_AGENT_SLUG}:${args.runDate}:${args.slot}`;
+    const runKey = `${agentSlug}:${args.runDate}:${args.slot}`;
     const existing = await ctx.db
       .query("forumAgentRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -51,16 +54,18 @@ export const claimRun = internalMutation({
     }
     const todayRuns = await ctx.db
       .query("forumAgentRuns")
-      .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
-      .take(30);
+      .withIndex("by_agentSlug_and_runDate_and_slot", (q) =>
+        q.eq("agentSlug", agentSlug).eq("runDate", args.runDate),
+      )
+      .take(40);
     const publishedCount = todayRuns.filter(
-      (run) => run.agentSlug === SUKI_AGENT_SLUG && run.status === "published",
+      (run) => run.status === "published",
     ).length;
     if (publishedCount >= agent.dailyPostTarget) {
       if (existing === null) {
         await ctx.db.insert("forumAgentRuns", {
           runKey,
-          agentSlug: SUKI_AGENT_SLUG,
+          agentSlug,
           runDate: args.runDate,
           slot: args.slot,
           attempt: args.attempt,
@@ -83,7 +88,7 @@ export const claimRun = internalMutation({
     if (existing === null) {
       await ctx.db.insert("forumAgentRuns", {
         runKey,
-        agentSlug: SUKI_AGENT_SLUG,
+        agentSlug,
         runDate: args.runDate,
         slot: args.slot,
         attempt: args.attempt,

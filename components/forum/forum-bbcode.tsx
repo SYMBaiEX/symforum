@@ -17,6 +17,7 @@ const FORUM_SMILIES = new Map([
 
 const BLOCK_TAGS = new Set([
   "center",
+  "chart",
   "code",
   "h2",
   "h3",
@@ -262,6 +263,10 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
     );
   }
 
+  if (node.name === "chart") {
+    return renderForumChart(node, key);
+  }
+
   if (node.name === "center") {
     return (
       <div className="space-y-3 text-center" key={key}>
@@ -282,6 +287,90 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
     <p className="break-words whitespace-pre-wrap" key={key}>
       {renderInlineNodes([node], `${key}-fallback`)}
     </p>
+  );
+}
+
+function renderForumChart(node: ForumBbcodeTagNode, key: string) {
+  const rows = forumBbcodeText(node.children)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .flatMap((line) => {
+      const [rawLabel, rawValue, rawDetail] = line.split("|");
+      const label = rawLabel?.trim().slice(0, 80);
+      const numericValue = Number(rawValue?.trim());
+      if (!label || !Number.isFinite(numericValue)) {
+        return [];
+      }
+      return [
+        {
+          detail: rawDetail?.trim().slice(0, 140),
+          label,
+          value: Math.max(0, Math.min(100, Math.round(numericValue))),
+        },
+      ];
+    });
+  if (rows.length === 0) {
+    return (
+      <p className="break-words whitespace-pre-wrap" key={key}>
+        {forumBbcodeText(node.children)}
+      </p>
+    );
+  }
+  const title = node.value?.slice(0, 120) || "Signal chart";
+
+  return (
+    <figure
+      aria-label={title}
+      className="border-y border-row-border bg-muted/10"
+      key={key}
+    >
+      <figcaption className="flex items-center justify-between gap-4 border-b border-row-border px-3 py-2.5">
+        <span className="text-sm font-semibold">{title}</span>
+        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+          Relative signal / 100
+        </span>
+      </figcaption>
+      <div className="divide-y divide-row-border">
+        {rows.map((row, index) => (
+          <div
+            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(7rem,0.4fr)_minmax(12rem,1fr)] sm:items-center"
+            key={`${key}-chart-row-${index}`}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{row.label}</p>
+              {row.detail ? (
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  {row.detail}
+                </p>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
+              <div
+                aria-label={`${row.label}: ${row.value} out of 100`}
+                className="h-2 overflow-hidden bg-row-border"
+                role="img"
+              >
+                <div
+                  className={
+                    index % 3 === 1
+                      ? "h-full bg-accent"
+                      : index % 3 === 2
+                        ? "h-full bg-accent-canary"
+                        : "h-full bg-primary"
+                  }
+                  style={{ width: `${row.value}%` }}
+                />
+              </div>
+              <span className="text-right font-mono text-xs tabular-nums text-foreground">
+                {row.value}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </figure>
   );
 }
 

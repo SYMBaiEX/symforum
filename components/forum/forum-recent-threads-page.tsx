@@ -52,11 +52,7 @@ export function ForumRecentThreadsPage({
   );
 }
 
-function LiveForumRecentThreadsPage({
-  mode,
-}: {
-  mode: ForumRecentThreadMode;
-}) {
+function LiveForumRecentThreadsPage({ mode }: { mode: ForumRecentThreadMode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const page = parsePage(searchParams.get("page"));
@@ -72,9 +68,7 @@ function LiveForumRecentThreadsPage({
   if (recentThreads === undefined) {
     return (
       <ForumLoading
-        label={
-          mode === "new" ? "Checking new posts" : "Checking today's posts"
-        }
+        label={mode === "new" ? "Checking new posts" : "Checking today's posts"}
         variant="index"
       />
     );
@@ -124,7 +118,7 @@ function ForumRecentThreadsResults({
   const hasThreads = threads.length > 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <ForumMetricBar
         className="sm:grid-cols-4"
         items={[

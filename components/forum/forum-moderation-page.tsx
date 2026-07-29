@@ -14,7 +14,7 @@ import { usePathname } from "next/navigation";
 
 export function ForumModerationPage({ enabled }: { enabled: boolean }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <ForumUtilityNav />
       <section className="border-y border-row-border py-3">
         <p className="font-mono text-xs uppercase text-muted-foreground">

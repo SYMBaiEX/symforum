@@ -233,7 +233,7 @@ function LiveForumSearchPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section className="border-y border-row-border">
         <div className="border-b border-row-border px-3 py-2.5">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -513,7 +513,7 @@ function ForumSearchResults({
   const showPosts = result.filters.resultType !== "threads";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {result.limited ? (
         <ForumStatusBox
           title="Search limited"

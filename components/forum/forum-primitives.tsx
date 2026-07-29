@@ -54,8 +54,7 @@ import {
 
 const FORUM_PRESENCE_HEARTBEAT_MS = 120_000;
 const FORUM_JUMP_PLACEHOLDER_VALUE = "__forum_jump__";
-const FORUM_ANNOUNCEMENT_COLLAPSE_KEY =
-  "symbaiex:forum:announcement-collapse";
+const FORUM_ANNOUNCEMENT_COLLAPSE_KEY = "symbaiex:forum:announcement-collapse";
 const FORUM_ANNOUNCEMENT_PANEL_ID = "forum-announcements-panel";
 const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum", label: "Board index" },
@@ -392,19 +391,10 @@ function ForumWelcomeStrip() {
   return <LiveForumWelcomeStrip pathname={pathname} />;
 }
 
-function LiveForumWelcomeStrip({
-  pathname,
-}: {
-  pathname: string | null;
-}) {
+function LiveForumWelcomeStrip({ pathname }: { pathname: string | null }) {
   const navState = useQuery(forumRefs.getMyForumNavState, {});
 
-  return (
-    <ForumWelcomeStripLayout
-      navState={navState}
-      pathname={pathname}
-    />
-  );
+  return <ForumWelcomeStripLayout navState={navState} pathname={pathname} />;
 }
 
 type ForumWelcomeNavState = {
@@ -446,7 +436,9 @@ function ForumWelcomeStripLayout({
           <span className="md:hidden">
             {forumCompactWelcomeMessage(navState)}
           </span>
-          <span className="hidden md:inline">{forumWelcomeMessage(navState)}</span>
+          <span className="hidden md:inline">
+            {forumWelcomeMessage(navState)}
+          </span>
         </p>
         <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(12rem,19rem)] sm:items-center sm:justify-end">
           <nav
@@ -455,7 +447,10 @@ function ForumWelcomeStripLayout({
           >
             {navState === undefined ? null : navState.authenticated ? (
               <>
-                <ForumMastheadLink href="/forum/control-panel" label="User CP" />
+                <ForumMastheadLink
+                  href="/forum/control-panel"
+                  label="User CP"
+                />
                 {navState.trusted ? (
                   <>
                     <ForumMastheadLink
@@ -925,10 +920,7 @@ export function ForumAnnouncementPanel({
           {title}
         </h2>
         <div
-          className={cn(
-            "min-w-0",
-            collapsed ? "self-center" : "space-y-2",
-          )}
+          className={cn("min-w-0", collapsed ? "self-center" : "space-y-2")}
           id={FORUM_ANNOUNCEMENT_PANEL_ID}
         >
           {collapsed ? (
@@ -1008,9 +1000,7 @@ export function ForumAnnouncementPanel({
   );
 }
 
-function forumAnnouncementSignature(
-  announcements: ForumAnnouncementRecord[],
-) {
+function forumAnnouncementSignature(announcements: ForumAnnouncementRecord[]) {
   return announcements
     .map((announcement) => `${announcement._id}:${announcement.updatedAt}`)
     .join("|");
@@ -1455,11 +1445,7 @@ export function ForumLegendStatStrip({
   );
 }
 
-function ForumIndexSection({
-  group,
-}: {
-  group: ForumCategorySectionRecord;
-}) {
+function ForumIndexSection({ group }: { group: ForumCategorySectionRecord }) {
   const heading = group.section
     ? getCategoryTitle(group.section)
     : "Main boards";
@@ -1577,7 +1563,10 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
       </dl>
       {latestThread ? (
         <div className="mt-2 border-t border-row-border pt-2">
-          <ForumLatestPostCell category={category} latestThread={latestThread} />
+          <ForumLatestPostCell
+            category={category}
+            latestThread={latestThread}
+          />
         </div>
       ) : null}
     </article>
@@ -1664,8 +1653,9 @@ function ForumLatestPostCell({
   category: ForumCategoryRecord;
   latestThread: ForumThreadSummaryRecord | null;
 }) {
+  const latestThreadCategorySlug = latestThread?.categorySlug ?? category.slug;
   const latestPostHref = latestThread
-    ? getThreadLastPostHref(latestThread, category.slug)
+    ? getThreadLastPostHref(latestThread, latestThreadCategorySlug)
     : null;
 
   return (
@@ -1676,7 +1666,7 @@ function ForumLatestPostCell({
       {latestThread ? (
         <div className="mt-1 flex min-w-0 flex-wrap items-start gap-2 md:mt-0">
           <ForumLink
-            href={forumPath(category.slug, latestThread.slug)}
+            href={forumPath(latestThreadCategorySlug, latestThread.slug)}
             prefetch
             className="focus-ring min-w-0 flex-1 basis-36 text-sm font-semibold hover:text-primary"
           >
@@ -1712,16 +1702,20 @@ function ForumSubforumLinks({ category }: { category: ForumCategoryRecord }) {
   }
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 font-mono text-[10px] uppercase leading-5">
-      <span className="py-2 text-muted-foreground">Sub-boards:</span>
+    <div className="mt-2 flex flex-wrap items-center gap-1 font-mono text-[10px] uppercase leading-5">
+      <span className="mr-1 text-muted-foreground">Sub-boards</span>
       {children.map((child) => (
         <ForumLink
           key={child.slug}
           href={forumPath(child.slug)}
           prefetch
-          className="focus-ring inline-flex min-h-10 items-center text-primary underline-offset-4 hover:underline lg:min-h-0"
+          className="focus-ring inline-flex min-h-8 items-center gap-1 border border-row-border px-2 text-foreground hover:border-primary hover:text-primary"
         >
-          {getCategoryTitle(child)}
+          <span>{getCategoryTitle(child)}</span>
+          <span className="text-muted-foreground">
+            {formatForumCount(getCategoryThreadCount(child))}/
+            {formatForumCount(getCategoryPostCount(child))}
+          </span>
         </ForumLink>
       ))}
     </div>

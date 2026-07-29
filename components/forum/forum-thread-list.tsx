@@ -104,8 +104,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   const selectedSortKey = resolveThreadSortKey(searchParams.get("sort"));
   const selectedSortOrder = resolveThreadSortOrder(searchParams.get("order"));
   const isNewestFirstOrder =
-    selectedSortKey === DEFAULT_THREAD_SORT_KEY &&
-    selectedSortOrder !== "asc";
+    selectedSortKey === DEFAULT_THREAD_SORT_KEY && selectedSortOrder !== "asc";
   const selectedDayFilter = resolveThreadDayFilter(searchParams.get("days"));
   const selectedDays =
     selectedDayFilter === THREAD_DAY_FILTER_ALL
@@ -411,11 +410,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
     selectedSortKey !== DEFAULT_THREAD_SORT_KEY ||
     selectedSortOrder !== DEFAULT_THREAD_SORT_ORDER ||
     selectedDayFilter !== THREAD_DAY_FILTER_ALL;
-  const showBoardTools =
-    currentPageThreads.length > 0 || boardFiltersActive;
+  const showBoardTools = currentPageThreads.length > 0 || boardFiltersActive;
   const showPagination = listResult.pagination.totalPages > 1;
-  const boardIsEmpty =
-    currentPageThreads.length === 0 && !boardFiltersActive;
+  const boardIsEmpty = currentPageThreads.length === 0 && !boardFiltersActive;
   const hasSubboards = (category.children?.length ?? 0) > 0;
 
   function toggleThreadComposer() {
@@ -438,8 +435,8 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="border-y border-row-border py-3">
+    <div className="space-y-4">
+      <div className="border-y border-row-border py-2.5">
         <ForumBreadcrumbs category={category} />
         <div className="mt-2">
           <p className="page-kicker">Public board</p>
@@ -451,13 +448,19 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
               {getCategoryDescription(category)}
             </p>
           ) : null}
-          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs uppercase text-muted-foreground">
+          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
             <div className="inline-flex items-baseline gap-1.5">
               <dt>Threads</dt>
               <dd className="font-semibold tabular-nums text-foreground">
                 {getCategoryThreadCount(category)}
               </dd>
             </div>
+            {hasSubboards ? (
+              <div className="text-muted-foreground">
+                <dt className="sr-only">Scope</dt>
+                <dd>Includes {category.children?.length ?? 0} sub-boards</dd>
+              </div>
+            ) : null}
             <div className="inline-flex items-baseline gap-1.5">
               <dt>Posts</dt>
               <dd className="font-semibold tabular-nums text-foreground">
@@ -488,9 +491,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                 aria-label="Search this board"
               />
             </label>
-            <div className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:justify-end md:overflow-visible md:p-0">
+            <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
               <Button
-                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
                 type="button"
                 disabled={authLoading || pending}
                 onClick={toggleThreadComposer}
@@ -498,7 +501,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                 {composeOpen ? "Close thread form" : "New thread"}
               </Button>
               <Button
-                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
                 type="button"
                 variant="outline"
                 disabled={authLoading || categorySubscriptionPending}
@@ -511,7 +514,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                     : "Subscribe"}
               </Button>
               <Button
-                className="min-h-10 shrink-0 rounded-none font-mono text-xs uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
                 type="button"
                 variant="outline"
                 disabled={authLoading || markReadPending}
@@ -717,9 +720,7 @@ function ForumSubboardSelector({
       className="border-y border-row-border"
     >
       <div className="flex min-h-10 items-baseline justify-between gap-3 border-b border-row-border px-3 py-2">
-        <h2 className="font-mono text-xs uppercase text-primary">
-          Sub-boards
-        </h2>
+        <h2 className="font-mono text-xs uppercase text-primary">Sub-boards</h2>
         <p className="font-mono text-xs uppercase text-muted-foreground">
           {boards.length}
         </p>
@@ -731,7 +732,7 @@ function ForumSubboardSelector({
       >
         {boards.map((board) => (
           <ForumLink
-            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2.5 hover:bg-muted/30 md:min-h-28 md:px-3 md:py-3"
+            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2.5 hover:bg-muted/30 md:min-h-20 md:px-3"
             href={forumPath(board.slug)}
             key={board.slug}
             prefetch
@@ -741,7 +742,7 @@ function ForumSubboardSelector({
                 {getCategoryTitle(board)}
               </span>
               {getCategoryDescription(board) ? (
-                <span className="mt-1 hidden line-clamp-2 text-xs leading-5 text-muted-foreground md:block">
+                <span className="mt-1 hidden line-clamp-1 text-xs leading-5 text-muted-foreground md:block">
                   {getCategoryDescription(board)}
                 </span>
               ) : null}

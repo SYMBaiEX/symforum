@@ -25,7 +25,7 @@ describe("forum BBCode parser", () => {
 
   test("supports rich block and inline tags", () => {
     const nodes = parseForumBbcode(
-      "[h2]Checklist[/h2][list=1][*]Map dependencies[/list][note]Context[/note][spoiler=Lab details]Hidden[/spoiler][table][tr][th]Mode[/th][td]Dry run[/td][/tr][/table]",
+      "[h2]Checklist[/h2][list=1][*]Map dependencies[/list][note]Context[/note][spoiler=Lab details]Hidden[/spoiler][chart=Signal map]Adoption|72|Growing[/chart][table][tr][th]Mode[/th][td]Dry run[/td][/tr][/table]",
     );
 
     expect(
@@ -37,6 +37,7 @@ describe("forum BBCode parser", () => {
       ["list", "1"],
       ["note", undefined],
       ["spoiler", "Lab details"],
+      ["chart", "Signal map"],
       ["table", undefined],
     ]);
   });

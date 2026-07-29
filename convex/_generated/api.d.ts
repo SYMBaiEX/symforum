@@ -13,6 +13,7 @@ import type * as adminApi from "../adminApi.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as belleForumAgent from "../belleForumAgent.js";
 import type * as comments from "../comments.js";
 import type * as contact from "../contact.js";
 import type * as contactEmails from "../contactEmails.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   auth: typeof auth;
   authz: typeof authz;
+  belleForumAgent: typeof belleForumAgent;
   comments: typeof comments;
   contact: typeof contact;
   contactEmails: typeof contactEmails;

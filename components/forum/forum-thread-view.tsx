@@ -482,10 +482,12 @@ function LiveForumThreadView({
         attachmentIdsToKeep: editThreadExistingAttachments.map(
           (attachment) => attachment._id,
         ),
-        attachments: editThreadNewAttachments.map(({ storageId, filename }) => ({
-          storageId,
-          filename,
-        })),
+        attachments: editThreadNewAttachments.map(
+          ({ storageId, filename }) => ({
+            storageId,
+            filename,
+          }),
+        ),
         editReason: editThreadReason.trim() || undefined,
       });
       setEditingThread(false);
@@ -999,7 +1001,7 @@ function LiveForumThreadView({
       : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="border-y border-row-border py-3">
         <ForumBreadcrumbs category={category} thread={thread} />
         <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
@@ -1106,9 +1108,7 @@ function LiveForumThreadView({
                 type="button"
                 variant="outline"
                 disabled={editThreadBody.trim().length === 0}
-                onClick={() =>
-                  setEditThreadPreviewOpen((current) => !current)
-                }
+                onClick={() => setEditThreadPreviewOpen((current) => !current)}
               >
                 {editThreadPreviewOpen ? "Hide preview" : "Preview"}
               </Button>
@@ -1125,7 +1125,10 @@ function LiveForumThreadView({
               onChange={setEditThreadPrefixId}
             />
             {editThreadPreviewOpen ? (
-              <ReplyPreviewPanel body={editThreadBody} label="Starter preview" />
+              <ReplyPreviewPanel
+                body={editThreadBody}
+                label="Starter preview"
+              />
             ) : null}
             <ForumEditAttachmentManager
               disabled={editThreadPending}
@@ -1192,7 +1195,7 @@ function LiveForumThreadView({
         />
       ) : null}
 
-      <section className="space-y-5">
+      <section className="space-y-4">
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
@@ -1969,7 +1972,9 @@ function ForumEditAttachmentManager({
 }) {
   function removeExistingAttachment(attachmentId: string) {
     onExistingAttachmentsChange(
-      existingAttachments.filter((attachment) => attachment._id !== attachmentId),
+      existingAttachments.filter(
+        (attachment) => attachment._id !== attachmentId,
+      ),
     );
   }
 

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthToken } from "@convex-dev/auth/react";
 import {
+  BarChart3,
   Bold,
   Code2,
   EyeOff,
@@ -251,6 +252,18 @@ export function ForumCompose({
             }
           />
           <ToolbarButton
+            ariaLabel="Insert signal chart markup"
+            disabled={disabled}
+            label={<BarChart3 className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[chart=Signal map]\n",
+                "\n[/chart]",
+                "Option A|72|Strong signal\nOption B|48|Mixed signal\nOption C|24|Early signal",
+              )
+            }
+          />
+          <ToolbarButton
             ariaLabel="Insert horizontal rule"
             disabled={disabled}
             label={<Minus className="size-3.5" />}
@@ -285,9 +298,9 @@ export function ForumCompose({
           </summary>
           <p className="border-t border-row-border px-3 py-3 text-xs leading-6 text-muted-foreground">
             Use headings, bold, italic, quotes, code, links, images, bullet or
-            numbered lists, notes, warnings, spoilers, tables, keyboard keys,
-            highlights, and horizontal rules. Preview before posting to check
-            the final layout.
+            numbered lists, notes, warnings, spoilers, tables, signal charts,
+            keyboard keys, highlights, and horizontal rules. Chart rows use
+            Label|0-100|Note. Preview before posting to check the final layout.
           </p>
         </details>
       </div>

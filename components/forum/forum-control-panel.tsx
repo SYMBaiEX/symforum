@@ -251,7 +251,7 @@ function LiveForumControlPanel() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <ForumMetricBar
         items={[
           { label: "Rank", value: profile.rank },

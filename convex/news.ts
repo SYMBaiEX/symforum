@@ -8,6 +8,7 @@ import {
 import { makeFunctionReference } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const HN_TOP_STORIES_URL =
   "https://hacker-news.firebaseio.com/v0/topstories.json";
@@ -313,6 +314,13 @@ export const refreshTopStories = internalAction({
         startedAt,
         stories: cleanStories,
       });
+      await ctx.scheduler.runAfter(
+        60_000,
+        internal.belleForumAgent.runDailyHackerNewsDigest,
+        {
+          snapshotDate: date,
+        },
+      );
       return { snapshotDate: date, storyCount: cleanStories.length };
     } catch (error) {
       await ctx.runMutation(markSnapshotFailedRef, {

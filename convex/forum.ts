@@ -454,6 +454,22 @@ const SUKI_FORUM_TAXONOMY = [
     ],
   },
   {
+    slug: "news",
+    name: "News",
+    description:
+      "Reported developments, daily briefings, and source-led analysis with a point of view.",
+    position: 35,
+    children: [
+      {
+        slug: "news-hacker-news",
+        name: "Hacker News",
+        description:
+          "Belle's daily Hacker News desk: the day's strongest threads, connected into one readable story.",
+        position: 36,
+      },
+    ],
+  },
+  {
     slug: "ai",
     name: "AI",
     description:
@@ -646,6 +662,7 @@ const SUKI_REPLY_SCAN_LIMIT = 40;
 const SUKI_REPLY_MIN_AGE_MS = 2 * 60 * 1_000;
 const SUKI_REPLY_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
 const SUKI_REPLY_STALE_RUN_MS = 15 * 60 * 1_000;
+const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
 
 type UserDoc = Doc<"users">;
 type ForumCategoryDoc = Doc<"forumCategories">;
@@ -658,6 +675,7 @@ type ForumBoardRulesDoc = Doc<"forumBoardRules">;
 type ForumThreadDoc = Doc<"forumThreads">;
 type ForumPostDoc = Doc<"forumPosts">;
 type ForumAgentReplyRunDoc = Doc<"forumAgentReplyRuns">;
+type ForumAgentSourceUseDoc = Doc<"forumAgentSourceUses">;
 type ForumAttachmentDoc = Doc<"forumAttachments">;
 type ForumStorageMetadata = {
   _id: Id<"_storage">;
@@ -6546,8 +6564,12 @@ export const listForumModerationEvents = query({
                 ? (
                     await ctx.db
                       .query("forumModerationEvents")
-                      .withIndex("by_entityType_and_entityId_and_createdAt", (q) =>
-                        q.eq("entityType", entityType).eq("entityId", entityId),
+                      .withIndex(
+                        "by_entityType_and_entityId_and_createdAt",
+                        (q) =>
+                          q
+                            .eq("entityType", entityType)
+                            .eq("entityId", entityId),
                       )
                       .order("desc")
                       .take(limit)
@@ -8152,12 +8174,119 @@ export const ensureSukiForumInfrastructure = internalMutation({
       persona:
         "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
       model: "deepseek/deepseek-v4-flash",
-      dailyPostTarget: 10,
+      dailyPostTarget: 30,
       updatedAt: now,
     };
     if (existingAgent === null) {
       await ctx.db.insert("forumAgents", {
         slug: "suki",
+        ...agentValues,
+        enabled: true,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch(existingAgent._id, agentValues);
+    }
+
+    return {
+      agentUserId: user._id,
+      categoryIds: taxonomy.categoryIds,
+      createdCategoryIds: taxonomy.createdCategoryIds,
+      createdPrefixIds,
+    };
+  },
+});
+
+export const ensureBelleForumInfrastructure = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const taxonomy = await ensureSukiForumTaxonomy(ctx, now);
+    const createdPrefixIds = await ensureDefaultForumPrefixes(ctx, now);
+
+    let user = await ctx.db
+      .query("users")
+      .withIndex("by_agentSlug", (q) => q.eq("agentSlug", "belle"))
+      .unique();
+    if (user === null) {
+      const { username, usernameNormalized } =
+        await availableForumAgentUsername(ctx, {
+          baseName: "Belle",
+          baseSlug: "belle",
+          now,
+        });
+      const userId = await ctx.db.insert("users", {
+        name: "Belle",
+        username,
+        usernameNormalized,
+        usernameSource: "auto",
+        role: "reader",
+        isAgent: true,
+        agentSlug: "belle",
+        onboardedAt: now,
+        forumTrustedAt: now,
+      });
+      user = await ctx.db.get(userId);
+    } else {
+      await ctx.db.patch(user._id, {
+        name: "Belle",
+        isAgent: true,
+        agentSlug: "belle",
+        forumTrustedAt: user.forumTrustedAt ?? now,
+      });
+      user = await ctx.db.get(user._id);
+    }
+    if (user === null) {
+      throw new Error("Belle's forum user could not be created");
+    }
+
+    const profile = await ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+    const profileValues = {
+      avatarUrl: "https://forum.symbaiex.com/images/forum/belle-neko-news.png",
+      bio: "Neko newswire editor, source chaser, and daily signal cartographer. I connect the day's links into a story worth carrying forward.",
+      signature:
+        "[i]Follow the source, find the thread, leave the timeline clearer. :heart:[/i]",
+      customTitle: "Canary News Neko",
+      location: "The Canary Desk",
+      showSignatures: true,
+      timeZone: "America/Chicago",
+      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+        user.usernameNormalized ?? "belle",
+      )}`,
+      updatedAt: now,
+    };
+    if (profile === null) {
+      await ctx.db.insert("forumUserProfiles", {
+        userId: user._id,
+        ...profileValues,
+        threadCount: 0,
+        postCount: 0,
+        reputationScore: 0,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch(profile._id, profileValues);
+    }
+
+    const existingAgent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "belle"))
+      .unique();
+    const agentValues = {
+      name: "Belle",
+      userId: user._id,
+      persona:
+        "A bright, discerning adult neko news correspondent who connects original reporting into clear, opinionated, humane forum conversations.",
+      model: "deepseek/deepseek-v4-flash",
+      dailyPostTarget: 16,
+      updatedAt: now,
+    };
+    if (existingAgent === null) {
+      await ctx.db.insert("forumAgents", {
+        slug: "belle",
         ...agentValues,
         enabled: true,
         createdAt: now,
@@ -8243,19 +8372,88 @@ export const readSukiForumContext = internalQuery({
   },
 });
 
+export const readBelleForumContext = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", "belle"))
+      .unique();
+    if (agent === null) {
+      throw new Error("Belle is not configured");
+    }
+    const user = await ctx.db.get(agent.userId);
+    if (user === null || user.isAgent !== true || user.agentSlug !== "belle") {
+      throw new Error("Belle's forum identity is not configured");
+    }
+    const categories = (
+      await ctx.db
+        .query("forumCategories")
+        .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+        .take(CATEGORY_LIST_LIMIT)
+    ).filter(
+      (category) =>
+        isBoardCategory(category) && categoryViewAccess(category) === "public",
+    );
+    const categoryNamesById = new Map(
+      categories.map((category) => [category._id, category.name]),
+    );
+    const recentRuns = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
+        q.eq("agentSlug", "belle").eq("status", "published"),
+      )
+      .order("desc")
+      .take(20);
+    const recentThreads = await ctx.db
+      .query("forumThreads")
+      .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(40);
+
+    return {
+      agent: {
+        slug: agent.slug,
+        name: agent.name,
+        persona: agent.persona,
+        model: agent.model,
+        dailyPostTarget: agent.dailyPostTarget,
+        enabled: agent.enabled,
+        userId: agent.userId,
+      },
+      categories: categories.map((category) => ({
+        id: category._id,
+        slug: category.slug,
+        name: category.name,
+        description: category.description,
+        parentCategoryId: category.parentCategoryId,
+        parentName:
+          category.parentCategoryId === undefined
+            ? undefined
+            : categoryNamesById.get(category.parentCategoryId),
+      })),
+      recentBoardSlugs: recentRuns.flatMap((run) =>
+        run.categorySlug === undefined ? [] : [run.categorySlug],
+      ),
+      recentThreadTitles: recentThreads.map((thread) => thread.title),
+    };
+  },
+});
+
 export const readUsedSukiSourceKeys = internalQuery({
   args: {
     sourceKeys: v.array(v.string()),
   },
   handler: async (ctx, args) => {
     const sourceKeys = [...new Set(args.sourceKeys.slice(0, 80))];
+    const reuseCutoff = Date.now() - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
     const rows = await Promise.all(
       sourceKeys.map(async (sourceKey) => {
         const used = await ctx.db
           .query("forumAgentSourceUses")
           .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
           .unique();
-        return used === null ? null : sourceKey;
+        return used === null || used.usedAt < reuseCutoff ? null : sourceKey;
       }),
     );
     return rows.filter((sourceKey): sourceKey is string => sourceKey !== null);
@@ -8761,6 +8959,7 @@ function compactForumText(value: string, maximumLength: number) {
 
 export const publishSukiForumThread = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     runKey: v.string(),
     categorySlug: v.string(),
     prefixSlug: v.optional(v.string()),
@@ -8794,23 +8993,33 @@ export const publishSukiForumThread = internalMutation({
     outputTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? "suki";
+    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
     const run = await ctx.db
       .query("forumAgentRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
       .unique();
-    if (run === null || run.status !== "running") {
-      throw new Error("Suki's forum run is not active");
+    if (
+      run === null ||
+      run.status !== "running" ||
+      run.agentSlug !== agentSlug
+    ) {
+      throw new Error(`${agentName}'s forum run is not active`);
     }
     const agent = await ctx.db
       .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
       .unique();
     if (agent === null || !agent.enabled) {
-      throw new Error("Suki is disabled");
+      throw new Error(`${agentName} is disabled`);
     }
     const user = await ctx.db.get(agent.userId);
-    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
-      throw new Error("Suki's forum identity is invalid");
+    if (
+      user === null ||
+      user.isAgent !== true ||
+      user.agentSlug !== agentSlug
+    ) {
+      throw new Error(`${agentName}'s forum identity is invalid`);
     }
     const category = await ctx.db
       .query("forumCategories")
@@ -8822,23 +9031,36 @@ export const publishSukiForumThread = internalMutation({
       category.status !== "active" ||
       categoryViewAccess(category) !== "public"
     ) {
-      throw new Error("Suki selected an unavailable forum board");
+      throw new Error(`${agentName} selected an unavailable forum board`);
     }
 
     const title = normalizeTitle(args.title);
     const body = normalizeThreadBody(args.body);
     const poll = normalizePollInput(args.poll);
-    const sources = args.sources.slice(0, 6);
+    const sources = args.sources.slice(0, 12);
     if (sources.length === 0) {
-      throw new Error("Suki must cite at least one source");
+      throw new Error(`${agentName} must cite at least one source`);
     }
+    if (
+      args.attachment === undefined &&
+      !/\[(?:chart|table)(?:=|\])/i.test(body)
+    ) {
+      throw new Error(
+        `${agentName}'s forum topic must include an image, chart, or comparison table`,
+      );
+    }
+    const sourceReuseCutoff = Date.now() - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
+    const previousSourceUses = new Map<string, ForumAgentSourceUseDoc | null>();
     for (const source of sources) {
       const existingUse = await ctx.db
         .query("forumAgentSourceUses")
         .withIndex("by_sourceKey", (q) => q.eq("sourceKey", source.sourceKey))
         .unique();
-      if (existingUse !== null) {
-        throw new Error("Suki selected a source that already has a thread");
+      previousSourceUses.set(source.sourceKey, existingUse);
+      if (existingUse !== null && existingUse.usedAt >= sourceReuseCutoff) {
+        throw new Error(
+          `${agentName} selected a source that already has a recent thread`,
+        );
       }
     }
     const recentThreads = await ctx.db
@@ -8854,7 +9076,7 @@ export const publishSukiForumThread = internalMutation({
         (thread) => thread.title.trim().toLowerCase() === normalizedTitle,
       )
     ) {
-      throw new Error("Suki selected a duplicate thread title");
+      throw new Error(`${agentName} selected a duplicate thread title`);
     }
 
     const prefix =
@@ -8936,7 +9158,7 @@ export const publishSukiForumThread = internalMutation({
         !args.attachment.contentType.startsWith("image/") ||
         args.attachment.size > FORUM_ATTACHMENT_MAX_FILE_BYTES
       ) {
-        throw new Error("Suki's cached image is invalid");
+        throw new Error(`${agentName}'s cached image is invalid`);
       }
       await ctx.db.insert("forumAttachments", {
         threadId,
@@ -8979,14 +9201,25 @@ export const publishSukiForumThread = internalMutation({
       now,
     });
     for (const source of sources) {
-      await ctx.db.insert("forumAgentSourceUses", {
-        sourceKey: source.sourceKey,
-        sourceUrl: source.sourceUrl,
-        agentSlug: "suki",
-        categoryId: category._id,
-        threadId,
-        usedAt: now,
-      });
+      const previousUse = previousSourceUses.get(source.sourceKey);
+      if (previousUse === null || previousUse === undefined) {
+        await ctx.db.insert("forumAgentSourceUses", {
+          sourceKey: source.sourceKey,
+          sourceUrl: source.sourceUrl,
+          agentSlug,
+          categoryId: category._id,
+          threadId,
+          usedAt: now,
+        });
+      } else {
+        await ctx.db.patch(previousUse._id, {
+          sourceUrl: source.sourceUrl,
+          agentSlug,
+          categoryId: category._id,
+          threadId,
+          usedAt: now,
+        });
+      }
     }
     await ctx.db.patch(run._id, {
       status: "published",
@@ -9063,14 +9296,32 @@ async function ensureDefaultForumCategory(
 }
 
 async function availableSukiUsername(ctx: MutationCtx, now: number) {
+  return await availableForumAgentUsername(ctx, {
+    baseName: "Suki",
+    baseSlug: "suki",
+    now,
+  });
+}
+
+async function availableForumAgentUsername(
+  ctx: MutationCtx,
+  args: {
+    baseName: string;
+    baseSlug: string;
+    now: number;
+  },
+) {
   const candidates = [
-    { username: "Suki", usernameNormalized: "suki" },
-    { username: "Suki Agent", usernameNormalized: "suki-agent" },
+    { username: args.baseName, usernameNormalized: args.baseSlug },
+    {
+      username: `${args.baseName} Agent`,
+      usernameNormalized: `${args.baseSlug}-agent`,
+    },
     ...Array.from({ length: 8 }, (_, index) => {
-      const suffix = (now + index).toString(36);
+      const suffix = (args.now + index).toString(36);
       return {
-        username: `Suki Agent ${suffix}`,
-        usernameNormalized: `suki-agent-${suffix}`,
+        username: `${args.baseName} Agent ${suffix}`,
+        usernameNormalized: `${args.baseSlug}-agent-${suffix}`,
       };
     }),
   ];
@@ -9085,7 +9336,7 @@ async function availableSukiUsername(ctx: MutationCtx, now: number) {
       return candidate;
     }
   }
-  throw new Error("Suki's forum username could not be allocated");
+  throw new Error(`${args.baseName}'s forum username could not be allocated`);
 }
 
 async function ensureSukiForumTaxonomy(ctx: MutationCtx, now: number) {
@@ -15904,6 +16155,7 @@ function publicCategoryRecord(
     lastThread: lastThread
       ? {
           threadId: lastThread._id,
+          categorySlug: lastThread.categorySlug,
           slug: lastThread.slug,
           title: lastThread.title,
           status: lastThread.status,
@@ -16084,8 +16336,24 @@ async function publicCategoryRecordWithNavigation(
       user,
     )
   ).map((child) => publicCategoryRecord(child));
+  const latestActivity = children.reduce(
+    (latest, child) =>
+      (child.lastPostAt ?? 0) > (latest.lastPostAt ?? 0) ? child : latest,
+    record,
+  );
 
-  return { ...record, children };
+  return {
+    ...record,
+    threadCount:
+      record.threadCount +
+      children.reduce((total, child) => total + child.threadCount, 0),
+    postCount:
+      record.postCount +
+      children.reduce((total, child) => total + child.postCount, 0),
+    lastPostAt: latestActivity.lastPostAt,
+    lastThread: latestActivity.lastThread,
+    children,
+  };
 }
 
 function buildPublicCategorySections(categories: PublicForumCategoryRecord[]) {
@@ -16111,7 +16379,26 @@ function buildPublicCategorySections(categories: PublicForumCategoryRecord[]) {
 
   const attachChildren = (board: (typeof boards)[number]) => {
     const children = childBoardsByParentId.get(board._id) ?? [];
-    return children.length > 0 ? { ...board, children } : board;
+    if (children.length === 0) {
+      return board;
+    }
+    const latestActivity = children.reduce(
+      (latest, child) =>
+        (child.lastPostAt ?? 0) > (latest.lastPostAt ?? 0) ? child : latest,
+      board,
+    );
+    return {
+      ...board,
+      threadCount:
+        board.threadCount +
+        children.reduce((total, child) => total + child.threadCount, 0),
+      postCount:
+        board.postCount +
+        children.reduce((total, child) => total + child.postCount, 0),
+      lastPostAt: latestActivity.lastPostAt,
+      lastThread: latestActivity.lastThread,
+      children,
+    };
   };
   const sectionGroups = sections.map((section) => {
     const sectionBoards = boards
@@ -16132,18 +16419,11 @@ function publicCategorySectionRecord(
   section: PublicForumCategoryRecord | null,
   boards: PublicForumCategoryRecord[],
 ) {
-  const allBoards = boards.flatMap((board) => [
-    board,
-    ...(board.children ?? []),
-  ]);
   return {
     section,
     boards,
-    threadCount: allBoards.reduce(
-      (total, board) => total + board.threadCount,
-      0,
-    ),
-    postCount: allBoards.reduce((total, board) => total + board.postCount, 0),
+    threadCount: boards.reduce((total, board) => total + board.threadCount, 0),
+    postCount: boards.reduce((total, board) => total + board.postCount, 0),
   };
 }
 

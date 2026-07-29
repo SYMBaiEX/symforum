@@ -13,7 +13,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 
-const SUKI_MODEL = "deepseek/deepseek-v4-flash";
+const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash";
 const FORUM_TIME_ZONE = "America/Chicago";
 const RESEARCH_CACHE_TTL_MS = 90 * 60 * 1_000;
 const MEDIA_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
@@ -22,7 +22,7 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v1";
+const PROMPT_VERSION = "suki-forum-v2";
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 
@@ -152,7 +152,14 @@ const topicSelectionSchema = z.object({
 
 const forumDraftSchema = z.object({
   title: z.string().min(8).max(150),
-  body: z.string().min(650).max(9_000),
+  body: z
+    .string()
+    .min(650)
+    .max(9_000)
+    .refine(
+      (body) => /\[(?:chart|table)(?:=|\])/i.test(body),
+      "The post needs a chart or comparison table.",
+    ),
   poll: z
     .object({
       question: z.string().min(8).max(150),
@@ -162,7 +169,7 @@ const forumDraftSchema = z.object({
   imageCandidateId: z.string().nullable(),
 });
 
-type ResearchCandidate = {
+export type ResearchCandidate = {
   id: string;
   sourceKey: string;
   sourceName: string;
@@ -175,14 +182,14 @@ type ResearchCandidate = {
   boardSlugs: string[];
 };
 
-type ArticleSnapshot = ResearchCandidate & {
+export type ArticleSnapshot = ResearchCandidate & {
   articleTitle: string;
   articleDescription: string;
   articleText: string;
   imageCredit: string;
 };
 
-type CachedImage = {
+export type CachedImage = {
   storageId: Id<"_storage">;
   filename: string;
   contentType: string;
@@ -192,7 +199,7 @@ type CachedImage = {
   articleUrl?: string;
 };
 
-type SukiRunResult =
+export type ForumResearchRunResult =
   | {
       status: "published";
       categorySlug: string;
@@ -208,257 +215,286 @@ type SukiRunResult =
       error: string;
     };
 
+export type ForumResearchAgentConfig = {
+  dailySlots: number;
+  name: "Suki" | "Belle";
+  promptVersion: string;
+  slug: "suki" | "belle";
+  topicInstructions: string;
+  writerInstructions: string;
+};
+
+export async function runForumResearchSlot(
+  ctx: ActionCtx,
+  args: {
+    slot: number;
+    attempt?: number;
+    runDate?: string;
+  },
+  config: ForumResearchAgentConfig,
+): Promise<ForumResearchRunResult> {
+  const attempt = args.attempt ?? 0;
+  const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
+  await ctx.runMutation(
+    config.slug === "suki"
+      ? internal.forum.ensureSukiForumInfrastructure
+      : internal.forum.ensureBelleForumInfrastructure,
+    {},
+  );
+  const claim = await ctx.runMutation(internal.sukiForumAgentData.claimRun, {
+    agentSlug: config.slug,
+    runDate,
+    slot: args.slot,
+    attempt,
+  });
+  if (!claim.claimed) {
+    return { status: "skipped" as const, reason: claim.reason };
+  }
+
+  try {
+    const apiKey = env.AI_GATEWAY_API_KEY?.trim();
+    if (!apiKey) {
+      throw new ForumAgentConfigurationError(
+        "AI_GATEWAY_API_KEY is not configured in Convex.",
+      );
+    }
+    const context = await ctx.runQuery(
+      config.slug === "suki"
+        ? internal.forum.readSukiForumContext
+        : internal.forum.readBelleForumContext,
+      {},
+    );
+    if (!context.agent.enabled) {
+      await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+        runKey: claim.runKey,
+        reason: `${config.name} is disabled.`,
+      });
+      return { status: "skipped" as const, reason: "disabled" };
+    }
+    if (context.agent.model !== FORUM_AGENT_MODEL) {
+      throw new ForumAgentConfigurationError(
+        `${config.name} must use the configured model ${FORUM_AGENT_MODEL}.`,
+      );
+    }
+
+    const candidates = await collectResearchCandidates(ctx);
+    const usedSourceKeys = new Set(
+      await ctx.runQuery(internal.forum.readUsedSukiSourceKeys, {
+        sourceKeys: candidates.map((candidate) => candidate.sourceKey),
+      }),
+    );
+    const unusedCandidates = candidates
+      .filter((candidate) => !usedSourceKeys.has(candidate.sourceKey))
+      .filter((candidate) => isRecentEnough(candidate.publishedAt))
+      .slice(0, MAX_RESEARCH_CANDIDATES);
+    if (unusedCandidates.length < 1) {
+      await markSkippedAndMaybeRetry(ctx, {
+        config,
+        attempt,
+        runDate,
+        runKey: claim.runKey,
+        slot: args.slot,
+        reason: "Not enough fresh, unused research candidates were available.",
+        candidateCount: unusedCandidates.length,
+      });
+      return {
+        status: "skipped" as const,
+        reason: "insufficient-research",
+      };
+    }
+
+    const gateway = createGateway({ apiKey });
+    const providerOptions = {
+      gateway: {
+        caching: "auto",
+        user: config.slug,
+        tags: [
+          `agent:${config.slug}`,
+          "feature:forum-research",
+          `prompt:${config.promptVersion}`,
+        ],
+      } satisfies GatewayProviderOptions,
+    };
+    const topicScout = new ToolLoopAgent({
+      id: `${config.slug}-topic-scout`,
+      model: gateway(context.agent.model as GatewayModelId),
+      tools: {
+        selectTopic: tool({
+          description: `Submit the single forum topic and board ${config.name} selected from the research packet.`,
+          inputSchema: topicSelectionSchema,
+        }),
+      },
+      toolChoice: { type: "tool", toolName: "selectTopic" },
+      providerOptions,
+      reasoning: "none",
+      temperature: 0.2,
+      maxOutputTokens: 2_000,
+      instructions: config.topicInstructions,
+    });
+    const selectionResult = await topicScout.generate({
+      prompt: topicSelectionPrompt({
+        candidates: unusedCandidates,
+        categories: context.categories,
+        recentBoardSlugs: context.recentBoardSlugs,
+        recentThreadTitles: context.recentThreadTitles,
+        slot: args.slot,
+        agentName: config.name,
+        dailySlots: config.dailySlots,
+      }),
+      abortSignal: AbortSignal.timeout(120_000),
+    });
+    const selectionCall = selectionResult.staticToolCalls[0];
+    if (selectionCall?.toolName !== "selectTopic") {
+      throw missingStructuredToolCallError("topic scout", selectionResult);
+    }
+    const selection = selectionCall.input;
+    const category = context.categories.find(
+      (candidate) => candidate.slug === selection.categorySlug,
+    );
+    if (category === undefined) {
+      throw new Error(`${config.name} selected a board that does not exist`);
+    }
+    const selectedCandidates = selection.candidateIds
+      .map((id) => unusedCandidates.find((candidate) => candidate.id === id))
+      .filter(
+        (candidate): candidate is ResearchCandidate => candidate !== undefined,
+      );
+    if (selectedCandidates.length === 0) {
+      throw new Error(`${config.name} selected no valid research candidates`);
+    }
+    const snapshots = await Promise.all(
+      selectedCandidates.map(fetchArticleSnapshot),
+    );
+    const forumWriter = new ToolLoopAgent({
+      id: `${config.slug}-forum-writer`,
+      model: gateway(context.agent.model as GatewayModelId),
+      tools: {
+        submitForumDraft: tool({
+          description:
+            "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
+          inputSchema: forumDraftSchema,
+        }),
+      },
+      toolChoice: { type: "tool", toolName: "submitForumDraft" },
+      providerOptions: {
+        gateway: {
+          ...providerOptions.gateway,
+          tags: [
+            `agent:${config.slug}`,
+            "feature:forum-writing",
+            `board:${category.slug}`,
+            `prompt:${config.promptVersion}`,
+          ],
+        } satisfies GatewayProviderOptions,
+      },
+      reasoning: "none",
+      temperature: 0.45,
+      maxOutputTokens: 6_500,
+      instructions: config.writerInstructions,
+    });
+    const draftResult = await forumWriter.generate({
+      prompt: forumDraftPrompt({
+        category,
+        selection,
+        snapshots,
+      }),
+      abortSignal: AbortSignal.timeout(180_000),
+    });
+    const draftCall = draftResult.staticToolCalls[0];
+    if (draftCall?.toolName !== "submitForumDraft") {
+      throw missingStructuredToolCallError("forum writer", draftResult);
+    }
+    const draft = draftCall.input;
+    const selectedImageCandidate =
+      snapshots.find(
+        (snapshot) =>
+          snapshot.id === draft.imageCandidateId && snapshot.imageUrl,
+      ) ?? snapshots.find((snapshot) => snapshot.imageUrl);
+    const cachedImage =
+      selectedImageCandidate === undefined
+        ? undefined
+        : await cacheResearchImage(ctx, selectedImageCandidate);
+    const body = finalizeForumBody(draft.body, snapshots);
+    const totalInputTokens = addOptionalNumbers(
+      selectionResult.usage.inputTokens,
+      draftResult.usage.inputTokens,
+    );
+    const totalOutputTokens = addOptionalNumbers(
+      selectionResult.usage.outputTokens,
+      draftResult.usage.outputTokens,
+    );
+    const published = await ctx.runMutation(
+      internal.forum.publishSukiForumThread,
+      {
+        agentSlug: config.slug,
+        runKey: claim.runKey,
+        categorySlug: category.slug,
+        prefixSlug: selection.prefixSlug,
+        title: draft.title,
+        body,
+        poll:
+          selection.includePoll && draft.poll !== null ? draft.poll : undefined,
+        sources: snapshots.map((snapshot) => ({
+          sourceKey: snapshot.sourceKey,
+          sourceUrl: snapshot.url,
+        })),
+        attachment:
+          cachedImage === undefined
+            ? undefined
+            : {
+                storageId: cachedImage.storageId,
+                filename: cachedImage.filename,
+                contentType: cachedImage.contentType,
+                size: cachedImage.size,
+                altText: cachedImage.altText,
+                credit: cachedImage.credit,
+                sourceUrl: cachedImage.articleUrl,
+              },
+        candidateCount: unusedCandidates.length,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      },
+    );
+    return {
+      status: "published" as const,
+      categorySlug: published.categorySlug,
+      threadSlug: published.threadSlug,
+      title: published.title,
+    };
+  } catch (error) {
+    const message = publicErrorMessage(error, config.name);
+    await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
+      runKey: claim.runKey,
+      errorMessage: message,
+    });
+    if (attempt < RETRY_DELAYS_MS.length && isRetryableError(error)) {
+      await ctx.scheduler.runAfter(
+        RETRY_DELAYS_MS[attempt],
+        config.slug === "suki"
+          ? internal.sukiForumAgent.runDailySlot
+          : internal.belleForumAgent.runDailySlot,
+        {
+          slot: args.slot,
+          attempt: attempt + 1,
+          runDate,
+        },
+      );
+    }
+    return { status: "failed" as const, error: message };
+  }
+}
+
 export const runDailySlot = internalAction({
   args: {
     slot: v.number(),
     attempt: v.optional(v.number()),
     runDate: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<SukiRunResult> => {
-    const attempt = args.attempt ?? 0;
-    const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
-    await ctx.runMutation(internal.forum.ensureSukiForumInfrastructure, {});
-    const claim = await ctx.runMutation(internal.sukiForumAgentData.claimRun, {
-      runDate,
-      slot: args.slot,
-      attempt,
-    });
-    if (!claim.claimed) {
-      return { status: "skipped" as const, reason: claim.reason };
-    }
-
-    try {
-      const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-      if (!apiKey) {
-        throw new SukiConfigurationError(
-          "AI_GATEWAY_API_KEY is not configured in Convex.",
-        );
-      }
-      const context = await ctx.runQuery(
-        internal.forum.readSukiForumContext,
-        {},
-      );
-      if (!context.agent.enabled) {
-        await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
-          runKey: claim.runKey,
-          reason: "Suki is disabled.",
-        });
-        return { status: "skipped" as const, reason: "disabled" };
-      }
-      if (context.agent.model !== SUKI_MODEL) {
-        throw new SukiConfigurationError(
-          `Suki must use the configured model ${SUKI_MODEL}.`,
-        );
-      }
-
-      const candidates = await collectResearchCandidates(ctx);
-      const usedSourceKeys = new Set(
-        await ctx.runQuery(internal.forum.readUsedSukiSourceKeys, {
-          sourceKeys: candidates.map((candidate) => candidate.sourceKey),
-        }),
-      );
-      const unusedCandidates = candidates
-        .filter((candidate) => !usedSourceKeys.has(candidate.sourceKey))
-        .filter((candidate) => isRecentEnough(candidate.publishedAt))
-        .slice(0, MAX_RESEARCH_CANDIDATES);
-      if (unusedCandidates.length < 3) {
-        await markSkippedAndMaybeRetry(ctx, {
-          attempt,
-          runDate,
-          runKey: claim.runKey,
-          slot: args.slot,
-          reason:
-            "Not enough fresh, unused research candidates were available.",
-          candidateCount: unusedCandidates.length,
-        });
-        return {
-          status: "skipped" as const,
-          reason: "insufficient-research",
-        };
-      }
-
-      const gateway = createGateway({ apiKey });
-      const providerOptions = {
-        gateway: {
-          caching: "auto",
-          user: "suki",
-          tags: [
-            "agent:suki",
-            "feature:forum-research",
-            `prompt:${PROMPT_VERSION}`,
-          ],
-        } satisfies GatewayProviderOptions,
-      };
-      const topicScout = new ToolLoopAgent({
-        id: "suki-topic-scout",
-        model: gateway(context.agent.model as GatewayModelId),
-        tools: {
-          selectTopic: tool({
-            description:
-              "Submit the single forum topic and board Suki selected from the research packet.",
-            inputSchema: topicSelectionSchema,
-          }),
-        },
-        toolChoice: { type: "tool", toolName: "selectTopic" },
-        providerOptions,
-        reasoning: "none",
-        temperature: 0.2,
-        maxOutputTokens: 2_000,
-        instructions: SUKI_TOPIC_SCOUT_INSTRUCTIONS,
-      });
-      const selectionResult = await topicScout.generate({
-        prompt: topicSelectionPrompt({
-          candidates: unusedCandidates,
-          categories: context.categories,
-          recentBoardSlugs: context.recentBoardSlugs,
-          recentThreadTitles: context.recentThreadTitles,
-          slot: args.slot,
-        }),
-        abortSignal: AbortSignal.timeout(120_000),
-      });
-      const selectionCall = selectionResult.staticToolCalls[0];
-      if (selectionCall?.toolName !== "selectTopic") {
-        throw missingStructuredToolCallError("topic scout", selectionResult);
-      }
-      const selection = selectionCall.input;
-      const category = context.categories.find(
-        (candidate) => candidate.slug === selection.categorySlug,
-      );
-      if (category === undefined) {
-        throw new Error("Suki selected a board that does not exist");
-      }
-      const selectedCandidates = selection.candidateIds
-        .map((id) => unusedCandidates.find((candidate) => candidate.id === id))
-        .filter(
-          (candidate): candidate is ResearchCandidate =>
-            candidate !== undefined,
-        );
-      if (selectedCandidates.length === 0) {
-        throw new Error("Suki selected no valid research candidates");
-      }
-      const snapshots = await Promise.all(
-        selectedCandidates.map(fetchArticleSnapshot),
-      );
-      const forumWriter = new ToolLoopAgent({
-        id: "suki-forum-writer",
-        model: gateway(context.agent.model as GatewayModelId),
-        tools: {
-          submitForumDraft: tool({
-            description:
-              "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
-            inputSchema: forumDraftSchema,
-          }),
-        },
-        toolChoice: { type: "tool", toolName: "submitForumDraft" },
-        providerOptions: {
-          gateway: {
-            ...providerOptions.gateway,
-            tags: [
-              "agent:suki",
-              "feature:forum-writing",
-              `board:${category.slug}`,
-              `prompt:${PROMPT_VERSION}`,
-            ],
-          } satisfies GatewayProviderOptions,
-        },
-        reasoning: "none",
-        temperature: 0.45,
-        maxOutputTokens: 6_500,
-        instructions: SUKI_FORUM_WRITER_INSTRUCTIONS,
-      });
-      const draftResult = await forumWriter.generate({
-        prompt: forumDraftPrompt({
-          category,
-          selection,
-          snapshots,
-        }),
-        abortSignal: AbortSignal.timeout(180_000),
-      });
-      const draftCall = draftResult.staticToolCalls[0];
-      if (draftCall?.toolName !== "submitForumDraft") {
-        throw missingStructuredToolCallError("forum writer", draftResult);
-      }
-      const draft = draftCall.input;
-      const selectedImageCandidate =
-        snapshots.find(
-          (snapshot) =>
-            snapshot.id === draft.imageCandidateId && snapshot.imageUrl,
-        ) ?? snapshots.find((snapshot) => snapshot.imageUrl);
-      const cachedImage =
-        selectedImageCandidate === undefined
-          ? undefined
-          : await cacheResearchImage(ctx, selectedImageCandidate);
-      const body = finalizeForumBody(draft.body, snapshots);
-      const totalInputTokens = addOptionalNumbers(
-        selectionResult.usage.inputTokens,
-        draftResult.usage.inputTokens,
-      );
-      const totalOutputTokens = addOptionalNumbers(
-        selectionResult.usage.outputTokens,
-        draftResult.usage.outputTokens,
-      );
-      const published = await ctx.runMutation(
-        internal.forum.publishSukiForumThread,
-        {
-          runKey: claim.runKey,
-          categorySlug: category.slug,
-          prefixSlug: selection.prefixSlug,
-          title: draft.title,
-          body,
-          poll:
-            selection.includePoll && draft.poll !== null
-              ? draft.poll
-              : undefined,
-          sources: snapshots.map((snapshot) => ({
-            sourceKey: snapshot.sourceKey,
-            sourceUrl: snapshot.url,
-          })),
-          attachment:
-            cachedImage === undefined
-              ? undefined
-              : {
-                  storageId: cachedImage.storageId,
-                  filename: cachedImage.filename,
-                  contentType: cachedImage.contentType,
-                  size: cachedImage.size,
-                  altText: cachedImage.altText,
-                  credit: cachedImage.credit,
-                  sourceUrl: cachedImage.articleUrl,
-                },
-          candidateCount: unusedCandidates.length,
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-        },
-      );
-      return {
-        status: "published" as const,
-        categorySlug: published.categorySlug,
-        threadSlug: published.threadSlug,
-        title: published.title,
-      };
-    } catch (error) {
-      const message = publicErrorMessage(error);
-      await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
-        runKey: claim.runKey,
-        errorMessage: message,
-      });
-      if (attempt < RETRY_DELAYS_MS.length && isRetryableError(error)) {
-        await ctx.scheduler.runAfter(
-          RETRY_DELAYS_MS[attempt],
-          internal.sukiForumAgent.runDailySlot,
-          {
-            slot: args.slot,
-            attempt: attempt + 1,
-            runDate,
-          },
-        );
-      }
-      return { status: "failed" as const, error: message };
-    }
-  },
+  handler: async (ctx, args): Promise<ForumResearchRunResult> =>
+    await runForumResearchSlot(ctx, args, SUKI_RESEARCH_CONFIG),
 });
 
-async function collectResearchCandidates(
+export async function collectResearchCandidates(
   ctx: ActionCtx,
 ): Promise<ResearchCandidate[]> {
   const groups: ResearchCandidate[][] = await Promise.all(
@@ -537,7 +573,7 @@ export function parseFeedXml(
     trimValues: true,
   });
   const parsed = parser.parse(xml) as Record<string, unknown>;
-  const itemRows = feedItemRows(parsed).slice(0, 7);
+  const itemRows = feedItemRows(parsed).slice(0, 20);
   return itemRows.flatMap((row, index) => {
     const title = compactText(decodeHtmlEntities(textValue(row.title)), 220);
     const url = feedItemUrl(row, source.feedUrl);
@@ -636,7 +672,7 @@ function feedItemImageUrl(row: Record<string, unknown>, articleUrl: string) {
   return imageUrl && isSafePublicUrl(imageUrl) ? imageUrl : undefined;
 }
 
-async function fetchArticleSnapshot(
+export async function fetchArticleSnapshot(
   candidate: ResearchCandidate,
 ): Promise<ArticleSnapshot> {
   try {
@@ -673,7 +709,7 @@ async function fetchArticleSnapshot(
   }
 }
 
-async function cacheResearchImage(
+export async function cacheResearchImage(
   ctx: ActionCtx,
   snapshot: ArticleSnapshot,
 ): Promise<CachedImage | undefined> {
@@ -751,6 +787,7 @@ async function cacheResearchImage(
 async function markSkippedAndMaybeRetry(
   ctx: ActionCtx,
   args: {
+    config: ForumResearchAgentConfig;
     attempt: number;
     runDate: string;
     runKey: string;
@@ -767,7 +804,9 @@ async function markSkippedAndMaybeRetry(
   if (args.attempt < RETRY_DELAYS_MS.length) {
     await ctx.scheduler.runAfter(
       RETRY_DELAYS_MS[args.attempt],
-      internal.sukiForumAgent.runDailySlot,
+      args.config.slug === "suki"
+        ? internal.sukiForumAgent.runDailySlot
+        : internal.belleForumAgent.runDailySlot,
       {
         slot: args.slot,
         attempt: args.attempt + 1,
@@ -778,6 +817,7 @@ async function markSkippedAndMaybeRetry(
 }
 
 function topicSelectionPrompt(args: {
+  agentName: string;
   candidates: ResearchCandidate[];
   categories: Array<{
     slug: string;
@@ -787,13 +827,14 @@ function topicSelectionPrompt(args: {
   }>;
   recentBoardSlugs: string[];
   recentThreadTitles: string[];
+  dailySlots: number;
   slot: number;
 }) {
   return [
-    `Daily slot: ${args.slot + 1} of 10.`,
+    `Daily slot: ${args.slot + 1} of ${args.dailySlots}.`,
     "Available boards (a parentName means this is a sub-board):",
     JSON.stringify(args.categories),
-    "Most recent Suki board choices, newest first:",
+    `Most recent ${args.agentName} board choices, newest first:`,
     JSON.stringify(args.recentBoardSlugs.slice(0, 10)),
     "Recent forum titles to avoid duplicating:",
     JSON.stringify(args.recentThreadTitles.slice(0, 30)),
@@ -879,6 +920,7 @@ Forum formatting:
 - Use [h2]major section[/h2] or [h3]minor section[/h3] to make longer posts scannable.
 - Use [b]emphasis[/b], [i]context[/i], [list][*]item[/list], [list=1][*]step[/list], [quote=source]...[/quote], and [code]...[/code] only when useful.
 - Use [note]...[/note] for a practical aside, [warning]...[/warning] for a real risk, [table][tr][th]...[/th][/tr][/table] for a compact comparison, and [spoiler=Optional deep dive]...[/spoiler] for genuinely optional detail.
+- Every post must include one evidence-backed visual block: either a compact [chart=Title]Label|0-100|Short note[/chart] with 3-6 newline-separated rows, or a genuinely useful [table]. Values in a chart are relative signal scores, not invented measurements, and the surrounding copy must explain the scale.
 - Use blank lines between blocks. Keep paragraphs readable.
 - Avoid Markdown, decorative formatting, giant tables, and emoji walls. Rich markup should clarify the post, not decorate every paragraph.
 - Pick imageCandidateId only from a research item that says hasCacheableImage.
@@ -888,6 +930,15 @@ Safety:
 - Gaming hacks means legitimate mods, accessibility, interoperability, or customization—not cheating, piracy, DRM bypass, or malware.
 - Downloads must point readers to the verified source list and explain provenance checks.
 Return only the requested structured draft.`;
+
+const SUKI_RESEARCH_CONFIG: ForumResearchAgentConfig = {
+  dailySlots: 30,
+  name: "Suki",
+  promptVersion: PROMPT_VERSION,
+  slug: "suki",
+  topicInstructions: SUKI_TOPIC_SCOUT_INSTRUCTIONS,
+  writerInstructions: SUKI_FORUM_WRITER_INSTRUCTIONS,
+};
 
 export function finalizeForumBody(
   generatedBody: string,
@@ -1311,8 +1362,8 @@ function addOptionalNumbers(
   return (left ?? 0) + (right ?? 0);
 }
 
-function publicErrorMessage(error: unknown) {
-  if (error instanceof SukiConfigurationError) {
+function publicErrorMessage(error: unknown, agentName = "Suki") {
+  if (error instanceof ForumAgentConfigurationError) {
     return error.message;
   }
   if (APICallError.isInstance(error)) {
@@ -1323,17 +1374,17 @@ function publicErrorMessage(error: unknown) {
       return "AI Gateway credits or budget are exhausted.";
     }
     if (error.statusCode === 429) {
-      return "AI Gateway rate limited Suki.";
+      return `AI Gateway rate limited ${agentName}.`;
     }
     return `AI Gateway request failed with HTTP ${error.statusCode ?? "unknown"}.`;
   }
   return error instanceof Error
     ? compactText(error.message, 500)
-    : "Suki's forum run failed.";
+    : `${agentName}'s forum run failed.`;
 }
 
 function isRetryableError(error: unknown) {
-  if (error instanceof SukiConfigurationError) {
+  if (error instanceof ForumAgentConfigurationError) {
     return false;
   }
   if (APICallError.isInstance(error)) {
@@ -1348,4 +1399,4 @@ function isRetryableError(error: unknown) {
   return true;
 }
 
-class SukiConfigurationError extends Error {}
+class ForumAgentConfigurationError extends Error {}

@@ -65,7 +65,7 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
       : "0";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section className="border border-row-border">
         <div className="border-b border-row-border px-4 py-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">

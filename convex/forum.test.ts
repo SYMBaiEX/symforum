@@ -752,7 +752,7 @@ describe("forum notification preferences", () => {
     );
 
     expect(first.created).toBe(true);
-    expect(first.createdCategoryIds).toHaveLength(40);
+    expect(first.createdCategoryIds).toHaveLength(42);
     expect(first.createdPrefixIds).toHaveLength(8);
     expect(first.createdAnnouncementIds).toHaveLength(1);
     expect(first.createdHelpDocumentIds).toHaveLength(3);
@@ -812,6 +812,8 @@ describe("forum notification preferences", () => {
       "music-playlists",
       "music-production",
       "music-scenes",
+      "news",
+      "news-hacker-news",
       "projects",
       "projects-build-logs",
       "projects-collaboration",
@@ -852,7 +854,7 @@ describe("forum notification preferences", () => {
     );
 
     expect(second.created).toBe(false);
-    expect(second.categoryIds).toHaveLength(40);
+    expect(second.categoryIds).toHaveLength(42);
     expect(second.createdCategoryIds).toHaveLength(0);
     expect(second.createdPrefixIds).toHaveLength(0);
     expect(second.createdAnnouncementIds).toHaveLength(0);
@@ -867,7 +869,7 @@ describe("forum notification preferences", () => {
       internal.forum.ensureSukiForumInfrastructure,
       {},
     );
-    expect(first.createdCategoryIds).toHaveLength(40);
+    expect(first.createdCategoryIds).toHaveLength(42);
     expect(first.createdPrefixIds).toHaveLength(8);
 
     const second = await t.mutation(
@@ -880,7 +882,7 @@ describe("forum notification preferences", () => {
 
     const context = await t.query(internal.forum.readSukiForumContext, {});
     expect(context.agent).toMatchObject({
-      dailyPostTarget: 10,
+      dailyPostTarget: 30,
       enabled: true,
       model: "deepseek/deepseek-v4-flash",
       name: "Suki",
@@ -915,6 +917,8 @@ describe("forum notification preferences", () => {
         "",
         "[b]What to check[/b]",
         "[list][*]Read the original notes.[*]Verify the documented tradeoffs.[*]Share a reproducible result.[/list]",
+        "",
+        "[chart=Evaluation signal]Evidence quality|90|Primary sources available\nReproducibility|70|Steps can be compared\nAdoption risk|35|Early field signal[/chart]",
         "",
         "[b]Sources and further reading[/b]",
         "[list][*][url=https://example.com/research]Primary research[/url] — Example Research[/list]",
@@ -1151,6 +1155,86 @@ describe("forum notification preferences", () => {
     expect(afterSpam).toMatchObject({
       claimed: false,
       reason: "no-candidate",
+    });
+  });
+
+  test("Belle infrastructure targets one digest plus fifteen varied daily posts", async () => {
+    const t = setup();
+    const infrastructure = await t.mutation(
+      internal.forum.ensureBelleForumInfrastructure,
+      {},
+    );
+    const context = await t.query(internal.forum.readBelleForumContext, {});
+
+    expect(context.agent).toMatchObject({
+      dailyPostTarget: 16,
+      enabled: true,
+      model: "deepseek/deepseek-v4-flash",
+      name: "Belle",
+      slug: "belle",
+    });
+    expect(context.categories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Hacker News",
+          parentName: "News",
+          slug: "news-hacker-news",
+        }),
+      ]),
+    );
+
+    const claim = await t.mutation(internal.sukiForumAgentData.claimRun, {
+      agentSlug: "belle",
+      attempt: 0,
+      runDate: "2026-07-28",
+      slot: 0,
+    });
+    expect(claim.claimed).toBe(true);
+
+    const published = await t.mutation(internal.forum.publishSukiForumThread, {
+      agentSlug: "belle",
+      body: [
+        "[note]The Canary Desk connects today's reporting into one useful thread.[/note]",
+        "[chart=Today's signal map]Research|92|Primary evidence\nInfrastructure|67|Adoption pressure\nCulture|44|Early movement[/chart]",
+        "[h2]The story through it[/h2]",
+        "The daily brief gives readers verified links, a concise summary, and a clearly labeled editorial interpretation.",
+        "[b]Which signal deserves a deeper follow-up tomorrow?[/b]",
+      ].join("\n\n"),
+      candidateCount: 8,
+      categorySlug: "news-hacker-news",
+      prefixSlug: "news",
+      runKey: claim.runKey,
+      sources: [
+        {
+          sourceKey: "belle-hn-123-2026-07-28",
+          sourceUrl: "https://example.com/hacker-news-story",
+        },
+      ],
+      title: "Jul 28, 2026 — The infrastructure story hiding in plain sight",
+    });
+
+    const stored = await t.run(async (ctx) => {
+      const [thread, profile] = await Promise.all([
+        ctx.db.get(published.threadId),
+        ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) =>
+            q.eq("userId", infrastructure.agentUserId),
+          )
+          .unique(),
+      ]);
+      return { profile, thread };
+    });
+    expect(stored.thread).toMatchObject({
+      authorId: infrastructure.agentUserId,
+      categorySlug: "news-hacker-news",
+      prefixSlug: "news",
+    });
+    expect(stored.profile).toMatchObject({
+      avatarUrl: "https://forum.symbaiex.com/images/forum/belle-neko-news.png",
+      customTitle: "Canary News Neko",
+      postCount: 1,
+      threadCount: 1,
     });
   });
 
@@ -2454,6 +2538,10 @@ describe("forum privacy regressions", () => {
         name: "Guides",
       }),
     ]);
+    expect(guestBoard.category).toMatchObject({
+      threadCount: 2,
+      postCount: 4,
+    });
 
     const asTrusted = t.withIdentity({
       subject: seed.trustedUserId,
@@ -2465,6 +2553,19 @@ describe("forum privacy regressions", () => {
     expect(
       trustedBoard.category.children?.map((category) => category.slug),
     ).toEqual(["public-guides", "trusted-downloads"]);
+    expect(trustedBoard.category).toMatchObject({
+      threadCount: 3,
+      postCount: 6,
+    });
+
+    const guestOverview = await t.query(api.forum.overview, {});
+    const publicBoard = guestOverview.sections
+      .flatMap((section) => section.boards)
+      .find((board) => board.slug === "public-square");
+    expect(publicBoard).toMatchObject({
+      threadCount: 2,
+      postCount: 4,
+    });
   });
 
   test("board display controls sort and date-prune threads", async () => {
@@ -3605,9 +3706,15 @@ describe("forum privacy regressions", () => {
         activeAttachment: await ctx.db.get(ids.activeAttachmentId),
         activeStorage: await ctx.db.system.get("_storage", ids.activeStorageId),
         deletedAttachment: await ctx.db.get(ids.deletedAttachmentId),
-        deletedStorage: await ctx.db.system.get("_storage", ids.deletedStorageId),
+        deletedStorage: await ctx.db.system.get(
+          "_storage",
+          ids.deletedStorageId,
+        ),
         expiredPendingUpload: await ctx.db.get(ids.expiredPendingUploadId),
-        expiredStorage: await ctx.db.system.get("_storage", ids.expiredStorageId),
+        expiredStorage: await ctx.db.system.get(
+          "_storage",
+          ids.expiredStorageId,
+        ),
       };
     });
     expect(after.expiredPendingUpload).toBeNull();
@@ -3615,7 +3722,9 @@ describe("forum privacy regressions", () => {
     expect(after.deletedAttachment).toBeNull();
     expect(after.deletedStorage).toBeNull();
     expect(after.activeAttachment).toMatchObject({ status: "active" });
-    expect(after.activeStorage).toMatchObject({ size: "active attachment".length });
+    expect(after.activeStorage).toMatchObject({
+      size: "active attachment".length,
+    });
   });
 
   test("claimed forum attachment uploads expire before posting", async () => {

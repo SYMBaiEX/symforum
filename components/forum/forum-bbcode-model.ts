@@ -17,6 +17,7 @@ const SUPPORTED_TAGS = new Set([
   "b",
   "br",
   "center",
+  "chart",
   "code",
   "h2",
   "h3",
