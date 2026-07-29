@@ -54,8 +54,8 @@ function LiveForumCalendarPage({ month }: { month: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="border-y border-row-border py-4">
+    <div className="space-y-4">
+      <div className="border-y border-row-border py-3">
         <p className="page-kicker">Forum calendar</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>

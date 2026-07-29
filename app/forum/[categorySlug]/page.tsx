@@ -43,7 +43,7 @@ export default async function ForumCategoryPage({ params }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-5" />
+      <ForumUtilityNav className="mb-3" />
       <ForumThreadList categorySlug={categorySlug} enabled={enabled} />
     </section>
   );

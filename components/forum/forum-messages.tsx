@@ -746,7 +746,7 @@ function LiveForumMessages() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <ForumMetricBar
         items={[
           {
@@ -824,7 +824,7 @@ function LiveForumMessages() {
           older undeleted messages.
         </p>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
         <section className="border border-row-border">
           <div className="flex flex-wrap gap-1 border-b border-row-border p-3">
             <MailboxTab

@@ -26,7 +26,7 @@ export default async function ForumMemberProfilePage({ params }: PageProps) {
 
   return (
     <section className="space-y-5">
-      <div className="border-y border-row-border py-4">
+      <div className="border-y border-row-border py-3">
         <p className="page-kicker">Forum member</p>
         <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
           /members/{username}

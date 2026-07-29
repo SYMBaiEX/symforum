@@ -251,7 +251,7 @@ function LiveForumControlPanel() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <ForumMetricBar
         items={[
           { label: "Rank", value: profile.rank },
@@ -270,7 +270,7 @@ function LiveForumControlPanel() {
         reputationEntriesCount={reputationEntriesCount}
         warnings={warnings}
       />
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
         <div
           className="scroll-mt-24 border border-row-border p-4"
           id="ucp-profile"

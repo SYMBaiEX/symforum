@@ -33,7 +33,7 @@ export function ForumRecentThreadsPage({
   title: string;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <ForumRecentThreadsHeader
         description={description}
         mode={mode}
@@ -99,7 +99,7 @@ function ForumRecentThreadsHeader({
   title: string;
 }) {
   return (
-    <section className="border-y border-row-border py-4">
+    <section className="border-y border-row-border py-3">
       <p className="page-kicker">
         {mode === "new" ? "Unread activity" : "Daily activity"}
       </p>

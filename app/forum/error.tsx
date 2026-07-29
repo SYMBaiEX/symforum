@@ -20,7 +20,7 @@ export default function ForumErrorRoute({
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-5" />
+      <ForumUtilityNav className="mb-3" />
       <ForumStatusBox
         title="Forum unavailable"
         body="This board view failed to load. Try again, or return to the forum index."

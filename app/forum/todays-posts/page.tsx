@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function ForumTodaysPostsRoute() {
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-5" />
+      <ForumUtilityNav className="mb-3" />
       <ForumRecentThreadsPage
         description="Threads active today across the SYMBaiEX forum, ordered by the most recent reply."
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}

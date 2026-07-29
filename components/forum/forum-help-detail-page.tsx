@@ -61,8 +61,8 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
   }
 
   return (
-    <article className="space-y-6">
-      <div className="border-y border-row-border py-4">
+    <article className="space-y-4">
+      <div className="border-y border-row-border py-3">
         <p className="page-kicker">Forum helpdesk</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold md:text-3xl">
@@ -77,7 +77,7 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
         </p>
       </div>
 
-      <div className="border-y border-row-border py-5">
+      <div className="border-y border-row-border py-4">
         <ForumBody body={document.body} />
       </div>
 

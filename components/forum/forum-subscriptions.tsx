@@ -237,7 +237,7 @@ function LiveForumSubscriptions() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <ForumBreadcrumbs category={subscriptionCategory} />
       <ForumSubscriptionActionStatus
         error={subscriptionActionError}

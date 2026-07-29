@@ -21,7 +21,7 @@ export default async function ForumCalendarRoute({ searchParams }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-5" />
+      <ForumUtilityNav className="mb-3" />
       <ForumCalendarPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         month={month}

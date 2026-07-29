@@ -97,7 +97,7 @@ export function ForumStatusBox({
   return (
     <div
       className={cn(
-        "border border-row-border p-4 md:p-5",
+        "border-y border-row-border py-3",
         accent === "cyan" && "border-accent/70 bg-accent/10",
         accent === "canary" && "border-accent-canary/60 bg-accent-canary/10",
         accent === "magenta" && "border-primary/50 bg-primary/10",
@@ -106,10 +106,10 @@ export function ForumStatusBox({
       <p className="font-mono text-[11px] uppercase text-muted-foreground">
         {title}
       </p>
-      <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
+      <p className="mt-1.5 max-w-3xl text-sm leading-6 text-muted-foreground">
         {body}
       </p>
-      {action ? <div className="mt-4">{action}</div> : null}
+      {action ? <div className="mt-3">{action}</div> : null}
     </div>
   );
 }
@@ -151,7 +151,7 @@ export function ForumLoading({
   return (
     <p
       aria-live="polite"
-      className="border-y border-row-border py-4 font-mono text-[11px] uppercase text-muted-foreground"
+      className="border-y border-row-border py-3 font-mono text-[11px] uppercase text-muted-foreground"
       role="status"
     >
       {label}
@@ -174,7 +174,7 @@ export function ForumBreadcrumbs({
   return (
     <nav
       aria-label="Forum breadcrumb"
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground"
+      className="flex min-w-0 items-center gap-x-2 overflow-hidden whitespace-nowrap font-mono text-[10px] uppercase text-muted-foreground"
     >
       <ForumLink
         href="/forum"
@@ -203,12 +203,7 @@ export function ForumBreadcrumbs({
           </ForumLink>
         </>
       ) : null}
-      {thread ? (
-        <>
-          <span>/</span>
-          <span className="truncate text-foreground">{thread.title}</span>
-        </>
-      ) : null}
+      {thread ? <span className="sr-only">/ {thread.title}</span> : null}
     </nav>
   );
 }
@@ -249,16 +244,16 @@ export function ForumMetricBar({
   return (
     <dl
       className={cn(
-        "grid grid-cols-2 gap-px border border-row-border bg-row-border sm:grid-cols-3",
+        "grid grid-cols-2 gap-px border-y border-row-border bg-row-border sm:grid-cols-3",
         className,
       )}
     >
       {items.map((item) => (
-        <div key={item.label} className="bg-background px-3 py-3">
+        <div key={item.label} className="bg-background px-3 py-2.5">
           <dt className="font-mono text-[10px] uppercase text-muted-foreground">
             {item.label}
           </dt>
-          <dd className="mt-1 text-lg font-semibold">
+          <dd className="mt-0.5 font-mono text-base font-semibold tabular-nums">
             {typeof item.value === "number"
               ? formatForumCount(item.value)
               : item.value}
@@ -324,14 +319,14 @@ export function ForumChrome({
   return (
     <header
       className={cn(
-        "min-w-0 overflow-hidden border border-row-border bg-background",
+        "min-w-0 overflow-hidden border-y border-row-border bg-background",
         className,
       )}
     >
       <ForumPresenceHeartbeat pathname={pathname} />
       <ForumWelcomeStrip />
       {children ? (
-        <div className="border-t border-row-border bg-background p-3 md:px-4">
+        <div className="border-t border-row-border bg-background px-2 py-2 md:px-3">
           {children}
         </div>
       ) : null}
@@ -445,15 +440,18 @@ function ForumWelcomeStripLayout({
   );
 
   return (
-    <div className="px-4 py-4 md:px-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <div className="px-3 py-2.5 md:px-4">
+      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
         <p className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
-          {forumWelcomeMessage(navState)}
+          <span className="md:hidden">
+            {forumCompactWelcomeMessage(navState)}
+          </span>
+          <span className="hidden md:inline">{forumWelcomeMessage(navState)}</span>
         </p>
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(12rem,19rem)] sm:items-center sm:justify-end">
           <nav
             aria-label="Forum account"
-            className="flex flex-wrap items-center gap-1"
+            className="flex min-w-0 items-center gap-1 overflow-x-auto"
           >
             {navState === undefined ? null : navState.authenticated ? (
               <>
@@ -585,6 +583,24 @@ function forumWelcomeMessage(navState: ForumWelcomeNavState | undefined) {
   return `Welcome back, ${username}. ${stats.join(" / ")}`;
 }
 
+function forumCompactWelcomeMessage(
+  navState: ForumWelcomeNavState | undefined,
+) {
+  if (navState === undefined) {
+    return "Checking forum session";
+  }
+  if (!navState.authenticated) {
+    return "Guest / public reading";
+  }
+  const username = navState.username ?? "member";
+  if (!navState.trusted) {
+    return `${username} / access pending`;
+  }
+  return `${username} / ${navState.rank ?? "Member"} / ${formatForumCount(
+    navState.postCount,
+  )} posts`;
+}
+
 function formatForumSignedCount(value: number) {
   if (value > 0) {
     return `+${formatForumCount(value)}`;
@@ -695,13 +711,13 @@ function ForumUtilityLinks({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between",
+        "grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center",
         className,
       )}
     >
       <nav
         aria-label="Forum tools"
-        className="grid min-w-0 grid-cols-3 gap-1 md:flex md:flex-wrap md:items-center"
+        className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:p-0"
       >
         {items.map((item) => {
           const active =
@@ -714,7 +730,7 @@ function ForumUtilityLinks({
             <Button
               asChild
               className={cn(
-                "min-h-10 w-full rounded-none border border-transparent px-2 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground lg:min-h-8 lg:w-auto",
+                "min-h-10 w-auto shrink-0 whitespace-nowrap rounded-none border border-transparent px-2.5 font-mono text-[10px] uppercase text-muted-foreground shadow-none hover:border-row-border hover:bg-transparent hover:text-foreground lg:min-h-8 lg:px-2",
                 active &&
                   "border-foreground bg-foreground text-background hover:bg-foreground hover:text-background",
               )}
@@ -760,7 +776,7 @@ function ForumJumpSelect({
   const selectedValue = forumJumpSelectedValue(normalizedPathname, categories);
 
   return (
-    <label className="flex min-h-10 min-w-0 max-w-full items-center gap-2 font-mono text-[10px] uppercase md:ml-auto lg:min-h-8">
+    <label className="flex min-h-10 min-w-0 w-full items-center gap-2 font-mono text-[10px] uppercase md:ml-auto md:w-auto lg:min-h-8">
       <span className="shrink-0 text-muted-foreground">Jump</span>
       <select
         aria-label="Forum jump"
@@ -857,7 +873,7 @@ export function ForumAnnouncementPanel({
   announcements: ForumAnnouncementRecord[];
   title?: string;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const announcementSignature = forumAnnouncementSignature(announcements);
 
   useEffect(() => {
@@ -867,11 +883,11 @@ export function ForumAnnouncementPanel({
 
     try {
       setCollapsed(
-        window.localStorage.getItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY) ===
-          announcementSignature,
+        window.localStorage.getItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY) !==
+          `expanded:${announcementSignature}`,
       );
     } catch {
-      setCollapsed(false);
+      setCollapsed(true);
     }
   }, [announcementSignature]);
 
@@ -887,12 +903,12 @@ export function ForumAnnouncementPanel({
 
       try {
         if (nextCollapsed) {
+          window.localStorage.removeItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY);
+        } else {
           window.localStorage.setItem(
             FORUM_ANNOUNCEMENT_COLLAPSE_KEY,
-            announcementSignature,
+            `expanded:${announcementSignature}`,
           );
-        } else {
-          window.localStorage.removeItem(FORUM_ANNOUNCEMENT_COLLAPSE_KEY);
         }
       } catch {
         // Keep the UI usable when storage is blocked.
@@ -903,7 +919,7 @@ export function ForumAnnouncementPanel({
   }
 
   return (
-    <section className="py-1">
+    <section className="border-y border-row-border py-2">
       <div className="grid gap-x-3 gap-y-1 lg:grid-cols-[7.5rem_minmax(0,1fr)_auto] lg:items-start">
         <h2 className="min-w-0 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
           {title}
@@ -1018,21 +1034,21 @@ export function ForumUserCpShell({
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <ForumChrome>
         <ForumUtilityLinkRow />
       </ForumChrome>
-      <section className="grid gap-px border border-row-border bg-row-border lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <aside className="bg-background p-4">
+      <section className="grid gap-px border-y border-row-border bg-row-border lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <aside className="bg-background p-3">
           <p className="font-mono text-[11px] uppercase text-muted-foreground">
             User CP
           </p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <p className="mt-1.5 text-sm leading-5 text-muted-foreground">
             {description}
           </p>
           <nav
             aria-label="Forum user control panel"
-            className="mt-4 flex gap-1 overflow-x-auto lg:grid lg:gap-px lg:bg-row-border"
+            className="mt-3 flex gap-1 overflow-x-auto lg:grid lg:gap-px lg:bg-row-border"
           >
             {items.map((item) => {
               const active = normalizedPathname === item.href;
@@ -1054,11 +1070,11 @@ export function ForumUserCpShell({
             })}
           </nav>
         </aside>
-        <div className="min-w-0 bg-background p-4 md:p-5">
+        <div className="min-w-0 bg-background p-3 md:p-4">
           <h2 className="font-mono text-[11px] uppercase text-muted-foreground">
             {title}
           </h2>
-          <div className="mt-4">{children}</div>
+          <div className="mt-3">{children}</div>
         </div>
       </section>
     </div>
@@ -1086,7 +1102,7 @@ export function ForumPaginationBar({
     <nav
       aria-label={`${label} pagination`}
       className={cn(
-        "flex flex-col gap-3 border border-row-border px-3 py-3 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-2 border-y border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
@@ -1364,7 +1380,7 @@ export function ForumIndexTable({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {groups.map((group, index) => (
         <ForumIndexSection
           key={group.section?.slug ?? `root-${index}`}
@@ -1449,8 +1465,8 @@ function ForumIndexSection({
     : "Main boards";
 
   return (
-    <section className="overflow-hidden border border-row-border">
-      <header className="flex flex-col gap-1 border-b border-row-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="overflow-hidden border-y border-row-border">
+      <header className="flex flex-col gap-1 border-b border-row-border bg-muted/20 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-mono text-[11px] uppercase text-foreground">
           {heading}
         </h3>
@@ -1523,7 +1539,7 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
   const statusState = categoryBoardStatusState(category);
 
   return (
-    <article className="px-4 py-5 odd:bg-muted/15">
+    <article className="px-3 py-3 odd:bg-muted/15">
       <div className="min-w-0">
         <div className="flex items-start gap-2">
           <ForumStatusGlyph className="mt-1" state={statusState} />
@@ -1531,7 +1547,7 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
             <ForumLink
               href={categoryHref}
               prefetch
-              className="focus-ring inline-flex min-h-10 items-center text-xl font-semibold leading-tight hover:text-primary"
+              className="focus-ring inline-flex min-h-10 items-center text-base font-semibold leading-tight hover:text-primary"
             >
               {getCategoryTitle(category)}
             </ForumLink>
@@ -1539,33 +1555,31 @@ function ForumMobileBoardRow({ category }: { category: ForumCategoryRecord }) {
           </div>
         </div>
         {getCategoryDescription(category) ? (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="mt-1 line-clamp-2 max-w-2xl text-xs leading-5 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
         <ForumSubforumLinks category={category} />
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-px border border-row-border bg-row-border">
-        <div className="bg-background px-3 py-3">
-          <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-            Threads
-          </dt>
-          <dd className="mt-1 text-base font-semibold">
+      <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+        <div className="inline-flex items-baseline gap-1.5">
+          <dt>Threads</dt>
+          <dd className="text-foreground">
             {formatForumCount(getCategoryThreadCount(category))}
           </dd>
         </div>
-        <div className="bg-background px-3 py-3">
-          <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-            Posts
-          </dt>
-          <dd className="mt-1 text-base font-semibold">
+        <div className="inline-flex items-baseline gap-1.5">
+          <dt>Posts</dt>
+          <dd className="text-foreground">
             {formatForumCount(getCategoryPostCount(category))}
           </dd>
         </div>
       </dl>
-      <div className="mt-4 border-t border-row-border pt-3">
-        <ForumLatestPostCell category={category} latestThread={latestThread} />
-      </div>
+      {latestThread ? (
+        <div className="mt-2 border-t border-row-border pt-2">
+          <ForumLatestPostCell category={category} latestThread={latestThread} />
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -1577,36 +1591,36 @@ function ForumDesktopBoardRow({ category }: { category: ForumCategoryRecord }) {
 
   return (
     <tr className="odd:bg-muted/15">
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-3 align-middle">
         <ForumStatusGlyph state={statusState} />
       </td>
-      <th className="px-4 py-4 text-left align-middle font-normal" scope="row">
+      <th className="px-3 py-3 text-left align-middle font-normal" scope="row">
         <ForumLink
           href={categoryHref}
           prefetch
-          className="focus-ring text-xl font-semibold leading-tight hover:text-primary"
+          className="focus-ring text-base font-semibold leading-tight hover:text-primary"
         >
           {getCategoryTitle(category)}
         </ForumLink>
         <ForumCategoryAccessBadges category={category} className="mt-2" />
         {getCategoryDescription(category) ? (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="mt-1 line-clamp-1 max-w-2xl text-xs leading-5 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
         <ForumSubforumLinks category={category} />
       </th>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-3 align-middle">
         <p className="text-sm font-medium">
           {formatForumCount(getCategoryThreadCount(category))}
         </p>
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-3 align-middle">
         <p className="text-sm font-medium">
           {formatForumCount(getCategoryPostCount(category))}
         </p>
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-3 align-middle">
         <ForumLatestPostCell category={category} latestThread={latestThread} />
       </td>
     </tr>
@@ -1698,8 +1712,8 @@ function ForumSubforumLinks({ category }: { category: ForumCategoryRecord }) {
   }
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase leading-5">
-      <span className="py-2 text-muted-foreground">Subforums:</span>
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0 font-mono text-[10px] uppercase leading-5">
+      <span className="py-2 text-muted-foreground">Sub-boards:</span>
       {children.map((child) => (
         <ForumLink
           key={child.slug}
@@ -1725,13 +1739,13 @@ function ForumCategoryAccessBadges({
   if (category.viewAccess && category.viewAccess !== "public") {
     tokens.push(`${category.viewAccess} view`);
   }
-  if (category.threadAccess) {
+  if (category.threadAccess && category.threadAccess !== "members") {
     tokens.push(`${category.threadAccess} threads`);
   }
-  if (category.replyAccess) {
+  if (category.replyAccess && category.replyAccess !== "members") {
     tokens.push(`${category.replyAccess} replies`);
   }
-  if (category.pollAccess) {
+  if (category.pollAccess && category.pollAccess !== "members") {
     tokens.push(`${category.pollAccess} polls`);
   }
 
@@ -1756,7 +1770,7 @@ export function ForumNewestThreads({
   heading?: string;
 }) {
   return (
-    <section className="border-y border-row-border py-4">
+    <section className="border-y border-row-border py-3">
       <div className="font-mono text-[10px] uppercase text-muted-foreground">
         {heading}
       </div>
@@ -1865,7 +1879,7 @@ export function ForumThreadTable({
                 <div
                   key={thread._id}
                   className={cn(
-                    "grid gap-4 border-l-2 border-transparent px-4 py-4",
+                    "grid gap-2 border-l-2 border-transparent px-3 py-3",
                     section.showHeader
                       ? index % 2 === 0 && "bg-muted/15"
                       : "odd:bg-muted/15",
@@ -1896,7 +1910,7 @@ export function ForumThreadTable({
                     {firstUnreadHref ? (
                       <ForumJumpLink
                         ariaLabel={`Go to first unread post in ${thread.title}`}
-                        className="mt-3"
+                        className="mt-2"
                         href={firstUnreadHref}
                       >
                         New / First unread »
@@ -1920,35 +1934,31 @@ export function ForumThreadTable({
                       </p>
                     ) : null}
                     {thread.excerpt ? (
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                      <p className="mt-1 line-clamp-1 text-xs leading-5 text-muted-foreground">
                         {thread.excerpt}
                       </p>
                     ) : null}
                     <ForumThreadRatingSummary
                       average={getThreadRatingAverage(thread)}
-                      className="mt-3"
+                      className="mt-2"
                       count={getThreadRatingCount(thread)}
                     />
                   </div>
-                  <dl className="grid grid-cols-2 gap-px border border-row-border bg-row-border">
-                    <div className="bg-background px-3 py-3">
-                      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-                        Replies
-                      </dt>
-                      <dd className="mt-1 text-base font-semibold">
+                  <dl className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+                    <div className="inline-flex items-baseline gap-1.5">
+                      <dt>Replies</dt>
+                      <dd className="text-foreground">
                         {formatForumCount(getThreadReplyCount(thread))}
                       </dd>
                     </div>
-                    <div className="bg-background px-3 py-3">
-                      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-                        Views
-                      </dt>
-                      <dd className="mt-1 text-base font-semibold">
+                    <div className="inline-flex items-baseline gap-1.5">
+                      <dt>Views</dt>
+                      <dd className="text-foreground">
                         {formatForumCount(thread.viewCount)}
                       </dd>
                     </div>
                   </dl>
-                  <div className="border-t border-row-border pt-3">
+                  <div className="border-t border-row-border pt-2">
                     <p className="font-mono text-[10px] uppercase text-muted-foreground">
                       Last post
                     </p>
@@ -2324,7 +2334,7 @@ export function ForumPostFrame({
         ) : null}
       </div>
       <div className="grid gap-px bg-row-border md:grid-cols-[11rem_minmax(0,1fr)]">
-        <aside className="bg-background px-3 py-3">
+        <aside className="bg-background px-3 py-2.5">
           <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3 md:grid-cols-1">
             <ForumAvatar
               alt={`${author} avatar`}
@@ -2351,40 +2361,42 @@ export function ForumPostFrame({
               </p>
             </div>
           </div>
-          <dl className="mt-3 grid grid-cols-2 gap-px bg-row-border font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-1">
+          <dl className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground md:grid md:grid-cols-1 md:gap-px md:bg-row-border">
             {role ? (
-              <div className="bg-background px-2 py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
                 <dt>Role</dt>
-                <dd className="mt-1 text-foreground">{role}</dd>
+                <dd className="text-foreground md:mt-1">{role}</dd>
               </div>
             ) : null}
             {typeof postCount === "number" ? (
-              <div className="bg-background px-2 py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
                 <dt>Posts</dt>
-                <dd className="mt-1 text-foreground">
+                <dd className="text-foreground md:mt-1">
                   {formatForumCount(postCount)}
                 </dd>
               </div>
             ) : null}
             {typeof reputationScore === "number" ? (
-              <div className="bg-background px-2 py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
                 <dt>Reputation</dt>
-                <dd className="mt-1 text-foreground">
+                <dd className="text-foreground md:mt-1">
                   {reputationScore > 0 ? "+" : ""}
                   {formatForumCount(reputationScore)}
                 </dd>
               </div>
             ) : null}
             {location ? (
-              <div className="bg-background px-2 py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
                 <dt>Location</dt>
-                <dd className="mt-1 break-words text-foreground">{location}</dd>
+                <dd className="break-words text-foreground md:mt-1">
+                  {location}
+                </dd>
               </div>
             ) : null}
             {typeof joinedAt === "number" ? (
-              <div className="bg-background px-2 py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
                 <dt>Joined</dt>
-                <dd className="mt-1 text-foreground">
+                <dd className="text-foreground md:mt-1">
                   {formatForumDateTime(joinedAt)}
                 </dd>
               </div>
@@ -2392,10 +2404,10 @@ export function ForumPostFrame({
           </dl>
           <ForumAuthorRailShortcuts author={author} authorHref={authorHref} />
         </aside>
-        <div className="min-w-0 bg-background px-4 py-4">
+        <div className="min-w-0 bg-background px-3 py-3 md:px-4">
           {children}
           {signature ? (
-            <div className="mt-6 border-t border-row-border pt-3">
+            <div className="mt-4 border-t border-row-border pt-3">
               <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
                 Signature
               </p>
@@ -2406,9 +2418,6 @@ export function ForumPostFrame({
             </div>
           ) : null}
         </div>
-      </div>
-      <div className="border-t border-row-border bg-muted/15 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
-        {author} / post #{postNumber}
       </div>
     </article>
   );
@@ -2468,12 +2477,12 @@ function ForumAuthorRailShortcuts({
   return (
     <nav
       aria-label={`${author} forum shortcuts`}
-      className="mt-3 grid grid-cols-2 gap-px bg-row-border font-mono text-[10px] uppercase md:grid-cols-1"
+      className="mt-2 flex gap-1 overflow-x-auto font-mono text-[10px] uppercase md:grid md:grid-cols-1 md:gap-px md:bg-row-border"
     >
       {authorActions.map((action) =>
         action.kind === "forum" ? (
           <ForumLink
-            className="focus-ring inline-flex min-h-10 items-center justify-center bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:text-left"
+            className="focus-ring inline-flex min-h-10 shrink-0 items-center justify-center border border-row-border bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:border-0 md:text-left"
             href={action.href}
             key={action.label}
             prefetch
@@ -2482,7 +2491,7 @@ function ForumAuthorRailShortcuts({
           </ForumLink>
         ) : (
           <ForumLink
-            className="focus-ring inline-flex min-h-10 items-center justify-center bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:text-left"
+            className="focus-ring inline-flex min-h-10 shrink-0 items-center justify-center border border-row-border bg-background px-2 py-2 text-center text-muted-foreground hover:bg-foreground hover:text-background md:justify-start md:border-0 md:text-left"
             href={action.href}
             key={action.label}
             prefetch
@@ -2931,7 +2940,7 @@ function ForumThreadSkeleton({ label }: { label: string }) {
       role="status"
     >
       <span className="sr-only">{label}</span>
-      <div className="border-y border-row-border py-4">
+      <div className="border-y border-row-border py-3">
         <SkeletonBox className="h-3 w-44" />
         <SkeletonBox className="mt-3 h-7 w-3/5 max-w-xl" />
         <div className="mt-3 flex flex-wrap gap-2">

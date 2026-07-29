@@ -90,14 +90,14 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <section className="min-w-0">
-        <div className="mb-4 flex flex-col gap-4 border-b border-row-border pb-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="mb-3 flex flex-col gap-2 border-b border-row-border pb-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Board index
             </p>
-            <h2 className="mt-2 text-2xl font-semibold md:text-3xl">
+            <h2 className="mt-1 text-xl font-semibold md:text-2xl">
               Public categories
             </h2>
             <ForumIndexSnapshot overview={overview} />
@@ -149,8 +149,8 @@ function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
 
 function ForumIndexPulse({ overview }: { overview: ForumOverviewRecord }) {
   return (
-    <section className="border-y border-row-border py-5">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.8fr)]">
+    <section className="border-y border-row-border py-3">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.8fr)]">
         <ForumIndexThreadPreview threads={overview.newestThreads} />
         <ForumPulseSummary overview={overview} />
       </div>
@@ -197,10 +197,10 @@ function ForumIndexThreadPreview({
           View new posts
         </ForumLink>
       </div>
-      <div className="mt-4 divide-y divide-row-border border-t border-row-border">
+      <div className="mt-3 divide-y divide-row-border border-t border-row-border">
         {threads.map((thread) => (
           <article
-            className="py-4"
+            className="py-3"
             key={`${thread.categorySlug ?? "forum"}-${thread.slug}`}
           >
             <div className="flex flex-wrap items-center gap-2">

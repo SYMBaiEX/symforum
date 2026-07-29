@@ -999,19 +999,18 @@ function LiveForumThreadView({
       : null;
 
   return (
-    <div className="space-y-8">
-      <div className="border-y border-row-border py-4">
+    <div className="space-y-5">
+      <div className="border-y border-row-border py-3">
         <ForumBreadcrumbs category={category} thread={thread} />
-        <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
+        <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
           <div>
-            <p className="page-kicker">Thread view</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ForumThreadPrefixBadge thread={thread} />
-              <h1 className="text-2xl font-semibold md:text-3xl">
+              <h1 className="text-xl font-semibold leading-tight sm:text-2xl md:text-3xl">
                 {thread.title}
               </h1>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <ForumThreadStateBadges thread={thread} />
               {firstUnreadHref ? (
                 <ForumJumpLink
@@ -1032,7 +1031,7 @@ function LiveForumThreadView({
                 onToggleSubscription={() => toggleSubscription(thread._id)}
               />
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="mt-2 flex flex-wrap items-center gap-3">
               <ForumThreadRatingSummary
                 average={getThreadRatingAverage(thread)}
                 count={getThreadRatingCount(thread)}
@@ -1060,7 +1059,7 @@ function LiveForumThreadView({
               </p>
             ) : null}
             {getCategoryDescription(category) ? (
-              <p className="mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
+              <p className="mt-3 max-w-3xl text-xs leading-5 text-muted-foreground md:text-sm">
                 {getCategoryTitle(category)} ·{" "}
                 {getCategoryDescription(category)}
               </p>

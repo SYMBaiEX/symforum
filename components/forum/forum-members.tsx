@@ -54,15 +54,14 @@ export function ForumMembers({ enabled }: { enabled: boolean }) {
 
 function LiveForumMembers() {
   return (
-    <section className="overflow-hidden border border-row-border">
-      <div className="border-b border-row-border px-4 py-4 md:px-5 md:py-5">
+    <section className="overflow-hidden border-y border-row-border">
+      <div className="border-b border-row-border px-3 py-3 md:px-4">
         <p className="page-kicker">Community directory</p>
-        <h1 className="mt-2 text-3xl font-semibold leading-tight md:text-4xl">
+        <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">
           Members
         </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base md:leading-7">
-          Find the people behind the threads, see who is active, and open a
-          member profile without digging through a dense roster.
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Find members, activity, and forum profiles.
         </p>
       </div>
       <ForumMemberTable />
@@ -149,15 +148,15 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="border-b border-row-border bg-muted/10 px-4 py-4 md:px-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
-          <label className="grid gap-2 sm:col-span-2 lg:col-span-1">
+      <div className="border-b border-row-border bg-muted/10 px-3 py-3 md:px-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
+          <label className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Search members
             </span>
             <input
               autoComplete="off"
-              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
+              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
                 const nextQuery = event.target.value;
                 setDraftQuery(nextQuery);
@@ -168,12 +167,12 @@ function ForumMemberTable() {
               value={draftQuery}
             />
           </label>
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Sort by
             </span>
             <select
-              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
+              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -189,12 +188,12 @@ function ForumMemberTable() {
               ))}
             </select>
           </label>
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Per page
             </span>
             <select
-              className="focus-ring h-11 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
+              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -251,12 +250,12 @@ function ForumMemberTable() {
             {visibleMembers.map((member) => (
               <article
                 key={member._id}
-                className="px-4 py-5 odd:bg-muted/15 md:px-5"
+                className="px-3 py-3 odd:bg-muted/15 md:px-4"
               >
                 <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
                   <ForumAvatar
                     alt={`${member.displayName} avatar`}
-                    className="size-14"
+                    className="size-12"
                     name={member.displayName}
                     src={member.avatarUrl}
                   />
@@ -264,7 +263,7 @@ function ForumMemberTable() {
                     <ForumLink
                       href={forumMemberProfilePath(member.username)}
                       prefetch
-                      className="focus-ring inline-flex min-h-10 items-center text-xl font-semibold leading-tight hover:text-primary"
+                      className="focus-ring inline-flex min-h-10 items-center text-base font-semibold leading-tight hover:text-primary"
                     >
                       {member.displayName}
                     </ForumLink>
@@ -283,7 +282,7 @@ function ForumMemberTable() {
                     ) : null}
                   </div>
                 </div>
-                <dl className="mt-4 grid grid-cols-3 gap-px border border-row-border bg-row-border">
+                <dl className="mt-3 grid grid-cols-3 gap-px border-y border-row-border bg-row-border">
                   <MemberMetric className="col-span-2" label="Rank">
                     {member.rank}
                   </MemberMetric>
@@ -453,7 +452,7 @@ function ForumMemberTable() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-row-border px-4 py-4 md:px-5">
+          <div className="border-t border-row-border px-3 py-3 md:px-4">
             <ForumMemberPager
               currentPage={currentPage}
               endItem={endItem}
@@ -535,7 +534,7 @@ function ForumMemberPager({
 }) {
   const pages = visibleMemberPages(currentPage, pageCount);
   return (
-    <div className="mt-4 flex flex-col gap-3 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-3 flex flex-col gap-2 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <p>
         Showing {startItem}-{endItem} of {matchedCount} matched
       </p>
@@ -631,7 +630,7 @@ function MemberMetric({
   label: string;
 }) {
   return (
-    <div className={cn("min-w-0 bg-background px-3 py-3", className)}>
+    <div className={cn("min-w-0 bg-background px-2 py-2", className)}>
       <dt className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </dt>

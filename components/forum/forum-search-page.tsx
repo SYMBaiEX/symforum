@@ -233,18 +233,18 @@ function LiveForumSearchPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="border border-row-border">
-        <div className="border-b border-row-border px-4 py-3">
+    <div className="space-y-5">
+      <section className="border-y border-row-border">
+        <div className="border-b border-row-border px-3 py-2.5">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Search
           </p>
-          <h2 className="mt-2 text-2xl font-semibold">
+          <h2 className="mt-1 text-xl font-semibold md:text-2xl">
             Find threads and replies
           </h2>
         </div>
-        <form className="space-y-3 p-4" onSubmit={submitSearch}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_14rem_10rem_11rem] xl:items-end">
+        <form className="space-y-3 p-3" onSubmit={submitSearch}>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_14rem_10rem_11rem] xl:items-end">
             <label className="grid gap-2">
               <span className="font-mono text-[10px] uppercase text-muted-foreground">
                 Keywords

@@ -208,6 +208,10 @@
     @apply min-w-0 overflow-x-clip;
   }
 
+  .forum-surface .page-frame-dense {
+    @apply py-4 md:py-6;
+  }
+
   .forum-surface :where(img, video, iframe, pre, table) {
     max-width: 100%;
   }
@@ -242,7 +246,7 @@
 
   @media (max-width: 767px) {
     .forum-surface .page-frame {
-      @apply px-3 pb-8 pt-5;
+      @apply px-3 pb-6 pt-4;
     }
   }
 

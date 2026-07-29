@@ -429,17 +429,17 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="border-y border-row-border py-4">
+    <div className="space-y-5">
+      <div className="border-y border-row-border py-3">
         <ForumBreadcrumbs category={category} />
-        <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
+        <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
           <div>
             <p className="page-kicker">Public board</p>
-            <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold md:text-3xl">
               {getCategoryTitle(category)}
             </h1>
             {getCategoryDescription(category) ? (
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground md:text-base">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
                 {getCategoryDescription(category)}
               </p>
             ) : null}
@@ -462,14 +462,14 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       <ForumAnnouncementPanel announcements={listResult.announcements} />
 
       <section
-        className={`grid gap-8 ${
+        className={`grid gap-5 ${
           hasBoardActivity
             ? "xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.8fr)]"
             : ""
         }`}
       >
-        <div className="min-w-0 space-y-6">
-          <div className="flex flex-col gap-3 border-y border-row-border py-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0 space-y-4">
+          <div className="grid gap-2 border-y border-row-border py-3 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Search this board</span>
               <Input
@@ -635,7 +635,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
         </div>
 
         {hasBoardActivity ? (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <ForumNewestThreads
               threads={sortedNewestThreads}
               heading={
@@ -674,7 +674,7 @@ function ForumSubboardSelector({
       aria-label={`${parentTitle} sub-boards`}
       className="border border-row-border"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-3 py-2.5">
         <div>
           <p className="font-mono text-[10px] uppercase text-primary">
             Choose a sub-board
@@ -687,10 +687,10 @@ function ForumSubboardSelector({
           {boards.length} {boards.length === 1 ? "destination" : "destinations"}
         </p>
       </div>
-      <div className="grid gap-px bg-row-border sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-px bg-row-border sm:grid-cols-2 xl:grid-cols-3">
         {boards.map((board) => (
           <ForumLink
-            className="focus-ring group flex min-h-28 min-w-0 flex-col justify-between bg-background px-4 py-4 hover:bg-muted/30"
+            className="focus-ring group flex min-h-20 min-w-0 flex-col justify-between bg-background px-3 py-3 hover:bg-muted/30"
             href={forumPath(board.slug)}
             key={board.slug}
             prefetch
@@ -700,12 +700,12 @@ function ForumSubboardSelector({
                 {getCategoryTitle(board)}
               </span>
               {getCategoryDescription(board) ? (
-                <span className="mt-2 line-clamp-2 block text-sm leading-5 text-muted-foreground">
+                <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">
                   {getCategoryDescription(board)}
                 </span>
               ) : null}
             </span>
-            <span className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] uppercase text-muted-foreground">
+            <span className="mt-2 flex items-center justify-between gap-3 font-mono text-[10px] uppercase text-muted-foreground">
               <span>
                 {getCategoryThreadCount(board)} threads ·{" "}
                 {getCategoryPostCount(board)} posts

@@ -16,7 +16,7 @@ export function ForumModerationPage({ enabled }: { enabled: boolean }) {
   return (
     <div className="space-y-5">
       <ForumUtilityNav />
-      <section className="border-y border-row-border py-5">
+      <section className="border-y border-row-border py-3">
         <p className="font-mono text-xs uppercase text-muted-foreground">
           Moderator CP
         </p>

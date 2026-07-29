@@ -35,8 +35,8 @@ function LiveForumHelpPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="border-y border-row-border py-4">
+    <div className="space-y-4">
+      <div className="border-y border-row-border py-3">
         <p className="page-kicker">Forum helpdesk</p>
         <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
           Help / FAQ
