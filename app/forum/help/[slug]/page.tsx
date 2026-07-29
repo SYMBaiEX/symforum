@@ -36,7 +36,7 @@ export default async function ForumHelpDetailRoute({ params }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumHelpDetailPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         slug={slug}

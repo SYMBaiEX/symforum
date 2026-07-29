@@ -1,6 +1,7 @@
 "use client";
 
 import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
+import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
 import { ConvexReactClient } from "convex/react";
 import { ReactNode, useMemo } from "react";
 
@@ -22,7 +23,9 @@ export default function ConvexClientProvider({
 
   return (
     <ConvexAuthNextjsProvider client={convex}>
-      {children}
+      <ConvexQueryCacheProvider expiration={15 * 60_000} maxIdleEntries={400}>
+        {children}
+      </ConvexQueryCacheProvider>
     </ConvexAuthNextjsProvider>
   );
 }

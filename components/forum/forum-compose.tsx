@@ -108,7 +108,7 @@ export function ForumCompose({
   }
 
   return (
-    <div className="border border-row-border p-4">
+    <div className="border border-row-border p-3">
       {titleEnabled ? (
         <label className="block">
           <span className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -123,7 +123,7 @@ export function ForumCompose({
           />
         </label>
       ) : null}
-      <div className={`block ${titleEnabled ? "mt-4" : ""}`}>
+      <div className={`block ${titleEnabled ? "mt-3" : ""}`}>
         <label
           className="font-mono text-[10px] uppercase text-muted-foreground"
           htmlFor={bodyInputId}
@@ -296,7 +296,7 @@ export function ForumCompose({
               +
             </span>
           </summary>
-          <p className="border-t border-row-border px-3 py-3 text-xs leading-6 text-muted-foreground">
+          <p className="border-t border-row-border px-3 py-2.5 text-xs leading-5 text-muted-foreground">
             Use headings, bold, italic, quotes, code, links, images, bullet or
             numbered lists, notes, warnings, spoilers, tables, signal charts,
             keyboard keys, highlights, and horizontal rules. Chart rows use
@@ -304,7 +304,7 @@ export function ForumCompose({
           </p>
         </details>
       </div>
-      {children ? <div className="mt-4">{children}</div> : null}
+      {children ? <div className="mt-3">{children}</div> : null}
       {note ? (
         <p className="mt-3 text-xs leading-6 text-muted-foreground">{note}</p>
       ) : null}
@@ -317,7 +317,7 @@ export function ForumCompose({
           {error}
         </p>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="font-mono text-[10px] uppercase text-muted-foreground">
           Classic board format
         </p>

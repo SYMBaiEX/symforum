@@ -43,7 +43,7 @@ export default async function ForumThreadPage({ params }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumThreadView
         categorySlug={categorySlug}
         threadSlug={threadSlug}

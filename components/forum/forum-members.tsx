@@ -14,7 +14,7 @@ import {
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
 import { cn } from "@/lib/utils";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -55,12 +55,12 @@ export function ForumMembers({ enabled }: { enabled: boolean }) {
 function LiveForumMembers() {
   return (
     <section className="overflow-hidden border-y border-row-border">
-      <div className="border-b border-row-border px-3 py-3 md:px-4">
+      <div className="border-b border-row-border px-3 py-2">
         <p className="page-kicker">Community directory</p>
-        <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">
+        <h1 className="mt-1 text-xl font-semibold leading-tight md:text-2xl">
           Members
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+        <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
           Find members, activity, and forum profiles.
         </p>
       </div>
@@ -148,8 +148,8 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="border-b border-row-border bg-muted/10 px-3 py-3 md:px-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
+      <div className="border-b border-row-border bg-muted/10 px-3 py-2">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
           <label className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Search members
@@ -228,12 +228,12 @@ function ForumMemberTable() {
         ) : null}
       </div>
       {result === undefined ? (
-        <div className="p-4">
+        <div className="p-3">
           <ForumLoading label="Syncing members" />
         </div>
       ) : null}
       {result !== undefined && visibleMembers.length === 0 ? (
-        <div className="p-4">
+        <div className="p-3">
           <ForumStatusBox
             title={query.trim() ? "No matches" : "Members"}
             body={
@@ -248,14 +248,11 @@ function ForumMemberTable() {
         <>
           <div className="divide-y divide-row-border lg:hidden">
             {visibleMembers.map((member) => (
-              <article
-                key={member._id}
-                className="px-3 py-3 odd:bg-muted/15 md:px-4"
-              >
-                <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
+              <article key={member._id} className="px-3 py-2.5 odd:bg-muted/15">
+                <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5">
                   <ForumAvatar
                     alt={`${member.displayName} avatar`}
-                    className="size-12"
+                    className="size-10"
                     name={member.displayName}
                     src={member.avatarUrl}
                   />
@@ -271,7 +268,7 @@ function ForumMemberTable() {
                       /members/{member.username}
                     </p>
                     {member.customTitle ? (
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      <p className="mt-1 text-sm leading-5 text-muted-foreground">
                         {member.customTitle}
                       </p>
                     ) : null}
@@ -282,7 +279,7 @@ function ForumMemberTable() {
                     ) : null}
                   </div>
                 </div>
-                <dl className="mt-3 grid grid-cols-3 gap-px border-y border-row-border bg-row-border">
+                <dl className="mt-2 grid grid-cols-3 gap-px border-y border-row-border bg-row-border">
                   <MemberMetric className="col-span-2" label="Rank">
                     {member.rank}
                   </MemberMetric>
@@ -324,41 +321,41 @@ function ForumMemberTable() {
             <caption className="sr-only">Forum members</caption>
             <thead>
               <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
-                <th className="px-4 py-3 text-left font-normal" scope="col">
+                <th className="px-3 py-2 text-left font-normal" scope="col">
                   Member
                 </th>
                 <th
-                  className="w-36 px-4 py-3 text-left font-normal"
+                  className="w-36 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Rank
                 </th>
                 <th
-                  className="w-36 px-4 py-3 text-left font-normal"
+                  className="w-36 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Status
                 </th>
                 <th
-                  className="w-28 px-4 py-3 text-left font-normal"
+                  className="w-28 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Threads
                 </th>
                 <th
-                  className="w-28 px-4 py-3 text-left font-normal"
+                  className="w-28 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Posts
                 </th>
                 <th
-                  className="w-32 px-4 py-3 text-left font-normal"
+                  className="w-32 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Reputation
                 </th>
                 <th
-                  className="w-48 px-4 py-3 text-left font-normal"
+                  className="w-48 px-3 py-2 text-left font-normal"
                   scope="col"
                 >
                   Joined
@@ -369,13 +366,13 @@ function ForumMemberTable() {
               {visibleMembers.map((member) => (
                 <tr className="odd:bg-muted/15" key={member._id}>
                   <th
-                    className="px-4 py-4 text-left align-middle font-normal"
+                    className="px-3 py-2.5 text-left align-middle font-normal"
                     scope="row"
                   >
-                    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3">
+                    <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5">
                       <ForumAvatar
                         alt={`${member.displayName} avatar`}
-                        className="size-12"
+                        className="size-10"
                         name={member.displayName}
                         src={member.avatarUrl}
                       />
@@ -383,7 +380,7 @@ function ForumMemberTable() {
                         <ForumLink
                           href={forumMemberProfilePath(member.username)}
                           prefetch
-                          className="focus-ring text-xl font-semibold leading-tight hover:text-primary"
+                          className="focus-ring text-base font-semibold leading-tight hover:text-primary"
                         >
                           {member.displayName}
                         </ForumLink>
@@ -391,7 +388,7 @@ function ForumMemberTable() {
                           /members/{member.username}
                         </p>
                         {member.customTitle ? (
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          <p className="mt-1 text-sm leading-5 text-muted-foreground">
                             {member.customTitle}
                           </p>
                         ) : null}
@@ -403,10 +400,10 @@ function ForumMemberTable() {
                       </div>
                     </div>
                   </th>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="text-sm font-medium">{member.rank}</p>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <div className="flex items-center gap-2">
                       <span
                         aria-hidden="true"
@@ -428,22 +425,22 @@ function ForumMemberTable() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="text-sm font-medium">
                       {formatForumCount(member.threadCount)}
                     </p>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="text-sm font-medium">
                       {formatForumCount(member.postCount)}
                     </p>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="text-sm font-medium">
                       {formatForumReputation(member.reputationScore)}
                     </p>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="text-sm font-medium">
                       {formatForumDateTime(member.joinedAt)}
                     </p>
@@ -452,7 +449,7 @@ function ForumMemberTable() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-row-border px-3 py-3 md:px-4">
+          <div className="border-t border-row-border px-3 py-2">
             <ForumMemberPager
               currentPage={currentPage}
               endItem={endItem}

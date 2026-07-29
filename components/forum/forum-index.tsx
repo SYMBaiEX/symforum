@@ -25,7 +25,8 @@ import {
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";

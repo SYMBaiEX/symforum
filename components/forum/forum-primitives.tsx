@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { safeImageUrl } from "@/lib/safe-url";
 import { ForumBbcodeBody } from "@/components/forum/forum-bbcode";
 import { cn } from "@/lib/utils";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import { Star } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -96,7 +97,7 @@ export function ForumStatusBox({
   return (
     <div
       className={cn(
-        "border-y border-row-border py-3",
+        "border-y border-row-border py-2.5",
         accent === "cyan" && "border-accent/70 bg-accent/10",
         accent === "canary" && "border-accent-canary/60 bg-accent-canary/10",
         accent === "magenta" && "border-primary/50 bg-primary/10",
@@ -105,10 +106,10 @@ export function ForumStatusBox({
       <p className="font-mono text-[11px] uppercase text-muted-foreground">
         {title}
       </p>
-      <p className="mt-1.5 max-w-3xl text-sm leading-6 text-muted-foreground">
+      <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
         {body}
       </p>
-      {action ? <div className="mt-3">{action}</div> : null}
+      {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
 }
@@ -150,7 +151,7 @@ export function ForumLoading({
   return (
     <p
       aria-live="polite"
-      className="border-y border-row-border py-3 font-mono text-[11px] uppercase text-muted-foreground"
+      className="border-y border-row-border py-2.5 font-mono text-[11px] uppercase text-muted-foreground"
       role="status"
     >
       {label}
@@ -248,7 +249,7 @@ export function ForumMetricBar({
       )}
     >
       {items.map((item) => (
-        <div key={item.label} className="bg-background px-3 py-2.5">
+        <div key={item.label} className="bg-background px-3 py-2">
           <dt className="font-mono text-[10px] uppercase text-muted-foreground">
             {item.label}
           </dt>
@@ -1049,8 +1050,7 @@ export function ForumUserCpShell({
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "focus-ring inline-flex min-h-10 min-w-0 items-center justify-center whitespace-nowrap bg-background px-2 py-2 text-center font-mono text-[10px] uppercase hover:text-primary lg:justify-start lg:px-3",
-                    active &&
-                      "bg-foreground text-background",
+                    active && "bg-foreground text-background",
                   )}
                   href={item.href}
                   key={item.href}
@@ -1062,7 +1062,7 @@ export function ForumUserCpShell({
             })}
           </nav>
         </aside>
-        <div className="min-w-0 bg-background p-3 md:p-4">
+        <div className="min-w-0 bg-background p-3">
           <h1 className="font-mono text-[11px] uppercase text-muted-foreground">
             {title}
           </h1>
@@ -1196,14 +1196,14 @@ export function ForumBody({
 }) {
   if (body.trim().length === 0) {
     return (
-      <p className={cn("text-sm leading-7 text-muted-foreground", className)}>
+      <p className={cn("text-sm leading-6 text-muted-foreground", className)}>
         No message body yet.
       </p>
     );
   }
 
   return (
-    <div className={cn("space-y-4 text-sm leading-7 md:text-base", className)}>
+    <div className={cn("space-y-3 text-sm leading-6 md:text-base", className)}>
       <ForumBbcodeBody body={body} />
     </div>
   );
@@ -1434,10 +1434,7 @@ export function ForumLegendStatStrip({
       {stats.length > 0 ? (
         <dl className="grid grid-cols-2 gap-px bg-row-border sm:grid-cols-4">
           {stats.map((item) => (
-            <div
-              className="min-w-20 bg-background px-3 py-2"
-              key={item.label}
-            >
+            <div className="min-w-20 bg-background px-3 py-2" key={item.label}>
               <dt className="font-mono text-[10px] uppercase text-muted-foreground">
                 {item.label}
               </dt>
@@ -1462,7 +1459,7 @@ function ForumIndexSection({ group }: { group: ForumCategorySectionRecord }) {
   return (
     <section className="overflow-hidden border-y border-row-border">
       {group.boards.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-muted-foreground">
+        <p className="px-3 py-3 text-sm text-muted-foreground">
           No boards in this section yet.
         </p>
       ) : (
@@ -1764,7 +1761,7 @@ export function ForumNewestThreads({
   heading?: string;
 }) {
   return (
-    <section className="border-y border-row-border py-3">
+    <section className="border-y border-row-border py-2.5">
       <div className="font-mono text-[10px] uppercase text-muted-foreground">
         {heading}
       </div>
@@ -1773,24 +1770,24 @@ export function ForumNewestThreads({
           No active threads yet.
         </p>
       ) : (
-        <div className="mt-3 divide-y divide-row-border border-t border-row-border">
+        <div className="mt-2 divide-y divide-row-border border-t border-row-border">
           {threads.map((thread) => (
             <div
               key={`${thread.categorySlug ?? "forum"}-${thread.slug}`}
-              className="py-4"
+              className="py-2.5"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <ForumThreadPrefixBadge thread={thread} />
                 <ForumLink
                   href={forumPath(thread.categorySlug, thread.slug)}
                   prefetch
-                  className="focus-ring min-w-0 text-base font-semibold hover:text-primary md:text-lg"
+                  className="focus-ring min-w-0 text-sm font-semibold leading-5 hover:text-primary md:text-base"
                 >
                   {thread.title}
                 </ForumLink>
                 <ForumThreadStateBadges thread={thread} />
               </div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {thread.categoryName ??
                   (thread.categorySlug
                     ? humanizeSlug(thread.categorySlug)
@@ -1801,7 +1798,7 @@ export function ForumNewestThreads({
                 {formatForumDateTime(getThreadStartedAt(thread))}
               </p>
               {thread.excerpt ? (
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
                   {thread.excerpt}
                 </p>
               ) : null}
@@ -2043,11 +2040,11 @@ export function ForumThreadTable({
                   )}
                   key={thread._id}
                 >
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <ForumStatusGlyph thread={thread} />
                   </td>
                   <th
-                    className="px-3 py-3 text-left align-middle font-normal"
+                    className="px-3 py-2.5 text-left align-middle font-normal"
                     scope="row"
                   >
                     <div className="flex flex-wrap items-center gap-2">
@@ -2055,7 +2052,7 @@ export function ForumThreadTable({
                       <ForumLink
                         href={threadHref}
                         prefetch
-                        className="focus-ring min-w-0 text-base font-semibold leading-tight hover:text-primary"
+                        className="focus-ring min-w-0 text-sm font-semibold leading-tight hover:text-primary"
                       >
                         {thread.title}
                       </ForumLink>
@@ -2064,7 +2061,7 @@ export function ForumThreadTable({
                     {firstUnreadHref ? (
                       <ForumJumpLink
                         ariaLabel={`Go to first unread post in ${thread.title}`}
-                        className="mt-3 px-2"
+                        className="mt-2 px-2"
                         href={firstUnreadHref}
                       >
                         New / First unread »
@@ -2089,23 +2086,23 @@ export function ForumThreadTable({
                       </p>
                     ) : null}
                   </th>
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <ForumThreadRatingSummary
                       average={getThreadRatingAverage(thread)}
                       count={getThreadRatingCount(thread)}
                     />
                   </td>
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="font-mono text-xs font-medium">
                       {formatForumCount(getThreadReplyCount(thread))}
                     </p>
                   </td>
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="font-mono text-xs font-medium">
                       {formatForumCount(thread.viewCount)}
                     </p>
                   </td>
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <p className="truncate text-sm font-medium">
                       {getThreadAuthor(thread)}
                     </p>
@@ -2113,7 +2110,7 @@ export function ForumThreadTable({
                       {formatForumDateTime(getThreadStartedAt(thread))}
                     </p>
                   </td>
-                  <td className="px-3 py-3 align-middle">
+                  <td className="px-3 py-2.5 align-middle">
                     <div className="flex flex-wrap items-center gap-2">
                       <ForumJumpLink
                         ariaLabel={`Go to last post in ${thread.title}`}
@@ -2317,11 +2314,11 @@ export function ForumPostFrame({
         ) : null}
       </div>
       <div className="grid gap-px bg-row-border md:grid-cols-[11rem_minmax(0,1fr)]">
-        <aside className="bg-background px-3 py-2.5">
+        <aside className="bg-background px-3 py-2">
           <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3 md:grid-cols-1">
             <ForumAvatar
               alt={`${author} avatar`}
-              className="size-12 md:size-20"
+              className="size-11 md:size-16"
               name={author}
               src={avatarUrl}
             />
@@ -2330,14 +2327,12 @@ export function ForumPostFrame({
                 <ForumLink
                   href={authorHref}
                   prefetch
-                  className="focus-ring break-words text-base font-semibold hover:text-primary md:text-lg"
+                  className="focus-ring break-words text-base font-semibold hover:text-primary"
                 >
                   {author}
                 </ForumLink>
               ) : (
-                <p className="break-words text-base font-semibold md:text-lg">
-                  {author}
-                </p>
+                <p className="break-words text-base font-semibold">{author}</p>
               )}
               <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
                 {rank ?? role ?? "Member"}
@@ -2346,13 +2341,13 @@ export function ForumPostFrame({
           </div>
           <dl className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground md:grid md:grid-cols-1 md:gap-px md:bg-row-border">
             {role ? (
-              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Role</dt>
                 <dd className="text-foreground md:mt-1">{role}</dd>
               </div>
             ) : null}
             {typeof postCount === "number" ? (
-              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Posts</dt>
                 <dd className="text-foreground md:mt-1">
                   {formatForumCount(postCount)}
@@ -2360,7 +2355,7 @@ export function ForumPostFrame({
               </div>
             ) : null}
             {typeof reputationScore === "number" ? (
-              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Reputation</dt>
                 <dd className="text-foreground md:mt-1">
                   {reputationScore > 0 ? "+" : ""}
@@ -2369,7 +2364,7 @@ export function ForumPostFrame({
               </div>
             ) : null}
             {location ? (
-              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Location</dt>
                 <dd className="break-words text-foreground md:mt-1">
                   {location}
@@ -2377,7 +2372,7 @@ export function ForumPostFrame({
               </div>
             ) : null}
             {typeof joinedAt === "number" ? (
-              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-2">
+              <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Joined</dt>
                 <dd className="text-foreground md:mt-1">
                   {formatForumDateTime(joinedAt)}
@@ -2387,10 +2382,10 @@ export function ForumPostFrame({
           </dl>
           <ForumAuthorRailShortcuts author={author} authorHref={authorHref} />
         </aside>
-        <div className="min-w-0 bg-background px-3 py-3 md:px-4">
+        <div className="min-w-0 bg-background px-3 py-2.5">
           {children}
           {signature ? (
-            <div className="mt-4 border-t border-row-border pt-3">
+            <div className="mt-3 border-t border-row-border pt-2.5">
               <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
                 Signature
               </p>
@@ -2536,7 +2531,7 @@ export function ForumAttachmentList({
   }
 
   return (
-    <div className="mt-6 border-t border-row-border pt-3">
+    <div className="mt-4 border-t border-row-border pt-2.5">
       <p className="mb-3 font-mono text-[10px] uppercase text-muted-foreground">
         Attached files
       </p>
@@ -2846,7 +2841,7 @@ function ForumTableSkeleton({
       <span className="sr-only">{label}</span>
       <div
         className={cn(
-          "hidden gap-4 border-b border-row-border px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground",
+          "hidden gap-3 border-b border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground",
           desktopGridClass,
           gridClass,
         )}
@@ -2862,7 +2857,7 @@ function ForumTableSkeleton({
         {Array.from({ length: rows }).map((_, index) => (
           <div
             className={cn(
-              "grid gap-4 px-4 py-4 odd:bg-muted/15",
+              "grid gap-3 px-3 py-2.5 odd:bg-muted/15",
               desktopItemClass,
               gridClass,
             )}
@@ -2919,11 +2914,11 @@ function ForumThreadSkeleton({ label }: { label: string }) {
     <div
       aria-busy="true"
       aria-live="polite"
-      className="space-y-4"
+      className="space-y-3"
       role="status"
     >
       <span className="sr-only">{label}</span>
-      <div className="border-y border-row-border py-3">
+      <div className="border-y border-row-border py-2">
         <SkeletonBox className="h-3 w-44" />
         <SkeletonBox className="mt-3 h-7 w-3/5 max-w-xl" />
         <div className="mt-3 flex flex-wrap gap-2">
@@ -2940,12 +2935,12 @@ function ForumThreadSkeleton({ label }: { label: string }) {
           className="grid gap-px border border-row-border bg-row-border md:grid-cols-[13rem_minmax(0,1fr)]"
           key={index}
         >
-          <div className="space-y-3 bg-background p-4">
+          <div className="space-y-3 bg-background p-3">
             <SkeletonBox className="h-5 w-28" />
             <SkeletonBox className="h-3 w-20" />
             <SkeletonBox className="h-16 w-full" />
           </div>
-          <div className="space-y-4 bg-background p-4">
+          <div className="space-y-3 bg-background p-3">
             <SkeletonBox className="h-3 w-44" />
             <SkeletonBox className="h-4 w-full" />
             <SkeletonBox className="h-4 w-5/6" />
@@ -2953,10 +2948,10 @@ function ForumThreadSkeleton({ label }: { label: string }) {
           </div>
         </div>
       ))}
-      <div className="border border-row-border p-4">
+      <div className="border border-row-border p-3">
         <SkeletonBox className="h-3 w-32" />
         <SkeletonBox className="mt-3 h-24 w-full" />
-        <SkeletonBox className="mt-4 h-9 w-32" />
+        <SkeletonBox className="mt-3 h-9 w-32" />
       </div>
     </div>
   );
@@ -2971,14 +2966,14 @@ function ForumUserCpSkeleton({ label }: { label: string }) {
       role="status"
     >
       <span className="sr-only">{label}</span>
-      <aside className="space-y-3 bg-background p-4">
+      <aside className="space-y-3 bg-background p-3">
         <p className="font-mono text-[11px] uppercase text-muted-foreground">
           {label}
         </p>
         <SkeletonBox className="h-8 w-full" />
         <SkeletonBox className="h-8 w-full" />
       </aside>
-      <div className="space-y-4 bg-background p-4">
+      <div className="space-y-3 bg-background p-3">
         <SkeletonBox className="h-5 w-40" />
         <SkeletonBox className="h-9 w-full" />
         <SkeletonBox className="h-28 w-full" />
@@ -2993,15 +2988,15 @@ function ForumSubscriptionsSkeleton({ label }: { label: string }) {
     <div
       aria-busy="true"
       aria-live="polite"
-      className="space-y-4"
+      className="space-y-3"
       role="status"
     >
       <span className="sr-only">{label}</span>
-      <div className="border-y border-row-border py-3 font-mono text-[11px] uppercase text-muted-foreground">
+      <div className="border-y border-row-border py-2 font-mono text-[11px] uppercase text-muted-foreground">
         {label}
       </div>
       <div className="border border-row-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border px-3 py-2.5">
           <div className="space-y-2">
             <SkeletonBox className="h-3 w-36" />
             <SkeletonBox className="h-4 w-56" />
@@ -3011,7 +3006,7 @@ function ForumSubscriptionsSkeleton({ label }: { label: string }) {
         <div className="divide-y divide-row-border">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
-              className="grid gap-3 px-4 py-3 odd:bg-muted/15 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center"
+              className="grid gap-2 px-3 py-2.5 odd:bg-muted/15 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center"
               key={index}
             >
               <div className="space-y-2">

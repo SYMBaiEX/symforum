@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function ForumMembersRoute() {
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumMembers enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
     </section>
   );

@@ -34,7 +34,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 
@@ -435,16 +436,16 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="border-y border-row-border py-2.5">
+    <div className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <ForumBreadcrumbs category={category} />
         <div className="mt-2">
           <p className="page-kicker">Public board</p>
-          <h1 className="mt-1 text-2xl font-semibold md:text-3xl">
+          <h1 className="mt-1 text-xl font-semibold md:text-2xl">
             {getCategoryTitle(category)}
           </h1>
           {getCategoryDescription(category) ? (
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
               {getCategoryDescription(category)}
             </p>
           ) : null}
@@ -479,7 +480,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       <ForumAnnouncementPanel announcements={listResult.announcements} />
 
       <section>
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-3">
           <div className="grid gap-2 border-y border-row-border py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
             <label className="min-w-0 flex-1">
               <span className="sr-only">Search this board</span>
@@ -487,13 +488,13 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search this board"
-                className="h-10 rounded-none border-row-border font-mono text-xs uppercase"
+                className="h-10 rounded-none border-row-border font-mono text-xs uppercase lg:h-8"
                 aria-label="Search this board"
               />
             </label>
             <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
                 type="button"
                 disabled={authLoading || pending}
                 onClick={toggleThreadComposer}
@@ -501,7 +502,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                 {composeOpen ? "Close thread form" : "New thread"}
               </Button>
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
                 type="button"
                 variant="outline"
                 disabled={authLoading || categorySubscriptionPending}
@@ -514,7 +515,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                     : "Subscribe"}
               </Button>
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase"
+                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
                 type="button"
                 variant="outline"
                 disabled={authLoading || markReadPending}
@@ -732,7 +733,7 @@ function ForumSubboardSelector({
       >
         {boards.map((board) => (
           <ForumLink
-            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2.5 hover:bg-muted/30 md:min-h-20 md:px-3"
+            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2 hover:bg-muted/30 md:px-3"
             href={forumPath(board.slug)}
             key={board.slug}
             prefetch
@@ -1145,7 +1146,7 @@ function ForumPollDraft({
         </p>
       ) : null}
       {enabled ? (
-        <div className="mt-4 grid gap-3">
+        <div className="mt-3 grid gap-3">
           <label className="grid gap-2">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               Question
@@ -1237,7 +1238,7 @@ function ForumSearchResults({
       </div>
       <div className="divide-y divide-row-border">
         {threads.map((thread) => (
-          <div key={`thread-${thread._id}`} className="px-4 py-4">
+          <div key={`thread-${thread._id}`} className="px-3 py-2.5">
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Thread
             </p>
@@ -1257,7 +1258,7 @@ function ForumSearchResults({
           </div>
         ))}
         {posts.map((post) => (
-          <div key={`post-${post._id}`} className="px-4 py-4">
+          <div key={`post-${post._id}`} className="px-3 py-2.5">
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Post
             </p>

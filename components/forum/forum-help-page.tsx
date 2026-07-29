@@ -11,7 +11,7 @@ import {
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 
 export function ForumHelpPage({ enabled }: { enabled: boolean }) {
   if (!enabled) {
@@ -35,13 +35,11 @@ function LiveForumHelpPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <div className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum helpdesk</p>
-        <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
-          Help / FAQ
-        </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">Help / FAQ</h1>
+        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
           Read posting guidelines, account information, and forum policies
           before opening a new thread.
         </p>
@@ -61,7 +59,7 @@ function LiveForumHelpPage() {
           <div className="divide-y divide-row-border">
             {documents.map((document) => (
               <article
-                className="grid gap-3 px-3 py-4 md:grid-cols-[minmax(0,1fr)_9rem]"
+                className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_9rem]"
                 key={document._id}
               >
                 <div className="min-w-0">
@@ -70,17 +68,17 @@ function LiveForumHelpPage() {
                       {document.title}
                     </ForumLink>
                   </h2>
-                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
                     {document.excerpt}
                   </p>
                 </div>
-                <div className="flex items-start justify-between gap-3 md:block md:text-right">
+                <div className="flex items-start justify-between gap-2 md:block md:text-right">
                   <p className="font-mono text-[10px] uppercase text-muted-foreground">
                     {formatForumDateTime(document.updatedAt)}
                   </p>
                   <Button
                     asChild
-                    className="mt-0 h-7 rounded-none px-2 font-mono text-[10px] uppercase md:mt-3"
+                    className="mt-0 h-7 rounded-none px-2 font-mono text-[10px] uppercase md:mt-2"
                     size="sm"
                     variant="outline"
                   >

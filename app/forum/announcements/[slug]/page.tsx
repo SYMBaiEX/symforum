@@ -48,7 +48,7 @@ export default async function ForumAnnouncementDetailRoute({
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumAnnouncementDetailPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         slug={slug}

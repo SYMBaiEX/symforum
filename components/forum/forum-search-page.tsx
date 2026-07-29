@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -233,7 +233,7 @@ function LiveForumSearchPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <section className="border-y border-row-border">
         <div className="border-b border-row-border px-3 py-2.5">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -411,7 +411,7 @@ function LiveForumSearchPage() {
               />
             </label>
           </div>
-          <div className="flex flex-col gap-3 border-t border-row-border pt-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 border-t border-row-border pt-2.5 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p
                 className="font-mono text-[10px] uppercase text-muted-foreground"
@@ -513,7 +513,7 @@ function ForumSearchResults({
   const showPosts = result.filters.resultType !== "threads";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {result.limited ? (
         <ForumStatusBox
           title="Search limited"
@@ -602,7 +602,7 @@ function SearchResultSection({
   const hasResults = pagination.totalItems > 0;
   return (
     <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="border-b border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
         {heading}
       </div>
       {hasResults ? (
@@ -616,7 +616,7 @@ function SearchResultSection({
           />
         </>
       ) : (
-        <p className="px-4 py-4 text-sm text-muted-foreground">{emptyLabel}</p>
+        <p className="px-3 py-3 text-sm text-muted-foreground">{emptyLabel}</p>
       )}
     </section>
   );
@@ -638,24 +638,24 @@ function SearchRow({
   title: string;
 }) {
   return (
-    <article className="px-4 py-4 odd:bg-muted/15">
+    <article className="px-3 py-2.5 odd:bg-muted/15">
       <p className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </p>
       <ForumLink
         href={href}
         prefetch
-        className="focus-ring mt-2 flex flex-wrap items-center gap-2 text-base font-semibold hover:text-primary"
+        className="focus-ring mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold hover:text-primary"
       >
         <ForumThreadPrefixBadge thread={thread} />
         {title}
       </ForumLink>
       {excerpt ? (
-        <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+        <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
           {excerpt}
         </p>
       ) : null}
-      <p className="mt-3 font-mono text-[10px] uppercase text-muted-foreground">
+      <p className="mt-1.5 font-mono text-[10px] uppercase text-muted-foreground">
         {searchHitMetadata(thread)}
       </p>
     </article>

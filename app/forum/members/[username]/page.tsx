@@ -26,11 +26,11 @@ export default async function ForumMemberProfilePage({ params }: PageProps) {
   const configured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
-    <section className="page-frame page-frame-dense space-y-4">
+    <section className="page-frame page-frame-dense space-y-3">
       <ForumUtilityNav />
-      <div className="border-y border-row-border py-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum member</p>
-        <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
           /members/{username}
         </h1>
       </div>

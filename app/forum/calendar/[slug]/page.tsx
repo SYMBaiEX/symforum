@@ -46,7 +46,7 @@ export default async function ForumCalendarDetailRoute({ params }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumCalendarDetailPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         slug={slug}

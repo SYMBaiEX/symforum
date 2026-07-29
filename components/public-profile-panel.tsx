@@ -12,7 +12,7 @@ import {
   type PublicProfileForumThreadRecord,
 } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -29,8 +29,8 @@ export function PublicProfilePanel({ username }: { username: string }) {
         <p className="font-mono text-xs uppercase text-muted-foreground">
           Profile lookup
         </p>
-        <h2 className="mt-3 text-2xl font-semibold">Profile not found.</h2>
-        <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground md:text-base">
+        <h2 className="mt-1 text-xl font-semibold">Profile not found.</h2>
+        <p className="mt-1.5 max-w-xl text-sm leading-5 text-muted-foreground">
           No user matches the handle in this URL.
         </p>
       </div>
@@ -38,19 +38,19 @@ export function PublicProfilePanel({ username }: { username: string }) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
+    <div className="grid gap-4 lg:grid-cols-12">
       <section className="lg:col-span-5">
         <p className="font-mono text-xs uppercase text-muted-foreground">
           Public profile
         </p>
-        <h2 className="mt-2 break-words text-3xl font-semibold md:text-4xl">
+        <h2 className="mt-1 break-words text-2xl font-semibold">
           {profile.user.username}
         </h2>
-        <p className="mt-4 text-sm leading-7 text-muted-foreground md:text-base">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {profile.user.bio?.trim() ||
             "No public bio has been set for this handle yet."}
         </p>
-        <dl className="mt-6 grid gap-4 text-sm">
+        <dl className="mt-3 grid gap-2 text-sm">
           <MetaItem
             label="Joined"
             value={formatDate(
@@ -79,7 +79,7 @@ export function PublicProfilePanel({ username }: { username: string }) {
           username={profile.user.usernameNormalized}
         />
         {profile.isCurrentUser ? (
-          <div className="mt-6">
+          <div className="mt-3">
             <Button asChild size="sm">
               <Link href="/profile" prefetch>
                 Open your profile
@@ -95,15 +95,15 @@ export function PublicProfilePanel({ username }: { username: string }) {
             <p className="font-mono text-xs uppercase text-muted-foreground">
               Recent comments
             </p>
-            <h3 className="mt-2 text-2xl font-semibold">Latest notes</h3>
+            <h3 className="mt-1 text-xl font-semibold">Latest notes</h3>
           </div>
         </div>
-        <div className="mt-6 space-y-4">
-          <section className="border-b border-row-border pb-6">
+        <div className="mt-3 space-y-3">
+          <section className="border-b border-row-border pb-3">
             <p className="font-mono text-xs uppercase text-muted-foreground">
               Forum activity
             </p>
-            <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            <div className="mt-2 grid gap-3 lg:grid-cols-2">
               <ActivityList
                 empty="No started threads yet."
                 heading="Threads"
@@ -134,7 +134,7 @@ export function PublicProfilePanel({ username }: { username: string }) {
                   <span>{commentLabel(comment)}</span>
                   <span>{formatDate(comment.createdAt)}</span>
                 </div>
-                <p className="text-sm leading-7 md:text-base">{comment.body}</p>
+                <p className="text-sm leading-6">{comment.body}</p>
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
                     <Link href={commentPath(comment)} prefetch>
@@ -162,11 +162,11 @@ function ForumProfileSummary({
 }) {
   const reputation = formatSignedCount(profile.reputationScore);
   return (
-    <section className="mt-7 border border-row-border">
-      <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3 border-b border-row-border p-4">
+    <section className="mt-4 border border-row-border">
+      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5 border-b border-row-border p-3">
         <ForumAvatar
           alt={`${username} avatar`}
-          className="size-12"
+          className="size-10"
           name={username}
           src={profile.avatarUrl}
         />
@@ -198,7 +198,7 @@ function ForumProfileSummary({
         />
         <ForumStatCell label="Reputation" value={reputation} />
       </dl>
-      <dl className="grid gap-3 p-4 text-sm">
+      <dl className="grid gap-2 p-3 text-sm">
         <MetaItem label="Rank" value={profile.rank} />
         {profile.location ? (
           <MetaItem label="Location" value={profile.location} />
@@ -240,28 +240,28 @@ function ForumProfileSummary({
         ) : null}
       </dl>
       {profile.bio ? (
-        <div className="border-t border-row-border p-4">
+        <div className="border-t border-row-border p-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Bio
           </p>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
             {profile.bio}
           </p>
         </div>
       ) : null}
       {profile.signature ? (
-        <div className="border-t border-row-border p-4">
+        <div className="border-t border-row-border p-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Signature
           </p>
           <ForumBody
             body={profile.signature}
-            className="mt-3 text-xs leading-6 text-muted-foreground md:text-sm"
+            className="mt-2 text-xs leading-5 text-muted-foreground md:text-sm"
           />
         </div>
       ) : null}
       {!currentUser && profile.trusted ? (
-        <div className="border-t border-row-border p-4">
+        <div className="border-t border-row-border p-3">
           <Button
             asChild
             className="rounded-none font-mono text-[10px] uppercase"
@@ -294,7 +294,7 @@ function ForumProfileBadge({ children }: { children: ReactNode }) {
 
 function ForumStatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-2 py-3">
+    <div className="px-2 py-2">
       <dt className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </dt>
@@ -317,7 +317,7 @@ function ActivityList<T>({
   return (
     <div>
       <h4 className="text-sm font-semibold">{heading}</h4>
-      <div className="mt-3 space-y-3">
+      <div className="mt-2 space-y-2.5">
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">{empty}</p>
         ) : (
@@ -370,7 +370,7 @@ function ForumReplyActivity({
         <ProfileForumPrefix prefix={reply.prefix} />
         {reply.threadTitle}
       </Link>
-      <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
+      <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
         {reply.excerpt}
       </p>
       <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">

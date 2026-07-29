@@ -13,7 +13,7 @@ import {
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 
 export function ForumAnnouncementsPage({ enabled }: { enabled: boolean }) {
   if (!enabled) {
@@ -39,10 +39,10 @@ function LiveForumAnnouncementsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <div className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum bulletin</p>
-        <h1 className="mt-2 text-2xl font-semibold md:text-3xl">
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
           Announcements
         </h1>
       </div>
@@ -55,9 +55,9 @@ function LiveForumAnnouncementsPage() {
       ) : (
         <div className="divide-y divide-row-border border-y border-row-border">
           {announcements.map((announcement) => (
-            <article className="py-5" key={announcement._id}>
+            <article className="py-3" key={announcement._id}>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold">
+                <h2 className="text-base font-semibold">
                   <ForumLink
                     href={forumAnnouncementPath(announcement)}
                     prefetch
@@ -69,8 +69,8 @@ function LiveForumAnnouncementsPage() {
                   {announcement.categoryName ?? "global"}
                 </span>
               </div>
-              <ForumBody body={announcement.body} className="mt-4" />
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              <ForumBody body={announcement.body} className="mt-2" />
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <p className="font-mono text-[10px] uppercase text-muted-foreground">
                   Updated {formatForumDateTime(announcement.updatedAt)}
                 </p>

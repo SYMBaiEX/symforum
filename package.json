@@ -30,6 +30,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.17.4",
+    "convex-helpers": "^0.1.120",
     "fast-xml-parser": "^5.10.1",
     "framer-motion": "^12.40.0",
     "katex": "^0.17.0",

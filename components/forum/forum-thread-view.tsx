@@ -61,7 +61,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import { Paperclip, Star, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1001,14 +1002,14 @@ function LiveForumThreadView({
       : null;
 
   return (
-    <div className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <div className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <ForumBreadcrumbs category={category} thread={thread} />
         <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <ForumThreadPrefixBadge thread={thread} />
-              <h1 className="text-xl font-semibold leading-tight sm:text-2xl md:text-3xl">
+              <h1 className="text-lg font-semibold leading-tight sm:text-xl md:text-2xl">
                 {thread.title}
               </h1>
             </div>
@@ -1046,7 +1047,7 @@ function LiveForumThreadView({
             </div>
             {subscriptionError ? (
               <p
-                className="mt-3 border border-row-border p-3 text-sm text-muted-foreground"
+                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
                 role="alert"
               >
                 {subscriptionError}
@@ -1054,14 +1055,14 @@ function LiveForumThreadView({
             ) : null}
             {ratingError ? (
               <p
-                className="mt-3 border border-row-border p-3 text-sm text-muted-foreground"
+                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
                 role="alert"
               >
                 {ratingError}
               </p>
             ) : null}
             {getCategoryDescription(category) ? (
-              <p className="mt-3 max-w-3xl text-xs leading-5 text-muted-foreground md:text-sm">
+              <p className="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground md:text-sm">
                 {getCategoryTitle(category)} ·{" "}
                 {getCategoryDescription(category)}
               </p>
@@ -1084,12 +1085,12 @@ function LiveForumThreadView({
       <ForumAnnouncementPanel announcements={detail.announcements} />
 
       {editingThread ? (
-        <section className="space-y-4">
-          <div className="border-b border-row-border pb-3">
+        <section className="space-y-3">
+          <div className="border-b border-row-border pb-2">
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Edit thread
             </p>
-            <h2 className="mt-2 text-2xl font-semibold">Starter post</h2>
+            <h2 className="mt-1 text-lg font-semibold">Starter post</h2>
           </div>
           <ForumCompose
             title={editThreadTitle}
@@ -1195,7 +1196,7 @@ function LiveForumThreadView({
         />
       ) : null}
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
@@ -1264,7 +1265,7 @@ function LiveForumThreadView({
               >
                 {editingPostId !== null &&
                 editingPostId === forumPostId(post) ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <ForumCompose
                       body={editPostBody}
                       bodyLabel={`Reply #${postNumber}`}
@@ -1359,13 +1360,13 @@ function LiveForumThreadView({
         />
       </section>
 
-      <section className="space-y-4" id="forum-reply-composer">
-        <div className="border-b border-row-border pb-3">
+      <section className="space-y-3" id="forum-reply-composer">
+        <div className="border-b border-row-border pb-2">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Reply
           </p>
-          <h2 className="mt-2 text-2xl font-semibold">Post to thread</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <h2 className="mt-1 text-lg font-semibold">Post to thread</h2>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
             Replies publish under your current SYM handle.
           </p>
         </div>
@@ -1443,7 +1444,7 @@ function LiveForumThreadView({
               Send this to the forum moderation queue for staff review.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             <label className="grid gap-2">
               <span className="font-mono text-[10px] uppercase text-muted-foreground">
                 Target
@@ -1527,7 +1528,7 @@ function LiveForumThreadView({
               Leave a short note for the member ledger.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             <label className="grid gap-2">
               <span className="font-mono text-[10px] uppercase text-muted-foreground">
                 Target
@@ -1647,12 +1648,12 @@ function ForumPollPanel({
 
   return (
     <section className="border border-row-border">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-row-border px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-row-border px-3 py-2.5">
         <div>
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Poll
           </p>
-          <h2 className="mt-2 text-xl font-semibold">{poll.question}</h2>
+          <h2 className="mt-1 text-base font-semibold">{poll.question}</h2>
         </div>
         {canEdit ? (
           <Button
@@ -1665,7 +1666,7 @@ function ForumPollPanel({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-3 p-4">
+      <div className="grid gap-2 p-3">
         {poll.options.map((option) => {
           const selected = selectedOptionId === option._id;
           const votedFor = poll.viewerOptionId === option._id;
@@ -1673,7 +1674,7 @@ function ForumPollPanel({
           return (
             <label
               key={option._id}
-              className="grid gap-2 border border-row-border p-3"
+              className="grid gap-1.5 border border-row-border p-2.5"
             >
               <span className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
@@ -1777,7 +1778,7 @@ function ForumPollEditor({
 
   return (
     <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3">
+      <div className="border-b border-row-border px-3 py-2.5">
         <p className="font-mono text-[10px] uppercase text-muted-foreground">
           Edit poll
         </p>
@@ -1785,7 +1786,7 @@ function ForumPollEditor({
           Poll options can be edited until the first vote is recorded.
         </p>
       </div>
-      <div className="grid gap-4 p-4">
+      <div className="grid gap-3 p-3">
         <label className="grid gap-2">
           <span className="font-mono text-[10px] uppercase text-muted-foreground">
             Question
@@ -1877,7 +1878,7 @@ function QueuedQuotePanel({
 }) {
   return (
     <div className="border border-row-border">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border px-3 py-2.5">
         <div>
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Multi-quote
@@ -1907,7 +1908,7 @@ function QueuedQuotePanel({
       <div className="divide-y divide-row-border">
         {quotes.map((quote) => (
           <div
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
             key={quote.key}
           >
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -1939,10 +1940,10 @@ function ReplyPreviewPanel({
 
   return (
     <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="border-b border-row-border px-3 py-2.5 font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </div>
-      <div className="p-4">
+      <div className="p-3">
         {trimmed.length > 0 ? (
           <ForumBody body={trimmed} />
         ) : (

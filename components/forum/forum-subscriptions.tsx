@@ -30,7 +30,8 @@ import {
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -237,7 +238,7 @@ function LiveForumSubscriptions() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ForumBreadcrumbs category={subscriptionCategory} />
       <ForumSubscriptionActionStatus
         error={subscriptionActionError}
@@ -280,7 +281,7 @@ function ForumSubscriptionActionStatus({
 
   return (
     <p
-      className="border border-row-border px-4 py-3 text-sm text-muted-foreground"
+      className="border border-row-border px-3 py-2.5 text-sm text-muted-foreground"
       role={error ? "alert" : "status"}
     >
       <span className="font-mono text-[10px] uppercase text-foreground">
@@ -322,7 +323,7 @@ function ForumNotificationPanel({
 
   return (
     <section className="border border-row-border">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border px-3 py-2.5">
         <div>
           <h2 className="font-mono text-[11px] uppercase text-muted-foreground">
             Forum notifications
@@ -340,12 +341,12 @@ function ForumNotificationPanel({
         </Button>
       </div>
       {error ? (
-        <p className="border-b border-row-border px-4 py-3 text-sm text-primary">
+        <p className="border-b border-row-border px-3 py-2.5 text-sm text-primary">
           {error}
         </p>
       ) : null}
       {notifications.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-muted-foreground">
+        <p className="px-3 py-3 text-sm text-muted-foreground">
           {limited
             ? "No visible notifications were found in the latest bounded scan."
             : "No unread forum notifications."}

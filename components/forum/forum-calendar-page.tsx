@@ -15,7 +15,7 @@ import {
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useMemo } from "react";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -54,15 +54,15 @@ function LiveForumCalendarPage({ month }: { month: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <div className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum calendar</p>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <div className="mt-1.5 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold md:text-3xl">
+            <h1 className="text-xl font-semibold md:text-2xl">
               {forumCalendarMonthLabel(month)}
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
+            <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
               Community events, meetups, publishing windows, and forum
               reminders.
             </p>
@@ -159,7 +159,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-28 border-r border-t border-row-border p-2 last:border-r-0",
+                  "min-h-24 border-r border-t border-row-border p-2 last:border-r-0",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}
@@ -204,7 +204,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
           <div className="divide-y divide-row-border">
             {events.map((event) => (
               <article
-                className="grid gap-3 px-3 py-4 md:grid-cols-[8rem_minmax(0,1fr)_auto]"
+                className="grid gap-2 px-3 py-2.5 md:grid-cols-[8rem_minmax(0,1fr)_auto]"
                 key={event._id}
               >
                 <div className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -217,7 +217,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                       {event.title}
                     </ForumLink>
                   </h2>
-                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
                     {event.excerpt}
                   </p>
                 </div>

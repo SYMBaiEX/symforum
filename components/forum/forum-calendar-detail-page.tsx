@@ -13,7 +13,7 @@ import {
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 
 export function ForumCalendarDetailPage({
   enabled,
@@ -63,24 +63,22 @@ function LiveForumCalendarDetailPage({ slug }: { slug: string }) {
   }
 
   return (
-    <article className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <article className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum calendar</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold md:text-3xl">
-            {event.title}
-          </h1>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold md:text-2xl">{event.title}</h1>
           <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
             Event
           </span>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+        <div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-muted-foreground">
           <span>{formatCalendarEventRange(event)}</span>
           <span>Updated {formatForumDateTime(event.updatedAt)}</span>
         </div>
       </div>
 
-      <div className="border-y border-row-border py-4">
+      <div className="border-y border-row-border py-3">
         <ForumBody body={event.body} />
       </div>
 

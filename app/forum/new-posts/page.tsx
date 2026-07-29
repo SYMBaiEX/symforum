@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function ForumNewPostsRoute() {
   return (
     <section className="page-frame page-frame-dense">
-      <ForumUtilityNav className="mb-3" />
+      <ForumUtilityNav className="mb-2" />
       <ForumRecentThreadsPage
         description="Unread and new activity across the SYMBaiEX forum, ordered by the latest reply."
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}

@@ -29,7 +29,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { userFacingError } from "@/lib/auth-errors";
 import { cn } from "@/lib/utils";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -746,7 +747,7 @@ function LiveForumMessages() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ForumMetricBar
         items={[
           {
@@ -824,7 +825,7 @@ function LiveForumMessages() {
           older undeleted messages.
         </p>
       ) : null}
-      <div className="grid gap-4 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
         <section className="border border-row-border">
           <div className="flex flex-wrap gap-1 border-b border-row-border p-3">
             <MailboxTab
@@ -945,7 +946,7 @@ function LiveForumMessages() {
             </div>
           ) : null}
           {messages.messages.length === 0 ? (
-            <div className="grid gap-3 px-4 py-4">
+            <div className="grid gap-2 px-3 py-3">
               <p className="text-sm text-muted-foreground">
                 {searchQuery
                   ? "No private messages match this search."
@@ -1029,12 +1030,12 @@ function LiveForumMessages() {
       </div>
       {composeOpen ? (
         <section className="border border-row-border">
-          <div className="border-b border-row-border px-4 py-3">
+          <div className="border-b border-row-border px-3 py-2">
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Compose private message
             </p>
           </div>
-          <form className="grid gap-4 p-4" onSubmit={sendMessage}>
+          <form className="grid gap-3 p-3" onSubmit={sendMessage}>
             <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
               <label className="grid gap-2">
                 <span className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -1181,7 +1182,7 @@ function LiveForumMessages() {
               Send the message snapshot and your reason to forum moderation.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4" onSubmit={submitPrivateMessageReport}>
+          <form className="grid gap-3" onSubmit={submitPrivateMessageReport}>
             {reportMessage ? (
               <div className="border border-row-border p-3">
                 <p className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -1406,7 +1407,7 @@ function MessageDetail({
     message.box === "trash" ? "Confirm permanent delete" : "Confirm move";
   return (
     <article>
-      <div className="border-b border-row-border px-4 py-4">
+      <div className="border-b border-row-border px-3 py-2.5">
         <p className="font-mono text-[10px] uppercase text-muted-foreground">
           {message.box === "trash"
             ? `${mailboxLabel(message.sourceBox)} copy / `
@@ -1418,7 +1419,7 @@ function MessageDetail({
           {formatForumDateTime(message.createdAt)}
         </p>
       </div>
-      <div className="px-4 py-4">
+      <div className="px-3 py-3">
         <ForumBody body={message.body ?? message.excerpt ?? ""} />
       </div>
       <div className="flex flex-wrap justify-between gap-2 border-t border-row-border px-4 py-3">

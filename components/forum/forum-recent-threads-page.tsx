@@ -15,7 +15,7 @@ import {
   ForumStatusBox,
   ForumThreadTable,
 } from "@/components/forum/forum-primitives";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const RECENT_THREADS_PAGE_SIZE = 25;
@@ -33,7 +33,7 @@ export function ForumRecentThreadsPage({
   title: string;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ForumRecentThreadsHeader
         description={description}
         mode={mode}
@@ -93,12 +93,12 @@ function ForumRecentThreadsHeader({
   title: string;
 }) {
   return (
-    <section className="border-y border-row-border py-3">
+    <section className="border-y border-row-border py-2">
       <p className="page-kicker">
         {mode === "new" ? "Unread activity" : "Daily activity"}
       </p>
-      <h1 className="mt-2 text-2xl font-semibold md:text-3xl">{title}</h1>
-      <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground md:text-base">
+      <h1 className="mt-1 text-xl font-semibold md:text-2xl">{title}</h1>
+      <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
         {description}
       </p>
     </section>
@@ -118,7 +118,7 @@ function ForumRecentThreadsResults({
   const hasThreads = threads.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ForumMetricBar
         className="sm:grid-cols-4"
         items={[

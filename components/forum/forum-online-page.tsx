@@ -15,7 +15,7 @@ import {
   ForumPaginationBar,
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useSearchParams } from "next/navigation";
 
 const ONLINE_PAGE_SIZE = 25;
@@ -65,14 +65,16 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
       : "0";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <section className="border border-row-border">
-        <div className="border-b border-row-border px-4 py-3">
+        <div className="border-b border-row-border px-3 py-2">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Who&apos;s online
           </p>
-          <h1 className="mt-2 text-2xl font-semibold">Active members</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+          <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+            Active members
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
             Registered forum members active since{" "}
             {formatForumDateTime(online.activeSince)}.
           </p>
@@ -113,26 +115,26 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
               <caption className="sr-only">Online forum members</caption>
               <thead>
                 <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
-                  <th className="px-4 py-3 text-left font-normal" scope="col">
+                  <th className="px-3 py-2 text-left font-normal" scope="col">
                     Roster
                   </th>
-                  <th className="px-4 py-3 text-left font-normal" scope="col">
+                  <th className="px-3 py-2 text-left font-normal" scope="col">
                     Activity / location
                   </th>
                   <th
-                    className="w-24 px-4 py-3 text-left font-normal"
+                    className="w-24 px-3 py-2 text-left font-normal"
                     scope="col"
                   >
                     Posts
                   </th>
                   <th
-                    className="w-28 px-4 py-3 text-left font-normal"
+                    className="w-28 px-3 py-2 text-left font-normal"
                     scope="col"
                   >
                     Reputation
                   </th>
                   <th
-                    className="w-44 px-4 py-3 text-left font-normal"
+                    className="w-44 px-3 py-2 text-left font-normal"
                     scope="col"
                   >
                     Last active
@@ -147,7 +149,7 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
             </table>
           </>
         ) : (
-          <p className="px-4 py-6 text-sm leading-6 text-muted-foreground">
+          <p className="px-3 py-3 text-sm leading-5 text-muted-foreground">
             No registered members are active in the forum window.
           </p>
         )}
@@ -165,7 +167,7 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
 
 function ForumOnlineSignal({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-background px-4 py-3">
+    <div className="bg-background px-3 py-2">
       <p className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </p>
@@ -181,19 +183,22 @@ function ForumOnlineDesktopRow({
 }) {
   return (
     <tr className="odd:bg-muted/15">
-      <th className="px-4 py-4 text-left align-middle font-normal" scope="row">
+      <th
+        className="px-3 py-2.5 text-left align-middle font-normal"
+        scope="row"
+      >
         <ForumOnlineIdentity member={member} size="desktop" />
       </th>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-2.5 align-middle">
         <ForumOnlineLocation location={member.location} />
       </td>
-      <td className="px-4 py-4 align-middle font-mono text-[11px] uppercase">
+      <td className="px-3 py-2.5 align-middle font-mono text-[11px] uppercase">
         {formatForumCount(member.postCount)}
       </td>
-      <td className="px-4 py-4 align-middle font-mono text-[11px] uppercase">
+      <td className="px-3 py-2.5 align-middle font-mono text-[11px] uppercase">
         {formatForumReputation(member.reputationScore)}
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-3 py-2.5 align-middle">
         <p className="text-sm font-medium">
           {formatForumDateTime(member.lastSeenAt)}
         </p>
@@ -207,10 +212,10 @@ function ForumOnlineDesktopRow({
 
 function ForumOnlineMobileRow({ member }: { member: ForumOnlineMemberRecord }) {
   return (
-    <article className="grid gap-4 px-4 py-4 odd:bg-muted/15">
+    <article className="grid gap-3 px-3 py-3 odd:bg-muted/15">
       <ForumOnlineIdentity member={member} size="mobile" />
       <div className="border border-row-border">
-        <div className="border-b border-row-border px-3 py-3">
+        <div className="border-b border-row-border px-3 py-2">
           <ForumOnlineLocation location={member.location} />
         </div>
         <dl className="grid gap-px bg-row-border text-center font-mono text-[10px] uppercase text-muted-foreground sm:grid-cols-3">
@@ -231,7 +236,6 @@ function ForumOnlineMobileRow({ member }: { member: ForumOnlineMemberRecord }) {
 
 function ForumOnlineIdentity({
   member,
-  size,
 }: {
   member: ForumOnlineMemberRecord;
   size: "desktop" | "mobile";
@@ -240,13 +244,13 @@ function ForumOnlineIdentity({
     <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3">
       <ForumAvatar
         alt={`${member.displayName} avatar`}
-        className={size === "desktop" ? "size-12" : "size-11"}
+        className="size-10"
         name={member.displayName}
         src={member.avatarUrl}
       />
       <div className="min-w-0">
         <ForumLink
-          className="focus-ring block truncate text-lg font-semibold leading-tight hover:text-primary"
+          className="focus-ring block truncate text-base font-semibold leading-tight hover:text-primary"
           href={forumMemberProfilePath(member.username)}
           prefetch
         >
@@ -255,7 +259,7 @@ function ForumOnlineIdentity({
         <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
           /members/{member.username}
         </p>
-        <p className="mt-2 break-words font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-1 break-words font-mono text-[10px] uppercase text-muted-foreground">
           {member.rank}
           {member.customTitle ? ` / ${member.customTitle}` : ""}
         </p>

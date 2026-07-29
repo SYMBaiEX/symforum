@@ -12,7 +12,7 @@ import {
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useSearchParams } from "next/navigation";
 
 export function ForumAnnouncementDetailPage({
@@ -38,7 +38,10 @@ export function ForumAnnouncementDetailPage({
 function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get("board") ?? undefined;
-  const announcement = useQuery(forumRefs.getAnnouncement, { slug, categorySlug });
+  const announcement = useQuery(forumRefs.getAnnouncement, {
+    slug,
+    categorySlug,
+  });
 
   if (announcement === undefined) {
     return <ForumLoading label="Opening announcement" />;
@@ -65,11 +68,11 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
   }
 
   return (
-    <article className="space-y-4">
-      <div className="border-y border-row-border py-3">
+    <article className="space-y-3">
+      <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum bulletin</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold md:text-3xl">
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold md:text-2xl">
             {announcement.title}
           </h1>
           <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
@@ -81,12 +84,12 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
             </span>
           ) : null}
         </div>
-        <p className="mt-3 font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
           Updated {formatForumDateTime(announcement.updatedAt)}
         </p>
       </div>
 
-      <div className="border-y border-row-border py-4">
+      <div className="border-y border-row-border py-3">
         <ForumBody body={announcement.body} />
       </div>
 
