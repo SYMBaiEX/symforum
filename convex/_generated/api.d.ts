@@ -21,6 +21,7 @@ import type * as contentAccess from "../contentAccess.js";
 import type * as crons from "../crons.js";
 import type * as dailyNewsletter from "../dailyNewsletter.js";
 import type * as forum from "../forum.js";
+import type * as forumLimits from "../forumLimits.js";
 import type * as forumNotificationEmails from "../forumNotificationEmails.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dailyNewsletter: typeof dailyNewsletter;
   forum: typeof forum;
+  forumLimits: typeof forumLimits;
   forumNotificationEmails: typeof forumNotificationEmails;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
