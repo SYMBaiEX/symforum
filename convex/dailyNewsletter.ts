@@ -875,12 +875,14 @@ async function readDailyConfig(
       args.testMode ??
       (testModeSetting === null ? false : testModeSetting === "true"),
     reviewRequired:
-      reviewRequiredSetting === null ? true : reviewRequiredSetting !== "false",
+      reviewRequiredSetting === null
+        ? false
+        : reviewRequiredSetting !== "false",
     weeklyEnabled:
       weeklyEnabledSetting === null ? true : weeklyEnabledSetting !== "false",
     weeklyReviewRequired:
       weeklyReviewRequiredSetting === null
-        ? true
+        ? false
         : weeklyReviewRequiredSetting !== "false",
     maxIndexedArticles: clampNumber(
       args.maxIndexedArticles ?? numberFromSetting(maxIndexedSetting),
@@ -946,12 +948,14 @@ async function readAdminSettings(
     enabled: enabledSetting === null ? true : enabledSetting !== "false",
     testMode: testModeSetting === null ? false : testModeSetting === "true",
     reviewRequired:
-      reviewRequiredSetting === null ? true : reviewRequiredSetting !== "false",
+      reviewRequiredSetting === null
+        ? false
+        : reviewRequiredSetting !== "false",
     weeklyEnabled:
       weeklyEnabledSetting === null ? true : weeklyEnabledSetting !== "false",
     weeklyReviewRequired:
       weeklyReviewRequiredSetting === null
-        ? true
+        ? false
         : weeklyReviewRequiredSetting !== "false",
     maxIndexedArticles: clampNumber(
       numberFromSetting(maxIndexedSetting),

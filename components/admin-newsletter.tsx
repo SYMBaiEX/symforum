@@ -96,9 +96,9 @@ export function AdminNewsletter() {
   const [dailyForm, setDailyForm] = useState<DailySettingsForm>({
     enabled: true,
     testMode: false,
-    reviewRequired: true,
+    reviewRequired: false,
     weeklyEnabled: true,
-    weeklyReviewRequired: true,
+    weeklyReviewRequired: false,
     timeZone: "America/Chicago",
     sendTimeLocal: "07:15",
     maxIndexedArticles: 40,
@@ -851,8 +851,10 @@ function DailyAutomationPanel({
           newsletter schedule with{" "}
           {settings?.cron.scheduleCheckUtc ?? "*/15 * * * *"}. Belle researches
           the indexed source packet, writes a source-linked editorial package,
-          and must pass the quality gate before a draft is saved. Weekly field
-          notes run at {settings?.cron.weeklyFieldNoteUtc ?? "30 13 * * 0"} UTC.
+          and sends it automatically after it passes the quality gate. Weekly
+          field notes run at{" "}
+          {settings?.cron.weeklyFieldNoteUtc ?? "30 13 * * 0"} UTC. Review holds
+          are emergency brakes, not required approvals.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <ToggleField
@@ -867,7 +869,7 @@ function DailyAutomationPanel({
           />
           <ToggleField
             checked={value.reviewRequired}
-            label="Review daily"
+            label="Hold daily for review"
             onChange={(reviewRequired) =>
               onChange({ ...value, reviewRequired })
             }
@@ -879,7 +881,7 @@ function DailyAutomationPanel({
           />
           <ToggleField
             checked={value.weeklyReviewRequired}
-            label="Review weekly"
+            label="Hold weekly for review"
             onChange={(weeklyReviewRequired) =>
               onChange({ ...value, weeklyReviewRequired })
             }
