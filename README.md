@@ -8,13 +8,13 @@ Convex, Convex Auth, and Vercel.
 Install dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 Run only the frontend:
 
 ```bash
-npm run dev:frontend
+bun run dev:frontend
 ```
 
 Run Convex locally in another terminal:
@@ -26,32 +26,40 @@ npx convex dev
 Run both after Convex has been configured:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ## Environment
 
-Next.js needs:
+Copy the documented environment template for a new checkout:
 
 ```bash
-NEXT_PUBLIC_CONVEX_URL=
+cp .env.example .env
 ```
 
-Convex Auth needs `SITE_URL` plus the provider credentials in each Convex
-deployment:
+Next.js automatically loads `.env` and `.env.local`. Convex deployment
+variables are separate: populate only the values you want to update in `.env`,
+then sync those values without exposing them in command history:
 
 ```bash
-SITE_URL=
-AUTH_GOOGLE_ID=
-AUTH_GOOGLE_SECRET=
+bun run env:check
+bun run env:push
+bun run env:push:prod
 ```
 
-Suki's forum research action needs a Vercel AI Gateway key in each Convex
-deployment. Keep it in Convex environment variables, not `.env.local`:
+The sync command ignores blank values and never prints secret values. It does
+not send browser-only values such as `NEXT_PUBLIC_CONVEX_URL` to Convex.
+
+Suki, Belle, and the newsletter agents need a Vercel AI Gateway key in each
+Convex deployment:
 
 ```bash
 AI_GATEWAY_API_KEY=
 ```
+
+Convex Auth also needs `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET`.
+The generated `JWT_PRIVATE_KEY` and `JWKS` values should be preserved in every
+deployment. See `.env.example` for the complete variable inventory.
 
 Create Google OAuth credentials as a **Web application**. For the current
 deployments, configure:
@@ -119,14 +127,15 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
 - Set `NEXT_PUBLIC_CONVEX_URL` from the Convex deployment.
 - Set `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` separately in the
   development and production Convex deployments.
-- Set `AI_GATEWAY_API_KEY` in Convex before enabling the Suki cron jobs. Suki
-  uses `deepseek/deepseek-v4-flash`; research feeds and source images are cached
-  in Convex, and every published topic records its run and source URLs.
+- Set `AI_GATEWAY_API_KEY` in Convex before enabling the forum and newsletter
+  agents. They use `deepseek/deepseek-v4-flash`; research feeds and source
+  images are cached in Convex, and every published topic records its run and
+  source URLs.
 - Keep `npx convex dev` running locally while editing Convex functions.
 
 ## Verification
 
 ```bash
-npm run lint
-npm run build
+bun run lint
+bun run build
 ```
