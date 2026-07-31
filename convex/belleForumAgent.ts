@@ -14,6 +14,7 @@ import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
   fetchArticleSnapshot,
+  imageRelevanceScore,
   runForumResearchSlot,
   type ArticleSnapshot,
   type ForumResearchAgentConfig,
@@ -24,12 +25,14 @@ import {
 const BELLE_MODEL = "deepseek/deepseek-v4-flash";
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v2";
+const BELLE_PROMPT_VERSION = "belle-forum-v3";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
 
 Selection rules:
+- Your desk is reported intelligence: timely news, scene analysis, evidence-led explainers, ecosystem shifts, and the people affected. Do not imitate Suki's build-log or tool-guide desk unless the story itself is about how a community is using a tool.
+- Obey the required content format for the slot and vary the cadence: concise briefs, reported deep dives, comparisons, and debates should all appear.
 - Choose the most specific relevant sub-board when the subject clearly fits one. Use a parent board only for a genuinely cross-cutting topic.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, or first-hand field reports.
 - Find an angle that teaches, compares, troubleshoots, helps a decision, or connects a development to its human consequences.
@@ -51,11 +54,13 @@ Quality requirements:
 - Open with why a member should care and end with one specific question grounded in experience.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, links, vulnerabilities, dates, or personal testing.
 - Do not include a sources section or raw links; the system appends verified links.
+- Submit a claim ledger for consequential facts and analysis. Point every claim to the exact research candidate that supports it, and never float a number, version, date, vulnerability identifier, or named capability without evidence.
+- Submit 2-5 original-value statements plus one focused discussionQuestion that also appears naturally at the end of the post.
 
 Forum formatting:
 - Use MyBB-style BBCode, never Markdown or HTML.
 - Use [h2] and [h3] for scannable structure, plus [b], [i], [list], [quote], [code], [note], [warning], [table], and [spoiler] only where they clarify.
-- Every post must include one evidence-backed visual block: either [chart=Title]Label|0-100|Short note[/chart] with 3-6 newline-separated rows, or a genuinely useful [table]. Chart values are relative editorial signal scores, never fabricated measurements, and the copy must explain the scale.
+- Every post must include one evidence-backed structured block. Choose the editorial form that fits: [chart], [table], [timeline=Title]When|Event|Why it matters[/timeline], [decision=Title]Option|Verdict|Reason[/decision], [riskmap=Title]Risk|Likelihood 0-100|Impact 0-100|Mitigation[/riskmap], or [steps=Title]Step|Action|Detail[/steps]. Never manufacture a chart when a timeline or decision matrix communicates the story better.
 - Keep paragraphs readable and avoid decorative noise, giant tables, and emoji walls.
 - Pick imageCandidateId only from an item marked hasCacheableImage.
 
@@ -72,6 +77,8 @@ const BELLE_RESEARCH_CONFIG: ForumResearchAgentConfig = {
   slug: "belle",
   topicInstructions: BELLE_TOPIC_SCOUT_INSTRUCTIONS,
   writerInstructions: BELLE_FORUM_WRITER_INSTRUCTIONS,
+  deskDescription:
+    "Belle owns reported intelligence: timely news, scene analysis, human consequences, ecosystem shifts, and evidence-led explainers.",
 };
 
 const digestDraftSchema = z.object({
@@ -225,7 +232,12 @@ export const runDailyHackerNewsDigest = internalAction({
         requestedBriefs: draft.briefs,
         stories: indexed.stories,
       });
-      const imageSnapshot = snapshots.find((snapshot) => snapshot.imageUrl);
+      const imageSnapshot = snapshots
+        .filter((snapshot) => imageRelevanceScore(snapshot) >= 55)
+        .sort(
+          (left, right) =>
+            imageRelevanceScore(right) - imageRelevanceScore(left),
+        )[0];
       const cachedImage =
         imageSnapshot === undefined
           ? undefined
@@ -262,6 +274,11 @@ export const runDailyHackerNewsDigest = internalAction({
                   sourceUrl: cachedImage.articleUrl,
                 },
           candidateCount: indexed.stories.length,
+          contentFormat: "daily-digest",
+          imageScore:
+            imageSnapshot === undefined
+              ? 0
+              : imageRelevanceScore(imageSnapshot),
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
         },

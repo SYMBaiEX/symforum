@@ -19,6 +19,7 @@ const BLOCK_TAGS = new Set([
   "center",
   "chart",
   "code",
+  "decision",
   "h2",
   "h3",
   "hr",
@@ -26,8 +27,12 @@ const BLOCK_TAGS = new Set([
   "list",
   "note",
   "quote",
+  "riskmap",
   "spoiler",
+  "sourcecards",
+  "steps",
   "table",
+  "timeline",
   "warning",
 ]);
 
@@ -267,6 +272,16 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
     return renderForumChart(node, key);
   }
 
+  if (
+    node.name === "timeline" ||
+    node.name === "decision" ||
+    node.name === "riskmap" ||
+    node.name === "steps" ||
+    node.name === "sourcecards"
+  ) {
+    return renderForumStructuredBlock(node, key);
+  }
+
   if (node.name === "center") {
     return (
       <div className="space-y-3 text-center" key={key}>
@@ -288,6 +303,186 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
       {renderInlineNodes([node], `${key}-fallback`)}
     </p>
   );
+}
+
+function renderForumStructuredBlock(
+  node: ForumBbcodeTagNode,
+  key: string,
+) {
+  const rows = forumBbcodeText(node.children)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((line) => line.split("|").map((cell) => cell.trim()));
+  if (rows.length === 0) {
+    return null;
+  }
+  const title = node.value?.slice(0, 120) || structuredBlockLabel(node.name);
+
+  if (node.name === "sourcecards") {
+    return (
+      <section className="border-y border-row-border" key={key}>
+        <StructuredHeading label="Continue reading" title={title} />
+        <div className="grid gap-px bg-row-border sm:grid-cols-2">
+          {rows.map(([label, rawUrl, detail], index) => {
+            const href = safeExternalUrl(rawUrl ?? "");
+            if (!label || !href) {
+              return null;
+            }
+            return (
+              <a
+                className="focus-ring group min-w-0 bg-background px-3 py-3 hover:bg-muted/25"
+                href={href}
+                key={`${key}-source-${index}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="block text-sm font-semibold leading-5 group-hover:text-primary">
+                  {label.slice(0, 160)}
+                </span>
+                {detail ? (
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                    {detail.slice(0, 220)}
+                  </span>
+                ) : null}
+              </a>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  if (node.name === "timeline" || node.name === "steps") {
+    return (
+      <section className="border-y border-row-border" key={key}>
+        <StructuredHeading
+          label={node.name === "timeline" ? "Timeline" : "Action sequence"}
+          title={title}
+        />
+        <ol className="divide-y divide-row-border">
+          {rows.map(([marker, heading, detail], index) => (
+            <li
+              className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 px-3 py-3"
+              key={`${key}-step-${index}`}
+            >
+              <span className="flex h-8 w-8 items-center justify-center border border-primary/50 font-mono text-[10px] text-primary">
+                {(marker || String(index + 1)).slice(0, 10)}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{heading || "Update"}</p>
+                {detail ? (
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {detail.slice(0, 320)}
+                  </p>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
+  }
+
+  if (node.name === "riskmap") {
+    return (
+      <section className="border-y border-row-border" key={key}>
+        <StructuredHeading label="Risk map" title={title} />
+        <div className="divide-y divide-row-border">
+          {rows.map(([risk, likelihood, impact, mitigation], index) => {
+            const likelihoodValue = boundedScore(likelihood);
+            const impactValue = boundedScore(impact);
+            return (
+              <div
+                className="grid gap-2 px-3 py-3 md:grid-cols-[minmax(10rem,0.7fr)_minmax(12rem,1fr)_minmax(12rem,1fr)] md:items-center"
+                key={`${key}-risk-${index}`}
+              >
+                <p className="text-sm font-semibold">{risk || "Risk"}</p>
+                <div className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+                  <span>Likelihood</span>
+                  <SignalBar value={likelihoodValue} />
+                  <span>{likelihoodValue}</span>
+                </div>
+                <div>
+                  <div className="grid grid-cols-[3rem_1fr_2rem] items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+                    <span>Impact</span>
+                    <SignalBar value={impactValue} />
+                    <span>{impactValue}</span>
+                  </div>
+                  {mitigation ? (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {mitigation.slice(0, 240)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border-y border-row-border" key={key}>
+      <StructuredHeading label="Decision matrix" title={title} />
+      <div className="divide-y divide-row-border">
+        {rows.map(([option, verdict, reason], index) => (
+          <div
+            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(8rem,0.45fr)_7rem_minmax(0,1fr)] sm:items-start"
+            key={`${key}-decision-${index}`}
+          >
+            <p className="text-sm font-semibold">{option || "Option"}</p>
+            <span className="w-fit border border-primary/45 px-2 py-1 font-mono text-[10px] uppercase text-primary">
+              {(verdict || "Consider").slice(0, 24)}
+            </span>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {(reason || "No rationale supplied.").slice(0, 320)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StructuredHeading({ label, title }: { label: string; title: string }) {
+  return (
+    <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-3 py-2.5">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <span className="font-mono text-[10px] uppercase text-muted-foreground">
+        {label}
+      </span>
+    </header>
+  );
+}
+
+function SignalBar({ value }: { value: number }) {
+  return (
+    <span className="h-1.5 overflow-hidden bg-row-border" aria-hidden="true">
+      <span className="block h-full bg-primary" style={{ width: `${value}%` }} />
+    </span>
+  );
+}
+
+function boundedScore(value: string | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(0, Math.min(100, Math.round(parsed)))
+    : 0;
+}
+
+function structuredBlockLabel(name: string) {
+  return name === "riskmap"
+    ? "Risk map"
+    : name === "decision"
+      ? "Decision matrix"
+      : name === "timeline"
+        ? "Timeline"
+        : name === "steps"
+          ? "Action sequence"
+          : "Related resources";
 }
 
 function renderForumChart(node: ForumBbcodeTagNode, key: string) {

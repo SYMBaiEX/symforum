@@ -73,6 +73,13 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "Belle relevant forum replies",
+  { minutes: 15 },
+  internal.sukiForumReplyAgent.runBelleReplySweep,
+  {},
+);
+
 crons.cron(
   "cleanup forum agent caches",
   "25 6 * * *",

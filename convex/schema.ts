@@ -768,6 +768,15 @@ export default defineSchema({
     title: v.optional(v.string()),
     sourceUrls: v.array(v.string()),
     imageSourceUrl: v.optional(v.string()),
+    contentFormat: v.optional(v.string()),
+    topicFingerprint: v.optional(v.string()),
+    qualityScore: v.optional(v.number()),
+    groundingScore: v.optional(v.number()),
+    noveltyScore: v.optional(v.number()),
+    utilityScore: v.optional(v.number()),
+    imageScore: v.optional(v.number()),
+    sourceCount: v.optional(v.number()),
+    followUpPostId: v.optional(v.id("forumPosts")),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
     errorMessage: v.optional(v.string()),
@@ -837,6 +846,40 @@ export default defineSchema({
     .index("by_sourceKey", ["sourceKey"])
     .index("by_agentSlug_and_usedAt", ["agentSlug", "usedAt"])
     .index("by_threadId", ["threadId"]),
+  forumAgentSourceReservations: defineTable({
+    sourceKey: v.string(),
+    runKey: v.string(),
+    agentSlug: v.string(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("published"),
+      v.literal("released"),
+    ),
+    threadId: v.optional(v.id("forumThreads")),
+    reservedAt: v.number(),
+    expiresAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sourceKey", ["sourceKey"])
+    .index("by_runKey", ["runKey"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"]),
+  forumAgentTopicReservations: defineTable({
+    topicFingerprint: v.string(),
+    runKey: v.string(),
+    agentSlug: v.string(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("published"),
+      v.literal("released"),
+    ),
+    threadId: v.optional(v.id("forumThreads")),
+    reservedAt: v.number(),
+    expiresAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_topicFingerprint", ["topicFingerprint"])
+    .index("by_runKey", ["runKey"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"]),
   forumAgentMediaCache: defineTable({
     sourceKey: v.string(),
     sourceUrl: v.string(),

@@ -4,6 +4,178 @@ import { internalMutation, internalQuery } from "./_generated/server";
 const SUKI_AGENT_SLUG = "suki";
 const SUKI_RUN_STALE_MS = 30 * 60 * 1_000;
 const SUKI_CACHE_CLEANUP_BATCH_SIZE = 100;
+const FORUM_AGENT_RESERVATION_TTL_MS = 20 * 60 * 1_000;
+const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
+
+export const reserveResearchTopic = internalMutation({
+  args: {
+    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    runKey: v.string(),
+    sourceKeys: v.array(v.string()),
+    topicFingerprint: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (
+      run === null ||
+      run.status !== "running" ||
+      run.agentSlug !== args.agentSlug
+    ) {
+      throw new Error("Forum agent run is not active");
+    }
+    const now = Date.now();
+    const sourceKeys = [...new Set(args.sourceKeys)].slice(0, 3);
+    if (sourceKeys.length === 0 || !args.topicFingerprint.trim()) {
+      throw new Error("A research reservation needs sources and a topic");
+    }
+
+    for (const sourceKey of sourceKeys) {
+      const used = await ctx.db
+        .query("forumAgentSourceUses")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+        .unique();
+      if (
+        used !== null &&
+        used.usedAt >= now - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS
+      ) {
+        return {
+          reserved: false as const,
+          reason: "source-covered" as const,
+          existingAgentSlug: used.agentSlug,
+          existingThreadId: used.threadId,
+        };
+      }
+      const existing = await ctx.db
+        .query("forumAgentSourceReservations")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+        .unique();
+      if (
+        existing !== null &&
+        existing.runKey !== args.runKey &&
+        (existing.status === "published" || existing.status === "reserved") &&
+        existing.expiresAt > now
+      ) {
+        return {
+          reserved: false as const,
+          reason: "source-reserved" as const,
+          existingAgentSlug: existing.agentSlug,
+          existingThreadId: existing.threadId,
+        };
+      }
+    }
+
+    const topic = await ctx.db
+      .query("forumAgentTopicReservations")
+      .withIndex("by_topicFingerprint", (q) =>
+        q.eq("topicFingerprint", args.topicFingerprint),
+      )
+      .unique();
+    const followUpTopic =
+      topic !== null &&
+      topic.runKey !== args.runKey &&
+      topic.status === "published" &&
+      topic.expiresAt > now &&
+      topic.agentSlug === args.agentSlug &&
+      topic.threadId !== undefined;
+    if (
+      topic !== null &&
+      topic.runKey !== args.runKey &&
+      (topic.status === "published" || topic.status === "reserved") &&
+      topic.expiresAt > now &&
+      !followUpTopic
+    ) {
+      return {
+        reserved: false as const,
+        reason:
+          topic.status === "published"
+            ? ("topic-covered" as const)
+            : ("topic-reserved" as const),
+        existingAgentSlug: topic.agentSlug,
+        existingThreadId: topic.threadId,
+      };
+    }
+
+    const expiresAt = now + FORUM_AGENT_RESERVATION_TTL_MS;
+    for (const sourceKey of sourceKeys) {
+      const existing = await ctx.db
+        .query("forumAgentSourceReservations")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+        .unique();
+      const value = {
+        sourceKey,
+        runKey: args.runKey,
+        agentSlug: args.agentSlug,
+        status: "reserved" as const,
+        threadId: undefined,
+        reservedAt: now,
+        expiresAt,
+        updatedAt: now,
+      };
+      if (existing === null) {
+        await ctx.db.insert("forumAgentSourceReservations", value);
+      } else {
+        await ctx.db.patch(existing._id, value);
+      }
+    }
+    const topicValue = {
+      topicFingerprint: args.topicFingerprint,
+      runKey: args.runKey,
+      agentSlug: args.agentSlug,
+      status: "reserved" as const,
+      threadId: followUpTopic ? topic?.threadId : undefined,
+      reservedAt: now,
+      expiresAt,
+      updatedAt: now,
+    };
+    if (topic === null) {
+      await ctx.db.insert("forumAgentTopicReservations", topicValue);
+    } else {
+      await ctx.db.patch(topic._id, topicValue);
+    }
+    await ctx.db.patch(run._id, {
+      topicFingerprint: args.topicFingerprint,
+      updatedAt: now,
+    });
+    return followUpTopic
+      ? {
+          reserved: false as const,
+          reason: "topic-covered" as const,
+          existingAgentSlug: args.agentSlug,
+          existingThreadId: topic?.threadId,
+        }
+      : { reserved: true as const };
+  },
+});
+
+export const releaseResearchReservations = internalMutation({
+  args: { runKey: v.string() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const [sources, topics] = await Promise.all([
+      ctx.db
+        .query("forumAgentSourceReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(3),
+      ctx.db
+        .query("forumAgentTopicReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(1),
+    ]);
+    for (const row of [...sources, ...topics]) {
+      if (row.status === "reserved") {
+        await ctx.db.patch(row._id, {
+          status: "released",
+          expiresAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+    return { released: sources.length + topics.length };
+  },
+});
 
 export const claimRun = internalMutation({
   args: {

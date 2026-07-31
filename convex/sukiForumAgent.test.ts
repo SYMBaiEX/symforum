@@ -3,7 +3,11 @@
 import { describe, expect, test } from "vitest";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
-import { finalizeForumBody, parseFeedXml } from "./sukiForumAgent";
+import {
+  finalizeForumBody,
+  imageRelevanceScore,
+  parseFeedXml,
+} from "./sukiForumAgent";
 
 describe("Suki forum research helpers", () => {
   test("parses RSS candidates, canonicalizes URLs, and keeps source imagery", () => {
@@ -73,5 +77,37 @@ ${"A useful field note. ".repeat(800)}`,
       "[url=https://example.com/research]Primary research[/url] — Example Research",
     );
     expect(body.endsWith("[/list]")).toBe(true);
+  });
+
+  test("rejects generic artwork and prefers relevant editorial imagery", () => {
+    const base = {
+      articleDescription: "A practical release with migration details",
+      articleText: "Release migration details",
+      articleTitle: "Framework 4 migration guide",
+      boardSlugs: ["ai-frameworks"],
+      id: "candidate-1",
+      imageCredit: "Example Research",
+      sourceFeedUrl: "https://example.com/feed.xml",
+      sourceKey: "source-1",
+      sourceName: "Example Research",
+      summary: "Migration details",
+      title: "Framework 4 migration guide",
+      url: "https://example.com/research",
+    };
+    expect(
+      imageRelevanceScore({
+        ...base,
+        imageUrl: "https://example.com/assets/logo.png",
+      }),
+    ).toBe(0);
+    expect(
+      imageRelevanceScore({
+        ...base,
+        imageAlt: "Framework 4 migration architecture",
+        imageHeight: 630,
+        imageUrl: "https://example.com/framework-4-migration.png",
+        imageWidth: 1200,
+      }),
+    ).toBeGreaterThanOrEqual(55);
   });
 });

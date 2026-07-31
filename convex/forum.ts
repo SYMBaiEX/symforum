@@ -660,6 +660,7 @@ const PRIVATE_MESSAGE_RECIPIENT_RATE_LIMIT_MS = 60_000;
 const PRIVATE_MESSAGE_DUPLICATE_WINDOW_MS = 10 * 60 * 1_000;
 const REPUTATION_RATE_LIMIT_MS = 2_000;
 const SUKI_REPLY_DAILY_LIMIT = 12;
+const BELLE_REPLY_DAILY_LIMIT = 8;
 const SUKI_REPLY_SCAN_LIMIT = 40;
 const SUKI_REPLY_MIN_AGE_MS = 2 * 60 * 1_000;
 const SUKI_REPLY_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
@@ -8344,6 +8345,28 @@ export const readSukiForumContext = internalQuery({
       .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
       .order("desc")
       .take(40);
+    const editorialSignals = [...new Set(categories.map((category) => category.slug))]
+      .map((categorySlug) => {
+        const matching = recentThreads.filter(
+          (thread) => thread.categorySlug === categorySlug,
+        );
+        return {
+          categorySlug,
+          recentPosts: matching.length,
+          engagementScore: matching.reduce(
+            (total, thread) =>
+              total + thread.viewCount + thread.replyCount * 5,
+            0,
+          ),
+        };
+      })
+      .filter((signal) => signal.recentPosts > 0)
+      .sort(
+        (left, right) =>
+          right.engagementScore - left.engagementScore ||
+          left.recentPosts - right.recentPosts,
+      )
+      .slice(0, 20);
 
     return {
       agent: {
@@ -8370,6 +8393,12 @@ export const readSukiForumContext = internalQuery({
         run.categorySlug === undefined ? [] : [run.categorySlug],
       ),
       recentThreadTitles: recentThreads.map((thread) => thread.title),
+      recentThreads: recentThreads.map((thread) => ({
+        categorySlug: thread.categorySlug,
+        slug: thread.slug,
+        title: thread.title,
+      })),
+      editorialSignals,
     };
   },
 });
@@ -8412,6 +8441,28 @@ export const readBelleForumContext = internalQuery({
       .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
       .order("desc")
       .take(40);
+    const editorialSignals = [...new Set(categories.map((category) => category.slug))]
+      .map((categorySlug) => {
+        const matching = recentThreads.filter(
+          (thread) => thread.categorySlug === categorySlug,
+        );
+        return {
+          categorySlug,
+          recentPosts: matching.length,
+          engagementScore: matching.reduce(
+            (total, thread) =>
+              total + thread.viewCount + thread.replyCount * 5,
+            0,
+          ),
+        };
+      })
+      .filter((signal) => signal.recentPosts > 0)
+      .sort(
+        (left, right) =>
+          right.engagementScore - left.engagementScore ||
+          left.recentPosts - right.recentPosts,
+      )
+      .slice(0, 20);
 
     return {
       agent: {
@@ -8438,6 +8489,12 @@ export const readBelleForumContext = internalQuery({
         run.categorySlug === undefined ? [] : [run.categorySlug],
       ),
       recentThreadTitles: recentThreads.map((thread) => thread.title),
+      recentThreads: recentThreads.map((thread) => ({
+        categorySlug: thread.categorySlug,
+        slug: thread.slug,
+        title: thread.title,
+      })),
+      editorialSignals,
     };
   },
 });
@@ -8464,23 +8521,26 @@ export const readUsedSukiSourceKeys = internalQuery({
 
 export const claimSukiForumReplyCandidate = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     attempt: v.number(),
     runDate: v.string(),
     runId: v.optional(v.id("forumAgentReplyRuns")),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? "suki";
+    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
     if (
       !Number.isInteger(args.attempt) ||
       args.attempt < 0 ||
       args.attempt > 2 ||
       !/^\d{4}-\d{2}-\d{2}$/.test(args.runDate)
     ) {
-      throw new Error("Invalid Suki reply run request");
+      throw new Error(`Invalid ${agentName} reply run request`);
     }
 
     const agent = await ctx.db
       .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
       .unique();
     if (agent === null || !agent.enabled) {
       return { claimed: false as const, reason: "disabled" };
@@ -8489,9 +8549,9 @@ export const claimSukiForumReplyCandidate = internalMutation({
     if (
       agentUser === null ||
       agentUser.isAgent !== true ||
-      agentUser.agentSlug !== "suki"
+      agentUser.agentSlug !== agentSlug
     ) {
-      throw new Error("Suki's forum identity is invalid");
+      throw new Error(`${agentName}'s forum identity is invalid`);
     }
 
     const dailyRuns = await ctx.db
@@ -8499,8 +8559,10 @@ export const claimSukiForumReplyCandidate = internalMutation({
       .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
       .take(100);
     if (
-      dailyRuns.filter((run) => run.status === "replied").length >=
-      SUKI_REPLY_DAILY_LIMIT
+      dailyRuns.filter(
+        (run) => run.agentSlug === agentSlug && run.status === "replied",
+      ).length >=
+      (agentSlug === "belle" ? BELLE_REPLY_DAILY_LIMIT : SUKI_REPLY_DAILY_LIMIT)
     ) {
       return { claimed: false as const, reason: "daily-limit" };
     }
@@ -8510,7 +8572,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       const run = await ctx.db.get(args.runId);
       if (
         run === null ||
-        run.agentSlug !== "suki" ||
+        run.agentSlug !== agentSlug ||
         run.runDate !== args.runDate ||
         run.status === "replied" ||
         run.status === "ignored" ||
@@ -8589,7 +8651,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       .sort((left, right) => right.sourceCreatedAt - left.sourceCreatedAt);
 
     for (const source of sources) {
-      const runKey = `suki-reply:${source.sourceKind}:${source.sourceId}`;
+      const runKey = `forum-reply:${source.sourceKind}:${source.sourceId}`;
       const existing = await ctx.db
         .query("forumAgentReplyRuns")
         .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
@@ -8612,9 +8674,12 @@ export const claimSukiForumReplyCandidate = internalMutation({
       if (candidate === null) {
         continue;
       }
+      if (!forumReplyDeskMatches(agentSlug, candidate.categorySlug)) {
+        continue;
+      }
       const runId = await ctx.db.insert("forumAgentReplyRuns", {
         runKey,
-        agentSlug: "suki",
+        agentSlug,
         runDate: args.runDate,
         sourceKind: source.sourceKind,
         sourcePostId: source.sourcePostId,
@@ -8636,14 +8701,16 @@ export const claimSukiForumReplyCandidate = internalMutation({
 
 export const markSukiForumReplyIgnored = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     runId: v.id("forumAgentReplyRuns"),
     reason: v.string(),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? "suki";
     const run = await ctx.db.get(args.runId);
-    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
+    if (run === null || run.agentSlug !== agentSlug || run.status !== "running") {
       return { updated: false };
     }
     const now = Date.now();
@@ -8661,12 +8728,14 @@ export const markSukiForumReplyIgnored = internalMutation({
 
 export const markSukiForumReplyFailed = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     runId: v.id("forumAgentReplyRuns"),
     reason: v.string(),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? "suki";
     const run = await ctx.db.get(args.runId);
-    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
+    if (run === null || run.agentSlug !== agentSlug || run.status !== "running") {
       return { updated: false };
     }
     const now = Date.now();
@@ -8682,6 +8751,7 @@ export const markSukiForumReplyFailed = internalMutation({
 
 export const publishSukiForumReply = internalMutation({
   args: {
+    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
     runId: v.id("forumAgentReplyRuns"),
     body: v.string(),
     reason: v.string(),
@@ -8689,20 +8759,22 @@ export const publishSukiForumReply = internalMutation({
     outputTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const agentSlug = args.agentSlug ?? "suki";
+    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
     const run = await ctx.db.get(args.runId);
-    if (run === null || run.agentSlug !== "suki" || run.status !== "running") {
-      throw new Error("Suki's reply run is not active");
+    if (run === null || run.agentSlug !== agentSlug || run.status !== "running") {
+      throw new Error(`${agentName}'s reply run is not active`);
     }
     const agent = await ctx.db
       .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+      .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
       .unique();
     if (agent === null || !agent.enabled) {
-      throw new Error("Suki is disabled");
+      throw new Error(`${agentName} is disabled`);
     }
     const user = await ctx.db.get(agent.userId);
-    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
-      throw new Error("Suki's forum identity is invalid");
+    if (user === null || user.isAgent !== true || user.agentSlug !== agentSlug) {
+      throw new Error(`${agentName}'s forum identity is invalid`);
     }
     const candidate = await loadSukiReplyCandidate(ctx, run, user._id);
     const now = Date.now();
@@ -8952,6 +9024,19 @@ export function isSukiReplyWorthReviewing(body: string) {
   return text.length >= 45 && words.length >= 7;
 }
 
+function forumReplyDeskMatches(
+  agentSlug: "suki" | "belle",
+  categorySlug: string,
+) {
+  const belleDesk =
+    categorySlug === "news" ||
+    categorySlug.startsWith("news-") ||
+    categorySlug === "hacking-security-news" ||
+    categorySlug === "music-scenes" ||
+    categorySlug === "music-new-releases";
+  return agentSlug === "belle" ? belleDesk : !belleDesk;
+}
+
 function compactForumText(value: string, maximumLength: number) {
   const normalized = value.replace(/\u0000/g, "").trim();
   return normalized.length <= maximumLength
@@ -8991,6 +9076,13 @@ export const publishSukiForumThread = internalMutation({
       }),
     ),
     candidateCount: v.number(),
+    contentFormat: v.optional(v.string()),
+    topicFingerprint: v.optional(v.string()),
+    qualityScore: v.optional(v.number()),
+    groundingScore: v.optional(v.number()),
+    noveltyScore: v.optional(v.number()),
+    utilityScore: v.optional(v.number()),
+    imageScore: v.optional(v.number()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
   },
@@ -9045,7 +9137,9 @@ export const publishSukiForumThread = internalMutation({
     }
     if (
       args.attachment === undefined &&
-      !/\[(?:chart|table)(?:=|\])/i.test(body)
+      !/\[(?:chart|table|timeline|decision|riskmap|steps|sourcecards)(?:=|\])/i.test(
+        body,
+      )
     ) {
       throw new Error(
         `${agentName}'s forum topic must include an image, chart, or comparison table`,
@@ -9232,18 +9326,236 @@ export const publishSukiForumThread = internalMutation({
       title,
       sourceUrls: sources.map((source) => source.sourceUrl),
       imageSourceUrl: args.attachment?.sourceUrl,
+      contentFormat: args.contentFormat,
+      topicFingerprint: args.topicFingerprint,
+      qualityScore: args.qualityScore,
+      groundingScore: args.groundingScore,
+      noveltyScore: args.noveltyScore,
+      utilityScore: args.utilityScore,
+      imageScore: args.imageScore,
+      sourceCount: sources.length,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       completedAt: now,
       updatedAt: now,
       errorMessage: undefined,
     });
+    const [sourceReservations, topicReservations] = await Promise.all([
+      ctx.db
+        .query("forumAgentSourceReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(3),
+      ctx.db
+        .query("forumAgentTopicReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(1),
+    ]);
+    for (const reservation of sourceReservations) {
+      await ctx.db.patch(reservation._id, {
+        status: "published",
+        threadId,
+        expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
+        updatedAt: now,
+      });
+    }
+    for (const reservation of topicReservations) {
+      await ctx.db.patch(reservation._id, {
+        status: "published",
+        threadId,
+        expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
+        updatedAt: now,
+      });
+    }
 
     return {
       categorySlug: category.slug,
       threadId,
       threadSlug: slug,
       title,
+    };
+  },
+});
+
+export const publishForumAgentFollowUp = internalMutation({
+  args: {
+    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    runKey: v.string(),
+    threadId: v.id("forumThreads"),
+    title: v.string(),
+    body: v.string(),
+    sources: v.array(
+      v.object({
+        sourceKey: v.string(),
+        sourceUrl: v.string(),
+      }),
+    ),
+    attachment: v.optional(
+      v.object({
+        storageId: v.id("_storage"),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+        altText: v.optional(v.string()),
+        credit: v.optional(v.string()),
+        sourceUrl: v.optional(v.string()),
+      }),
+    ),
+    candidateCount: v.number(),
+    contentFormat: v.optional(v.string()),
+    topicFingerprint: v.optional(v.string()),
+    qualityScore: v.optional(v.number()),
+    groundingScore: v.optional(v.number()),
+    noveltyScore: v.optional(v.number()),
+    utilityScore: v.optional(v.number()),
+    imageScore: v.optional(v.number()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (
+      run === null ||
+      run.status !== "running" ||
+      run.agentSlug !== args.agentSlug
+    ) {
+      throw new Error("Forum follow-up run is not active");
+    }
+    const agent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
+      .unique();
+    const thread = await ctx.db.get(args.threadId);
+    if (
+      agent === null ||
+      !agent.enabled ||
+      thread === null ||
+      thread.status !== "active"
+    ) {
+      throw new Error("Forum follow-up target is unavailable");
+    }
+    const user = await ctx.db.get(agent.userId);
+    const category = await ctx.db.get(thread.categoryId);
+    if (
+      user === null ||
+      user.isAgent !== true ||
+      user.agentSlug !== args.agentSlug ||
+      thread.authorId !== user._id ||
+      category === null ||
+      category.status !== "active" ||
+      categoryViewAccess(category) !== "public"
+    ) {
+      throw new Error("Forum follow-up identity or board is invalid");
+    }
+    const sources = args.sources.slice(0, 6);
+    if (sources.length === 0) {
+      throw new Error("A forum follow-up needs at least one source");
+    }
+    const body = normalizeReplyBody(args.body);
+    const now = Date.now();
+    const postNumber = await nextPostNumberForThread(ctx, thread);
+    const postId = await ctx.db.insert("forumPosts", {
+      threadId: thread._id,
+      categoryId: category._id,
+      authorId: user._id,
+      body,
+      postNumber,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(thread._id, {
+      replyCount: thread.replyCount + 1,
+      lastAssignedPostNumber: postNumber,
+      lastPostId: postId,
+      lastPostAt: now,
+      lastPostUserId: user._id,
+      updatedAt: now,
+    });
+    await ctx.db.patch(category._id, {
+      postCount: category.postCount + 1,
+      lastThreadId: thread._id,
+      lastPostId: postId,
+      lastPostAt: now,
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, user._id, {
+      postDelta: 1,
+      now,
+    });
+    for (const source of sources) {
+      const previousUse = await ctx.db
+        .query("forumAgentSourceUses")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", source.sourceKey))
+        .unique();
+      if (previousUse === null) {
+        await ctx.db.insert("forumAgentSourceUses", {
+          sourceKey: source.sourceKey,
+          sourceUrl: source.sourceUrl,
+          agentSlug: args.agentSlug,
+          categoryId: category._id,
+          threadId: thread._id,
+          usedAt: now,
+        });
+      }
+    }
+    await ctx.db.patch(run._id, {
+      status: "published",
+      candidateCount: args.candidateCount,
+      categoryId: category._id,
+      categorySlug: category.slug,
+      threadId: thread._id,
+      title: thread.title,
+      sourceUrls: sources.map((source) => source.sourceUrl),
+      contentFormat: "follow-up",
+      topicFingerprint: args.topicFingerprint,
+      qualityScore: args.qualityScore,
+      groundingScore: args.groundingScore,
+      noveltyScore: args.noveltyScore,
+      utilityScore: args.utilityScore,
+      imageScore: 0,
+      sourceCount: sources.length,
+      followUpPostId: postId,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      completedAt: now,
+      updatedAt: now,
+      errorMessage: undefined,
+    });
+    const [sourceReservations, topicReservations] = await Promise.all([
+      ctx.db
+        .query("forumAgentSourceReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(3),
+      ctx.db
+        .query("forumAgentTopicReservations")
+        .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+        .take(1),
+    ]);
+    for (const reservation of sourceReservations) {
+      await ctx.db.patch(reservation._id, {
+        status: "published",
+        threadId: thread._id,
+        expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
+        updatedAt: now,
+      });
+    }
+    for (const reservation of topicReservations) {
+      await ctx.db.patch(reservation._id, {
+        status: "published",
+        threadId: thread._id,
+        expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
+        updatedAt: now,
+      });
+    }
+    return {
+      categorySlug: category.slug,
+      threadSlug: thread.slug,
+      title: thread.title,
+      postId,
+      postNumber,
     };
   },
 });

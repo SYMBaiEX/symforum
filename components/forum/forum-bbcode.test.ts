@@ -25,7 +25,7 @@ describe("forum BBCode parser", () => {
 
   test("supports rich block and inline tags", () => {
     const nodes = parseForumBbcode(
-      "[h2]Checklist[/h2][list=1][*]Map dependencies[/list][note]Context[/note][spoiler=Lab details]Hidden[/spoiler][chart=Signal map]Adoption|72|Growing[/chart][table][tr][th]Mode[/th][td]Dry run[/td][/tr][/table]",
+      "[h2]Checklist[/h2][list=1][*]Map dependencies[/list][note]Context[/note][spoiler=Lab details]Hidden[/spoiler][chart=Signal map]Adoption|72|Growing[/chart][table][tr][th]Mode[/th][td]Dry run[/td][/tr][/table][timeline=Release path]Today|Ship|Verify[/timeline][decision=Options]A|Choose|Lower risk[/decision][riskmap=Risks]Drift|40|80|Pin versions[/riskmap][steps=Runbook]1|Inspect|Collect evidence[/steps][sourcecards=Related]Thread|https://forum.symbaiex.com/forum/ai/example|Continue[/sourcecards]",
     );
 
     expect(
@@ -39,6 +39,11 @@ describe("forum BBCode parser", () => {
       ["spoiler", "Lab details"],
       ["chart", "Signal map"],
       ["table", undefined],
+      ["timeline", "Release path"],
+      ["decision", "Options"],
+      ["riskmap", "Risks"],
+      ["steps", "Runbook"],
+      ["sourcecards", "Related"],
     ]);
   });
 

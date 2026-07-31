@@ -16,6 +16,7 @@ import {
   Bold,
   Code2,
   EyeOff,
+  GitCompareArrows,
   Heading2,
   ImageIcon,
   Info,
@@ -31,6 +32,7 @@ import {
   Table2,
   Underline,
   Upload,
+  Workflow,
   X,
 } from "lucide-react";
 import { useId, useRef, useState, type Ref, type ReactNode } from "react";
@@ -264,6 +266,30 @@ export function ForumCompose({
             }
           />
           <ToolbarButton
+            ariaLabel="Insert action sequence markup"
+            disabled={disabled}
+            label={<Workflow className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[steps=Action sequence]\n",
+                "\n[/steps]",
+                "1|Inspect|Collect the evidence\n2|Decide|Choose the lowest-risk path\n3|Verify|Confirm the outcome",
+              )
+            }
+          />
+          <ToolbarButton
+            ariaLabel="Insert decision matrix markup"
+            disabled={disabled}
+            label={<GitCompareArrows className="size-3.5" />}
+            onClick={() =>
+              appendMarkup(
+                "[decision=Options]\n",
+                "\n[/decision]",
+                "Option A|Choose|Best fit for this constraint\nOption B|Watch|Promising but not ready",
+              )
+            }
+          />
+          <ToolbarButton
             ariaLabel="Insert horizontal rule"
             disabled={disabled}
             label={<Minus className="size-3.5" />}
@@ -299,8 +325,9 @@ export function ForumCompose({
           <p className="border-t border-row-border px-3 py-2.5 text-xs leading-5 text-muted-foreground">
             Use headings, bold, italic, quotes, code, links, images, bullet or
             numbered lists, notes, warnings, spoilers, tables, signal charts,
-            keyboard keys, highlights, and horizontal rules. Chart rows use
-            Label|0-100|Note. Preview before posting to check the final layout.
+            action sequences, decision matrices, keyboard keys, highlights,
+            and horizontal rules. Structured rows use pipe separators. Preview
+            before posting to check the final layout.
           </p>
         </details>
       </div>
