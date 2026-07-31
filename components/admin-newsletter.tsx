@@ -10,9 +10,14 @@ import {
   type DailyNewsletterRunRecord,
   type DailyNewsletterSettingsRecord,
   type NewsletterSendLogRecord,
+  type NewsletterEditorialAnalyticsRecord,
   type NewsletterIssueRecord,
   type NewsletterSubscriberRecord,
 } from "@/lib/convex-refs";
+import {
+  parseEditorialNewsletterPayload,
+  type EditorialNewsletterPayload,
+} from "@/convex/newsletterPayload";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -66,12 +71,13 @@ const blankIssue: IssueForm = {
 export function AdminNewsletter() {
   const subscribers = useQuery(convexRefs.admin.listNewsletterSubscribers, {});
   const issues = useQuery(convexRefs.admin.listNewsletterIssues, {});
-  const dailySettings = useQuery(
-    convexRefs.admin.dailyNewsletterSettings,
-    {},
-  );
+  const dailySettings = useQuery(convexRefs.admin.dailyNewsletterSettings, {});
   const dailyRuns = useQuery(convexRefs.admin.listDailyNewsletterRuns, {});
   const dailySendLogs = useQuery(convexRefs.admin.listNewsletterSendLogs, {});
+  const editorialAnalytics = useQuery(
+    convexRefs.admin.newsletterEditorialAnalytics,
+    {},
+  );
   const upsertIssue = useMutation(convexRefs.admin.upsertNewsletterIssue);
   const sendTest = useMutation(convexRefs.admin.sendNewsletterIssueTest);
   const sendNow = useMutation(convexRefs.admin.sendNewsletterIssueNow);
@@ -83,10 +89,16 @@ export function AdminNewsletter() {
   const queueDailyNewsletter = useMutation(
     convexRefs.admin.queueDailyNewsletter,
   );
+  const queueWeeklyFieldNote = useMutation(
+    convexRefs.admin.queueWeeklyFieldNote,
+  );
   const [form, setForm] = useState<IssueForm>(blankIssue);
   const [dailyForm, setDailyForm] = useState<DailySettingsForm>({
     enabled: true,
     testMode: false,
+    reviewRequired: true,
+    weeklyEnabled: true,
+    weeklyReviewRequired: true,
     timeZone: "America/Chicago",
     sendTimeLocal: "07:15",
     maxIndexedArticles: 40,
@@ -106,6 +118,9 @@ export function AdminNewsletter() {
     setDailyForm({
       enabled: dailySettings.enabled,
       testMode: dailySettings.testMode,
+      reviewRequired: dailySettings.reviewRequired,
+      weeklyEnabled: dailySettings.weeklyEnabled,
+      weeklyReviewRequired: dailySettings.weeklyReviewRequired,
       timeZone: dailySettings.timeZone,
       sendTimeLocal: dailySettings.sendTimeLocal,
       maxIndexedArticles: dailySettings.maxIndexedArticles,
@@ -117,14 +132,15 @@ export function AdminNewsletter() {
   const subscriberRows = useMemo(() => subscribers ?? [], [subscribers]);
   const issueRows = useMemo(() => issues ?? [], [issues]);
   const dailyRunRows = useMemo(() => dailyRuns ?? [], [dailyRuns]);
-  const dailySendLogRows = useMemo(
-    () => dailySendLogs ?? [],
-    [dailySendLogs],
-  );
+  const dailySendLogRows = useMemo(() => dailySendLogs ?? [], [dailySendLogs]);
   const selectedSlug = form.slug.trim();
   const selectedIssue = useMemo(
     () => issueRows.find((issue) => issue.slug === selectedSlug) ?? null,
     [issueRows, selectedSlug],
+  );
+  const selectedEditorialPayload = useMemo(
+    () => parseEditorialNewsletterPayload(form.body),
+    [form.body],
   );
   const confirmedSubscribers = subscriberRows.filter(
     (row) => row.status === "confirmed",
@@ -318,6 +334,9 @@ export function AdminNewsletter() {
       setDailyForm({
         enabled: updated.enabled,
         testMode: updated.testMode,
+        reviewRequired: updated.reviewRequired,
+        weeklyEnabled: updated.weeklyEnabled,
+        weeklyReviewRequired: updated.weeklyReviewRequired,
         timeZone: updated.timeZone,
         sendTimeLocal: updated.sendTimeLocal,
         maxIndexedArticles: updated.maxIndexedArticles,
@@ -361,267 +380,421 @@ export function AdminNewsletter() {
     }
   }
 
+  async function queueWeeklyRun() {
+    try {
+      await queueWeeklyFieldNote({ force: true });
+      toast.success("Weekly field note draft queued");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "weekly_queue_failed",
+        component: "AdminNewsletter",
+        action: "dailyNewsletter:queueAdminWeeklyFieldNote",
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Could not queue weekly draft",
+      );
+    }
+  }
+
   return (
     <>
       <DailyAutomationPanel
         logs={dailySendLogRows}
         onQueueLive={() => queueDailyRun(false)}
         onQueueTest={() => queueDailyRun(true)}
+        onQueueWeekly={queueWeeklyRun}
         onSave={saveDailySettings}
         runs={dailyRunRows}
         settings={dailySettings}
         value={dailyForm}
         onChange={setDailyForm}
       />
+      <EditorialAnalyticsPanel rows={editorialAnalytics ?? []} />
       <section className="mt-6 grid gap-6 xl:grid-cols-12">
-      <div className="xl:col-span-4">
-        <div className="rounded-xl border bg-background p-4 sm:p-5">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Newsletter
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold">Issues</h2>
-            </div>
-            <Button size="sm" variant="outline" onClick={resetDraft}>
-              New
-            </Button>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {ISSUE_FILTERS.map((filter) => (
-              <FilterChip
-                active={issueFilter === filter}
-                key={filter}
-                onClick={() => setIssueFilter(filter)}
-              >
-                {labelFromFilter(filter)}{" "}
-                <span className="text-muted-foreground">
-                  {filter === "all"
-                    ? issueRows.length
-                    : (issueCounts[filter] ?? 0)}
-                </span>
-              </FilterChip>
-            ))}
-          </div>
-          <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
-            {filteredIssues.map((issue) => (
-              <IssueButton
-                active={issue.slug === selectedSlug}
-                issue={issue}
-                key={issue._id}
-                onSelect={() => selectIssue(issue)}
-              />
-            ))}
-            {issues === undefined ? (
-              <StatusLine>Loading issues</StatusLine>
-            ) : null}
-            {issues?.length === 0 ? (
-              <StatusLine>No issues yet</StatusLine>
-            ) : null}
-            {issues !== undefined &&
-            issues.length > 0 &&
-            filteredIssues.length === 0 ? (
-              <StatusLine>No issues match this filter</StatusLine>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <form onSubmit={saveIssue} className="xl:col-span-5">
-        <div className="rounded-xl border bg-background p-4 sm:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Editor
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-semibold">
-                  {selectedIssue ? selectedIssue.subject : "New issue"}
-                </h3>
-                {selectedIssue ? (
-                  <IssueStatusBadge status={selectedIssue.status} />
-                ) : (
-                  <Badge variant="outline">Unsaved</Badge>
-                )}
+        <div className="xl:col-span-4">
+          <div className="rounded-xl border bg-background p-4 sm:p-5">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  Newsletter
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">Issues</h2>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {selectedIssue
-                  ? `Updated ${formatDateTime(selectedIssue.updatedAt)}`
-                  : "Draft the editorial content here, then use delivery controls once it is saved."}
-              </p>
+              <Button size="sm" variant="outline" onClick={resetDraft}>
+                New
+              </Button>
             </div>
-            <Button type="submit" size="sm">
-              Save
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3">
-            <Field label="Subject">
-              <Input
-                value={form.subject}
-                onChange={(event) =>
-                  setForm({ ...form, subject: event.target.value })
-                }
-                required
-              />
-            </Field>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Slug">
-                <Input
-                  value={form.slug}
-                  onChange={(event) =>
-                    setForm({ ...form, slug: event.target.value })
-                  }
-                  placeholder="auto-from-subject"
-                />
-              </Field>
-              <Field label="Linked post">
-                <Input
-                  value={form.linkedPostSlug}
-                  onChange={(event) =>
-                    setForm({ ...form, linkedPostSlug: event.target.value })
-                  }
-                  placeholder="optional-post-slug"
-                />
-              </Field>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {ISSUE_FILTERS.map((filter) => (
+                <FilterChip
+                  active={issueFilter === filter}
+                  key={filter}
+                  onClick={() => setIssueFilter(filter)}
+                >
+                  {labelFromFilter(filter)}{" "}
+                  <span className="text-muted-foreground">
+                    {filter === "all"
+                      ? issueRows.length
+                      : (issueCounts[filter] ?? 0)}
+                  </span>
+                </FilterChip>
+              ))}
             </div>
-            <Field label="Preview">
-              <Input
-                value={form.previewText}
-                onChange={(event) =>
-                  setForm({ ...form, previewText: event.target.value })
-                }
-                required
-              />
-            </Field>
-            <Field label="Markdown body">
-              <Textarea
-                value={form.body}
-                onChange={(event) =>
-                  setForm({ ...form, body: event.target.value })
-                }
-                rows={14}
-                required
-              />
-            </Field>
-          </div>
-        </div>
-      </form>
-
-      <div className="grid gap-6 xl:col-span-3">
-        <aside className="rounded-xl border bg-background p-4 sm:p-5">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            Delivery
-          </p>
-          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="font-mono uppercase">
-                {selectedIssue?.slug || "unsaved"}
-              </Badge>
-              {selectedIssue ? (
-                <IssueStatusBadge status={selectedIssue.status} />
+            <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
+              {filteredIssues.map((issue) => (
+                <IssueButton
+                  active={issue.slug === selectedSlug}
+                  issue={issue}
+                  key={issue._id}
+                  onSelect={() => selectIssue(issue)}
+                />
+              ))}
+              {issues === undefined ? (
+                <StatusLine>Loading issues</StatusLine>
+              ) : null}
+              {issues?.length === 0 ? (
+                <StatusLine>No issues yet</StatusLine>
+              ) : null}
+              {issues !== undefined &&
+              issues.length > 0 &&
+              filteredIssues.length === 0 ? (
+                <StatusLine>No issues match this filter</StatusLine>
               ) : null}
             </div>
-            <p className="mt-2 text-sm font-medium">
-              {selectedIssue?.subject ||
-                "Save an issue to unlock send controls"}
-            </p>
-            <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
-              <ControlFact
-                label="Audience"
-                value={`${confirmedSubscribers} confirmed / ${subscriberRows.length} total`}
-              />
-              <ControlFact
-                label="Scheduled"
-                value={
-                  selectedIssue?.scheduledAt
-                    ? formatDateTime(selectedIssue.scheduledAt)
-                    : "Not scheduled"
-                }
-              />
-              <ControlFact
-                label="Sent"
-                value={
-                  selectedIssue?.sentAt
-                    ? formatDateTime(selectedIssue.sentAt)
-                    : "Not sent"
-                }
-              />
-            </div>
-            {selectedIssue?.errorMessage ? (
-              <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {selectedIssue.errorMessage}
-              </p>
-            ) : null}
           </div>
+        </div>
 
-          <div className="mt-4 grid gap-4">
-            <Field label="Test recipient">
-              <Input
-                value={testEmail}
-                onChange={(event) => setTestEmail(event.target.value)}
-                placeholder="test@domain.com"
-              />
-            </Field>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={testIssue}
-              disabled={!canRunIssueActions}
-            >
-              <TestTube2 aria-hidden="true" />
-              Send test
-            </Button>
+        <form onSubmit={saveIssue} className="xl:col-span-5">
+          <div className="rounded-xl border bg-background p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  Editor
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-semibold">
+                    {selectedIssue ? selectedIssue.subject : "New issue"}
+                  </h3>
+                  {selectedIssue ? (
+                    <IssueStatusBadge status={selectedIssue.status} />
+                  ) : (
+                    <Badge variant="outline">Unsaved</Badge>
+                  )}
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {selectedIssue
+                    ? `Updated ${formatDateTime(selectedIssue.updatedAt)}`
+                    : "Draft the editorial content here, then use delivery controls once it is saved."}
+                </p>
+              </div>
+              <Button type="submit" size="sm">
+                Save
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <Field label="Subject">
+                <Input
+                  value={form.subject}
+                  onChange={(event) =>
+                    setForm({ ...form, subject: event.target.value })
+                  }
+                  required
+                />
+              </Field>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Slug">
+                  <Input
+                    value={form.slug}
+                    onChange={(event) =>
+                      setForm({ ...form, slug: event.target.value })
+                    }
+                    placeholder="auto-from-subject"
+                  />
+                </Field>
+                <Field label="Linked post">
+                  <Input
+                    value={form.linkedPostSlug}
+                    onChange={(event) =>
+                      setForm({ ...form, linkedPostSlug: event.target.value })
+                    }
+                    placeholder="optional-post-slug"
+                  />
+                </Field>
+              </div>
+              <Field label="Preview">
+                <Input
+                  value={form.previewText}
+                  onChange={(event) =>
+                    setForm({ ...form, previewText: event.target.value })
+                  }
+                  required
+                />
+              </Field>
+              <Field
+                label={
+                  selectedEditorialPayload
+                    ? "Generated editorial package"
+                    : "Markdown body"
+                }
+              >
+                <Textarea
+                  value={form.body}
+                  onChange={(event) =>
+                    setForm({ ...form, body: event.target.value })
+                  }
+                  rows={14}
+                  required
+                />
+              </Field>
+              {selectedEditorialPayload ? (
+                <EditorialDraftPreview
+                  payload={selectedEditorialPayload}
+                  slug={selectedIssue?.slug}
+                />
+              ) : null}
+            </div>
+          </div>
+        </form>
 
-            <Field label="Schedule send">
-              <Input
-                type="datetime-local"
-                value={scheduleAt}
-                onChange={(event) => setScheduleAt(event.target.value)}
-              />
-            </Field>
-            <p className="-mt-2 text-xs text-muted-foreground">
-              Uses your local timezone in the browser. Saving the editor does
-              not queue delivery.
+        <div className="grid gap-6 xl:col-span-3">
+          <aside className="rounded-xl border bg-background p-4 sm:p-5">
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Delivery
             </p>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="font-mono uppercase">
+                  {selectedIssue?.slug || "unsaved"}
+                </Badge>
+                {selectedIssue ? (
+                  <IssueStatusBadge status={selectedIssue.status} />
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm font-medium">
+                {selectedIssue?.subject ||
+                  "Save an issue to unlock send controls"}
+              </p>
+              <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                <ControlFact
+                  label="Audience"
+                  value={`${confirmedSubscribers} confirmed / ${subscriberRows.length} total`}
+                />
+                <ControlFact
+                  label="Scheduled"
+                  value={
+                    selectedIssue?.scheduledAt
+                      ? formatDateTime(selectedIssue.scheduledAt)
+                      : "Not scheduled"
+                  }
+                />
+                <ControlFact
+                  label="Sent"
+                  value={
+                    selectedIssue?.sentAt
+                      ? formatDateTime(selectedIssue.sentAt)
+                      : "Not sent"
+                  }
+                />
+              </div>
+              {selectedIssue?.errorMessage ? (
+                <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {selectedIssue.errorMessage}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-4 grid gap-4">
+              <Field label="Test recipient">
+                <Input
+                  value={testEmail}
+                  onChange={(event) => setTestEmail(event.target.value)}
+                  placeholder="test@domain.com"
+                />
+              </Field>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={scheduleSelectedIssue}
-                disabled={!canSchedule}
+                onClick={testIssue}
+                disabled={!canRunIssueActions}
               >
-                <CalendarClock aria-hidden="true" />
-                Schedule
+                <TestTube2 aria-hidden="true" />
+                Send test
               </Button>
-              <Button size="sm" onClick={sendIssueNow} disabled={!canSendNow}>
-                <Send aria-hidden="true" />
-                {selectedIssue?.status === "scheduled"
-                  ? "Send immediately"
-                  : "Send now"}
+
+              <Field label="Schedule send">
+                <Input
+                  type="datetime-local"
+                  value={scheduleAt}
+                  onChange={(event) => setScheduleAt(event.target.value)}
+                />
+              </Field>
+              <p className="-mt-2 text-xs text-muted-foreground">
+                Uses your local timezone in the browser. Saving the editor does
+                not queue delivery.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={scheduleSelectedIssue}
+                  disabled={!canSchedule}
+                >
+                  <CalendarClock aria-hidden="true" />
+                  Schedule
+                </Button>
+                <Button size="sm" onClick={sendIssueNow} disabled={!canSendNow}>
+                  <Send aria-hidden="true" />
+                  {selectedIssue?.status === "scheduled"
+                    ? "Send immediately"
+                    : "Send now"}
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={cancelSelectedIssue}
+                disabled={!canCancel}
+              >
+                Cancel schedule
               </Button>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={cancelSelectedIssue}
-              disabled={!canCancel}
-            >
-              Cancel schedule
-            </Button>
-          </div>
-        </aside>
+          </aside>
 
-        <SubscriberSummary
-          counts={subscriberCounts}
-          filter={subscriberFilter}
-          filteredSubscribers={filteredSubscribers}
-          onFilterChange={setSubscriberFilter}
-          subscribers={subscriberRows}
-          syncCounts={syncCounts}
-        />
-      </div>
+          <SubscriberSummary
+            counts={subscriberCounts}
+            filter={subscriberFilter}
+            filteredSubscribers={filteredSubscribers}
+            onFilterChange={setSubscriberFilter}
+            subscribers={subscriberRows}
+            syncCounts={syncCounts}
+          />
+        </div>
       </section>
     </>
+  );
+}
+
+function EditorialAnalyticsPanel({
+  rows,
+}: {
+  rows: NewsletterEditorialAnalyticsRecord[];
+}) {
+  const sent = rows.filter((row) => row.status === "sent");
+  const delivered = sent.reduce((sum, row) => sum + row.delivered, 0);
+  const opened = sent.reduce((sum, row) => sum + row.opened, 0);
+  const clicked = sent.reduce((sum, row) => sum + row.clicked, 0);
+  const replies = sent.reduce((sum, row) => sum + row.forumReplies, 0);
+  const saves = sent.reduce((sum, row) => sum + row.saves, 0);
+  return (
+    <section className="mt-6 rounded-xl border bg-background p-4 sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            Editorial performance
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold">
+            Quality and reader signal
+          </h2>
+        </div>
+        <p className="max-w-xl text-xs leading-5 text-muted-foreground">
+          Opens are provider-reported and can be incomplete. On-site clicks,
+          archive reads, and forum replies are first-party signals.
+        </p>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+        <MetricTile label="Delivered" value={delivered} />
+        <MetricTile label="Reported opens" value={opened} />
+        <MetricTile label="Tracked clicks" value={clicked} />
+        <MetricTile label="Forum replies" value={replies} />
+        <MetricTile label="Story saves" value={saves} />
+      </div>
+      <div className="mt-4 max-h-72 overflow-y-auto border-y border-row-border">
+        {rows.slice(0, 20).map((row) => (
+          <div
+            className="grid gap-2 border-b border-row-border py-3 text-xs last:border-b-0 md:grid-cols-[minmax(0,1fr)_5rem_repeat(5,4.2rem)] md:items-center"
+            key={row.issueId}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{row.subject}</p>
+              <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                {row.edition?.replaceAll("-", " ") ?? "manual"} / {row.status}
+              </p>
+            </div>
+            <span className="font-mono text-muted-foreground">
+              Q {row.qualityScore ?? "—"}
+            </span>
+            <AnalyticsFact label="Delivered" value={row.delivered} />
+            <AnalyticsFact label="Opens" value={row.opened} />
+            <AnalyticsFact label="Clicks" value={row.clicked} />
+            <AnalyticsFact label="Replies" value={row.forumReplies} />
+            <AnalyticsFact label="Saves" value={row.saves} />
+          </div>
+        ))}
+        {rows.length === 0 ? (
+          <div className="py-5">
+            <StatusLine>No editorial analytics yet</StatusLine>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsFact({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="flex justify-between gap-2 md:block">
+      <span className="font-mono text-[9px] uppercase text-muted-foreground md:block">
+        {label}
+      </span>
+      <span className="font-medium md:mt-1 md:block">{value}</span>
+    </span>
+  );
+}
+
+function EditorialDraftPreview({
+  payload,
+  slug,
+}: {
+  payload: EditorialNewsletterPayload;
+  slug?: string;
+}) {
+  return (
+    <div className="border border-row-border bg-muted/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-mono text-[10px] uppercase text-accent-canary">
+          Rendered review
+        </p>
+        <div className="flex flex-wrap gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+          <span>Quality {payload.quality.score}/100</span>
+          <span>/</span>
+          <span>{payload.stories.length} sources</span>
+          <span>/</span>
+          <span>{payload.edition.replaceAll("-", " ")}</span>
+        </div>
+      </div>
+      <h4 className="mt-3 text-xl font-semibold">{payload.headline}</h4>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        {payload.dek}
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {payload.stories.map((story) => (
+          <div className="border border-row-border p-3" key={story.hnItemId}>
+            <p className="line-clamp-2 text-sm font-medium">{story.title}</p>
+            <p className="mt-2 font-mono text-[9px] uppercase text-muted-foreground">
+              {story.host ?? "HN"} / signal {story.signalScore}
+            </p>
+          </div>
+        ))}
+      </div>
+      {slug ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          The public archive URL becomes /newsletter/{slug} after this issue is
+          sent.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -630,6 +803,7 @@ function DailyAutomationPanel({
   onChange,
   onQueueLive,
   onQueueTest,
+  onQueueWeekly,
   onSave,
   runs,
   settings,
@@ -639,6 +813,7 @@ function DailyAutomationPanel({
   onChange: (value: DailySettingsForm) => void;
   onQueueLive: () => void;
   onQueueTest: () => void;
+  onQueueWeekly: () => void;
   onSave: () => void;
   runs: DailyNewsletterRunRecord[];
   settings: DailyNewsletterSettingsRecord | undefined;
@@ -655,24 +830,29 @@ function DailyAutomationPanel({
               Daily automation
             </p>
             <h2 className="mt-1 text-2xl font-semibold">
-              Hacker News digest
+              Belle editorial desk
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={onQueueTest}>
-              Queue dry run
+              Draft daily
+            </Button>
+            <Button size="sm" variant="outline" onClick={onQueueWeekly}>
+              Draft weekly
             </Button>
             <Button size="sm" onClick={onQueueLive}>
-              Queue live run
+              Run daily
             </Button>
           </div>
         </div>
         <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
-          Convex refreshes Hacker News at {settings?.cron.hnRefreshUtc ?? "0 11 * * *"} UTC
-          and checks the newsletter schedule with{" "}
-          {settings?.cron.scheduleCheckUtc ?? "*/15 * * * *"}. The daily send
-          uses the configured local time, indexed stories, stored quote
-          rotation, and this settings record before sending through Resend.
+          Convex refreshes Hacker News at{" "}
+          {settings?.cron.hnRefreshUtc ?? "0 11 * * *"} UTC and checks the
+          newsletter schedule with{" "}
+          {settings?.cron.scheduleCheckUtc ?? "*/15 * * * *"}. Belle researches
+          the indexed source packet, writes a source-linked editorial package,
+          and must pass the quality gate before a draft is saved. Weekly field
+          notes run at {settings?.cron.weeklyFieldNoteUtc ?? "30 13 * * 0"} UTC.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <ToggleField
@@ -684,6 +864,25 @@ function DailyAutomationPanel({
             checked={value.testMode}
             label="Test mode"
             onChange={(testMode) => onChange({ ...value, testMode })}
+          />
+          <ToggleField
+            checked={value.reviewRequired}
+            label="Review daily"
+            onChange={(reviewRequired) =>
+              onChange({ ...value, reviewRequired })
+            }
+          />
+          <ToggleField
+            checked={value.weeklyEnabled}
+            label="Weekly enabled"
+            onChange={(weeklyEnabled) => onChange({ ...value, weeklyEnabled })}
+          />
+          <ToggleField
+            checked={value.weeklyReviewRequired}
+            label="Review weekly"
+            onChange={(weeklyReviewRequired) =>
+              onChange({ ...value, weeklyReviewRequired })
+            }
           />
           <Field label="Timezone">
             <Input
@@ -716,20 +915,6 @@ function DailyAutomationPanel({
               }
             />
           </Field>
-          <Field label="Email stories">
-            <Input
-              type="number"
-              min={3}
-              max={12}
-              value={value.maxNewsletterStories}
-              onChange={(event) =>
-                onChange({
-                  ...value,
-                  maxNewsletterStories: Number(event.target.value),
-                })
-              }
-            />
-          </Field>
           <Field label="Site URL">
             <Input
               value={value.siteUrl}
@@ -757,6 +942,22 @@ function DailyAutomationPanel({
               value={`${latestRun.topStoryIds.length}/${latestRun.storyCount}`}
             />
             <ControlFact
+              label="Quality"
+              value={
+                latestRun.qualityScore === undefined
+                  ? "Pending"
+                  : `${latestRun.qualityScore}/100`
+              }
+            />
+            <ControlFact
+              label="AI tokens"
+              value={
+                latestRun.inputTokens === undefined
+                  ? "Pending"
+                  : `${latestRun.inputTokens.toLocaleString()} in / ${(latestRun.outputTokens ?? 0).toLocaleString()} out`
+              }
+            />
+            <ControlFact
               label="Started"
               value={formatDateTime(latestRun.startedAt)}
             />
@@ -771,7 +972,8 @@ function DailyAutomationPanel({
         )}
         {latestLog ? (
           <p className="border-t pt-3 text-xs text-muted-foreground">
-            Last send log: {latestLog.status} on {formatDateTime(latestLog.createdAt)}
+            Last send log: {latestLog.status} on{" "}
+            {formatDateTime(latestLog.createdAt)}
           </p>
         ) : null}
       </div>
@@ -807,6 +1009,14 @@ function IssueButton({
         <IssueStatusBadge status={issue.status} />
       </div>
       <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+        {issue.edition ? (
+          <span>
+            {issue.edition.replaceAll("-", " ")}
+            {issue.qualityScore === undefined
+              ? ""
+              : ` / quality ${issue.qualityScore}`}
+          </span>
+        ) : null}
         <span>Updated {formatDate(issue.updatedAt)}</span>
         <span>
           {issue.sentAt
@@ -893,6 +1103,15 @@ function SubscriberSummary({
             </div>
             <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
               <span>Source {subscriber.source}</span>
+              <span>
+                Topics{" "}
+                {[
+                  subscriber.dailyOptIn ? "daily" : null,
+                  subscriber.weeklyOptIn ? "weekly" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" + ") || "none"}
+              </span>
               <span>{subscriberLifecycleLabel(subscriber)}</span>
             </div>
             {subscriber.resendError ? (

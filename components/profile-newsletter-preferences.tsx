@@ -15,8 +15,10 @@ export function ProfileNewsletterPreferences() {
   const requestSubscription = useMutation(
     convexRefs.newsletter.requestViewerSubscription,
   );
+  const updateTopics = useMutation(convexRefs.newsletter.updateViewerTopics);
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
+  const [topicPendingId, setTopicPendingId] = useState<string | null>(null);
   const prefilled = useRef(false);
 
   useEffect(() => {
@@ -61,6 +63,33 @@ export function ProfileNewsletterPreferences() {
     }
   }
 
+  async function setTopics(
+    subscriberId: string,
+    dailyOptIn: boolean,
+    weeklyOptIn: boolean,
+  ) {
+    setTopicPendingId(subscriberId);
+    try {
+      await updateTopics({ subscriberId, dailyOptIn, weeklyOptIn });
+      toast.success("Newsletter topics updated");
+    } catch (error) {
+      reportAppError(error, {
+        scope: "newsletter",
+        eventType: "profile_topics_failed",
+        component: "ProfileNewsletterPreferences",
+        action: "newsletter:updateViewerTopics",
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update newsletter topics",
+      );
+    } finally {
+      setTopicPendingId(null);
+    }
+  }
+
   if (preferences === undefined) {
     return (
       <section className="mt-8 font-mono text-xs uppercase text-muted-foreground">
@@ -77,7 +106,10 @@ export function ProfileNewsletterPreferences() {
       <p className="font-mono text-xs uppercase text-muted-foreground">
         Newsletter
       </p>
-      <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <form
+        onSubmit={submit}
+        className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
+      >
         <label className="sr-only" htmlFor="profile-newsletter-email">
           Email address
         </label>
@@ -100,16 +132,61 @@ export function ProfileNewsletterPreferences() {
         {preferences.subscriptions.map((subscription) => (
           <div
             key={subscription._id}
-            className="grid gap-1 font-mono text-[11px] uppercase text-muted-foreground sm:grid-cols-[1fr_auto]"
+            className="grid gap-3 border-y border-row-border py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
           >
-            <span>{subscription.email}</span>
-            <span>
-              {subscription.status} / {formatDate(subscription.updatedAt)}
-            </span>
+            <div>
+              <p className="font-medium">{subscription.email}</p>
+              <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                {subscription.status} / {formatDate(subscription.updatedAt)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <TopicToggle
+                checked={subscription.dailyOptIn}
+                disabled={topicPendingId === subscription._id}
+                label="Daily signal"
+                onChange={(checked) =>
+                  setTopics(subscription._id, checked, subscription.weeklyOptIn)
+                }
+              />
+              <TopicToggle
+                checked={subscription.weeklyOptIn}
+                disabled={topicPendingId === subscription._id}
+                label="Weekly field note"
+                onChange={(checked) =>
+                  setTopics(subscription._id, subscription.dailyOptIn, checked)
+                }
+              />
+            </div>
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function TopicToggle({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+      <input
+        checked={checked}
+        className="size-4 accent-primary"
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      {label}
+    </label>
   );
 }
 

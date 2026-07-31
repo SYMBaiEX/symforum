@@ -12,59 +12,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
-
-type NewsStory = Pick<
-  Doc<"hnStories">,
-  | "hnItemId"
-  | "rank"
-  | "title"
-  | "url"
-  | "host"
-  | "by"
-  | "text"
-  | "score"
-  | "descendants"
-  | "timePosted"
->;
-
-type DailyStory = {
-  hnItemId: number;
-  rank: number;
-  title: string;
-  host?: string;
-  by?: string;
-  score?: number;
-  comments?: number;
-  sourceUrl?: string;
-  siteUrl: string;
-  summary: string;
-  theme: string;
-  relevanceScore: number;
-};
-
-type DailyQuote = {
-  quoteKey: string;
-  quote: string;
-  author: string;
-  source: string;
-  sourceUrl?: string;
-  reflection: string;
-};
-
-type DailyNewsletterPayload = {
-  kind: "daily-news";
-  version: 1;
-  runDate: string;
-  snapshotDate: string;
-  generatedAt: number;
-  siteUrl: string;
-  newsUrl: string;
-  intro: string;
-  themeLabel: string;
-  quote: DailyQuote;
-  topStories: DailyStory[];
-  additionalStories: DailyStory[];
-};
+import type { EditorialNewsletterPayload } from "./newsletterPayload";
 
 type DailyRunStart =
   | {
@@ -79,12 +27,20 @@ type DailyRunStart =
       reason: string;
     };
 
+type EditorialGenerationResult = {
+  subject: string;
+  previewText: string;
+  payload: EditorialNewsletterPayload;
+  storyCount: number;
+  topStoryIds: number[];
+  inputTokens?: number;
+  outputTokens?: number;
+};
+
 const DEFAULT_TIME_ZONE = "America/Chicago";
 const DEFAULT_SEND_TIME_LOCAL = "07:15";
 const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
-const DAILY_CAMPAIGN = "daily_hn_newsletter";
-const NEWSLETTER_SUBJECT_MAX_LENGTH = 70;
 
 const readIndexedSnapshotRef = makeFunctionReference<
   "query",
@@ -121,6 +77,24 @@ const runDailyNewsletterRef = makeFunctionReference<
   DailyRunResult
 >("dailyNewsletter:runDailyNewsletter");
 
+const runWeeklyNewsletterRef = makeFunctionReference<
+  "action",
+  { runDate?: string; force?: boolean },
+  DailyRunResult
+>("dailyNewsletter:runWeeklyFieldNote");
+
+const generateDailySignalRef = makeFunctionReference<
+  "action",
+  { runDate: string; snapshotDate?: string; siteUrl: string },
+  EditorialGenerationResult
+>("newsletterAgent:generateDailySignal");
+
+const generateWeeklyFieldNoteRef = makeFunctionReference<
+  "action",
+  { runDate: string; siteUrl: string },
+  EditorialGenerationResult
+>("newsletterAgent:generateWeeklyFieldNote");
+
 const startDailyRunRef = makeFunctionReference<
   "mutation",
   {
@@ -133,20 +107,13 @@ const startDailyRunRef = makeFunctionReference<
   DailyRunStart
 >("dailyNewsletter:startDailyRun");
 
-const selectDailyQuoteRef = makeFunctionReference<
-  "mutation",
-  {
-    runDate: string;
-    themeLabel: string;
-  },
-  DailyQuote
->("dailyNewsletter:selectDailyQuote");
-
 const upsertDailyIssueRef = makeFunctionReference<
   "mutation",
   {
     runId: Id<"dailyNewsletterRuns">;
     runDate: string;
+    slug: string;
+    edition: "daily-signal" | "weekly-field-note";
     snapshotDate: string;
     subject: string;
     previewText: string;
@@ -154,19 +121,14 @@ const upsertDailyIssueRef = makeFunctionReference<
     storyCount: number;
     topStoryIds: number[];
     sendEnabled: boolean;
+    qualityScore: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    forumCategorySlug?: string;
+    forumThreadSlug?: string;
   },
   { issueId: Id<"newsletterIssues">; slug: string }
 >("dailyNewsletter:upsertDailyIssue");
-
-const markDailyRunSkippedRef = makeFunctionReference<
-  "mutation",
-  {
-    runId: Id<"dailyNewsletterRuns">;
-    reason: string;
-    issueId?: Id<"newsletterIssues">;
-  },
-  null
->("dailyNewsletter:markDailyRunSkipped");
 
 const markDailyRunFailedRef = makeFunctionReference<
   "mutation",
@@ -176,183 +138,6 @@ const markDailyRunFailedRef = makeFunctionReference<
   },
   null
 >("dailyNewsletter:markDailyRunFailed");
-
-const quoteBank = [
-  {
-    quoteKey: "edison-perspiration",
-    quote:
-      "Genius is one percent inspiration and ninety-nine percent perspiration.",
-    author: "Thomas Edison",
-    source: "Quote Investigator review of the Edison attribution",
-  },
-  {
-    quoteKey: "kay-invent-future",
-    quote: "The best way to predict the future is to invent it.",
-    author: "Alan Kay",
-    source: "Quote Investigator, Xerox PARC and InfoWorld attribution",
-  },
-  {
-    quoteKey: "hopper-dangerous-phrase",
-    quote:
-      "The most dangerous phrase in the language is, 'We've always done it this way.'",
-    author: "Grace Hopper",
-    source: "Quote Investigator, 1976 Hopper attribution",
-  },
-  {
-    quoteKey: "feynman-create-understand",
-    quote: "What I cannot create, I do not understand.",
-    author: "Richard Feynman",
-    source: "Caltech Archives blackboard note, 1988",
-  },
-  {
-    quoteKey: "lovelace-analytical-engine",
-    quote:
-      "The Analytical Engine weaves algebraic patterns, just as the Jacquard loom weaves flowers and leaves.",
-    author: "Ada Lovelace",
-    source: "notes on the Analytical Engine, 1843",
-  },
-  {
-    quoteKey: "jobs-real-artists",
-    quote: "Real artists ship.",
-    author: "Steve Jobs",
-    source: "attributed in accounts of early Macintosh development",
-  },
-  {
-    quoteKey: "musk-important-enough",
-    quote:
-      "When something is important enough, you do it even if the odds are not in your favor.",
-    author: "Elon Musk",
-    source: "public interviews and talks",
-  },
-  {
-    quoteKey: "tesla-future-worked",
-    quote:
-      "The present is theirs; the future, for which I really worked, is mine.",
-    author: "Nikola Tesla",
-    source: "attributed in Tesla interviews and essays",
-  },
-  {
-    quoteKey: "fuller-change-model",
-    quote:
-      "To change something, build a new model that makes the existing model obsolete.",
-    author: "Buckminster Fuller",
-    source: "attributed in Buckminster Fuller lectures",
-  },
-] as const;
-
-const themeDefinitions = [
-  {
-    key: "ai",
-    label: "AI systems",
-    words: [
-      "ai",
-      "agent",
-      "agents",
-      "llm",
-      "model",
-      "models",
-      "inference",
-      "openai",
-      "anthropic",
-      "neural",
-      "automation",
-    ],
-  },
-  {
-    key: "developer-tools",
-    label: "developer tools",
-    words: [
-      "developer",
-      "developers",
-      "programming",
-      "compiler",
-      "runtime",
-      "typescript",
-      "javascript",
-      "python",
-      "rust",
-      "database",
-      "framework",
-      "tool",
-      "tools",
-      "api",
-    ],
-  },
-  {
-    key: "security",
-    label: "security",
-    words: [
-      "security",
-      "vulnerability",
-      "exploit",
-      "breach",
-      "privacy",
-      "auth",
-      "encryption",
-      "secure",
-      "malware",
-    ],
-  },
-  {
-    key: "startups",
-    label: "startups",
-    words: [
-      "startup",
-      "startups",
-      "yc",
-      "funding",
-      "founder",
-      "company",
-      "product",
-      "hiring",
-      "growth",
-    ],
-  },
-  {
-    key: "systems",
-    label: "systems",
-    words: [
-      "linux",
-      "kernel",
-      "network",
-      "distributed",
-      "database",
-      "performance",
-      "architecture",
-      "server",
-      "memory",
-      "compute",
-    ],
-  },
-  {
-    key: "hardware",
-    label: "hardware",
-    words: [
-      "chip",
-      "hardware",
-      "gpu",
-      "cpu",
-      "robot",
-      "raspberry",
-      "device",
-      "semiconductor",
-    ],
-  },
-  {
-    key: "science",
-    label: "science",
-    words: [
-      "science",
-      "research",
-      "paper",
-      "math",
-      "physics",
-      "biology",
-      "space",
-      "climate",
-    ],
-  },
-] as const;
 
 type DailyRunResult = {
   ok: boolean;
@@ -370,6 +155,9 @@ type DailyRunResult = {
 type DailyNewsletterAdminSettings = {
   enabled: boolean;
   testMode: boolean;
+  reviewRequired: boolean;
+  weeklyEnabled: boolean;
+  weeklyReviewRequired: boolean;
   timeZone: string;
   sendTimeLocal: string;
   maxIndexedArticles: number;
@@ -378,6 +166,7 @@ type DailyNewsletterAdminSettings = {
   cron: {
     hnRefreshUtc: string;
     scheduleCheckUtc: string;
+    weeklyFieldNoteUtc: string;
   };
 };
 
@@ -393,6 +182,9 @@ export const updateAdminSettings = mutation({
   args: {
     enabled: v.optional(v.boolean()),
     testMode: v.optional(v.boolean()),
+    reviewRequired: v.optional(v.boolean()),
+    weeklyEnabled: v.optional(v.boolean()),
+    weeklyReviewRequired: v.optional(v.boolean()),
     timeZone: v.optional(v.string()),
     sendTimeLocal: v.optional(v.string()),
     maxIndexedArticles: v.optional(v.number()),
@@ -413,6 +205,24 @@ export const updateAdminSettings = mutation({
       updates.push({
         key: "dailyNewsletter.testMode",
         value: args.testMode ? "true" : "false",
+      });
+    }
+    if (args.reviewRequired !== undefined) {
+      updates.push({
+        key: "dailyNewsletter.reviewRequired",
+        value: args.reviewRequired ? "true" : "false",
+      });
+    }
+    if (args.weeklyEnabled !== undefined) {
+      updates.push({
+        key: "weeklyNewsletter.enabled",
+        value: args.weeklyEnabled ? "true" : "false",
+      });
+    }
+    if (args.weeklyReviewRequired !== undefined) {
+      updates.push({
+        key: "weeklyNewsletter.reviewRequired",
+        value: args.weeklyReviewRequired ? "true" : "false",
       });
     }
     if (args.timeZone !== undefined) {
@@ -529,7 +339,8 @@ export const runDailyNewsletter = internalAction({
     const startedAt = Date.now();
     const runDate = args.runDate ?? dateInTimeZone(startedAt, config.timeZone);
     const mode = args.mode ?? (config.testMode ? "test" : "cron");
-    const sendEnabled = args.sendEnabled ?? config.sendEnabled;
+    const requestedSendEnabled = args.sendEnabled ?? config.sendEnabled;
+    const sendEnabled = requestedSendEnabled && !config.reviewRequired;
 
     const start = await ctx.runMutation(startDailyRunRef, {
       runDate,
@@ -563,59 +374,41 @@ export const runDailyNewsletter = internalAction({
         throw new Error("No indexed Hacker News stories were available");
       }
 
-      const ranked = rankStories(indexed.stories);
-      const selected = ranked.slice(0, config.maxNewsletterStories);
-      const topStories = selected.slice(0, 3);
-      const additionalStories = selected.slice(3, 8);
-      const themeLabel = themeLabelForStories(indexed.stories);
-      const quote = await ctx.runMutation(selectDailyQuoteRef, {
-        runDate,
-        themeLabel,
-      });
-      const siteUrl = config.siteUrl;
-      const newsUrl = withUtm(`${siteUrl}/news`, runDate);
-      const intro = introForThemes(themeLabel);
-      const payload: DailyNewsletterPayload = {
-        kind: "daily-news",
-        version: 1,
+      const generated = await ctx.runAction(generateDailySignalRef, {
         runDate,
         snapshotDate: indexed.snapshot.snapshotDate,
-        generatedAt: Date.now(),
-        siteUrl,
-        newsUrl,
-        intro,
-        themeLabel,
-        quote,
-        topStories: topStories.map((story) =>
-          storyForPayload(story, siteUrl, runDate),
-        ),
-        additionalStories: additionalStories.map((story) =>
-          storyForPayload(story, siteUrl, runDate),
-        ),
-      };
-      const subject = subjectForDate(runDate, themeLabel);
-      const previewText = `${intro} Top stories: ${topStories
-        .map((story) => story.title)
-        .join(" / ")
-        .slice(0, 140)}`;
+        siteUrl: config.siteUrl,
+      });
+      const forum = await ctx.runAction(
+        internal.belleForumAgent.runDailyHackerNewsDigest,
+        { snapshotDate: indexed.snapshot.snapshotDate },
+      );
+      const payload = generated.payload;
+      if (forum.status === "published") {
+        payload.discussion.forumUrl = `${config.siteUrl}/forum/${forum.categorySlug}/${forum.threadSlug}`;
+      }
       const issue = await ctx.runMutation(upsertDailyIssueRef, {
         runId: start.runId,
         runDate,
+        slug: `daily-signal-${runDate}`,
+        edition: "daily-signal",
         snapshotDate: indexed.snapshot.snapshotDate,
-        subject,
-        previewText,
+        subject: generated.subject,
+        previewText: generated.previewText,
         payloadJson: JSON.stringify(payload),
-        storyCount: indexed.stories.length,
-        topStoryIds: selected.map((story) => story.hnItemId),
+        storyCount: generated.storyCount,
+        topStoryIds: generated.topStoryIds,
         sendEnabled,
+        qualityScore: payload.quality.score,
+        inputTokens: generated.inputTokens,
+        outputTokens: generated.outputTokens,
+        forumCategorySlug:
+          forum.status === "published" ? forum.categorySlug : undefined,
+        forumThreadSlug:
+          forum.status === "published" ? forum.threadSlug : undefined,
       });
 
       if (!sendEnabled || config.testMode || mode === "test") {
-        await ctx.runMutation(markDailyRunSkippedRef, {
-          runId: start.runId,
-          reason: "Daily newsletter sending is disabled or in test mode",
-          issueId: issue.issueId,
-        });
         return {
           ok: true,
           skipped: true,
@@ -623,9 +416,9 @@ export const runDailyNewsletter = internalAction({
           issueId: issue.issueId,
           runDate,
           snapshotDate: indexed.snapshot.snapshotDate,
-          storyCount: indexed.stories.length,
-          topStoryIds: selected.map((story) => story.hnItemId),
-          reason: "send-disabled",
+          storyCount: generated.storyCount,
+          topStoryIds: generated.topStoryIds,
+          reason: config.reviewRequired ? "review-required" : "send-disabled",
         };
       }
 
@@ -637,8 +430,8 @@ export const runDailyNewsletter = internalAction({
         issueId: issue.issueId,
         runDate,
         snapshotDate: indexed.snapshot.snapshotDate,
-        storyCount: indexed.stories.length,
-        topStoryIds: selected.map((story) => story.hnItemId),
+        storyCount: generated.storyCount,
+        topStoryIds: generated.topStoryIds,
         sent: true,
       };
     } catch (error) {
@@ -648,6 +441,119 @@ export const runDailyNewsletter = internalAction({
       });
       throw error;
     }
+  },
+});
+
+export const runWeeklyFieldNote = internalAction({
+  args: {
+    runDate: v.optional(v.string()),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<DailyRunResult> => {
+    const config = await readDailyConfig(ctx, {});
+    const runDate = args.runDate ?? dateInTimeZone(Date.now(), config.timeZone);
+    if (!config.weeklyEnabled) {
+      return {
+        ok: true,
+        skipped: true,
+        runDate,
+        reason: "weekly-newsletter-disabled",
+      };
+    }
+    const runKey = `weekly-${runDate}`;
+    const sendEnabled = !config.weeklyReviewRequired && !config.testMode;
+    const start = await ctx.runMutation(startDailyRunRef, {
+      runDate: runKey,
+      mode: "cron",
+      sendEnabled,
+      startedAt: Date.now(),
+      force: args.force ?? false,
+    });
+    if (start.skipped) {
+      return {
+        ok: true,
+        skipped: true,
+        runId: start.runId,
+        runDate,
+        reason: start.reason,
+      };
+    }
+
+    try {
+      const generated = await ctx.runAction(generateWeeklyFieldNoteRef, {
+        runDate,
+        siteUrl: config.siteUrl,
+      });
+      const forum = await ctx.runAction(
+        internal.belleForumAgent.runDailyHackerNewsDigest,
+        { snapshotDate: generated.payload.snapshotDate },
+      );
+      if (forum.status === "published") {
+        generated.payload.discussion.forumUrl = `${config.siteUrl}/forum/${forum.categorySlug}/${forum.threadSlug}`;
+      }
+      const issue = await ctx.runMutation(upsertDailyIssueRef, {
+        runId: start.runId,
+        runDate: runKey,
+        slug: `weekly-field-note-${runDate}`,
+        edition: "weekly-field-note",
+        snapshotDate: generated.payload.snapshotDate,
+        subject: generated.subject,
+        previewText: generated.previewText,
+        payloadJson: JSON.stringify(generated.payload),
+        storyCount: generated.storyCount,
+        topStoryIds: generated.topStoryIds,
+        sendEnabled,
+        qualityScore: generated.payload.quality.score,
+        inputTokens: generated.inputTokens,
+        outputTokens: generated.outputTokens,
+        forumCategorySlug:
+          forum.status === "published" ? forum.categorySlug : undefined,
+        forumThreadSlug:
+          forum.status === "published" ? forum.threadSlug : undefined,
+      });
+      if (!sendEnabled) {
+        return {
+          ok: true,
+          skipped: true,
+          runId: start.runId,
+          issueId: issue.issueId,
+          runDate,
+          snapshotDate: generated.payload.snapshotDate,
+          storyCount: generated.storyCount,
+          topStoryIds: generated.topStoryIds,
+          reason: "review-required",
+        };
+      }
+      await ctx.runAction(sendIssueRef, { issueId: issue.issueId });
+      return {
+        ok: true,
+        runId: start.runId,
+        issueId: issue.issueId,
+        runDate,
+        snapshotDate: generated.payload.snapshotDate,
+        storyCount: generated.storyCount,
+        topStoryIds: generated.topStoryIds,
+        sent: true,
+      };
+    } catch (error) {
+      await ctx.runMutation(markDailyRunFailedRef, {
+        runId: start.runId,
+        errorMessage: errorMessage(error),
+      });
+      throw error;
+    }
+  },
+});
+
+export const queueAdminWeeklyFieldNote = mutation({
+  args: { runDate: v.optional(v.string()), force: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    await requireSiteAdmin(ctx);
+    await ctx.scheduler.runAfter(0, runWeeklyNewsletterRef, {
+      runDate: args.runDate,
+      force: args.force ?? true,
+    });
+    return { queued: true };
   },
 });
 
@@ -739,6 +645,14 @@ export const startDailyRun = internalMutation({
           reason: "Daily newsletter already sent",
         };
       }
+      if (existing.status === "generated") {
+        return {
+          ok: true,
+          runId: existing._id,
+          skipped: true,
+          reason: "Newsletter draft is awaiting editorial review",
+        };
+      }
       if (recentRunning) {
         return {
           ok: true,
@@ -761,6 +675,9 @@ export const startDailyRun = internalMutation({
         errorMessage: undefined,
         storyCount: 0,
         topStoryIds: [],
+        qualityScore: undefined,
+        inputTokens: undefined,
+        outputTokens: undefined,
         updatedAt: args.startedAt,
       });
       return { ok: true, runId: existing._id, skipped: false };
@@ -780,75 +697,12 @@ export const startDailyRun = internalMutation({
   },
 });
 
-export const selectDailyQuote = internalMutation({
-  args: {
-    runDate: v.string(),
-    themeLabel: v.string(),
-  },
-  handler: async (ctx, args): Promise<DailyQuote> => {
-    const existing = await ctx.db
-      .query("dailyQuotes")
-      .withIndex("by_usedDate", (q) => q.eq("usedDate", args.runDate))
-      .unique();
-    if (existing) {
-      return {
-        quoteKey: existing.quoteKey,
-        quote: existing.quote,
-        author: existing.author,
-        source: existing.source,
-        sourceUrl: existing.sourceUrl,
-        reflection: existing.reflection,
-      };
-    }
-
-    const recentlyUsed = new Set<string>();
-    for (const quote of quoteBank) {
-      const recent = await ctx.db
-        .query("dailyQuotes")
-        .withIndex("by_quoteKey_and_usedAt", (q) =>
-          q.eq("quoteKey", quote.quoteKey),
-        )
-        .order("desc")
-        .take(1);
-      if (
-        recent[0] &&
-        Date.now() - recent[0].usedAt < 14 * 24 * 60 * 60 * 1000
-      ) {
-        recentlyUsed.add(quote.quoteKey);
-      }
-    }
-
-    const available = quoteBank.filter(
-      (quote) => !recentlyUsed.has(quote.quoteKey),
-    );
-    const pool = available.length > 0 ? available : [...quoteBank];
-    const quote = pool[hashString(args.runDate) % pool.length];
-    const reflection = reflectionForQuote(args.themeLabel);
-
-    await ctx.db.insert("dailyQuotes", {
-      quoteKey: quote.quoteKey,
-      quote: quote.quote,
-      author: quote.author,
-      source: quote.source,
-      reflection,
-      usedDate: args.runDate,
-      usedAt: Date.now(),
-    });
-
-    return {
-      quoteKey: quote.quoteKey,
-      quote: quote.quote,
-      author: quote.author,
-      source: quote.source,
-      reflection,
-    };
-  },
-});
-
 export const upsertDailyIssue = internalMutation({
   args: {
     runId: v.id("dailyNewsletterRuns"),
     runDate: v.string(),
+    slug: v.string(),
+    edition: v.union(v.literal("daily-signal"), v.literal("weekly-field-note")),
     snapshotDate: v.string(),
     subject: v.string(),
     previewText: v.string(),
@@ -856,9 +710,14 @@ export const upsertDailyIssue = internalMutation({
     storyCount: v.number(),
     topStoryIds: v.array(v.number()),
     sendEnabled: v.boolean(),
+    qualityScore: v.number(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    forumCategorySlug: v.optional(v.string()),
+    forumThreadSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const slug = `daily-signal-${args.runDate}`;
+    const slug = args.slug;
     const now = Date.now();
     const existingIssue = await ctx.db
       .query("newsletterIssues")
@@ -872,6 +731,11 @@ export const upsertDailyIssue = internalMutation({
         subject: args.subject,
         previewText: args.previewText.slice(0, 240),
         body: args.payloadJson,
+        edition: args.edition,
+        editorialVersion: 2,
+        qualityScore: args.qualityScore,
+        forumCategorySlug: args.forumCategorySlug,
+        forumThreadSlug: args.forumThreadSlug,
         status: args.sendEnabled ? "scheduled" : "draft",
         scheduledAt: args.sendEnabled ? now : undefined,
         createdAt: now,
@@ -886,6 +750,11 @@ export const upsertDailyIssue = internalMutation({
         subject: args.subject,
         previewText: args.previewText.slice(0, 240),
         body: args.payloadJson,
+        edition: args.edition,
+        editorialVersion: 2,
+        qualityScore: args.qualityScore,
+        forumCategorySlug: args.forumCategorySlug,
+        forumThreadSlug: args.forumThreadSlug,
         status: args.sendEnabled ? "scheduled" : "draft",
         scheduledAt: args.sendEnabled ? now : undefined,
         errorMessage: undefined,
@@ -899,6 +768,9 @@ export const upsertDailyIssue = internalMutation({
       issueId,
       storyCount: args.storyCount,
       topStoryIds: args.topStoryIds,
+      qualityScore: args.qualityScore,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
       completedAt: now,
       errorMessage: undefined,
       updatedAt: now,
@@ -908,7 +780,9 @@ export const upsertDailyIssue = internalMutation({
       issueId,
       provider: "resend",
       status: args.sendEnabled ? "queued" : "skipped",
-      errorMessage: args.sendEnabled ? undefined : "Daily sending disabled",
+      errorMessage: args.sendEnabled
+        ? undefined
+        : "Awaiting editorial review or sending disabled",
       createdAt: now,
     });
 
@@ -972,6 +846,15 @@ async function readDailyConfig(
   const testModeSetting = await ctx.runQuery(getSettingRef, {
     key: "dailyNewsletter.testMode",
   });
+  const reviewRequiredSetting = await ctx.runQuery(getSettingRef, {
+    key: "dailyNewsletter.reviewRequired",
+  });
+  const weeklyEnabledSetting = await ctx.runQuery(getSettingRef, {
+    key: "weeklyNewsletter.enabled",
+  });
+  const weeklyReviewRequiredSetting = await ctx.runQuery(getSettingRef, {
+    key: "weeklyNewsletter.reviewRequired",
+  });
   const maxIndexedSetting = await ctx.runQuery(getSettingRef, {
     key: "dailyNewsletter.maxIndexedArticles",
   });
@@ -991,6 +874,14 @@ async function readDailyConfig(
     testMode:
       args.testMode ??
       (testModeSetting === null ? false : testModeSetting === "true"),
+    reviewRequired:
+      reviewRequiredSetting === null ? true : reviewRequiredSetting !== "false",
+    weeklyEnabled:
+      weeklyEnabledSetting === null ? true : weeklyEnabledSetting !== "false",
+    weeklyReviewRequired:
+      weeklyReviewRequiredSetting === null
+        ? true
+        : weeklyReviewRequiredSetting !== "false",
     maxIndexedArticles: clampNumber(
       args.maxIndexedArticles ?? numberFromSetting(maxIndexedSetting),
       5,
@@ -1017,6 +908,18 @@ async function readAdminSettings(
     ctx,
     "dailyNewsletter.testMode",
   );
+  const reviewRequiredSetting = await getSettingDirect(
+    ctx,
+    "dailyNewsletter.reviewRequired",
+  );
+  const weeklyEnabledSetting = await getSettingDirect(
+    ctx,
+    "weeklyNewsletter.enabled",
+  );
+  const weeklyReviewRequiredSetting = await getSettingDirect(
+    ctx,
+    "weeklyNewsletter.reviewRequired",
+  );
   const maxIndexedSetting = await getSettingDirect(
     ctx,
     "dailyNewsletter.maxIndexedArticles",
@@ -1042,6 +945,14 @@ async function readAdminSettings(
     ),
     enabled: enabledSetting === null ? true : enabledSetting !== "false",
     testMode: testModeSetting === null ? false : testModeSetting === "true",
+    reviewRequired:
+      reviewRequiredSetting === null ? true : reviewRequiredSetting !== "false",
+    weeklyEnabled:
+      weeklyEnabledSetting === null ? true : weeklyEnabledSetting !== "false",
+    weeklyReviewRequired:
+      weeklyReviewRequiredSetting === null
+        ? true
+        : weeklyReviewRequiredSetting !== "false",
     maxIndexedArticles: clampNumber(
       numberFromSetting(maxIndexedSetting),
       5,
@@ -1057,6 +968,7 @@ async function readAdminSettings(
     cron: {
       hnRefreshUtc: "0 11 * * *",
       scheduleCheckUtc: "*/15 * * * *",
+      weeklyFieldNoteUtc: "30 13 * * 0",
     },
   };
 }
@@ -1080,170 +992,6 @@ async function setSettingDirect(ctx: MutationCtx, key: string, value: string) {
   } else {
     await ctx.db.insert("newsletterSettings", { key, value, updatedAt: now });
   }
-}
-
-function rankStories(stories: NewsStory[]) {
-  return stories
-    .map((story) => {
-      const theme = themeForStory(story);
-      const title = story.title.toLowerCase();
-      const themeScore = themeDefinitions.reduce(
-        (total, definition) =>
-          total +
-          definition.words.reduce(
-            (sum, word) => sum + (title.includes(word) ? 1 : 0),
-            0,
-          ),
-        0,
-      );
-      const rankScore = Math.max(0, 50 - story.rank) * 2;
-      const popularityScore = (story.score ?? 0) / 12;
-      const discussionScore = (story.descendants ?? 0) / 8;
-      const sourceBonus = story.url ? 5 : 0;
-      const relevanceScore =
-        rankScore +
-        popularityScore +
-        discussionScore +
-        themeScore * 7 +
-        sourceBonus;
-
-      return {
-        ...story,
-        comments: story.descendants,
-        relevanceScore,
-        theme,
-        summary: summaryForStory(story, theme),
-      };
-    })
-    .sort((left, right) => {
-      const scoreDelta = right.relevanceScore - left.relevanceScore;
-      return scoreDelta !== 0 ? scoreDelta : left.rank - right.rank;
-    });
-}
-
-function themeLabelForStories(stories: NewsStory[]) {
-  const scores = themeDefinitions.map((definition) => {
-    const score = stories.reduce((total, story) => {
-      const text = `${story.title} ${story.host ?? ""}`.toLowerCase();
-      return (
-        total +
-        definition.words.reduce(
-          (sum, word) => sum + (text.includes(word) ? 1 : 0),
-          0,
-        )
-      );
-    }, 0);
-    return { label: definition.label, score };
-  });
-  const top = scores
-    .filter((row) => row.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 3)
-    .map((row) => row.label);
-
-  if (top.length === 0) {
-    return "software, systems, and internet culture";
-  }
-  if (top.length === 1) {
-    return top[0];
-  }
-  if (top.length === 2) {
-    return `${top[0]} and ${top[1]}`;
-  }
-  return `${top[0]}, ${top[1]}, and ${top[2]}`;
-}
-
-function themeForStory(story: NewsStory) {
-  const text = `${story.title} ${story.host ?? ""}`.toLowerCase();
-  const match = themeDefinitions
-    .map((definition) => ({
-      label: definition.label,
-      score: definition.words.reduce(
-        (sum, word) => sum + (text.includes(word) ? 1 : 0),
-        0,
-      ),
-    }))
-    .sort((left, right) => right.score - left.score)[0];
-  return match && match.score > 0 ? match.label : "technology";
-}
-
-function summaryForStory(story: NewsStory, theme: string) {
-  const host = story.host ?? "news.ycombinator.com";
-  const discussion =
-    typeof story.descendants === "number" && story.descendants > 0
-      ? ` with ${story.descendants} HN comments`
-      : "";
-  return `A signal on ${theme} from ${host}${discussion}. Open the SYMBaiEX index for the source link, saves, and discussion.`;
-}
-
-function storyForPayload(
-  story: ReturnType<typeof rankStories>[number],
-  siteUrl: string,
-  runDate: string,
-): DailyStory {
-  return {
-    hnItemId: story.hnItemId,
-    rank: story.rank,
-    title: story.title,
-    host: story.host,
-    by: story.by,
-    score: story.score,
-    comments: story.comments,
-    sourceUrl: story.url,
-    siteUrl: withUtm(`${siteUrl}${newsStoryPath(story)}`, runDate),
-    summary: story.summary,
-    theme: story.theme,
-    relevanceScore: Math.round(story.relevanceScore * 10) / 10,
-  };
-}
-
-function newsStoryPath(story: { hnItemId: number; title: string }) {
-  return `/news/${slugifyNewsTitle(story.title)}-${story.hnItemId}`;
-}
-
-function slugifyNewsTitle(title: string) {
-  const slug = title
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-")
-    .slice(0, 88)
-    .replace(/-+$/g, "");
-
-  return slug || "story";
-}
-
-function withUtm(url: string, runDate: string) {
-  const nextUrl = new URL(url);
-  nextUrl.searchParams.set("utm_source", "newsletter");
-  nextUrl.searchParams.set("utm_medium", "email");
-  nextUrl.searchParams.set("utm_campaign", DAILY_CAMPAIGN);
-  nextUrl.searchParams.set("utm_content", runDate);
-  return nextUrl.toString();
-}
-
-function subjectForDate(runDate: string, themeLabel: string) {
-  const date = new Date(`${runDate}T12:00:00.000Z`);
-  const label = new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-  return limitPlainText(
-    `SYMBaiEX Morning Signal - ${label}: ${themeLabel}`,
-    NEWSLETTER_SUBJECT_MAX_LENGTH,
-  );
-}
-
-function introForThemes(themeLabel: string) {
-  return `Hey there, today's signal is heavy on ${themeLabel}. The daily index is live on SYMBaiEX, with the source trail, comments, saves, and room to branch the conversation.`;
-}
-
-function reflectionForQuote(themeLabel: string) {
-  return `Today's signal: work around ${themeLabel} rarely arrives as one clean breakthrough. It gets noticed, shaped, shipped, argued with, and improved in public.`;
 }
 
 function dateInTimeZone(timestamp: number, timeZone: string) {
@@ -1341,24 +1089,6 @@ function clampNumber(
     return fallback;
   }
   return Math.max(min, Math.min(max, Math.floor(value)));
-}
-
-function limitPlainText(value: string, maxLength: number) {
-  const clean = value.replace(/\s+/g, " ").trim();
-  if (clean.length <= maxLength) {
-    return clean;
-  }
-
-  const suffix = "...";
-  return `${clean.slice(0, maxLength - suffix.length).trimEnd()}${suffix}`;
-}
-
-function hashString(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
 }
 
 function errorMessage(error: unknown) {

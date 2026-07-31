@@ -110,9 +110,7 @@ function adminAgentTools(convex: ConvexHttpClient) {
       description:
         "Read users, comments, and interactions. Optional filters keep comment and interaction checks focused.",
       inputSchema: z.object({
-        entityType: z
-          .enum(["post", "hnStory", "portfolioProject"])
-          .optional(),
+        entityType: z.enum(["post", "hnStory", "portfolioProject"]).optional(),
         entityId: z.string().optional(),
       }),
       execute: async ({ entityType, entityId }) => {
@@ -135,22 +133,40 @@ function adminAgentTools(convex: ConvexHttpClient) {
         "Read newsletter subscribers, issues, daily automation settings, recent runs, and recent send logs.",
       inputSchema: z.object({}),
       execute: async () => {
-        const [subscribers, issues, dailySettings, dailyRuns, sendLogs] =
-          await Promise.all([
-            convex.query(convexRefs.admin.listNewsletterSubscribers, {}),
-            convex.query(convexRefs.admin.listNewsletterIssues, {}),
-            convex.query(convexRefs.admin.dailyNewsletterSettings, {}),
-            convex.query(convexRefs.admin.listDailyNewsletterRuns, {}),
-            convex.query(convexRefs.admin.listNewsletterSendLogs, {}),
-          ]);
+        const [
+          subscribers,
+          issues,
+          dailySettings,
+          dailyRuns,
+          sendLogs,
+          editorialAnalytics,
+        ] = await Promise.all([
+          convex.query(convexRefs.admin.listNewsletterSubscribers, {}),
+          convex.query(convexRefs.admin.listNewsletterIssues, {}),
+          convex.query(convexRefs.admin.dailyNewsletterSettings, {}),
+          convex.query(convexRefs.admin.listDailyNewsletterRuns, {}),
+          convex.query(convexRefs.admin.listNewsletterSendLogs, {}),
+          convex.query(convexRefs.admin.newsletterEditorialAnalytics, {}),
+        ]);
         return {
           subscribers,
           issues,
           dailySettings,
           recentDailyRuns: dailyRuns.slice(0, 12),
           recentSendLogs: sendLogs.slice(0, 24),
+          editorialAnalytics: editorialAnalytics.slice(0, 20),
         };
       },
+    }),
+    queueWeeklyFieldNote: tool({
+      description:
+        "Owner-only mutation. Queue Belle's weekly field note for editorial review. Use only after explicit owner request.",
+      inputSchema: z.object({
+        runDate: z.string().optional(),
+        force: z.boolean().optional(),
+      }),
+      execute: async (input) =>
+        convex.mutation(convexRefs.admin.queueWeeklyFieldNote, input),
     }),
     systemHealth: tool({
       description:
@@ -194,10 +210,15 @@ function adminAgentTools(convex: ConvexHttpClient) {
       inputSchema: z.object({
         enabled: z.boolean().optional(),
         testMode: z.boolean().optional(),
+        reviewRequired: z.boolean().optional(),
+        weeklyEnabled: z.boolean().optional(),
+        weeklyReviewRequired: z.boolean().optional(),
         timeZone: z.string().optional(),
-        sendTimeLocal: z.string().regex(/^\d{1,2}:\d{2}$/).optional(),
+        sendTimeLocal: z
+          .string()
+          .regex(/^\d{1,2}:\d{2}$/)
+          .optional(),
         maxIndexedArticles: z.number().min(5).max(100).optional(),
-        maxNewsletterStories: z.number().min(3).max(12).optional(),
         siteUrl: z.string().url().optional(),
       }),
       execute: async (input) =>

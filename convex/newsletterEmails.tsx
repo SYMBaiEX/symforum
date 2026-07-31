@@ -8,6 +8,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Markdown,
   Preview,
@@ -23,11 +24,17 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { resend } from "./resendClient";
 import type { ReactElement, ReactNode } from "react";
+import {
+  parseEditorialNewsletterPayload,
+  type EditorialNewsletterPayload,
+} from "./newsletterPayload";
 
 const SEGMENT_NAME = "SYMBaiEX Newsletter";
-const TOPIC_NAME = "Field Notes";
+const WEEKLY_TOPIC_NAME = "Field Notes";
+const DAILY_TOPIC_NAME = "Daily Signals";
 const SEGMENT_SETTING = "resend.segmentId";
-const TOPIC_SETTING = "resend.topicId";
+const WEEKLY_TOPIC_SETTING = "resend.topicId";
+const DAILY_TOPIC_SETTING = "resend.dailyTopicId";
 const RESEND_BROADCAST_NAME_MAX_LENGTH = 70;
 const RESEND_REQUEST_INTERVAL_MS = 260;
 
@@ -198,14 +205,14 @@ export const sendManageSubscriptionEmail = internalAction({
     }
 
     const unsubscribeUrl = `${args.siteUrl}/newsletter/unsubscribe?token=${encodeURIComponent(args.token)}`;
-    const preferencesUrl = `${args.siteUrl}/newsletter/preferences`;
+    const preferencesUrl = `${args.siteUrl}/newsletter/preferences?token=${encodeURIComponent(args.token)}`;
     const { html, text } = await renderEmail(
       <BaseEmail preview="Manage your SYMBaiEX newsletter subscription.">
         <Heading style={styles.heading}>Manage your subscription</Heading>
         <Text style={styles.copy}>
-          This inbox is already confirmed for SYMBaiEX notes. Use the button
-          below to unsubscribe instantly, or ignore this email to keep
-          receiving issues.
+          This inbox is already confirmed for SYMBaiEX notes. Choose daily
+          signals, weekly field notes, or both from the preferences link. The
+          button below stops every newsletter.
         </Text>
         <Button href={unsubscribeUrl} style={styles.button}>
           Unsubscribe
@@ -252,12 +259,12 @@ export const sendWelcomeEmail = internalAction({
       <BaseEmail preview="You are on the SYMBaiEX newsletter list.">
         <Heading style={styles.heading}>You are in</Heading>
         <Text style={styles.copy}>
-          Thanks for subscribing. The newsletter will stay compact: essays,
-          systems notes, agent research, and the occasional useful shard from
-          the edge of the web.
+          Thanks for subscribing. Belle&apos;s daily signal connects a small
+          source set into one useful argument; the weekly field note goes
+          deeper. Both stay source-linked, practical, and open to discussion.
         </Text>
-        <Button href={`${args.siteUrl}/blog`} style={styles.button}>
-          Read the archive
+        <Button href={`${args.siteUrl}/newsletter`} style={styles.button}>
+          Open the newsletter archive
         </Button>
       </BaseEmail>,
     );
@@ -296,17 +303,15 @@ export const syncSubscriberToResend = internalAction({
     try {
       const client = resendSdk();
       const pacer = createResendPacer();
-      const { segmentId, topicId } = await ensureResendListSettings(
-        ctx,
-        client,
-        pacer,
-      );
+      const { segmentId, dailyTopicId, weeklyTopicId } =
+        await ensureResendListSettings(ctx, client, pacer);
       await syncSubscriberRecordToResend(
         ctx,
         client,
         subscriber,
         segmentId,
-        topicId,
+        dailyTopicId,
+        weeklyTopicId,
         pacer,
       );
     } catch (error) {
@@ -369,16 +374,14 @@ export const sendNewsletterIssue = internalAction({
     try {
       const client = resendSdk();
       const pacer = createResendPacer();
-      const { segmentId, topicId } = await ensureResendListSettings(
-        ctx,
-        client,
-        pacer,
-      );
+      const { segmentId, dailyTopicId, weeklyTopicId } =
+        await ensureResendListSettings(ctx, client, pacer);
       const audience = await syncConfirmedAudienceForBroadcast(
         ctx,
         client,
         segmentId,
-        topicId,
+        dailyTopicId,
+        weeklyTopicId,
         pacer,
       );
       if (audience.confirmed === 0) {
@@ -391,8 +394,7 @@ export const sendNewsletterIssue = internalAction({
           `No confirmed subscribers could be synced to Resend (${audience.failed} failed).`,
         );
       }
-      const siteUrl = process.env.NEWSLETTER_SITE_URL || "https://symbaiex.com";
-      const unsubscribeUrl = `${siteUrl}/newsletter/preferences`;
+      const unsubscribeUrl = "{{{RESEND_UNSUBSCRIBE_URL}}}";
       const { html, text } = await renderIssueEmail(issue, unsubscribeUrl);
       const response = await callResend(pacer, () =>
         client.broadcasts.create({
@@ -404,7 +406,10 @@ export const sendNewsletterIssue = internalAction({
           html,
           text,
           segmentId,
-          topicId,
+          topicId:
+            issue.edition === "weekly-field-note"
+              ? weeklyTopicId
+              : dailyTopicId,
           send: true,
         }),
       );
@@ -431,7 +436,8 @@ async function syncConfirmedAudienceForBroadcast(
   ctx: ActionCtx,
   client: ResendSdk,
   segmentId: string,
-  topicId: string,
+  dailyTopicId: string,
+  weeklyTopicId: string,
   pacer: ResendPacer,
 ) {
   const subscribers = await ctx.runQuery(
@@ -450,7 +456,8 @@ async function syncConfirmedAudienceForBroadcast(
         client,
         subscriber,
         segmentId,
-        topicId,
+        dailyTopicId,
+        weeklyTopicId,
         pacer,
       );
       synced += 1;
@@ -472,11 +479,15 @@ async function syncSubscriberRecordToResend(
   client: ResendSdk,
   subscriber: Doc<"newsletterSubscribers">,
   segmentId: string,
-  topicId: string,
+  dailyTopicId: string,
+  weeklyTopicId: string,
   pacer: ResendPacer,
 ) {
   const unsubscribed = subscriber.status !== "confirmed";
-  const topicSubscription = unsubscribed ? "opt_out" : "opt_in";
+  const dailySubscription =
+    unsubscribed || subscriber.dailyOptIn === false ? "opt_out" : "opt_in";
+  const weeklySubscription =
+    unsubscribed || subscriber.weeklyOptIn === false ? "opt_out" : "opt_in";
   let contactId = subscriber.resendContactId;
 
   if (!contactId) {
@@ -516,7 +527,10 @@ async function syncSubscriberRecordToResend(
     const topic = await callResend(pacer, () =>
       client.contacts.topics.update({
         id: resolvedContactId,
-        topics: [{ id: topicId, subscription: topicSubscription }],
+        topics: [
+          { id: dailyTopicId, subscription: dailySubscription },
+          { id: weeklyTopicId, subscription: weeklySubscription },
+        ],
       }),
     );
     if (topic.error) {
@@ -528,7 +542,10 @@ async function syncSubscriberRecordToResend(
         email: subscriber.email,
         unsubscribed,
         segments: [{ id: segmentId }],
-        topics: [{ id: topicId, subscription: topicSubscription }],
+        topics: [
+          { id: dailyTopicId, subscription: dailySubscription },
+          { id: weeklyTopicId, subscription: weeklySubscription },
+        ],
       }),
     );
     if (created.error) {
@@ -550,8 +567,17 @@ async function ensureResendListSettings(
   pacer: ResendPacer,
 ) {
   const segmentId = await ensureSegment(ctx, client, pacer);
-  const topicId = await ensureTopic(ctx, client, pacer);
-  return { segmentId, topicId };
+  const dailyTopicId = await ensureTopic(ctx, client, pacer, {
+    description: "Belle's reviewed daily source-led technology signal.",
+    name: DAILY_TOPIC_NAME,
+    settingKey: DAILY_TOPIC_SETTING,
+  });
+  const weeklyTopicId = await ensureTopic(ctx, client, pacer, {
+    description: "Long-form weekly SYMBaiEX research and field notes.",
+    name: WEEKLY_TOPIC_NAME,
+    settingKey: WEEKLY_TOPIC_SETTING,
+  });
+  return { segmentId, dailyTopicId, weeklyTopicId };
 }
 
 async function ensureSegment(
@@ -596,8 +622,15 @@ async function ensureTopic(
   ctx: ActionCtx,
   client: ResendSdk,
   pacer: ResendPacer,
+  topic: {
+    description: string;
+    name: string;
+    settingKey: string;
+  },
 ) {
-  const existingId = await ctx.runQuery(getSettingRef, { key: TOPIC_SETTING });
+  const existingId = await ctx.runQuery(getSettingRef, {
+    key: topic.settingKey,
+  });
   if (existingId) {
     return existingId;
   }
@@ -605,18 +638,18 @@ async function ensureTopic(
   if (list.error) {
     throw new Error(list.error.message);
   }
-  const found = list.data.data.find((topic) => topic.name === TOPIC_NAME);
+  const found = list.data.data.find((row) => row.name === topic.name);
   if (found) {
     await ctx.runMutation(setSettingRef, {
-      key: TOPIC_SETTING,
+      key: topic.settingKey,
       value: found.id,
     });
     return found.id;
   }
   const created = await callResend(pacer, () =>
     client.topics.create({
-      name: TOPIC_NAME,
-      description: "SYMBaiEX essays, project notes, and news digests.",
+      name: topic.name,
+      description: topic.description,
       defaultSubscription: "opt_in",
     }),
   );
@@ -624,7 +657,7 @@ async function ensureTopic(
     throw new Error(created.error.message);
   }
   await ctx.runMutation(setSettingRef, {
-    key: TOPIC_SETTING,
+    key: topic.settingKey,
     value: created.data.id,
   });
   return created.data.id;
@@ -634,6 +667,14 @@ async function renderIssueEmail(
   issue: Doc<"newsletterIssues">,
   unsubscribeUrl: string,
 ) {
+  const editorialPayload = parseEditorialNewsletterPayload(issue.body);
+  if (editorialPayload) {
+    return await renderEditorialNewsletterEmail(
+      issue,
+      editorialPayload,
+      unsubscribeUrl,
+    );
+  }
   const dailyPayload = parseDailyNewsletterPayload(issue.body);
   if (dailyPayload) {
     return await renderDailyNewsletterEmail(
@@ -658,6 +699,159 @@ async function renderIssueEmail(
       >
         {issue.body}
       </Markdown>
+      <Hr style={styles.hr} />
+      <Text style={styles.small}>
+        Manage newsletter preferences or unsubscribe at{" "}
+        <Link href={unsubscribeUrl} style={styles.link}>
+          symbaiex.com/newsletter/preferences
+        </Link>
+        .
+      </Text>
+    </BaseEmail>,
+  );
+}
+
+async function renderEditorialNewsletterEmail(
+  issue: Doc<"newsletterIssues">,
+  payload: EditorialNewsletterPayload,
+  unsubscribeUrl: string,
+) {
+  const dateLabel = formatRunDate(payload.runDate);
+  const editionLabel =
+    payload.edition === "weekly-field-note"
+      ? "Weekly field note"
+      : "Belle's daily signal";
+  const track = (target: string) =>
+    `${payload.siteUrl}/newsletter/${issue.slug}/go/${target}`;
+  return await renderEmail(
+    <BaseEmail preview={issue.previewText}>
+      <Section style={styles.accentRule}>
+        <Text style={styles.accentMagenta}> </Text>
+        <Text style={styles.accentCyan}> </Text>
+        <Text style={styles.accentYellow}> </Text>
+      </Section>
+      <Text style={styles.eyebrow}>
+        {editionLabel} / {dateLabel}
+      </Text>
+      <Heading style={styles.heading}>{payload.headline}</Heading>
+      <Text style={styles.dek}>{payload.dek}</Text>
+      <Text style={styles.byline}>
+        By Belle / {payload.author.role} / AI-assisted, source-linked
+      </Text>
+      {payload.heroImage ? (
+        <Section style={styles.heroWrap}>
+          <Img
+            alt={payload.heroImage.alt}
+            src={payload.heroImage.url}
+            style={styles.heroImage}
+          />
+          {payload.heroImage.credit ? (
+            <Text style={styles.imageCredit}>
+              Image: {payload.heroImage.credit}
+            </Text>
+          ) : null}
+        </Section>
+      ) : null}
+      <Section style={styles.thesisBlock}>
+        <Text style={styles.sectionLabel}>The thread through today</Text>
+        <Text style={styles.thesis}>{payload.thesis}</Text>
+      </Section>
+      <Text style={styles.copy}>{payload.lead}</Text>
+      {payload.sections?.map((section) => (
+        <Section key={section.heading} style={styles.editorialSection}>
+          <Heading as="h2" style={styles.sectionHeading}>
+            {section.heading}
+          </Heading>
+          <Text style={styles.copy}>{section.body}</Text>
+        </Section>
+      ))}
+      <Hr style={styles.hr} />
+      <Text style={styles.sectionLabel}>{payload.chart.title}</Text>
+      <Text style={styles.chartSubtitle}>{payload.chart.subtitle}</Text>
+      <Section style={styles.chartBlock}>
+        {payload.chart.items.map((item) => (
+          <Section key={item.label} style={styles.chartRow}>
+            <Text style={styles.chartLabel}>
+              {item.label} / {item.value}
+            </Text>
+            <Section style={styles.chartTrack}>
+              <Section
+                style={{
+                  ...styles.chartFill,
+                  width: `${Math.max(2, item.value)}%`,
+                }}
+              />
+            </Section>
+            <Text style={styles.chartNote}>{item.note}</Text>
+          </Section>
+        ))}
+      </Section>
+      <Text style={styles.chartMetric}>{payload.chart.metricLabel}</Text>
+      <Hr style={styles.hr} />
+      <Text style={styles.sectionLabel}>Source-led briefing</Text>
+      {payload.stories.map((story, index) => (
+        <Section key={story.hnItemId} style={styles.storyFeature}>
+          <Text style={styles.storyMeta}>
+            #{String(index + 1).padStart(2, "0")} / signal {story.signalScore}
+            {story.host ? ` / ${story.host}` : ""}
+          </Text>
+          <Heading as="h3" style={styles.storyHeading}>
+            {story.title}
+          </Heading>
+          <Text style={styles.storySummary}>{story.summary}</Text>
+          <Text style={styles.storyWhy}>
+            <strong>Why it matters:</strong> {story.whyItMatters}
+          </Text>
+          <Section style={styles.takeawayBlock}>
+            {story.takeaways.map((takeaway) => (
+              <Text key={takeaway} style={styles.takeaway}>
+                • {takeaway}
+              </Text>
+            ))}
+          </Section>
+          <Button
+            href={track(`source-${story.hnItemId}`)}
+            style={styles.smallButton}
+          >
+            Read source
+          </Button>{" "}
+          <Link
+            href={track(`discussion-${story.hnItemId}`)}
+            style={styles.inlineLink}
+          >
+            HN discussion
+          </Link>
+        </Section>
+      ))}
+      <Hr style={styles.hr} />
+      <Text style={styles.sectionLabel}>What to do with this</Text>
+      {payload.practicalMoves.map((move) => (
+        <Text key={move} style={styles.listItem}>
+          • {move}
+        </Text>
+      ))}
+      <Text style={styles.sectionLabel}>What Belle is watching</Text>
+      {payload.whatToWatch.map((item) => (
+        <Text key={item} style={styles.listItem}>
+          • {item}
+        </Text>
+      ))}
+      <Section style={styles.discussionBlock}>
+        <Text style={styles.sectionLabel}>Join the argument</Text>
+        <Text style={styles.discussionQuestion}>
+          {payload.discussion.question}
+        </Text>
+        {payload.discussion.forumUrl ? (
+          <Button href={track("forum")} style={styles.button}>
+            Discuss on the forum
+          </Button>
+        ) : null}
+      </Section>
+      <Button href={track("archive")} style={styles.archiveButton}>
+        Read and share this edition
+      </Button>
+      <Text style={styles.methodology}>{payload.methodology}</Text>
+      <Text style={styles.disclosure}>{payload.author.disclosure}</Text>
       <Hr style={styles.hr} />
       <Text style={styles.small}>
         Manage newsletter preferences or unsubscribe at{" "}
@@ -958,6 +1152,60 @@ const styles = {
     lineHeight: "1",
     fontWeight: 750,
   },
+  dek: {
+    margin: "0 0 12px",
+    color: "#d7d7d7",
+    fontSize: "19px",
+    lineHeight: "1.5",
+  },
+  byline: {
+    margin: "0 0 24px",
+    color: "#8f8f8f",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "11px",
+    lineHeight: "1.5",
+    textTransform: "uppercase" as const,
+  },
+  heroWrap: {
+    margin: "0 0 26px",
+  },
+  heroImage: {
+    display: "block",
+    width: "100%",
+    height: "auto",
+    maxHeight: "360px",
+    objectFit: "cover" as const,
+    border: "1px solid #2b2b2b",
+  },
+  imageCredit: {
+    margin: "7px 0 0",
+    color: "#777777",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "10px",
+    lineHeight: "1.4",
+  },
+  thesisBlock: {
+    margin: "0 0 24px",
+    padding: "18px",
+    borderLeft: "3px solid #ffe95f",
+    backgroundColor: "#111111",
+  },
+  thesis: {
+    margin: "0",
+    color: "#f1f1f1",
+    fontSize: "18px",
+    lineHeight: "1.55",
+    fontWeight: 650,
+  },
+  editorialSection: {
+    margin: "0 0 26px",
+  },
+  sectionHeading: {
+    margin: "0 0 10px",
+    color: "#ffffff",
+    fontSize: "24px",
+    lineHeight: "1.2",
+  },
   copy: {
     margin: "0 0 22px",
     color: "#c8c8c8",
@@ -1042,6 +1290,125 @@ const styles = {
     color: "#bdbdbd",
     fontSize: "15px",
     lineHeight: "1.6",
+  },
+  storyHeading: {
+    margin: "0",
+    color: "#ffffff",
+    fontSize: "22px",
+    lineHeight: "1.3",
+    fontWeight: 750,
+  },
+  storyWhy: {
+    margin: "0 0 12px",
+    color: "#dedede",
+    fontSize: "15px",
+    lineHeight: "1.6",
+  },
+  takeawayBlock: {
+    margin: "0 0 14px",
+    padding: "12px 14px",
+    backgroundColor: "#101010",
+    border: "1px solid #292929",
+  },
+  takeaway: {
+    margin: "0 0 6px",
+    color: "#c9c9c9",
+    fontSize: "14px",
+    lineHeight: "1.55",
+  },
+  inlineLink: {
+    marginLeft: "12px",
+    color: "#8de7df",
+    fontSize: "12px",
+    fontWeight: 700,
+    textDecoration: "underline",
+  },
+  chartSubtitle: {
+    margin: "-8px 0 18px",
+    color: "#a7a7a7",
+    fontSize: "14px",
+    lineHeight: "1.55",
+  },
+  chartBlock: {
+    margin: "0 0 10px",
+    padding: "16px",
+    backgroundColor: "#101010",
+    border: "1px solid #2b2b2b",
+  },
+  chartRow: {
+    margin: "0 0 16px",
+  },
+  chartLabel: {
+    margin: "0 0 6px",
+    color: "#f1f1f1",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "11px",
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+  },
+  chartTrack: {
+    width: "100%",
+    height: "8px",
+    backgroundColor: "#272727",
+  },
+  chartFill: {
+    height: "8px",
+    backgroundColor: "#ff35c8",
+  },
+  chartNote: {
+    margin: "6px 0 0",
+    color: "#9f9f9f",
+    fontSize: "12px",
+    lineHeight: "1.45",
+  },
+  chartMetric: {
+    margin: "8px 0 0",
+    color: "#777777",
+    fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    fontSize: "10px",
+    textTransform: "uppercase" as const,
+  },
+  listItem: {
+    margin: "0 0 10px",
+    color: "#c8c8c8",
+    fontSize: "15px",
+    lineHeight: "1.6",
+  },
+  discussionBlock: {
+    margin: "28px 0 20px",
+    padding: "20px",
+    border: "1px solid #3a3a3a",
+    backgroundColor: "#101010",
+  },
+  discussionQuestion: {
+    margin: "0 0 18px",
+    color: "#ffffff",
+    fontSize: "19px",
+    lineHeight: "1.5",
+    fontWeight: 650,
+  },
+  archiveButton: {
+    display: "inline-block",
+    margin: "0 0 20px",
+    backgroundColor: "#ffe95f",
+    color: "#080808",
+    padding: "13px 18px",
+    borderRadius: "0",
+    fontSize: "14px",
+    fontWeight: 750,
+    textDecoration: "none",
+  },
+  methodology: {
+    margin: "8px 0 0",
+    color: "#898989",
+    fontSize: "12px",
+    lineHeight: "1.55",
+  },
+  disclosure: {
+    margin: "8px 0 0",
+    color: "#777777",
+    fontSize: "11px",
+    lineHeight: "1.5",
   },
   smallButton: {
     display: "inline-block",

@@ -114,6 +114,32 @@ export const claimRun = internalMutation({
   },
 });
 
+export const readRun = internalQuery({
+  args: { runKey: v.string() },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (run === null) {
+      return null;
+    }
+    const thread =
+      run.threadId === undefined ? null : await ctx.db.get(run.threadId);
+    return {
+      run,
+      thread:
+        thread === null
+          ? null
+          : {
+              categorySlug: thread.categorySlug,
+              threadSlug: thread.slug,
+              title: thread.title,
+            },
+    };
+  },
+});
+
 export const markRunFailed = internalMutation({
   args: {
     runKey: v.string(),

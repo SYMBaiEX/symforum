@@ -23,6 +23,12 @@ crons.cron(
   internal.dailyNewsletter.checkDailyNewsletterSchedule,
   {},
 );
+crons.cron(
+  "draft weekly SYMBaiEX field note",
+  "30 13 * * 0",
+  internal.dailyNewsletter.runWeeklyFieldNote,
+  {},
+);
 crons.interval(
   "cleanup expired forum attachment uploads",
   { hours: 1 },

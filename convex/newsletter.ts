@@ -20,6 +20,7 @@ import {
   normalizeSiteUrl,
   normalizeTokenHash,
 } from "./newsletterModel";
+import { parseEditorialNewsletterPayload } from "./newsletterPayload";
 
 const sendConfirmationEmailRef = makeFunctionReference<
   "action",
@@ -150,6 +151,62 @@ export const viewerPreferences = query({
   },
 });
 
+export const updateViewerTopics = mutation({
+  args: {
+    subscriberId: v.id("newsletterSubscribers"),
+    dailyOptIn: v.boolean(),
+    weeklyOptIn: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new Error("Sign in to manage newsletter preferences");
+    }
+    const subscriber = await ctx.db.get(args.subscriberId);
+    if (subscriber === null || subscriber.userId !== userId) {
+      throw new Error("Newsletter subscription not found");
+    }
+    await ctx.db.patch(subscriber._id, {
+      dailyOptIn: args.dailyOptIn,
+      weeklyOptIn: args.weeklyOptIn,
+      resendSyncStatus: "idle",
+      resendError: undefined,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, syncSubscriberRef, {
+      subscriberId: subscriber._id,
+    });
+    const updated = await ctx.db.get(subscriber._id);
+    return updated ? publicSubscriber(updated) : null;
+  },
+});
+
+export const updateTopicsByToken = mutation({
+  args: {
+    tokenHash: v.string(),
+    dailyOptIn: v.boolean(),
+    weeklyOptIn: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const subscriber = await subscriberByTokenHash(ctx, args.tokenHash);
+    if (subscriber === null || subscriber.status !== "confirmed") {
+      throw new Error("Confirmed newsletter subscription not found");
+    }
+    await ctx.db.patch(subscriber._id, {
+      dailyOptIn: args.dailyOptIn,
+      weeklyOptIn: args.weeklyOptIn,
+      resendSyncStatus: "idle",
+      resendError: undefined,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, syncSubscriberRef, {
+      subscriberId: subscriber._id,
+    });
+    const updated = await ctx.db.get(subscriber._id);
+    return updated ? publicSubscriber(updated) : null;
+  },
+});
+
 export const getByToken = query({
   args: { tokenHash: v.string() },
   handler: async (ctx, args) => {
@@ -241,6 +298,268 @@ export const listAdminIssues = query({
       .withIndex("by_updatedAt")
       .order("desc")
       .take(100);
+  },
+});
+
+export const listPublicIssues = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 24), 60));
+    const issues = await ctx.db
+      .query("newsletterIssues")
+      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "sent"))
+      .order("desc")
+      .take(limit);
+    return issues.map(publicIssue);
+  },
+});
+
+export const readPublicIssueBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const issue = await issueBySlug(ctx, args.slug);
+    return issue?.status === "sent" ? publicIssue(issue) : null;
+  },
+});
+
+export const resolvePublicDestination = query({
+  args: {
+    slug: v.string(),
+    target: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const issue = await issueBySlug(ctx, args.slug);
+    if (issue === null || issue.status !== "sent") {
+      return null;
+    }
+    const payload = parseEditorialNewsletterPayload(issue.body);
+    if (payload === null) {
+      return null;
+    }
+    if (args.target === "forum") {
+      return issue.forumCategorySlug && issue.forumThreadSlug
+        ? {
+            url: `${payload.siteUrl}/forum/${issue.forumCategorySlug}/${issue.forumThreadSlug}`,
+            eventType: "forum_click" as const,
+          }
+        : null;
+    }
+    if (args.target === "news") {
+      return {
+        url: payload.newsUrl,
+        eventType: "news_index_click" as const,
+      };
+    }
+    if (args.target === "archive") {
+      return {
+        url: payload.archiveUrl,
+        eventType: "archive_click" as const,
+      };
+    }
+    const match = args.target.match(/^(source|discussion)-(\d+)$/);
+    if (match === null) {
+      return null;
+    }
+    const storyId = Number(match[2]);
+    const story = payload.stories.find(
+      (candidate) => candidate.hnItemId === storyId,
+    );
+    if (story === undefined) {
+      return null;
+    }
+    return {
+      url: match[1] === "source" ? story.sourceUrl : story.discussionUrl,
+      eventType:
+        match[1] === "source"
+          ? ("source_click" as const)
+          : ("discussion_click" as const),
+      hnItemId: storyId,
+    };
+  },
+});
+
+export const recordPublicEngagement = mutation({
+  args: {
+    slug: v.string(),
+    eventType: v.union(
+      v.literal("archive_view"),
+      v.literal("archive_click"),
+      v.literal("source_click"),
+      v.literal("discussion_click"),
+      v.literal("forum_click"),
+      v.literal("news_index_click"),
+    ),
+    hnItemId: v.optional(v.number()),
+    visitorKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const issue = await issueBySlug(ctx, args.slug);
+    if (issue === null || issue.status !== "sent") {
+      return { recorded: false };
+    }
+    const payload = parseEditorialNewsletterPayload(issue.body);
+    if (payload === null) {
+      return { recorded: false };
+    }
+    const storyEvent =
+      args.eventType === "source_click" ||
+      args.eventType === "discussion_click";
+    if (
+      (storyEvent &&
+        (args.hnItemId === undefined ||
+          !payload.stories.some(
+            (story) => story.hnItemId === args.hnItemId,
+          ))) ||
+      (!storyEvent && args.hnItemId !== undefined) ||
+      (args.eventType === "forum_click" &&
+        (!issue.forumCategorySlug || !issue.forumThreadSlug))
+    ) {
+      return { recorded: false };
+    }
+    const now = Date.now();
+    const visitorKey = normalizeVisitorKey(args.visitorKey);
+    if (visitorKey) {
+      const recent = await ctx.db
+        .query("newsletterEngagements")
+        .withIndex("by_issueId_and_eventType_and_createdAt", (q) =>
+          q.eq("issueId", issue._id).eq("eventType", args.eventType),
+        )
+        .order("desc")
+        .take(100);
+      const dedupeWindow =
+        args.eventType === "archive_view" ? 60 * 60 * 1000 : 10 * 1000;
+      if (
+        recent.some(
+          (row) =>
+            row.visitorKey === visitorKey &&
+            row.hnItemId === args.hnItemId &&
+            now - row.createdAt < dedupeWindow,
+        )
+      ) {
+        return { recorded: false };
+      }
+    }
+    await ctx.db.insert("newsletterEngagements", {
+      issueId: issue._id,
+      eventType: args.eventType,
+      hnItemId: args.hnItemId,
+      visitorKey,
+      createdAt: now,
+    });
+    return { recorded: true };
+  },
+});
+
+export const readRecentEditorialContext = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 7), 14));
+    const issues = await ctx.db
+      .query("newsletterIssues")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(limit * 2);
+    const payloads = issues
+      .map((issue) => parseEditorialNewsletterPayload(issue.body))
+      .filter((payload) => payload !== null)
+      .slice(0, limit);
+    return {
+      headlines: payloads.map((payload) => payload.headline),
+      theses: payloads.map((payload) => payload.thesis),
+      storyIds: [
+        ...new Set(
+          payloads.flatMap((payload) =>
+            payload.stories.map((story) => story.hnItemId),
+          ),
+        ),
+      ],
+    };
+  },
+});
+
+export const adminEditorialAnalytics = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSiteAdmin(ctx);
+    const issues = await ctx.db
+      .query("newsletterIssues")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(30);
+    const rows = await Promise.all(
+      issues.map(async (issue) => {
+        const [events, engagements] = await Promise.all([
+          ctx.db
+            .query("newsletterEvents")
+            .withIndex("by_issueId_and_receivedAt", (q) =>
+              q.eq("issueId", issue._id),
+            )
+            .take(2_000),
+          ctx.db
+            .query("newsletterEngagements")
+            .withIndex("by_issueId_and_createdAt", (q) =>
+              q.eq("issueId", issue._id),
+            )
+            .take(2_000),
+        ]);
+        const forumThread =
+          issue.forumCategorySlug && issue.forumThreadSlug
+            ? await ctx.db
+                .query("forumThreads")
+                .withIndex("by_categorySlug_and_slug", (q) =>
+                  q
+                    .eq("categorySlug", issue.forumCategorySlug!)
+                    .eq("slug", issue.forumThreadSlug!),
+                )
+                .unique()
+            : null;
+        const payload = parseEditorialNewsletterPayload(issue.body);
+        const saveRows =
+          payload === null
+            ? []
+            : (
+                await Promise.all(
+                  payload.stories.map((story) =>
+                    ctx.db
+                      .query("interactions")
+                      .withIndex("by_entityType_and_entityId", (q) =>
+                        q
+                          .eq("entityType", "hnStory")
+                          .eq("entityId", String(story.hnItemId)),
+                      )
+                      .take(1_000),
+                  ),
+                )
+              ).flat();
+        return {
+          issueId: issue._id,
+          slug: issue.slug,
+          subject: issue.subject,
+          status: issue.status,
+          edition: issue.edition,
+          qualityScore: issue.qualityScore ?? payload?.quality.score,
+          sentAt: issue.sentAt,
+          delivered: countEvent(events, "email.delivered"),
+          opened: countEvent(events, "email.opened"),
+          bounced: countEvent(events, "email.bounced"),
+          complained: countEvent(events, "email.complained"),
+          clicked: engagements.filter((row) => row.eventType.endsWith("_click"))
+            .length,
+          archiveViews: engagements.filter(
+            (row) => row.eventType === "archive_view",
+          ).length,
+          sourceClicks: engagements.filter(
+            (row) => row.eventType === "source_click",
+          ).length,
+          forumClicks: engagements.filter(
+            (row) => row.eventType === "forum_click",
+          ).length,
+          forumReplies: forumThread?.replyCount ?? 0,
+          saves: saveRows.filter((row) => row.saved).length,
+        };
+      }),
+    );
+    return rows;
   },
 });
 
@@ -573,6 +892,8 @@ async function upsertPendingSubscriber(
       userId: args.userId,
       status: "pending",
       source: normalizeNewsletterSource(args.source),
+      dailyOptIn: true,
+      weeklyOptIn: true,
       tokenHash,
       resendSyncStatus: "idle",
       createdAt: now,
@@ -626,7 +947,10 @@ async function subscriberByTokenHash(
     .unique();
 }
 
-async function issueBySlug(ctx: MutationCtx, slug: string) {
+async function issueBySlug(
+  ctx: { db: MutationCtx["db"] | QueryCtx["db"] },
+  slug: string,
+) {
   const issue = normalizeIssueInput({
     subject: slug,
     previewText: slug,
@@ -637,6 +961,37 @@ async function issueBySlug(ctx: MutationCtx, slug: string) {
     .query("newsletterIssues")
     .withIndex("by_slug", (q) => q.eq("slug", issue.slug))
     .unique();
+}
+
+function publicIssue(issue: Doc<"newsletterIssues">) {
+  return {
+    _id: issue._id,
+    _creationTime: issue._creationTime,
+    slug: issue.slug,
+    subject: issue.subject,
+    previewText: issue.previewText,
+    body: issue.body,
+    edition: issue.edition,
+    editorialVersion: issue.editorialVersion,
+    qualityScore: issue.qualityScore,
+    forumCategorySlug: issue.forumCategorySlug,
+    forumThreadSlug: issue.forumThreadSlug,
+    sentAt: issue.sentAt,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+  };
+}
+
+function normalizeVisitorKey(value: string | undefined) {
+  const clean = value
+    ?.trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80);
+  return clean || undefined;
+}
+
+function countEvent(events: Doc<"newsletterEvents">[], eventType: string) {
+  return events.filter((event) => event.eventType === eventType).length;
 }
 
 async function upsertIssue(
@@ -674,6 +1029,8 @@ function publicSubscriber(subscriber: Doc<"newsletterSubscribers">) {
     email: subscriber.email,
     status: subscriber.status,
     source: subscriber.source,
+    dailyOptIn: subscriber.dailyOptIn ?? true,
+    weeklyOptIn: subscriber.weeklyOptIn ?? true,
     resendContactId: subscriber.resendContactId,
     resendSyncStatus: subscriber.resendSyncStatus,
     resendSyncedAt: subscriber.resendSyncedAt,

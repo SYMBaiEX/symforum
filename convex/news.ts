@@ -204,6 +204,58 @@ export const readIndexedSnapshot = internalQuery({
   },
 });
 
+export const readRecentStoryCorpus = internalQuery({
+  args: {
+    days: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const days = Math.max(1, Math.min(Math.floor(args.days ?? 7), 14));
+    const limit = Math.max(8, Math.min(Math.floor(args.limit ?? 28), 60));
+    const snapshots = (await recentSnapshots(ctx))
+      .filter(
+        (snapshot) => snapshot.status === "complete" && snapshot.storyCount > 0,
+      )
+      .slice(0, days);
+    const rows = (
+      await Promise.all(
+        snapshots.map((snapshot) =>
+          ctx.db
+            .query("hnStories")
+            .withIndex("by_snapshotDate_and_rank", (q) =>
+              q.eq("snapshotDate", snapshot.snapshotDate),
+            )
+            .order("asc")
+            .take(20),
+        ),
+      )
+    ).flat();
+    const bestByStoryId = new Map<number, Doc<"hnStories">>();
+    for (const story of rows) {
+      const existing = bestByStoryId.get(story.hnItemId);
+      if (
+        existing === undefined ||
+        story.rank < existing.rank ||
+        (story.rank === existing.rank &&
+          (story.score ?? 0) > (existing.score ?? 0))
+      ) {
+        bestByStoryId.set(story.hnItemId, story);
+      }
+    }
+    const stories = [...bestByStoryId.values()]
+      .sort(
+        (left, right) =>
+          left.rank - right.rank || (right.score ?? 0) - (left.score ?? 0),
+      )
+      .slice(0, limit);
+
+    return {
+      snapshotDate: snapshots[0]?.snapshotDate ?? null,
+      stories,
+    };
+  },
+});
+
 export const timeline = query({
   args: {
     snapshotDate: v.optional(v.string()),

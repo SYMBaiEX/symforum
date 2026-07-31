@@ -137,6 +137,20 @@ export const runDailyHackerNewsDigest = internalAction({
       attempt,
     });
     if (!claim.claimed) {
+      if (claim.reason === "published") {
+        const existing = await ctx.runQuery(
+          internal.sukiForumAgentData.readRun,
+          { runKey: claim.runKey },
+        );
+        if (existing?.thread) {
+          return {
+            status: "published",
+            categorySlug: existing.thread.categorySlug,
+            threadSlug: existing.thread.threadSlug,
+            title: existing.thread.title,
+          };
+        }
+      }
       return { status: "skipped", reason: claim.reason };
     }
 

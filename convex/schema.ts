@@ -235,6 +235,8 @@ export default defineSchema({
       v.literal("bounced"),
     ),
     source: v.string(),
+    dailyOptIn: v.optional(v.boolean()),
+    weeklyOptIn: v.optional(v.boolean()),
     tokenHash: v.string(),
     resendContactId: v.optional(v.string()),
     resendSyncStatus: v.union(
@@ -260,6 +262,11 @@ export default defineSchema({
     subject: v.string(),
     previewText: v.string(),
     body: v.string(),
+    edition: v.optional(
+      v.union(v.literal("daily-signal"), v.literal("weekly-field-note")),
+    ),
+    editorialVersion: v.optional(v.number()),
+    qualityScore: v.optional(v.number()),
     status: v.union(
       v.literal("draft"),
       v.literal("scheduled"),
@@ -268,6 +275,8 @@ export default defineSchema({
       v.literal("failed"),
     ),
     linkedPostSlug: v.optional(v.string()),
+    forumCategorySlug: v.optional(v.string()),
+    forumThreadSlug: v.optional(v.string()),
     scheduledAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     resendBroadcastId: v.optional(v.string()),
@@ -293,7 +302,38 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_receivedAt", ["receivedAt"])
+    .index("by_issueId_and_receivedAt", ["issueId", "receivedAt"])
+    .index("by_issueId_and_eventType_and_receivedAt", [
+      "issueId",
+      "eventType",
+      "receivedAt",
+    ])
     .index("by_subscriberId_and_receivedAt", ["subscriberId", "receivedAt"]),
+  newsletterEngagements: defineTable({
+    issueId: v.id("newsletterIssues"),
+    eventType: v.union(
+      v.literal("archive_view"),
+      v.literal("archive_click"),
+      v.literal("source_click"),
+      v.literal("discussion_click"),
+      v.literal("forum_click"),
+      v.literal("news_index_click"),
+    ),
+    hnItemId: v.optional(v.number()),
+    visitorKey: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_issueId_and_createdAt", ["issueId", "createdAt"])
+    .index("by_issueId_and_eventType_and_createdAt", [
+      "issueId",
+      "eventType",
+      "createdAt",
+    ])
+    .index("by_issueId_and_hnItemId_and_createdAt", [
+      "issueId",
+      "hnItemId",
+      "createdAt",
+    ]),
   newsletterSettings: defineTable({
     key: v.string(),
     value: v.string(),
@@ -317,6 +357,9 @@ export default defineSchema({
     issueId: v.optional(v.id("newsletterIssues")),
     storyCount: v.number(),
     topStoryIds: v.array(v.number()),
+    qualityScore: v.optional(v.number()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
     resendBroadcastId: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     updatedAt: v.number(),

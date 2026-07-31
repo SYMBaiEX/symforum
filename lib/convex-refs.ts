@@ -1161,6 +1161,8 @@ export type NewsletterSubscriberRecord = {
   email: string;
   status: "pending" | "confirmed" | "unsubscribed" | "bounced";
   source: string;
+  dailyOptIn: boolean;
+  weeklyOptIn: boolean;
   resendContactId?: string;
   resendSyncStatus: "idle" | "synced" | "failed" | "not_configured";
   resendSyncedAt?: number;
@@ -1178,8 +1180,13 @@ export type NewsletterIssueRecord = {
   subject: string;
   previewText: string;
   body: string;
+  edition?: "daily-signal" | "weekly-field-note";
+  editorialVersion?: number;
+  qualityScore?: number;
   status: "draft" | "scheduled" | "sent" | "cancelled" | "failed";
   linkedPostSlug?: string;
+  forumCategorySlug?: string;
+  forumThreadSlug?: string;
   scheduledAt?: number;
   sentAt?: number;
   resendBroadcastId?: string;
@@ -1191,6 +1198,9 @@ export type NewsletterIssueRecord = {
 export type DailyNewsletterSettingsRecord = {
   enabled: boolean;
   testMode: boolean;
+  reviewRequired: boolean;
+  weeklyEnabled: boolean;
+  weeklyReviewRequired: boolean;
   timeZone: string;
   sendTimeLocal: string;
   maxIndexedArticles: number;
@@ -1199,6 +1209,7 @@ export type DailyNewsletterSettingsRecord = {
   cron: {
     hnRefreshUtc: string;
     scheduleCheckUtc: string;
+    weeklyFieldNoteUtc: string;
   };
 };
 
@@ -1216,9 +1227,41 @@ export type DailyNewsletterRunRecord = {
   issueId?: string;
   storyCount: number;
   topStoryIds: number[];
+  qualityScore?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   resendBroadcastId?: string;
   errorMessage?: string;
   updatedAt: number;
+};
+
+export type PublicNewsletterIssueRecord = Omit<
+  NewsletterIssueRecord,
+  | "status"
+  | "linkedPostSlug"
+  | "scheduledAt"
+  | "resendBroadcastId"
+  | "errorMessage"
+>;
+
+export type NewsletterEditorialAnalyticsRecord = {
+  issueId: string;
+  slug: string;
+  subject: string;
+  status: NewsletterIssueRecord["status"];
+  edition?: NewsletterIssueRecord["edition"];
+  qualityScore?: number;
+  sentAt?: number;
+  delivered: number;
+  opened: number;
+  bounced: number;
+  complained: number;
+  clicked: number;
+  archiveViews: number;
+  sourceClicks: number;
+  forumClicks: number;
+  forumReplies: number;
+  saves: number;
 };
 
 export type NewsletterSendLogRecord = {
@@ -1966,6 +2009,9 @@ export const convexRefs = {
       {
         enabled?: boolean;
         testMode?: boolean;
+        reviewRequired?: boolean;
+        weeklyEnabled?: boolean;
+        weeklyReviewRequired?: boolean;
         timeZone?: string;
         sendTimeLocal?: string;
         maxIndexedArticles?: number;
@@ -1974,6 +2020,11 @@ export const convexRefs = {
       },
       DailyNewsletterSettingsRecord
     >("dailyNewsletter:updateAdminSettings"),
+    queueWeeklyFieldNote: makeFunctionReference<
+      "mutation",
+      { runDate?: string; force?: boolean },
+      { queued: boolean }
+    >("dailyNewsletter:queueAdminWeeklyFieldNote"),
     queueDailyNewsletter: makeFunctionReference<
       "mutation",
       {
@@ -1994,6 +2045,11 @@ export const convexRefs = {
       { runDate?: string },
       NewsletterSendLogRecord[]
     >("dailyNewsletter:listAdminSendLogs"),
+    newsletterEditorialAnalytics: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      NewsletterEditorialAnalyticsRecord[]
+    >("newsletter:adminEditorialAnalytics"),
     listSystemLogs: makeFunctionReference<
       "query",
       {
@@ -2677,6 +2733,46 @@ export const convexRefs = {
     >("users:publicProfile"),
   },
   newsletter: {
+    listPublicIssues: makeFunctionReference<
+      "query",
+      { limit?: number },
+      PublicNewsletterIssueRecord[]
+    >("newsletter:listPublicIssues"),
+    readPublicIssueBySlug: makeFunctionReference<
+      "query",
+      { slug: string },
+      PublicNewsletterIssueRecord | null
+    >("newsletter:readPublicIssueBySlug"),
+    resolvePublicDestination: makeFunctionReference<
+      "query",
+      { slug: string; target: string },
+      {
+        url: string;
+        eventType:
+          | "source_click"
+          | "discussion_click"
+          | "forum_click"
+          | "archive_click"
+          | "news_index_click";
+        hnItemId?: number;
+      } | null
+    >("newsletter:resolvePublicDestination"),
+    recordPublicEngagement: makeFunctionReference<
+      "mutation",
+      {
+        slug: string;
+        eventType:
+          | "archive_view"
+          | "archive_click"
+          | "source_click"
+          | "discussion_click"
+          | "forum_click"
+          | "news_index_click";
+        hnItemId?: number;
+        visitorKey?: string;
+      },
+      { recorded: boolean }
+    >("newsletter:recordPublicEngagement"),
     subscribe: makeFunctionReference<
       "mutation",
       {
@@ -2707,6 +2803,24 @@ export const convexRefs = {
       },
       NewsletterSubscriberRecord
     >("newsletter:requestViewerSubscription"),
+    updateViewerTopics: makeFunctionReference<
+      "mutation",
+      {
+        subscriberId: string;
+        dailyOptIn: boolean;
+        weeklyOptIn: boolean;
+      },
+      NewsletterSubscriberRecord | null
+    >("newsletter:updateViewerTopics"),
+    updateTopicsByToken: makeFunctionReference<
+      "mutation",
+      {
+        tokenHash: string;
+        dailyOptIn: boolean;
+        weeklyOptIn: boolean;
+      },
+      NewsletterSubscriberRecord | null
+    >("newsletter:updateTopicsByToken"),
     getByToken: makeFunctionReference<
       "query",
       { tokenHash: string },
