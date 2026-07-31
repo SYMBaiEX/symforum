@@ -12,6 +12,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
+import {
+  FORUM_AGENT_DRAFT_BODY_MAX_LENGTH,
+  FORUM_THREAD_BODY_MAX_LENGTH,
+} from "./forumLimits";
 
 const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash";
 const FORUM_TIME_ZONE = "America/Chicago";
@@ -22,7 +26,7 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v2";
+const PROMPT_VERSION = "suki-forum-v3";
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 
@@ -155,7 +159,7 @@ const forumDraftSchema = z.object({
   body: z
     .string()
     .min(650)
-    .max(9_000)
+    .max(FORUM_AGENT_DRAFT_BODY_MAX_LENGTH)
     .refine(
       (body) => /\[(?:chart|table)(?:=|\])/i.test(body),
       "The post needs a chart or comparison table.",
@@ -961,11 +965,13 @@ export function finalizeForumBody(
     )
     .join("\n");
   const sourceBlock = `[b]Sources and further reading[/b]\n[list]\n${sourceItems}\n[/list]`;
-  const maximumBodyLength = Math.max(0, 11_950 - sourceBlock.length - 2);
-  const boundedBody = withoutUnverifiedLinks
-    .slice(0, maximumBodyLength)
-    .trimEnd();
-  return `${boundedBody}\n\n${sourceBlock}`;
+  const finalizedBody = `${withoutUnverifiedLinks}\n\n${sourceBlock}`;
+  if (finalizedBody.length > FORUM_THREAD_BODY_MAX_LENGTH) {
+    throw new Error(
+      `Forum draft exceeds the ${FORUM_THREAD_BODY_MAX_LENGTH}-character thread limit.`,
+    );
+  }
+  return finalizedBody;
 }
 
 function parseCachedCandidates(payloadJson: string) {

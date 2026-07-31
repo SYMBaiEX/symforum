@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 
 import { buildDigestBody } from "./belleForumAgent";
+import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 
 describe("Belle Hacker News digest", () => {
   test("renders a dated visual briefing with direct SYMBaiEX and source links", () => {
@@ -45,6 +46,50 @@ describe("Belle Hacker News digest", () => {
     expect(body).toContain(
       "[url=https://www.symbaiex.com/news]Open the complete SYMBaiEX News desk[/url]",
     );
-    expect(body.length).toBeLessThanOrEqual(11_900);
+    expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
+  });
+
+  test("preserves the ending and links in a digest longer than the old cutoff", () => {
+    const stories = Array.from({ length: 12 }, (_, index) => ({
+      hnItemId: index + 1,
+      rank: index + 1,
+      title: `Story ${index + 1}: a substantial systems development with consequences`,
+      url: `https://example.com/story-${index + 1}`,
+      score: 300 - index * 10,
+      descendants: 90 - index,
+    }));
+    const body = buildDigestBody({
+      closing:
+        "BELLE-CLOSING-SENTINEL The connective lesson is that durable technical progress depends on evidence people can inspect together.",
+      date: "2026-07-29",
+      opening:
+        "This edition follows a common tension across the day's reporting. ".repeat(
+          18,
+        ),
+      requestedBriefs: stories.map((story) => ({
+        hnItemId: story.hnItemId,
+        summary:
+          `Summary ${story.hnItemId}. ` +
+          "The reporting provides concrete context, scope, and constraints that readers need before drawing a conclusion. ".repeat(
+            7,
+          ),
+        analysis:
+          `Analysis ${story.hnItemId}. ` +
+          "The practical implication is worth separating from the headline because teams will experience the tradeoffs differently. ".repeat(
+            6,
+          ),
+      })),
+      stories,
+    });
+
+    expect(body.length).toBeGreaterThan(11_900);
+    expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
+    expect(body).toContain("BELLE-CLOSING-SENTINEL");
+    expect(body).toContain(
+      "[url=https://www.symbaiex.com/news/12]Read on SYMBaiEX News[/url]",
+    );
+    expect(body).toContain(
+      "What story here feels most consequential a month from now",
+    );
   });
 });

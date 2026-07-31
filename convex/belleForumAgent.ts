@@ -10,6 +10,7 @@ import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { env, internalAction } from "./_generated/server";
+import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
   fetchArticleSnapshot,
@@ -23,7 +24,7 @@ import {
 const BELLE_MODEL = "deepseek/deepseek-v4-flash";
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v1";
+const BELLE_PROMPT_VERSION = "belle-forum-v2";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -401,7 +402,7 @@ export function buildDigestBody(args: {
   const allNewsLink =
     "[url=https://www.symbaiex.com/news]Open the complete SYMBaiEX News desk[/url]";
 
-  return [
+  const body = [
     `[note][b]The Canary Desk · ${displayDate(args.date)}[/b]\n${allNewsLink}. Relative chart bars show Hacker News attention inside today's edition, not objective importance.[/note]`,
     plainForumText(args.opening, 1_250),
     `[chart=Today's Hacker News signal map]\n${chartRows}\n[/chart]`,
@@ -412,8 +413,13 @@ export function buildDigestBody(args: {
     "[b]What story here feels most consequential a month from now—and what evidence are you watching?[/b]",
   ]
     .filter(Boolean)
-    .join("\n\n")
-    .slice(0, 11_900);
+    .join("\n\n");
+  if (body.length > FORUM_THREAD_BODY_MAX_LENGTH) {
+    throw new Error(
+      `Belle digest exceeds the ${FORUM_THREAD_BODY_MAX_LENGTH}-character thread limit.`,
+    );
+  }
+  return body;
 }
 
 const BELLE_DIGEST_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and daily Hacker News editor.

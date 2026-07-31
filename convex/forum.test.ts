@@ -11,6 +11,10 @@ import {
   forumNotificationEmailUrl,
   type ForumNotificationEmailRenderContext,
 } from "./forumNotificationEmails";
+import {
+  FORUM_REPLY_BODY_MAX_LENGTH,
+  FORUM_THREAD_BODY_MAX_LENGTH,
+} from "./forumLimits";
 import schema from "./schema";
 
 const modules = {
@@ -2331,6 +2335,43 @@ describe("forum notification preferences", () => {
 });
 
 describe("forum privacy regressions", () => {
+  test("stores long threads and replies without truncating their endings", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const asOtherTrusted = t.withIdentity({
+      subject: seed.otherTrustedUserId,
+      name: "Other Trusted",
+    });
+    const threadEnding = "THREAD-END-SENTINEL";
+    const replyEnding = "REPLY-END-SENTINEL";
+    const threadBody = `${"Long-form forum reporting section. ".repeat(600)}${threadEnding}`;
+    const replyBody = `${"Detailed community response section. ".repeat(400)}${replyEnding}`;
+
+    expect(threadBody.length).toBeGreaterThan(12_000);
+    expect(threadBody.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
+    expect(replyBody.length).toBeGreaterThan(6_000);
+    expect(replyBody.length).toBeLessThanOrEqual(FORUM_REPLY_BODY_MAX_LENGTH);
+
+    const thread = await asOtherTrusted.mutation(api.forum.createThread, {
+      categorySlug: "public-square",
+      title: "Long-form reporting survives intact",
+      body: threadBody,
+    });
+    const reply = await asOtherTrusted.mutation(api.forum.createReply, {
+      threadId: thread.threadId,
+      body: replyBody,
+    });
+    const stored = await t.run(async (ctx) => ({
+      thread: await ctx.db.get(thread.threadId),
+      reply: await ctx.db.get(reply.postId),
+    }));
+
+    expect(stored.thread?.body).toBe(threadBody);
+    expect(stored.thread?.body.endsWith(threadEnding)).toBe(true);
+    expect(stored.reply?.body).toBe(replyBody);
+    expect(stored.reply?.body.endsWith(replyEnding)).toBe(true);
+  });
+
   test("mode=new shows unread trusted threads for trusted users even when public board is read", async () => {
     const t = setup();
     const seed = await seedForum(t);

@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 
+import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import { finalizeForumBody, parseFeedXml } from "./sukiForumAgent";
 
 describe("Suki forum research helpers", () => {
@@ -63,7 +64,8 @@ ${"A useful field note. ".repeat(800)}`,
       ],
     );
 
-    expect(body.length).toBeLessThanOrEqual(11_950);
+    expect(body.length).toBeGreaterThan(11_950);
+    expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
     expect(body).not.toContain("unverified.example");
     expect(body).toContain("mystery download");
     expect(body).toContain("[b]Sources and further reading[/b]");

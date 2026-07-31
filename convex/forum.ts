@@ -12,6 +12,10 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import {
+  FORUM_REPLY_BODY_MAX_LENGTH,
+  FORUM_THREAD_BODY_MAX_LENGTH,
+} from "./forumLimits";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -247,9 +251,7 @@ const FORUM_BOARD_RULES_BODY_MAX_LENGTH = 8_000;
 const THREAD_TITLE_MIN_LENGTH = 3;
 const THREAD_TITLE_MAX_LENGTH = 160;
 const THREAD_BODY_MIN_LENGTH = 10;
-const THREAD_BODY_MAX_LENGTH = 12_000;
 const REPLY_BODY_MIN_LENGTH = 2;
-const REPLY_BODY_MAX_LENGTH = 6_000;
 const REPORT_REASON_MIN_LENGTH = 3;
 const REPORT_REASON_MAX_LENGTH = 80;
 const REPORT_DETAILS_MAX_LENGTH = 1_000;
@@ -12551,7 +12553,7 @@ function normalizeThreadBody(value: string) {
   return cleanRequired(
     value,
     THREAD_BODY_MIN_LENGTH,
-    THREAD_BODY_MAX_LENGTH,
+    FORUM_THREAD_BODY_MAX_LENGTH,
     "Thread body",
   );
 }
@@ -12560,7 +12562,7 @@ function normalizeReplyBody(value: string) {
   return cleanRequired(
     value,
     REPLY_BODY_MIN_LENGTH,
-    REPLY_BODY_MAX_LENGTH,
+    FORUM_REPLY_BODY_MAX_LENGTH,
     "Reply body",
   );
 }
