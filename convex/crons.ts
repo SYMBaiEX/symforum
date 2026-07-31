@@ -49,8 +49,8 @@ Array.from({ length: 30 }, (_, slot) => ({
   crons.cron(
     `Suki forum post ${slot + 1}`,
     schedule,
-    internal.sukiForumAgent.runDailySlot,
-    { slot },
+    internal.forumAgentWorkflow.queuePublication,
+    { agentSlug: "suki", slot },
   );
 });
 
@@ -61,21 +61,21 @@ Array.from({ length: 15 }, (_, index) => ({
   crons.cron(
     `Belle forum post ${slot}`,
     schedule,
-    internal.belleForumAgent.runDailySlot,
-    { slot },
+    internal.forumAgentWorkflow.queuePublication,
+    { agentSlug: "belle", slot },
   );
 });
 
 crons.interval(
-  "Suki relevant forum replies",
-  { minutes: 10 },
+  "Suki forum reply recovery sweep",
+  { hours: 1 },
   internal.sukiForumReplyAgent.runReplySweep,
   {},
 );
 
 crons.interval(
-  "Belle relevant forum replies",
-  { minutes: 15 },
+  "Belle forum reply recovery sweep",
+  { hours: 1 },
   internal.sukiForumReplyAgent.runBelleReplySweep,
   {},
 );
@@ -84,6 +84,13 @@ crons.cron(
   "cleanup forum agent caches",
   "25 6 * * *",
   internal.sukiForumAgentData.cleanupExpiredResearchCache,
+  {},
+);
+
+crons.cron(
+  "refresh forum editorial cohorts",
+  "15 */6 * * *",
+  internal.forumAgentEditorial.refreshEditorialCohorts,
   {},
 );
 

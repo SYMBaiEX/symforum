@@ -111,6 +111,8 @@ export const runDailySlot = internalAction({
     slot: v.number(),
     attempt: v.optional(v.number()),
     runDate: v.optional(v.string()),
+    workflowManaged: v.optional(v.boolean()),
+    workflowId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ForumResearchRunResult> =>
     await runForumResearchSlot(ctx, args, BELLE_RESEARCH_CONFIG),

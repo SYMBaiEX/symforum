@@ -779,6 +779,9 @@ export default defineSchema({
     followUpPostId: v.optional(v.id("forumPosts")),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    agentThreadId: v.optional(v.string()),
+    workflowId: v.optional(v.string()),
+    promptVersion: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -795,6 +798,7 @@ export default defineSchema({
       "status",
       "startedAt",
     ])
+    .index("by_threadId_and_startedAt", ["threadId", "startedAt"])
     .index("by_runDate", ["runDate"]),
   forumAgentReplyRuns: defineTable({
     runKey: v.string(),
@@ -807,6 +811,7 @@ export default defineSchema({
     authorId: v.id("users"),
     attempt: v.number(),
     status: v.union(
+      v.literal("queued"),
       v.literal("running"),
       v.literal("replied"),
       v.literal("ignored"),
@@ -825,6 +830,41 @@ export default defineSchema({
     .index("by_sourcePostId", ["sourcePostId"])
     .index("by_runDate", ["runDate"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  forumAgentUsageEvents: defineTable({
+    runKey: v.string(),
+    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    stage: v.union(
+      v.literal("topic"),
+      v.literal("draft"),
+      v.literal("revision"),
+      v.literal("reply"),
+      v.literal("embedding"),
+    ),
+    model: v.string(),
+    categorySlug: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    durationMs: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_runKey_and_createdAt", ["runKey", "createdAt"])
+    .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"]),
+  forumAgentEditorialCohorts: defineTable({
+    cohortKey: v.string(),
+    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    categorySlug: v.string(),
+    contentFormat: v.string(),
+    promptVersion: v.string(),
+    sampleCount: v.number(),
+    totalViews: v.number(),
+    totalReplies: v.number(),
+    totalPollVotes: v.number(),
+    totalQuality: v.number(),
+    score: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_cohortKey", ["cohortKey"])
+    .index("by_agentSlug_and_score", ["agentSlug", "score"]),
   forumAgentResearchCache: defineTable({
     cacheKey: v.string(),
     sourceName: v.string(),

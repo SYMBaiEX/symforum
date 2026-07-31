@@ -21,6 +21,10 @@ import type * as contentAccess from "../contentAccess.js";
 import type * as crons from "../crons.js";
 import type * as dailyNewsletter from "../dailyNewsletter.js";
 import type * as forum from "../forum.js";
+import type * as forumAgentEditorial from "../forumAgentEditorial.js";
+import type * as forumAgentEditorialData from "../forumAgentEditorialData.js";
+import type * as forumAgentMemory from "../forumAgentMemory.js";
+import type * as forumAgentWorkflow from "../forumAgentWorkflow.js";
 import type * as forumLimits from "../forumLimits.js";
 import type * as forumNotificationEmails from "../forumNotificationEmails.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
@@ -63,6 +67,10 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dailyNewsletter: typeof dailyNewsletter;
   forum: typeof forum;
+  forumAgentEditorial: typeof forumAgentEditorial;
+  forumAgentEditorialData: typeof forumAgentEditorialData;
+  forumAgentMemory: typeof forumAgentMemory;
+  forumAgentWorkflow: typeof forumAgentWorkflow;
   forumLimits: typeof forumLimits;
   forumNotificationEmails: typeof forumNotificationEmails;
   githubPortfolio: typeof githubPortfolio;
@@ -114,4 +122,8 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+  rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
 };

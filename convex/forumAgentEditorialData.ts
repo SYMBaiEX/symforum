@@ -1,0 +1,227 @@
+import { v } from "convex/values";
+import { internalMutation, internalQuery } from "./_generated/server";
+
+const AGENT_SLUG = v.union(v.literal("suki"), v.literal("belle"));
+const USAGE_STAGE = v.union(
+  v.literal("topic"),
+  v.literal("draft"),
+  v.literal("revision"),
+  v.literal("reply"),
+  v.literal("embedding"),
+);
+
+export const attachRunInfrastructure = internalMutation({
+  args: {
+    runKey: v.string(),
+    agentThreadId: v.optional(v.string()),
+    workflowId: v.optional(v.string()),
+    promptVersion: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
+      .unique();
+    if (run === null) return { updated: false as const };
+    await ctx.db.patch(run._id, {
+      agentThreadId: args.agentThreadId ?? run.agentThreadId,
+      workflowId: args.workflowId ?? run.workflowId,
+      promptVersion: args.promptVersion ?? run.promptVersion,
+      updatedAt: Date.now(),
+    });
+    return { updated: true as const };
+  },
+});
+
+export const recordUsage = internalMutation({
+  args: {
+    runKey: v.string(),
+    agentSlug: AGENT_SLUG,
+    stage: USAGE_STAGE,
+    model: v.string(),
+    categorySlug: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    durationMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("forumAgentUsageEvents", {
+      ...args,
+      durationMs: Math.max(0, Math.round(args.durationMs)),
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const readThreadForMemory = internalQuery({
+  args: { threadId: v.id("forumThreads") },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (thread === null || thread.status !== "active") return null;
+    const [category, author, posts, editorialRuns] = await Promise.all([
+      ctx.db.get(thread.categoryId),
+      ctx.db.get(thread.authorId),
+      ctx.db
+        .query("forumPosts")
+        .withIndex("by_threadId_and_status_and_createdAt", (q) =>
+          q.eq("threadId", thread._id).eq("status", "active"),
+        )
+        .order("asc")
+        .take(24),
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_threadId_and_startedAt", (q) =>
+          q.eq("threadId", thread._id),
+        )
+        .order("desc")
+        .take(8),
+    ]);
+    if (category === null || author === null) return null;
+    return {
+      threadId: thread._id,
+      categorySlug: category.slug,
+      title: thread.title,
+      body: thread.body,
+      replies: posts.map((post) => post.body),
+      editorialEvidence: editorialRuns.map((run) => ({
+        agentSlug: run.agentSlug,
+        contentFormat: run.contentFormat,
+        qualityScore: run.qualityScore,
+        groundingScore: run.groundingScore,
+        noveltyScore: run.noveltyScore,
+        utilityScore: run.utilityScore,
+        sourceUrls: run.sourceUrls,
+      })),
+      authorName: author.name ?? author.username ?? "Forum member",
+      agentSlug:
+        author.agentSlug === "suki" || author.agentSlug === "belle"
+          ? author.agentSlug
+          : "human",
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    };
+  },
+});
+
+export const readAgentThreadsForBackfill = internalQuery({
+  args: {
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("forumThreads")
+      .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+      .order("desc")
+      .paginate({ cursor: args.cursor ?? null, numItems: 40 });
+    const rows = await Promise.all(
+      page.page.map(async (thread) => {
+        const author = await ctx.db.get(thread.authorId);
+        return author?.agentSlug === "suki" || author?.agentSlug === "belle"
+          ? thread._id
+          : null;
+      }),
+    );
+    return {
+      threadIds: rows.filter((id): id is NonNullable<typeof id> => id !== null),
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+    };
+  },
+});
+
+export const readEditorialOutcomeSnapshot = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const runs = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runDate")
+      .order("desc")
+      .take(180);
+    const published = runs.filter(
+      (run) =>
+        run.status === "published" &&
+        run.threadId !== undefined &&
+        (run.agentSlug === "suki" || run.agentSlug === "belle"),
+    );
+    return await Promise.all(
+      published.map(async (run) => {
+        const [thread, poll] = await Promise.all([
+          ctx.db.get(run.threadId!),
+          ctx.db
+            .query("forumPolls")
+            .withIndex("by_threadId", (q) => q.eq("threadId", run.threadId!))
+            .unique(),
+        ]);
+        if (thread === null) return null;
+        return {
+          agentSlug: run.agentSlug as "suki" | "belle",
+          categorySlug: run.categorySlug ?? thread.categorySlug,
+          contentFormat: run.contentFormat ?? "brief",
+          promptVersion: run.promptVersion ?? "legacy",
+          views: thread.viewCount,
+          replies: thread.replyCount,
+          pollVotes: poll?.totalVotes ?? 0,
+          quality: run.qualityScore ?? 70,
+        };
+      }),
+    );
+  },
+});
+
+export const replaceEditorialCohorts = internalMutation({
+  args: {
+    cohorts: v.array(
+      v.object({
+        cohortKey: v.string(),
+        agentSlug: AGENT_SLUG,
+        categorySlug: v.string(),
+        contentFormat: v.string(),
+        promptVersion: v.string(),
+        sampleCount: v.number(),
+        totalViews: v.number(),
+        totalReplies: v.number(),
+        totalPollVotes: v.number(),
+        totalQuality: v.number(),
+        score: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    for (const cohort of args.cohorts.slice(0, 160)) {
+      const existing = await ctx.db
+        .query("forumAgentEditorialCohorts")
+        .withIndex("by_cohortKey", (q) => q.eq("cohortKey", cohort.cohortKey))
+        .unique();
+      if (existing === null) {
+        await ctx.db.insert("forumAgentEditorialCohorts", {
+          ...cohort,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.patch(existing._id, { ...cohort, updatedAt: now });
+      }
+    }
+    return { updated: Math.min(args.cohorts.length, 160) };
+  },
+});
+
+export const readEditorialStrategies = internalQuery({
+  args: { agentSlug: AGENT_SLUG },
+  handler: async (ctx, args) => {
+    const cohorts = await ctx.db
+      .query("forumAgentEditorialCohorts")
+      .withIndex("by_agentSlug_and_score", (q) =>
+        q.eq("agentSlug", args.agentSlug),
+      )
+      .order("desc")
+      .take(24);
+    return cohorts.map((cohort) => ({
+      categorySlug: cohort.categorySlug,
+      contentFormat: cohort.contentFormat,
+      sampleCount: cohort.sampleCount,
+      score: cohort.score,
+    }));
+  },
+});
