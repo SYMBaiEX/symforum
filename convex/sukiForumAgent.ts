@@ -399,10 +399,29 @@ export async function runForumResearchSlot(
     if (selectedCandidates.length === 0) {
       throw new Error(`${config.name} selected no valid research candidates`);
     }
-    const topicFingerprint = buildTopicFingerprint(
-      selection.angle,
-      selectedCandidates,
+    const overlappingThread = context.recentThreads.find(
+      (thread) =>
+        selectedCandidates.some(
+          (candidate) =>
+            lexicalSimilarity(candidate.title, thread.title) >= 0.45,
+        ),
     );
+    if (overlappingThread !== undefined && !overlappingThread.ownedByAgent) {
+      await markSkippedAndMaybeRetry(ctx, {
+        config,
+        attempt: RETRY_DELAYS_MS.length,
+        runDate,
+        runKey: claim.runKey,
+        slot: args.slot,
+        reason: "A closely matching forum discussion already exists.",
+        candidateCount: unusedCandidates.length,
+      });
+      return { status: "skipped" as const, reason: "topic-covered" };
+    }
+    const topicFingerprint =
+      overlappingThread === undefined
+        ? buildTopicFingerprint(selection.angle, selectedCandidates)
+        : hashKey(`thread:${overlappingThread.id}`);
     const reservation = await ctx.runMutation(
       internal.sukiForumAgentData.reserveResearchTopic,
       {
@@ -412,7 +431,8 @@ export async function runForumResearchSlot(
         topicFingerprint,
       },
     );
-    let followUpThreadId: Id<"forumThreads"> | undefined;
+    let followUpThreadId: Id<"forumThreads"> | undefined =
+      overlappingThread?.id;
     if (
       !reservation.reserved &&
       reservation.reason === "topic-covered" &&

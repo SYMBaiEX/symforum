@@ -8394,9 +8394,11 @@ export const readSukiForumContext = internalQuery({
       ),
       recentThreadTitles: recentThreads.map((thread) => thread.title),
       recentThreads: recentThreads.map((thread) => ({
+        id: thread._id,
         categorySlug: thread.categorySlug,
         slug: thread.slug,
         title: thread.title,
+        ownedByAgent: thread.authorId === agent.userId,
       })),
       editorialSignals,
     };
@@ -8490,9 +8492,11 @@ export const readBelleForumContext = internalQuery({
       ),
       recentThreadTitles: recentThreads.map((thread) => thread.title),
       recentThreads: recentThreads.map((thread) => ({
+        id: thread._id,
         categorySlug: thread.categorySlug,
         slug: thread.slug,
         title: thread.title,
+        ownedByAgent: thread.authorId === agent.userId,
       })),
       editorialSignals,
     };
