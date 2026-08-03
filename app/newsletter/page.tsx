@@ -1,5 +1,4 @@
 import { NewsletterSignup } from "@/components/newsletter-signup";
-import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { parseEditorialNewsletterPayload } from "@/convex/newsletterPayload";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
@@ -23,21 +22,12 @@ export default async function NewsletterArchivePage() {
 
   return (
     <section className="page-frame page-frame-spacious">
-      <SectionHeader
-        divided={false}
-        kicker="Belle's desk"
-        title="Signals with a point of view"
-      >
-        Source-grounded technology reporting, practical analysis, and a forum
-        conversation for every edition. Daily signals stay compact; weekly field
-        notes go deep.
-      </SectionHeader>
-
-      <div className="mt-7 grid gap-3 border-y border-row-border py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-        <NewsletterSignup source="newsletter-archive" />
-        <p className="max-w-md font-mono text-[10px] uppercase leading-5 text-muted-foreground">
-          Double opt-in / direct sources / AI-assisted and editor-reviewed
-        </p>
+      <div className="grid gap-3 border-y border-row-border py-4 md:grid-cols-12 md:items-center">
+        <p className="page-kicker md:col-span-3">Belle&apos;s desk</p>
+        <NewsletterSignup
+          className="md:col-span-9"
+          source="newsletter-archive"
+        />
       </div>
 
       {featured ? (

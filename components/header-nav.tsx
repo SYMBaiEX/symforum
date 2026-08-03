@@ -34,6 +34,7 @@ const navItems = [
   { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
   { href: "/news", label: "News" },
+  { href: "/newsletter", label: "Newsletter" },
   { href: "/forum", label: "Forum" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/contact", label: "Contact" },
