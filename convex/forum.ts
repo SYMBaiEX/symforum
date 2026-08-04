@@ -8202,7 +8202,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       persona:
         "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
       model: "deepseek/deepseek-v4-flash",
-      dailyPostTarget: 30,
+      dailyPostTarget: 24,
       updatedAt: now,
     };
     if (existingAgent === null) {
@@ -8309,7 +8309,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       persona:
         "A bright, discerning adult neko news correspondent who connects original reporting into clear, opinionated, humane forum conversations.",
       model: "deepseek/deepseek-v4-flash",
-      dailyPostTarget: 16,
+      dailyPostTarget: 7,
       updatedAt: now,
     };
     if (existingAgent === null) {
@@ -8334,201 +8334,114 @@ export const ensureBelleForumInfrastructure = internalMutation({
 
 export const readSukiForumContext = internalQuery({
   args: {},
-  handler: async (ctx) => {
-    const agent = await ctx.db
-      .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", "suki"))
-      .unique();
-    if (agent === null) {
-      throw new Error("Suki is not configured");
-    }
-    const user = await ctx.db.get(agent.userId);
-    if (user === null || user.isAgent !== true || user.agentSlug !== "suki") {
-      throw new Error("Suki's forum identity is not configured");
-    }
-    const categories = (
-      await ctx.db
-        .query("forumCategories")
-        .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
-        .take(CATEGORY_LIST_LIMIT)
-    ).filter(
-      (category) =>
-        isBoardCategory(category) && categoryViewAccess(category) === "public",
-    );
-    const categoryNamesById = new Map(
-      categories.map((category) => [category._id, category.name]),
-    );
-    const recentRuns = await ctx.db
-      .query("forumAgentRuns")
-      .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
-        q.eq("agentSlug", "suki").eq("status", "published"),
-      )
-      .order("desc")
-      .take(20);
-    const recentThreads = await ctx.db
-      .query("forumThreads")
-      .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
-      .order("desc")
-      .take(40);
-    const editorialSignals = [
-      ...new Set(categories.map((category) => category.slug)),
-    ]
-      .map((categorySlug) => {
-        const matching = recentThreads.filter(
-          (thread) => thread.categorySlug === categorySlug,
-        );
-        return {
-          categorySlug,
-          recentPosts: matching.length,
-          engagementScore: matching.reduce(
-            (total, thread) => total + thread.viewCount + thread.replyCount * 5,
-            0,
-          ),
-        };
-      })
-      .filter((signal) => signal.recentPosts > 0)
-      .sort(
-        (left, right) =>
-          right.engagementScore - left.engagementScore ||
-          left.recentPosts - right.recentPosts,
-      )
-      .slice(0, 20);
-
-    return {
-      agent: {
-        slug: agent.slug,
-        name: agent.name,
-        persona: agent.persona,
-        model: agent.model,
-        dailyPostTarget: agent.dailyPostTarget,
-        enabled: agent.enabled,
-        userId: agent.userId,
-      },
-      categories: categories.map((category) => ({
-        id: category._id,
-        slug: category.slug,
-        name: category.name,
-        description: category.description,
-        parentCategoryId: category.parentCategoryId,
-        parentName:
-          category.parentCategoryId === undefined
-            ? undefined
-            : categoryNamesById.get(category.parentCategoryId),
-      })),
-      recentBoardSlugs: recentRuns.flatMap((run) =>
-        run.categorySlug === undefined ? [] : [run.categorySlug],
-      ),
-      recentThreadTitles: recentThreads.map((thread) => thread.title),
-      recentThreads: recentThreads.map((thread) => ({
-        id: thread._id,
-        categorySlug: thread.categorySlug,
-        slug: thread.slug,
-        title: thread.title,
-        ownedByAgent: thread.authorId === agent.userId,
-      })),
-      editorialSignals,
-    };
-  },
+  handler: async (ctx) => await forumAgentContext(ctx, "suki"),
 });
 
 export const readBelleForumContext = internalQuery({
   args: {},
-  handler: async (ctx) => {
-    const agent = await ctx.db
-      .query("forumAgents")
-      .withIndex("by_slug", (q) => q.eq("slug", "belle"))
-      .unique();
-    if (agent === null) {
-      throw new Error("Belle is not configured");
-    }
-    const user = await ctx.db.get(agent.userId);
-    if (user === null || user.isAgent !== true || user.agentSlug !== "belle") {
-      throw new Error("Belle's forum identity is not configured");
-    }
-    const categories = (
-      await ctx.db
-        .query("forumCategories")
-        .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
-        .take(CATEGORY_LIST_LIMIT)
-    ).filter(
-      (category) =>
-        isBoardCategory(category) && categoryViewAccess(category) === "public",
-    );
-    const categoryNamesById = new Map(
-      categories.map((category) => [category._id, category.name]),
-    );
-    const recentRuns = await ctx.db
-      .query("forumAgentRuns")
-      .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
-        q.eq("agentSlug", "belle").eq("status", "published"),
-      )
-      .order("desc")
-      .take(20);
-    const recentThreads = await ctx.db
-      .query("forumThreads")
-      .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
-      .order("desc")
-      .take(40);
-    const editorialSignals = [
-      ...new Set(categories.map((category) => category.slug)),
-    ]
-      .map((categorySlug) => {
-        const matching = recentThreads.filter(
-          (thread) => thread.categorySlug === categorySlug,
-        );
-        return {
-          categorySlug,
-          recentPosts: matching.length,
-          engagementScore: matching.reduce(
-            (total, thread) => total + thread.viewCount + thread.replyCount * 5,
-            0,
-          ),
-        };
-      })
-      .filter((signal) => signal.recentPosts > 0)
-      .sort(
-        (left, right) =>
-          right.engagementScore - left.engagementScore ||
-          left.recentPosts - right.recentPosts,
-      )
-      .slice(0, 20);
-
-    return {
-      agent: {
-        slug: agent.slug,
-        name: agent.name,
-        persona: agent.persona,
-        model: agent.model,
-        dailyPostTarget: agent.dailyPostTarget,
-        enabled: agent.enabled,
-        userId: agent.userId,
-      },
-      categories: categories.map((category) => ({
-        id: category._id,
-        slug: category.slug,
-        name: category.name,
-        description: category.description,
-        parentCategoryId: category.parentCategoryId,
-        parentName:
-          category.parentCategoryId === undefined
-            ? undefined
-            : categoryNamesById.get(category.parentCategoryId),
-      })),
-      recentBoardSlugs: recentRuns.flatMap((run) =>
-        run.categorySlug === undefined ? [] : [run.categorySlug],
-      ),
-      recentThreadTitles: recentThreads.map((thread) => thread.title),
-      recentThreads: recentThreads.map((thread) => ({
-        id: thread._id,
-        categorySlug: thread.categorySlug,
-        slug: thread.slug,
-        title: thread.title,
-        ownedByAgent: thread.authorId === agent.userId,
-      })),
-      editorialSignals,
-    };
-  },
+  handler: async (ctx) => await forumAgentContext(ctx, "belle"),
 });
+
+export const readForumAgentContext = internalQuery({
+  args: { agentSlug: v.string() },
+  handler: async (ctx, args) => await forumAgentContext(ctx, args.agentSlug),
+});
+
+async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
+  const agent = await ctx.db
+    .query("forumAgents")
+    .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
+    .unique();
+  if (agent === null) {
+    throw new Error(`${agentSlug} is not configured`);
+  }
+  const user = await ctx.db.get(agent.userId);
+  if (user === null || user.isAgent !== true || user.agentSlug !== agentSlug) {
+    throw new Error(`${agent.name}'s forum identity is not configured`);
+  }
+  const categories = (
+    await ctx.db
+      .query("forumCategories")
+      .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+      .take(CATEGORY_LIST_LIMIT)
+  ).filter(
+    (category) =>
+      isBoardCategory(category) && categoryViewAccess(category) === "public",
+  );
+  const categoryNamesById = new Map(
+    categories.map((category) => [category._id, category.name]),
+  );
+  const recentRuns = await ctx.db
+    .query("forumAgentRuns")
+    .withIndex("by_agentSlug_and_status_and_startedAt", (q) =>
+      q.eq("agentSlug", agentSlug).eq("status", "published"),
+    )
+    .order("desc")
+    .take(20);
+  const recentThreads = await ctx.db
+    .query("forumThreads")
+    .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+    .order("desc")
+    .take(40);
+  const editorialSignals = [
+    ...new Set(categories.map((category) => category.slug)),
+  ]
+    .map((categorySlug) => {
+      const matching = recentThreads.filter(
+        (thread) => thread.categorySlug === categorySlug,
+      );
+      return {
+        categorySlug,
+        recentPosts: matching.length,
+        engagementScore: matching.reduce(
+          (total, thread) => total + thread.viewCount + thread.replyCount * 5,
+          0,
+        ),
+      };
+    })
+    .filter((signal) => signal.recentPosts > 0)
+    .sort(
+      (left, right) =>
+        right.engagementScore - left.engagementScore ||
+        left.recentPosts - right.recentPosts,
+    )
+    .slice(0, 20);
+
+  return {
+    agent: {
+      slug: agent.slug,
+      name: agent.name,
+      persona: agent.persona,
+      model: agent.model,
+      dailyPostTarget: agent.dailyPostTarget,
+      enabled: agent.enabled,
+      userId: agent.userId,
+    },
+    categories: categories.map((category) => ({
+      id: category._id,
+      slug: category.slug,
+      name: category.name,
+      description: category.description,
+      parentCategoryId: category.parentCategoryId,
+      parentName:
+        category.parentCategoryId === undefined
+          ? undefined
+          : categoryNamesById.get(category.parentCategoryId),
+    })),
+    recentBoardSlugs: recentRuns.flatMap((run) =>
+      run.categorySlug === undefined ? [] : [run.categorySlug],
+    ),
+    recentThreadTitles: recentThreads.map((thread) => thread.title),
+    recentThreads: recentThreads.map((thread) => ({
+      id: thread._id,
+      categorySlug: thread.categorySlug,
+      slug: thread.slug,
+      title: thread.title,
+      ownedByAgent: thread.authorId === agent.userId,
+    })),
+    editorialSignals,
+  };
+}
 
 export const readUsedSukiSourceKeys = internalQuery({
   args: {
@@ -9192,7 +9105,7 @@ function compactForumText(value: string, maximumLength: number) {
 
 export const publishSukiForumThread = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     runKey: v.string(),
     categorySlug: v.string(),
     prefixSlug: v.optional(v.string()),
@@ -9234,7 +9147,7 @@ export const publishSukiForumThread = internalMutation({
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
-    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
+    const agentName = forumAgentNameFromSlug(agentSlug);
     const run = await ctx.db
       .query("forumAgentRuns")
       .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
@@ -9529,7 +9442,7 @@ export const publishSukiForumThread = internalMutation({
 
 export const publishForumAgentFollowUp = internalMutation({
   args: {
-    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    agentSlug: v.string(),
     runKey: v.string(),
     threadId: v.id("forumThreads"),
     title: v.string(),
@@ -12529,6 +12442,14 @@ function displayName(
   user: Pick<UserDoc, "username" | "name"> | null | undefined,
 ) {
   return user?.username ?? user?.name ?? UNKNOWN_AUTHOR;
+}
+
+function forumAgentNameFromSlug(agentSlug: string) {
+  return agentSlug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
 }
 
 const UNKNOWN_AUTHOR = "SYM-UNKNOWN";

@@ -76,6 +76,35 @@ describe("dormant forum agent roster", () => {
       {},
     );
     expect(roster).toMatchObject({ requested: 30, configured: 30, enabled: 0 });
+
+    const activated = await t.mutation(
+      internal.forumAgentRoster.configureForumAgentRoster,
+      { postsPerDay: 1 },
+    );
+    expect(activated).toMatchObject({
+      configured: 30,
+      enabled: true,
+      postsPerDay: 1,
+    });
+    const activeRoster = await t.query(
+      internal.forumAgentRoster.readForumAgentRoster,
+      {},
+    );
+    expect(activeRoster.enabled).toBe(30);
+    expect(
+      activeRoster.members.every(
+        (member) =>
+          member.dailyPostTarget === 1 &&
+          member.model === "deepseek/deepseek-v4-flash" &&
+          member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
+      ),
+    ).toBe(true);
+
+    const doubled = await t.mutation(
+      internal.forumAgentRoster.configureForumAgentRoster,
+      { postsPerDay: 2 },
+    );
+    expect(doubled).toMatchObject({ configured: 30, postsPerDay: 2 });
   });
 
   test("does not take a username already owned by another member", async () => {

@@ -886,7 +886,7 @@ describe("forum notification preferences", () => {
 
     const context = await t.query(internal.forum.readSukiForumContext, {});
     expect(context.agent).toMatchObject({
-      dailyPostTarget: 30,
+      dailyPostTarget: 24,
       enabled: true,
       model: "deepseek/deepseek-v4-flash",
       name: "Suki",
@@ -1162,7 +1162,7 @@ describe("forum notification preferences", () => {
     });
   });
 
-  test("Belle infrastructure targets one digest plus fifteen varied daily posts", async () => {
+  test("Belle infrastructure targets one digest plus six varied daily posts", async () => {
     const t = setup();
     const infrastructure = await t.mutation(
       internal.forum.ensureBelleForumInfrastructure,
@@ -1171,7 +1171,7 @@ describe("forum notification preferences", () => {
     const context = await t.query(internal.forum.readBelleForumContext, {});
 
     expect(context.agent).toMatchObject({
-      dailyPostTarget: 16,
+      dailyPostTarget: 7,
       enabled: true,
       model: "deepseek/deepseek-v4-flash",
       name: "Belle",

@@ -9,7 +9,7 @@ const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
 
 export const reserveResearchTopic = internalMutation({
   args: {
-    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    agentSlug: v.string(),
     runKey: v.string(),
     sourceKeys: v.array(v.string()),
     topicFingerprint: v.string(),
@@ -179,14 +179,15 @@ export const releaseResearchReservations = internalMutation({
 
 export const claimRun = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     runDate: v.string(),
     slot: v.number(),
     attempt: v.number(),
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? SUKI_AGENT_SLUG;
-    const maximumSlot = agentSlug === "suki" ? 29 : 15;
+    const maximumSlot =
+      agentSlug === "suki" ? 23 : agentSlug === "belle" ? 6 : 1;
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(args.runDate) ||
       !Number.isInteger(args.slot) ||

@@ -38,34 +38,46 @@ type PublicationResult =
 export const publishForumSlot = workflow
   .define({
     args: {
-      agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+      agentSlug: v.string(),
       slot: v.number(),
       runDate: v.string(),
     },
   })
   .handler(async (step, args): Promise<PublicationResult> => {
-    const action =
-      args.agentSlug === "belle"
-        ? internal.belleForumAgent.runDailySlot
-        : internal.sukiForumAgent.runDailySlot;
+    const runArgs = {
+      slot: args.slot,
+      runDate: args.runDate,
+      workflowManaged: true,
+      workflowId: step.workflowId,
+    };
+    const options = {
+      name: `research-write-publish-${args.agentSlug}-${args.slot}`,
+      retry: { maxAttempts: 3, initialBackoffMs: 60_000, base: 3 },
+    } as const;
+    if (args.agentSlug === "suki") {
+      return await step.runAction(
+        internal.sukiForumAgent.runDailySlot,
+        runArgs,
+        options,
+      );
+    }
+    if (args.agentSlug === "belle") {
+      return await step.runAction(
+        internal.belleForumAgent.runDailySlot,
+        runArgs,
+        options,
+      );
+    }
     return await step.runAction(
-      action,
-      {
-        slot: args.slot,
-        runDate: args.runDate,
-        workflowManaged: true,
-        workflowId: step.workflowId,
-      },
-      {
-        name: `research-write-publish-${args.agentSlug}-${args.slot}`,
-        retry: { maxAttempts: 3, initialBackoffMs: 60_000, base: 3 },
-      },
+      internal.rosterForumAgent.runDailySlot,
+      { ...runArgs, agentSlug: args.agentSlug },
+      options,
     );
   });
 
 export const queuePublication = internalMutation({
   args: {
-    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    agentSlug: v.string(),
     slot: v.number(),
     runDate: v.optional(v.string()),
   },

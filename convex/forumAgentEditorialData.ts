@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 
-const AGENT_SLUG = v.union(v.literal("suki"), v.literal("belle"));
+const AGENT_SLUG = v.string();
 const USAGE_STAGE = v.union(
   v.literal("topic"),
   v.literal("draft"),
@@ -95,7 +95,7 @@ export const readThreadForMemory = internalQuery({
       })),
       authorName: author.name ?? author.username ?? "Forum member",
       agentSlug:
-        author.agentSlug === "suki" || author.agentSlug === "belle"
+        author.isAgent === true && author.agentSlug !== undefined
           ? author.agentSlug
           : "human",
       createdAt: thread.createdAt,
@@ -117,7 +117,7 @@ export const readAgentThreadsForBackfill = internalQuery({
     const rows = await Promise.all(
       page.page.map(async (thread) => {
         const author = await ctx.db.get(thread.authorId);
-        return author?.agentSlug === "suki" || author?.agentSlug === "belle"
+        return author?.isAgent === true && author.agentSlug !== undefined
           ? thread._id
           : null;
       }),
@@ -139,10 +139,7 @@ export const readEditorialOutcomeSnapshot = internalQuery({
       .order("desc")
       .take(180);
     const published = runs.filter(
-      (run) =>
-        run.status === "published" &&
-        run.threadId !== undefined &&
-        (run.agentSlug === "suki" || run.agentSlug === "belle"),
+      (run) => run.status === "published" && run.threadId !== undefined,
     );
     return await Promise.all(
       published.map(async (run) => {
@@ -155,7 +152,7 @@ export const readEditorialOutcomeSnapshot = internalQuery({
         ]);
         if (thread === null) return null;
         return {
-          agentSlug: run.agentSlug as "suki" | "belle",
+          agentSlug: run.agentSlug,
           categorySlug: run.categorySlug ?? thread.categorySlug,
           contentFormat: run.contentFormat ?? "brief",
           promptVersion: run.promptVersion ?? "legacy",

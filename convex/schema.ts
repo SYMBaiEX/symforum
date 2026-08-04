@@ -833,7 +833,7 @@ export default defineSchema({
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   forumAgentUsageEvents: defineTable({
     runKey: v.string(),
-    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    agentSlug: v.string(),
     stage: v.union(
       v.literal("topic"),
       v.literal("draft"),
@@ -852,7 +852,7 @@ export default defineSchema({
     .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
-    agentSlug: v.union(v.literal("suki"), v.literal("belle")),
+    agentSlug: v.string(),
     categorySlug: v.string(),
     contentFormat: v.string(),
     promptVersion: v.string(),

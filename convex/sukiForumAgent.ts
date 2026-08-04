@@ -254,9 +254,9 @@ export type ForumResearchRunResult =
 
 export type ForumResearchAgentConfig = {
   dailySlots: number;
-  name: "Suki" | "Belle";
+  name: string;
   promptVersion: string;
-  slug: "suki" | "belle";
+  slug: string;
   topicInstructions: string;
   writerInstructions: string;
   deskDescription: string;
@@ -275,12 +275,11 @@ export async function runForumResearchSlot(
 ): Promise<ForumResearchRunResult> {
   const attempt = args.attempt ?? 0;
   const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
-  await ctx.runMutation(
-    config.slug === "suki"
-      ? internal.forum.ensureSukiForumInfrastructure
-      : internal.forum.ensureBelleForumInfrastructure,
-    {},
-  );
+  if (config.slug === "suki") {
+    await ctx.runMutation(internal.forum.ensureSukiForumInfrastructure, {});
+  } else if (config.slug === "belle") {
+    await ctx.runMutation(internal.forum.ensureBelleForumInfrastructure, {});
+  }
   const claim = await ctx.runMutation(internal.sukiForumAgentData.claimRun, {
     agentSlug: config.slug,
     runDate,
@@ -315,12 +314,14 @@ export async function runForumResearchSlot(
         "AI_GATEWAY_API_KEY is not configured in Convex.",
       );
     }
-    const context = await ctx.runQuery(
+    const context =
       config.slug === "suki"
-        ? internal.forum.readSukiForumContext
-        : internal.forum.readBelleForumContext,
-      {},
-    );
+        ? await ctx.runQuery(internal.forum.readSukiForumContext, {})
+        : config.slug === "belle"
+          ? await ctx.runQuery(internal.forum.readBelleForumContext, {})
+          : await ctx.runQuery(internal.forum.readForumAgentContext, {
+              agentSlug: config.slug,
+            });
     const editorialStrategies = await ctx.runQuery(
       internal.forumAgentEditorialData.readEditorialStrategies,
       { agentSlug: config.slug },
@@ -773,17 +774,13 @@ export async function runForumResearchSlot(
       attempt < RETRY_DELAYS_MS.length &&
       isRetryableError(error)
     ) {
-      await ctx.scheduler.runAfter(
-        RETRY_DELAYS_MS[attempt],
-        config.slug === "suki"
-          ? internal.sukiForumAgent.runDailySlot
-          : internal.belleForumAgent.runDailySlot,
-        {
-          slot: args.slot,
-          attempt: attempt + 1,
-          runDate,
-        },
-      );
+      await scheduleForumResearchRetry(ctx, {
+        config,
+        delayMs: RETRY_DELAYS_MS[attempt],
+        slot: args.slot,
+        attempt: attempt + 1,
+        runDate,
+      });
     }
     if (args.workflowManaged && isRetryableError(error)) throw error;
     return { status: "failed" as const, error: message };
@@ -1114,16 +1111,48 @@ async function markSkippedAndMaybeRetry(
     candidateCount: args.candidateCount,
   });
   if (!args.workflowManaged && args.attempt < RETRY_DELAYS_MS.length) {
+    await scheduleForumResearchRetry(ctx, {
+      config: args.config,
+      delayMs: RETRY_DELAYS_MS[args.attempt],
+      slot: args.slot,
+      attempt: args.attempt + 1,
+      runDate: args.runDate,
+    });
+  }
+}
+
+async function scheduleForumResearchRetry(
+  ctx: ActionCtx,
+  args: {
+    config: ForumResearchAgentConfig;
+    delayMs: number;
+    slot: number;
+    attempt: number;
+    runDate: string;
+  },
+) {
+  const retryArgs = {
+    slot: args.slot,
+    attempt: args.attempt,
+    runDate: args.runDate,
+  };
+  if (args.config.slug === "suki") {
     await ctx.scheduler.runAfter(
-      RETRY_DELAYS_MS[args.attempt],
-      args.config.slug === "suki"
-        ? internal.sukiForumAgent.runDailySlot
-        : internal.belleForumAgent.runDailySlot,
-      {
-        slot: args.slot,
-        attempt: args.attempt + 1,
-        runDate: args.runDate,
-      },
+      args.delayMs,
+      internal.sukiForumAgent.runDailySlot,
+      retryArgs,
+    );
+  } else if (args.config.slug === "belle") {
+    await ctx.scheduler.runAfter(
+      args.delayMs,
+      internal.belleForumAgent.runDailySlot,
+      retryArgs,
+    );
+  } else {
+    await ctx.scheduler.runAfter(
+      args.delayMs,
+      internal.rosterForumAgent.runDailySlot,
+      { ...retryArgs, agentSlug: args.config.slug },
     );
   }
 }
@@ -1281,7 +1310,7 @@ Safety:
 Return only the requested structured draft.`;
 
 const SUKI_RESEARCH_CONFIG: ForumResearchAgentConfig = {
-  dailySlots: 30,
+  dailySlots: 24,
   name: "Suki",
   promptVersion: PROMPT_VERSION,
   slug: "suki",

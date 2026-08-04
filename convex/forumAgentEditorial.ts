@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
 type EditorialOutcome = {
-  agentSlug: "suki" | "belle";
+  agentSlug: string;
   categorySlug: string;
   contentFormat: string;
   promptVersion: string;

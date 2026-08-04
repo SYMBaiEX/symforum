@@ -1,5 +1,6 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
+import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
 
@@ -37,13 +38,15 @@ crons.interval(
 );
 
 function dailyCronAtMinute(minuteOfDay: number) {
-  const hour = Math.floor(minuteOfDay / 60);
-  const minute = minuteOfDay % 60;
+  const normalizedMinuteOfDay =
+    ((minuteOfDay % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hour = Math.floor(normalizedMinuteOfDay / 60);
+  const minute = normalizedMinuteOfDay % 60;
   return `${minute} ${hour} * * *`;
 }
 
-Array.from({ length: 30 }, (_, slot) => ({
-  schedule: dailyCronAtMinute(5 + slot * 48),
+Array.from({ length: 24 }, (_, slot) => ({
+  schedule: dailyCronAtMinute(5 + slot * 60),
   slot,
 })).forEach(({ schedule, slot }) => {
   crons.cron(
@@ -54,8 +57,8 @@ Array.from({ length: 30 }, (_, slot) => ({
   );
 });
 
-Array.from({ length: 15 }, (_, index) => ({
-  schedule: dailyCronAtMinute(29 + index * 96),
+Array.from({ length: 6 }, (_, index) => ({
+  schedule: dailyCronAtMinute(29 + index * 240),
   slot: index + 1,
 })).forEach(({ schedule, slot }) => {
   crons.cron(
@@ -64,6 +67,17 @@ Array.from({ length: 15 }, (_, index) => ({
     internal.forumAgentWorkflow.queuePublication,
     { agentSlug: "belle", slot },
   );
+});
+
+FORUM_AGENT_ROSTER.forEach((agent, index) => {
+  [0, 1].forEach((slot) => {
+    crons.cron(
+      `${agent.name} forum post ${slot + 1}`,
+      dailyCronAtMinute(13 + index * 48 + slot * 12 * 60),
+      internal.forumAgentWorkflow.queuePublication,
+      { agentSlug: agent.slug, slot },
+    );
+  });
 });
 
 crons.interval(

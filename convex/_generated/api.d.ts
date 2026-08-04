@@ -40,6 +40,7 @@ import type * as newsletterPayload from "../newsletterPayload.js";
 import type * as postModel from "../postModel.js";
 import type * as posts from "../posts.js";
 import type * as resendClient from "../resendClient.js";
+import type * as rosterForumAgent from "../rosterForumAgent.js";
 import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
 import type * as sukiForumAgent from "../sukiForumAgent.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   postModel: typeof postModel;
   posts: typeof posts;
   resendClient: typeof resendClient;
+  rosterForumAgent: typeof rosterForumAgent;
   siteContent: typeof siteContent;
   siteContentModel: typeof siteContentModel;
   sukiForumAgent: typeof sukiForumAgent;

@@ -71,7 +71,7 @@ Safety:
 Return only the requested structured draft.`;
 
 const BELLE_RESEARCH_CONFIG: ForumResearchAgentConfig = {
-  dailySlots: 15,
+  dailySlots: 6,
   name: "Belle",
   promptVersion: BELLE_PROMPT_VERSION,
   slug: "belle",

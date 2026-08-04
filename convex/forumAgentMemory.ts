@@ -25,11 +25,11 @@ type MemoryMetadata = {
   createdAt: number;
 };
 
-function platform(apiKey: string, agentSlug: "suki" | "belle") {
+function platform(apiKey: string, agentSlug: string) {
   const gateway = createGateway({ apiKey });
   const embeddingModel = gateway.embeddingModel(EMBEDDING_MODEL);
   const agent = new Agent(components.agent, {
-    name: agentSlug === "belle" ? "Belle" : "Suki",
+    name: forumAgentName(agentSlug),
     languageModel: gateway(FORUM_AGENT_MODEL as GatewayModelId),
     embeddingModel,
     contextOptions: {
@@ -62,7 +62,7 @@ function requireApiKey() {
 export async function startEditorialMemory(
   ctx: ActionCtx,
   args: {
-    agentSlug: "suki" | "belle";
+    agentSlug: string;
     runKey: string;
     promptVersion: string;
     slot: number;
@@ -100,7 +100,7 @@ export async function startEditorialMemory(
 export async function finishEditorialMemory(
   ctx: ActionCtx,
   args: {
-    agentSlug: "suki" | "belle";
+    agentSlug: string;
     threadId: string;
     result: Record<string, unknown>;
   },
@@ -122,7 +122,7 @@ export async function finishEditorialMemory(
 export async function searchEditorialMemory(
   ctx: ActionCtx,
   args: {
-    agentSlug: "suki" | "belle";
+    agentSlug: string;
     query: string;
     categorySlug?: string;
     runKey: string;
@@ -174,7 +174,7 @@ async function indexThread(ctx: ActionCtx, threadId: Id<"forumThreads">) {
     { threadId },
   );
   if (source === null) return { status: "skipped" as const };
-  const agentSlug = source.agentSlug === "belle" ? "belle" : "suki";
+  const agentSlug = source.agentSlug === "human" ? "suki" : source.agentSlug;
   const startedAt = Date.now();
   const { rag } = platform(requireApiKey(), agentSlug);
   const text = [
@@ -248,3 +248,11 @@ export const backfillForumMemory = internalAction({
     return { indexed: page.threadIds.length, done: page.isDone };
   },
 });
+
+function forumAgentName(agentSlug: string) {
+  return agentSlug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
+}
