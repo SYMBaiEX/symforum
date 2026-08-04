@@ -24,6 +24,7 @@ import type * as forum from "../forum.js";
 import type * as forumAgentEditorial from "../forumAgentEditorial.js";
 import type * as forumAgentEditorialData from "../forumAgentEditorialData.js";
 import type * as forumAgentMemory from "../forumAgentMemory.js";
+import type * as forumAgentRoster from "../forumAgentRoster.js";
 import type * as forumAgentWorkflow from "../forumAgentWorkflow.js";
 import type * as forumLimits from "../forumLimits.js";
 import type * as forumNotificationEmails from "../forumNotificationEmails.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   forumAgentEditorial: typeof forumAgentEditorial;
   forumAgentEditorialData: typeof forumAgentEditorialData;
   forumAgentMemory: typeof forumAgentMemory;
+  forumAgentRoster: typeof forumAgentRoster;
   forumAgentWorkflow: typeof forumAgentWorkflow;
   forumLimits: typeof forumLimits;
   forumNotificationEmails: typeof forumNotificationEmails;
