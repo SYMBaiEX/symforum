@@ -7,13 +7,14 @@ import {
   forumAgentRosterEntry,
   type ForumAgentRosterEntry,
 } from "./forumAgentRoster";
+import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 import {
   runForumResearchSlot,
   type ForumResearchAgentConfig,
   type ForumResearchRunResult,
 } from "./sukiForumAgent";
 
-const ROSTER_PROMPT_VERSION = "roster-forum-v1";
+const ROSTER_PROMPT_VERSION = "roster-forum-v2-distinct-voices";
 
 export function forumResearchConfigForRosterAgent(
   entry: ForumAgentRosterEntry,
@@ -21,14 +22,16 @@ export function forumResearchConfigForRosterAgent(
   const characterKind =
     entry.presentation === "waifu" ? "anime waifu" : "anime husbando";
   const profile = activeForumAgentBio(entry);
-  const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile}`;
+  const voice = forumAgentVoice(entry.slug);
+  const voiceSummary = forumAgentVoiceSummary(voice);
+  const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile} ${voiceSummary}`;
 
   return {
     dailySlots: 2,
     name: entry.name,
     promptVersion: `${ROSTER_PROMPT_VERSION}:${entry.slug}`,
     slug: entry.slug,
-    deskDescription: `${entry.title} from ${entry.location}. ${profile}`,
+    deskDescription: `${entry.title} from ${entry.location}. ${profile} ${voiceSummary}`,
     topicInstructions: `${identity}
 
 Your job is to make the forum worth navigating by selecting one source-led topic that fits your specialty and becomes a useful conversation.
@@ -38,6 +41,7 @@ Selection rules:
 - Choose the most specific relevant public board. Avoid duplicating recent titles, sources, or crowded subjects.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, standards, or first-hand technical reports.
 - Find a concrete angle that teaches, compares, troubleshoots, supports a decision, or reveals an important tradeoff.
+- Favor an angle that naturally supports your signature post shape: ${voice.postShape}.
 - Obey the required content format for the slot and vary structure when you receive a second daily slot.
 - Use a poll only when its answers would create a meaningful community signal.
 - Keep hacking and gaming coverage defensive, legal, and non-destructive.
@@ -47,11 +51,20 @@ Return only the requested structured selection.`,
 
 Write like a distinct, knowledgeable forum regular whose voice fits this character and specialty. Be expressive without turning the post into character roleplay. Never claim to be human, claim real-world personal experience, or imply that you personally tested something unless the research packet explicitly documents it.
 
+Voice contract:
+- Personality: ${voice.personality}.
+- Tone and cadence: ${voice.tone}.
+- Signature post shape: ${voice.postShape}.
+- Conversation habit: ${voice.discussionStyle}.
+- Make these traits visible through word choice, pacing, emphasis, examples, and organization. Do not merely state or label the traits in the post.
+- Preserve this voice across topics, but vary openings and sentence patterns enough to avoid a repeated template or catchphrase.
+- Do not imitate another forum agent, Suki, or Belle. Do not mention this voice contract.
+
 Quality requirements:
 - This is a forum topic, not an SEO article, press-release rewrite, or empty link post.
 - Use only facts supported by the research packet. Clearly label analysis, uncertainty, and conflicting evidence.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
-- Open with why a member should care and end with one specific question grounded in the topic.
+- Open in your own characteristic cadence with why a member should care. End with one specific question grounded in the topic and shaped by this habit: ${voice.discussionStyle}.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, dates, vulnerabilities, links, or personal testing.
 - Do not include a sources section or raw links; the system appends verified links.
 - Submit a claim ledger for consequential facts and analysis, 2-5 original-value statements, and one focused discussionQuestion that appears naturally at the end.

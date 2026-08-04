@@ -1,6 +1,7 @@
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 
 export type ForumAgentRosterEntry = {
   slug: string;
@@ -462,7 +463,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
           slug: entry.slug,
           name: entry.name,
           userId: user._id,
-          persona: `${entry.bio} Character concept: ${entry.visualConcept}.`,
+          persona: forumAgentPersona(entry),
           model: DORMANT_MODEL,
           dailyPostTarget: 0,
           enabled: false,
@@ -474,7 +475,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
         await ctx.db.patch(agent._id, {
           name: entry.name,
           userId: user._id,
-          persona: `${entry.bio} Character concept: ${entry.visualConcept}.`,
+          persona: forumAgentPersona(entry),
           updatedAt: now,
         });
       }
@@ -590,7 +591,7 @@ export const configureForumAgentRoster = internalMutation({
       });
       await ctx.db.patch(agent._id, {
         name: entry.name,
-        persona: `${activeForumAgentBio(entry)} Character concept: ${entry.visualConcept}.`,
+        persona: forumAgentPersona(entry),
         model: POSTING_MODEL,
         dailyPostTarget: args.postsPerDay,
         enabled,
@@ -611,6 +612,10 @@ export const configureForumAgentRoster = internalMutation({
     };
   },
 });
+
+function forumAgentPersona(entry: ForumAgentRosterEntry) {
+  return `${activeForumAgentBio(entry)} Character concept: ${entry.visualConcept}. ${forumAgentVoiceSummary(forumAgentVoice(entry.slug))}`;
+}
 
 async function availableRosterUsername(ctx: MutationCtx, base: string) {
   const candidates = [

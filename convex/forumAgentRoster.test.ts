@@ -59,6 +59,15 @@ describe("dormant forum agent roster", () => {
     expect(stored.agents.every((agent) => agent.dailyPostTarget === 0)).toBe(
       true,
     );
+    expect(new Set(stored.agents.map((agent) => agent.persona)).size).toBe(30);
+    expect(
+      stored.agents.every(
+        (agent) =>
+          agent.persona.includes("Personality:") &&
+          agent.persona.includes("Signature structure:") &&
+          agent.persona.includes("Conversation habit:"),
+      ),
+    ).toBe(true);
 
     const second = await t.mutation(
       internal.forumAgentRoster.ensureDormantForumAgentRoster,
