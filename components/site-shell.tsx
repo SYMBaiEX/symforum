@@ -12,7 +12,7 @@ import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { RouteImagePreloader } from "@/components/route-image-preloader";
 import { Button } from "@/components/ui/button";
-import { Github, Newspaper, Twitter } from "lucide-react";
+import { Github, Linkedin, Twitter } from "lucide-react";
 import Link from "next/link";
 import {
   CSSProperties,
@@ -30,6 +30,11 @@ const socialItems = [
     href: "https://github.com/symbaiex",
     label: "GitHub",
     Icon: Github,
+  },
+  {
+    href: "https://linkedin.com/in/austinhamiltonal",
+    label: "LinkedIn",
+    Icon: Linkedin,
   },
   {
     href: "https://twitter.com/symbiex",
@@ -216,19 +221,6 @@ function SiteFooter({
           <NewsletterSignup source="footer" variant="footer" />
         </div>
         <div className="flex shrink-0 items-center justify-end">
-          <Button
-            asChild
-            className="h-9 w-9 px-0 font-mono uppercase text-muted-foreground sm:w-auto sm:px-2.5"
-            size="sm"
-            variant="ghost"
-          >
-            <Link href="/newsletter" aria-label="Newsletter archive">
-              <Newspaper data-icon="inline-start" />
-              <span aria-hidden="true" className="hidden sm:inline">
-                Archive
-              </span>
-            </Link>
-          </Button>
           {socialItems.map(({ href, label, Icon }) => (
             <Button
               key={href}

@@ -1222,6 +1222,7 @@ export type DailyNewsletterRunRecord = {
   mode: "cron" | "manual" | "test";
   sendEnabled: boolean;
   startedAt: number;
+  attemptCount?: number;
   completedAt?: number;
   sentAt?: number;
   issueId?: string;

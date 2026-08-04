@@ -940,6 +940,10 @@ function DailyAutomationPanel({
             <ControlFact label="Status" value={latestRun.status} />
             <ControlFact label="Mode" value={latestRun.mode} />
             <ControlFact
+              label="Attempts"
+              value={`${latestRun.attemptCount ?? 1} total / 3 automatic max`}
+            />
+            <ControlFact
               label="Stories"
               value={`${latestRun.topStoryIds.length}/${latestRun.storyCount}`}
             />

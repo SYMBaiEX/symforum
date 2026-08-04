@@ -22,7 +22,10 @@ import {
   type ResearchCandidate,
 } from "./sukiForumAgent";
 
-const NEWSLETTER_MODEL = "deepseek/deepseek-v4-flash";
+const NEWSLETTER_MODELS = [
+  "deepseek/deepseek-v4-flash",
+  "openai/gpt-5.4-mini",
+] as const satisfies readonly GatewayModelId[];
 const PROMPT_VERSION = "belle-newsletter-v2";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
@@ -207,54 +210,27 @@ async function generateEditorialPackage(
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
   const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
   const gateway = createGateway({ apiKey });
-  const providerOptions = {
-    gateway: {
-      caching: "auto",
-      user: "belle",
-      tags: [
-        "agent:belle",
-        `feature:${args.edition}`,
-        `snapshot:${args.snapshotDate}`,
-        `prompt:${PROMPT_VERSION}`,
-      ],
-    } satisfies GatewayProviderOptions,
-  };
+  const gatewayTags = [
+    "agent:belle",
+    `feature:${args.edition}`,
+    `snapshot:${args.snapshotDate}`,
+    `prompt:${PROMPT_VERSION}`,
+  ];
   const schema =
     args.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
   const toolName =
     args.edition === "daily-signal"
       ? "submitDailySignal"
       : "submitWeeklyFieldNote";
-  const writer = new ToolLoopAgent({
-    id: `belle-${args.edition}`,
-    model: gateway(NEWSLETTER_MODEL as GatewayModelId),
-    tools: {
-      [toolName]: tool({
-        description: `Submit Belle's complete ${args.edition} editorial package.`,
-        inputSchema: schema,
-      }),
-    },
-    toolChoice: { type: "tool", toolName },
-    providerOptions,
-    reasoning: "none",
-    temperature: args.edition === "daily-signal" ? 0.35 : 0.45,
-    maxOutputTokens: args.edition === "daily-signal" ? 7_500 : 12_000,
-    instructions: EDITORIAL_INSTRUCTIONS,
-  });
-  const result = await writer.generate({
+  const generation = await generateDraftWithFallback({
+    edition: args.edition,
+    gateway,
+    gatewayTags,
     prompt: editorialPrompt(args, snapshots, recent),
-    abortSignal: AbortSignal.timeout(
-      args.edition === "daily-signal" ? 180_000 : 240_000,
-    ),
+    schema,
+    toolName,
   });
-  const call = result.staticToolCalls[0];
-  if (call?.toolName !== toolName) {
-    throw new Error(
-      `Belle did not submit structured ${args.edition} copy (${result.finishReason}).`,
-    );
-  }
-
-  const draft = schema.parse(call.input);
+  const draft = generation.draft;
   const storiesById = new Map(
     args.stories.map((story) => [story.hnItemId, story]),
   );
@@ -394,9 +370,85 @@ async function generateEditorialPackage(
     payload,
     storyCount: args.stories.length,
     topStoryIds: selectedIds,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
+    inputTokens: generation.usage.inputTokens,
+    outputTokens: generation.usage.outputTokens,
   };
+}
+
+async function generateDraftWithFallback({
+  edition,
+  gateway,
+  gatewayTags,
+  prompt,
+  schema,
+  toolName,
+}: {
+  edition: "daily-signal" | "weekly-field-note";
+  gateway: ReturnType<typeof createGateway>;
+  gatewayTags: string[];
+  prompt: string;
+  schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
+  toolName: "submitDailySignal" | "submitWeeklyFieldNote";
+}) {
+  const failures: string[] = [];
+
+  for (const modelId of NEWSLETTER_MODELS) {
+    try {
+      const writer = new ToolLoopAgent({
+        id: `belle-${edition}-${modelId.replaceAll("/", "-")}`,
+        model: gateway(modelId),
+        tools: {
+          [toolName]: tool({
+            description: `Submit Belle's complete ${edition} editorial package.`,
+            inputSchema: schema,
+          }),
+        },
+        toolChoice: { type: "tool", toolName },
+        providerOptions: {
+          gateway: {
+            caching: "auto",
+            user: "belle",
+            tags: gatewayTags,
+          } satisfies GatewayProviderOptions,
+        },
+        reasoning: "none",
+        temperature: edition === "daily-signal" ? 0.35 : 0.45,
+        maxOutputTokens: edition === "daily-signal" ? 12_000 : 24_000,
+        instructions: EDITORIAL_INSTRUCTIONS,
+      });
+      const result = await writer.generate({
+        prompt,
+        abortSignal: AbortSignal.timeout(
+          edition === "daily-signal" ? 120_000 : 180_000,
+        ),
+      });
+      const call = result.staticToolCalls[0];
+      if (call?.toolName !== toolName) {
+        throw new Error(`missing tool submission (${result.finishReason})`);
+      }
+
+      return {
+        draft: schema.parse(call.input),
+        usage: result.usage,
+      };
+    } catch (error) {
+      const failure = `${modelId}: ${generationErrorMessage(error)}`;
+      failures.push(failure);
+      console.warn("Belle newsletter generation attempt failed", {
+        edition,
+        failure,
+      });
+    }
+  }
+
+  throw new Error(
+    `Belle could not submit structured ${edition} copy after ${NEWSLETTER_MODELS.length} model attempts: ${failures.join(" | ")}`,
+  );
+}
+
+function generationErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return compact(message, 300);
 }
 
 function editorialPrompt(

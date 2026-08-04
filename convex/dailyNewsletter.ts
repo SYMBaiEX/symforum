@@ -37,18 +37,22 @@ type EditorialGenerationResult = {
   outputTokens?: number;
 };
 
+type IndexedNewsSnapshot = {
+  snapshot: Doc<"newsSnapshots"> | null;
+  stories: Doc<"hnStories">[];
+};
+
 const DEFAULT_TIME_ZONE = "America/Chicago";
 const DEFAULT_SEND_TIME_LOCAL = "07:15";
 const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
+const MAX_AUTOMATED_DAILY_ATTEMPTS = 3;
+const AUTOMATED_RETRY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 const readIndexedSnapshotRef = makeFunctionReference<
   "query",
   { snapshotDate?: string; limit?: number },
-  {
-    snapshot: Doc<"newsSnapshots"> | null;
-    stories: Doc<"hnStories">[];
-  }
+  IndexedNewsSnapshot
 >("news:readIndexedSnapshot");
 
 const getSettingRef = makeFunctionReference<
@@ -361,14 +365,30 @@ export const runDailyNewsletter = internalAction({
     }
 
     try {
-      const refreshed: { snapshotDate: string; storyCount: number } =
-        await ctx.runAction(internal.news.refreshTopStories, {
+      let indexed: IndexedNewsSnapshot | null = null;
+      const currentRunDate = dateInTimeZone(startedAt, config.timeZone);
+
+      if (runDate !== currentRunDate) {
+        indexed = await ctx.runQuery(readIndexedSnapshotRef, {
+          snapshotDate: runDate,
           limit: config.maxIndexedArticles,
         });
-      const indexed = await ctx.runQuery(readIndexedSnapshotRef, {
-        snapshotDate: refreshed.snapshotDate,
-        limit: config.maxIndexedArticles,
-      });
+      }
+
+      if (
+        indexed === null ||
+        indexed.snapshot === null ||
+        indexed.stories.length === 0
+      ) {
+        const refreshed: { snapshotDate: string; storyCount: number } =
+          await ctx.runAction(internal.news.refreshTopStories, {
+            limit: config.maxIndexedArticles,
+          });
+        indexed = await ctx.runQuery(readIndexedSnapshotRef, {
+          snapshotDate: refreshed.snapshotDate,
+          limit: config.maxIndexedArticles,
+        });
+      }
 
       if (indexed.snapshot === null || indexed.stories.length === 0) {
         throw new Error("No indexed Hacker News stories were available");
@@ -627,6 +647,7 @@ export const startDailyRun = internalMutation({
     const recentRunning =
       existing?.status === "running" &&
       args.startedAt - existing.startedAt < 30 * 60 * 1000;
+    const attemptCount = existing?.attemptCount ?? 1;
 
     if (existing && !args.force) {
       if (existing.status === "sent") {
@@ -661,6 +682,29 @@ export const startDailyRun = internalMutation({
           reason: "Daily newsletter run already in progress",
         };
       }
+      if (
+        existing.status === "failed" &&
+        attemptCount >= MAX_AUTOMATED_DAILY_ATTEMPTS
+      ) {
+        return {
+          ok: true,
+          runId: existing._id,
+          skipped: true,
+          reason: `Daily newsletter reached its ${MAX_AUTOMATED_DAILY_ATTEMPTS}-attempt retry limit`,
+        };
+      }
+      if (
+        existing.status === "failed" &&
+        args.startedAt - (existing.completedAt ?? existing.updatedAt) <
+          AUTOMATED_RETRY_COOLDOWN_MS
+      ) {
+        return {
+          ok: true,
+          runId: existing._id,
+          skipped: true,
+          reason: "Daily newsletter retry is cooling down",
+        };
+      }
     }
 
     if (existing) {
@@ -678,6 +722,7 @@ export const startDailyRun = internalMutation({
         qualityScore: undefined,
         inputTokens: undefined,
         outputTokens: undefined,
+        attemptCount: attemptCount + 1,
         updatedAt: args.startedAt,
       });
       return { ok: true, runId: existing._id, skipped: false };
@@ -689,6 +734,7 @@ export const startDailyRun = internalMutation({
       mode: args.mode,
       sendEnabled: args.sendEnabled,
       startedAt: args.startedAt,
+      attemptCount: 1,
       storyCount: 0,
       topStoryIds: [],
       updatedAt: args.startedAt,

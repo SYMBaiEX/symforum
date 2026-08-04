@@ -352,6 +352,7 @@ export default defineSchema({
     mode: v.union(v.literal("cron"), v.literal("manual"), v.literal("test")),
     sendEnabled: v.boolean(),
     startedAt: v.number(),
+    attemptCount: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     issueId: v.optional(v.id("newsletterIssues")),
