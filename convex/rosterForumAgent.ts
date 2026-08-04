@@ -7,6 +7,10 @@ import {
   forumAgentRosterEntry,
   type ForumAgentRosterEntry,
 } from "./forumAgentRoster";
+import {
+  forumAgentStyleVariation,
+  forumAgentStyleVariationSummary,
+} from "./forumAgentStyleEntropy";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 import {
   runForumResearchSlot,
@@ -14,27 +18,42 @@ import {
   type ForumResearchRunResult,
 } from "./sukiForumAgent";
 
-const ROSTER_PROMPT_VERSION = "roster-forum-v2-distinct-voices";
+const ROSTER_PROMPT_VERSION = "roster-forum-v3-seeded-style-entropy";
+
+type ForumAgentStyleSeed = {
+  runDate: string;
+  slot: number;
+};
 
 export function forumResearchConfigForRosterAgent(
   entry: ForumAgentRosterEntry,
+  styleSeed: ForumAgentStyleSeed = { runDate: "baseline", slot: 0 },
 ): ForumResearchAgentConfig {
   const characterKind =
     entry.presentation === "waifu" ? "anime waifu" : "anime husbando";
   const profile = activeForumAgentBio(entry);
   const voice = forumAgentVoice(entry.slug);
   const voiceSummary = forumAgentVoiceSummary(voice);
+  const variation = forumAgentStyleVariation(
+    entry.slug,
+    styleSeed.runDate,
+    styleSeed.slot,
+  );
+  const variationSummary = forumAgentStyleVariationSummary(variation);
   const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile} ${voiceSummary}`;
 
   return {
     dailySlots: 2,
     name: entry.name,
-    promptVersion: `${ROSTER_PROMPT_VERSION}:${entry.slug}`,
+    promptVersion: `${ROSTER_PROMPT_VERSION}:${entry.slug}:${variation.key}`,
     slug: entry.slug,
     deskDescription: `${entry.title} from ${entry.location}. ${profile} ${voiceSummary}`,
     topicInstructions: `${identity}
 
 Your job is to make the forum worth navigating by selecting one source-led topic that fits your specialty and becomes a useful conversation.
+
+This run's controlled style variation is: ${variationSummary}
+Use the rhetorical posture and evidence emphasis to influence topic selection when the sources support them. They add entropy to your stable personality; they never override source quality or your specialty.
 
 Selection rules:
 - Stay recognizably within your specialty while allowing adjacent topics when your perspective adds real value.
@@ -59,6 +78,14 @@ Voice contract:
 - Make these traits visible through word choice, pacing, emphasis, examples, and organization. Do not merely state or label the traits in the post.
 - Preserve this voice across topics, but vary openings and sentence patterns enough to avoid a repeated template or catchphrase.
 - Do not imitate another forum agent, Suki, or Belle. Do not mention this voice contract.
+
+This run's controlled variation:
+- Opening move: ${variation.openingMove}.
+- Rhetorical posture: ${variation.rhetoricalPosture}.
+- Cadence shift: ${variation.cadence}.
+- Evidence emphasis: ${variation.evidenceEmphasis}.
+- Interaction energy: ${variation.interactionEnergy}.
+- Treat these as modulation, not a replacement personality. Apply them only where the research packet supports them, never announce them, and never invent evidence to satisfy them.
 
 Quality requirements:
 - This is a forum topic, not an SEO article, press-release rewrite, or empty link post.
@@ -103,16 +130,31 @@ export const runDailySlot = internalAction({
     ) {
       throw new Error("Invalid roster forum agent slot");
     }
+    const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
     return await runForumResearchSlot(
       ctx,
       {
         slot: args.slot,
         attempt: args.attempt,
-        runDate: args.runDate,
+        runDate,
         workflowManaged: args.workflowManaged,
         workflowId: args.workflowId,
       },
-      forumResearchConfigForRosterAgent(entry),
+      forumResearchConfigForRosterAgent(entry, {
+        runDate,
+        slot: args.slot,
+      }),
     );
   },
 });
+
+function forumDateForTimestamp(timestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
+}
