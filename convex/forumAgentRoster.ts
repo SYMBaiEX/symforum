@@ -367,7 +367,7 @@ function forumAgentSignature(entry: ForumAgentRosterEntry) {
 }
 
 const DORMANT_MODEL = "unassigned";
-const POSTING_MODEL = "deepseek/deepseek-v4-flash";
+const POSTING_MODEL = "deepseek/deepseek-v4-flash-0731";
 
 export const ensureDormantForumAgentRoster = internalMutation({
   args: {},

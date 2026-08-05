@@ -8201,7 +8201,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       userId: user._id,
       persona:
         "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
-      model: "deepseek/deepseek-v4-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       dailyPostTarget: 24,
       updatedAt: now,
     };
@@ -8308,7 +8308,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       userId: user._id,
       persona:
         "A bright, discerning adult neko news correspondent who connects original reporting into clear, opinionated, humane forum conversations.",
-      model: "deepseek/deepseek-v4-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       dailyPostTarget: 7,
       updatedAt: now,
     };

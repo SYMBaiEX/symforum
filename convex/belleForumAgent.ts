@@ -22,7 +22,7 @@ import {
   type ResearchCandidate,
 } from "./sukiForumAgent";
 
-const BELLE_MODEL = "deepseek/deepseek-v4-flash";
+const BELLE_MODEL = "deepseek/deepseek-v4-flash-0731";
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
 const BELLE_PROMPT_VERSION = "belle-forum-v3";

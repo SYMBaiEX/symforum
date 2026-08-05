@@ -888,7 +888,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 24,
       enabled: true,
-      model: "deepseek/deepseek-v4-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       name: "Suki",
       slug: "suki",
     });
@@ -1173,7 +1173,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 7,
       enabled: true,
-      model: "deepseek/deepseek-v4-flash",
+      model: "deepseek/deepseek-v4-flash-0731",
       name: "Belle",
       slug: "belle",
     });

@@ -104,7 +104,7 @@ describe("dormant forum agent roster", () => {
       activeRoster.members.every(
         (member) =>
           member.dailyPostTarget === 1 &&
-          member.model === "deepseek/deepseek-v4-flash" &&
+          member.model === "deepseek/deepseek-v4-flash-0731" &&
           member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
       ),
     ).toBe(true);

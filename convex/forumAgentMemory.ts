@@ -8,7 +8,7 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 
-const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash";
+const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash-0731";
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const MEMORY_NAMESPACE = "forum-editorial-v1";
 

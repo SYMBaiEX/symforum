@@ -22,7 +22,7 @@ import {
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
 
-const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash";
+const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash-0731";
 const FORUM_TIME_ZONE = "America/Chicago";
 const RESEARCH_CACHE_TTL_MS = 90 * 60 * 1_000;
 const MEDIA_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1_000;

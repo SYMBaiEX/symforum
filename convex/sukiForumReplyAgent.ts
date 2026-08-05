@@ -10,7 +10,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 
-const SUKI_MODEL = "deepseek/deepseek-v4-flash";
+const SUKI_MODEL = "deepseek/deepseek-v4-flash-0731";
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = "forum-replies-v2";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;

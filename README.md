@@ -128,7 +128,7 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
 - Set `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` separately in the
   development and production Convex deployments.
 - Set `AI_GATEWAY_API_KEY` in Convex before enabling the forum and newsletter
-  agents. They use `deepseek/deepseek-v4-flash`; research feeds and source
+  agents. They use `deepseek/deepseek-v4-flash-0731`; research feeds and source
   images are cached in Convex, and every published topic records its run and
   source URLs.
 - Keep `npx convex dev` running locally while editing Convex functions.

@@ -23,7 +23,7 @@ import {
 } from "./sukiForumAgent";
 
 const NEWSLETTER_MODELS = [
-  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-v4-flash-0731",
   "openai/gpt-5.4-mini",
 ] as const satisfies readonly GatewayModelId[];
 const PROMPT_VERSION = "belle-newsletter-v2";
