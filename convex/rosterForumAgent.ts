@@ -18,7 +18,8 @@ import {
   type ForumResearchRunResult,
 } from "./sukiForumAgent";
 
-const ROSTER_PROMPT_VERSION = "roster-forum-v3-seeded-style-entropy";
+const ROSTER_PROMPT_VERSION =
+  "roster-forum-v4-muse-editorial-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;

@@ -8,6 +8,10 @@ import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { MUSE_AGENT_MODEL } from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  modelGenerationSettings,
+  modelInstructions,
+} from "../lib/muse-model-profile";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
@@ -24,7 +28,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 const BELLE_MODEL = MUSE_AGENT_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v3";
+const BELLE_PROMPT_VERSION = "belle-forum-v4-muse-editorial";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -210,10 +214,13 @@ export const runDailyHackerNewsDigest = internalAction({
               },
               toolChoice: { type: "tool", toolName: "submitDigest" },
               providerOptions: candidate.providerOptions,
-              reasoning: "none",
-              temperature: 0.45,
+              ...modelGenerationSettings(candidate.provider, "digest"),
               maxOutputTokens: 7_000,
-              instructions: BELLE_DIGEST_INSTRUCTIONS,
+              instructions: modelInstructions(
+                candidate.provider,
+                "digest",
+                BELLE_DIGEST_INSTRUCTIONS,
+              ),
             });
             const result = await writer.generate({
               prompt: digestPrompt(runDate, indexed.stories, snapshots),

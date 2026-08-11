@@ -6,10 +6,14 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  modelGenerationSettings,
+  modelInstructions,
+} from "../lib/muse-model-profile";
 import { convexModelRoutingConfig } from "./modelRouting";
 
 const FORUM_TIME_ZONE = "America/Chicago";
-const PROMPT_VERSION = "forum-replies-v2";
+const PROMPT_VERSION = "forum-replies-v3-muse";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 
 type SukiReplyDecision =
@@ -93,8 +97,10 @@ async function runReplySweepForAgent(
   try {
     const routingConfig = convexModelRoutingConfig();
     if (
-      !(routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim())
-      && !routingConfig.gatewayApiKey?.trim()
+      !(
+        routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
+      ) &&
+      !routingConfig.gatewayApiKey?.trim()
     ) {
       throw new SukiReplyConfigurationError(
         "Neither Muse API access nor AI_GATEWAY_API_KEY is configured.",
@@ -117,19 +123,23 @@ async function runReplySweepForAgent(
       {
         stage: `${agentSlug}:forum-reply`,
         totalTimeoutMs: 120_000,
-        run: async (candidate, signal) => await generateText({
-          model: candidate.model,
-          instructions:
-            agentSlug === "belle"
-              ? BELLE_REPLY_INSTRUCTIONS
-              : SUKI_REPLY_INSTRUCTIONS,
-          prompt: sukiReplyPrompt(claim.candidate, agentName),
-          maxOutputTokens: 1_400,
-          maxRetries: 1,
-          temperature: 0.3,
-          providerOptions: candidate.providerOptions,
-          abortSignal: signal,
-        }),
+        run: async (candidate, signal) =>
+          await generateText({
+            model: candidate.model,
+            instructions: modelInstructions(
+              candidate.provider,
+              "reply",
+              agentSlug === "belle"
+                ? BELLE_REPLY_INSTRUCTIONS
+                : SUKI_REPLY_INSTRUCTIONS,
+            ),
+            prompt: sukiReplyPrompt(claim.candidate, agentName),
+            maxOutputTokens: 1_400,
+            maxRetries: 1,
+            ...modelGenerationSettings(candidate.provider, "reply"),
+            providerOptions: candidate.providerOptions,
+            abortSignal: signal,
+          }),
       },
     );
     const result = generation.value;

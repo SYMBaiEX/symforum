@@ -4,6 +4,8 @@ import { describe, expect, test } from "vitest";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
+  contentFormatGuidance,
+  evaluateForumDraft,
   finalizeForumBody,
   imageRelevanceScore,
   parseFeedXml,
@@ -109,5 +111,93 @@ ${"A useful field note. ".repeat(800)}`,
         imageWidth: 1200,
       }),
     ).toBeGreaterThanOrEqual(55);
+  });
+
+  test("checks factual numbers against the claim's cited source", () => {
+    const snapshots = [
+      {
+        articleDescription: "Release 2.4 adds checkpoint recovery.",
+        articleText: "Version 2.4 adds checkpoint recovery to sync jobs.",
+        articleTitle: "Checkpoint recovery release",
+        boardSlugs: ["ai-frameworks"],
+        id: "source-a",
+        imageCredit: "Example",
+        sourceFeedUrl: "https://example.com/feed.xml",
+        sourceKey: "source-a",
+        sourceName: "Example A",
+        summary: "Checkpoint recovery",
+        title: "Checkpoint recovery release",
+        url: "https://example.com/a",
+      },
+      {
+        articleDescription: "A separate product reached version 9.9.",
+        articleText: "Version 9.9 is now available.",
+        articleTitle: "Unrelated 9.9 release",
+        boardSlugs: ["ai-frameworks"],
+        id: "source-b",
+        imageCredit: "Example",
+        sourceFeedUrl: "https://example.com/feed.xml",
+        sourceKey: "source-b",
+        sourceName: "Example B",
+        summary: "A different release",
+        title: "Unrelated release",
+        url: "https://example.com/b",
+      },
+    ];
+    const discussionQuestion =
+      "Where would checkpoint recovery remove the most operational pain for you?";
+    const body = `${"Checkpoint recovery changes how teams resume interrupted synchronization work. ".repeat(45)}\n\n[steps=Recovery check]\n1|Verify|Inspect the checkpoint\n[/steps]\n\n${discussionQuestion}`;
+    const result = evaluateForumDraft({
+      draft: {
+        title: "Checkpoint recovery changes the sync failure playbook",
+        body,
+        poll: null,
+        imageCandidateId: null,
+        claims: [
+          {
+            claim: "Version 9.9 adds checkpoint recovery to sync jobs.",
+            sourceCandidateId: "source-a",
+            confidence: "high",
+            kind: "fact",
+          },
+          {
+            claim:
+              "Checkpoint recovery can reduce repeated synchronization work.",
+            sourceCandidateId: "source-a",
+            confidence: "medium",
+            kind: "analysis",
+          },
+        ],
+        originalValue: [
+          "A verification step before resuming work",
+          "A bounded way to reason about interrupted jobs",
+        ],
+        discussionQuestion,
+      },
+      selection: {
+        angle: "How checkpoint recovery changes synchronization operations",
+        candidateIds: ["source-a"],
+        categorySlug: "ai-frameworks",
+        postType: "news-analysis",
+        prefixSlug: "news",
+        includePoll: false,
+        contentFormat: "field-note",
+      },
+      snapshots,
+      recentThreadTitles: [],
+    });
+
+    expect(result.groundingScore).toBeLessThan(100);
+    expect(result.feedback.join(" ")).toContain(
+      "source-a but that source does not contain: 9.9",
+    );
+  });
+
+  test("gives each editorial format a concrete argument architecture", () => {
+    expect(contentFormatGuidance("comparison")).toContain(
+      "Declare decision criteria first",
+    );
+    expect(contentFormatGuidance("guide")).toContain("verification step");
+    expect(contentFormatGuidance("deep-dive")).toContain("counterpoint");
   });
 });

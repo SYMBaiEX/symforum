@@ -11,6 +11,16 @@ import { internalAction, type ActionCtx } from "./_generated/server";
 import { MUSE_AGENT_MODEL } from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import {
+  lexicalEvidenceCoverage,
+  lexicalSimilarity,
+  significantTokens,
+  unsupportedVerifiableTokens,
+} from "../lib/editorial-quality";
+import {
+  modelGenerationSettings,
+  modelInstructions,
+} from "../lib/muse-model-profile";
+import {
   finishEditorialMemory,
   searchEditorialMemory,
   startEditorialMemory,
@@ -30,7 +40,7 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v4";
+const PROMPT_VERSION = "suki-forum-v5-muse-editorial";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -309,8 +319,10 @@ export async function runForumResearchSlot(
     });
     const routingConfig = convexModelRoutingConfig();
     if (
-      !(routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim())
-      && !routingConfig.gatewayApiKey?.trim()
+      !(
+        routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
+      ) &&
+      !routingConfig.gatewayApiKey?.trim()
     ) {
       throw new ForumAgentConfigurationError(
         "Neither Muse API access nor AI_GATEWAY_API_KEY is configured in Convex.",
@@ -407,10 +419,13 @@ export async function runForumResearchSlot(
             },
             toolChoice: { type: "tool", toolName: "selectTopic" },
             providerOptions: candidate.providerOptions,
-            reasoning: "none",
-            temperature: 0.2,
+            ...modelGenerationSettings(candidate.provider, "topic-selection"),
             maxOutputTokens: 2_000,
-            instructions: config.topicInstructions,
+            instructions: modelInstructions(
+              candidate.provider,
+              "topic-selection",
+              config.topicInstructions,
+            ),
           });
           const result = await topicScout.generate({
             prompt: topicPrompt,
@@ -566,10 +581,8 @@ export async function runForumResearchSlot(
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-    ) => await runWithModelFallback(
-      routingConfig,
-      writerGatewayOptions,
-      {
+    ) =>
+      await runWithModelFallback(routingConfig, writerGatewayOptions, {
         stage: `${config.slug}:forum-${stage}`,
         totalTimeoutMs: 240_000,
         run: async (candidate, signal) => {
@@ -585,20 +598,28 @@ export async function runForumResearchSlot(
             },
             toolChoice: { type: "tool", toolName: "submitForumDraft" },
             providerOptions: candidate.providerOptions,
-            reasoning: "none",
-            temperature: 0.45,
+            ...modelGenerationSettings(
+              candidate.provider,
+              stage === "revision" ? "forum-revision" : "forum-draft",
+            ),
             maxOutputTokens: 6_500,
-            instructions: config.writerInstructions,
+            instructions: modelInstructions(
+              candidate.provider,
+              stage === "revision" ? "forum-revision" : "forum-draft",
+              config.writerInstructions,
+            ),
           });
-          const result = await forumWriter.generate({ prompt, abortSignal: signal });
+          const result = await forumWriter.generate({
+            prompt,
+            abortSignal: signal,
+          });
           const call = result.staticToolCalls[0];
           if (call?.toolName !== "submitForumDraft") {
             throw missingStructuredToolCallError(`forum ${stage}`, result);
           }
           return { result, draft: call.input };
         },
-      },
-    );
+      });
     const draftStartedAt = Date.now();
     const draftGeneration = await generateForumDraft(
       "draft",
@@ -640,6 +661,7 @@ export async function runForumResearchSlot(
           snapshots,
           config,
           revisionFeedback: quality.feedback,
+          previousDraft: draft,
           followUp: followUpThreadId !== undefined,
         }),
       );
@@ -1246,6 +1268,7 @@ function forumDraftPrompt(args: {
   snapshots: ArticleSnapshot[];
   config: ForumResearchAgentConfig;
   revisionFeedback?: string[];
+  previousDraft?: z.infer<typeof forumDraftSchema>;
   followUp?: boolean;
 }) {
   return [
@@ -1255,6 +1278,8 @@ function forumDraftPrompt(args: {
     JSON.stringify(args.selection),
     `Editorial desk: ${args.config.deskDescription}`,
     `Target length and shape: ${contentFormatGuidance(args.selection.contentFormat)}`,
+    "Editorial discipline: make one source-specific argument. Do not repeat the thesis in the opening, section headings, structured block, and conclusion. Prefer concrete nouns and verbs from the evidence over reusable frames such as operational ownership, a new era, shifting landscape, or the real story.",
+    "Measurement discipline: distinguish totals from changes, gross from net, estimates from observations, and editorial scores from measured results. Every number or version in a factual claim must appear in that claim's cited source.",
     ...(args.followUp
       ? [
           "This is a concise follow-up to an existing thread about the same event. Cover only genuinely new evidence, changed implications, or corrected guidance. Do not restate the original article.",
@@ -1277,6 +1302,8 @@ function forumDraftPrompt(args: {
       : [
           "The previous draft missed the deterministic quality gate. Fix every item below without weakening supported claims:",
           JSON.stringify(args.revisionFeedback),
+          "Previous draft to revise:",
+          JSON.stringify(args.previousDraft),
         ]),
     "Write the actual forum topic now. Do not write a generic news article.",
   ].join("\n\n");
@@ -1412,63 +1439,100 @@ type EvaluatedForumDraft = {
   feedback: string[];
 };
 
-function evaluateForumDraft(args: {
+export function evaluateForumDraft(args: {
   draft: z.infer<typeof forumDraftSchema>;
   selection: z.infer<typeof topicSelectionSchema>;
   snapshots: ArticleSnapshot[];
   recentThreadTitles: string[];
 }): EvaluatedForumDraft {
   const feedback: string[] = [];
-  const snapshotIds = new Set(args.snapshots.map((snapshot) => snapshot.id));
-  const validClaims = args.draft.claims.filter((claim) =>
-    snapshotIds.has(claim.sourceCandidateId),
+  const snapshotsById = new Map(
+    args.snapshots.map((snapshot) => [snapshot.id, snapshot]),
   );
-  const researchText = args.snapshots
-    .map(
-      (snapshot) =>
-        `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`,
-    )
-    .join(" ")
-    .toLowerCase();
-  const factualNumbers = args.draft.claims
-    .filter((claim) => claim.kind === "fact")
-    .flatMap(
-      (claim) =>
-        claim.claim.match(
-          /\b(?:cve-\d{4}-\d+|\d+(?:\.\d+){1,3}|\d+(?:%|x|gb|mb|ms|days?|hours?))\b/gi,
-        ) ?? [],
-    );
-  const supportedNumbers = factualNumbers.filter((value) =>
-    researchText.includes(value.toLowerCase()),
+  const validClaims = args.draft.claims.filter((claim) =>
+    snapshotsById.has(claim.sourceCandidateId),
+  );
+  const factualClaims = args.draft.claims.filter(
+    (claim) => claim.kind === "fact",
+  );
+  const factualSupport = factualClaims.map((claim, index) => {
+    const snapshot = snapshotsById.get(claim.sourceCandidateId);
+    if (snapshot === undefined) {
+      return {
+        index,
+        unsupported: unsupportedVerifiableTokens(claim.claim, ""),
+        lexicalCoverage: 0,
+      };
+    }
+    const sourceText = `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`;
+    return {
+      index,
+      unsupported: unsupportedVerifiableTokens(claim.claim, sourceText),
+      lexicalCoverage: lexicalEvidenceCoverage(claim.claim, sourceText),
+    };
+  });
+  const verifiableTokenCount = factualClaims.reduce(
+    (total, claim) =>
+      total + unsupportedVerifiableTokens(claim.claim, "").length,
+    0,
+  );
+  const unsupportedTokenCount = factualSupport.reduce(
+    (total, support) => total + support.unsupported.length,
+    0,
   );
   const claimCoverage =
     args.draft.claims.length === 0
       ? 0
       : validClaims.length / args.draft.claims.length;
   const numberCoverage =
-    factualNumbers.length === 0
+    verifiableTokenCount === 0
       ? 1
-      : supportedNumbers.length / factualNumbers.length;
+      : Math.max(
+          0,
+          (verifiableTokenCount - unsupportedTokenCount) / verifiableTokenCount,
+        );
+  const factualEvidenceCoverage =
+    factualSupport.length === 0
+      ? 1
+      : factualSupport.reduce(
+          (total, support) =>
+            total + Math.min(1, support.lexicalCoverage / 0.45),
+          0,
+        ) / factualSupport.length;
   const groundingScore = Math.round(
-    Math.min(100, claimCoverage * 75 + numberCoverage * 25),
+    Math.min(
+      100,
+      claimCoverage * 55 + numberCoverage * 25 + factualEvidenceCoverage * 20,
+    ),
   );
   if (claimCoverage < 1) {
     feedback.push("Every claim must reference a candidate ID in the packet");
   }
   if (numberCoverage < 1) {
+    for (const support of factualSupport.filter(
+      (entry) => entry.unsupported.length > 0,
+    )) {
+      const claim = factualClaims[support.index];
+      feedback.push(
+        `Fact claim ${support.index + 1} cites ${claim.sourceCandidateId} but that source does not contain: ${support.unsupported.join(", ")}`,
+      );
+    }
+  }
+  if (factualEvidenceCoverage < 0.7) {
     feedback.push(
-      "Remove or source unsupported numbers, versions, and identifiers",
+      "Rewrite factual claims around evidence actually present in their cited source",
     );
   }
 
-  const maximumTitleSimilarity = Math.max(
+  const maximumFrameSimilarity = Math.max(
     0,
-    ...args.recentThreadTitles.map((title) =>
+    ...args.recentThreadTitles.flatMap((title) => [
       lexicalSimilarity(args.draft.title, title),
-    ),
+      lexicalSimilarity(args.selection.angle, title),
+    ]),
   );
   const noveltyScore = Math.round(
-    Math.max(0, 100 - maximumTitleSimilarity * 100),
+    Math.max(0, 100 - maximumFrameSimilarity * 100),
   );
   if (noveltyScore < 70) {
     feedback.push(
@@ -1525,52 +1589,6 @@ function buildTopicFingerprint(angle: string, candidates: ResearchCandidate[]) {
   return hashKey(tokens.join("|"));
 }
 
-function significantTokens(value: string) {
-  const stopWords = new Set([
-    "about",
-    "after",
-    "again",
-    "also",
-    "from",
-    "have",
-    "into",
-    "just",
-    "more",
-    "news",
-    "that",
-    "their",
-    "this",
-    "what",
-    "when",
-    "where",
-    "which",
-    "with",
-    "your",
-  ]);
-  return [
-    ...new Set(
-      (value.toLowerCase().match(/[a-z0-9][a-z0-9.+_-]{2,}/g) ?? []).filter(
-        (token) => !stopWords.has(token),
-      ),
-    ),
-  ];
-}
-
-function lexicalSimilarity(left: string, right: string) {
-  const leftTokens = new Set(significantTokens(left));
-  const rightTokens = new Set(significantTokens(right));
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return 0;
-  }
-  let shared = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      shared += 1;
-    }
-  }
-  return shared / Math.max(leftTokens.size, rightTokens.size);
-}
-
 function requiredContentFormat(
   agentName: string,
   slot: number,
@@ -1603,11 +1621,25 @@ function contentFormatWordRange(
   }
 }
 
-function contentFormatGuidance(
+export function contentFormatGuidance(
   format: z.infer<typeof topicSelectionSchema>["contentFormat"],
 ) {
   const [minimum, maximum] = contentFormatWordRange(format);
-  return `${format}; ${minimum}-${maximum} words. Use only the sections and structured blocks the subject earns.`;
+  const architecture = {
+    brief:
+      "Lead with the verified change, explain the immediate consequence, and end on the next signal worth watching.",
+    debate:
+      "State the decision or disagreement, give the strongest evidence-backed case on each side, identify shared facts, and name what would resolve it.",
+    "field-note":
+      "Start from an observed signal, separate evidence from bounded interpretation, record uncertainty, and specify the next observation or experiment.",
+    comparison:
+      "Declare decision criteria first, compare the same dimensions across options, expose tradeoffs, and finish with fit-by-scenario guidance.",
+    guide:
+      "Name prerequisites, give ordered actions, include a verification step and likely failure modes, and avoid steps the sources do not support.",
+    "deep-dive":
+      "Advance one thesis through a traceable evidence chain, test a serious counterpoint, and finish with practical implications rather than a recap.",
+  }[format];
+  return `${format}; ${minimum}-${maximum} words. ${architecture} Use only the sections and structured blocks the subject earns.`;
 }
 
 function plainWordCount(value: string) {

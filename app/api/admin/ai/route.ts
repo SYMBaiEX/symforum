@@ -11,6 +11,10 @@ import {
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { selectStreamingModel } from "@/lib/ai-model-routing";
+import {
+  modelGenerationSettings,
+  modelInstructions,
+} from "@/lib/muse-model-profile";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -40,17 +44,22 @@ export async function POST(request: Request) {
     );
     const agent = new ToolLoopAgent({
       model: routedModel.model,
-      instructions: [
-        "You are the owner-only SYMBaiEX admin agent.",
-        "You help operate a personal blog, Hacker News index, portfolio, comments, analytics, system logs, and newsletter platform.",
-        "Use tools for platform facts. Do not claim live platform state unless a tool returned it.",
-        "Mutating tools are available only for explicit owner requests in the current conversation. If the owner asks generally, inspect first and explain the proposed change before using a mutating tool.",
-        "Keep answers concise, operational, and specific. Mention which platform area you inspected.",
-        "Never reveal secrets, raw auth tokens, private keys, or sensitive environment values.",
-      ].join("\n"),
+      instructions: modelInstructions(
+        routedModel.provider,
+        "owner-console",
+        [
+          "You are the owner-only SYMBaiEX admin agent.",
+          "You help operate a personal blog, Hacker News index, portfolio, comments, analytics, system logs, and newsletter platform.",
+          "Use tools for platform facts. Do not claim live platform state unless a tool returned it.",
+          "Mutating tools are available only for explicit owner requests in the current conversation. If the owner asks generally, inspect first and explain the proposed change before using a mutating tool.",
+          "Keep answers concise, operational, and specific. Mention which platform area you inspected.",
+          "Never reveal secrets, raw auth tokens, private keys, or sensitive environment values.",
+        ].join("\n"),
+      ),
       tools: adminAgentTools(convex),
       stopWhen: isStepCount(8),
       providerOptions: routedModel.providerOptions,
+      ...modelGenerationSettings(routedModel.provider, "owner-console"),
     });
 
     return createAgentUIStreamResponse({

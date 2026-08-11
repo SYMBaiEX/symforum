@@ -1,4 +1,8 @@
-import { createGateway, type GatewayModelId, type GatewayProviderOptions } from "@ai-sdk/gateway";
+import {
+  createGateway,
+  type GatewayModelId,
+  type GatewayProviderOptions,
+} from "@ai-sdk/gateway";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
@@ -7,6 +11,7 @@ import {
   MUSE_AGENT_MODEL,
   MUSE_API_MODEL_ID,
 } from "./ai-models";
+import { MUSE_TOP_K } from "./muse-model-profile";
 
 export type ModelRoute = {
   provider: "muse" | "gateway";
@@ -104,6 +109,12 @@ function museModel(config: ModelRoutingConfig): RoutedModel | undefined {
     modelId: MUSE_API_MODEL_ID,
     persistedModel: MUSE_AGENT_MODEL,
     model: provider(MUSE_API_MODEL_ID),
+    // The generic OpenAI-compatible adapter treats topK as unsupported, but it
+    // forwards unknown provider options into the request body. Muse's server
+    // accepts the native snake_case field recommended by its model card.
+    providerOptions: {
+      symbaiexMuse: { top_k: MUSE_TOP_K },
+    } as ProviderOptions,
   };
 }
 
@@ -139,7 +150,9 @@ export async function routedModelCandidates(
     if (await isMuseAvailable(config)) {
       candidates.push(muse);
     } else {
-      console.warn("Muse model route unavailable; using configured gateway fallback");
+      console.warn(
+        "Muse model route unavailable; using configured gateway fallback",
+      );
     }
   }
   for (const modelId of gatewayModelIds) {
@@ -169,9 +182,10 @@ export async function runRoutedCandidates<T>(
     const candidate = candidates[index];
     const remaining = deadline - Date.now();
     if (remaining <= 1_000) break;
-    const fallbackReserve = index < candidates.length - 1
-      ? Math.min(45_000, Math.floor(args.totalTimeoutMs * 0.3))
-      : 0;
+    const fallbackReserve =
+      index < candidates.length - 1
+        ? Math.min(45_000, Math.floor(args.totalTimeoutMs * 0.3))
+        : 0;
     const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
     try {
       const value = await args.run(
