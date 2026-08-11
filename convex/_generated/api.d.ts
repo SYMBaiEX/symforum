@@ -10,6 +10,8 @@
 
 import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
+import type * as aiTelemetry from "../aiTelemetry.js";
+import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
@@ -61,6 +63,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminApi: typeof adminApi;
+  aiTelemetry: typeof aiTelemetry;
+  aiTelemetryHelpers: typeof aiTelemetryHelpers;
   analytics: typeof analytics;
   auth: typeof auth;
   authz: typeof authz;

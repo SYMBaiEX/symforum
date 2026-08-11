@@ -30,6 +30,7 @@ import {
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
 import { convexModelRoutingConfig } from "./modelRouting";
+import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_AGENT_MODEL = MUSE_AGENT_MODEL;
 const FORUM_TIME_ZONE = "America/Chicago";
@@ -318,6 +319,12 @@ export async function runForumResearchSlot(
       runDate,
     });
     const routingConfig = convexModelRoutingConfig();
+    const recordRouteAttempt = routeTelemetry(ctx, {
+      correlationId: claim.runKey,
+      feature: "forum-agent",
+      runKey: claim.runKey,
+      agentSlug: config.slug,
+    });
     if (
       !(
         routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
@@ -406,6 +413,10 @@ export async function runForumResearchSlot(
       gatewayOptions,
       {
         stage: `${config.slug}:forum-topic`,
+        correlationId: claim.runKey,
+        feature: "forum-agent",
+        agent: config.slug,
+        onAttempt: recordRouteAttempt,
         totalTimeoutMs: 180_000,
         run: async (candidate, signal) => {
           const topicScout = new ToolLoopAgent({
@@ -584,6 +595,10 @@ export async function runForumResearchSlot(
     ) =>
       await runWithModelFallback(routingConfig, writerGatewayOptions, {
         stage: `${config.slug}:forum-${stage}`,
+        correlationId: claim.runKey,
+        feature: "forum-agent",
+        agent: config.slug,
+        onAttempt: recordRouteAttempt,
         totalTimeoutMs: 240_000,
         run: async (candidate, signal) => {
           const forumWriter = new ToolLoopAgent({

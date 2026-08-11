@@ -11,6 +11,7 @@ import {
   modelInstructions,
 } from "../lib/muse-model-profile";
 import { convexModelRoutingConfig } from "./modelRouting";
+import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = "forum-replies-v3-muse";
@@ -96,6 +97,13 @@ async function runReplySweepForAgent(
 
   try {
     const routingConfig = convexModelRoutingConfig();
+    const replyRunKey = `reply:${claim.runId}`;
+    const recordRouteAttempt = routeTelemetry(ctx, {
+      correlationId: replyRunKey,
+      feature: "forum-reply",
+      runKey: replyRunKey,
+      agentSlug,
+    });
     if (
       !(
         routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
@@ -122,6 +130,10 @@ async function runReplySweepForAgent(
       gatewayOptions,
       {
         stage: `${agentSlug}:forum-reply`,
+        correlationId: replyRunKey,
+        feature: "forum-reply",
+        agent: agentSlug,
+        onAttempt: recordRouteAttempt,
         totalTimeoutMs: 120_000,
         run: async (candidate, signal) =>
           await generateText({
@@ -144,7 +156,7 @@ async function runReplySweepForAgent(
     );
     const result = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
-      runKey: `reply:${claim.runId}`,
+      runKey: replyRunKey,
       agentSlug,
       stage: "reply",
       model: generation.route.persistedModel,

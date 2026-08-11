@@ -30,10 +30,30 @@ export type ModelRoutingConfig = {
   gatewayApiKey?: string;
 };
 
-type RouteRunArgs<T> = {
+export type ModelRouteAttempt = {
+  correlationId: string;
+  feature: string;
+  stage: string;
+  attempt: number;
+  provider: ModelRoute["provider"];
+  model: string;
+  outcome: "completed" | "failed";
+  fallback: boolean;
+  durationMs: number;
+  errorMessage?: string;
+};
+
+type RouteTelemetryContext = {
+  correlationId?: string;
+  feature?: string;
+  agent?: string;
+};
+
+export type RouteRunArgs<T> = RouteTelemetryContext & {
   stage: string;
   totalTimeoutMs: number;
   run: (candidate: RoutedModel, signal: AbortSignal) => Promise<T>;
+  onAttempt?: (event: ModelRouteAttempt) => void | Promise<void>;
 };
 
 let healthCache:
@@ -94,7 +114,17 @@ export function clearMuseHealthCacheForTests() {
   healthCache = undefined;
 }
 
-function museModel(config: ModelRoutingConfig): RoutedModel | undefined {
+function safeTelemetryHeader(value: string | undefined) {
+  const cleaned = clean(value);
+  return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned)
+    ? cleaned
+    : undefined;
+}
+
+function museModel(
+  config: ModelRoutingConfig,
+  telemetry?: RouteTelemetryContext,
+): RoutedModel | undefined {
   const baseURL = museBaseUrl(config.museBaseUrl);
   const apiKey = clean(config.museApiKey);
   if (!baseURL || !apiKey) return undefined;
@@ -103,6 +133,21 @@ function museModel(config: ModelRoutingConfig): RoutedModel | undefined {
     apiKey,
     baseURL,
     includeUsage: true,
+    headers: {
+      ...(safeTelemetryHeader(telemetry?.correlationId)
+        ? {
+            "x-symbaiex-correlation-id": safeTelemetryHeader(
+              telemetry?.correlationId,
+            )!,
+          }
+        : {}),
+      ...(safeTelemetryHeader(telemetry?.feature)
+        ? { "x-symbaiex-feature": safeTelemetryHeader(telemetry?.feature)! }
+        : {}),
+      ...(safeTelemetryHeader(telemetry?.agent)
+        ? { "x-symbaiex-agent": safeTelemetryHeader(telemetry?.agent)! }
+        : {}),
+    },
   });
   return {
     provider: "muse",
@@ -143,9 +188,10 @@ export async function routedModelCandidates(
   gatewayModelIds: readonly GatewayModelId[] = [
     DEEPSEEK_FALLBACK_MODEL as GatewayModelId,
   ],
+  telemetry?: RouteTelemetryContext,
 ) {
   const candidates: RoutedModel[] = [];
-  const muse = museModel(config);
+  const muse = museModel(config, telemetry);
   if (muse) {
     if (await isMuseAvailable(config)) {
       candidates.push(muse);
@@ -187,6 +233,7 @@ export async function runRoutedCandidates<T>(
         ? Math.min(45_000, Math.floor(args.totalTimeoutMs * 0.3))
         : 0;
     const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
+    const attemptStartedAt = Date.now();
     try {
       const value = await args.run(
         candidate,
@@ -196,6 +243,18 @@ export async function runRoutedCandidates<T>(
         stage: args.stage,
         provider: candidate.provider,
         model: candidate.persistedModel,
+      });
+      await emitRouteAttempt(args, {
+        correlationId:
+          args.correlationId ?? `${args.feature ?? "ai"}:${args.stage}`,
+        feature: args.feature ?? "ai-generation",
+        stage: args.stage,
+        attempt: index + 1,
+        provider: candidate.provider,
+        model: candidate.persistedModel,
+        outcome: "completed",
+        fallback: index > 0,
+        durationMs: Date.now() - attemptStartedAt,
       });
       return {
         value,
@@ -214,11 +273,39 @@ export async function runRoutedCandidates<T>(
         model: candidate.persistedModel,
         error: safeError(error),
       });
+      await emitRouteAttempt(args, {
+        correlationId:
+          args.correlationId ?? `${args.feature ?? "ai"}:${args.stage}`,
+        feature: args.feature ?? "ai-generation",
+        stage: args.stage,
+        attempt: index + 1,
+        provider: candidate.provider,
+        model: candidate.persistedModel,
+        outcome: "failed",
+        fallback: index > 0,
+        durationMs: Date.now() - attemptStartedAt,
+        errorMessage: safeError(error),
+      });
     }
   }
   throw new Error(
     `AI generation failed for ${args.stage} after ${failures.length} route attempt${failures.length === 1 ? "" : "s"}: ${failures.join(" | ")}`,
   );
+}
+
+async function emitRouteAttempt<T>(
+  args: RouteRunArgs<T>,
+  event: ModelRouteAttempt,
+) {
+  if (!args.onAttempt) return;
+  try {
+    await args.onAttempt(event);
+  } catch (error) {
+    console.warn("AI route telemetry write failed", {
+      stage: args.stage,
+      error: safeError(error),
+    });
+  }
 }
 
 export async function runWithModelFallback<T>(
@@ -231,6 +318,7 @@ export async function runWithModelFallback<T>(
     config,
     gatewayOptions,
     gatewayModelIds,
+    args,
   );
   return runRoutedCandidates(candidates, args);
 }
@@ -238,8 +326,14 @@ export async function runWithModelFallback<T>(
 export async function selectStreamingModel(
   config: ModelRoutingConfig,
   gatewayOptions?: GatewayProviderOptions,
+  telemetry?: RouteTelemetryContext,
 ) {
-  const [candidate] = await routedModelCandidates(config, gatewayOptions);
+  const [candidate] = await routedModelCandidates(
+    config,
+    gatewayOptions,
+    undefined,
+    telemetry,
+  );
   console.info("AI streaming model route selected", {
     provider: candidate.provider,
     model: candidate.persistedModel,

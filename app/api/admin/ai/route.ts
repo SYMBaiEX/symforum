@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const correlationId = `admin-ai:${crypto.randomUUID()}`;
   try {
     const convex = await ownerConvexClient(request);
     const { messages } = (await request.json()) as { messages?: UIMessage[] };
@@ -40,6 +41,11 @@ export async function POST(request: Request) {
       {
         tags: ["feature:admin-ai", "surface:owner-console"],
         user: "symbaiex-owner",
+      },
+      {
+        correlationId,
+        feature: "admin-ai",
+        agent: "owner-console",
       },
     );
     const agent = new ToolLoopAgent({
@@ -82,6 +88,7 @@ export async function POST(request: Request) {
         error instanceof AdminAiError ? error.status : 500,
         error instanceof Error ? error.message : "unknown",
       ].join("|"),
+      metadataJson: JSON.stringify({ correlationId }),
       ...requestLogContext(request),
     });
 

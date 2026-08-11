@@ -1421,6 +1421,83 @@ export type AdminOverviewRecord = {
   recentInteractions: AdminInteractionRecord[];
 };
 
+export type AiTelemetrySnapshotRecord = {
+  generatedAt: number;
+  windowHours: number;
+  totals: {
+    routeAttempts: number;
+    routeFailures: number;
+    fallbackAttempts: number;
+    agentRuns: number;
+    published: number;
+    skipped: number;
+    failed: number;
+    replies: number;
+    newsletters: number;
+    inputTokens: number;
+    outputTokens: number;
+    averageDurationMs: number;
+    p95DurationMs: number;
+    averageQuality: number;
+  };
+  models: Array<{
+    model: string;
+    attempts: number;
+    failures: number;
+    fallbacks: number;
+    stages: number;
+    inputTokens: number;
+    outputTokens: number;
+    durationMs: number;
+  }>;
+  agents: Array<{
+    agentSlug: string;
+    runs: number;
+    published: number;
+    skipped: number;
+    failed: number;
+    replies: number;
+    ignoredReplies: number;
+    inputTokens: number;
+    outputTokens: number;
+    averageQuality: number;
+    qualitySamples: number;
+  }>;
+  stages: Array<{
+    stage: string;
+    events: number;
+    inputTokens: number;
+    outputTokens: number;
+    durationMs: number;
+    averageDurationMs: number;
+  }>;
+  series: Array<{
+    at: number;
+    generations: number;
+    failures: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
+  recent: Array<{
+    kind: "route" | "publication" | "reply" | "newsletter";
+    at: number;
+    correlationId: string;
+    agentSlug?: string;
+    stage: string;
+    model?: string;
+    status: string;
+    detail?: string;
+    durationMs?: number;
+  }>;
+  bounded: {
+    routes: boolean;
+    runs: boolean;
+    replies: boolean;
+    usage: boolean;
+    newsletters: boolean;
+  };
+};
+
 export const convexRefs = {
   admin: {
     viewer: makeFunctionReference<
@@ -1440,6 +1517,11 @@ export const convexRefs = {
       Record<string, never>,
       AdminOverviewRecord
     >("admin:overview"),
+    aiTelemetrySnapshot: makeFunctionReference<
+      "query",
+      { hours?: number },
+      AiTelemetrySnapshotRecord
+    >("aiTelemetry:snapshotAdmin"),
     claimInitialOwner: makeFunctionReference<
       "mutation",
       { bootstrapToken: string },

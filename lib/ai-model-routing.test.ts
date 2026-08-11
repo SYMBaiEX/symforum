@@ -47,12 +47,20 @@ describe("AI model routing", () => {
       if (route.provider === "muse") throw new Error("primary unavailable");
       return "fallback-result";
     });
+    const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
       [
         candidate("muse", "muse/Muse-Glimmer-30B"),
         candidate("gateway", "deepseek/fallback"),
       ],
-      { stage: "test-fallback", totalTimeoutMs: 5_000, run },
+      {
+        stage: "test-fallback",
+        correlationId: "test:route-fallback",
+        feature: "routing-test",
+        totalTimeoutMs: 5_000,
+        run,
+        onAttempt,
+      },
     );
 
     expect(result.value).toBe("fallback-result");
@@ -61,6 +69,22 @@ describe("AI model routing", () => {
       persistedModel: "deepseek/fallback",
     });
     expect(run).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        correlationId: "test:route-fallback",
+        outcome: "failed",
+        fallback: false,
+      }),
+    );
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        correlationId: "test:route-fallback",
+        outcome: "completed",
+        fallback: true,
+      }),
+    );
   });
 
   test("passes Muse's native top_k setting through provider options", async () => {

@@ -800,7 +800,8 @@ export default defineSchema({
       "startedAt",
     ])
     .index("by_threadId_and_startedAt", ["threadId", "startedAt"])
-    .index("by_runDate", ["runDate"]),
+    .index("by_runDate", ["runDate"])
+    .index("by_startedAt", ["startedAt"]),
   forumAgentReplyRuns: defineTable({
     runKey: v.string(),
     agentSlug: v.string(),
@@ -830,7 +831,8 @@ export default defineSchema({
     .index("by_runKey", ["runKey"])
     .index("by_sourcePostId", ["sourcePostId"])
     .index("by_runDate", ["runDate"])
-    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
+    .index("by_updatedAt", ["updatedAt"]),
   forumAgentUsageEvents: defineTable({
     runKey: v.string(),
     agentSlug: v.string(),
@@ -849,7 +851,27 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_runKey_and_createdAt", ["runKey", "createdAt"])
-    .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"]),
+    .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
+  aiRouteEvents: defineTable({
+    correlationId: v.string(),
+    feature: v.string(),
+    runKey: v.optional(v.string()),
+    agentSlug: v.optional(v.string()),
+    stage: v.string(),
+    attempt: v.number(),
+    provider: v.union(v.literal("muse"), v.literal("gateway")),
+    model: v.string(),
+    outcome: v.union(v.literal("completed"), v.literal("failed")),
+    fallback: v.boolean(),
+    durationMs: v.number(),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_correlationId_and_createdAt", ["correlationId", "createdAt"])
+    .index("by_feature_and_createdAt", ["feature", "createdAt"])
+    .index("by_outcome_and_createdAt", ["outcome", "createdAt"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),

@@ -29,6 +29,7 @@ import {
   type ResearchCandidate,
 } from "./sukiForumAgent";
 import { convexModelRoutingConfig } from "./modelRouting";
+import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const NEWSLETTER_GATEWAY_MODELS = [
   DEEPSEEK_FALLBACK_MODEL,
@@ -229,7 +230,9 @@ async function generateEditorialPackage(
       ? "submitDailySignal"
       : "submitWeeklyFieldNote";
   const generation = await generateDraftWithFallback({
+    ctx,
     edition: args.edition,
+    runDate: args.runDate,
     stage: "draft",
     routingConfig,
     gatewayTags,
@@ -289,7 +292,9 @@ async function generateEditorialPackage(
   let evaluation = evaluateDraft();
   if (evaluation.needsRevision) {
     const revision = await generateDraftWithFallback({
+      ctx,
       edition: args.edition,
+      runDate: args.runDate,
       stage: "revision",
       routingConfig,
       gatewayTags,
@@ -435,7 +440,9 @@ async function generateEditorialPackage(
 }
 
 async function generateDraftWithFallback({
+  ctx,
   edition,
+  runDate,
   stage,
   routingConfig,
   gatewayTags,
@@ -443,7 +450,9 @@ async function generateDraftWithFallback({
   schema,
   toolName,
 }: {
+  ctx: ActionCtx;
   edition: "daily-signal" | "weekly-field-note";
+  runDate: string;
   stage: "draft" | "revision";
   routingConfig: ReturnType<typeof convexModelRoutingConfig>;
   gatewayTags: string[];
@@ -451,6 +460,7 @@ async function generateDraftWithFallback({
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
   toolName: "submitDailySignal" | "submitWeeklyFieldNote";
 }) {
+  const correlationId = `newsletter:${edition}:${runDate}`;
   const gatewayOptions = {
     caching: "auto",
     user: "belle",
@@ -461,6 +471,15 @@ async function generateDraftWithFallback({
     gatewayOptions,
     {
       stage: `belle:${edition}:${stage}`,
+      correlationId,
+      feature: `newsletter-${edition}`,
+      agent: "belle",
+      onAttempt: routeTelemetry(ctx, {
+        correlationId,
+        feature: `newsletter-${edition}`,
+        runKey: correlationId,
+        agentSlug: "belle",
+      }),
       totalTimeoutMs: edition === "daily-signal" ? 240_000 : 300_000,
       run: async (candidate, signal) => {
         const writer = new ToolLoopAgent({

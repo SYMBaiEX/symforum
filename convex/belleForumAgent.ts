@@ -24,6 +24,7 @@ import {
   type ResearchCandidate,
 } from "./sukiForumAgent";
 import { convexModelRoutingConfig } from "./modelRouting";
+import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const BELLE_MODEL = MUSE_AGENT_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
@@ -168,6 +169,12 @@ export const runDailyHackerNewsDigest = internalAction({
 
     try {
       const routingConfig = convexModelRoutingConfig();
+      const recordRouteAttempt = routeTelemetry(ctx, {
+        correlationId: claim.runKey,
+        feature: "hacker-news-digest",
+        runKey: claim.runKey,
+        agentSlug: "belle",
+      });
       const context = await ctx.runQuery(
         internal.forum.readBelleForumContext,
         {},
@@ -200,6 +207,10 @@ export const runDailyHackerNewsDigest = internalAction({
         gatewayOptions,
         {
           stage: "belle:hacker-news-digest",
+          correlationId: claim.runKey,
+          feature: "hacker-news-digest",
+          agent: "belle",
+          onAttempt: recordRouteAttempt,
           totalTimeoutMs: 240_000,
           run: async (candidate, signal) => {
             const writer = new ToolLoopAgent({

@@ -7,6 +7,7 @@ import { AdminForum, adminForumOverviewRef } from "@/components/admin-forum";
 import { AdminSiteContent } from "@/components/admin-site-content";
 import { AdminNewsletter } from "@/components/admin-newsletter";
 import { AdminSystemLogs } from "@/components/admin-system-logs";
+import { AdminTelemetry } from "@/components/admin-telemetry";
 import { AdminUsers } from "@/components/admin-users";
 import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,7 @@ import {
   BarChart3,
   Copy,
   FileText,
+  Gauge,
   ImagePlus,
   KeyRound,
   Mail,
@@ -91,7 +93,8 @@ type AdminTabId =
   | "newsletter"
   | "contact"
   | "content"
-  | "ai";
+  | "ai"
+  | "telemetry";
 
 type AdminTab = {
   id: AdminTabId;
@@ -515,9 +518,15 @@ function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
           note: "Operator",
           icon: Wrench,
         },
+        {
+          id: "telemetry",
+          label: "Telemetry",
+          note: "Muse + agents",
+          icon: Gauge,
+        },
       ].filter(
         (tab): tab is AdminTab =>
-          isOwner || !["api", "users", "ai"].includes(tab.id),
+          isOwner || !["api", "users", "ai", "telemetry"].includes(tab.id),
       ),
     [
       activity.length,
@@ -1453,6 +1462,7 @@ function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
         {activeTab === "contact" ? <AdminContactRequests /> : null}
         {activeTab === "content" ? <AdminSiteContent /> : null}
         {isOwner && activeTab === "ai" ? <AdminAiChat /> : null}
+        {isOwner && activeTab === "telemetry" ? <AdminTelemetry /> : null}
       </div>
     </>
   );
