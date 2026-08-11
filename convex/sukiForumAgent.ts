@@ -9,7 +9,12 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { MUSE_AGENT_MODEL } from "../lib/ai-models";
-import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  routedModelCandidates,
+  runRoutedCandidates,
+  runWithModelFallback,
+  type RoutedModel,
+} from "../lib/ai-model-routing";
 import {
   forumBodyFactualStatements,
   forumBodyQuestions,
@@ -423,7 +428,7 @@ export async function runForumResearchSlot(
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: 240_000,
-        run: async (candidate, signal) => {
+        run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
             model: candidate.model,
@@ -597,15 +602,17 @@ export async function runForumResearchSlot(
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-    ) =>
-      await runWithModelFallback(routingConfig, writerGatewayOptions, {
+      options?: { gatewayOnly?: boolean },
+    ) => {
+      const routeArgs = {
         stage: `${config.slug}:forum-${stage}`,
         correlationId: claim.runKey,
         feature: "forum-agent",
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 300_000,
-        run: async (candidate, signal) => {
+        totalTimeoutMs: options?.gatewayOnly ? 90_000 : 300_000,
+        attemptOffset: options?.gatewayOnly ? 1 : 0,
+        run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
             model: candidate.model,
@@ -639,7 +646,25 @@ export async function runForumResearchSlot(
           }
           return { result, draft: call.input };
         },
-      });
+      };
+      if (!options?.gatewayOnly) {
+        return await runWithModelFallback(
+          routingConfig,
+          writerGatewayOptions,
+          routeArgs,
+        );
+      }
+      const candidates = await routedModelCandidates(
+        routingConfig,
+        writerGatewayOptions,
+        undefined,
+        routeArgs,
+      );
+      return await runRoutedCandidates(
+        candidates.filter((candidate) => candidate.provider === "gateway"),
+        routeArgs,
+      );
+    };
     const draftStartedAt = Date.now();
     const draftGeneration = await generateForumDraft(
       "draft",
@@ -687,6 +712,7 @@ export async function runForumResearchSlot(
           previousDraft: draft,
           followUp: followUpThreadId !== undefined,
         }),
+        { gatewayOnly: draftGeneration.route.provider === "gateway" },
       );
       const revision = revisionGeneration.value.result;
       draft = repairForumDraftForReview(
