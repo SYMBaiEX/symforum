@@ -6,10 +6,10 @@ import { internalMutation } from "./_generated/server";
 
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
-    // Keep Muse saturated without putting multiple long generations behind
-    // the laptop's single active inference slot. One workflow can research
-    // while the other is generating or waiting in the model queue.
-    maxParallelism: 2,
+    // A model attempt's timeout starts before it reaches the laptop queue.
+    // Keep one publication workflow active so queue wait cannot consume the
+    // generation budget for another workflow on the single llama.cpp slot.
+    maxParallelism: 1,
     retryActionsByDefault: true,
     defaultRetryBehavior: {
       maxAttempts: 3,

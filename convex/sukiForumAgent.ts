@@ -1484,8 +1484,6 @@ export function repairForumDraftForReview(
   const claims = [...draft.claims];
   const statements = forumBodyFactualStatements(body);
   for (const statement of statements) {
-    if (claims.length >= 12) break;
-    if (statement.length > 400) continue;
     const covered = claims.some(
       (claim) =>
         lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
@@ -1502,15 +1500,32 @@ export function repairForumDraftForReview(
         ),
       }))
       .sort((left, right) => right.coverage - left.coverage)[0];
-    if (!source || source.coverage < 0.45) continue;
+    if (
+      source &&
+      source.coverage >= 0.45 &&
+      statement.length <= 400 &&
+      claims.length < 12
+    ) {
+      claims.push({
+        claim: statement,
+        sourceCandidateId: source.id,
+        confidence: "medium",
+        kind: "fact",
+      });
+      continue;
+    }
 
-    claims.push({
-      claim: statement,
-      sourceCandidateId: source.id,
-      confidence: "medium",
-      kind: "fact",
-    });
+    // If the model wrote an exact consequential sentence that cannot be tied
+    // to supplied evidence, delete that sentence instead of inventing a
+    // ledger citation. Tagged or otherwise transformed text remains untouched
+    // and will continue to fail the deterministic quality gate.
+    if (body.includes(statement)) body = body.replace(statement, "");
   }
+
+  body = body
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
   return { ...draft, body, claims, discussionQuestion };
 }

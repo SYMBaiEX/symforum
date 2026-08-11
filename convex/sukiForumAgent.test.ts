@@ -349,6 +349,8 @@ ${discussionQuestion}`;
         body: `[h2]Recovery[/h2]
 Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.
 
+Real typing speed is the part most hobby modems get wrong.
+
 [table]
 [tr][th]Signal[th]Meaning[/tr]
 [tr][td]Checkpoint[td]Resume interrupted synchronization jobs[/tr]
@@ -372,6 +374,9 @@ Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.
     );
     expect(repaired.body).toMatch(
       /Where would checkpoint recovery remove operational pain\?$/,
+    );
+    expect(repaired.body).not.toContain(
+      "Real typing speed is the part most hobby modems get wrong.",
     );
     expect(repaired.discussionQuestion).toBe(
       "Where would checkpoint recovery remove operational pain?",
