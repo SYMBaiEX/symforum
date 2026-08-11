@@ -23,8 +23,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useConvexAuth } from "convex/react";
-import { Menu } from "lucide-react";
+import { convexRefs } from "@/lib/convex-refs";
+import { useConvexAuth, useQuery } from "convex/react";
+import {
+  Bot,
+  ChevronDown,
+  Cpu,
+  Gauge,
+  KeyRound,
+  Menu,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -39,6 +48,39 @@ const navItems = [
   { href: "/portfolio", label: "Portfolio" },
   { href: "/contact", label: "Contact" },
 ];
+
+const ownerNavItems = [
+  {
+    href: "/admin",
+    label: "Admin",
+    note: "Control deck",
+    icon: ShieldCheck,
+  },
+  {
+    href: "/admin/telemetry",
+    label: "Metrics",
+    note: "Muse + agents",
+    icon: Gauge,
+  },
+  {
+    href: "/admin/ai",
+    label: "AI operator",
+    note: "Owner assistant",
+    icon: Bot,
+  },
+  {
+    href: "/admin/api",
+    label: "API access",
+    note: "Keys + routes",
+    icon: KeyRound,
+  },
+  {
+    href: "https://agent.symbaiex.com/admin",
+    label: "Model host",
+    note: "Power + model API",
+    icon: Cpu,
+  },
+] as const;
 
 export function HeaderNav({
   initialForumHost = false,
@@ -74,6 +116,10 @@ function LiveHeaderNav({
   initialPrimarySiteHref: string;
 }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const viewer = useQuery(
+    convexRefs.admin.viewer,
+    isAuthenticated ? {} : "skip",
+  );
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -93,8 +139,14 @@ function LiveHeaderNav({
   if (isAuthenticated) {
     return (
       <NavRow
+        adminAccess={
+          viewer?.canAccessAdmin === true ||
+          viewer?.canAdminForum === true ||
+          viewer?.canModerateForum === true
+        }
         authHref="/profile"
         authLabel="Profile"
+        ownerAccess={viewer?.isOwner === true}
         initialForumHost={initialForumHost}
         initialPrimarySiteHref={initialPrimarySiteHref}
       />
@@ -112,17 +164,21 @@ function LiveHeaderNav({
 }
 
 function NavRow({
+  adminAccess = false,
   authHref,
   authLabel,
   authPending = false,
   initialForumHost = false,
   initialPrimarySiteHref = "/",
+  ownerAccess = false,
 }: {
+  adminAccess?: boolean;
   authHref?: string;
   authLabel?: string;
   authPending?: boolean;
   initialForumHost?: boolean;
   initialPrimarySiteHref?: string;
+  ownerAccess?: boolean;
 }) {
   const pathname = usePathname() ?? "/";
   const [forumHost, setForumHost] = useState(initialForumHost);
@@ -165,7 +221,7 @@ function NavRow({
 
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
-      <div className="hidden min-w-0 items-center gap-1 md:flex">
+      <div className="hidden min-w-0 items-center gap-1 lg:flex">
         {navItems.map((item) => {
           const href = resolveHref(item.href);
           return (
@@ -183,6 +239,13 @@ function NavRow({
             </DesktopNavLink>
           );
         })}
+        {adminAccess ? (
+          <DesktopOwnerMenu
+            active={isHeaderRouteActive(pathname, "/admin")}
+            ownerAccess={ownerAccess}
+            resolveHref={resolveHref}
+          />
+        ) : null}
         <span className="inline-flex w-[4.75rem] shrink-0 justify-center">
           {authPending ? (
             <span
@@ -201,14 +264,16 @@ function NavRow({
           ) : null}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 md:hidden">
+      <div className="flex items-center gap-1.5 lg:hidden">
         <MobileNavMenu
           authHref={authHref}
           authIsActive={authIsActive}
           authLabel={authLabel}
           authLinkHref={authLinkHref}
           authPending={authPending}
+          adminAccess={adminAccess}
           forumHost={forumHost}
+          ownerAccess={ownerAccess}
           resolveActive={resolveActive}
           resolveHref={resolveHref}
         />
@@ -260,21 +325,25 @@ function DesktopNavLink({
 }
 
 function MobileNavMenu({
+  adminAccess,
   authHref,
   authIsActive,
   authLabel,
   authLinkHref,
   authPending,
   forumHost,
+  ownerAccess,
   resolveActive,
   resolveHref,
 }: {
+  adminAccess: boolean;
   authHref?: string;
   authIsActive: boolean;
   authLabel?: string;
   authLinkHref?: string;
   authPending: boolean;
   forumHost: boolean;
+  ownerAccess: boolean;
   resolveActive: (href: string) => boolean;
   resolveHref: (href: string) => string;
 }) {
@@ -292,7 +361,7 @@ function MobileNavMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[min(16rem,calc(100vw-2rem))] rounded-none border-row-border bg-background p-1.5 text-foreground shadow-[0_18px_70px_rgba(0,0,0,0.55)] dark:bg-[#030303] md:hidden"
+        className="max-h-[calc(100vh-5rem)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-none border-row-border bg-background p-1.5 text-foreground shadow-[0_18px_70px_rgba(0,0,0,0.55)] dark:bg-[#030303] lg:hidden"
       >
         <DropdownMenuLabel className="px-2 pb-1.5 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
           Menu
@@ -315,13 +384,30 @@ function MobileNavMenu({
             );
           })}
         </DropdownMenuGroup>
+        {adminAccess ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="px-2 pb-1.5 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
+              Owner console
+            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              {(ownerAccess ? ownerNavItems : ownerNavItems.slice(0, 1)).map(
+                (item) => (
+                  <MobileNavItem
+                    active={resolveActive(item.href)}
+                    href={resolveHref(item.href)}
+                    key={item.href}
+                    label={item.label}
+                  />
+                ),
+              )}
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {authPending ? (
-            <DropdownMenuItem
-              className="h-10 rounded-none px-3"
-              disabled
-            >
+            <DropdownMenuItem className="h-10 rounded-none px-3" disabled>
               <span
                 aria-hidden="true"
                 className="h-3 w-16 animate-pulse rounded-none bg-muted"
@@ -334,6 +420,74 @@ function MobileNavMenu({
               label={authLabel}
             />
           ) : null}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DesktopOwnerMenu({
+  active,
+  ownerAccess,
+  resolveHref,
+}: {
+  active: boolean;
+  ownerAccess: boolean;
+  resolveHref: (href: string) => string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          aria-label="Open owner console navigation"
+          className={cn(
+            "h-7 rounded-none border border-transparent px-2.5 text-xs text-muted-foreground hover:border-row-border hover:bg-transparent hover:text-foreground",
+            active &&
+              "border-foreground bg-foreground text-background hover:border-foreground hover:bg-foreground hover:text-background",
+          )}
+          size="sm"
+          variant="ghost"
+        >
+          Console
+          <ChevronDown className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-64 rounded-none border-row-border bg-background p-1.5 shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+      >
+        <DropdownMenuLabel className="px-2 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Owner routes
+        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          {(ownerAccess ? ownerNavItems : ownerNavItems.slice(0, 1)).map(
+            (item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenuItem
+                  asChild
+                  className="rounded-none p-0 focus:bg-muted"
+                  key={item.href}
+                >
+                  <Link
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2.5"
+                    href={resolveHref(item.href)}
+                    prefetch={!isExternalHeaderHref(item.href)}
+                  >
+                    <Icon className="size-4 text-emerald-500" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">
+                        {item.label}
+                      </span>
+                      <span className="block font-mono text-[9px] uppercase text-muted-foreground">
+                        {item.note}
+                      </span>
+                    </span>
+                  </Link>
+                </DropdownMenuItem>
+              );
+            },
+          )}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -125,8 +125,38 @@ const windows = [
   { label: "30D", hours: 720 },
 ] as const;
 
+type TelemetryView = "overview" | "performance" | "agents" | "history";
+
+const telemetryViews = [
+  {
+    id: "overview",
+    label: "Overview",
+    note: "Live system posture",
+    icon: Activity,
+  },
+  {
+    id: "performance",
+    label: "Performance",
+    note: "GPU, queue + speed",
+    icon: Gauge,
+  },
+  {
+    id: "agents",
+    label: "Agents",
+    note: "Editorial output",
+    icon: ShieldCheck,
+  },
+  {
+    id: "history",
+    label: "Timeline",
+    note: "Correlated events",
+    icon: Timer,
+  },
+] as const;
+
 export function AdminTelemetry() {
   const [hours, setHours] = useState(24);
+  const [view, setView] = useState<TelemetryView>("overview");
   const [refreshKey, setRefreshKey] = useState(0);
   const [modelEnvelope, setModelEnvelope] =
     useState<ModelTelemetryEnvelope | null>(null);
@@ -193,22 +223,55 @@ export function AdminTelemetry() {
   );
 
   return (
-    <div className="space-y-6">
-      <section className="border-y border-row-border bg-foreground/[0.015] py-5">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <div className="space-y-5 pb-10">
+      <section className="relative overflow-hidden border border-row-border bg-foreground/[0.025]">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.28] [background-image:linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] [background-size:28px_28px]" />
+        <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="relative grid gap-8 p-5 md:p-7 xl:grid-cols-[minmax(0,1.15fr)_minmax(28rem,0.85fr)] xl:items-end">
           <div>
-            <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              <Activity className="h-4 w-4 text-emerald-500" />
-              AI control plane / redacted telemetry
+            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+              Live observatory / redacted telemetry
             </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              Muse + editorial agent operations
+            <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+              The machine and the voices, on one signal board.
             </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Live laptop inference, GPU and queue health are correlated with
-              forum, reply, and newsletter agent activity. Prompts and generated
-              content are never stored in this telemetry stream.
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Muse inference, GPU pressure, queue health, model routing, and
+              editorial output are correlated without retaining prompts or
+              generated content.
             </p>
+          </div>
+          <div className="grid grid-cols-3 gap-px border border-row-border bg-row-border">
+            <HeroSignal
+              label="Now"
+              value={decimal(runtime?.llama?.generationTokensPerSecond)}
+              unit="tok/s"
+            />
+            <HeroSignal
+              label="Window"
+              value={integer(model?.totals.requests)}
+              unit="requests"
+            />
+            <HeroSignal
+              label="Quality"
+              value={decimal(editorial?.totals.averageQuality)}
+              unit="avg score"
+            />
+          </div>
+        </div>
+        <div className="relative flex flex-col gap-3 border-t border-row-border bg-background/70 p-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            <span>{runtime?.gpu?.name ?? "GPU awaiting sample"}</span>
+            <span aria-hidden="true">/</span>
+            <span>
+              {runtime?.at
+                ? `sample ${relativeTime(runtime.at)}`
+                : "connecting"}
+            </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex border border-row-border bg-background p-1">
@@ -217,7 +280,7 @@ export function AdminTelemetry() {
                   key={window.hours}
                   type="button"
                   className={cn(
-                    "px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
+                    "px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors",
                     hours === window.hours
                       ? "bg-foreground text-background"
                       : "text-muted-foreground hover:text-foreground",
@@ -230,6 +293,7 @@ export function AdminTelemetry() {
             </div>
             <Button
               variant="outline"
+              size="sm"
               className="rounded-none"
               onClick={() => setRefreshKey((value) => value + 1)}
               disabled={modelLoading}
@@ -241,56 +305,76 @@ export function AdminTelemetry() {
         </div>
       </section>
 
-      <section className="grid gap-px overflow-hidden border border-row-border bg-row-border md:grid-cols-2 xl:grid-cols-5">
-        <StatusCell
-          label="Muse model"
-          value={
-            runtime?.modelHealthy
-              ? "Healthy"
-              : modelError
-                ? "Unavailable"
-                : "Checking"
-          }
-          tone={runtime?.modelHealthy ? "good" : modelError ? "bad" : "neutral"}
-          detail={
-            runtime?.at
-              ? `sample ${relativeTime(runtime.at)}`
-              : "awaiting sample"
-          }
-        />
-        <StatusCell
-          label="Hermes gateway"
-          value={
-            modelEnvelope?.gateway?.gateway_running ? "Running" : "Unknown"
-          }
-          tone={modelEnvelope?.gateway?.gateway_running ? "good" : "neutral"}
-          detail={
-            modelEnvelope?.gateway?.gateway_busy ? "agent processing" : "idle"
-          }
-        />
-        <StatusCell
-          label="Inference queue"
-          value={`${number(runtime?.llama?.requestsProcessing)} active`}
-          tone={(runtime?.llama?.requestsDeferred ?? 0) > 0 ? "warn" : "good"}
-          detail={`${number(runtime?.llama?.requestsDeferred)} deferred`}
-        />
-        <StatusCell
-          label="Telemetry store"
-          value={model ? `${model.retentionDays} day retention` : "Unavailable"}
-          tone={model ? "good" : "neutral"}
-          detail={
-            model
-              ? `${integer(model.storage.eventCount)} events in window`
-              : "redacted JSONL"
-          }
-        />
-        <StatusCell
-          label="Content logging"
-          value="Disabled"
-          tone="good"
-          detail="metadata and counters only"
-        />
-      </section>
+      <nav
+        aria-label="Telemetry views"
+        className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+        role="tablist"
+      >
+        {telemetryViews.map((item, index) => {
+          const selected = item.id === view;
+          const Icon = item.icon;
+          return (
+            <button
+              aria-controls={`telemetry-panel-${item.id}`}
+              aria-selected={selected}
+              className={cn(
+                "group relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden border p-3 text-left transition-colors",
+                selected
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-row-border bg-background hover:border-foreground",
+              )}
+              id={`telemetry-tab-${item.id}`}
+              key={item.id}
+              onClick={() => setView(item.id)}
+              onKeyDown={(event) => {
+                if (
+                  !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                    event.key,
+                  )
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                const nextIndex =
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? telemetryViews.length - 1
+                      : (index +
+                          (event.key === "ArrowRight" ? 1 : -1) +
+                          telemetryViews.length) %
+                        telemetryViews.length;
+                const next = telemetryViews[nextIndex];
+                setView(next.id);
+                document.getElementById(`telemetry-tab-${next.id}`)?.focus();
+              }}
+              role="tab"
+              tabIndex={selected ? 0 : -1}
+              type="button"
+            >
+              <Icon
+                className={cn(
+                  "size-4",
+                  selected ? "text-emerald-400" : "text-emerald-500",
+                )}
+              />
+              <span>
+                <span className="block text-sm font-semibold">
+                  {item.label}
+                </span>
+                <span
+                  className={cn(
+                    "mt-0.5 block font-mono text-[9px] uppercase tracking-[0.12em]",
+                    selected ? "text-background/60" : "text-muted-foreground",
+                  )}
+                >
+                  {item.note}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
 
       {modelError ? (
         <section className="border border-amber-500/40 bg-amber-500/5 p-4">
@@ -301,136 +385,379 @@ export function AdminTelemetry() {
         </section>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          icon={Zap}
-          label="Generation speed"
-          value={`${decimal(runtime?.llama?.generationTokensPerSecond)} tok/s`}
-          detail={`${decimal(model?.totals.averageTokensPerSecond)} average/request`}
-        />
-        <MetricCard
-          icon={Timer}
-          label="P95 latency"
-          value={duration(model?.totals.p95LatencyMs)}
-          detail={`${duration(model?.totals.p95QueueWaitMs)} queue p95`}
-        />
-        <MetricCard
-          icon={Cpu}
-          label="GPU load"
-          value={percent(runtime?.gpu?.utilizationPercent)}
-          detail={runtime?.gpu?.name ?? "GPU not reported"}
-        />
-        <MetricCard
-          icon={HardDrive}
-          label="VRAM"
-          value={memory(runtime?.gpu?.memoryUsedMiB)}
-          detail={`${memory(runtime?.gpu?.memoryTotalMiB)} total`}
-        />
-        <MetricCard
-          icon={Activity}
-          label="Inference requests"
-          value={integer(model?.totals.requests)}
-          detail={`${integer(model?.totals.completed)} completed`}
-        />
-        <MetricCard
-          icon={Gauge}
-          label="Error rate"
-          value={percent(model?.totals.errorRate)}
-          detail={`${integer(model?.totals.rejected)} rejected`}
-          warning={(model?.totals.errorRate ?? 0) > 0}
-        />
-        <MetricCard
-          icon={Zap}
-          label="DFlash acceptance"
-          value={percent(model?.speculativeDecoding.acceptanceRate)}
-          detail={`${integer(model?.speculativeDecoding.acceptedDraftTokens)} accepted drafts`}
-        />
-        <MetricCard
-          icon={ShieldCheck}
-          label="Agent quality"
-          value={decimal(editorial?.totals.averageQuality)}
-          detail={`${integer(editorial?.totals.published)} posts published`}
-        />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-        <Panel
-          eyebrow="Throughput"
-          title="Inference traffic"
-          aside={`${integer(model?.totals.inputTokens)} in / ${integer(model?.totals.outputTokens)} out`}
+      {view === "overview" ? (
+        <div
+          aria-labelledby="telemetry-tab-overview"
+          className="space-y-5"
+          id="telemetry-panel-overview"
+          role="tabpanel"
         >
-          <SeriesBars
-            rows={(model?.series ?? []).map((row) => ({
-              key: row.at,
-              label: compactTime(row.at, hours),
-              primary: row.outputTokens,
-              secondary: row.failed + row.rejected,
-              title: `${row.requests} requests · ${row.outputTokens} output tokens`,
-            }))}
-            empty={
-              modelLoading
-                ? "Loading inference telemetry"
-                : "No inference requests in this window"
-            }
+          <SystemStatusGrid
+            model={model}
+            modelEnvelope={modelEnvelope}
+            modelError={modelError}
+            runtime={runtime}
           />
-        </Panel>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              icon={Zap}
+              label="Generation speed"
+              value={`${decimal(runtime?.llama?.generationTokensPerSecond)} tok/s`}
+              detail={`${decimal(model?.totals.averageTokensPerSecond)} average/request`}
+            />
+            <MetricCard
+              icon={Timer}
+              label="P95 latency"
+              value={duration(model?.totals.p95LatencyMs)}
+              detail={`${duration(model?.totals.p95QueueWaitMs)} queue p95`}
+            />
+            <MetricCard
+              icon={Gauge}
+              label="Error rate"
+              value={percent(model?.totals.errorRate)}
+              detail={`${integer(model?.totals.rejected)} rejected`}
+              warning={(model?.totals.errorRate ?? 0) > 0}
+            />
+            <MetricCard
+              icon={ShieldCheck}
+              label="Agent quality"
+              value={decimal(editorial?.totals.averageQuality)}
+              detail={`${integer(editorial?.totals.published)} posts published`}
+            />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+            <InferenceTraffic
+              model={model}
+              hours={hours}
+              loading={modelLoading}
+            />
+            <Panel
+              eyebrow="Latest signal"
+              title="Recent operations"
+              aside={`${combinedRecent.length} correlated`}
+            >
+              <RecentTimeline rows={combinedRecent.slice(0, 10)} />
+            </Panel>
+          </section>
+        </div>
+      ) : null}
 
-        <Panel eyebrow="Laptop" title="Runtime envelope">
-          <dl className="divide-y divide-row-border border-y border-row-border">
-            <RuntimeRow
-              label="Temperature"
-              value={temperature(runtime?.gpu?.temperatureCelsius)}
+      {view === "performance" ? (
+        <div
+          aria-labelledby="telemetry-tab-performance"
+          className="space-y-5"
+          id="telemetry-panel-performance"
+          role="tabpanel"
+        >
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              icon={Cpu}
+              label="GPU load"
+              value={percent(runtime?.gpu?.utilizationPercent)}
+              detail={runtime?.gpu?.name ?? "GPU not reported"}
             />
-            <RuntimeRow
-              label="GPU power"
-              value={`${decimal(runtime?.gpu?.powerDrawWatts)} / ${decimal(runtime?.gpu?.powerLimitWatts)} W`}
+            <MetricCard
+              icon={HardDrive}
+              label="VRAM"
+              value={memory(runtime?.gpu?.memoryUsedMiB)}
+              detail={`${memory(runtime?.gpu?.memoryTotalMiB)} total`}
             />
-            <RuntimeRow
-              label="Prompt throughput"
-              value={`${decimal(runtime?.llama?.inputTokensPerSecond)} tok/s`}
+            <MetricCard
+              icon={Activity}
+              label="Inference requests"
+              value={integer(model?.totals.requests)}
+              detail={`${integer(model?.totals.completed)} completed`}
             />
-            <RuntimeRow
-              label="Cumulative tokens"
-              value={`${integer(runtime?.llama?.inputTokensTotal)} in · ${integer(runtime?.llama?.outputTokensTotal)} out`}
+            <MetricCard
+              icon={Zap}
+              label="DFlash acceptance"
+              value={percent(model?.speculativeDecoding.acceptanceRate)}
+              detail={`${integer(model?.speculativeDecoding.acceptedDraftTokens)} accepted drafts`}
             />
-            <RuntimeRow
-              label="First byte p95"
-              value={duration(model?.totals.p95FirstByteMs)}
+          </section>
+          <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+            <InferenceTraffic
+              model={model}
+              hours={hours}
+              loading={modelLoading}
             />
-          </dl>
-        </Panel>
-      </section>
+            <RuntimePanel model={model} runtime={runtime} />
+          </section>
+          <Panel eyebrow="Access pressure" title="Usage by API key">
+            <KeyUsageTable rows={model?.keys ?? []} />
+          </Panel>
+        </div>
+      ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Panel
-          eyebrow="SYMBaiEX agents"
-          title="Editorial production"
-          aside={`${integer(editorial?.totals.agentRuns)} runs · ${integer(editorial?.totals.replies)} replies`}
+      {view === "agents" ? (
+        <div
+          aria-labelledby="telemetry-tab-agents"
+          className="space-y-5"
+          id="telemetry-panel-agents"
+          role="tabpanel"
         >
-          <AgentTable snapshot={editorial} />
-        </Panel>
-        <Panel
-          eyebrow="Routing"
-          title="Model attempts + fallbacks"
-          aside={`${integer(editorial?.totals.fallbackAttempts)} fallback attempts`}
-        >
-          <ModelTable snapshot={editorial} />
-        </Panel>
-      </section>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              icon={Activity}
+              label="Agent runs"
+              value={integer(editorial?.totals.agentRuns)}
+              detail={`${integer(editorial?.totals.published)} published`}
+            />
+            <MetricCard
+              icon={ShieldCheck}
+              label="Replies"
+              value={integer(editorial?.totals.replies)}
+              detail={`${integer(editorial?.totals.newsletters)} newsletter runs`}
+            />
+            <MetricCard
+              icon={Gauge}
+              label="Route failures"
+              value={integer(editorial?.totals.routeFailures)}
+              detail={`${integer(editorial?.totals.fallbackAttempts)} fallbacks`}
+              warning={(editorial?.totals.routeFailures ?? 0) > 0}
+            />
+            <MetricCard
+              icon={Zap}
+              label="Agent tokens"
+              value={integer(
+                (editorial?.totals.inputTokens ?? 0) +
+                  (editorial?.totals.outputTokens ?? 0),
+              )}
+              detail={`${duration(editorial?.totals.p95DurationMs)} generation p95`}
+            />
+          </section>
+          <Panel
+            eyebrow="Editorial cadence"
+            title="Agent output over time"
+            aside={`${integer(editorial?.totals.inputTokens)} in / ${integer(editorial?.totals.outputTokens)} out`}
+          >
+            <SeriesBars
+              rows={(editorial?.series ?? []).map((row) => ({
+                key: String(row.at),
+                label: compactTime(new Date(row.at).toISOString(), hours),
+                primary: row.outputTokens || row.generations,
+                secondary: row.failures,
+                title: `${row.generations} generations · ${row.outputTokens} output tokens`,
+              }))}
+              empty="No editorial generations in this window"
+            />
+          </Panel>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <Panel
+              eyebrow="SYMBaiEX agents"
+              title="Editorial production"
+              aside={`${integer(editorial?.totals.agentRuns)} runs · ${integer(editorial?.totals.replies)} replies`}
+            >
+              <AgentTable snapshot={editorial} />
+            </Panel>
+            <Panel
+              eyebrow="Routing"
+              title="Model attempts + fallbacks"
+              aside={`${integer(editorial?.totals.fallbackAttempts)} fallback attempts`}
+            >
+              <ModelTable snapshot={editorial} />
+            </Panel>
+          </section>
+        </div>
+      ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <Panel eyebrow="Access" title="Usage by API key">
-          <KeyUsageTable rows={model?.keys ?? []} />
-        </Panel>
-        <Panel
-          eyebrow="Correlated history"
-          title="Recent operations"
-          aside="newest first"
+      {view === "history" ? (
+        <div
+          aria-labelledby="telemetry-tab-history"
+          className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]"
+          id="telemetry-panel-history"
+          role="tabpanel"
         >
-          <RecentTimeline rows={combinedRecent} />
-        </Panel>
-      </section>
+          <div className="space-y-5">
+            <Panel eyebrow="Retention" title="Data integrity">
+              <dl className="divide-y divide-row-border border-y border-row-border">
+                <RuntimeRow
+                  label="Retention"
+                  value={model ? `${model.retentionDays} days` : "—"}
+                />
+                <RuntimeRow
+                  label="Events in window"
+                  value={integer(model?.storage.eventCount)}
+                />
+                <RuntimeRow
+                  label="Oldest event"
+                  value={
+                    model?.storage.oldestAt
+                      ? formatClock(Date.parse(model.storage.oldestAt))
+                      : "—"
+                  }
+                />
+                <RuntimeRow label="Content captured" value="None" />
+                <RuntimeRow label="Store mode" value="Redacted JSONL" />
+              </dl>
+            </Panel>
+            <Panel eyebrow="Clients" title="API-key history">
+              <KeyUsageTable rows={model?.keys ?? []} />
+            </Panel>
+          </div>
+          <Panel
+            eyebrow="Correlated history"
+            title="Operational timeline"
+            aside="newest first"
+          >
+            <RecentTimeline rows={combinedRecent} />
+          </Panel>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function HeroSignal({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+}) {
+  return (
+    <div className="min-w-0 bg-background/85 p-3 sm:p-4">
+      <p className="font-mono text-[8px] uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-3 truncate font-mono text-2xl font-semibold tracking-[-0.05em] sm:text-3xl">
+        {value}
+      </p>
+      <p className="mt-1 truncate font-mono text-[8px] uppercase tracking-[0.12em] text-emerald-600 dark:text-emerald-400">
+        {unit}
+      </p>
+    </div>
+  );
+}
+
+function SystemStatusGrid({
+  model,
+  modelEnvelope,
+  modelError,
+  runtime,
+}: {
+  model: ModelTelemetry | undefined;
+  modelEnvelope: ModelTelemetryEnvelope | null;
+  modelError: string | null;
+  runtime: RuntimeSample | null | undefined;
+}) {
+  return (
+    <section className="grid gap-px overflow-hidden border border-row-border bg-row-border md:grid-cols-2 xl:grid-cols-5">
+      <StatusCell
+        label="Muse model"
+        value={
+          runtime?.modelHealthy
+            ? "Healthy"
+            : modelError
+              ? "Unavailable"
+              : "Checking"
+        }
+        tone={runtime?.modelHealthy ? "good" : modelError ? "bad" : "neutral"}
+        detail={
+          runtime?.at ? `sample ${relativeTime(runtime.at)}` : "awaiting sample"
+        }
+      />
+      <StatusCell
+        label="Hermes gateway"
+        value={modelEnvelope?.gateway?.gateway_running ? "Running" : "Unknown"}
+        tone={modelEnvelope?.gateway?.gateway_running ? "good" : "neutral"}
+        detail={
+          modelEnvelope?.gateway?.gateway_busy ? "agent processing" : "idle"
+        }
+      />
+      <StatusCell
+        label="Inference queue"
+        value={`${number(runtime?.llama?.requestsProcessing)} active`}
+        tone={(runtime?.llama?.requestsDeferred ?? 0) > 0 ? "warn" : "good"}
+        detail={`${number(runtime?.llama?.requestsDeferred)} deferred`}
+      />
+      <StatusCell
+        label="Telemetry store"
+        value={model ? `${model.retentionDays} day retention` : "Unavailable"}
+        tone={model ? "good" : "neutral"}
+        detail={
+          model
+            ? `${integer(model.storage.eventCount)} events in window`
+            : "redacted JSONL"
+        }
+      />
+      <StatusCell
+        label="Content logging"
+        value="Disabled"
+        tone="good"
+        detail="metadata and counters only"
+      />
+    </section>
+  );
+}
+
+function InferenceTraffic({
+  model,
+  hours,
+  loading,
+}: {
+  model: ModelTelemetry | undefined;
+  hours: number;
+  loading: boolean;
+}) {
+  return (
+    <Panel
+      eyebrow="Throughput"
+      title="Inference traffic"
+      aside={`${integer(model?.totals.inputTokens)} in / ${integer(model?.totals.outputTokens)} out`}
+    >
+      <SeriesBars
+        rows={(model?.series ?? []).map((row) => ({
+          key: row.at,
+          label: compactTime(row.at, hours),
+          primary: row.outputTokens,
+          secondary: row.failed + row.rejected,
+          title: `${row.requests} requests · ${row.outputTokens} output tokens`,
+        }))}
+        empty={
+          loading
+            ? "Loading inference telemetry"
+            : "No inference requests in this window"
+        }
+      />
+    </Panel>
+  );
+}
+
+function RuntimePanel({
+  model,
+  runtime,
+}: {
+  model: ModelTelemetry | undefined;
+  runtime: RuntimeSample | null | undefined;
+}) {
+  return (
+    <Panel eyebrow="Laptop" title="Runtime envelope">
+      <dl className="divide-y divide-row-border border-y border-row-border">
+        <RuntimeRow
+          label="Temperature"
+          value={temperature(runtime?.gpu?.temperatureCelsius)}
+        />
+        <RuntimeRow
+          label="GPU power"
+          value={`${decimal(runtime?.gpu?.powerDrawWatts)} / ${decimal(runtime?.gpu?.powerLimitWatts)} W`}
+        />
+        <RuntimeRow
+          label="Prompt throughput"
+          value={`${decimal(runtime?.llama?.inputTokensPerSecond)} tok/s`}
+        />
+        <RuntimeRow
+          label="Cumulative tokens"
+          value={`${integer(runtime?.llama?.inputTokensTotal)} in · ${integer(runtime?.llama?.outputTokensTotal)} out`}
+        />
+        <RuntimeRow
+          label="First byte p95"
+          value={duration(model?.totals.p95FirstByteMs)}
+        />
+      </dl>
+    </Panel>
   );
 }
 
@@ -446,8 +773,9 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="border border-row-border bg-background">
-      <header className="flex items-end justify-between gap-4 border-b border-row-border p-4">
+    <section className="overflow-hidden border border-row-border bg-background shadow-[0_14px_50px_rgba(0,0,0,0.03)]">
+      <header className="relative flex items-end justify-between gap-4 border-b border-row-border bg-foreground/[0.018] p-4">
+        <span className="absolute inset-y-0 left-0 w-px bg-emerald-500" />
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             {eyebrow}
@@ -514,7 +842,15 @@ function MetricCard({
   warning?: boolean;
 }) {
   return (
-    <div className="border border-row-border p-4">
+    <div className="group relative overflow-hidden border border-row-border bg-foreground/[0.015] p-4 transition-colors hover:border-foreground/50">
+      <span
+        className={cn(
+          "absolute inset-x-0 top-0 h-px transition-colors",
+          warning
+            ? "bg-amber-500"
+            : "bg-emerald-500/50 group-hover:bg-emerald-500",
+        )}
+      />
       <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           {label}

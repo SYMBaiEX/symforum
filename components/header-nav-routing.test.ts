@@ -62,6 +62,14 @@ describe("header nav routing", () => {
         pathname: "/search",
       }),
     ).toBe("/subscriptions");
+    expect(
+      resolveHeaderNavHref({
+        forumHost: true,
+        href: "https://agent.symbaiex.com/admin",
+        location: productionForumLocation,
+        pathname: "/search",
+      }),
+    ).toBe("https://agent.symbaiex.com/admin");
   });
 
   test("keeps site-owned auth and profile links on the forum host", () => {

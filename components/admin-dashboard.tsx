@@ -30,6 +30,11 @@ import {
   type ConvexPostRecord,
 } from "@/lib/convex-refs";
 import { compactNumber, formatDate } from "@/lib/format";
+import {
+  adminSectionHref,
+  ownerOnlyAdminSections,
+  type AdminSectionId,
+} from "@/lib/admin-sections";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -54,6 +59,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useMemo,
   useRef,
@@ -80,21 +86,7 @@ type PostForm = {
   imageCredit: string;
 };
 
-type AdminTabId =
-  | "overview"
-  | "forum"
-  | "posts"
-  | "api"
-  | "comments"
-  | "interactions"
-  | "analytics"
-  | "users"
-  | "logs"
-  | "newsletter"
-  | "contact"
-  | "content"
-  | "ai"
-  | "telemetry";
+type AdminTabId = AdminSectionId;
 
 type AdminTab = {
   id: AdminTabId;
@@ -186,7 +178,11 @@ const adminApiRoutes = [
   },
 ] as const;
 
-export function AdminDashboard() {
+export function AdminDashboard({
+  initialTab = "overview",
+}: {
+  initialTab?: AdminSectionId;
+}) {
   const viewer = useQuery(convexRefs.admin.viewer, {});
   const claimInitialOwner = useMutation(convexRefs.admin.claimInitialOwner);
   const [ownerBootstrapToken, setOwnerBootstrapToken] = useState("");
@@ -265,7 +261,9 @@ export function AdminDashboard() {
     );
   }
 
-  return <SiteAdminDashboard isOwner={viewer.isOwner} />;
+  return (
+    <SiteAdminDashboard initialTab={initialTab} isOwner={viewer.isOwner} />
+  );
 }
 
 function ForumStaffDashboard({ mode }: { mode: "full" | "moderation" }) {
@@ -290,7 +288,14 @@ function ForumStaffDashboard({ mode }: { mode: "full" | "moderation" }) {
   );
 }
 
-function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
+function SiteAdminDashboard({
+  initialTab,
+  isOwner,
+}: {
+  initialTab: AdminSectionId;
+  isOwner: boolean;
+}) {
+  const router = useRouter();
   const overview = useQuery(convexRefs.admin.overview, {});
   const forumOverview = useQuery(adminForumOverviewRef, {});
   const posts = useQuery(convexRefs.admin.listPosts, {});
@@ -314,7 +319,13 @@ function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
   >(null);
   const [apiKeyName, setApiKeyName] = useState("Blog writer");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTabId>("overview");
+  const activeTab =
+    !isOwner && ownerOnlyAdminSections.has(initialTab)
+      ? "overview"
+      : initialTab;
+  const navigateToTab = (tab: AdminTabId) => {
+    router.push(adminSectionHref(tab));
+  };
   const [postSearch, setPostSearch] = useState("");
   const [postStatusFilter, setPostStatusFilter] = useState<
     "all" | ConvexPostRecord["status"]
@@ -744,7 +755,7 @@ function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
     <>
       <AdminTabChrome
         activeTab={activeTab}
-        onChange={setActiveTab}
+        onChange={navigateToTab}
         tabs={tabs}
       />
 
@@ -755,10 +766,10 @@ function SiteAdminDashboard({ isOwner }: { isOwner: boolean }) {
             overview={overview}
             onCreatePost={() => {
               setForm(blankPost);
-              setActiveTab("posts");
+              navigateToTab("posts");
             }}
             tabs={tabs}
-            onChange={setActiveTab}
+            onChange={navigateToTab}
           />
         ) : null}
 
@@ -1517,12 +1528,26 @@ function AdminTabChrome({
   onChange: (tab: AdminTabId) => void;
   tabs: AdminTab[];
 }) {
+  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   return (
-    <div className="mb-7">
+    <div className="sticky top-0 z-30 -mx-4 mb-7 border-b border-row-border bg-background/95 px-4 pb-3 pt-2 backdrop-blur md:-mx-8 md:px-8">
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Admin control deck / {active?.note ?? "Operations"}
+          </p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">
+            {active?.label ?? "Admin"}
+          </h1>
+        </div>
+        <Link
+          className="hidden font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground sm:block"
+          href="/"
+        >
+          Exit console ↗
+        </Link>
+      </div>
       <div className="md:hidden">
-        <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
-          Admin section
-        </p>
         <Select
           value={activeTab}
           onValueChange={(value) => onChange(value as AdminTabId)}
@@ -1540,32 +1565,50 @@ function AdminTabChrome({
         </Select>
       </div>
 
-      <div
+      <nav
         aria-label="Admin sections"
-        className="hidden flex-wrap items-center gap-1 md:flex"
-        role="group"
+        className="scrollbar-none -mx-1 hidden items-stretch gap-1 overflow-x-auto px-1 md:flex"
       >
         {tabs.map((tab) => {
           const selected = activeTab === tab.id;
+          const Icon = tab.icon;
           return (
-            <button
-              aria-pressed={selected}
+            <Link
+              aria-current={selected ? "page" : undefined}
               className={cn(
-                "px-3 py-2 text-sm font-medium transition-colors",
+                "group relative flex shrink-0 items-center gap-2 border border-transparent px-3 py-2.5 text-sm font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 selected
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "border-row-border bg-foreground/[0.06] text-foreground"
+                  : "text-muted-foreground hover:border-row-border hover:text-foreground",
               )}
+              href={adminSectionHref(tab.id)}
               key={tab.id}
-              onClick={() => onChange(tab.id)}
-              type="button"
             >
-              {tab.label}
-            </button>
+              <Icon className="size-3.5" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 ? (
+                <span
+                  className={cn(
+                    "font-mono text-[9px]",
+                    selected
+                      ? "text-foreground/60"
+                      : "text-muted-foreground/60",
+                  )}
+                >
+                  {compactNumber(tab.count)}
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  "absolute inset-x-2 -bottom-[0.8rem] h-px bg-transparent transition-colors",
+                  selected && "bg-emerald-500",
+                )}
+              />
+            </Link>
           );
         })}
-      </div>
+      </nav>
     </div>
   );
 }

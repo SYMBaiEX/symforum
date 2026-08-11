@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Admin",
+  robots: { index: false, follow: false },
 };
 
 export default function AdminPage() {
@@ -12,7 +13,7 @@ export default function AdminPage() {
     <>
       <section className="page-frame">
         {configured ? (
-          <AdminDashboard />
+          <AdminDashboard initialTab="overview" />
         ) : (
           <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
             Convex is not connected locally.
