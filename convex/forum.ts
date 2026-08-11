@@ -18316,6 +18316,8 @@ function forumThreadExcerpt(body: string) {
         .replace(/\[url(?:=[^\]]+)?\]([\s\S]*?)\[\/url\]/gi, "$1")
         .replace(/\[img\]([\s\S]*?)\[\/img\]/gi, " ")
         .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+        .replace(/<\/?[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+        .replace(/<[^>]+>/g, " ")
         .replace(/\s*\|\s*/g, " "),
       180,
     ) || "Forum discussion on SYMBaiEX."

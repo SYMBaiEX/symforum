@@ -2714,6 +2714,11 @@ describe("forum privacy regressions", () => {
       subject: seed.trustedUserId,
       name: "Trusted Author",
     });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(seed.trustedThreadId, {
+        body: "[h2]Trusted launch</h2] Trusted members can read this lunar launch discussion.",
+      });
+    });
     await expect(
       asTrusted.query(api.forum.routeStatus, {
         categorySlug: "trusted-lab",
@@ -2724,7 +2729,8 @@ describe("forum privacy regressions", () => {
       kind: "thread",
       categoryName: "Trusted Lab",
       threadTitle: "Trusted lunar brief",
-      threadExcerpt: "Trusted members can read this lunar launch discussion.",
+      threadExcerpt:
+        "Trusted launch Trusted members can read this lunar launch discussion.",
     });
   });
 
