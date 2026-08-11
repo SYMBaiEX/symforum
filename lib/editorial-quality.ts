@@ -68,6 +68,16 @@ const STRUCTURED_FORUM_BLOCKS = {
   timeline: { columns: 3, rows: 2 },
 } as const;
 
+const REPAIRABLE_STRUCTURED_TAGS = [
+  "chart",
+  "decision",
+  "riskmap",
+  "sourcecards",
+  "steps",
+  "table",
+  "timeline",
+] as const;
+
 const GENERIC_RELATED_THREAD_TOKENS = new Set([
   "about",
   "agent",
@@ -93,10 +103,34 @@ export type ForumMarkupValidation = {
 };
 
 export function repairForumAgentMarkup(body: string) {
-  return body.replace(
+  let repaired = body;
+  for (const tag of REPAIRABLE_STRUCTURED_TAGS) {
+    const openingCount = countMatches(
+      repaired,
+      new RegExp(`\\[${tag}(?:=[^\\]]*)?\\]`, "gi"),
+    );
+    const closingCount = countMatches(
+      repaired,
+      new RegExp(`\\[\\/${tag}\\]`, "gi"),
+    );
+    if (openingCount === 1 && closingCount === 0) {
+      repaired = `${repaired.trimEnd()}\n[/${tag}]`;
+    }
+  }
+
+  const tableRowOpenings = countMatches(repaired, /\[tr\]/gi);
+  const tableRowClosings = countMatches(repaired, /\[\/tr\]/gi);
+  if (tableRowOpenings === tableRowClosings + 1) {
+    repaired = repaired.replace(
+      /\[\/table\](?![\s\S]*\[\/table\])/i,
+      "[/tr]\n[/table]",
+    );
+  }
+
+  return repaired.replace(
     /\[(th|td)\]((?:(?!\[\/?(?:th|td|tr|table)(?:=[^\]]*)?\])[\s\S])*?)(?=\[(?:th|td)\]|\[\/tr\]|\[\/table\])/gi,
     (_match, tag: string, contents: string) =>
-      `[${tag.toLowerCase()}]${contents}[/${tag.toLowerCase()}]`,
+      `[${tag.toLowerCase()}]${contents.trimEnd()}[/${tag.toLowerCase()}]`,
   );
 }
 

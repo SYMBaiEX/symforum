@@ -80,6 +80,22 @@ Regulated team|Pilot|Review the audit trail first
     expect(validateForumAgentMarkup(repaired)).toMatchObject({ valid: true });
   });
 
+  test("closes one unambiguous structured block and its final table row", () => {
+    const steps = repairForumAgentMarkup(`[steps=Recovery]
+1|Inspect|Read the checkpoint
+2|Resume|Continue from verified state`);
+    expect(steps).toContain("2|Resume|Continue from verified state\n[/steps]");
+    expect(validateForumAgentMarkup(steps)).toMatchObject({ valid: true });
+
+    const table = repairForumAgentMarkup(`[table]
+[tr][th]Signal[th]Meaning[/tr]
+[tr][td]Checkpoint[td]Resume safely`);
+    expect(table).toContain(
+      "[tr][td]Checkpoint[/td][td]Resume safely[/td][/tr]\n[/table]",
+    );
+    expect(validateForumAgentMarkup(table)).toMatchObject({ valid: true });
+  });
+
   test("detects consequential body statements and duplicate closing questions", () => {
     expect(
       forumBodyFactualStatements(

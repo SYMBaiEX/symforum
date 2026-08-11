@@ -622,7 +622,7 @@ export async function runForumResearchSlot(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
             ),
-            maxOutputTokens: 5_000,
+            maxOutputTokens: 4_200,
             instructions: modelInstructions(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
@@ -1370,7 +1370,7 @@ Quality requirements:
 - Submit a claim ledger for every consequential factual or analytical claim. Each claim must point to the exact research candidate that supports it. A factual number, version, date, vulnerability identifier, or named capability without source support fails review.
 - Make the claim ledger complete: every consequential factual sentence in the body must map to one submitted claim. Do not hide an unsupported assertion by omitting it from the ledger or labeling it analysis.
 - Preserve source caveats and scope exactly. Do not infer filters, permissions, controls, guarantees, or product behavior the source does not explicitly describe.
-- Submit 2-5 concise original-value statements and one focused discussionQuestion. The question must also appear naturally at the end of the body.
+- Submit 2-5 concise originalValue entries copied exactly from useful sentences already present in the body, plus one focused discussionQuestion. The question must also appear naturally at the end of the body.
 
 Forum formatting:
 - Use MyBB-style BBCode, not Markdown or HTML.
@@ -1527,7 +1527,45 @@ export function repairForumDraftForReview(
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { ...draft, body, claims, discussionQuestion };
+  const originalValue = anchorOriginalValueStatements(
+    draft.originalValue,
+    body,
+  );
+
+  return { ...draft, body, claims, discussionQuestion, originalValue };
+}
+
+function anchorOriginalValueStatements(values: string[], body: string) {
+  const segments = body
+    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, "\n")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter(
+      (segment) =>
+        segment.length >= 8 &&
+        segment.length <= 240 &&
+        segment.split(/\s+/).length >= 5 &&
+        !segment.endsWith("?"),
+    );
+  const used = new Set<string>();
+  return values.map((value) => {
+    if (lexicalEvidenceCoverage(value, plainForumDraftText(body)) >= 0.65) {
+      return value;
+    }
+    const match = segments
+      .filter((segment) => !used.has(segment))
+      .map((segment) => ({
+        segment,
+        score: Math.max(
+          lexicalEvidenceCoverage(value, segment),
+          lexicalEvidenceCoverage(segment, value),
+        ),
+      }))
+      .sort((left, right) => right.score - left.score)[0];
+    if (!match || match.score < 0.35) return value;
+    used.add(match.segment);
+    return match.segment;
+  });
 }
 
 function normalizeDiscussionQuestion(question: string) {
