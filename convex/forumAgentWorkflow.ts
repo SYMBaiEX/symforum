@@ -6,7 +6,10 @@ import { internalMutation } from "./_generated/server";
 
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
-    maxParallelism: 3,
+    // Keep Muse saturated without putting multiple long generations behind
+    // the laptop's single active inference slot. One workflow can research
+    // while the other is generating or waiting in the model queue.
+    maxParallelism: 2,
     retryActionsByDefault: true,
     defaultRetryBehavior: {
       maxAttempts: 3,

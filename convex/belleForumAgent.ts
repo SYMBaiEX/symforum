@@ -193,7 +193,6 @@ export const runDailyHackerNewsDigest = internalAction({
       const candidates = indexed.stories.map(hackerNewsCandidate);
       const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
       const gatewayOptions = {
-        caching: "auto",
         user: "belle",
         tags: [
           "agent:belle",
@@ -211,7 +210,7 @@ export const runDailyHackerNewsDigest = internalAction({
           feature: "hacker-news-digest",
           agent: "belle",
           onAttempt: recordRouteAttempt,
-          totalTimeoutMs: 240_000,
+          totalTimeoutMs: 300_000,
           run: async (candidate, signal) => {
             const writer = new ToolLoopAgent({
               id: `belle-hacker-news-desk-${candidate.provider}`,
@@ -223,10 +222,10 @@ export const runDailyHackerNewsDigest = internalAction({
                   inputSchema: digestDraftSchema,
                 }),
               },
-              toolChoice: { type: "tool", toolName: "submitDigest" },
+              toolChoice: "required",
               providerOptions: candidate.providerOptions,
               ...modelGenerationSettings(candidate.provider, "digest"),
-              maxOutputTokens: 7_000,
+              maxOutputTokens: 5_500,
               instructions: modelInstructions(
                 candidate.provider,
                 "digest",

@@ -115,7 +115,6 @@ async function runReplySweepForAgent(
       );
     }
     const gatewayOptions = {
-      caching: "auto",
       user: agentSlug,
       tags: [
         `agent:${agentSlug}`,
@@ -134,7 +133,7 @@ async function runReplySweepForAgent(
         feature: "forum-reply",
         agent: agentSlug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 120_000,
+        totalTimeoutMs: 240_000,
         run: async (candidate, signal) =>
           await generateText({
             model: candidate.model,

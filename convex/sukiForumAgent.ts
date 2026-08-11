@@ -393,7 +393,6 @@ export async function runForumResearchSlot(
     }
 
     const gatewayOptions = {
-      caching: "auto",
       user: config.slug,
       tags: [
         `agent:${config.slug}`,
@@ -422,7 +421,7 @@ export async function runForumResearchSlot(
         feature: "forum-agent",
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 180_000,
+        totalTimeoutMs: 240_000,
         run: async (candidate, signal) => {
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
@@ -433,10 +432,10 @@ export async function runForumResearchSlot(
                 inputSchema: topicSelectionSchema,
               }),
             },
-            toolChoice: { type: "tool", toolName: "selectTopic" },
+            toolChoice: "required",
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(candidate.provider, "topic-selection"),
-            maxOutputTokens: 2_000,
+            maxOutputTokens: 3_000,
             instructions: modelInstructions(
               candidate.provider,
               "topic-selection",
@@ -604,7 +603,7 @@ export async function runForumResearchSlot(
         feature: "forum-agent",
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 240_000,
+        totalTimeoutMs: 300_000,
         run: async (candidate, signal) => {
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
@@ -616,13 +615,13 @@ export async function runForumResearchSlot(
                 inputSchema: forumDraftSchema,
               }),
             },
-            toolChoice: { type: "tool", toolName: "submitForumDraft" },
+            toolChoice: "required",
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
             ),
-            maxOutputTokens: 6_500,
+            maxOutputTokens: 5_000,
             instructions: modelInstructions(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",

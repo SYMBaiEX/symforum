@@ -30,7 +30,6 @@ export const probe = internalAction({
   }),
   handler: async () => {
     const gatewayOptions = {
-      caching: "auto",
       user: "operator-route-probe",
       tags: ["feature:model-route-probe"],
     } satisfies GatewayProviderOptions;
@@ -39,7 +38,7 @@ export const probe = internalAction({
       gatewayOptions,
       {
         stage: "operator:model-route-probe",
-        totalTimeoutMs: 90_000,
+        totalTimeoutMs: 180_000,
         run: async (candidate, signal) => {
           const result = await generateText({
             model: candidate.model,

@@ -230,7 +230,10 @@ export async function runRoutedCandidates<T>(
     if (remaining <= 1_000) break;
     const fallbackReserve =
       index < candidates.length - 1
-        ? Math.min(45_000, Math.floor(args.totalTimeoutMs * 0.3))
+        ? Math.min(
+            120_000,
+            Math.max(1_000, Math.floor(args.totalTimeoutMs * 0.25)),
+          )
         : 0;
     const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
     const attemptStartedAt = Date.now();
