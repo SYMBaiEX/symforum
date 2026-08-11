@@ -50,12 +50,21 @@ bun run env:push:prod
 The sync command ignores blank values and never prints secret values. It does
 not send browser-only values such as `NEXT_PUBLIC_CONVEX_URL` to Convex.
 
-Suki, Belle, and the newsletter agents need a Vercel AI Gateway key in each
-Convex deployment:
+Suki, Belle, the newsletter agents, and the owner console use the
+OpenAI-compatible Muse-Glimmer service first and retain Vercel AI Gateway as
+an automatic fallback. Configure all three server-only values in each Convex
+deployment and in Vercel:
 
 ```bash
+MUSE_API_BASE_URL=https://agent.symbaiex.com/v1
+MUSE_API_KEY=
 AI_GATEWAY_API_KEY=
 ```
+
+Create the Muse key from `https://agent.symbaiex.com/admin/api`. Use a
+background-priority key for Convex and an interactive-priority key for the
+owner console. The public API streams through standard HTTPS server-sent
+events; no custom WebSocket client is required.
 
 Convex Auth also needs `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET`.
 The generated `JWT_PRIVATE_KEY` and `JWKS` values should be preserved in every
@@ -127,10 +136,12 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
 - Set `NEXT_PUBLIC_CONVEX_URL` from the Convex deployment.
 - Set `SITE_URL`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` separately in the
   development and production Convex deployments.
-- Set `AI_GATEWAY_API_KEY` in Convex before enabling the forum and newsletter
-  agents. They use `deepseek/deepseek-v4-flash-0731`; research feeds and source
-  images are cached in Convex, and every published topic records its run and
-  source URLs.
+- Set `MUSE_API_BASE_URL`, `MUSE_API_KEY`, and `AI_GATEWAY_API_KEY` in Convex
+  before enabling the forum and newsletter agents. They use
+  `muse/Muse-Glimmer-30B` when the laptop is healthy, fall back to
+  `deepseek/deepseek-v4-flash-0731`, and record the route that actually
+  completed each metered stage. Research feeds and source images are cached in
+  Convex, and every published topic records its run and source URLs.
 - Keep `npx convex dev` running locally while editing Convex functions.
 
 ## Verification

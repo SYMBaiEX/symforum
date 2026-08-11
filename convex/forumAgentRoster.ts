@@ -1,6 +1,7 @@
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { MUSE_AGENT_MODEL } from "../lib/ai-models";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 
 export type ForumAgentRosterEntry = {
@@ -367,7 +368,29 @@ function forumAgentSignature(entry: ForumAgentRosterEntry) {
 }
 
 const DORMANT_MODEL = "unassigned";
-const POSTING_MODEL = "deepseek/deepseek-v4-flash-0731";
+const POSTING_MODEL = MUSE_AGENT_MODEL;
+
+export const migratePostingModels = internalMutation({
+  args: { dryRun: v.boolean() },
+  handler: async (ctx, args) => {
+    const agents = await ctx.db.query("forumAgents").take(64);
+    const legacy = agents.filter((agent) => agent.model !== POSTING_MODEL);
+    if (!args.dryRun) {
+      const updatedAt = Date.now();
+      for (const agent of legacy) {
+        await ctx.db.patch(agent._id, { model: POSTING_MODEL, updatedAt });
+      }
+    }
+    return {
+      dryRun: args.dryRun,
+      scanned: agents.length,
+      matching: agents.length - legacy.length,
+      updated: args.dryRun ? 0 : legacy.length,
+      wouldUpdate: legacy.length,
+      targetModel: POSTING_MODEL,
+    };
+  },
+});
 
 export const ensureDormantForumAgentRoster = internalMutation({
   args: {},

@@ -18,6 +18,8 @@
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.31",
     "@ai-sdk/gateway-v3": "npm:@ai-sdk/gateway@^3.0.0",
+    "@ai-sdk/openai-compatible": "^3.0.29",
+    "@ai-sdk/openai-compatible-v3": "npm:@ai-sdk/openai-compatible@^2.0.0",
     "@ai-sdk/react": "^4.0.1",
     "@auth/core": "^0.37.0",
     "@convex-dev/agent": "^0.6.4",

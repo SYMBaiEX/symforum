@@ -1,16 +1,17 @@
 "use node";
 
-import {
-  createGateway,
-  type GatewayModelId,
-  type GatewayProviderOptions,
-} from "@ai-sdk/gateway";
+import type { GatewayModelId, GatewayProviderOptions } from "@ai-sdk/gateway";
 import { tool, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { z } from "zod";
 import type { Doc } from "./_generated/dataModel";
-import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
+import {
+  DEEPSEEK_FALLBACK_MODEL,
+  NEWSLETTER_LAST_RESORT_MODEL,
+} from "../lib/ai-models";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import {
   editorialWordCount,
   type EditorialNewsletterPayload,
@@ -21,10 +22,11 @@ import {
   type ArticleSnapshot,
   type ResearchCandidate,
 } from "./sukiForumAgent";
+import { convexModelRoutingConfig } from "./modelRouting";
 
-const NEWSLETTER_MODELS = [
-  "deepseek/deepseek-v4-flash-0731",
-  "openai/gpt-5.4-mini",
+const NEWSLETTER_GATEWAY_MODELS = [
+  DEEPSEEK_FALLBACK_MODEL,
+  NEWSLETTER_LAST_RESORT_MODEL,
 ] as const satisfies readonly GatewayModelId[];
 const PROMPT_VERSION = "belle-newsletter-v2";
 const DAILY_SOURCE_LIMIT = 18;
@@ -199,17 +201,12 @@ async function generateEditorialPackage(
     stories: Doc<"hnStories">[];
   },
 ) {
-  const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("AI_GATEWAY_API_KEY is not configured in Convex.");
-  }
-
+  const routingConfig = convexModelRoutingConfig();
   const recent = await ctx.runQuery(readRecentEditorialContextRef, {
     limit: args.edition === "daily-signal" ? 7 : 4,
   });
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
   const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
-  const gateway = createGateway({ apiKey });
   const gatewayTags = [
     "agent:belle",
     `feature:${args.edition}`,
@@ -224,7 +221,7 @@ async function generateEditorialPackage(
       : "submitWeeklyFieldNote";
   const generation = await generateDraftWithFallback({
     edition: args.edition,
-    gateway,
+    routingConfig,
     gatewayTags,
     prompt: editorialPrompt(args, snapshots, recent),
     schema,
@@ -377,26 +374,34 @@ async function generateEditorialPackage(
 
 async function generateDraftWithFallback({
   edition,
-  gateway,
+  routingConfig,
   gatewayTags,
   prompt,
   schema,
   toolName,
 }: {
   edition: "daily-signal" | "weekly-field-note";
-  gateway: ReturnType<typeof createGateway>;
+  routingConfig: ReturnType<typeof convexModelRoutingConfig>;
   gatewayTags: string[];
   prompt: string;
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
   toolName: "submitDailySignal" | "submitWeeklyFieldNote";
 }) {
-  const failures: string[] = [];
-
-  for (const modelId of NEWSLETTER_MODELS) {
-    try {
+  const gatewayOptions = {
+    caching: "auto",
+    user: "belle",
+    tags: gatewayTags,
+  } satisfies GatewayProviderOptions;
+  const generation = await runWithModelFallback(
+    routingConfig,
+    gatewayOptions,
+    {
+      stage: `belle:${edition}`,
+      totalTimeoutMs: edition === "daily-signal" ? 240_000 : 300_000,
+      run: async (candidate, signal) => {
       const writer = new ToolLoopAgent({
-        id: `belle-${edition}-${modelId.replaceAll("/", "-")}`,
-        model: gateway(modelId),
+        id: `belle-${edition}-${candidate.persistedModel.replaceAll("/", "-")}`,
+        model: candidate.model,
         tools: {
           [toolName]: tool({
             description: `Submit Belle's complete ${edition} editorial package.`,
@@ -404,13 +409,7 @@ async function generateDraftWithFallback({
           }),
         },
         toolChoice: { type: "tool", toolName },
-        providerOptions: {
-          gateway: {
-            caching: "auto",
-            user: "belle",
-            tags: gatewayTags,
-          } satisfies GatewayProviderOptions,
-        },
+        providerOptions: candidate.providerOptions,
         reasoning: "none",
         temperature: edition === "daily-signal" ? 0.35 : 0.45,
         maxOutputTokens: edition === "daily-signal" ? 12_000 : 24_000,
@@ -418,9 +417,7 @@ async function generateDraftWithFallback({
       });
       const result = await writer.generate({
         prompt,
-        abortSignal: AbortSignal.timeout(
-          edition === "daily-signal" ? 120_000 : 180_000,
-        ),
+        abortSignal: signal,
       });
       const call = result.staticToolCalls[0];
       if (call?.toolName !== toolName) {
@@ -431,24 +428,11 @@ async function generateDraftWithFallback({
         draft: schema.parse(call.input),
         usage: result.usage,
       };
-    } catch (error) {
-      const failure = `${modelId}: ${generationErrorMessage(error)}`;
-      failures.push(failure);
-      console.warn("Belle newsletter generation attempt failed", {
-        edition,
-        failure,
-      });
-    }
-  }
-
-  throw new Error(
-    `Belle could not submit structured ${edition} copy after ${NEWSLETTER_MODELS.length} model attempts: ${failures.join(" | ")}`,
+      },
+    },
+    NEWSLETTER_GATEWAY_MODELS,
   );
-}
-
-function generationErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return compact(message, 300);
+  return generation.value;
 }
 
 function editorialPrompt(

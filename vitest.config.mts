@@ -8,6 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: "edge-runtime",
+    exclude: ["**/node_modules/**", "**/.claude/worktrees/**"],
     server: {
       deps: {
         inline: ["convex-test"],

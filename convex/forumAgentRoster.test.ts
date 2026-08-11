@@ -104,7 +104,7 @@ describe("dormant forum agent roster", () => {
       activeRoster.members.every(
         (member) =>
           member.dailyPostTarget === 1 &&
-          member.model === "deepseek/deepseek-v4-flash-0731" &&
+          member.model === "muse/Muse-Glimmer-30B" &&
           member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
       ),
     ).toBe(true);
@@ -114,6 +114,37 @@ describe("dormant forum agent roster", () => {
       { postsPerDay: 2 },
     );
     expect(doubled).toMatchObject({ configured: 30, postsPerDay: 2 });
+
+    await t.run(async (ctx) => {
+      const legacy = await ctx.db.query("forumAgents").first();
+      if (!legacy) throw new Error("missing test agent");
+      await ctx.db.patch(legacy._id, {
+        model: "deepseek/deepseek-v4-flash-0731",
+      });
+    });
+    const dryRun = await t.mutation(
+      internal.forumAgentRoster.migratePostingModels,
+      { dryRun: true },
+    );
+    expect(dryRun).toMatchObject({
+      dryRun: true,
+      scanned: 30,
+      matching: 29,
+      updated: 0,
+      wouldUpdate: 1,
+      targetModel: "muse/Muse-Glimmer-30B",
+    });
+    const migrated = await t.mutation(
+      internal.forumAgentRoster.migratePostingModels,
+      { dryRun: false },
+    );
+    expect(migrated).toMatchObject({ updated: 1, wouldUpdate: 1 });
+    const models = await t.run(async (ctx) =>
+      (await ctx.db.query("forumAgents").take(40)).map((agent) => agent.model),
+    );
+    expect(models.every((model) => model === "muse/Muse-Glimmer-30B")).toBe(
+      true,
+    );
   });
 
   test("does not take a username already owned by another member", async () => {

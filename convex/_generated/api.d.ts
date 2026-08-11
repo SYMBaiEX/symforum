@@ -33,6 +33,7 @@ import type * as forumNotificationEmails from "../forumNotificationEmails.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
+import type * as modelRouting from "../modelRouting.js";
 import type * as news from "../news.js";
 import type * as newsletter from "../newsletter.js";
 import type * as newsletterAgent from "../newsletterAgent.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
   interactions: typeof interactions;
+  modelRouting: typeof modelRouting;
   news: typeof news;
   newsletter: typeof newsletter;
   newsletterAgent: typeof newsletterAgent;

@@ -3,12 +3,16 @@
 import { Agent } from "@convex-dev/agent";
 import { RAG } from "@convex-dev/rag";
 import { createGateway, type GatewayModelId } from "@ai-sdk/gateway-v3";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
+import {
+  DEEPSEEK_FALLBACK_MODEL,
+  MUSE_API_MODEL_ID,
+} from "../lib/ai-models";
 
-const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash-0731";
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const MEMORY_NAMESPACE = "forum-editorial-v1";
 
@@ -28,9 +32,19 @@ type MemoryMetadata = {
 function platform(apiKey: string, agentSlug: string) {
   const gateway = createGateway({ apiKey });
   const embeddingModel = gateway.embeddingModel(EMBEDDING_MODEL);
+  const museBaseUrl = env.MUSE_API_BASE_URL?.trim();
+  const museApiKey = env.MUSE_API_KEY?.trim();
+  const languageModel = museBaseUrl && museApiKey
+    ? createOpenAICompatible({
+        name: "symbaiexMuse",
+        apiKey: museApiKey,
+        baseURL: museBaseUrl,
+        includeUsage: true,
+      })(MUSE_API_MODEL_ID)
+    : gateway(DEEPSEEK_FALLBACK_MODEL as GatewayModelId);
   const agent = new Agent(components.agent, {
     name: forumAgentName(agentSlug),
-    languageModel: gateway(FORUM_AGENT_MODEL as GatewayModelId),
+    languageModel,
     embeddingModel,
     contextOptions: {
       recentMessages: 20,

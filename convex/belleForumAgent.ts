@@ -1,15 +1,13 @@
 "use node";
 
 import { APICallError, tool, ToolLoopAgent } from "ai";
-import {
-  createGateway,
-  type GatewayModelId,
-  type GatewayProviderOptions,
-} from "@ai-sdk/gateway";
+import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { env, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
+import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
@@ -21,8 +19,9 @@ import {
   type ForumResearchRunResult,
   type ResearchCandidate,
 } from "./sukiForumAgent";
+import { convexModelRoutingConfig } from "./modelRouting";
 
-const BELLE_MODEL = "deepseek/deepseek-v4-flash-0731";
+const BELLE_MODEL = MUSE_AGENT_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
 const BELLE_PROMPT_VERSION = "belle-forum-v3";
@@ -164,10 +163,7 @@ export const runDailyHackerNewsDigest = internalAction({
     }
 
     try {
-      const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-      if (!apiKey) {
-        throw new Error("AI_GATEWAY_API_KEY is not configured in Convex.");
-      }
+      const routingConfig = convexModelRoutingConfig();
       const context = await ctx.runQuery(
         internal.forum.readBelleForumContext,
         {},
@@ -185,48 +181,56 @@ export const runDailyHackerNewsDigest = internalAction({
 
       const candidates = indexed.stories.map(hackerNewsCandidate);
       const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
-      const gateway = createGateway({ apiKey });
-      const providerOptions = {
-        gateway: {
-          caching: "auto",
-          user: "belle",
-          tags: [
-            "agent:belle",
-            "feature:hacker-news-digest",
-            `snapshot:${runDate}`,
-            `prompt:${BELLE_PROMPT_VERSION}`,
-          ],
-        } satisfies GatewayProviderOptions,
-      };
-      const writer = new ToolLoopAgent({
-        id: "belle-hacker-news-desk",
-        model: gateway(context.agent.model as GatewayModelId),
-        tools: {
-          submitDigest: tool({
-            description:
-              "Submit Belle's complete daily Hacker News editorial package.",
-            inputSchema: digestDraftSchema,
-          }),
+      const gatewayOptions = {
+        caching: "auto",
+        user: "belle",
+        tags: [
+          "agent:belle",
+          "feature:hacker-news-digest",
+          `snapshot:${runDate}`,
+          `prompt:${BELLE_PROMPT_VERSION}`,
+        ],
+      } satisfies GatewayProviderOptions;
+      const generation = await runWithModelFallback(
+        routingConfig,
+        gatewayOptions,
+        {
+          stage: "belle:hacker-news-digest",
+          totalTimeoutMs: 240_000,
+          run: async (candidate, signal) => {
+            const writer = new ToolLoopAgent({
+              id: `belle-hacker-news-desk-${candidate.provider}`,
+              model: candidate.model,
+              tools: {
+                submitDigest: tool({
+                  description:
+                    "Submit Belle's complete daily Hacker News editorial package.",
+                  inputSchema: digestDraftSchema,
+                }),
+              },
+              toolChoice: { type: "tool", toolName: "submitDigest" },
+              providerOptions: candidate.providerOptions,
+              reasoning: "none",
+              temperature: 0.45,
+              maxOutputTokens: 7_000,
+              instructions: BELLE_DIGEST_INSTRUCTIONS,
+            });
+            const result = await writer.generate({
+              prompt: digestPrompt(runDate, indexed.stories, snapshots),
+              abortSignal: signal,
+            });
+            const call = result.staticToolCalls[0];
+            if (call?.toolName !== "submitDigest") {
+              throw new Error(
+                `Belle's digest writer did not submit structured copy (${result.finishReason}).`,
+              );
+            }
+            return { result, draft: call.input };
+          },
         },
-        toolChoice: { type: "tool", toolName: "submitDigest" },
-        providerOptions,
-        reasoning: "none",
-        temperature: 0.45,
-        maxOutputTokens: 7_000,
-        instructions: BELLE_DIGEST_INSTRUCTIONS,
-      });
-      const result = await writer.generate({
-        prompt: digestPrompt(runDate, indexed.stories, snapshots),
-        abortSignal: AbortSignal.timeout(180_000),
-      });
-      const call = result.staticToolCalls[0];
-      if (call?.toolName !== "submitDigest") {
-        throw new Error(
-          `Belle's digest writer did not submit structured copy (${result.finishReason}).`,
-        );
-      }
-
-      const draft = call.input;
+      );
+      const result = generation.value.result;
+      const draft = generation.value.draft;
       const body = buildDigestBody({
         closing: draft.closing,
         date: runDate,

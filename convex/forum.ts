@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { MUSE_AGENT_MODEL } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -8201,7 +8202,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       userId: user._id,
       persona:
         "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: MUSE_AGENT_MODEL,
       dailyPostTarget: 24,
       updatedAt: now,
     };
@@ -8308,7 +8309,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       userId: user._id,
       persona:
         "A bright, discerning adult neko news correspondent who connects original reporting into clear, opinionated, humane forum conversations.",
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: MUSE_AGENT_MODEL,
       dailyPostTarget: 7,
       updatedAt: now,
     };

@@ -34,6 +34,8 @@ type Env = {
   readonly FORUM_SITE_URL: string | undefined;
   readonly GH_TOKEN: string | undefined;
   readonly GITHUB_TOKEN: string | undefined;
+  readonly MUSE_API_BASE_URL: string | undefined;
+  readonly MUSE_API_KEY: string | undefined;
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;

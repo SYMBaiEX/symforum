@@ -1,17 +1,15 @@
 "use node";
 
 import { APICallError, tool, ToolLoopAgent } from "ai";
-import {
-  createGateway,
-  type GatewayModelId,
-  type GatewayProviderOptions,
-} from "@ai-sdk/gateway";
+import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
+import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import {
   finishEditorialMemory,
   searchEditorialMemory,
@@ -21,8 +19,9 @@ import {
   FORUM_AGENT_DRAFT_BODY_MAX_LENGTH,
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
+import { convexModelRoutingConfig } from "./modelRouting";
 
-const FORUM_AGENT_MODEL = "deepseek/deepseek-v4-flash-0731";
+const FORUM_AGENT_MODEL = MUSE_AGENT_MODEL;
 const FORUM_TIME_ZONE = "America/Chicago";
 const RESEARCH_CACHE_TTL_MS = 90 * 60 * 1_000;
 const MEDIA_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
@@ -308,10 +307,13 @@ export async function runForumResearchSlot(
       slot: args.slot,
       runDate,
     });
-    const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-    if (!apiKey) {
+    const routingConfig = convexModelRoutingConfig();
+    if (
+      !(routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim())
+      && !routingConfig.gatewayApiKey?.trim()
+    ) {
       throw new ForumAgentConfigurationError(
-        "AI_GATEWAY_API_KEY is not configured in Convex.",
+        "Neither Muse API access nor AI_GATEWAY_API_KEY is configured in Convex.",
       );
     }
     const context =
@@ -366,66 +368,76 @@ export async function runForumResearchSlot(
       };
     }
 
-    const gateway = createGateway({ apiKey });
-    const providerOptions = {
-      gateway: {
-        caching: "auto",
-        user: config.slug,
-        tags: [
-          `agent:${config.slug}`,
-          "feature:forum-research",
-          `prompt:${config.promptVersion}`,
-        ],
-      } satisfies GatewayProviderOptions,
-    };
-    const topicScout = new ToolLoopAgent({
-      id: `${config.slug}-topic-scout`,
-      model: gateway(context.agent.model as GatewayModelId),
-      tools: {
-        selectTopic: tool({
-          description: `Submit the single forum topic and board ${config.name} selected from the research packet.`,
-          inputSchema: topicSelectionSchema,
-        }),
-      },
-      toolChoice: { type: "tool", toolName: "selectTopic" },
-      providerOptions,
-      reasoning: "none",
-      temperature: 0.2,
-      maxOutputTokens: 2_000,
-      instructions: config.topicInstructions,
+    const gatewayOptions = {
+      caching: "auto",
+      user: config.slug,
+      tags: [
+        `agent:${config.slug}`,
+        "feature:forum-research",
+        `prompt:${config.promptVersion}`,
+      ],
+    } satisfies GatewayProviderOptions;
+    const topicPrompt = topicSelectionPrompt({
+      candidates: unusedCandidates,
+      categories: context.categories,
+      recentBoardSlugs: context.recentBoardSlugs,
+      recentThreadTitles: context.recentThreadTitles,
+      editorialSignals: context.editorialSignals,
+      editorialStrategies,
+      slot: args.slot,
+      agentName: config.name,
+      dailySlots: config.dailySlots,
     });
     const topicStartedAt = Date.now();
-    const selectionResult = await topicScout.generate({
-      prompt: topicSelectionPrompt({
-        candidates: unusedCandidates,
-        categories: context.categories,
-        recentBoardSlugs: context.recentBoardSlugs,
-        recentThreadTitles: context.recentThreadTitles,
-        editorialSignals: context.editorialSignals,
-        editorialStrategies,
-        slot: args.slot,
-        agentName: config.name,
-        dailySlots: config.dailySlots,
-      }),
-      abortSignal: AbortSignal.timeout(120_000),
-    });
+    const selectionGeneration = await runWithModelFallback(
+      routingConfig,
+      gatewayOptions,
+      {
+        stage: `${config.slug}:forum-topic`,
+        totalTimeoutMs: 180_000,
+        run: async (candidate, signal) => {
+          const topicScout = new ToolLoopAgent({
+            id: `${config.slug}-topic-scout-${candidate.provider}`,
+            model: candidate.model,
+            tools: {
+              selectTopic: tool({
+                description: `Submit the single forum topic and board ${config.name} selected from the research packet.`,
+                inputSchema: topicSelectionSchema,
+              }),
+            },
+            toolChoice: { type: "tool", toolName: "selectTopic" },
+            providerOptions: candidate.providerOptions,
+            reasoning: "none",
+            temperature: 0.2,
+            maxOutputTokens: 2_000,
+            instructions: config.topicInstructions,
+          });
+          const result = await topicScout.generate({
+            prompt: topicPrompt,
+            abortSignal: signal,
+          });
+          const call = result.staticToolCalls[0];
+          if (call?.toolName !== "selectTopic") {
+            throw missingStructuredToolCallError("topic scout", result);
+          }
+          return { result, selection: call.input };
+        },
+      },
+    );
+    const selectionResult = selectionGeneration.value.result;
+    const selection = {
+      ...selectionGeneration.value.selection,
+      contentFormat: requiredContentFormat(config.name, args.slot),
+    };
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: claim.runKey,
       agentSlug: config.slug,
       stage: "topic",
-      model: context.agent.model,
+      model: selectionGeneration.route.persistedModel,
       inputTokens: selectionResult.usage.inputTokens,
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
     });
-    const selectionCall = selectionResult.staticToolCalls[0];
-    if (selectionCall?.toolName !== "selectTopic") {
-      throw missingStructuredToolCallError("topic scout", selectionResult);
-    }
-    const selection = {
-      ...selectionCall.input,
-      contentFormat: requiredContentFormat(config.name, args.slot),
-    };
     const category = context.categories.find(
       (candidate) => candidate.slug === selection.categorySlug,
     );
@@ -542,59 +554,74 @@ export async function runForumResearchSlot(
     const snapshots = await Promise.all(
       selectedCandidates.map(fetchArticleSnapshot),
     );
-    const forumWriter = new ToolLoopAgent({
-      id: `${config.slug}-forum-writer`,
-      model: gateway(context.agent.model as GatewayModelId),
-      tools: {
-        submitForumDraft: tool({
-          description:
-            "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
-          inputSchema: forumDraftSchema,
-        }),
+    const writerGatewayOptions = {
+      ...gatewayOptions,
+      tags: [
+        `agent:${config.slug}`,
+        "feature:forum-writing",
+        `board:${category.slug}`,
+        `prompt:${config.promptVersion}`,
+      ],
+    } satisfies GatewayProviderOptions;
+    const generateForumDraft = async (
+      stage: "draft" | "revision",
+      prompt: string,
+    ) => await runWithModelFallback(
+      routingConfig,
+      writerGatewayOptions,
+      {
+        stage: `${config.slug}:forum-${stage}`,
+        totalTimeoutMs: 240_000,
+        run: async (candidate, signal) => {
+          const forumWriter = new ToolLoopAgent({
+            id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
+            model: candidate.model,
+            tools: {
+              submitForumDraft: tool({
+                description:
+                  "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
+                inputSchema: forumDraftSchema,
+              }),
+            },
+            toolChoice: { type: "tool", toolName: "submitForumDraft" },
+            providerOptions: candidate.providerOptions,
+            reasoning: "none",
+            temperature: 0.45,
+            maxOutputTokens: 6_500,
+            instructions: config.writerInstructions,
+          });
+          const result = await forumWriter.generate({ prompt, abortSignal: signal });
+          const call = result.staticToolCalls[0];
+          if (call?.toolName !== "submitForumDraft") {
+            throw missingStructuredToolCallError(`forum ${stage}`, result);
+          }
+          return { result, draft: call.input };
+        },
       },
-      toolChoice: { type: "tool", toolName: "submitForumDraft" },
-      providerOptions: {
-        gateway: {
-          ...providerOptions.gateway,
-          tags: [
-            `agent:${config.slug}`,
-            "feature:forum-writing",
-            `board:${category.slug}`,
-            `prompt:${config.promptVersion}`,
-          ],
-        } satisfies GatewayProviderOptions,
-      },
-      reasoning: "none",
-      temperature: 0.45,
-      maxOutputTokens: 6_500,
-      instructions: config.writerInstructions,
-    });
+    );
     const draftStartedAt = Date.now();
-    const draftResult = await forumWriter.generate({
-      prompt: forumDraftPrompt({
+    const draftGeneration = await generateForumDraft(
+      "draft",
+      forumDraftPrompt({
         category,
         selection: effectiveSelection,
         snapshots,
         config,
         followUp: followUpThreadId !== undefined,
       }),
-      abortSignal: AbortSignal.timeout(180_000),
-    });
+    );
+    const draftResult = draftGeneration.value.result;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: claim.runKey,
       agentSlug: config.slug,
       stage: "draft",
-      model: context.agent.model,
+      model: draftGeneration.route.persistedModel,
       categorySlug: category.slug,
       inputTokens: draftResult.usage.inputTokens,
       outputTokens: draftResult.usage.outputTokens,
       durationMs: Date.now() - draftStartedAt,
     });
-    const draftCall = draftResult.staticToolCalls[0];
-    if (draftCall?.toolName !== "submitForumDraft") {
-      throw missingStructuredToolCallError("forum writer", draftResult);
-    }
-    let draft = draftCall.input;
+    let draft = draftGeneration.value.draft;
     let revisionInputTokens: number | undefined;
     let revisionOutputTokens: number | undefined;
     let quality = evaluateForumDraft({
@@ -605,8 +632,9 @@ export async function runForumResearchSlot(
     });
     if (quality.qualityScore < FORUM_AGENT_QUALITY_THRESHOLD) {
       const revisionStartedAt = Date.now();
-      const revision = await forumWriter.generate({
-        prompt: forumDraftPrompt({
+      const revisionGeneration = await generateForumDraft(
+        "revision",
+        forumDraftPrompt({
           category,
           selection: effectiveSelection,
           snapshots,
@@ -614,20 +642,16 @@ export async function runForumResearchSlot(
           revisionFeedback: quality.feedback,
           followUp: followUpThreadId !== undefined,
         }),
-        abortSignal: AbortSignal.timeout(180_000),
-      });
-      const revisionCall = revision.staticToolCalls[0];
-      if (revisionCall?.toolName !== "submitForumDraft") {
-        throw missingStructuredToolCallError("forum revision", revision);
-      }
-      draft = revisionCall.input;
+      );
+      const revision = revisionGeneration.value.result;
+      draft = revisionGeneration.value.draft;
       revisionInputTokens = revision.usage.inputTokens;
       revisionOutputTokens = revision.usage.outputTokens;
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
         runKey: claim.runKey,
         agentSlug: config.slug,
         stage: "revision",
-        model: context.agent.model,
+        model: revisionGeneration.route.persistedModel,
         categorySlug: category.slug,
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,

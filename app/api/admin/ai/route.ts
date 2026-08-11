@@ -6,17 +6,14 @@ import {
   createAgentUIStreamResponse,
   isStepCount,
   tool,
-  type LanguageModel,
   type UIMessage,
 } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { selectStreamingModel } from "@/lib/ai-model-routing";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
-
-const ADMIN_AI_MODEL = (process.env.ADMIN_AI_MODEL ??
-  "deepseek/deepseek-v4-flash-0731") as LanguageModel;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +27,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const routedModel = await selectStreamingModel(
+      {
+        museBaseUrl: process.env.MUSE_API_BASE_URL,
+        museApiKey: process.env.MUSE_API_KEY,
+        gatewayApiKey: process.env.AI_GATEWAY_API_KEY,
+      },
+      {
+        tags: ["feature:admin-ai", "surface:owner-console"],
+        user: "symbaiex-owner",
+      },
+    );
     const agent = new ToolLoopAgent({
-      model: ADMIN_AI_MODEL,
+      model: routedModel.model,
       instructions: [
         "You are the owner-only SYMBaiEX admin agent.",
         "You help operate a personal blog, Hacker News index, portfolio, comments, analytics, system logs, and newsletter platform.",
@@ -42,17 +50,13 @@ export async function POST(request: Request) {
       ].join("\n"),
       tools: adminAgentTools(convex),
       stopWhen: isStepCount(8),
-      providerOptions: {
-        gateway: {
-          tags: ["feature:admin-ai", "surface:owner-console"],
-        },
-      },
+      providerOptions: routedModel.providerOptions,
     });
 
     return createAgentUIStreamResponse({
       agent,
       uiMessages: messages,
-      timeout: { totalMs: 55_000 },
+      timeout: { totalMs: 240_000 },
     });
   } catch (error) {
     void recordSystemLog({

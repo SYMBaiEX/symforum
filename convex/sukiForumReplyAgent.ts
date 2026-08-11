@@ -1,16 +1,13 @@
 "use node";
 
-import {
-  createGateway,
-  type GatewayModelId,
-  type GatewayProviderOptions,
-} from "@ai-sdk/gateway";
+import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { APICallError, generateText } from "ai";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { env, internalAction, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
+import { runWithModelFallback } from "../lib/ai-model-routing";
+import { convexModelRoutingConfig } from "./modelRouting";
 
-const SUKI_MODEL = "deepseek/deepseek-v4-flash-0731";
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = "forum-replies-v2";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
@@ -94,43 +91,53 @@ async function runReplySweepForAgent(
   }
 
   try {
-    const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-    if (!apiKey) {
+    const routingConfig = convexModelRoutingConfig();
+    if (
+      !(routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim())
+      && !routingConfig.gatewayApiKey?.trim()
+    ) {
       throw new SukiReplyConfigurationError(
-        "AI_GATEWAY_API_KEY is not configured.",
+        "Neither Muse API access nor AI_GATEWAY_API_KEY is configured.",
       );
     }
-    const gateway = createGateway({ apiKey });
+    const gatewayOptions = {
+      caching: "auto",
+      user: agentSlug,
+      tags: [
+        `agent:${agentSlug}`,
+        "feature:forum-replies",
+        `prompt:${PROMPT_VERSION}`,
+        `board:${claim.candidate.categorySlug}`,
+      ],
+    } satisfies GatewayProviderOptions;
     const generationStartedAt = Date.now();
-    const result = await generateText({
-      model: gateway(SUKI_MODEL as GatewayModelId),
-      instructions:
-        agentSlug === "belle"
-          ? BELLE_REPLY_INSTRUCTIONS
-          : SUKI_REPLY_INSTRUCTIONS,
-      prompt: sukiReplyPrompt(claim.candidate, agentName),
-      maxOutputTokens: 1_400,
-      maxRetries: 1,
-      temperature: 0.3,
-      providerOptions: {
-        gateway: {
-          caching: "auto",
-          user: agentSlug,
-          tags: [
-            `agent:${agentSlug}`,
-            "feature:forum-replies",
-            `prompt:${PROMPT_VERSION}`,
-            `board:${claim.candidate.categorySlug}`,
-          ],
-        } satisfies GatewayProviderOptions,
+    const generation = await runWithModelFallback(
+      routingConfig,
+      gatewayOptions,
+      {
+        stage: `${agentSlug}:forum-reply`,
+        totalTimeoutMs: 120_000,
+        run: async (candidate, signal) => await generateText({
+          model: candidate.model,
+          instructions:
+            agentSlug === "belle"
+              ? BELLE_REPLY_INSTRUCTIONS
+              : SUKI_REPLY_INSTRUCTIONS,
+          prompt: sukiReplyPrompt(claim.candidate, agentName),
+          maxOutputTokens: 1_400,
+          maxRetries: 1,
+          temperature: 0.3,
+          providerOptions: candidate.providerOptions,
+          abortSignal: signal,
+        }),
       },
-      abortSignal: AbortSignal.timeout(90_000),
-    });
+    );
+    const result = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: `reply:${claim.runId}`,
       agentSlug,
       stage: "reply",
-      model: SUKI_MODEL,
+      model: generation.route.persistedModel,
       categorySlug: claim.candidate.categorySlug,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
