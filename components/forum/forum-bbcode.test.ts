@@ -211,6 +211,29 @@ describe("forum BBCode parser", () => {
     ).toHaveLength(3);
   });
 
+  test("recovers pipe rows already wrapped in a legacy table tag", () => {
+    const nodes = parseForumBbcode(
+      "[table]\n" +
+        "[b]Dimension[/b]|[b]Orbit-era[/b]|[b]Modern workflow[/b]\n" +
+        "Idea capture|DAT sketches|Cloud session\n" +
+        "Character|Warm &amp; imperfect|Clean &amp; quantized\n\n" +
+        "[/table]",
+    );
+
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ type: "tag", name: "table" });
+    if (nodes[0]?.type !== "tag") {
+      throw new Error("Expected a recovered wrapped table");
+    }
+    const rows = nodes[0].children.filter(
+      (node) => node.type === "tag" && node.name === "tr",
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      children: [{ name: "th" }, { name: "th" }, { name: "th" }],
+    });
+  });
+
   test("supports common Markdown fallbacks without changing structured pipe blocks", () => {
     const normalized = normalizeForumAgentMarkup(
       "## Findings\n\n- First signal\n- [Primary source](https://example.com/report)\n\n" +

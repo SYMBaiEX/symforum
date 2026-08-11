@@ -485,8 +485,20 @@ export function normalizeForumAgentMarkup(input: string) {
       /^(?:\[|<)(chart|code|decision|riskmap|sourcecards|steps|table|timeline)(?:=[^\]>]*)?(?:\]|>)/i,
     );
     if (protectedMatch) {
-      normalized.push(line);
       const blockName = protectedMatch[1]?.toLowerCase() ?? "";
+      if (blockName === "table") {
+        const recoveredTable = readWrappedLegacyPipeTable(
+          lines,
+          index,
+          protectedMatch[0],
+        );
+        if (recoveredTable) {
+          normalized.push(recoveredTable.markup);
+          index = recoveredTable.nextIndex;
+          continue;
+        }
+      }
+      normalized.push(line);
       if (
         PIPE_BLOCK_TAGS.has(blockName) &&
         !new RegExp(`(?:\\[/|</)${blockName}(?:\\]|>)`, "i").test(
@@ -588,6 +600,57 @@ function readLegacyPipeTable(lines: string[], startIndex: number) {
     return null;
   }
 
+  const dataRows = validLegacyPipeRows(rows);
+  if (!dataRows) {
+    return null;
+  }
+
+  return {
+    markup: `[table]\n${legacyPipeRowsMarkup(dataRows)}\n[/table]`,
+    nextIndex: index,
+  };
+}
+
+function readWrappedLegacyPipeTable(
+  lines: string[],
+  startIndex: number,
+  openingTag: string,
+) {
+  if ((lines[startIndex] ?? "").trim() !== openingTag) {
+    return null;
+  }
+
+  const rows: string[][] = [];
+  let index = startIndex + 1;
+  for (; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (/^(?:\[\/table\]|<\/table>)$/i.test(line.trim())) {
+      break;
+    }
+    if (!line.trim()) {
+      continue;
+    }
+    const cells = parsePipeRow(line, true);
+    if (!cells) {
+      return null;
+    }
+    rows.push(cells);
+  }
+
+  if (index >= lines.length) {
+    return null;
+  }
+  const dataRows = validLegacyPipeRows(rows);
+  if (!dataRows) {
+    return null;
+  }
+  return {
+    markup: `${openingTag}\n${legacyPipeRowsMarkup(dataRows)}\n[/table]`,
+    nextIndex: index + 1,
+  };
+}
+
+function validLegacyPipeRows(rows: string[][]) {
   const separatorIndex = isMarkdownTableSeparator(rows[1]) ? 1 : -1;
   const dataRows = rows.filter((_row, rowIndex) => rowIndex !== separatorIndex);
   const columnCount = dataRows[0]?.length ?? 0;
@@ -598,8 +661,11 @@ function readLegacyPipeTable(lines: string[], startIndex: number) {
   ) {
     return null;
   }
+  return dataRows;
+}
 
-  const markup = dataRows
+function legacyPipeRowsMarkup(rows: string[][]) {
+  return rows
     .map((row, rowIndex) => {
       const cellTag = rowIndex === 0 ? "th" : "td";
       return `[tr]${row
@@ -609,12 +675,11 @@ function readLegacyPipeTable(lines: string[], startIndex: number) {
         .join("")}[/tr]`;
     })
     .join("\n");
-  return { markup: `[table]\n${markup}\n[/table]`, nextIndex: index };
 }
 
-function parsePipeRow(line: string) {
+function parsePipeRow(line: string, allowLeadingMarkup = false) {
   const trimmed = line.trim();
-  if (!trimmed.includes("|") || /^\[/.test(trimmed)) {
+  if (!trimmed.includes("|") || (!allowLeadingMarkup && /^\[/.test(trimmed))) {
     return null;
   }
   const withoutOuterPipes = trimmed.replace(/^\|/, "").replace(/\|$/, "");
