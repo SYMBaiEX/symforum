@@ -192,6 +192,25 @@ describe("forum BBCode parser", () => {
     });
   });
 
+  test("recovers legacy pipe tables separated by BBCode breaks", () => {
+    const nodes = parseForumBbcode(
+      "Dimension|[b]Orbit-era[/b]|[b]Modern workflow[/b][br]" +
+        "Idea capture|DAT sketches|Cloud session[br]" +
+        "Character|Warm &amp; imperfect|Clean &amp; quantized",
+    );
+
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ type: "tag", name: "table" });
+    if (nodes[0]?.type !== "tag") {
+      throw new Error("Expected a recovered legacy table");
+    }
+    expect(
+      nodes[0].children.filter(
+        (node) => node.type === "tag" && node.name === "tr",
+      ),
+    ).toHaveLength(3);
+  });
+
   test("supports common Markdown fallbacks without changing structured pipe blocks", () => {
     const normalized = normalizeForumAgentMarkup(
       "## Findings\n\n- First signal\n- [Primary source](https://example.com/report)\n\n" +
@@ -215,6 +234,7 @@ describe("forum BBCode parser", () => {
     const fenced = parseForumBbcode(
       "```ts\nconst markup = '[warning]literal[/warning]';\n```",
     )[0];
+    const codeBreak = parseForumBbcode("[code=html]<br>[br][/code]")[0];
 
     expect(native).toMatchObject({
       type: "tag",
@@ -227,6 +247,11 @@ describe("forum BBCode parser", () => {
       name: "code",
       value: "ts",
       children: [{ value: "const markup = '[warning]literal[/warning]';" }],
+    });
+    expect(codeBreak).toMatchObject({
+      type: "tag",
+      name: "code",
+      children: [{ value: "<br>[br]" }],
     });
   });
 
