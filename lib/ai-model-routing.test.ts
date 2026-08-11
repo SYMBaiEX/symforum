@@ -101,4 +101,31 @@ describe("AI model routing", () => {
       symbaiexMuse: { top_k: 64 },
     });
   });
+
+  test("passes only configured attribution metadata to the gateway fallback", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response("{}", { status: 200 }),
+    ) as typeof fetch;
+    const candidates = await routedModelCandidates(
+      {
+        museBaseUrl: "https://agent.example.com/v1",
+        museApiKey: "test-muse-key",
+        gatewayApiKey: "test-gateway-key",
+      },
+      {
+        user: "iris-kellan",
+        tags: ["agent:iris-kellan", "feature:forum-writing"],
+      },
+    );
+
+    expect(candidates[1]).toMatchObject({
+      provider: "gateway",
+      providerOptions: {
+        gateway: {
+          user: "iris-kellan",
+          tags: ["agent:iris-kellan", "feature:forum-writing"],
+        },
+      },
+    });
+  });
 });

@@ -462,7 +462,6 @@ async function generateDraftWithFallback({
 }) {
   const correlationId = `newsletter:${edition}:${runDate}`;
   const gatewayOptions = {
-    caching: "auto",
     user: "belle",
     tags: [...gatewayTags, `stage:${stage}`],
   } satisfies GatewayProviderOptions;
@@ -480,7 +479,7 @@ async function generateDraftWithFallback({
         runKey: correlationId,
         agentSlug: "belle",
       }),
-      totalTimeoutMs: edition === "daily-signal" ? 240_000 : 300_000,
+      totalTimeoutMs: edition === "daily-signal" ? 270_000 : 330_000,
       run: async (candidate, signal) => {
         const writer = new ToolLoopAgent({
           id: `belle-${edition}-${stage}-${candidate.persistedModel.replaceAll("/", "-")}`,
@@ -491,7 +490,7 @@ async function generateDraftWithFallback({
               inputSchema: schema,
             }),
           },
-          toolChoice: { type: "tool", toolName },
+          toolChoice: "required",
           providerOptions: candidate.providerOptions,
           ...modelGenerationSettings(
             candidate.provider,
@@ -501,7 +500,7 @@ async function generateDraftWithFallback({
                 ? "newsletter-daily"
                 : "newsletter-weekly",
           ),
-          maxOutputTokens: edition === "daily-signal" ? 12_000 : 24_000,
+          maxOutputTokens: edition === "daily-signal" ? 4_000 : 6_000,
           instructions: modelInstructions(
             candidate.provider,
             stage === "revision"
