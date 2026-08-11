@@ -462,7 +462,9 @@ export function decodeForumEntities(value: string) {
 }
 
 export function normalizeForumAgentMarkup(input: string) {
-  const lines = input.replace(/\r\n?/g, "\n").split("\n");
+  const lines = forumBreakTagsToNewlines(input)
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
   const normalized: string[] = [];
   let protectedBlock: string | null = null;
 
@@ -553,6 +555,21 @@ export function normalizeForumAgentMarkup(input: string) {
   }
 
   return normalized.join("\n");
+}
+
+function forumBreakTagsToNewlines(input: string) {
+  let insideCode = false;
+  return input.replace(
+    /(?:\[|<)(\/?)(code|br)(?:=[^\]>]*)?\s*\/?(?:\]|>)/gi,
+    (match, closing: string, rawName: string) => {
+      const name = rawName.toLowerCase();
+      if (name === "code") {
+        insideCode = closing !== "/";
+        return match;
+      }
+      return insideCode ? match : "\n";
+    },
+  );
 }
 
 function readLegacyPipeTable(lines: string[], startIndex: number) {
