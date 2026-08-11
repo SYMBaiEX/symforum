@@ -1,6 +1,7 @@
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { Fragment, type ReactNode } from "react";
 import {
+  decodeForumEntities,
   forumStructuredBlockRows,
   forumStructuredBlockTitle,
   parseForumBbcode,
@@ -76,7 +77,10 @@ function renderFlowNodes(
       return;
     }
     rendered.push(
-      <p className="min-w-0 break-words whitespace-pre-wrap" key={key}>
+      <p
+        className="min-w-0 max-w-[76ch] whitespace-pre-wrap text-pretty [overflow-wrap:anywhere]"
+        key={key}
+      >
         {renderInlineNodes(trimmed, `${key}-inline`)}
       </p>,
     );
@@ -117,8 +121,8 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
       <Heading
         className={
           node.name === "h2"
-            ? "border-b border-row-border pb-2 text-xl font-semibold leading-tight md:text-2xl"
-            : "text-base font-semibold leading-6 md:text-lg"
+            ? "max-w-[68ch] border-b border-row-border pb-2 text-xl font-semibold leading-tight text-pretty md:text-2xl"
+            : "max-w-[68ch] text-base font-semibold leading-6 text-pretty md:text-lg"
         }
         key={key}
       >
@@ -129,30 +133,44 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
 
   if (node.name === "quote") {
     return (
-      <blockquote
-        className="border-l-2 border-primary/60 bg-muted/35 px-4 py-3"
-        key={key}
-      >
+      <figure className="max-w-[76ch]" key={key}>
+        <blockquote className="border-l-2 border-primary/60 bg-muted/35 px-4 py-3 text-muted-foreground">
+          <div className="space-y-3">
+            {renderFlowNodes(node.children, `${key}-quote`)}
+          </div>
+        </blockquote>
         {node.value ? (
-          <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
-            {node.value} wrote
-          </p>
+          <figcaption className="mt-1.5 pl-4 font-mono text-[10px] uppercase text-muted-foreground">
+            — {decodeForumEntities(node.value).slice(0, 120)}
+          </figcaption>
         ) : null}
-        <div className="space-y-3 text-muted-foreground">
-          {renderFlowNodes(node.children, `${key}-quote`)}
-        </div>
-      </blockquote>
+      </figure>
     );
   }
 
   if (node.name === "code") {
     return (
-      <pre
-        className="max-w-full overflow-x-auto border border-row-border bg-muted/35 p-3 font-mono text-xs leading-6"
+      <figure
+        className="max-w-full border border-row-border bg-muted/20"
         key={key}
       >
-        <code>{forumBbcodeText(node.children).replace(/^\n|\n$/g, "")}</code>
-      </pre>
+        <figcaption className="border-b border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+          {node.value
+            ? `Code · ${decodeForumEntities(node.value).slice(0, 24)}`
+            : "Code"}
+        </figcaption>
+        <pre
+          aria-label={node.value ? `${node.value} code sample` : "Code sample"}
+          className="max-w-full overflow-x-auto p-3 font-mono text-xs leading-6 [tab-size:2]"
+          tabIndex={0}
+        >
+          <code>
+            {decodeForumEntities(
+              forumBbcodeText(node.children).replace(/^\n|\n$/g, ""),
+            )}
+          </code>
+        </pre>
+      </figure>
     );
   }
 
@@ -172,7 +190,7 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
       : "list-disc";
     return (
       <List
-        className={`${listStyle} space-y-2 pl-6 marker:text-primary`}
+        className={`${listStyle} max-w-[76ch] space-y-2 pl-6 marker:text-primary`}
         key={key}
       >
         {items.map((item, index) => (
@@ -188,7 +206,10 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
 
   if (node.name === "spoiler") {
     return (
-      <details className="group border border-row-border bg-muted/15" key={key}>
+      <details
+        className="group max-w-[76ch] border border-row-border bg-muted/15"
+        key={key}
+      >
         <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground marker:content-none">
           <span>{node.value || "Spoiler"}</span>
           <span aria-hidden="true" className="text-primary">
@@ -209,8 +230,8 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
       <aside
         className={
           warning
-            ? "border-l-2 border-accent-canary bg-accent-canary/10 px-4 py-3"
-            : "border-l-2 border-accent bg-accent/10 px-4 py-3"
+            ? "max-w-[76ch] border-l-2 border-accent-canary bg-accent-canary/10 px-4 py-3"
+            : "max-w-[76ch] border-l-2 border-accent bg-accent/10 px-4 py-3"
         }
         key={key}
       >
@@ -225,59 +246,7 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
   }
 
   if (node.name === "table") {
-    const rows = node.children.filter(
-      (child): child is ForumBbcodeTagNode =>
-        child.type === "tag" && child.name === "tr",
-    );
-    if (rows.length === 0) {
-      const fallback = forumBbcodeText(node.children).trim();
-      return fallback ? (
-        <p className="break-words whitespace-pre-wrap" key={key}>
-          {fallback}
-        </p>
-      ) : null;
-    }
-    return (
-      <div
-        className="max-w-full overflow-x-auto border border-row-border"
-        key={key}
-      >
-        <table className="w-full min-w-[32rem] border-collapse text-left">
-          <caption className="sr-only">Forum comparison table</caption>
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr
-                className="border-b border-row-border last:border-b-0"
-                key={`${key}-row-${rowIndex}`}
-              >
-                {row.children
-                  .filter(
-                    (child): child is ForumBbcodeTagNode =>
-                      child.type === "tag" &&
-                      (child.name === "th" || child.name === "td"),
-                  )
-                  .map((cell, cellIndex) => {
-                    const cellKey = `${key}-cell-${rowIndex}-${cellIndex}`;
-                    const content = renderInlineNodes(cell.children, cellKey);
-                    return cell.name === "th" ? (
-                      <th
-                        className="bg-muted/35 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground"
-                        key={cellKey}
-                      >
-                        {content}
-                      </th>
-                    ) : (
-                      <td className="px-3 py-3 align-top text-sm" key={cellKey}>
-                        {content}
-                      </td>
-                    );
-                  })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+    return renderForumTable(node, key);
   }
 
   if (node.name === "chart") {
@@ -296,7 +265,7 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
 
   if (node.name === "center") {
     return (
-      <div className="space-y-3 text-center" key={key}>
+      <div className="max-w-[76ch] space-y-3 text-center" key={key}>
         {renderFlowNodes(node.children, `${key}-center`)}
       </div>
     );
@@ -311,16 +280,148 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
   }
 
   return (
-    <p className="break-words whitespace-pre-wrap" key={key}>
+    <p
+      className="max-w-[76ch] whitespace-pre-wrap [overflow-wrap:anywhere]"
+      key={key}
+    >
       {renderInlineNodes([node], `${key}-fallback`)}
     </p>
   );
 }
 
-function renderForumStructuredBlock(
-  node: ForumBbcodeTagNode,
-  key: string,
-) {
+function renderForumTable(node: ForumBbcodeTagNode, key: string) {
+  const rows = node.children
+    .filter(
+      (child): child is ForumBbcodeTagNode =>
+        child.type === "tag" && child.name === "tr",
+    )
+    .map((row) =>
+      row.children.filter(
+        (child): child is ForumBbcodeTagNode =>
+          child.type === "tag" && (child.name === "th" || child.name === "td"),
+      ),
+    )
+    .filter((row) => row.length > 0);
+  if (rows.length === 0) {
+    const fallback = decodeForumEntities(forumBbcodeText(node.children).trim());
+    return fallback ? (
+      <p
+        className="max-w-[76ch] whitespace-pre-wrap [overflow-wrap:anywhere]"
+        key={key}
+      >
+        {fallback}
+      </p>
+    ) : null;
+  }
+
+  const firstRow = rows[0] ?? [];
+  const hasHeaderRow = firstRow.some((cell) => cell.name === "th");
+  const headers = hasHeaderRow
+    ? firstRow.map(
+        (cell, index) =>
+          decodeForumEntities(forumBbcodeText(cell.children).trim()) ||
+          `Column ${index + 1}`,
+      )
+    : [];
+  const dataRows = hasHeaderRow ? rows.slice(1) : rows;
+  const caption = decodeForumEntities(
+    node.value?.slice(0, 120) || "Comparison table",
+  );
+
+  return (
+    <figure className="max-w-full border border-row-border" key={key}>
+      {node.value ? (
+        <figcaption className="border-b border-row-border px-3 py-2.5 text-sm font-semibold">
+          {caption}
+        </figcaption>
+      ) : null}
+      <div className="divide-y divide-row-border sm:hidden">
+        {dataRows.map((row, rowIndex) => (
+          <dl
+            className="grid gap-2 px-3 py-3"
+            key={`${key}-mobile-row-${rowIndex}`}
+          >
+            {row.map((cell, cellIndex) => (
+              <div
+                className="grid grid-cols-[minmax(5.5rem,0.4fr)_minmax(0,1fr)] gap-3"
+                key={`${key}-mobile-cell-${rowIndex}-${cellIndex}`}
+              >
+                <dt className="font-mono text-[10px] uppercase leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                  {headers[cellIndex] || `Column ${cellIndex + 1}`}
+                </dt>
+                <dd className="min-w-0 text-sm leading-5 [overflow-wrap:anywhere]">
+                  {renderInlineNodes(
+                    cell.children,
+                    `${key}-mobile-content-${rowIndex}-${cellIndex}`,
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ))}
+      </div>
+      <div
+        aria-label={`${caption}. Scroll horizontally if needed.`}
+        className="hidden max-w-full overflow-x-auto sm:block"
+        role="region"
+        tabIndex={0}
+      >
+        <table className="w-full min-w-full border-collapse text-left">
+          <caption className="sr-only">{caption}</caption>
+          {hasHeaderRow ? (
+            <thead>
+              <tr className="border-b border-row-border">
+                {firstRow.map((cell, cellIndex) => (
+                  <th
+                    className="bg-muted/35 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground [overflow-wrap:anywhere]"
+                    key={`${key}-header-${cellIndex}`}
+                    scope="col"
+                  >
+                    {renderInlineNodes(
+                      cell.children,
+                      `${key}-header-content-${cellIndex}`,
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          ) : null}
+          <tbody>
+            {dataRows.map((row, rowIndex) => (
+              <tr
+                className="border-b border-row-border last:border-b-0"
+                key={`${key}-row-${rowIndex}`}
+              >
+                {row.map((cell, cellIndex) => {
+                  const cellKey = `${key}-cell-${rowIndex}-${cellIndex}`;
+                  const content = renderInlineNodes(cell.children, cellKey);
+                  return cell.name === "th" ? (
+                    <th
+                      className="bg-muted/20 px-3 py-3 align-top text-sm font-semibold [overflow-wrap:anywhere]"
+                      key={cellKey}
+                      scope="row"
+                    >
+                      {content}
+                    </th>
+                  ) : (
+                    <td
+                      className="px-3 py-3 align-top text-sm [overflow-wrap:anywhere]"
+                      key={cellKey}
+                    >
+                      {content}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </figure>
+  );
+}
+
+function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
   const rows = forumStructuredBlockRows(node);
   if (rows.length === 0) {
     return null;
@@ -328,34 +429,50 @@ function renderForumStructuredBlock(
   const title = forumStructuredBlockTitle(node);
 
   if (node.name === "sourcecards") {
+    const sources = rows.flatMap(([label, rawUrl, detail]) => {
+      const link = forumLinkDetails(rawUrl ?? "");
+      return label && link
+        ? [
+            {
+              detail: decodeForumEntities(detail ?? ""),
+              label: decodeForumEntities(label),
+              ...link,
+            },
+          ]
+        : [];
+    });
+    if (sources.length === 0) {
+      return null;
+    }
     return (
       <section className="border-y border-row-border" key={key}>
         <StructuredHeading label="Continue reading" title={title} />
         <div className="grid gap-px bg-row-border sm:grid-cols-2">
-          {rows.map(([label, rawUrl, detail], index) => {
-            const href = safeExternalUrl(rawUrl ?? "");
-            if (!label || !href) {
-              return null;
-            }
-            return (
-              <a
-                className="focus-ring group min-w-0 bg-background px-3 py-3 hover:bg-muted/25"
-                href={href}
-                key={`${key}-source-${index}`}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <span className="block text-sm font-semibold leading-5 group-hover:text-primary">
-                  {label.slice(0, 160)}
+          {sources.map((source, index) => (
+            <a
+              className="focus-ring group min-w-0 bg-background px-3 py-3 transition-colors duration-100 hover:bg-muted/25 motion-reduce:transition-none"
+              href={source.href}
+              key={`${key}-source-${index}`}
+              rel={source.external ? "noopener noreferrer" : undefined}
+              target={source.external ? "_blank" : undefined}
+            >
+              <span className="block text-sm font-semibold leading-5 text-pretty [overflow-wrap:anywhere] group-hover:text-primary">
+                {source.label.slice(0, 160)}
+              </span>
+              {source.detail ? (
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                  {source.detail.slice(0, 220)}
                 </span>
-                {detail ? (
-                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                    {detail.slice(0, 220)}
-                  </span>
-                ) : null}
-              </a>
-            );
-          })}
+              ) : null}
+              <span className="mt-2 block font-mono text-[10px] uppercase text-muted-foreground">
+                {source.hostname}
+                {source.external ? " · External" : " · Forum"}
+              </span>
+              {source.external ? (
+                <span className="sr-only"> (opens in a new tab)</span>
+              ) : null}
+            </a>
+          ))}
         </div>
       </section>
     );
@@ -371,17 +488,29 @@ function renderForumStructuredBlock(
         <ol className="divide-y divide-row-border">
           {rows.map(([marker, heading, detail], index) => (
             <li
-              className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 px-3 py-3"
+              className={
+                node.name === "timeline"
+                  ? "grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-3 py-3"
+                  : "grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 px-3 py-3"
+              }
               key={`${key}-step-${index}`}
             >
-              <span className="flex h-8 w-8 items-center justify-center border border-primary/50 font-mono text-[10px] text-primary">
-                {(marker || String(index + 1)).slice(0, 10)}
+              <span
+                className={
+                  node.name === "timeline"
+                    ? "flex min-h-8 min-w-20 items-center justify-center border border-primary/50 px-2 py-1 text-center font-mono text-[10px] leading-4 text-primary"
+                    : "flex h-8 w-8 items-center justify-center border border-primary/50 font-mono text-[10px] text-primary"
+                }
+              >
+                {decodeForumEntities(marker || String(index + 1)).slice(0, 24)}
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold">{heading || "Update"}</p>
+                <p className="text-sm font-semibold text-pretty [overflow-wrap:anywhere]">
+                  {decodeForumEntities(heading || "Update")}
+                </p>
                 {detail ? (
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {detail.slice(0, 320)}
+                    {decodeForumEntities(detail).slice(0, 320)}
                   </p>
                 ) : null}
               </div>
@@ -398,28 +527,20 @@ function renderForumStructuredBlock(
         <StructuredHeading label="Risk map" title={title} />
         <div className="divide-y divide-row-border">
           {rows.map(([risk, likelihood, impact, mitigation], index) => {
-            const likelihoodValue = boundedScore(likelihood);
-            const impactValue = boundedScore(impact);
             return (
               <div
                 className="grid gap-2 px-3 py-3 md:grid-cols-[minmax(10rem,0.7fr)_minmax(12rem,1fr)_minmax(12rem,1fr)] md:items-center"
                 key={`${key}-risk-${index}`}
               >
-                <p className="text-sm font-semibold">{risk || "Risk"}</p>
-                <div className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-                  <span>Likelihood</span>
-                  <SignalBar value={likelihoodValue} />
-                  <span>{likelihoodValue}</span>
-                </div>
+                <p className="text-sm font-semibold text-pretty [overflow-wrap:anywhere]">
+                  {decodeForumEntities(risk || "Risk")}
+                </p>
+                <RiskMetric label="Likelihood" value={likelihood} />
                 <div>
-                  <div className="grid grid-cols-[3rem_1fr_2rem] items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-                    <span>Impact</span>
-                    <SignalBar value={impactValue} />
-                    <span>{impactValue}</span>
-                  </div>
+                  <RiskMetric label="Impact" value={impact} />
                   {mitigation ? (
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {mitigation.slice(0, 240)}
+                      {decodeForumEntities(mitigation).slice(0, 240)}
                     </p>
                   ) : null}
                 </div>
@@ -437,15 +558,20 @@ function renderForumStructuredBlock(
       <div className="divide-y divide-row-border">
         {rows.map(([option, verdict, reason], index) => (
           <div
-            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(8rem,0.45fr)_7rem_minmax(0,1fr)] sm:items-start"
+            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(8rem,0.45fr)_minmax(8rem,0.35fr)_minmax(0,1fr)] sm:items-start"
             key={`${key}-decision-${index}`}
           >
-            <p className="text-sm font-semibold">{option || "Option"}</p>
-            <span className="w-fit border border-primary/45 px-2 py-1 font-mono text-[10px] uppercase text-primary">
-              {(verdict || "Consider").slice(0, 24)}
+            <p className="text-sm font-semibold text-pretty [overflow-wrap:anywhere]">
+              {decodeForumEntities(option || "Option")}
+            </p>
+            <span className="w-fit max-w-full border border-primary/45 px-2 py-1 font-mono text-[10px] uppercase leading-4 text-primary [overflow-wrap:anywhere]">
+              {decodeForumEntities(verdict || "Consider").slice(0, 80)}
             </span>
             <p className="text-xs leading-5 text-muted-foreground">
-              {(reason || "No rationale supplied.").slice(0, 320)}
+              {decodeForumEntities(reason || "No rationale supplied.").slice(
+                0,
+                320,
+              )}
             </p>
           </div>
         ))}
@@ -457,7 +583,9 @@ function renderForumStructuredBlock(
 function StructuredHeading({ label, title }: { label: string; title: string }) {
   return (
     <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-3 py-2.5">
-      <h3 className="text-sm font-semibold">{title}</h3>
+      <h3 className="text-sm font-semibold text-pretty">
+        {decodeForumEntities(title)}
+      </h3>
       <span className="font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </span>
@@ -465,10 +593,17 @@ function StructuredHeading({ label, title }: { label: string; title: string }) {
   );
 }
 
-function SignalBar({ value }: { value: number }) {
+function SignalBar({ label, value }: { label?: string; value: number }) {
   return (
-    <span className="h-1.5 overflow-hidden bg-row-border" aria-hidden="true">
-      <span className="block h-full bg-primary" style={{ width: `${value}%` }} />
+    <span
+      aria-label={label ? `${label}: ${value} out of 100` : undefined}
+      className="h-1.5 overflow-hidden bg-row-border"
+      role={label ? "img" : undefined}
+    >
+      <span
+        className="block h-full bg-primary"
+        style={{ width: `${value}%` }}
+      />
     </span>
   );
 }
@@ -477,25 +612,67 @@ function boundedScore(value: string | undefined) {
   const parsed = Number(value);
   return Number.isFinite(parsed)
     ? Math.max(0, Math.min(100, Math.round(parsed)))
-    : 0;
+    : null;
+}
+
+function RiskMetric({ label, value }: { label: string; value?: string }) {
+  const score = boundedScore(value);
+  if (score === null) {
+    return (
+      <div className="flex min-h-6 items-center justify-between gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+        <span>{label}</span>
+        <span className="border border-row-border px-2 py-0.5 text-foreground">
+          {decodeForumEntities(value?.trim() || "Not scored").slice(0, 24)}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)_2rem] items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+      <span>{label}</span>
+      <SignalBar label={label} value={score} />
+      <span className="text-right tabular-nums">{score}</span>
+    </div>
+  );
+}
+
+function forumLinkDetails(value: string) {
+  const safeUrl = safeExternalUrl(decodeForumEntities(value));
+  if (!safeUrl) {
+    return null;
+  }
+  const url = new URL(safeUrl);
+  const forumPathOnPrimaryHost =
+    (url.hostname === "symbaiex.com" || url.hostname === "www.symbaiex.com") &&
+    (url.pathname === "/forum" || url.pathname.startsWith("/forum/"));
+  const forumHost = url.hostname === "forum.symbaiex.com";
+  if (forumHost || forumPathOnPrimaryHost) {
+    const pathname = url.pathname.replace(/^\/forum(?=\/|$)/, "") || "/";
+    return {
+      external: false,
+      hostname: "forum.symbaiex.com",
+      href: `https://forum.symbaiex.com${pathname}${url.search}${url.hash}`,
+    };
+  }
+  return {
+    external: true,
+    hostname: url.hostname.replace(/^www\./, ""),
+    href: safeUrl,
+  };
 }
 
 function renderForumChart(node: ForumBbcodeTagNode, key: string) {
-  const rows = forumBbcodeText(node.children)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
+  const rows = forumStructuredBlockRows(node)
     .slice(0, 8)
-    .flatMap((line) => {
-      const [rawLabel, rawValue, rawDetail] = line.split("|");
-      const label = rawLabel?.trim().slice(0, 80);
+    .flatMap(([rawLabel, rawValue, rawDetail]) => {
+      const label = decodeForumEntities(rawLabel?.trim() ?? "").slice(0, 80);
       const numericValue = Number(rawValue?.trim());
       if (!label || !Number.isFinite(numericValue)) {
         return [];
       }
       return [
         {
-          detail: rawDetail?.trim().slice(0, 140),
+          detail: decodeForumEntities(rawDetail?.trim() ?? "").slice(0, 140),
           label,
           value: Math.max(0, Math.min(100, Math.round(numericValue))),
         },
@@ -504,11 +681,13 @@ function renderForumChart(node: ForumBbcodeTagNode, key: string) {
   if (rows.length === 0) {
     return (
       <p className="break-words whitespace-pre-wrap" key={key}>
-        {forumBbcodeText(node.children)}
+        {decodeForumEntities(forumBbcodeText(node.children))}
       </p>
     );
   }
-  const title = node.value?.slice(0, 120) || "Signal chart";
+  const title = decodeForumEntities(
+    node.value?.slice(0, 120) || "Signal chart",
+  );
 
   return (
     <figure
@@ -529,7 +708,9 @@ function renderForumChart(node: ForumBbcodeTagNode, key: string) {
             key={`${key}-chart-row-${index}`}
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{row.label}</p>
+              <p className="text-sm font-medium text-pretty [overflow-wrap:anywhere]">
+                {row.label}
+              </p>
               {row.detail ? (
                 <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                   {row.detail}
@@ -615,23 +796,35 @@ function renderInlineNodes(
         </mark>
       );
     }
+    if (node.name === "color") {
+      return (
+        <span className={forumColorClass(node.value)} key={key}>
+          {renderInlineNodes(node.children, `${key}-color`)}
+        </span>
+      );
+    }
     if (node.name === "url") {
-      const href = safeExternalUrl(
+      const link = forumLinkDetails(
         node.value || forumBbcodeText(node.children),
       );
-      const label = forumBbcodeText(node.children).trim() || href;
-      if (!href || !label) {
-        return forumBbcodeText(node.children);
+      const label = forumBbcodeText(node.children).trim() || link?.href;
+      if (!link || !label) {
+        return decodeForumEntities(forumBbcodeText(node.children));
       }
       return (
         <a
-          className="focus-ring break-words underline decoration-primary/60 underline-offset-2 hover:text-primary"
-          href={href}
+          className="focus-ring [overflow-wrap:anywhere] underline decoration-primary/60 underline-offset-2 transition-colors duration-100 hover:text-primary motion-reduce:transition-none"
+          href={link.href}
           key={key}
-          rel="noreferrer"
-          target="_blank"
+          rel={link.external ? "noopener noreferrer" : undefined}
+          target={link.external ? "_blank" : undefined}
         >
-          {renderInlineNodes(node.children, `${key}-link`)}
+          {node.children.length > 0
+            ? renderInlineNodes(node.children, `${key}-link`)
+            : link.href}
+          {link.external ? (
+            <span className="sr-only"> (opens in a new tab)</span>
+          ) : null}
         </a>
       );
     }
@@ -642,22 +835,29 @@ function renderInlineNodes(
       return <br key={key} />;
     }
 
-    return <Fragment key={key}>{forumBbcodeText(node.children)}</Fragment>;
+    return (
+      <Fragment key={key}>
+        {decodeForumEntities(forumBbcodeText(node.children))}
+      </Fragment>
+    );
   });
 }
 
 function renderForumImage(node: ForumBbcodeTagNode, key: string) {
-  const src = safeImageUrl(forumBbcodeText(node.children).trim());
+  const src = safeImageUrl(
+    decodeForumEntities(forumBbcodeText(node.children).trim()),
+  );
   if (!src) {
-    return forumBbcodeText(node.children);
+    return decodeForumEntities(forumBbcodeText(node.children));
   }
-  const alt = node.value?.slice(0, 180) ?? "";
+  const alt = decodeForumEntities(node.value?.slice(0, 180) ?? "");
   return (
     <figure className="my-3 max-w-full" key={key}>
       {/* eslint-disable-next-line @next/next/no-img-element -- Forum BBCode images can be external user content. */}
       <img
         alt={alt}
         className="max-h-[32rem] max-w-full border border-row-border object-contain"
+        decoding="async"
         loading="lazy"
         referrerPolicy="no-referrer"
         src={src}
@@ -682,7 +882,7 @@ function renderTextWithBreaks(value: string, keyPrefix: string): ReactNode[] {
 
 function renderForumSmilies(text: string, keyPrefix: string): ReactNode[] {
   const pattern = /(:\)|:D|;\)|:P|:\(|:o|:cool:|:heart:)/g;
-  return text
+  return decodeForumEntities(text)
     .split(pattern)
     .filter((part) => part.length > 0)
     .map((part, index) => {
@@ -700,6 +900,23 @@ function renderForumSmilies(text: string, keyPrefix: string): ReactNode[] {
         </span>
       );
     });
+}
+
+function forumColorClass(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  if (["cyan", "teal", "tiffany", "accent"].includes(normalized ?? "")) {
+    return "text-accent-cyan";
+  }
+  if (["yellow", "canary", "gold"].includes(normalized ?? "")) {
+    return "text-accent-canary";
+  }
+  if (["pink", "magenta", "primary"].includes(normalized ?? "")) {
+    return "text-primary";
+  }
+  if (["muted", "gray", "grey"].includes(normalized ?? "")) {
+    return "text-muted-foreground";
+  }
+  return "text-foreground";
 }
 
 function trimBoundaryWhitespace(nodes: ForumBbcodeNode[]) {

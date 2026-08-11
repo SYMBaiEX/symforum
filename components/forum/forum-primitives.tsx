@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { safeImageUrl } from "@/lib/safe-url";
 import { ForumBbcodeBody } from "@/components/forum/forum-bbcode";
+import { decodeForumEntities } from "@/components/forum/forum-bbcode-model";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
@@ -1203,7 +1204,12 @@ export function ForumBody({
   }
 
   return (
-    <div className={cn("space-y-3 text-sm leading-6 md:text-base", className)}>
+    <div
+      className={cn(
+        "min-w-0 space-y-3 text-sm leading-6 md:text-base",
+        className,
+      )}
+    >
       <ForumBbcodeBody body={body} />
     </div>
   );
@@ -2887,6 +2893,12 @@ export function ForumAttachmentList({
       <div className="grid gap-2">
         {attachments.map((attachment) => {
           const isImage = attachment.contentType.startsWith("image/");
+          const attachmentLabel = decodeForumEntities(
+            attachment.altText || attachment.filename,
+          );
+          const attachmentCredit = attachment.credit
+            ? decodeForumEntities(attachment.credit)
+            : undefined;
           if (isImage) {
             return (
               <figure
@@ -2901,7 +2913,11 @@ export function ForumAttachmentList({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- Convex attachment URLs are signed runtime URLs. */}
                   <img
-                    alt={attachment.altText ?? ""}
+                    alt={
+                      attachment.altText
+                        ? decodeForumEntities(attachment.altText)
+                        : ""
+                    }
                     className="max-h-[34rem] w-full object-contain"
                     loading="lazy"
                     src={safeImageUrl(attachment.url) ?? attachment.url}
@@ -2909,8 +2925,7 @@ export function ForumAttachmentList({
                 </a>
                 <figcaption className="mt-3 flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {attachment.altText || attachment.filename} ·{" "}
-                    {formatFileSize(attachment.size)}
+                    {attachmentLabel} · {formatFileSize(attachment.size)}
                   </span>
                   {attachment.sourceUrl ? (
                     <a
@@ -2919,11 +2934,11 @@ export function ForumAttachmentList({
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      {attachment.credit || "Image source"}
+                      {attachmentCredit || "Image source"}
                     </a>
-                  ) : attachment.credit ? (
+                  ) : attachmentCredit ? (
                     <span className="font-mono text-[10px] uppercase">
-                      {attachment.credit}
+                      {attachmentCredit}
                     </span>
                   ) : null}
                 </figcaption>
@@ -2943,7 +2958,7 @@ export function ForumAttachmentList({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-foreground">
-                  {attachment.filename}
+                  {decodeForumEntities(attachment.filename)}
                 </span>
                 <span className="mt-1 block font-mono text-[10px] uppercase text-muted-foreground">
                   {attachment.contentType} / {formatFileSize(attachment.size)}

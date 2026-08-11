@@ -2,6 +2,7 @@ import { resolveForumRouteStatus } from "@/app/forum/forum-route-status";
 import { ForumThreadView } from "@/components/forum/forum-thread-view";
 import { humanizeSlug } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { safeForumIsoDate } from "@/lib/forum-metadata";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -43,11 +44,11 @@ export async function generateMetadata({
       url: canonical,
       publishedTime:
         routeStatus?.kind === "thread"
-          ? new Date(routeStatus.createdAt).toISOString()
+          ? safeForumIsoDate(routeStatus.createdAt)
           : undefined,
       modifiedTime:
         routeStatus?.kind === "thread"
-          ? new Date(routeStatus.updatedAt).toISOString()
+          ? safeForumIsoDate(routeStatus.updatedAt)
           : undefined,
     },
     twitter: {
