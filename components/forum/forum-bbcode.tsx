@@ -1,8 +1,12 @@
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { Fragment, type ReactNode } from "react";
-import { parseForumBbcode, type ForumBbcodeNode } from "./forum-bbcode-model";
-
-type ForumBbcodeTagNode = Extract<ForumBbcodeNode, { type: "tag" }>;
+import {
+  forumStructuredBlockRows,
+  forumStructuredBlockTitle,
+  parseForumBbcode,
+  type ForumBbcodeNode,
+  type ForumBbcodeTagNode,
+} from "./forum-bbcode-model";
 
 const FORUM_SMILIES = new Map([
   [":)", ":)"],
@@ -225,6 +229,14 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
       (child): child is ForumBbcodeTagNode =>
         child.type === "tag" && child.name === "tr",
     );
+    if (rows.length === 0) {
+      const fallback = forumBbcodeText(node.children).trim();
+      return fallback ? (
+        <p className="break-words whitespace-pre-wrap" key={key}>
+          {fallback}
+        </p>
+      ) : null;
+    }
     return (
       <div
         className="max-w-full overflow-x-auto border border-row-border"
@@ -309,16 +321,11 @@ function renderForumStructuredBlock(
   node: ForumBbcodeTagNode,
   key: string,
 ) {
-  const rows = forumBbcodeText(node.children)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 10)
-    .map((line) => line.split("|").map((cell) => cell.trim()));
+  const rows = forumStructuredBlockRows(node);
   if (rows.length === 0) {
     return null;
   }
-  const title = node.value?.slice(0, 120) || structuredBlockLabel(node.name);
+  const title = forumStructuredBlockTitle(node);
 
   if (node.name === "sourcecards") {
     return (
@@ -471,18 +478,6 @@ function boundedScore(value: string | undefined) {
   return Number.isFinite(parsed)
     ? Math.max(0, Math.min(100, Math.round(parsed)))
     : 0;
-}
-
-function structuredBlockLabel(name: string) {
-  return name === "riskmap"
-    ? "Risk map"
-    : name === "decision"
-      ? "Decision matrix"
-      : name === "timeline"
-        ? "Timeline"
-        : name === "steps"
-          ? "Action sequence"
-          : "Related resources";
 }
 
 function renderForumChart(node: ForumBbcodeTagNode, key: string) {

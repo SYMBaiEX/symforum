@@ -3,7 +3,7 @@ type ForumBbcodeTextNode = {
   value: string;
 };
 
-type ForumBbcodeTagNode = {
+export type ForumBbcodeTagNode = {
   type: "tag";
   name: string;
   value?: string;
@@ -34,6 +34,7 @@ const SUPPORTED_TAGS = new Set([
   "s",
   "spoiler",
   "sourcecards",
+  "step",
   "steps",
   "table",
   "timeline",
@@ -61,6 +62,7 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
     if (!value) {
       return;
     }
+    recoverFromDanglingTable(value);
     const target = children();
     const previous = target.at(-1);
     if (previous?.type === "text") {
@@ -68,6 +70,42 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
       return;
     }
     target.push({ type: "text", value });
+  }
+
+  function recoverFromDanglingTable(value: string) {
+    if (value.trim().length === 0) {
+      return;
+    }
+    const tableIndex = stack.findLastIndex((entry) => entry.name === "table");
+    if (tableIndex < 0) {
+      return;
+    }
+    const insideCell = stack
+      .slice(tableIndex + 1)
+      .some((entry) => entry.name === "td" || entry.name === "th");
+    if (!insideCell) {
+      stack.length = tableIndex;
+    }
+  }
+
+  function closeThrough(name: string) {
+    const matchingIndex = stack.findLastIndex((entry) => entry.name === name);
+    if (matchingIndex < 0) {
+      return false;
+    }
+    stack.length = matchingIndex;
+    return true;
+  }
+
+  function closeToParent(parentName: string) {
+    const parentIndex = stack.findLastIndex(
+      (entry) => entry.name === parentName,
+    );
+    if (parentIndex < 0) {
+      return false;
+    }
+    stack.length = parentIndex + 1;
+    return true;
   }
 
   for (const match of input.matchAll(tokenPattern)) {
@@ -84,13 +122,9 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
     }
 
     if (name === "*" && !closing) {
-      const listIndex = stack.findLastIndex((entry) => entry.name === "list");
-      if (listIndex < 0) {
+      if (!closeToParent("list")) {
         appendText(match[0]);
         continue;
-      }
-      if (stack.at(-1)?.name === "*") {
-        stack.pop();
       }
       const item: ForumBbcodeTagNode = {
         type: "tag",
@@ -103,15 +137,26 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
     }
 
     if (closing) {
-      if (name === "list" && stack.at(-1)?.name === "*") {
-        stack.pop();
-      }
-      if (stack.at(-1)?.name === name) {
-        stack.pop();
-      } else {
-        appendText(match[0]);
-      }
+      // Close unclosed descendants along with their parent. Agent-authored BBCode
+      // commonly omits [/step], [/*], [/td], or [/tr], and strict stack matching
+      // would otherwise expose the closing tag or swallow the rest of the post.
+      closeThrough(name);
       continue;
+    }
+
+    if (name === "table" && stack.at(-1)?.name === "table") {
+      // Models occasionally repeat the table opener. Treat it as one table;
+      // an extra closing tag is harmless because unmatched supported closers
+      // are ignored above.
+      continue;
+    }
+
+    if (name === "tr") {
+      closeToParent("table");
+    } else if (name === "td" || name === "th") {
+      closeToParent("tr");
+    } else if (name === "step") {
+      closeToParent("steps");
     }
 
     const node: ForumBbcodeTagNode = {
@@ -128,4 +173,91 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
 
   appendText(input.slice(cursor));
   return root;
+}
+
+export function forumStructuredBlockRows(
+  node: ForumBbcodeTagNode,
+): string[][] {
+  if (node.name === "steps") {
+    const explicitSteps = node.children.filter(
+      (child): child is ForumBbcodeTagNode =>
+        child.type === "tag" && child.name === "step",
+    );
+    if (explicitSteps.length > 0) {
+      return explicitSteps.slice(0, 10).map((step, index) => [
+        String(index + 1),
+        forumBbcodePlainText(step.children).trim(),
+      ]);
+    }
+
+    const listItems = node.children
+      .filter(
+        (child): child is ForumBbcodeTagNode =>
+          child.type === "tag" && child.name === "list",
+      )
+      .flatMap((list) =>
+        list.children.filter(
+          (child): child is ForumBbcodeTagNode =>
+            child.type === "tag" && child.name === "*",
+        ),
+      );
+    if (listItems.length > 0) {
+      return listItems.slice(0, 10).map((item, index) => [
+        String(index + 1),
+        forumBbcodePlainText(item.children).trim(),
+      ]);
+    }
+  }
+
+  return forumBbcodePlainText(node.children)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((line, index) => {
+      const cells = line.split("|").map((cell) => cell.trim());
+      if (node.name === "steps" && cells.length === 1) {
+        return [String(index + 1), cells[0] ?? ""];
+      }
+      return cells;
+    });
+}
+
+export function forumStructuredBlockTitle(node: ForumBbcodeTagNode) {
+  if (node.value) {
+    return node.value.slice(0, 120);
+  }
+  if (node.name === "steps") {
+    const intro = node.children
+      .filter((child) => child.type === "text")
+      .map((child) => child.value.trim())
+      .filter(Boolean)
+      .join(" ");
+    if (intro) {
+      return intro.slice(0, 120);
+    }
+  }
+  return structuredBlockLabel(node.name);
+}
+
+function structuredBlockLabel(name: string) {
+  return name === "riskmap"
+    ? "Risk map"
+    : name === "decision"
+      ? "Decision matrix"
+      : name === "timeline"
+        ? "Timeline"
+        : name === "steps"
+          ? "Action sequence"
+          : "Related resources";
+}
+
+function forumBbcodePlainText(nodes: ForumBbcodeNode[]): string {
+  return nodes
+    .map((node) =>
+      node.type === "text"
+        ? node.value
+        : forumBbcodePlainText(node.children),
+    )
+    .join("");
 }
