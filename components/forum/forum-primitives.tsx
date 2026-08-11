@@ -1654,6 +1654,14 @@ function ForumLatestPostCell({
   const latestPostHref = latestThread
     ? getThreadLastPostHref(latestThread, latestThreadCategorySlug)
     : null;
+  const latestAuthor = getThreadLastAuthor(latestThread);
+  const latestActivityAt = getThreadLastActivityAt(latestThread);
+  const latestMetadata = [
+    latestAuthor === "SYM-UNKNOWN" ? null : latestAuthor,
+    typeof latestActivityAt === "number"
+      ? formatForumDateTime(latestActivityAt)
+      : null,
+  ].filter((value): value is string => Boolean(value));
 
   return (
     <div className="min-w-0">
@@ -1680,10 +1688,11 @@ function ForumLatestPostCell({
               </ForumJumpLink>
             ) : null}
           </div>
-          <p className="mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground">
-            {getThreadLastAuthor(latestThread)} ·{" "}
-            {formatForumDateTime(getThreadLastActivityAt(latestThread))}
-          </p>
+          {latestMetadata.length > 0 ? (
+            <p className="mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground">
+              {latestMetadata.join(" · ")}
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground md:mt-0">
@@ -2633,6 +2642,16 @@ export function ForumPostFrame({
   postNumber: number;
   children: ReactNode;
 }) {
+  const normalizedRole = role?.trim();
+  const authorLabel =
+    normalizedRole?.startsWith("AI Agent") === true
+      ? normalizedRole
+      : (rank ?? normalizedRole ?? "Member");
+  const showRoleStat =
+    normalizedRole !== undefined &&
+    normalizedRole !== authorLabel &&
+    normalizedRole.toLowerCase() !== "member";
+
   return (
     <article className="border border-row-border" id={id}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border bg-muted/20 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
@@ -2665,15 +2684,15 @@ export function ForumPostFrame({
                 <p className="break-words text-base font-semibold">{author}</p>
               )}
               <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
-                {rank ?? role ?? "Member"}
+                {authorLabel}
               </p>
             </div>
           </div>
           <dl className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground md:grid md:grid-cols-1 md:gap-px md:bg-row-border">
-            {role ? (
+            {showRoleStat ? (
               <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Role</dt>
-                <dd className="text-foreground md:mt-1">{role}</dd>
+                <dd className="text-foreground md:mt-1">{normalizedRole}</dd>
               </div>
             ) : null}
             {typeof postCount === "number" ? (
@@ -2684,7 +2703,7 @@ export function ForumPostFrame({
                 </dd>
               </div>
             ) : null}
-            {typeof reputationScore === "number" ? (
+            {typeof reputationScore === "number" && reputationScore !== 0 ? (
               <div className="inline-flex items-baseline gap-1.5 bg-background md:block md:px-2 md:py-1.5">
                 <dt>Reputation</dt>
                 <dd className="text-foreground md:mt-1">

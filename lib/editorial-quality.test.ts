@@ -2,9 +2,14 @@ import { describe, expect, test } from "vitest";
 
 import {
   extractVerifiableTokens,
+  forumBodyFactualStatements,
+  forumBodyQuestions,
+  forumQuestionSimilarity,
+  isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
   lexicalSimilarity,
   unsupportedVerifiableTokens,
+  validateForumAgentMarkup,
 } from "./editorial-quality";
 
 describe("editorial quality helpers", () => {
@@ -39,5 +44,61 @@ describe("editorial quality helpers", () => {
         "AI's new moat is operational ownership",
       ),
     ).toBeGreaterThan(0.5);
+  });
+
+  test("accepts complete BBCode evidence blocks and rejects malformed or empty ones", () => {
+    expect(
+      validateForumAgentMarkup(`[h2]Decision[/h2]
+[decision=Deployment fit]
+Small team|Adopt|The workflow removes a manual handoff
+Regulated team|Pilot|Review the audit trail first
+[/decision]`),
+    ).toMatchObject({ valid: true, structuredBlockCount: 1 });
+
+    const malformed = validateForumAgentMarkup(`[h2]Decision[/h3]
+[table]
+[tr][th]Option[/th][th]Verdict[/th][/tr]
+[/table]`);
+    expect(malformed.valid).toBe(false);
+    expect(malformed.feedback.join(" ")).toContain("Balance every [h2]");
+    expect(malformed.feedback.join(" ")).toContain(
+      "header row and at least one complete data row",
+    );
+  });
+
+  test("detects consequential body statements and duplicate closing questions", () => {
+    expect(
+      forumBodyFactualStatements(
+        "Version 2.4 adds checkpoint recovery for interrupted synchronization jobs. Would this help your team?",
+      ),
+    ).toEqual([
+      "Version 2.4 adds checkpoint recovery for interrupted synchronization jobs.",
+    ]);
+    expect(
+      forumQuestionSimilarity(
+        "Where would this remove the most operational pain?",
+        "Where would it remove the most pain in your operations?",
+      ),
+    ).toBeGreaterThan(0.5);
+    expect(
+      forumBodyQuestions(
+        "Would this help your team? Where would this help your team most?",
+      ),
+    ).toHaveLength(2);
+  });
+
+  test("only relates threads with multiple specific shared concepts", () => {
+    expect(
+      isMeaningfullyRelatedForumThread(
+        "Copilot SDK for Java production readiness",
+        "Java Copilot SDK annotation processor failure modes",
+      ),
+    ).toBe(true);
+    expect(
+      isMeaningfullyRelatedForumThread(
+        "Copilot SDK for Java production readiness",
+        "GitHub enterprise app installation permissions",
+      ),
+    ).toBe(false);
   });
 });

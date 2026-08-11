@@ -24,7 +24,6 @@ import {
   getThreadRatingAverage,
   getThreadRatingCount,
   getThreadReplyCount,
-  formatThreadRating,
   isLockedThread,
   type ForumCategoryRecord,
   type ForumAttachmentRecord,
@@ -1000,6 +999,23 @@ function LiveForumThreadView({
           thread.firstUnreadPage,
         )
       : null;
+  const ratingCount = getThreadRatingCount(thread);
+  const ratingVisible = ratingCount > 0 || thread.viewerCanRateThread === true;
+  const threadMetrics = [
+    { label: "Replies", value: getThreadReplyCount(thread) },
+    {
+      label: "Posts",
+      value: getThreadPostCount(thread) || posts.length,
+    },
+    ...(ratingCount > 0
+      ? [
+          {
+            label: "Rating",
+            value: `${getThreadRatingAverage(thread).toFixed(1)}/5`,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="space-y-3">
@@ -1034,17 +1050,23 @@ function LiveForumThreadView({
                 onToggleSubscription={() => toggleSubscription(thread._id)}
               />
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <ForumThreadRatingSummary
-                average={getThreadRatingAverage(thread)}
-                count={getThreadRatingCount(thread)}
-              />
-              <ThreadRatingControls
-                pending={ratingPending}
-                thread={thread}
-                onRate={updateThreadRating}
-              />
-            </div>
+            {ratingVisible ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {ratingCount > 0 ? (
+                  <ForumThreadRatingSummary
+                    average={getThreadRatingAverage(thread)}
+                    count={ratingCount}
+                  />
+                ) : null}
+                {thread.viewerCanRateThread === true ? (
+                  <ThreadRatingControls
+                    pending={ratingPending}
+                    thread={thread}
+                    onRate={updateThreadRating}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             {subscriptionError ? (
               <p
                 className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
@@ -1069,15 +1091,8 @@ function LiveForumThreadView({
             ) : null}
           </div>
           <ForumMetricBar
-            items={[
-              { label: "Replies", value: getThreadReplyCount(thread) },
-              {
-                label: "Posts",
-                value: getThreadPostCount(thread) || posts.length,
-              },
-              { label: "Rating", value: formatThreadRating(thread) },
-            ]}
-            className="sm:grid-cols-3"
+            items={threadMetrics}
+            className={ratingCount > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}
           />
         </div>
       </div>

@@ -223,10 +223,16 @@ export type ForumBoardStatisticsRecord = {
 
 export type ForumCategoryLastThreadRecord = {
   threadId: string;
+  categorySlug: string;
   slug: string;
   title: string;
   status: ForumThreadStatus;
   pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastPostAt: number;
+  author: string;
+  lastPostAuthor: string;
   lastPostNumber?: number;
   lastPostPage?: number;
 };
@@ -2267,12 +2273,25 @@ export const convexRefs = {
       "query",
       { categorySlug: string; threadSlug?: string },
       | { exists: false; kind: "missing" }
-      | { exists: true; kind: "category"; categorySlug: string }
+      | {
+          exists: true;
+          kind: "category";
+          categorySlug: string;
+          categoryName: string;
+          categoryDescription: string;
+        }
       | {
           exists: true;
           kind: "thread";
           categorySlug: string;
+          categoryName: string;
+          categoryDescription: string;
           threadSlug: string;
+          threadTitle: string;
+          threadExcerpt: string;
+          createdAt: number;
+          updatedAt: number;
+          lastPostAt: number;
         }
     >("forum:routeStatus"),
     listAnnouncements: makeFunctionReference<

@@ -808,6 +808,13 @@ export const listCategories = query({
       ctx,
       Array.from(lastThreadsById.values()),
     );
+    const lastThreadAuthorsByUserId = await loadUserNamesById(
+      ctx,
+      Array.from(lastThreadsById.values()).flatMap((thread) => [
+        thread.authorId,
+        thread.lastPostUserId,
+      ]),
+    );
     const categoryReadsById =
       viewer === null
         ? new Map<Id<"forumCategories">, ForumCategoryReadDoc>()
@@ -829,6 +836,14 @@ export const listCategories = query({
           ? undefined
           : lastPostTargetsByThreadId.get(lastThread._id),
         {
+          lastPostAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+          threadAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.authorId),
           viewerHasRead:
             viewer === null
               ? undefined
@@ -884,6 +899,8 @@ export const routeStatus = query({
         exists: true,
         kind: "category" as const,
         categorySlug: category.slug,
+        categoryName: category.name,
+        categoryDescription: category.description,
       };
     }
 
@@ -906,7 +923,14 @@ export const routeStatus = query({
       exists: true,
       kind: "thread" as const,
       categorySlug: category.slug,
+      categoryName: category.name,
+      categoryDescription: category.description,
       threadSlug: thread.slug,
+      threadTitle: thread.title,
+      threadExcerpt: forumThreadExcerpt(thread.body),
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      lastPostAt: thread.lastPostAt,
     };
   },
 });
@@ -1138,6 +1162,13 @@ export const overview = query({
       ctx,
       Array.from(lastThreadsById.values()),
     );
+    const lastThreadAuthorsByUserId = await loadUserNamesById(
+      ctx,
+      Array.from(lastThreadsById.values()).flatMap((thread) => [
+        thread.authorId,
+        thread.lastPostUserId,
+      ]),
+    );
     const categoryReadsById =
       viewer === null
         ? new Map<Id<"forumCategories">, ForumCategoryReadDoc>()
@@ -1158,6 +1189,14 @@ export const overview = query({
           ? undefined
           : lastPostTargetsByThreadId.get(lastThread._id),
         {
+          lastPostAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+          threadAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.authorId),
           viewerHasRead:
             viewer === null
               ? undefined
@@ -1177,6 +1216,14 @@ export const overview = query({
           ? undefined
           : lastPostTargetsByThreadId.get(lastThread._id),
         {
+          lastPostAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+          threadAuthor:
+            lastThread === undefined
+              ? undefined
+              : lastThreadAuthorsByUserId.get(lastThread.authorId),
           viewerHasRead:
             viewer === null
               ? undefined
@@ -1215,6 +1262,9 @@ export const overview = query({
       ctx,
       newestThreads,
     );
+    const categoryNamesById = new Map(
+      visibleCategories.map((category) => [category._id, category.name]),
+    );
     const online = await onlineForumSummary(
       ctx,
       Date.now(),
@@ -1231,6 +1281,7 @@ export const overview = query({
       ),
       newestThreads: newestThreads.map((thread) =>
         publicThreadListRecord(thread, authorsById.get(thread.authorId), {
+          categoryName: categoryNamesById.get(thread.categoryId),
           lastPostAuthor: authorsById.get(thread.lastPostUserId),
           lastPostTarget: newestLastPostTargetsByThreadId.get(thread._id),
         }),
@@ -2257,6 +2308,13 @@ export const listMyCategorySubscriptions = query({
       ctx,
       Array.from(lastThreadsById.values()),
     );
+    const lastThreadAuthorsByUserId = await loadUserNamesById(
+      ctx,
+      Array.from(lastThreadsById.values()).flatMap((thread) => [
+        thread.authorId,
+        thread.lastPostUserId,
+      ]),
+    );
 
     return {
       categories: visibleCategories.map((category) => {
@@ -2270,6 +2328,16 @@ export const listMyCategorySubscriptions = query({
           lastThread === undefined
             ? undefined
             : lastPostTargetsByThreadId.get(lastThread._id),
+          {
+            lastPostAuthor:
+              lastThread === undefined
+                ? undefined
+                : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+            threadAuthor:
+              lastThread === undefined
+                ? undefined
+                : lastThreadAuthorsByUserId.get(lastThread.authorId),
+          },
         );
       }),
     };
@@ -16542,6 +16610,8 @@ function publicCategoryRecord(
   lastThread?: ForumThreadDoc,
   lastPostTarget?: ForumLastPostTarget,
   options?: {
+    lastPostAuthor?: string;
+    threadAuthor?: string;
     viewerHasRead?: boolean;
   },
 ) {
@@ -16574,6 +16644,12 @@ function publicCategoryRecord(
           title: lastThread.title,
           status: lastThread.status,
           pinned: lastThread.pinned,
+          createdAt: lastThread.createdAt,
+          updatedAt: lastThread.updatedAt,
+          lastPostAt: lastThread.lastPostAt,
+          author: options?.threadAuthor ?? UNKNOWN_AUTHOR,
+          lastPostAuthor:
+            options?.lastPostAuthor ?? options?.threadAuthor ?? UNKNOWN_AUTHOR,
           lastPostNumber: lastPostTarget?.lastPostNumber,
           lastPostPage: lastPostTarget?.lastPostPage,
         }
@@ -18229,6 +18305,20 @@ function forumHelpDocumentExcerpt(body: string) {
         .replace(/\[([bius])\]([\s\S]*?)\[\/\1\]/gi, "$2"),
       FORUM_HELP_DOCUMENT_EXCERPT_MAX_LENGTH,
     ) || "No text preview available."
+  );
+}
+
+function forumThreadExcerpt(body: string) {
+  return (
+    excerpt(
+      body
+        .replace(/\[code(?:=[^\]]*)?\]([\s\S]*?)\[\/code\]/gi, "$1")
+        .replace(/\[url(?:=[^\]]+)?\]([\s\S]*?)\[\/url\]/gi, "$1")
+        .replace(/\[img\]([\s\S]*?)\[\/img\]/gi, " ")
+        .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+        .replace(/\s*\|\s*/g, " "),
+      180,
+    ) || "Forum discussion on SYMBaiEX."
   );
 }
 

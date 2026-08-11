@@ -21,11 +21,31 @@ export async function generateMetadata({
   if (process.env.NEXT_PUBLIC_CONVEX_URL && routeStatus?.exists !== true) {
     notFound();
   }
+  const categoryName =
+    routeStatus?.kind === "category"
+      ? routeStatus.categoryName
+      : humanizeSlug(categorySlug);
+  const description =
+    routeStatus?.kind === "category"
+      ? routeStatus.categoryDescription
+      : `Public thread list for the ${categoryName} board.`;
+  const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}`;
   return {
-    title: `Forum / ${humanizeSlug(categorySlug)}`,
-    description: `Public thread list for the ${humanizeSlug(categorySlug)} board.`,
+    title: categoryName,
+    description,
     alternates: {
-      canonical: `/${categorySlug}`,
+      canonical,
+    },
+    openGraph: {
+      title: categoryName,
+      description,
+      type: "website",
+      url: canonical,
+    },
+    twitter: {
+      card: "summary",
+      title: categoryName,
+      description,
     },
   };
 }

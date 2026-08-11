@@ -81,6 +81,58 @@ ${"A useful field note. ".repeat(800)}`,
     expect(body.endsWith("[/list]")).toBe(true);
   });
 
+  test("does not duplicate a paraphrased closing question and excludes weak related links", () => {
+    const body = finalizeForumBody(
+      `[h2]Operational fit[/h2]
+The SDK changes the shape of Java agent integration.
+
+[decision=Pilot scope]
+Sandbox|Pilot|Measure annotation processing behavior
+Production|Wait|Verify blocking dependencies first
+[/decision]
+
+Where would your team pilot this first?`,
+      [
+        {
+          articleDescription: "Java SDK release details",
+          articleText: "The SDK uses annotation processing.",
+          articleTitle: "Copilot SDK for Java",
+          boardSlugs: ["ai-frameworks"],
+          id: "candidate-1",
+          imageCredit: "Example",
+          sourceFeedUrl: "https://example.com/feed.xml",
+          sourceKey: "source-1",
+          sourceName: "Example",
+          summary: "Java SDK release details",
+          title: "Copilot SDK for Java",
+          url: "https://example.com/java-sdk",
+        },
+      ],
+      {
+        discussionQuestion: "Where would your team pilot it first?",
+        subjectTitle: "Copilot SDK Java production readiness",
+        relatedThreads: [
+          {
+            categorySlug: "ai-frameworks",
+            slug: "annotation-processor-failures",
+            title: "Java Copilot SDK annotation processor failure modes",
+          },
+          {
+            categorySlug: "projects-releases",
+            slug: "enterprise-app-installation",
+            title: "GitHub enterprise app installation permissions",
+          },
+        ],
+      },
+    );
+
+    expect(body).not.toContain("[h3]Over to the board[/h3]");
+    expect(body).toContain(
+      "https://forum.symbaiex.com/ai-frameworks/annotation-processor-failures",
+    );
+    expect(body).not.toContain("enterprise-app-installation");
+  });
+
   test("rejects generic artwork and prefers relevant editorial imagery", () => {
     const base = {
       articleDescription: "A practical release with migration details",
@@ -190,6 +242,84 @@ ${"A useful field note. ".repeat(800)}`,
     expect(result.groundingScore).toBeLessThan(100);
     expect(result.feedback.join(" ")).toContain(
       "source-a but that source does not contain: 9.9",
+    );
+  });
+
+  test("holds malformed evidence blocks below the publishing threshold", () => {
+    const discussionQuestion =
+      "Where would checkpoint recovery remove operational pain for your team?";
+    const body = `[h2]Recovery decision[/h3]
+Version 2.4 adds checkpoint recovery to synchronization jobs.
+
+Checkpoint verification reduces ambiguity after an interrupted run. ${"The operational playbook benefits from a deliberate pause before resuming work. ".repeat(35)}
+
+[decision=Adoption]
+Pilot|Adopt|Verify the checkpoint
+[/decision]
+
+${discussionQuestion}`;
+    const result = evaluateForumDraft({
+      draft: {
+        title: "Checkpoint recovery needs a verification gate",
+        body,
+        poll: null,
+        imageCandidateId: null,
+        claims: [
+          {
+            claim:
+              "Version 2.4 adds checkpoint recovery to synchronization jobs.",
+            sourceCandidateId: "source-a",
+            confidence: "high",
+            kind: "fact",
+          },
+          {
+            claim:
+              "Checkpoint verification reduces ambiguity after an interrupted run.",
+            sourceCandidateId: "source-a",
+            confidence: "medium",
+            kind: "analysis",
+          },
+        ],
+        originalValue: [
+          "Checkpoint verification after an interrupted run",
+          "A deliberate pause before resuming work",
+        ],
+        discussionQuestion,
+      },
+      selection: {
+        angle: "Checkpoint verification after interrupted synchronization",
+        candidateIds: ["source-a"],
+        categorySlug: "ai-frameworks",
+        postType: "guide",
+        prefixSlug: "guide",
+        includePoll: false,
+        contentFormat: "brief",
+      },
+      snapshots: [
+        {
+          articleDescription:
+            "Version 2.4 adds checkpoint recovery to synchronization jobs.",
+          articleText:
+            "Version 2.4 adds checkpoint recovery to synchronization jobs after interrupted runs.",
+          articleTitle: "Checkpoint recovery release",
+          boardSlugs: ["ai-frameworks"],
+          id: "source-a",
+          imageCredit: "Example",
+          sourceFeedUrl: "https://example.com/feed.xml",
+          sourceKey: "source-a",
+          sourceName: "Example",
+          summary: "Checkpoint recovery",
+          title: "Checkpoint recovery release",
+          url: "https://example.com/a",
+        },
+      ],
+      recentThreadTitles: [],
+    });
+
+    expect(result.qualityScore).toBeLessThan(78);
+    expect(result.feedback.join(" ")).toContain("Balance every [h2]");
+    expect(result.feedback.join(" ")).toContain(
+      "[decision] needs at least 2 complete rows",
     );
   });
 

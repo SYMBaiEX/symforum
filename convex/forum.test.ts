@@ -2694,7 +2694,12 @@ describe("forum privacy regressions", () => {
 
     await expect(
       t.query(api.forum.routeStatus, { categorySlug: "public-square" }),
-    ).resolves.toMatchObject({ exists: true, kind: "category" });
+    ).resolves.toMatchObject({
+      exists: true,
+      kind: "category",
+      categoryName: "Public Square",
+      categoryDescription: "Public Square description",
+    });
     await expect(
       t.query(api.forum.routeStatus, { categorySlug: "trusted-lab" }),
     ).resolves.toMatchObject({ exists: false, kind: "missing" });
@@ -2714,7 +2719,42 @@ describe("forum privacy regressions", () => {
         categorySlug: "trusted-lab",
         threadSlug: "trusted-lunar-brief",
       }),
-    ).resolves.toMatchObject({ exists: true, kind: "thread" });
+    ).resolves.toMatchObject({
+      exists: true,
+      kind: "thread",
+      categoryName: "Trusted Lab",
+      threadTitle: "Trusted lunar brief",
+      threadExcerpt: "Trusted members can read this lunar launch discussion.",
+    });
+  });
+
+  test("overview hydrates real latest-thread metadata without UI placeholders", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(seed.publicCategoryId, {
+        lastThreadId: seed.publicThreadId,
+        lastPostAt: 1_800_000_000_001,
+      });
+    });
+
+    const [categories, overview] = await Promise.all([
+      t.query(api.forum.listCategories, {}),
+      t.query(api.forum.overview, {}),
+    ]);
+    expect(
+      categories.find((category) => category.slug === "public-square")
+        ?.lastThread,
+    ).toMatchObject({
+      author: "trustedauthor",
+      lastPostAuthor: "trustedauthor",
+      lastPostAt: 1_800_000_000_001,
+    });
+    expect(
+      overview.newestThreads.find(
+        (thread) => thread.slug === "public-lunar-brief",
+      ),
+    ).toMatchObject({ categoryName: "Public Square" });
   });
 
   test("search filters protected boards for keyword and author searches", async () => {

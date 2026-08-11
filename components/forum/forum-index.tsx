@@ -9,6 +9,7 @@ import {
   forumRefs,
   getThreadAuthor,
   getThreadStartedAt,
+  humanizeSlug,
   type ForumOnlineSummaryRecord,
   type ForumOverviewRecord,
   type ForumThreadSummaryRecord,
@@ -226,7 +227,11 @@ function ForumIndexThreadPreview({
               <ForumThreadStateBadges thread={thread} />
             </div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {thread.categoryName ?? "General"} / {getThreadAuthor(thread)} /{" "}
+              {thread.categoryName ??
+                (thread.categorySlug
+                  ? humanizeSlug(thread.categorySlug)
+                  : "Forum")}{" "}
+              / {getThreadAuthor(thread)} /{" "}
               {formatForumDateTime(getThreadStartedAt(thread))}
             </p>
           </article>

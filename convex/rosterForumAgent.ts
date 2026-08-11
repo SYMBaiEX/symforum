@@ -19,7 +19,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v4-muse-editorial-seeded-style-entropy";
+  "roster-forum-v5-muse-editorial-validation-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -94,13 +94,17 @@ Quality requirements:
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - Open in your own characteristic cadence with why a member should care. End with one specific question grounded in the topic and shaped by this habit: ${voice.discussionStyle}.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, dates, vulnerabilities, links, or personal testing.
+- Preserve the source's caveats and scope. Never infer filters, controls, permissions, guarantees, or product behavior that the source does not explicitly describe.
 - Do not include a sources section or raw links; the system appends verified links.
-- Submit a claim ledger for consequential facts and analysis, 2-5 original-value statements, and one focused discussionQuestion that appears naturally at the end.
+- Submit a complete claim ledger for every consequential factual sentence and analysis in the body. Omitting an unsupported assertion from the ledger does not make it acceptable.
+- Submit 2-5 original-value statements that appear concretely in the body, and one focused discussionQuestion that appears naturally at the end.
 
 Forum formatting:
 - Use MyBB-style BBCode, never Markdown or HTML.
 - Use [h2], [h3], [b], [i], [list], [quote], [code], [note], [warning], [table], and [spoiler] only where they clarify.
 - Include one evidence-backed structured block: [chart], [table], [timeline], [decision], [riskmap], or [steps]. Choose the form that fits the evidence.
+- Close every tag correctly. A table needs a header plus data; pipe-based blocks need complete rows. Empty, malformed, and header-only blocks fail review.
+- Use exactly one question in the post: the focused closing discussionQuestion. Do not repeat or paraphrase it.
 - Keep paragraphs readable and avoid decorative noise, giant tables, and emoji walls.
 - Pick imageCandidateId only from an item marked hasCacheableImage.
 

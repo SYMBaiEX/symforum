@@ -11,10 +11,15 @@ import { internalAction, type ActionCtx } from "./_generated/server";
 import { MUSE_AGENT_MODEL } from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import {
+  forumBodyFactualStatements,
+  forumBodyQuestions,
+  forumQuestionSimilarity,
+  isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
   lexicalSimilarity,
   significantTokens,
   unsupportedVerifiableTokens,
+  validateForumAgentMarkup,
 } from "../lib/editorial-quality";
 import {
   modelGenerationSettings,
@@ -41,7 +46,7 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v5-muse-editorial";
+const PROMPT_VERSION = "suki-forum-v6-muse-editorial-validation";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -1357,6 +1362,8 @@ Quality requirements:
 - Do not include a sources section; the system appends verified source links.
 - Do not embed images or external links in the body; the system attaches a cached, attributed image and appends verified links.
 - Submit a claim ledger for every consequential factual or analytical claim. Each claim must point to the exact research candidate that supports it. A factual number, version, date, vulnerability identifier, or named capability without source support fails review.
+- Make the claim ledger complete: every consequential factual sentence in the body must map to one submitted claim. Do not hide an unsupported assertion by omitting it from the ledger or labeling it analysis.
+- Preserve source caveats and scope exactly. Do not infer filters, permissions, controls, guarantees, or product behavior the source does not explicitly describe.
 - Submit 2-5 concise original-value statements and one focused discussionQuestion. The question must also appear naturally at the end of the body.
 
 Forum formatting:
@@ -1365,6 +1372,8 @@ Forum formatting:
 - Use [b]emphasis[/b], [i]context[/i], [list][*]item[/list], [list=1][*]step[/list], [quote=source]...[/quote], and [code]...[/code] only when useful.
 - Use [note]...[/note] for a practical aside, [warning]...[/warning] for a real risk, [table][tr][th]...[/th][/tr][/table] for a compact comparison, and [spoiler=Optional deep dive]...[/spoiler] for genuinely optional detail.
 - Every post must include one evidence-backed structured block. Choose the best fit: [chart=Title]Label|0-100|Note[/chart], [table]...[/table], [timeline=Title]When|Event|Why it matters[/timeline], [decision=Title]Option|Verdict|Reason[/decision], [riskmap=Title]Risk|Likelihood 0-100|Impact 0-100|Mitigation[/riskmap], or [steps=Title]Step|Action|Detail[/steps]. Never force a chart into a topic that is better served by a timeline, decision matrix, or actionable sequence.
+- Close every BBCode tag with the matching tag. Tables need a header and at least one complete data row; pipe-based blocks need at least two complete rows except a risk map, which may use one. Never submit an empty or header-only structured block.
+- Use exactly one question in the post: the focused discussionQuestion at the end. Do not restate or paraphrase it a second time.
 - Use blank lines between blocks. Keep paragraphs readable.
 - Avoid Markdown, decorative formatting, giant tables, and emoji walls. Rich markup should clarify the post, not decorate every paragraph.
 - Pick imageCandidateId only from a research item that says hasCacheableImage.
@@ -1416,22 +1425,29 @@ export function finalizeForumBody(
     )
     .join("\n");
   const sourceBlock = `[b]Sources and further reading[/b]\n[list]\n${sourceItems}\n[/list]`;
+  const existingQuestions = forumBodyQuestions(withoutUnverifiedLinks);
   const question =
     options?.discussionQuestion &&
-    !withoutUnverifiedLinks
-      .toLowerCase()
-      .includes(options.discussionQuestion.toLowerCase())
+    !existingQuestions.some(
+      (existingQuestion) =>
+        forumQuestionSimilarity(
+          existingQuestion,
+          options.discussionQuestion ?? "",
+        ) >= 0.55,
+    )
       ? `\n\n[h3]Over to the board[/h3]\n${escapeBbcodeText(options.discussionQuestion)}`
       : "";
   const related = (options?.relatedThreads ?? [])
-    .filter(
-      (thread) =>
-        lexicalSimilarity(thread.title, options?.subjectTitle ?? "") >= 0.14,
+    .filter((thread) =>
+      isMeaningfullyRelatedForumThread(
+        options?.subjectTitle ?? "",
+        thread.title,
+      ),
     )
     .slice(0, 3)
     .map(
       (thread) =>
-        `${escapeBbcodeText(thread.title)}|https://forum.symbaiex.com/forum/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}|Continue the subject in this existing discussion`,
+        `${escapeBbcodeText(thread.title)}|https://forum.symbaiex.com/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}|Continue the subject in this existing discussion`,
     );
   const relatedBlock =
     related.length === 0
@@ -1555,16 +1571,88 @@ export function evaluateForumDraft(args: {
     );
   }
 
-  const questionPresent = args.draft.body
-    .toLowerCase()
-    .includes(args.draft.discussionQuestion.toLowerCase());
-  const utilityScore = Math.min(
-    100,
-    args.draft.originalValue.length * 18 + (questionPresent ? 28 : 8) + 18,
+  const bodyStatements = forumBodyFactualStatements(args.draft.body);
+  const ledgerCoveredStatements = bodyStatements.filter((statement) =>
+    args.draft.claims.some(
+      (claim) =>
+        lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
+        lexicalEvidenceCoverage(claim.claim, statement) >= 0.7,
+    ),
   );
-  if (!questionPresent) {
+  const bodyClaimCoverage =
+    bodyStatements.length === 0
+      ? 0
+      : ledgerCoveredStatements.length / bodyStatements.length;
+  if (bodyClaimCoverage < 0.8) {
+    const uncovered = bodyStatements.filter(
+      (statement) => !ledgerCoveredStatements.includes(statement),
+    );
+    feedback.push(
+      `Add every consequential body claim to the claim ledger, including: ${uncovered
+        .slice(0, 2)
+        .join(" / ")}`,
+    );
+  }
+
+  const combinedSourceText = args.snapshots
+    .map(
+      (snapshot) =>
+        `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`,
+    )
+    .join(" ");
+  const unsupportedBodyTokens = unsupportedVerifiableTokens(
+    plainForumDraftText(args.draft.body),
+    combinedSourceText,
+  ).filter((token) => !/^\d{1,3}$/.test(token));
+  if (unsupportedBodyTokens.length > 0) {
+    feedback.push(
+      `Remove or source unsupported factual tokens from the body: ${unsupportedBodyTokens
+        .slice(0, 8)
+        .join(", ")}`,
+    );
+  }
+
+  const questions = forumBodyQuestions(args.draft.body);
+  const matchingQuestion = questions.find(
+    (question) =>
+      forumQuestionSimilarity(question, args.draft.discussionQuestion) >= 0.55,
+  );
+  const questionAtEnd =
+    matchingQuestion !== undefined &&
+    plainForumDraftText(args.draft.body).endsWith(
+      plainForumDraftText(matchingQuestion),
+    );
+  if (questions.length !== 1) {
+    feedback.push(
+      `Use exactly one question in the body, the final discussion question (draft: ${questions.length})`,
+    );
+  }
+  if (!matchingQuestion || !questionAtEnd) {
     feedback.push("End the body with the submitted discussion question");
   }
+
+  const originalValueCoverage =
+    args.draft.originalValue.filter(
+      (value) =>
+        lexicalEvidenceCoverage(value, plainForumDraftText(args.draft.body)) >=
+        0.65,
+    ).length / args.draft.originalValue.length;
+  if (originalValueCoverage < 0.6) {
+    feedback.push(
+      "Make the submitted original-value statements concrete and visible in the body",
+    );
+  }
+  const markupValidation = validateForumAgentMarkup(args.draft.body);
+  feedback.push(...markupValidation.feedback);
+  const utilityScore = Math.round(
+    Math.min(
+      100,
+      bodyClaimCoverage * 30 +
+        originalValueCoverage * 30 +
+        (questionAtEnd && questions.length === 1 ? 25 : 5) +
+        Math.min(15, markupValidation.structuredRowCount * 5),
+    ),
+  );
   const words = plainWordCount(args.draft.body);
   const [minimumWords, maximumWords] = contentFormatWordRange(
     args.selection.contentFormat,
@@ -1575,17 +1663,26 @@ export function evaluateForumDraft(args: {
       `Keep ${args.selection.contentFormat} between ${minimumWords} and ${maximumWords} words (draft: ${words})`,
     );
   }
-  const structured =
-    /\[(?:chart|table|timeline|decision|riskmap|steps|sourcecards)(?:=|\])/i.test(
-      args.draft.body,
-    );
-  const formatScore = (correctLength ? 55 : 20) + (structured ? 45 : 0);
-  const qualityScore = Math.round(
+  const formatScore =
+    (correctLength ? 55 : 20) + (markupValidation.valid ? 45 : 0);
+  let qualityScore = Math.round(
     groundingScore * 0.4 +
       noveltyScore * 0.2 +
       utilityScore * 0.3 +
       formatScore * 0.1,
   );
+  if (!markupValidation.valid) {
+    qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
+  }
+  if (
+    bodyClaimCoverage < 0.8 ||
+    unsupportedBodyTokens.length > 0 ||
+    originalValueCoverage < 0.6 ||
+    questions.length !== 1 ||
+    !questionAtEnd
+  ) {
+    qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
+  }
   return {
     qualityScore,
     groundingScore,
@@ -1593,6 +1690,14 @@ export function evaluateForumDraft(args: {
     utilityScore,
     feedback,
   };
+}
+
+function plainForumDraftText(value: string) {
+  return value
+    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function buildTopicFingerprint(angle: string, candidates: ResearchCandidate[]) {
