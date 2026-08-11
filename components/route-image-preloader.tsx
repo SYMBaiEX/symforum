@@ -1,5 +1,6 @@
 "use client";
 
+import { isForumHostname } from "@/components/forum/forum-host-url";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -39,8 +40,10 @@ export function RouteImagePreloader() {
         image.src = src;
       }
 
-      for (const href of warmRoutes) {
-        router.prefetch(href);
+      if (shouldPrefetchPrimaryRoutes(window.location.hostname)) {
+        for (const href of warmRoutes) {
+          router.prefetch(href);
+        }
       }
     };
 
@@ -62,4 +65,8 @@ export function RouteImagePreloader() {
   }, [router]);
 
   return null;
+}
+
+export function shouldPrefetchPrimaryRoutes(hostname: string) {
+  return !isForumHostname(hostname);
 }
