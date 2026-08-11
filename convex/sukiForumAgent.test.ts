@@ -351,6 +351,10 @@ Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.
 
 Real typing speed is the part most hobby modems get wrong.
 
+Verify the checkpoint before resuming interrupted work.
+
+Choose a bounded recovery decision under ambiguous saved state.
+
 [table]
 [tr][th]Signal[th]Meaning[/tr]
 [tr][td]Checkpoint[td]Resume interrupted synchronization jobs[/tr]
@@ -359,8 +363,8 @@ Real typing speed is the part most hobby modems get wrong.
         imageCandidateId: null,
         claims: [],
         originalValue: [
-          "Checkpoint verification before resuming work",
-          "A bounded recovery decision",
+          "A concrete checkpoint verification practice should happen immediately before every team restarts the entire interrupted workflow",
+          "Choose a deliberately bounded operational decision whenever the persisted recovery state remains unclear to the team",
         ],
         discussionQuestion:
           "Where would checkpoint recovery remove operational pain",
@@ -389,6 +393,10 @@ Real typing speed is the part most hobby modems get wrong.
         kind: "fact",
       }),
     );
+    expect(repaired.originalValue).toEqual([
+      "Verify the checkpoint before resuming interrupted work.",
+      "Choose a bounded recovery decision under ambiguous saved state.",
+    ]);
   });
 
   test("gives each editorial format a concrete argument architecture", () => {
