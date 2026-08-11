@@ -44,20 +44,24 @@ export const probe = internalAction({
           const result = await generateText({
             model: candidate.model,
             prompt: "Reply with exactly: SYMBiEX model route healthy",
-            maxOutputTokens: 32,
+            maxOutputTokens: 256,
             maxRetries: 0,
             temperature: 0,
             providerOptions: candidate.providerOptions,
             abortSignal: signal,
           });
-          return { response: result.text };
+          const response = result.text.trim();
+          if (!response) {
+            throw new Error("model route returned an empty visible response");
+          }
+          return { response };
         },
       },
     );
     return {
       provider: generation.route.provider,
       model: generation.route.persistedModel,
-      response: generation.value.response.trim().slice(0, 120),
+      response: generation.value.response.slice(0, 120),
     };
   },
 });
