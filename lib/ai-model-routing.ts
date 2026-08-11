@@ -52,6 +52,7 @@ type RouteTelemetryContext = {
 export type RouteRunArgs<T> = RouteTelemetryContext & {
   stage: string;
   totalTimeoutMs: number;
+  attemptOffset?: number;
   run: (candidate: RoutedModel, signal: AbortSignal) => Promise<T>;
   onAttempt?: (event: ModelRouteAttempt) => void | Promise<void>;
 };
@@ -224,6 +225,7 @@ export async function runRoutedCandidates<T>(
 ): Promise<{ value: T; route: ModelRoute }> {
   const deadline = Date.now() + args.totalTimeoutMs;
   const failures: string[] = [];
+  const attemptOffset = Math.max(0, Math.floor(args.attemptOffset ?? 0));
   for (let index = 0; index < candidates.length; index += 1) {
     const candidate = candidates[index];
     const remaining = deadline - Date.now();
@@ -252,11 +254,11 @@ export async function runRoutedCandidates<T>(
           args.correlationId ?? `${args.feature ?? "ai"}:${args.stage}`,
         feature: args.feature ?? "ai-generation",
         stage: args.stage,
-        attempt: index + 1,
+        attempt: index + 1 + attemptOffset,
         provider: candidate.provider,
         model: candidate.persistedModel,
         outcome: "completed",
-        fallback: index > 0,
+        fallback: index + attemptOffset > 0,
         durationMs: Date.now() - attemptStartedAt,
       });
       return {
@@ -281,11 +283,11 @@ export async function runRoutedCandidates<T>(
           args.correlationId ?? `${args.feature ?? "ai"}:${args.stage}`,
         feature: args.feature ?? "ai-generation",
         stage: args.stage,
-        attempt: index + 1,
+        attempt: index + 1 + attemptOffset,
         provider: candidate.provider,
         model: candidate.persistedModel,
         outcome: "failed",
-        fallback: index > 0,
+        fallback: index + attemptOffset > 0,
         durationMs: Date.now() - attemptStartedAt,
         errorMessage: safeError(error),
       });

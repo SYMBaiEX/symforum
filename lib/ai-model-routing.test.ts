@@ -87,6 +87,25 @@ describe("AI model routing", () => {
     );
   });
 
+  test("marks an explicitly gateway-only continuation as a fallback", async () => {
+    const onAttempt = vi.fn();
+    const result = await runRoutedCandidates(
+      [candidate("gateway", "deepseek/fallback")],
+      {
+        stage: "test-gateway-continuation",
+        totalTimeoutMs: 5_000,
+        attemptOffset: 1,
+        run: async () => "gateway-result",
+        onAttempt,
+      },
+    );
+
+    expect(result.route.provider).toBe("gateway");
+    expect(onAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 2, fallback: true }),
+    );
+  });
+
   test("passes Muse's native top_k setting through provider options", async () => {
     globalThis.fetch = vi.fn(
       async () => new Response("{}", { status: 200 }),
