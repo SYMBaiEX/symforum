@@ -68,15 +68,16 @@ describe("forum BBCode parser", () => {
 
   test("recovers duplicate and unclosed table wrappers without consuming the post", () => {
     const nodes = parseForumBbcode(
-      "[table]\n[table]\n[tr][th]Stack[/th][th]Version[/th][/tr]\n" +
-        "[tr][td]Open Liberty[/td][td]26.0.0.5[/td][/tr]\n[/table]\n\n" +
-        "The analysis continues.\n\n[h3]Over to the board[/h3]",
+      "[h2]Evaluation</h2]\n\n[table]\n[table]\n" +
+        "[tr][th]Stack</th][th]Version</th][/tr]\n" +
+        "[tr][td]Open Liberty</td][td]26.0.0.5</td][/tr]\n[/table]\n\n" +
+        "The analysis continues.\n\n[h3]Over to the board</h3]",
     );
 
     expect(
       nodes.map((node) => (node.type === "tag" ? node.name : "text")),
-    ).toEqual(["table", "text", "h3"]);
-    const table = nodes[0];
+    ).toEqual(["h2", "text", "table", "text", "h3"]);
+    const table = nodes[2];
     expect(table?.type).toBe("tag");
     if (table?.type !== "tag") {
       throw new Error("Expected a recovered table");
@@ -86,10 +87,21 @@ describe("forum BBCode parser", () => {
         .filter((node) => node.type === "tag")
         .map((node) => node.name),
     ).toEqual(["tr", "tr"]);
-    expect(nodes[1]).toMatchObject({
+    expect(nodes[3]).toMatchObject({
       type: "text",
       value: expect.stringContaining("The analysis continues."),
     });
+  });
+
+  test("accepts safe HTML tags and mixed closing delimiters from agents", () => {
+    const nodes = parseForumBbcode(
+      "<h2>HTML heading</h2><note]Mixed note[/note>",
+    );
+
+    expect(nodes).toMatchObject([
+      { type: "tag", name: "h2", children: [{ value: "HTML heading" }] },
+      { type: "tag", name: "note", children: [{ value: "Mixed note" }] },
+    ]);
   });
 
   test("ignores an extra table closer after a duplicated balanced wrapper", () => {

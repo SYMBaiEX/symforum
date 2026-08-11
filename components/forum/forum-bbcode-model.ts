@@ -51,7 +51,10 @@ const SELF_CLOSING_TAGS = new Set(["br", "hr"]);
 export function parseForumBbcode(input: string): ForumBbcodeNode[] {
   const root: ForumBbcodeNode[] = [];
   const stack: ForumBbcodeTagNode[] = [];
-  const tokenPattern = /\[(\/?)([a-z0-9*]+)(?:=([^\]]*))?\]/gi;
+  // Accept standard BBCode plus the HTML/BBCode delimiter hybrids that some
+  // models emit, such as </h2] and </td]. The supported-tag allowlist still
+  // controls what becomes markup, so this recovery does not enable raw HTML.
+  const tokenPattern = /(?:\[|<)(\/?)([a-z0-9*]+)(?:=([^\]>]*))?(?:\]|>)/gi;
   let cursor = 0;
 
   function children() {
