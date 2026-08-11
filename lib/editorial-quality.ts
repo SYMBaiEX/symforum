@@ -92,6 +92,14 @@ export type ForumMarkupValidation = {
   valid: boolean;
 };
 
+export function repairForumAgentMarkup(body: string) {
+  return body.replace(
+    /\[(th|td)\]((?:(?!\[\/?(?:th|td|tr|table)(?:=[^\]]*)?\])[\s\S])*?)(?=\[(?:th|td)\]|\[\/tr\]|\[\/table\])/gi,
+    (_match, tag: string, contents: string) =>
+      `[${tag.toLowerCase()}]${contents}[/${tag.toLowerCase()}]`,
+  );
+}
+
 export function significantTokens(value: string) {
   return [
     ...new Set(
@@ -255,6 +263,7 @@ export function forumBodyFactualStatements(body: string) {
   const plain = plainForumText(
     body
       .replace(/\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi, " ")
+      .replace(/\[h[23]\][\s\S]*?\[\/h[23]\]/gi, "\n\n")
       .replace(
         /\[(?:chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]/gi,
         "\n",

@@ -9,6 +9,7 @@ import {
   finalizeForumBody,
   imageRelevanceScore,
   parseFeedXml,
+  repairForumDraftForReview,
 } from "./sukiForumAgent";
 
 describe("Suki forum research helpers", () => {
@@ -320,6 +321,68 @@ ${discussionQuestion}`;
     expect(result.feedback.join(" ")).toContain("Balance every [h2]");
     expect(result.feedback.join(" ")).toContain(
       "[decision] needs at least 2 complete rows",
+    );
+  });
+
+  test("repairs Muse table cells, closing question, and supported claim ledger gaps", () => {
+    const snapshots = [
+      {
+        articleDescription:
+          "Version 2.4 adds checkpoint recovery to synchronization jobs.",
+        articleText:
+          "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+        articleTitle: "Checkpoint recovery release",
+        boardSlugs: ["ai-frameworks"],
+        id: "source-a",
+        imageCredit: "Example",
+        sourceFeedUrl: "https://example.com/feed.xml",
+        sourceKey: "source-a",
+        sourceName: "Example",
+        summary: "Checkpoint recovery",
+        title: "Checkpoint recovery release",
+        url: "https://example.com/a",
+      },
+    ];
+    const repaired = repairForumDraftForReview(
+      {
+        title: "Checkpoint recovery changes synchronization operations",
+        body: `[h2]Recovery[/h2]
+Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.
+
+[table]
+[tr][th]Signal[th]Meaning[/tr]
+[tr][td]Checkpoint[td]Resume interrupted synchronization jobs[/tr]
+[/table]`,
+        poll: null,
+        imageCandidateId: null,
+        claims: [],
+        originalValue: [
+          "Checkpoint verification before resuming work",
+          "A bounded recovery decision",
+        ],
+        discussionQuestion:
+          "Where would checkpoint recovery remove operational pain",
+      },
+      snapshots,
+    );
+
+    expect(repaired.body).toContain("[tr][th]Signal[/th][th]Meaning[/th][/tr]");
+    expect(repaired.body).toContain(
+      "[tr][td]Checkpoint[/td][td]Resume interrupted synchronization jobs[/td][/tr]",
+    );
+    expect(repaired.body).toMatch(
+      /Where would checkpoint recovery remove operational pain\?$/,
+    );
+    expect(repaired.discussionQuestion).toBe(
+      "Where would checkpoint recovery remove operational pain?",
+    );
+    expect(repaired.claims).toContainEqual(
+      expect.objectContaining({
+        claim:
+          "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+        sourceCandidateId: "source-a",
+        kind: "fact",
+      }),
     );
   });
 

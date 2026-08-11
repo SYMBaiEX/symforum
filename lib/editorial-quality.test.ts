@@ -8,6 +8,7 @@ import {
   isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
   lexicalSimilarity,
+  repairForumAgentMarkup,
   unsupportedVerifiableTokens,
   validateForumAgentMarkup,
 } from "./editorial-quality";
@@ -64,6 +65,19 @@ Regulated team|Pilot|Review the audit trail first
     expect(malformed.feedback.join(" ")).toContain(
       "header row and at least one complete data row",
     );
+  });
+
+  test("repairs omitted table-cell closing tags without changing complete cells", () => {
+    const repaired = repairForumAgentMarkup(`[table]
+[tr][th]Signal[th]Meaning[/tr]
+[tr][td]Checkpoint[/td][td]Resume interrupted work[/tr]
+[/table]`);
+
+    expect(repaired).toContain("[tr][th]Signal[/th][th]Meaning[/th][/tr]");
+    expect(repaired).toContain(
+      "[tr][td]Checkpoint[/td][td]Resume interrupted work[/td][/tr]",
+    );
+    expect(validateForumAgentMarkup(repaired)).toMatchObject({ valid: true });
   });
 
   test("detects consequential body statements and duplicate closing questions", () => {

@@ -17,6 +17,7 @@ import {
   isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
   lexicalSimilarity,
+  repairForumAgentMarkup,
   significantTokens,
   unsupportedVerifiableTokens,
   validateForumAgentMarkup,
@@ -661,7 +662,10 @@ export async function runForumResearchSlot(
       outputTokens: draftResult.usage.outputTokens,
       durationMs: Date.now() - draftStartedAt,
     });
-    let draft = draftGeneration.value.draft;
+    let draft = repairForumDraftForReview(
+      draftGeneration.value.draft,
+      snapshots,
+    );
     let revisionInputTokens: number | undefined;
     let revisionOutputTokens: number | undefined;
     let quality = evaluateForumDraft({
@@ -685,7 +689,10 @@ export async function runForumResearchSlot(
         }),
       );
       const revision = revisionGeneration.value.result;
-      draft = revisionGeneration.value.draft;
+      draft = repairForumDraftForReview(
+        revisionGeneration.value.draft,
+        snapshots,
+      );
       revisionInputTokens = revision.usage.inputTokens;
       revisionOutputTokens = revision.usage.outputTokens;
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
@@ -1459,6 +1466,58 @@ export function finalizeForumBody(
     );
   }
   return finalizedBody;
+}
+
+export function repairForumDraftForReview(
+  draft: z.infer<typeof forumDraftSchema>,
+  snapshots: ArticleSnapshot[],
+) {
+  const discussionQuestion = normalizeDiscussionQuestion(
+    draft.discussionQuestion,
+  );
+  let body = repairForumAgentMarkup(draft.body).trim();
+  const bodyQuestions = forumBodyQuestions(body);
+  if (bodyQuestions.length === 0) {
+    body = `${body}\n\n${discussionQuestion}`;
+  }
+
+  const claims = [...draft.claims];
+  const statements = forumBodyFactualStatements(body);
+  for (const statement of statements) {
+    if (claims.length >= 12) break;
+    if (statement.length > 400) continue;
+    const covered = claims.some(
+      (claim) =>
+        lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
+        lexicalEvidenceCoverage(claim.claim, statement) >= 0.7,
+    );
+    if (covered) continue;
+
+    const source = snapshots
+      .map((snapshot) => ({
+        id: snapshot.id,
+        coverage: lexicalEvidenceCoverage(
+          statement,
+          `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`,
+        ),
+      }))
+      .sort((left, right) => right.coverage - left.coverage)[0];
+    if (!source || source.coverage < 0.45) continue;
+
+    claims.push({
+      claim: statement,
+      sourceCandidateId: source.id,
+      confidence: "medium",
+      kind: "fact",
+    });
+  }
+
+  return { ...draft, body, claims, discussionQuestion };
+}
+
+function normalizeDiscussionQuestion(question: string) {
+  const trimmed = question.trim();
+  return trimmed.endsWith("?") ? trimmed : `${trimmed.replace(/[.!]+$/, "")}?`;
 }
 
 type EvaluatedForumDraft = {
