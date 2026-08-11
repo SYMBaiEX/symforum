@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  decodeForumEntities,
   forumStructuredBlockRows,
   forumStructuredBlockTitle,
+  normalizeForumAgentMarkup,
   parseForumBbcode,
 } from "./forum-bbcode-model";
 
@@ -162,5 +164,119 @@ describe("forum BBCode parser", () => {
     expect(forumStructuredBlockTitle(listBased)).toBe(
       "Review notification settings",
     );
+  });
+
+  test("recovers an unwrapped legacy pipe table as semantic table nodes", () => {
+    const nodes = parseForumBbcode(
+      "Dimension|[b]Orbit-era[/b]|Typical modern workflow\n" +
+        "Idea capture|DAT sketches|Cloud session\n" +
+        "Character|Warm &amp; imperfect|Clean &amp; quantized",
+    );
+
+    expect(nodes).toHaveLength(1);
+    const table = nodes[0];
+    expect(table).toMatchObject({ type: "tag", name: "table" });
+    if (table?.type !== "tag") {
+      throw new Error("Expected a recovered legacy table");
+    }
+    const rows = table.children.filter(
+      (node) => node.type === "tag" && node.name === "tr",
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      children: [
+        { name: "th" },
+        { name: "th", children: [{ name: "b" }] },
+        { name: "th" },
+      ],
+    });
+  });
+
+  test("supports common Markdown fallbacks without changing structured pipe blocks", () => {
+    const normalized = normalizeForumAgentMarkup(
+      "## Findings\n\n- First signal\n- [Primary source](https://example.com/report)\n\n" +
+        "> Keep the caveat visible.\n\n" +
+        "[chart=Signals]\nLabel|Value|Detail\nAdoption|72|Growing\n[/chart]",
+    );
+    const nodes = parseForumBbcode(normalized);
+
+    expect(
+      nodes.filter((node) => node.type === "tag").map((node) => node.name),
+    ).toEqual(["h2", "list", "quote", "chart"]);
+    expect(normalized).toContain("[url=https://example.com/report]");
+    expect(normalized).toContain("Label|Value|Detail");
+    expect(normalized).not.toContain("[chart=Signals]\n[table]");
+  });
+
+  test("keeps BBCode-looking text literal inside native and fenced code blocks", () => {
+    const native = parseForumBbcode(
+      "[code=tsx]<Panel>[b]literal[/b]</Panel>[/code]",
+    )[0];
+    const fenced = parseForumBbcode(
+      "```ts\nconst markup = '[warning]literal[/warning]';\n```",
+    )[0];
+
+    expect(native).toMatchObject({
+      type: "tag",
+      name: "code",
+      value: "tsx",
+      children: [{ value: "<Panel>[b]literal[/b]</Panel>" }],
+    });
+    expect(fenced).toMatchObject({
+      type: "tag",
+      name: "code",
+      value: "ts",
+      children: [{ value: "const markup = '[warning]literal[/warning]';" }],
+    });
+  });
+
+  test("promotes later block markup out of dangling inline formatting", () => {
+    const nodes = parseForumBbcode(
+      "[i]Intro that never closes\n\n[h2]Evidence[/h2]\n" +
+        "Signal|Meaning\nCapacity|Constraint\n\n" +
+        "[sourcecards=Related]Thread|https://forum.symbaiex.com/forum/ai/example|Continue[/sourcecards]",
+    );
+
+    expect(
+      nodes.map((node) => (node.type === "tag" ? node.name : "text")),
+    ).toEqual(["i", "h2", "text", "table", "text", "sourcecards"]);
+  });
+
+  test("drops structured column headers instead of rendering a fake first step", () => {
+    const steps = parseForumBbcode(
+      "[steps=Runbook]\nStep|Action|Detail\n1|Inspect|Collect evidence\n2|Verify|Confirm outcome\n[/steps]",
+    )[0];
+    const decision = parseForumBbcode(
+      "[decision=Options]\nOption|Verdict|Reason\nA|Choose|Lowest risk | keeps rollback\n[/decision]",
+    )[0];
+    const sourcedDecision = parseForumBbcode(
+      "[decision=Options]\nOption|Verdict|Reason\nB|Avoid|Roadmap risk|5ca6590066ef09fc-3\n[/decision]",
+    )[0];
+
+    if (
+      steps?.type !== "tag" ||
+      decision?.type !== "tag" ||
+      sourcedDecision?.type !== "tag"
+    ) {
+      throw new Error("Expected structured blocks");
+    }
+    expect(forumStructuredBlockRows(steps)).toEqual([
+      ["1", "Inspect", "Collect evidence"],
+      ["2", "Verify", "Confirm outcome"],
+    ]);
+    expect(forumStructuredBlockRows(decision)).toEqual([
+      ["A", "Choose", "Lowest risk | keeps rollback"],
+    ]);
+    expect(forumStructuredBlockRows(sourcedDecision)).toEqual([
+      ["B", "Avoid", "Roadmap risk"],
+    ]);
+  });
+
+  test("decodes named and numeric entities used by imported agent sources", () => {
+    expect(
+      decodeForumEntities(
+        "M&ouml;tley and M&Ouml;tley? Madonna&rsquo;s &ldquo;Ray of Light&rdquo; &#8212; &#x2026;",
+      ),
+    ).toBe("Mötley and MÖtley? Madonna’s “Ray of Light” — …");
   });
 });
