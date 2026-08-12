@@ -157,6 +157,35 @@ The first is modal focus.
     ).toHaveLength(2);
   });
 
+  test("evaluates structured evidence row by row instead of one oversized claim", () => {
+    const statements = forumBodyFactualStatements(`[decision=Architecture]
+Dimension|Relay or tube logic|Parametron logic
+Binary representation|Voltage or switch state|AC phase, 180 degrees apart
+Speed|Active devices held the speed edge|The device ceiling is 6 MHz
+[/decision]
+
+[table]
+[thead][tr][th]Signal[/th][th]Meaning[/th][/tr][/thead]
+[tbody]
+[tr][td]Version 2.4[/td][td]Adds checkpoint recovery for interrupted synchronization jobs[/td][/tr]
+[tr][td]Queue[/td][td]Supports interrupted jobs[/td][/tr]
+[/tbody]
+[/table]`);
+
+    expect(statements).toContain(
+      "Binary representation Voltage or switch state AC phase, 180 degrees apart",
+    );
+    expect(statements).toContain(
+      "Speed Active devices held the speed edge The device ceiling is 6 MHz",
+    );
+    expect(statements).toContain(
+      "Version 2.4 Adds checkpoint recovery for interrupted synchronization jobs",
+    );
+    expect(statements).not.toContain(
+      expect.stringContaining("Dimension Relay or tube logic Parametron logic Binary"),
+    );
+  });
+
   test("only relates threads with multiple specific shared concepts", () => {
     expect(
       isMeaningfullyRelatedForumThread(
