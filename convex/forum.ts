@@ -662,11 +662,11 @@ const PRIVATE_MESSAGE_DUPLICATE_WINDOW_MS = 10 * 60 * 1_000;
 const REPUTATION_RATE_LIMIT_MS = 2_000;
 const SUKI_REPLY_DAILY_LIMIT = 12;
 const BELLE_REPLY_DAILY_LIMIT = 8;
-const SUKI_REPLY_SCAN_LIMIT = 40;
 const SUKI_REPLY_MIN_AGE_MS = 2 * 60 * 1_000;
 const SUKI_REPLY_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
 const SUKI_REPLY_STALE_RUN_MS = 15 * 60 * 1_000;
 const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
+const FORUM_THREAD_DIGEST_BACKFILL_KEY = "forum-thread-digests-v1";
 
 type UserDoc = Doc<"users">;
 type ForumCategoryDoc = Doc<"forumCategories">;
@@ -677,6 +677,7 @@ type ForumHelpDocumentDoc = Doc<"forumHelpDocuments">;
 type ForumCalendarEventDoc = Doc<"forumCalendarEvents">;
 type ForumBoardRulesDoc = Doc<"forumBoardRules">;
 type ForumThreadDoc = Doc<"forumThreads">;
+type ForumThreadEditorialDigestDoc = Doc<"forumThreadEditorialDigests">;
 type ForumPostDoc = Doc<"forumPosts">;
 type ForumAgentReplyRunDoc = Doc<"forumAgentReplyRuns">;
 type ForumAgentSourceUseDoc = Doc<"forumAgentSourceUses">;
@@ -3628,6 +3629,7 @@ export const createThread = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, threadId);
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -4127,6 +4129,7 @@ export const createReply = mutation({
       lastPostUserId: user._id,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     await ctx.db.patch(category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -4159,11 +4162,6 @@ export const createReply = mutation({
       authorId: user._id,
       now,
     });
-    await ctx.scheduler.runAfter(
-      0,
-      internal.forumAgentMemory.indexForumThread,
-      { threadId: thread._id },
-    );
 
     return {
       postId,
@@ -4446,6 +4444,9 @@ export const recordThreadView = mutation({
       viewCount: nextViewCount,
       updatedAt: now,
     });
+    if (nextViewCount === 1 || nextViewCount % 25 === 0) {
+      await syncForumThreadEditorialDigest(ctx, thread._id);
+    }
     return { recorded: true, viewCount: nextViewCount };
   },
 });
@@ -5210,6 +5211,7 @@ export const updateThreadContent = mutation({
       editCount: (thread.editCount ?? 0) + 1,
       lastEditReason: editReason,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     if (attachmentEditPlan !== null) {
       await applyForumAttachmentEditPlan(ctx, {
         plan: attachmentEditPlan,
@@ -5440,6 +5442,7 @@ export const deleteThread = mutation({
       updatedAt: now,
       visibilityProfileDeltaToken,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     await ctx.db.patch(category._id, {
       threadCount: Math.max(0, category.threadCount - 1),
       postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
@@ -8401,6 +8404,61 @@ export const ensureBelleForumInfrastructure = internalMutation({
   },
 });
 
+function forumThreadEditorialDigestValues(thread: ForumThreadDoc) {
+  return {
+    threadId: thread._id,
+    categoryId: thread.categoryId,
+    categorySlug: thread.categorySlug,
+    slug: thread.slug,
+    title: thread.title,
+    authorId: thread.authorId,
+    status: thread.status,
+    replyCount: thread.replyCount,
+    viewCount: thread.viewCount,
+    lastPostAt: thread.lastPostAt,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+  };
+}
+
+async function upsertForumThreadEditorialDigest(
+  ctx: MutationCtx,
+  thread: ForumThreadDoc,
+) {
+  const values = forumThreadEditorialDigestValues(thread);
+  const existing = await ctx.db
+    .query("forumThreadEditorialDigests")
+    .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
+    .unique();
+  if (existing === null) {
+    await ctx.db.insert("forumThreadEditorialDigests", values);
+    return;
+  }
+  if (
+    existing.categoryId === values.categoryId &&
+    existing.categorySlug === values.categorySlug &&
+    existing.slug === values.slug &&
+    existing.title === values.title &&
+    existing.authorId === values.authorId &&
+    existing.status === values.status &&
+    existing.replyCount === values.replyCount &&
+    existing.viewCount === values.viewCount &&
+    existing.lastPostAt === values.lastPostAt &&
+    existing.updatedAt === values.updatedAt
+  ) {
+    return;
+  }
+  await ctx.db.patch(existing._id, values);
+}
+
+async function syncForumThreadEditorialDigest(
+  ctx: MutationCtx,
+  threadId: Id<"forumThreads">,
+) {
+  const thread = await ctx.db.get(threadId);
+  if (thread !== null) await upsertForumThreadEditorialDigest(ctx, thread);
+}
+
 export const readSukiForumContext = internalQuery({
   args: {},
   handler: async (ctx) => await forumAgentContext(ctx, "suki"),
@@ -8447,11 +8505,49 @@ async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
     )
     .order("desc")
     .take(20);
-  const recentThreads = await ctx.db
-    .query("forumThreads")
-    .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
-    .order("desc")
-    .take(40);
+  const digestBackfill = await ctx.db
+    .query("forumAgentMaintenanceState")
+    .withIndex("by_key", (q) => q.eq("key", FORUM_THREAD_DIGEST_BACKFILL_KEY))
+    .unique();
+  const recentThreads: Array<
+    Pick<
+      ForumThreadEditorialDigestDoc,
+      | "threadId"
+      | "categorySlug"
+      | "slug"
+      | "title"
+      | "authorId"
+      | "replyCount"
+      | "viewCount"
+      | "lastPostAt"
+    >
+  > =
+    digestBackfill === null
+      ? (
+          await ctx.db
+            .query("forumThreads")
+            .withIndex("by_status_and_lastPostAt", (q) =>
+              q.eq("status", "active"),
+            )
+            .order("desc")
+            .take(40)
+        ).map((thread) => ({
+          threadId: thread._id,
+          categorySlug: thread.categorySlug,
+          slug: thread.slug,
+          title: thread.title,
+          authorId: thread.authorId,
+          replyCount: thread.replyCount,
+          viewCount: thread.viewCount,
+          lastPostAt: thread.lastPostAt,
+        }))
+      : await ctx.db
+          .query("forumThreadEditorialDigests")
+          .withIndex("by_status_and_lastPostAt", (q) =>
+            q.eq("status", "active"),
+          )
+          .order("desc")
+          .take(40);
   const editorialSignals = [
     ...new Set(categories.map((category) => category.slug)),
   ]
@@ -8502,7 +8598,7 @@ async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
     ),
     recentThreadTitles: recentThreads.map((thread) => thread.title),
     recentThreads: recentThreads.map((thread) => ({
-      id: thread._id,
+      id: thread.threadId,
       categorySlug: thread.categorySlug,
       slug: thread.slug,
       title: thread.title,
@@ -8637,88 +8733,57 @@ export const claimSukiForumReplyCandidate = internalMutation({
       };
     }
 
-    const [recentThreads, recentPosts] = await Promise.all([
-      ctx.db
-        .query("forumThreads")
-        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
-        .order("desc")
-        .take(SUKI_REPLY_SCAN_LIMIT),
-      ctx.db
-        .query("forumPosts")
-        .withIndex("by_status_and_createdAt", (q) => q.eq("status", "active"))
-        .order("desc")
-        .take(SUKI_REPLY_SCAN_LIMIT),
-    ]);
-    const sources = [
-      ...recentThreads.map((thread) => ({
-        sourceKind: "thread" as const,
-        sourcePostId: undefined,
-        sourceId: thread._id as string,
-        sourceCreatedAt: thread.createdAt,
-        threadId: thread._id,
-        categoryId: thread.categoryId,
-        authorId: thread.authorId,
-      })),
-      ...recentPosts.map((post) => ({
-        sourceKind: "reply" as const,
-        sourcePostId: post._id,
-        sourceId: post._id as string,
-        sourceCreatedAt: post.createdAt,
-        threadId: post.threadId,
-        categoryId: post.categoryId,
-        authorId: post.authorId,
-      })),
-    ]
-      .filter(
-        (source) =>
-          now - source.sourceCreatedAt >= SUKI_REPLY_MIN_AGE_MS &&
-          now - source.sourceCreatedAt <= SUKI_REPLY_MAX_AGE_MS,
+    const queuedRuns = await ctx.db
+      .query("forumAgentReplyRuns")
+      .withIndex("by_agentSlug_and_status_and_updatedAt", (q) =>
+        q.eq("agentSlug", agentSlug).eq("status", "queued"),
       )
-      .sort((left, right) => right.sourceCreatedAt - left.sourceCreatedAt);
+      .order("asc")
+      .take(12);
 
-    for (const source of sources) {
-      const runKey = `forum-reply:${source.sourceKind}:${source.sourceId}`;
-      const existing = await ctx.db
-        .query("forumAgentReplyRuns")
-        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
-        .unique();
-      if (existing !== null) {
+    for (const queuedRun of queuedRuns) {
+      if (now - queuedRun.startedAt < SUKI_REPLY_MIN_AGE_MS) continue;
+      if (now - queuedRun.startedAt > SUKI_REPLY_MAX_AGE_MS) {
+        await ctx.db.patch(queuedRun._id, {
+          status: "ignored",
+          reason: "recovery-window-expired",
+          completedAt: now,
+          updatedAt: now,
+        });
         continue;
       }
-      const provisionalRun: SukiReplyRunSource = {
-        sourceKind: source.sourceKind,
-        sourcePostId: source.sourcePostId,
-        threadId: source.threadId,
-        categoryId: source.categoryId,
-        authorId: source.authorId,
-      };
       const candidate = await loadSukiReplyCandidate(
         ctx,
-        provisionalRun,
+        queuedRun,
         agent.userId,
       );
       if (candidate === null) {
+        await ctx.db.patch(queuedRun._id, {
+          status: "ignored",
+          reason: "source-unavailable",
+          completedAt: now,
+          updatedAt: now,
+        });
         continue;
       }
       if (!forumReplyDeskMatches(agentSlug, candidate.categorySlug)) {
+        await ctx.db.patch(queuedRun._id, {
+          status: "ignored",
+          reason: "desk-mismatch",
+          completedAt: now,
+          updatedAt: now,
+        });
         continue;
       }
-      const runId = await ctx.db.insert("forumAgentReplyRuns", {
-        runKey,
-        agentSlug,
-        runDate: args.runDate,
-        sourceKind: source.sourceKind,
-        sourcePostId: source.sourcePostId,
-        threadId: source.threadId,
-        categoryId: source.categoryId,
-        authorId: source.authorId,
+      await ctx.db.patch(queuedRun._id, {
         attempt: args.attempt,
         status: "running",
         model: agent.model,
         startedAt: now,
+        completedAt: undefined,
         updatedAt: now,
       });
-      return { claimed: true as const, runId, candidate };
+      return { claimed: true as const, runId: queuedRun._id, candidate };
     }
 
     return { claimed: false as const, reason: "no-candidate" };
@@ -8867,6 +8932,7 @@ export const publishSukiForumReply = internalMutation({
       lastPostUserId: user._id,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     await ctx.db.patch(category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -8900,11 +8966,6 @@ export const publishSukiForumReply = internalMutation({
       completedAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(
-      0,
-      internal.forumAgentMemory.indexForumThread,
-      { threadId: thread._id },
-    );
 
     return {
       status: "replied" as const,
@@ -9345,6 +9406,7 @@ export const publishSukiForumThread = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, threadId);
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -9607,6 +9669,7 @@ export const publishForumAgentFollowUp = internalMutation({
       lastPostUserId: user._id,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     await ctx.db.patch(category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -9683,11 +9746,6 @@ export const publishForumAgentFollowUp = internalMutation({
         updatedAt: now,
       });
     }
-    await ctx.scheduler.runAfter(
-      0,
-      internal.forumAgentMemory.indexForumThread,
-      { threadId: thread._id },
-    );
     return {
       categorySlug: category.slug,
       threadSlug: thread.slug,
@@ -10566,6 +10624,7 @@ export const moveForumThread = mutation({
       moderationRootActivityAt: now,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
     await scheduleMovedThreadCategoryReferenceSync(ctx, {
       threadId: thread._id,
       targetCategoryId: targetCategory._id,
@@ -10997,6 +11056,7 @@ export const splitForumPosts = mutation({
       createdAt: openerPost.createdAt,
       updatedAt: now,
     });
+    await syncForumThreadEditorialDigest(ctx, newThreadId);
 
     await ctx.db.patch(openerPost._id, {
       status: "deleted",
@@ -11464,6 +11524,7 @@ export const updateForumThreadModeration = mutation({
         ? {}
         : { visibilityProfileDeltaToken }),
     });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
 
     if (wasVisible !== isVisible) {
       await ctx.db.patch(category._id, {
@@ -18759,6 +18820,7 @@ async function recomputeThreadActivity(
     lastPostUserId: newestReply?.authorId ?? thread.authorId,
     updatedAt: Date.now(),
   });
+  await syncForumThreadEditorialDigest(ctx, threadId);
 }
 
 function sortedForumPostsForAppend(posts: ForumPostDoc[]) {

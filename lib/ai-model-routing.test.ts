@@ -121,7 +121,7 @@ describe("AI model routing", () => {
     });
   });
 
-  test("passes only configured attribution metadata to the gateway fallback", async () => {
+  test("omits optional attribution provider options from gateway fallbacks", async () => {
     globalThis.fetch = vi.fn(
       async () => new Response("{}", { status: 200 }),
     ) as typeof fetch;
@@ -139,12 +139,7 @@ describe("AI model routing", () => {
 
     expect(candidates[1]).toMatchObject({
       provider: "gateway",
-      providerOptions: {
-        gateway: {
-          user: "iris-kellan",
-          tags: ["agent:iris-kellan", "feature:forum-writing"],
-        },
-      },
     });
+    expect(candidates[1].providerOptions).toBeUndefined();
   });
 });

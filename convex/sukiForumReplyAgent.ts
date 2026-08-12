@@ -133,7 +133,7 @@ async function runReplySweepForAgent(
         feature: "forum-reply",
         agent: agentSlug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 240_000,
+        totalTimeoutMs: 120_000,
         run: async (candidate, signal) =>
           await generateText({
             model: candidate.model,

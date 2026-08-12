@@ -59,23 +59,9 @@ export const readThreadForMemory = internalQuery({
   handler: async (ctx, args) => {
     const thread = await ctx.db.get(args.threadId);
     if (thread === null || thread.status !== "active") return null;
-    const [category, author, posts, editorialRuns] = await Promise.all([
+    const [category, author] = await Promise.all([
       ctx.db.get(thread.categoryId),
       ctx.db.get(thread.authorId),
-      ctx.db
-        .query("forumPosts")
-        .withIndex("by_threadId_and_status_and_createdAt", (q) =>
-          q.eq("threadId", thread._id).eq("status", "active"),
-        )
-        .order("asc")
-        .take(24),
-      ctx.db
-        .query("forumAgentRuns")
-        .withIndex("by_threadId_and_startedAt", (q) =>
-          q.eq("threadId", thread._id),
-        )
-        .order("desc")
-        .take(8),
     ]);
     if (category === null || author === null) return null;
     return {
@@ -83,16 +69,6 @@ export const readThreadForMemory = internalQuery({
       categorySlug: category.slug,
       title: thread.title,
       body: thread.body,
-      replies: posts.map((post) => post.body),
-      editorialEvidence: editorialRuns.map((run) => ({
-        agentSlug: run.agentSlug,
-        contentFormat: run.contentFormat,
-        qualityScore: run.qualityScore,
-        groundingScore: run.groundingScore,
-        noveltyScore: run.noveltyScore,
-        utilityScore: run.utilityScore,
-        sourceUrls: run.sourceUrls,
-      })),
       authorName: author.name ?? author.username ?? "Forum member",
       agentSlug:
         author.isAgent === true && author.agentSlug !== undefined

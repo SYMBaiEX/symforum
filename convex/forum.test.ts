@@ -1064,7 +1064,27 @@ describe("forum notification preferences", () => {
         replyCount: 0,
         lastAssignedPostNumber: 1,
       });
-      return { authorId, categoryId: category._id, threadId };
+      const agent = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+        .unique();
+      if (agent === null) throw new Error("Expected Suki's agent record");
+      const replyRunId = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `forum-reply:thread:${threadId}`,
+        agentSlug: "suki",
+        runDate: "2026-07-28",
+        sourceKind: "thread",
+        threadId,
+        categoryId: category._id,
+        authorId,
+        attempt: -1,
+        status: "queued",
+        model: agent.model,
+        reason: "event-queued",
+        startedAt: now,
+        updatedAt: now,
+      });
+      return { authorId, categoryId: category._id, replyRunId, threadId };
     });
 
     const claim = await t.mutation(
@@ -1072,6 +1092,7 @@ describe("forum notification preferences", () => {
       {
         attempt: 0,
         runDate: "2026-07-28",
+        runId: seeded.replyRunId,
       },
     );
     if (!claim.claimed) {

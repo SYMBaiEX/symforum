@@ -107,7 +107,7 @@ export async function isMuseAvailable(config: ModelRoutingConfig) {
     return healthCache.result;
   }
   const result = checkMuseHealth(baseUrl, apiKey);
-  healthCache = { baseUrl, expiresAt: now + 5_000, result };
+  healthCache = { baseUrl, expiresAt: now + 30_000, result };
   return result;
 }
 
@@ -167,7 +167,6 @@ function museModel(
 function gatewayModel(
   config: ModelRoutingConfig,
   modelId: GatewayModelId,
-  gatewayOptions?: GatewayProviderOptions,
 ): RoutedModel | undefined {
   const apiKey = clean(config.gatewayApiKey);
   if (!apiKey) return undefined;
@@ -177,9 +176,10 @@ function gatewayModel(
     modelId,
     persistedModel: modelId,
     model: gateway(modelId),
-    providerOptions: gatewayOptions
-      ? ({ gateway: gatewayOptions } as ProviderOptions)
-      : undefined,
+    // Route attribution already lives in aiRouteEvents. Avoid duplicating it
+    // in providerOptions because older Gateway deployments reject that shape
+    // before a fallback request can run.
+    providerOptions: undefined,
   };
 }
 
@@ -191,6 +191,9 @@ export async function routedModelCandidates(
   ],
   telemetry?: RouteTelemetryContext,
 ) {
+  // Preserve the public route-builder signature for callers while keeping
+  // optional Gateway attribution out of providerOptions (see gatewayModel).
+  void gatewayOptions;
   const candidates: RoutedModel[] = [];
   const muse = museModel(config, telemetry);
   if (muse) {
@@ -203,7 +206,7 @@ export async function routedModelCandidates(
     }
   }
   for (const modelId of gatewayModelIds) {
-    const fallback = gatewayModel(config, modelId, gatewayOptions);
+    const fallback = gatewayModel(config, modelId);
     if (fallback) candidates.push(fallback);
   }
   if (!candidates.length) {
@@ -233,8 +236,8 @@ export async function runRoutedCandidates<T>(
     const fallbackReserve =
       index < candidates.length - 1
         ? Math.min(
-            120_000,
-            Math.max(1_000, Math.floor(args.totalTimeoutMs * 0.25)),
+            90_000,
+            Math.max(30_000, Math.floor(args.totalTimeoutMs * 0.4)),
           )
         : 0;
     const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
