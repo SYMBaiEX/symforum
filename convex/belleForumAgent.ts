@@ -6,7 +6,7 @@ import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { runWithModelFallback } from "../lib/ai-model-routing";
 import {
   modelGenerationSettings,
@@ -26,10 +26,10 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
-const BELLE_MODEL = MUSE_AGENT_MODEL;
+const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v4-muse-editorial";
+const BELLE_PROMPT_VERSION = "belle-forum-v5-openrouter-nemotron";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.

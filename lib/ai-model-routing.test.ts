@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { LanguageModel } from "ai";
 import {
   clearMuseHealthCacheForTests,
+  openRouterModelForStage,
   routedModelCandidates,
   runRoutedCandidates,
   type RoutedModel,
@@ -15,7 +16,7 @@ afterEach(() => {
 });
 
 function candidate(
-  provider: "muse" | "gateway",
+  provider: "openrouter" | "muse" | "gateway",
   persistedModel: string,
 ): RoutedModel {
   return {
@@ -27,6 +28,37 @@ function candidate(
 }
 
 describe("AI model routing", () => {
+  test("routes forum topic selection to Nano and writing to Super", () => {
+    expect(openRouterModelForStage("suki:forum-topic")).toBe(
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+    );
+    expect(openRouterModelForStage("suki:forum-draft")).toBe(
+      "nvidia/nemotron-3-super-120b-a12b:free",
+    );
+  });
+
+  test("puts OpenRouter before Muse and the paid gateway", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response("{}", { status: 200 }),
+    ) as typeof fetch;
+    const candidates = await routedModelCandidates({
+      openRouterApiKey: "test-openrouter-key",
+      museBaseUrl: "https://agent.example.com/v1",
+      museApiKey: "test-muse-key",
+      gatewayApiKey: "test-gateway-key",
+    });
+
+    expect(candidates.map(({ provider }) => provider)).toEqual([
+      "openrouter",
+      "muse",
+      "gateway",
+    ]);
+    expect(candidates[0].persistedModel).toBe(
+      "nvidia/nemotron-3-super-120b-a12b:free",
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   test("uses Muse when the primary route succeeds", async () => {
     const run = vi.fn(async (route: RoutedModel) => `${route.provider}-result`);
     const result = await runRoutedCandidates(
@@ -42,14 +74,15 @@ describe("AI model routing", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  test("falls back to the gateway and records the route that completed", async () => {
+  test("falls through OpenRouter and Muse and records the gateway completion", async () => {
     const run = vi.fn(async (route: RoutedModel) => {
-      if (route.provider === "muse") throw new Error("primary unavailable");
+      if (route.provider !== "gateway") throw new Error("route unavailable");
       return "fallback-result";
     });
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
       [
+        candidate("openrouter", "nvidia/nemotron:free"),
         candidate("muse", "muse/Muse-Glimmer-30B"),
         candidate("gateway", "deepseek/fallback"),
       ],
@@ -68,7 +101,7 @@ describe("AI model routing", () => {
       provider: "gateway",
       persistedModel: "deepseek/fallback",
     });
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(3);
     expect(onAttempt).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -78,7 +111,7 @@ describe("AI model routing", () => {
       }),
     );
     expect(onAttempt).toHaveBeenNthCalledWith(
-      2,
+      3,
       expect.objectContaining({
         correlationId: "test:route-fallback",
         outcome: "completed",

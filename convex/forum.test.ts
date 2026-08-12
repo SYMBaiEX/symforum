@@ -888,7 +888,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 24,
       enabled: true,
-      model: "muse/Muse-Glimmer-30B",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
       name: "Suki",
       slug: "suki",
     });
@@ -1224,7 +1224,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 7,
       enabled: true,
-      model: "muse/Muse-Glimmer-30B",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
       name: "Belle",
       slug: "belle",
     });

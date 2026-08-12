@@ -104,7 +104,7 @@ describe("dormant forum agent roster", () => {
       activeRoster.members.every(
         (member) =>
           member.dailyPostTarget === 1 &&
-          member.model === "muse/Muse-Glimmer-30B" &&
+          member.model === "nvidia/nemotron-3-super-120b-a12b:free" &&
           member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
       ),
     ).toBe(true);
@@ -132,7 +132,7 @@ describe("dormant forum agent roster", () => {
       matching: 29,
       updated: 0,
       wouldUpdate: 1,
-      targetModel: "muse/Muse-Glimmer-30B",
+      targetModel: "nvidia/nemotron-3-super-120b-a12b:free",
     });
     const migrated = await t.mutation(
       internal.forumAgentRoster.migratePostingModels,
@@ -142,9 +142,11 @@ describe("dormant forum agent roster", () => {
     const models = await t.run(async (ctx) =>
       (await ctx.db.query("forumAgents").take(40)).map((agent) => agent.model),
     );
-    expect(models.every((model) => model === "muse/Muse-Glimmer-30B")).toBe(
-      true,
-    );
+    expect(
+      models.every(
+        (model) => model === "nvidia/nemotron-3-super-120b-a12b:free",
+      ),
+    ).toBe(true);
   });
 
   test("does not take a username already owned by another member", async () => {

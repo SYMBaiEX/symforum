@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
     const routedModel = await selectStreamingModel(
       {
+        openRouterApiKey: process.env.OPENROUTER_API_KEY,
         museBaseUrl: process.env.MUSE_API_BASE_URL,
         museApiKey: process.env.MUSE_API_KEY,
         gatewayApiKey: process.env.AI_GATEWAY_API_KEY,

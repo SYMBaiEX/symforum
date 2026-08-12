@@ -9,7 +9,7 @@ export type MuseTask =
   | "reply"
   | "owner-console";
 
-export type ModelProvider = "muse" | "gateway";
+export type ModelProvider = "openrouter" | "muse" | "gateway";
 
 export const MUSE_TOP_K = 64;
 
@@ -65,7 +65,7 @@ export function modelGenerationSettings(
   provider: ModelProvider,
   task: MuseTask,
 ) {
-  return TASK_PROFILES[task][provider];
+  return TASK_PROFILES[task][provider === "muse" ? "muse" : "gateway"];
 }
 
 export function modelInstructions(

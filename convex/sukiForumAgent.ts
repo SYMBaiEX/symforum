@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import {
   routedModelCandidates,
   runRoutedCandidates,
@@ -39,7 +39,7 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
-const FORUM_AGENT_MODEL = MUSE_AGENT_MODEL;
+const FORUM_AGENT_MODEL = OPENROUTER_FORUM_MODEL;
 const FORUM_TIME_ZONE = "America/Chicago";
 const RESEARCH_CACHE_TTL_MS = 90 * 60 * 1_000;
 const MEDIA_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
@@ -48,7 +48,7 @@ const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v6-muse-editorial-validation";
+const PROMPT_VERSION = "suki-forum-v7-openrouter-nemotron";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -326,13 +326,14 @@ export async function runForumResearchSlot(
       agentSlug: config.slug,
     });
     if (
+      !routingConfig.openRouterApiKey?.trim() &&
       !(
         routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
       ) &&
       !routingConfig.gatewayApiKey?.trim()
     ) {
       throw new ForumAgentConfigurationError(
-        "Neither Muse API access nor AI_GATEWAY_API_KEY is configured in Convex.",
+        "OPENROUTER_API_KEY, Muse API access, and AI_GATEWAY_API_KEY are all unconfigured in Convex.",
       );
     }
     const context =
@@ -652,6 +653,7 @@ export async function runForumResearchSlot(
         writerGatewayOptions,
         undefined,
         routeArgs,
+        [],
       );
       return await runRoutedCandidates(
         candidates.filter((candidate) => candidate.provider === "gateway"),

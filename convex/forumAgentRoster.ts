@@ -1,7 +1,7 @@
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 
 export type ForumAgentRosterEntry = {
@@ -368,7 +368,7 @@ function forumAgentSignature(entry: ForumAgentRosterEntry) {
 }
 
 const DORMANT_MODEL = "unassigned";
-const POSTING_MODEL = MUSE_AGENT_MODEL;
+const POSTING_MODEL = OPENROUTER_FORUM_MODEL;
 
 export const migratePostingModels = internalMutation({
   args: { dryRun: v.boolean() },

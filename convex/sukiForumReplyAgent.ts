@@ -14,7 +14,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_TIME_ZONE = "America/Chicago";
-const PROMPT_VERSION = "forum-replies-v3-muse";
+const PROMPT_VERSION = "forum-replies-v4-openrouter-nemotron";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 
 type SukiReplyDecision =
@@ -105,13 +105,14 @@ async function runReplySweepForAgent(
       agentSlug,
     });
     if (
+      !routingConfig.openRouterApiKey?.trim() &&
       !(
         routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
       ) &&
       !routingConfig.gatewayApiKey?.trim()
     ) {
       throw new SukiReplyConfigurationError(
-        "Neither Muse API access nor AI_GATEWAY_API_KEY is configured.",
+        "OPENROUTER_API_KEY, Muse API access, and AI_GATEWAY_API_KEY are all unconfigured.",
       );
     }
     const gatewayOptions = {

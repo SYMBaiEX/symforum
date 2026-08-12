@@ -35,7 +35,7 @@ const NEWSLETTER_GATEWAY_MODELS = [
   DEEPSEEK_FALLBACK_MODEL,
   NEWSLETTER_LAST_RESORT_MODEL,
 ] as const satisfies readonly GatewayModelId[];
-const PROMPT_VERSION = "belle-newsletter-v3-muse-editorial";
+const PROMPT_VERSION = "belle-newsletter-v4-openrouter-nemotron";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;

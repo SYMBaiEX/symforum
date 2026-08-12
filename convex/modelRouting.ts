@@ -13,6 +13,7 @@ import { env, internalAction } from "./_generated/server";
 
 export function convexModelRoutingConfig(): ModelRoutingConfig {
   return {
+    openRouterApiKey: env.OPENROUTER_API_KEY,
     museBaseUrl: env.MUSE_API_BASE_URL,
     museApiKey: env.MUSE_API_KEY,
     gatewayApiKey: env.AI_GATEWAY_API_KEY,
@@ -21,16 +22,21 @@ export function convexModelRoutingConfig(): ModelRoutingConfig {
 
 /**
  * Non-publishing production smoke test for operators. It exercises the same
- * Muse-first route and DeepSeek fallback used by scheduled forum agents. An
- * operator can select one route to verify the fallback without disrupting
- * Muse.
+ * OpenRouter-first route plus Muse and DeepSeek fallbacks used by scheduled
+ * forum agents. An operator can select one route without publishing content.
  */
 export const probe = internalAction({
   args: {
-    provider: v.optional(v.union(v.literal("muse"), v.literal("gateway"))),
+    provider: v.optional(
+      v.union(v.literal("openrouter"), v.literal("muse"), v.literal("gateway")),
+    ),
   },
   returns: v.object({
-    provider: v.union(v.literal("muse"), v.literal("gateway")),
+    provider: v.union(
+      v.literal("openrouter"),
+      v.literal("muse"),
+      v.literal("gateway"),
+    ),
     model: v.string(),
     response: v.string(),
   }),

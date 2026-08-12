@@ -888,7 +888,11 @@ export default defineSchema({
     agentSlug: v.optional(v.string()),
     stage: v.string(),
     attempt: v.number(),
-    provider: v.union(v.literal("muse"), v.literal("gateway")),
+    provider: v.union(
+      v.literal("openrouter"),
+      v.literal("muse"),
+      v.literal("gateway"),
+    ),
     model: v.string(),
     outcome: v.union(v.literal("completed"), v.literal("failed")),
     fallback: v.boolean(),

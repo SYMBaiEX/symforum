@@ -9,6 +9,7 @@ import workflow from "@convex-dev/workflow/convex.config.js";
 const app = defineApp({
   env: {
     AI_GATEWAY_API_KEY: v.optional(v.string()),
+    OPENROUTER_API_KEY: v.optional(v.string()),
     MUSE_API_BASE_URL: v.optional(v.string()),
     MUSE_API_KEY: v.optional(v.string()),
     GITHUB_TOKEN: v.optional(v.string()),

@@ -39,6 +39,7 @@ type Env = {
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
+  readonly OPENROUTER_API_KEY: string | undefined;
   readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
