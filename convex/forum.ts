@@ -8617,11 +8617,23 @@ export const readUsedSukiSourceKeys = internalQuery({
     const reuseCutoff = Date.now() - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
     const rows = await Promise.all(
       sourceKeys.map(async (sourceKey) => {
-        const used = await ctx.db
-          .query("forumAgentSourceUses")
-          .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
-          .unique();
-        return used === null || used.usedAt < reuseCutoff ? null : sourceKey;
+        const [used, reservation] = await Promise.all([
+          ctx.db
+            .query("forumAgentSourceUses")
+            .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+            .unique(),
+          ctx.db
+            .query("forumAgentSourceReservations")
+            .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+            .unique(),
+        ]);
+        const recentlyUsed = used !== null && used.usedAt >= reuseCutoff;
+        const activelyReserved =
+          reservation !== null &&
+          reservation.expiresAt > Date.now() &&
+          (reservation.status === "reserved" ||
+            reservation.status === "published");
+        return recentlyUsed || activelyReserved ? sourceKey : null;
       }),
     );
     return rows.filter((sourceKey): sourceKey is string => sourceKey !== null);

@@ -30,6 +30,23 @@ describe("editorial quality helpers", () => {
         "CVE-2026-1234 affects v3.2.1 in 12% of 40 models",
       ),
     ).toEqual(["cve-2026-1234", "v3.2.1", "12%", "40 models"]);
+    expect(
+      extractVerifiableTokens(
+        "This is a two-dollar fix that prevents a two-minute delay.",
+      ),
+    ).toEqual(["two dollar", "two minute"]);
+    expect(
+      unsupportedVerifiableTokens(
+        "This is a two-dollar fix.",
+        "The source only describes a focus fix.",
+      ),
+    ).toEqual(["two dollar"]);
+    expect(
+      unsupportedVerifiableTokens(
+        "The fix covers CVE-2026-1234.",
+        "Advisory CVE-2026-1234 describes the affected versions.",
+      ),
+    ).toEqual([]);
   });
 
   test("measures evidence and frame overlap without stop-word inflation", () => {
@@ -64,6 +81,29 @@ Regulated team|Pilot|Review the audit trail first
     expect(malformed.feedback.join(" ")).toContain("Balance every [h2]");
     expect(malformed.feedback.join(" ")).toContain(
       "header row and at least one complete data row",
+    );
+  });
+
+  test("accepts standard table sections and rejects empty or dangling prose", () => {
+    expect(
+      validateForumAgentMarkup(`[table]
+[thead][tr][th]Signal[/th][th]Meaning[/th][/tr][/thead]
+[tbody][tr][td]Queue[/td][td]No wait[/td][/tr][/tbody]
+[/table]`),
+    ).toMatchObject({ valid: true, structuredRowCount: 2 });
+
+    const broken = validateForumAgentMarkup(`[list]
+[*]Keep this
+[*]
+[/list]
+
+The first is modal focus.
+
+[table][tr][th]A[/th][th]B[/th][/tr][tr][td]1[/td][td]2[/td][/tr][/table]`);
+    expect(broken.valid).toBe(false);
+    expect(broken.feedback).toContain("Remove empty list items");
+    expect(broken.feedback).toContain(
+      "Complete or rewrite dangling numbered points",
     );
   });
 

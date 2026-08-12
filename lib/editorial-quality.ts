@@ -50,8 +50,11 @@ const BALANCED_FORUM_TAGS = [
   "spoiler",
   "steps",
   "table",
+  "tbody",
   "td",
+  "tfoot",
   "th",
+  "thead",
   "timeline",
   "tr",
   "u",
@@ -166,10 +169,20 @@ export function lexicalEvidenceCoverage(statement: string, source: string) {
 }
 
 export function extractVerifiableTokens(value: string) {
-  const matches = value.match(
+  const numericMatches = value.match(
     /\b(?:cve-\d{4}-\d+|v?\d+(?:\.\d+){1,3}|\d[\d,]*(?:\.\d+)?(?:\s?(?:%|x|×|kb|mb|gb|tb|ms|s|sec(?:onds?)?|min(?:utes?)?|hours?|days?|weeks?|months?|years?|tokens?|parameters?|requests?|users?|models?|points?|btc|usd|dollars?|million|billion|trillion))?)(?![a-z0-9])/gi,
   );
-  return [...new Set((matches ?? []).map(normalizeEvidenceToken))];
+  const wordNumberMatches = value.match(
+    /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[ -]?(?:percent|kb|mb|gb|tb|milliseconds?|seconds?|minutes?|hours?|days?|weeks?|months?|years?|tokens?|parameters?|requests?|users?|models?|points?|btc|usd|dollars?|million|billion|trillion)\b/gi,
+  );
+  return [
+    ...new Set([
+      ...(numericMatches ?? []).map(normalizeEvidenceToken),
+      ...(wordNumberMatches ?? []).map((match) =>
+        normalizeEvidenceToken(match).replace(/-/g, " "),
+      ),
+    ]),
+  ];
 }
 
 export function unsupportedVerifiableTokens(statement: string, source: string) {
@@ -201,6 +214,33 @@ export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
   }
   if (/<\/?[a-z][^>]*>/i.test(withoutCodeContents)) {
     feedback.push("Use BBCode instead of raw HTML");
+  }
+
+  const emptyListItems = [
+    ...withoutCodeContents.matchAll(
+      /\[(?:\*|li)\]([\s\S]*?)(?=\[(?:\*|li)\]|\[\/list\])/gi,
+    ),
+  ].filter((item) => plainForumText(item[1] ?? "").length === 0);
+  if (emptyListItems.length > 0) {
+    feedback.push("Remove empty list items");
+  }
+
+  const danglingEnumeration = plainForumText(withoutCodeContents).match(
+    /\b(?:the|this)\s+(first|second|third)\s+(?:is|was|means?|covers?)\b/i,
+  );
+  if (danglingEnumeration) {
+    const ordinal = danglingEnumeration[1]?.toLowerCase();
+    const hasNext =
+      ordinal === "first"
+        ? /\b(?:the|this)\s+second\b/i.test(plainForumText(withoutCodeContents))
+        : ordinal === "second"
+          ? /\b(?:the|this)\s+third\b/i.test(
+              plainForumText(withoutCodeContents),
+            )
+          : true;
+    if (!hasNext) {
+      feedback.push("Complete or rewrite dangling numbered points");
+    }
   }
 
   for (const tag of BALANCED_FORUM_TAGS) {
@@ -388,6 +428,7 @@ function countMatches(value: string, pattern: RegExp) {
 
 function evidenceTokenVariants(token: string) {
   const variants = new Set([token]);
+  if (token.includes("-")) variants.add(token.replace(/-/g, " "));
   if (/^v\d/.test(token)) variants.add(token.slice(1));
   if (/s\b/.test(token)) variants.add(token.replace(/s\b/, ""));
   return [...variants];
@@ -398,5 +439,9 @@ function normalizeEvidenceToken(value: string) {
 }
 
 function normalizeEvidenceText(value: string) {
-  return value.toLowerCase().replaceAll(",", "").replace(/\s+/g, " ");
+  return value
+    .toLowerCase()
+    .replaceAll(",", "")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ");
 }

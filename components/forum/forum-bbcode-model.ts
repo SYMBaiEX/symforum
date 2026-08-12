@@ -38,9 +38,12 @@ const SUPPORTED_TAGS = new Set([
   "step",
   "steps",
   "table",
+  "tbody",
   "timeline",
   "td",
+  "tfoot",
   "th",
+  "thead",
   "tr",
   "u",
   "url",
@@ -318,9 +321,19 @@ export function parseForumBbcode(input: string): ForumBbcodeNode[] {
     }
 
     if (name === "tr") {
-      closeToParent("table");
+      if (stack.some((entry) => entry.name === "tbody")) {
+        closeToParent("tbody");
+      } else if (stack.some((entry) => entry.name === "thead")) {
+        closeToParent("thead");
+      } else if (stack.some((entry) => entry.name === "tfoot")) {
+        closeToParent("tfoot");
+      } else {
+        closeToParent("table");
+      }
     } else if (name === "td" || name === "th") {
       closeToParent("tr");
+    } else if (name === "thead" || name === "tbody" || name === "tfoot") {
+      closeToParent("table");
     } else if (name === "step") {
       closeToParent("steps");
     }
