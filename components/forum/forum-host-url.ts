@@ -1,6 +1,7 @@
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 
 const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
+const FORUM_PRODUCTION_ORIGIN = `https://${FORUM_PRODUCTION_HOSTNAME}`;
 const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
 const FORUM_SITE_ROUTE_PREFIXES = [
   "/admin",
@@ -46,6 +47,16 @@ export function shouldUseForumShell({
     return false;
   }
   return !isForumSubdomainSitePath(pathname);
+}
+
+export function canonicalForumHref(href: string) {
+  const cleanHref =
+    href === "/forum"
+      ? "/"
+      : href.startsWith("/forum/")
+        ? href.slice("/forum".length)
+        : href;
+  return new URL(cleanHref, FORUM_PRODUCTION_ORIGIN).toString();
 }
 
 export function primarySiteHrefForForumHost(

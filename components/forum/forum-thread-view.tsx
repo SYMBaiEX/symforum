@@ -8,7 +8,9 @@ import {
   type ForumAttachmentDraft,
 } from "@/components/forum/forum-compose";
 import { MAX_FORUM_ATTACHMENTS } from "@/components/forum/forum-attachment-upload";
+import { canonicalForumHref } from "@/components/forum/forum-host-url";
 import { forumPollInteractionState } from "@/components/forum/forum-poll-state";
+import { buildPostQuote } from "@/components/forum/forum-quote";
 import {
   forumPath,
   forumMemberProfilePath,
@@ -66,9 +68,9 @@ import { useConvexAuth, useMutation } from "convex/react";
 import { Paperclip, Star, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const POSTS_PER_PAGE = 20;
-const MAX_QUOTED_BODY_CHARS = 2_000;
 const MAX_REPUTATION_COMMENT_CHARS = 180;
 
 type QueuedQuote = {
@@ -603,6 +605,32 @@ function LiveForumThreadView({
       return;
     }
     appendReplyText(buildPostQuote(post));
+  }
+
+  async function copyPostPermalink(postNumber: number, postPage?: number) {
+    const permalink = canonicalForumHref(
+      forumPostPath(categorySlug, threadSlug, postNumber, postPage),
+    );
+    try {
+      await copyForumText(permalink);
+      toast.success("Post link copied", {
+        description: `Post #${postNumber}`,
+      });
+    } catch (caught) {
+      reportAppError(caught, {
+        scope: "forum",
+        eventType: "forum_post_permalink_copy_failed",
+        component: "ForumThreadView",
+        action: "forum:copyPostPermalink",
+        entityType: "forumThread",
+        entityId: detail?.thread?._id,
+        metadata: { postNumber, permalink },
+        notify: false,
+      });
+      toast.error("Could not copy post link", {
+        description: "Use the numbered post link to copy it manually.",
+      });
+    }
   }
 
   function toggleQueuedQuote(post: ForumPostRecord, postNumber: number) {
@@ -1305,6 +1333,9 @@ function LiveForumThreadView({
                       (post.viewerReputationScore ?? 0) as ReputationScore
                     }
                     onDelete={() => removePost(post)}
+                    onCopyLink={() =>
+                      copyPostPermalink(postNumber, post.postPage)
+                    }
                     onEdit={() => openPostEditor(post)}
                     onMultiQuote={() => toggleQueuedQuote(post, postNumber)}
                     onQuote={() => quotePost(post)}
@@ -2174,6 +2205,7 @@ function PostActions({
   reputationPending,
   viewerReputationScore,
   onDelete,
+  onCopyLink,
   onEdit,
   onMultiQuote,
   post,
@@ -2191,6 +2223,7 @@ function PostActions({
   reputationPending: boolean;
   viewerReputationScore: ReputationScore;
   onDelete: () => void;
+  onCopyLink: () => void;
   onEdit: () => void;
   onMultiQuote: () => void;
   post: ForumPostRecord;
@@ -2215,6 +2248,14 @@ function PostActions({
         >
           #{postNumber}
         </a>
+      </Button>
+      <Button
+        className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+        type="button"
+        variant="outline"
+        onClick={onCopyLink}
+      >
+        Copy link
       </Button>
       {canQuote ? (
         <>
@@ -2458,16 +2499,6 @@ function ForumPrefixEditSelect({
   );
 }
 
-function buildPostQuote(post: ForumPostRecord) {
-  const author = getThreadAuthor(post);
-  const cleanBody = post.body
-    .replace(/\[quote(?:=[^\]]+)?\][\s\S]*?\[\/quote\]/gi, "")
-    .replace(/\[\/?quote[^\]]*\]/gi, "")
-    .trim()
-    .slice(0, MAX_QUOTED_BODY_CHARS);
-  return `[quote=${author}]\n${cleanBody}\n[/quote]\n\n`;
-}
-
 function getPostQuoteKey(post: ForumPostRecord, postNumber: number) {
   return post._id ?? `post-${postNumber}`;
 }
@@ -2481,6 +2512,34 @@ function profileHref(username?: string) {
     return undefined;
   }
   return forumMemberProfilePath(username);
+}
+
+async function copyForumText(value: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+  } catch {
+    // Sandboxed browsers can deny Clipboard API access; use a selected textarea.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0 auto auto -9999px";
+  document.body.append(textarea);
+  let copied = false;
+  try {
+    textarea.select();
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
+  if (!copied) {
+    throw new Error("Clipboard access is unavailable in this browser.");
+  }
 }
 
 function buildPollEditPayload(question: string, options: string[]) {

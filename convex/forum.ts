@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { MUSE_AGENT_MODEL } from "../lib/ai-models";
+import { extractForumMentionUsernames } from "../lib/forum-mentions";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -348,7 +349,6 @@ const MY_FORUM_WARNING_LIST_LIMIT = 20;
 const MY_PENDING_FORUM_CONTENT_LIMIT = 20;
 const REPLY_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
 const NEW_THREAD_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
-const FORUM_MENTION_LIMIT = 10;
 const THREAD_VISIBILITY_PROFILE_DELTA_BATCH_LIMIT = 100;
 const FORUM_PRESENCE_WINDOW_MS = 15 * 60 * 1_000;
 const FORUM_PRESENCE_HEARTBEAT_MIN_MS = 60 * 1_000;
@@ -15369,26 +15369,6 @@ async function createMentionNotifications(
       updatedAt: args.now,
     });
   }
-}
-
-function extractForumMentionUsernames(body: string) {
-  const searchableBody = body
-    .replace(/\[quote(?:=[^\]]+)?\][\s\S]*?\[\/quote\]/gi, " ")
-    .replace(/\[code(?:=[^\]]+)?\][\s\S]*?\[\/code\]/gi, " ");
-  const usernames = new Set<string>();
-  const mentionPattern =
-    /(^|[^\w@])@([a-z0-9][a-z0-9_-]{2,31})(?![a-z0-9_-])/gi;
-
-  for (const match of searchableBody.matchAll(mentionPattern)) {
-    const username = match[2]?.toLowerCase();
-    if (username !== undefined) {
-      usernames.add(username);
-    }
-    if (usernames.size >= FORUM_MENTION_LIMIT) {
-      break;
-    }
-  }
-  return [...usernames];
 }
 
 async function loadVisibleForumNotifications(

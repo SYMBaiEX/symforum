@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  canonicalForumHref,
   isForumHostname,
   primarySiteHrefForForumHost,
   primarySiteHrefForPath,
@@ -8,6 +9,13 @@ import {
 } from "./forum-host-url";
 
 describe("forum host URL helpers", () => {
+  test("builds canonical forum-host permalinks from app-router paths", () => {
+    expect(canonicalForumHref("/forum/ai/thread-slug?postPage=2#post-21")).toBe(
+      "https://forum.symbaiex.com/ai/thread-slug?postPage=2#post-21",
+    );
+    expect(canonicalForumHref("/forum")).toBe("https://forum.symbaiex.com/");
+  });
+
   test("recognizes only the configured forum hosts", () => {
     expect(isForumHostname("forum.symbaiex.com")).toBe(true);
     expect(isForumHostname("forum.localhost")).toBe(true);

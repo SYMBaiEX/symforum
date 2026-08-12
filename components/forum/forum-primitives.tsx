@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { safeImageUrl } from "@/lib/safe-url";
 import { ForumBbcodeBody } from "@/components/forum/forum-bbcode";
 import { decodeForumEntities } from "@/components/forum/forum-bbcode-model";
+import { ForumLink } from "@/components/forum/forum-link";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
@@ -13,10 +14,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Fragment,
   ReactNode,
-  forwardRef,
   useEffect,
   useState,
-  type ComponentProps,
   type FormEvent,
 } from "react";
 import {
@@ -852,22 +851,7 @@ function forumJumpSelectedValue(
     : FORUM_JUMP_PLACEHOLDER_VALUE;
 }
 
-export const ForumLink = forwardRef<
-  HTMLAnchorElement,
-  Omit<ComponentProps<typeof Link>, "href"> & {
-    href: string;
-  }
->(function ForumLink({ href, prefetch, ...props }, ref) {
-  const pathname = usePathname();
-  return (
-    <Link
-      {...props}
-      href={forumHrefForPathname(href, pathname)}
-      prefetch={prefetch}
-      ref={ref}
-    />
-  );
-});
+export { ForumLink } from "@/components/forum/forum-link";
 
 export function ForumAnnouncementPanel({
   announcements,

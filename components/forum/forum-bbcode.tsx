@@ -1,5 +1,7 @@
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
+import { splitForumMentions } from "@/lib/forum-mentions";
 import { Fragment, type ReactNode } from "react";
+import { ForumLink } from "./forum-link";
 import {
   decodeForumEntities,
   forumStructuredBlockRows,
@@ -759,35 +761,40 @@ function renderForumChart(node: ForumBbcodeTagNode, key: string) {
 function renderInlineNodes(
   nodes: ForumBbcodeNode[],
   keyPrefix: string,
+  linkMentions = true,
 ): ReactNode[] {
   return nodes.flatMap((node, index) => {
     const key = `${keyPrefix}-${index}`;
     if (node.type === "text") {
-      return renderTextWithBreaks(node.value, key);
+      return renderTextWithBreaks(node.value, key, linkMentions);
     }
 
     if (node.name === "b") {
       return (
         <strong key={key}>
-          {renderInlineNodes(node.children, `${key}-bold`)}
+          {renderInlineNodes(node.children, `${key}-bold`, linkMentions)}
         </strong>
       );
     }
     if (node.name === "i") {
       return (
-        <em key={key}>{renderInlineNodes(node.children, `${key}-italic`)}</em>
+        <em key={key}>
+          {renderInlineNodes(node.children, `${key}-italic`, linkMentions)}
+        </em>
       );
     }
     if (node.name === "u") {
       return (
         <span className="underline underline-offset-2" key={key}>
-          {renderInlineNodes(node.children, `${key}-underline`)}
+          {renderInlineNodes(node.children, `${key}-underline`, linkMentions)}
         </span>
       );
     }
     if (node.name === "s") {
       return (
-        <s key={key}>{renderInlineNodes(node.children, `${key}-strike`)}</s>
+        <s key={key}>
+          {renderInlineNodes(node.children, `${key}-strike`, linkMentions)}
+        </s>
       );
     }
     if (node.name === "kbd") {
@@ -803,14 +810,14 @@ function renderInlineNodes(
     if (node.name === "mark") {
       return (
         <mark className="bg-primary/15 px-1 text-foreground" key={key}>
-          {renderInlineNodes(node.children, `${key}-mark`)}
+          {renderInlineNodes(node.children, `${key}-mark`, linkMentions)}
         </mark>
       );
     }
     if (node.name === "color") {
       return (
         <span className={forumColorClass(node.value)} key={key}>
-          {renderInlineNodes(node.children, `${key}-color`)}
+          {renderInlineNodes(node.children, `${key}-color`, linkMentions)}
         </span>
       );
     }
@@ -831,7 +838,7 @@ function renderInlineNodes(
           target={link.external ? "_blank" : undefined}
         >
           {node.children.length > 0
-            ? renderInlineNodes(node.children, `${key}-link`)
+            ? renderInlineNodes(node.children, `${key}-link`, false)
             : link.href}
           {link.external ? (
             <span className="sr-only"> (opens in a new tab)</span>
@@ -882,16 +889,28 @@ function renderForumImage(node: ForumBbcodeTagNode, key: string) {
   );
 }
 
-function renderTextWithBreaks(value: string, keyPrefix: string): ReactNode[] {
+function renderTextWithBreaks(
+  value: string,
+  keyPrefix: string,
+  linkMentions: boolean,
+): ReactNode[] {
   return value.split("\n").flatMap((line, lineIndex, lines) => {
-    const rendered = renderForumSmilies(line, `${keyPrefix}-${lineIndex}`);
+    const rendered = renderForumSmilies(
+      line,
+      `${keyPrefix}-${lineIndex}`,
+      linkMentions,
+    );
     return lineIndex < lines.length - 1
       ? [...rendered, <br key={`${keyPrefix}-break-${lineIndex}`} />]
       : rendered;
   });
 }
 
-function renderForumSmilies(text: string, keyPrefix: string): ReactNode[] {
+function renderForumSmilies(
+  text: string,
+  keyPrefix: string,
+  linkMentions: boolean,
+): ReactNode[] {
   const pattern = /(:\)|:D|;\)|:P|:\(|:o|:cool:|:heart:)/g;
   return decodeForumEntities(text)
     .split(pattern)
@@ -899,7 +918,27 @@ function renderForumSmilies(text: string, keyPrefix: string): ReactNode[] {
     .map((part, index) => {
       const label = FORUM_SMILIES.get(part);
       if (!label) {
-        return <Fragment key={`${keyPrefix}-text-${index}`}>{part}</Fragment>;
+        if (!linkMentions) {
+          return <Fragment key={`${keyPrefix}-text-${index}`}>{part}</Fragment>;
+        }
+        return splitForumMentions(part).map((segment, segmentIndex) =>
+          segment.kind === "mention" ? (
+            <ForumLink
+              className="focus-ring font-medium text-primary underline decoration-primary/45 underline-offset-2 hover:decoration-primary"
+              href={`/forum/members/${encodeURIComponent(segment.username)}`}
+              key={`${keyPrefix}-text-${index}-mention-${segmentIndex}`}
+              prefetch
+            >
+              {segment.value}
+            </ForumLink>
+          ) : (
+            <Fragment
+              key={`${keyPrefix}-text-${index}-segment-${segmentIndex}`}
+            >
+              {segment.value}
+            </Fragment>
+          ),
+        );
       }
       return (
         <span

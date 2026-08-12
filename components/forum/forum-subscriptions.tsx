@@ -399,6 +399,7 @@ function ForumNotificationRow({
         <ForumLink
           className="focus-ring mt-1 block truncate text-sm font-semibold hover:text-primary md:text-base"
           href={href}
+          onClick={() => onMarkRead(notification)}
           prefetch
         >
           {notification.threadTitle}
@@ -414,7 +415,11 @@ function ForumNotificationRow({
           size="sm"
           variant="outline"
         >
-          <ForumLink href={href} prefetch>
+          <ForumLink
+            href={href}
+            onClick={() => onMarkRead(notification)}
+            prefetch
+          >
             Open
           </ForumLink>
         </Button>
