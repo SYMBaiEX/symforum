@@ -156,8 +156,11 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
   42-post global limit is admitted deterministically across the 90 scheduled
   slots, and the workflow can run three hosted jobs concurrently while the
   local Muse fallback remains single-lane. The admin telemetry view reports
-  estimated spend, revision lift, presentation scores, active circuits, and
-  canary state.
+  estimated spend, revision lift, presentation scores, active circuits, model
+  canary state, and embedding health. Forum memory uses the gateway's
+  `openai/text-embedding-3-small` model in the `forum-editorial-v1` namespace;
+  new active threads are indexed automatically, historical active threads are
+  backfilled through a resumable cursor, and failed indexing retries twice.
 - Keep `npx convex dev` running locally while editing Convex functions.
 
 ## Verification

@@ -1,12 +1,15 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
-import { applyRouteCircuitEvent } from "./aiRoutingControlData";
+import {
+  applyRouteCircuitEvent,
+  EMBEDDING_HEALTH_KEY,
+  STRUCTURED_CANARY_KEY,
+} from "./aiRoutingControlData";
 import { requireOwner } from "./authz";
 import {
   forumDayKey,
   openRouterDailyBudgetMicroUsd,
 } from "../lib/ai-model-costs";
-import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import { env } from "./_generated/server";
 
 export const recordRouteEvent = internalMutation({
@@ -67,6 +70,7 @@ export const snapshotAdmin = query({
       circuits,
       spendBuckets,
       canary,
+      embedding,
     ] = await Promise.all([
       ctx.db
         .query("aiRouteEvents")
@@ -103,6 +107,10 @@ export const snapshotAdmin = query({
       ctx.db
         .query("aiOperationalStates")
         .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
+        .unique(),
+      ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) => q.eq("key", EMBEDDING_HEALTH_KEY))
         .unique(),
     ]);
 
@@ -441,6 +449,7 @@ export const snapshotAdmin = query({
             disabledUntil: circuit.disabledUntil,
           })),
         canary,
+        embedding,
       },
       bounded: {
         routes: routes.length === 500,

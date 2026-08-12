@@ -3,6 +3,7 @@ import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 export const STRUCTURED_CANARY_KEY = "forum-agent-structured-canary";
+export const EMBEDDING_HEALTH_KEY = "forum-agent-embedding";
 export const MUSE_LEASE_KEY = "muse-generation";
 
 const FREE_QUOTA_RETRY_MS = 60 * 60 * 1_000;
@@ -247,4 +248,44 @@ export const recordCanaryState = internalMutation({
     else await ctx.db.patch(existing._id, value);
     return value;
   },
+});
+
+export const recordOperationalState = internalMutation({
+  args: {
+    key: v.string(),
+    healthy: v.boolean(),
+    provider: v.optional(v.string()),
+    model: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    pauseUntil: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("aiOperationalStates")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    const value = {
+      key: args.key,
+      healthy: args.healthy,
+      provider: args.provider,
+      model: args.model,
+      detail: args.detail?.replace(/\s+/g, " ").slice(0, 240),
+      checkedAt: now,
+      pauseUntil: args.pauseUntil ?? 0,
+      updatedAt: now,
+    };
+    if (existing === null) await ctx.db.insert("aiOperationalStates", value);
+    else await ctx.db.patch(existing._id, value);
+    return value;
+  },
+});
+
+export const readOperationalState = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, args) =>
+    await ctx.db
+      .query("aiOperationalStates")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique(),
 });

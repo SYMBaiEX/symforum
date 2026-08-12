@@ -129,4 +129,18 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "verify forum agent embeddings",
+  "17 * * * *",
+  internal.forumAgentMemory.checkEmbeddingHealth,
+  {},
+);
+
+crons.cron(
+  "backfill forum agent embeddings",
+  "40 7 * * *",
+  internal.forumAgentMemory.backfillForumMemory,
+  {},
+);
+
 export default crons;

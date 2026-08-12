@@ -969,6 +969,7 @@ export default defineSchema({
     .index("by_agentSlug_and_score", ["agentSlug", "score"]),
   forumAgentMaintenanceState: defineTable({
     key: v.string(),
+    cursor: v.optional(v.string()),
     completedAt: v.number(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),

@@ -555,6 +555,14 @@ export function AdminTelemetry() {
                       : "paused / unknown"
                   }
                 />
+                <RuntimeRow
+                  label="Embeddings"
+                  value={
+                    editorial?.operations.embedding?.healthy
+                      ? "healthy"
+                      : "paused / unknown"
+                  }
+                />
               </dl>
             </Panel>
             <Panel
@@ -580,6 +588,17 @@ export function AdminTelemetry() {
                   value={integer(editorial?.operations.circuits.length)}
                   detail="currently paused"
                   warning={(editorial?.operations.circuits.length ?? 0) > 0}
+                />
+                <MetricCard
+                  icon={ShieldCheck}
+                  label="Embedding model"
+                  value={
+                    editorial?.operations.embedding?.healthy ? "ready" : "check"
+                  }
+                  detail={
+                    editorial?.operations.embedding?.model ?? "not verified"
+                  }
+                  warning={editorial?.operations.embedding?.healthy === false}
                 />
               </div>
             </Panel>

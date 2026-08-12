@@ -1526,6 +1526,14 @@ export type AiTelemetrySnapshotRecord = {
       checkedAt: number;
       pauseUntil: number;
     } | null;
+    embedding: {
+      healthy: boolean;
+      provider?: string;
+      model?: string;
+      detail?: string;
+      checkedAt: number;
+      pauseUntil: number;
+    } | null;
   };
   bounded: {
     routes: boolean;

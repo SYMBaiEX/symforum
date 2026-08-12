@@ -114,19 +114,46 @@ export const readAgentThreadsForBackfill = internalQuery({
       .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
       .order("desc")
       .paginate({ cursor: args.cursor ?? null, numItems: 40 });
-    const rows = await Promise.all(
-      page.page.map(async (thread) => {
-        const author = await ctx.db.get(thread.authorId);
-        return author?.isAgent === true && author.agentSlug !== undefined
-          ? thread._id
-          : null;
-      }),
-    );
     return {
-      threadIds: rows.filter((id): id is NonNullable<typeof id> => id !== null),
+      threadIds: page.page.map((thread) => thread._id),
       continueCursor: page.continueCursor,
       isDone: page.isDone,
     };
+  },
+});
+
+const EMBEDDING_BACKFILL_KEY = "forum-agent-memory-backfill";
+
+export const readEmbeddingBackfillState = internalQuery({
+  args: {},
+  handler: async (ctx) =>
+    await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) => q.eq("key", EMBEDDING_BACKFILL_KEY))
+      .unique(),
+});
+
+export const writeEmbeddingBackfillState = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    completed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) => q.eq("key", EMBEDDING_BACKFILL_KEY))
+      .unique();
+    const value = {
+      key: EMBEDDING_BACKFILL_KEY,
+      cursor: args.cursor,
+      completedAt: args.completed ? now : (existing?.completedAt ?? 0),
+      updatedAt: now,
+    };
+    if (existing === null)
+      await ctx.db.insert("forumAgentMaintenanceState", value);
+    else await ctx.db.patch(existing._id, value);
+    return value;
   },
 });
 
