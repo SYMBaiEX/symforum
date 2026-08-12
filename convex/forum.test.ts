@@ -1183,6 +1183,36 @@ describe("forum notification preferences", () => {
     });
   });
 
+  test("forum research excludes active source reservations before topic generation", async () => {
+    const t = setup();
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("forumAgentSourceReservations", {
+        sourceKey: "reserved-source",
+        runKey: "other:2026-08-12:0",
+        agentSlug: "other",
+        status: "reserved",
+        reservedAt: now,
+        expiresAt: now + 60_000,
+        updatedAt: now,
+      });
+      await ctx.db.insert("forumAgentSourceReservations", {
+        sourceKey: "expired-source",
+        runKey: "other:2026-08-11:0",
+        agentSlug: "other",
+        status: "reserved",
+        reservedAt: now - 120_000,
+        expiresAt: now - 60_000,
+        updatedAt: now - 60_000,
+      });
+    });
+
+    const unavailable = await t.query(internal.forum.readUsedSukiSourceKeys, {
+      sourceKeys: ["reserved-source", "expired-source", "free-source"],
+    });
+    expect(unavailable).toEqual(["reserved-source"]);
+  });
+
   test("Belle infrastructure targets one digest plus six varied daily posts", async () => {
     const t = setup();
     const infrastructure = await t.mutation(

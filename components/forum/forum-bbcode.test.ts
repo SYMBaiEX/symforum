@@ -95,6 +95,21 @@ describe("forum BBCode parser", () => {
     });
   });
 
+  test("keeps standard table section wrappers semantic", () => {
+    const table = parseForumBbcode(
+      "[table][thead][tr][th]Signal[/th][th]Meaning[/th][/tr][/thead]" +
+        "[tbody][tr][td]Queue[/td][td]No wait[/td][/tr][/tbody][/table]",
+    )[0];
+
+    expect(table).toMatchObject({ type: "tag", name: "table" });
+    if (table?.type !== "tag") throw new Error("Expected a table");
+    expect(
+      table.children
+        .filter((node) => node.type === "tag")
+        .map((node) => node.name),
+    ).toEqual(["thead", "tbody"]);
+  });
+
   test("accepts safe HTML tags and mixed closing delimiters from agents", () => {
     const nodes = parseForumBbcode(
       "<h2>HTML heading</h2><note]Mixed note[/note>",

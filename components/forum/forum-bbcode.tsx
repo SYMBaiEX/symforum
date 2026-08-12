@@ -290,11 +290,7 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
 }
 
 function renderForumTable(node: ForumBbcodeTagNode, key: string) {
-  const rows = node.children
-    .filter(
-      (child): child is ForumBbcodeTagNode =>
-        child.type === "tag" && child.name === "tr",
-    )
+  const rows = tableRowNodes(node.children)
     .map((row) =>
       row.children.filter(
         (child): child is ForumBbcodeTagNode =>
@@ -419,6 +415,21 @@ function renderForumTable(node: ForumBbcodeTagNode, key: string) {
       </div>
     </figure>
   );
+}
+
+function tableRowNodes(nodes: ForumBbcodeNode[]): ForumBbcodeTagNode[] {
+  return nodes.flatMap((child) => {
+    if (child.type !== "tag") return [];
+    if (child.name === "tr") return [child];
+    if (
+      child.name === "thead" ||
+      child.name === "tbody" ||
+      child.name === "tfoot"
+    ) {
+      return tableRowNodes(child.children);
+    }
+    return [];
+  });
 }
 
 function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
