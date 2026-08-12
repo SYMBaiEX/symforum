@@ -170,6 +170,7 @@ const presenceLocationTypeValidator = v.union(
   v.literal("userCp"),
   v.literal("messages"),
   v.literal("subscriptions"),
+  v.literal("saved"),
 );
 const moderationEventEntityTypeValidator = v.union(
   v.literal("forumThread"),
@@ -221,6 +222,7 @@ const RESERVED_CATEGORY_SLUGS = new Set([
   "new-posts",
   "online",
   "search",
+  "saved",
   "subscriptions",
   "todays-posts",
 ]);
@@ -1726,6 +1728,10 @@ export const getThread = query({
       viewer === null
         ? null
         : await loadThreadSubscription(ctx, viewer._id, thread._id);
+    const bookmark =
+      viewer === null
+        ? null
+        : await loadThreadBookmark(ctx, viewer._id, thread._id);
     const viewerThreadRating =
       viewer === null
         ? null
@@ -1847,6 +1853,7 @@ export const getThread = query({
               ? undefined
               : hasReadThread(thread, readState, categoryRead),
           viewerSubscribed: subscription?.status === "active",
+          viewerBookmarked: bookmark !== null,
           viewerCanRateThread:
             viewer !== null &&
             viewer._id !== thread.authorId &&
@@ -2253,6 +2260,94 @@ export const listMyThreadSubscriptions = query({
     return {
       threads: visibleThreads.map((thread) =>
         publicThreadListRecord(thread, authorsById.get(thread.authorId), {
+          categoryName: categoriesById.get(thread.categoryId)?.name,
+          lastPostAuthor: authorsById.get(thread.lastPostUserId),
+          lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
+          viewerHasRead: hasReadThread(
+            thread,
+            readsByThreadId.get(thread._id),
+            categoryReadsById.get(thread.categoryId),
+          ),
+          firstUnreadPostNumber: firstUnreadByThreadId.get(thread._id),
+        }),
+      ),
+    };
+  },
+});
+
+export const listMyThreadBookmarks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireSignedInUser(
+      ctx,
+      "Sign in to view saved forum threads.",
+    );
+    const limit = clampLimit(args.limit, THREAD_LIST_LIMIT, THREAD_LIST_LIMIT);
+    const bookmarks = await ctx.db
+      .query("forumThreadBookmarks")
+      .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(Math.min(limit * 3, THREAD_PAGE_SCAN_LIMIT));
+    const threadsById = await loadThreadsById(
+      ctx,
+      bookmarks.map((bookmark) => bookmark.threadId),
+    );
+    const threads = bookmarks
+      .map((bookmark) => threadsById.get(bookmark.threadId))
+      .filter(
+        (thread): thread is ForumThreadDoc =>
+          thread !== undefined && isVisibleThreadStatus(thread.status),
+      );
+    const categoriesById = await loadCategoriesById(
+      ctx,
+      threads.map((thread) => thread.categoryId),
+    );
+    const categoryVisibility = new Map(
+      await Promise.all(
+        Array.from(categoriesById.values()).map(
+          async (category) =>
+            [
+              category._id,
+              isBoardCategory(category) &&
+                (await canViewCategoryWithAncestors(ctx, user, category)),
+            ] as const,
+        ),
+      ),
+    );
+    const visibleThreads = threads
+      .filter((thread) => categoryVisibility.get(thread.categoryId) === true)
+      .slice(0, limit);
+    const authorsById = await loadUserNamesById(ctx, [
+      ...visibleThreads.map((thread) => thread.authorId),
+      ...visibleThreads.map((thread) => thread.lastPostUserId),
+    ]);
+    const readsByThreadId = await loadThreadReads(
+      ctx,
+      user._id,
+      visibleThreads.map((thread) => thread._id),
+    );
+    const categoryReadsById = await loadCategoryReads(
+      ctx,
+      user._id,
+      visibleThreads.map((thread) => thread.categoryId),
+    );
+    const firstUnreadByThreadId = await loadFirstUnreadPostNumbers(
+      ctx,
+      visibleThreads,
+      readsByThreadId,
+      categoryReadsById,
+    );
+    const lastPostTargetsByThreadId = await loadThreadLastPostTargets(
+      ctx,
+      visibleThreads,
+    );
+
+    return {
+      threads: visibleThreads.map((thread) =>
+        publicThreadListRecord(thread, authorsById.get(thread.authorId), {
+          categoryName: categoriesById.get(thread.categoryId)?.name,
           lastPostAuthor: authorsById.get(thread.lastPostUserId),
           lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
           viewerHasRead: hasReadThread(
@@ -4599,6 +4694,50 @@ export const toggleThreadSubscription = mutation({
       subscribed: nextStatus === "active",
       subscriptionId: existing._id,
     };
+  },
+});
+
+export const setThreadBookmark = mutation({
+  args: {
+    threadId: v.id("forumThreads"),
+    saved: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireSignedInUser(
+      ctx,
+      "Sign in to save forum threads.",
+    );
+    const thread = await ctx.db.get(args.threadId);
+    if (thread === null || !isVisibleThreadStatus(thread.status)) {
+      throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
+    }
+    const category = await requireVisibleCategoryById(
+      ctx,
+      thread.categoryId,
+      user,
+    );
+    const existing = await loadThreadBookmark(ctx, user._id, thread._id);
+
+    if (!args.saved) {
+      if (existing !== null) {
+        await ctx.db.delete(existing._id);
+      }
+      return { saved: false, bookmarkId: existing?._id ?? null };
+    }
+
+    if (existing !== null) {
+      return { saved: true, bookmarkId: existing._id };
+    }
+
+    const now = Date.now();
+    const bookmarkId = await ctx.db.insert("forumThreadBookmarks", {
+      userId: user._id,
+      threadId: thread._id,
+      categoryId: category._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { saved: true, bookmarkId };
   },
 });
 
@@ -15415,6 +15554,19 @@ async function loadThreadSubscription(
     .unique();
 }
 
+async function loadThreadBookmark(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  threadId: Id<"forumThreads">,
+) {
+  return await ctx.db
+    .query("forumThreadBookmarks")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", userId).eq("threadId", threadId),
+    )
+    .unique();
+}
+
 async function loadThreadRating(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
@@ -17047,6 +17199,7 @@ function publicThreadDetailRecord(
     viewerCanDelete?: boolean;
     viewerHasRead?: boolean;
     viewerSubscribed?: boolean;
+    viewerBookmarked?: boolean;
     viewerCanRateThread?: boolean;
     viewerRating?: number;
     viewerCanGiveReputation?: boolean;
@@ -17080,6 +17233,7 @@ function publicThreadDetailRecord(
     viewerCanEdit: options?.viewerCanEdit ?? false,
     viewerCanDelete: options?.viewerCanDelete ?? false,
     viewerSubscribed: options?.viewerSubscribed ?? false,
+    viewerBookmarked: options?.viewerBookmarked ?? false,
     viewerCanRateThread: options?.viewerCanRateThread ?? false,
     viewerRating: options?.viewerRating ?? 0,
     viewerCanGiveReputation: options?.viewerCanGiveReputation ?? false,

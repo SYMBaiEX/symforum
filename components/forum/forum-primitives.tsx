@@ -453,6 +453,7 @@ function ForumWelcomeStripLayout({
                   href="/forum/control-panel"
                   label="User CP"
                 />
+                <ForumMastheadLink href="/forum/saved" label="Saved" />
                 {navState.trusted ? (
                   <>
                     <ForumMastheadLink
@@ -655,6 +656,9 @@ function forumPresencePayload(pathname: string | null): {
   }
   if (path.startsWith("/forum/subscriptions")) {
     return { locationType: "subscriptions", path, label: "Subscriptions" };
+  }
+  if (path.startsWith("/forum/saved")) {
+    return { locationType: "saved", path, label: "Saved threads" };
   }
 
   const segments = path.split("/").filter(Boolean);
@@ -1025,6 +1029,7 @@ export function ForumUserCpShell({
     { href: "/forum/control-panel", label: "Profile settings" },
     { href: "/forum/messages", label: "Private messages" },
     { href: "/forum/subscriptions", label: "Subscriptions" },
+    { href: "/forum/saved", label: "Saved threads" },
   ];
 
   return (
@@ -1042,7 +1047,7 @@ export function ForumUserCpShell({
           </p>
           <nav
             aria-label="Forum user control panel"
-            className="mt-3 grid grid-cols-3 gap-px bg-row-border lg:grid-cols-1"
+            className="mt-3 grid grid-cols-2 gap-px bg-row-border sm:grid-cols-4 lg:grid-cols-1"
           >
             {items.map((item) => {
               const active = normalizedPathname === item.href;

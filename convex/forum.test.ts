@@ -4224,6 +4224,97 @@ describe("forum privacy regressions", () => {
     ).resolves.toMatchObject({ categories: [] });
   });
 
+  test("thread bookmarks stay private, remain separate from watches, and honor current board visibility", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const asOtherTrusted = t.withIdentity({
+      subject: seed.otherTrustedUserId,
+      name: "Other Trusted",
+    });
+    const asUntrusted = t.withIdentity({
+      subject: seed.untrustedUserId,
+      name: "New Member",
+    });
+
+    await expect(
+      t.mutation(api.forum.setThreadBookmark, {
+        threadId: seed.publicThreadId,
+        saved: true,
+      }),
+    ).rejects.toThrow(/Sign in/);
+    await expect(
+      t.query(api.forum.listMyThreadBookmarks, { limit: 10 }),
+    ).rejects.toThrow(/Sign in/);
+    await expect(
+      asUntrusted.mutation(api.forum.setThreadBookmark, {
+        threadId: seed.trustedThreadId,
+        saved: true,
+      }),
+    ).rejects.toThrow(/not available/);
+
+    const before = await asOtherTrusted.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+    });
+    expect(before.thread?.viewerBookmarked).toBe(false);
+
+    const saved = await asOtherTrusted.mutation(api.forum.setThreadBookmark, {
+      threadId: seed.publicThreadId,
+      saved: true,
+    });
+    expect(saved).toMatchObject({ saved: true });
+
+    const afterSave = await asOtherTrusted.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+    });
+    expect(afterSave.thread?.viewerBookmarked).toBe(true);
+    await expect(
+      asOtherTrusted.query(api.forum.listMyThreadBookmarks, { limit: 10 }),
+    ).resolves.toMatchObject({
+      threads: [
+        expect.objectContaining({
+          _id: seed.publicThreadId,
+          categoryName: "Public Square",
+        }),
+      ],
+    });
+    await expect(
+      asOtherTrusted.query(api.forum.listMyThreadSubscriptions, { limit: 10 }),
+    ).resolves.toMatchObject({ threads: [] });
+
+    await t.run(async (ctx) => {
+      const now = 1_800_000_000_310;
+      await ctx.db.insert("forumThreadBookmarks", {
+        userId: seed.untrustedUserId,
+        threadId: seed.trustedThreadId,
+        categoryId: seed.trustedCategoryId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    await expect(
+      asUntrusted.query(api.forum.listMyThreadBookmarks, { limit: 10 }),
+    ).resolves.toMatchObject({ threads: [] });
+
+    const removed = await asOtherTrusted.mutation(api.forum.setThreadBookmark, {
+      threadId: seed.publicThreadId,
+      saved: false,
+    });
+    expect(removed).toMatchObject({
+      saved: false,
+      bookmarkId: saved.bookmarkId,
+    });
+    const afterRemove = await asOtherTrusted.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+    });
+    expect(afterRemove.thread?.viewerBookmarked).toBe(false);
+    await expect(
+      asOtherTrusted.query(api.forum.listMyThreadBookmarks, { limit: 10 }),
+    ).resolves.toMatchObject({ threads: [] });
+  });
+
   test("authors can delete reply-free threads while counters, profiles, and audit rows stay consistent", async () => {
     const t = setup();
     const seed = await seedForum(t);

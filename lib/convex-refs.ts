@@ -140,7 +140,8 @@ export type ForumPresenceLocationType =
   | "calendar"
   | "userCp"
   | "messages"
-  | "subscriptions";
+  | "subscriptions"
+  | "saved";
 
 export type ForumPresenceLocationRecord = {
   type: ForumPresenceLocationType;
@@ -494,6 +495,7 @@ export type ForumThreadDetailRecord = ForumThreadRecord & {
   viewerCanEdit: boolean;
   viewerCanDelete: boolean;
   viewerSubscribed: boolean;
+  viewerBookmarked: boolean;
   viewerCanRateThread: boolean;
   viewerRating: number;
   viewerCanGiveReputation: boolean;
@@ -2457,6 +2459,11 @@ export const convexRefs = {
       { limit?: number },
       { threads: ForumThreadRecord[] }
     >("forum:listMyThreadSubscriptions"),
+    listMyThreadBookmarks: makeFunctionReference<
+      "query",
+      { limit?: number },
+      { threads: ForumThreadRecord[] }
+    >("forum:listMyThreadBookmarks"),
     listMyCategorySubscriptions: makeFunctionReference<
       "query",
       { limit?: number },
@@ -2682,6 +2689,11 @@ export const convexRefs = {
       { threadId: string },
       { subscribed: boolean; subscriptionId: string }
     >("forum:toggleThreadSubscription"),
+    setThreadBookmark: makeFunctionReference<
+      "mutation",
+      { threadId: string; saved: boolean },
+      { saved: boolean; bookmarkId: string | null }
+    >("forum:setThreadBookmark"),
     toggleCategorySubscription: makeFunctionReference<
       "mutation",
       { categorySlug: string },

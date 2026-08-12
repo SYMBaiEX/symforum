@@ -65,6 +65,7 @@ export type ForumThreadSummaryRecord = Partial<ConvexForumThreadRecord> & {
   viewerCanEdit?: boolean;
   viewerCanDelete?: boolean;
   viewerSubscribed?: boolean;
+  viewerBookmarked?: boolean;
   viewerCanRateThread?: boolean;
   viewerRating?: number;
   ratingCount?: number;
@@ -261,6 +262,7 @@ export const forumRefs = {
   listMembers: convexRefs.forum.listMembers,
   listOnlineMembers: convexRefs.forum.listOnlineMembers,
   listMyThreadSubscriptions: convexRefs.forum.listMyThreadSubscriptions,
+  listMyThreadBookmarks: convexRefs.forum.listMyThreadBookmarks,
   listMyCategorySubscriptions: convexRefs.forum.listMyCategorySubscriptions,
   listMyNotifications: convexRefs.forum.listMyNotifications,
   getMyForumNavState: convexRefs.forum.getMyForumNavState,
@@ -289,6 +291,7 @@ export const forumRefs = {
   markCategoryRead: convexRefs.forum.markCategoryRead,
   markAllForumsRead: convexRefs.forum.markAllForumsRead,
   toggleThreadSubscription: convexRefs.forum.toggleThreadSubscription,
+  setThreadBookmark: convexRefs.forum.setThreadBookmark,
   toggleCategorySubscription: convexRefs.forum.toggleCategorySubscription,
   votePoll: convexRefs.forum.votePoll,
   updatePollContent: convexRefs.forum.updatePollContent,

@@ -149,6 +149,7 @@ function LiveForumThreadView({
   const toggleThreadSubscription = useMutation(
     forumRefs.toggleThreadSubscription,
   );
+  const setThreadBookmark = useMutation(forumRefs.setThreadBookmark);
   const votePoll = useMutation(forumRefs.votePoll);
   const updatePollContent = useMutation(forumRefs.updatePollContent);
   const rateThread = useMutation(forumRefs.rateThread);
@@ -170,6 +171,8 @@ function LiveForumThreadView({
   const [pending, setPending] = useState(false);
   const [subscriptionPending, setSubscriptionPending] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState("");
+  const [bookmarkPending, setBookmarkPending] = useState(false);
+  const [bookmarkError, setBookmarkError] = useState("");
   const [pollPending, setPollPending] = useState(false);
   const [pollError, setPollError] = useState("");
   const [ratingPending, setRatingPending] = useState(false);
@@ -446,6 +449,39 @@ function LiveForumThreadView({
       );
     } finally {
       setSubscriptionPending(false);
+    }
+  }
+
+  async function toggleBookmark(threadId: string, bookmarked: boolean) {
+    if (!isAuthenticated) {
+      setAuthAction("save this thread");
+      setAuthOpen(true);
+      return;
+    }
+    setBookmarkPending(true);
+    setBookmarkError("");
+    try {
+      await setThreadBookmark({ threadId, saved: !bookmarked });
+    } catch (caught) {
+      if (isAuthRequiredError(caught)) {
+        setAuthAction("save this thread");
+        setAuthOpen(true);
+        return;
+      }
+      reportAppError(caught, {
+        scope: "forum",
+        eventType: "thread_bookmark_failed",
+        component: "ForumThreadView",
+        action: "forum:setThreadBookmark",
+        entityType: "forumThread",
+        entityId: threadId,
+        notify: false,
+      });
+      setBookmarkError(
+        userFacingError(caught, "Could not update saved thread"),
+      );
+    } finally {
+      setBookmarkPending(false);
     }
   }
 
@@ -1042,12 +1078,17 @@ function LiveForumThreadView({
                 </ForumJumpLink>
               ) : null}
               <ThreadActions
+                bookmarked={thread.viewerBookmarked === true}
+                bookmarkPending={bookmarkPending}
                 canDelete={thread.viewerCanDelete === true}
                 canEdit={thread.viewerCanEdit === true}
                 subscribed={thread.viewerSubscribed === true}
                 subscriptionPending={subscriptionPending}
                 onDelete={() => removeThread(thread._id, category.slug)}
                 onEdit={openThreadEditor}
+                onToggleBookmark={() =>
+                  toggleBookmark(thread._id, thread.viewerBookmarked === true)
+                }
                 onToggleSubscription={() => toggleSubscription(thread._id)}
               />
             </div>
@@ -1074,6 +1115,14 @@ function LiveForumThreadView({
                 role="alert"
               >
                 {subscriptionError}
+              </p>
+            ) : null}
+            {bookmarkError ? (
+              <p
+                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
+                role="alert"
+              >
+                {bookmarkError}
               </p>
             ) : null}
             {ratingError ? (
@@ -2255,24 +2304,40 @@ function PostActions({
 }
 
 function ThreadActions({
+  bookmarked,
+  bookmarkPending,
   canDelete,
   canEdit,
   subscribed,
   subscriptionPending,
   onDelete,
   onEdit,
+  onToggleBookmark,
   onToggleSubscription,
 }: {
+  bookmarked: boolean;
+  bookmarkPending: boolean;
   canDelete: boolean;
   canEdit: boolean;
   subscribed: boolean;
   subscriptionPending: boolean;
   onDelete: () => void;
   onEdit: () => void;
+  onToggleBookmark: () => void;
   onToggleSubscription: () => void;
 }) {
   return (
     <>
+      <Button
+        aria-pressed={bookmarked}
+        className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
+        type="button"
+        variant="outline"
+        disabled={bookmarkPending}
+        onClick={onToggleBookmark}
+      >
+        {bookmarkPending ? "Saving..." : bookmarked ? "Saved" : "Save"}
+      </Button>
       <Button
         className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
         type="button"

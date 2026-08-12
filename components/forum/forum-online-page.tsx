@@ -347,6 +347,9 @@ function formatPresenceLocationType(type: ForumOnlineLocationRecord["type"]) {
   if (type === "subscriptions") {
     return "Subscriptions";
   }
+  if (type === "saved") {
+    return "Saved threads";
+  }
   return "Forum";
 }
 

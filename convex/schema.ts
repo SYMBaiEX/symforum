@@ -1133,6 +1133,7 @@ export default defineSchema({
       v.literal("userCp"),
       v.literal("messages"),
       v.literal("subscriptions"),
+      v.literal("saved"),
     ),
     path: v.string(),
     label: v.string(),
@@ -1206,6 +1207,15 @@ export default defineSchema({
       "updatedAt",
     ])
     .index("by_threadId_and_status", ["threadId", "status"]),
+  forumThreadBookmarks: defineTable({
+    userId: v.id("users"),
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
   forumCategorySubscriptions: defineTable({
     userId: v.id("users"),
     categoryId: v.id("forumCategories"),
