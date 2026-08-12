@@ -642,6 +642,28 @@ export default defineSchema({
       searchField: "searchText",
       filterFields: ["status", "categorySlug", "categoryId", "authorId"],
     }),
+  forumThreadEditorialDigests: defineTable({
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    categorySlug: v.string(),
+    slug: v.string(),
+    title: v.string(),
+    authorId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("locked"),
+      v.literal("hidden"),
+      v.literal("deleted"),
+    ),
+    replyCount: v.number(),
+    viewCount: v.number(),
+    lastPostAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_status_and_lastPostAt", ["status", "lastPostAt"]),
   forumPosts: defineTable({
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),
@@ -801,6 +823,7 @@ export default defineSchema({
     ])
     .index("by_threadId_and_startedAt", ["threadId", "startedAt"])
     .index("by_runDate", ["runDate"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_startedAt", ["startedAt"]),
   forumAgentReplyRuns: defineTable({
     runKey: v.string(),
@@ -831,6 +854,11 @@ export default defineSchema({
     .index("by_runKey", ["runKey"])
     .index("by_sourcePostId", ["sourcePostId"])
     .index("by_runDate", ["runDate"])
+    .index("by_agentSlug_and_status_and_updatedAt", [
+      "agentSlug",
+      "status",
+      "updatedAt",
+    ])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_updatedAt", ["updatedAt"]),
   forumAgentUsageEvents: defineTable({
@@ -888,6 +916,11 @@ export default defineSchema({
   })
     .index("by_cohortKey", ["cohortKey"])
     .index("by_agentSlug_and_score", ["agentSlug", "score"]),
+  forumAgentMaintenanceState: defineTable({
+    key: v.string(),
+    completedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
   forumAgentResearchCache: defineTable({
     cacheKey: v.string(),
     sourceName: v.string(),
@@ -908,7 +941,8 @@ export default defineSchema({
   })
     .index("by_sourceKey", ["sourceKey"])
     .index("by_agentSlug_and_usedAt", ["agentSlug", "usedAt"])
-    .index("by_threadId", ["threadId"]),
+    .index("by_threadId", ["threadId"])
+    .index("by_usedAt", ["usedAt"]),
   forumAgentSourceReservations: defineTable({
     sourceKey: v.string(),
     runKey: v.string(),

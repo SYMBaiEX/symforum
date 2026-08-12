@@ -1,17 +1,11 @@
 "use node";
 
-import { Agent } from "@convex-dev/agent";
 import { RAG } from "@convex-dev/rag";
-import { createGateway, type GatewayModelId } from "@ai-sdk/gateway-v3";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
+import { createGateway } from "@ai-sdk/gateway-v3";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
-import {
-  DEEPSEEK_FALLBACK_MODEL,
-  MUSE_API_MODEL_ID,
-} from "../lib/ai-models";
 
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const MEMORY_NAMESPACE = "forum-editorial-v1";
@@ -29,108 +23,21 @@ type MemoryMetadata = {
   createdAt: number;
 };
 
-function platform(apiKey: string, agentSlug: string) {
+function platform(apiKey: string) {
   const gateway = createGateway({ apiKey });
   const embeddingModel = gateway.embeddingModel(EMBEDDING_MODEL);
-  const museBaseUrl = env.MUSE_API_BASE_URL?.trim();
-  const museApiKey = env.MUSE_API_KEY?.trim();
-  const languageModel = museBaseUrl && museApiKey
-    ? createOpenAICompatible({
-        name: "symbaiexMuse",
-        apiKey: museApiKey,
-        baseURL: museBaseUrl,
-        includeUsage: true,
-      })(MUSE_API_MODEL_ID)
-    : gateway(DEEPSEEK_FALLBACK_MODEL as GatewayModelId);
-  const agent = new Agent(components.agent, {
-    name: forumAgentName(agentSlug),
-    languageModel,
-    embeddingModel,
-    contextOptions: {
-      recentMessages: 20,
-      searchOptions: {
-        limit: 8,
-        textSearch: true,
-        vectorSearch: true,
-        vectorScoreThreshold: 0.55,
-        messageRange: { before: 1, after: 1 },
-      },
-      searchOtherThreads: true,
-    },
-    storageOptions: { saveMessages: "all" },
-  });
   const rag = new RAG<MemoryFilters, MemoryMetadata>(components.rag, {
     embeddingDimension: 1536,
     textEmbeddingModel: embeddingModel,
     filterNames: ["category", "authorKind", "categoryAndAuthor"],
   });
-  return { agent, rag };
+  return { rag };
 }
 
 function requireApiKey() {
   const apiKey = env.AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) throw new Error("AI_GATEWAY_API_KEY is not configured.");
   return apiKey;
-}
-
-export async function startEditorialMemory(
-  ctx: ActionCtx,
-  args: {
-    agentSlug: string;
-    runKey: string;
-    promptVersion: string;
-    slot: number;
-    runDate: string;
-  },
-) {
-  const { agent } = platform(requireApiKey(), args.agentSlug);
-  const { threadId } = await agent.createThread(ctx, {
-    userId: args.agentSlug,
-    title: `${args.agentSlug} editorial run ${args.runDate} / ${args.slot}`,
-    summary: `Durable editorial memory for ${args.runKey}`,
-  });
-  await agent.saveMessage(ctx, {
-    threadId,
-    userId: args.agentSlug,
-    prompt: JSON.stringify({
-      event: "editorial_run_started",
-      runKey: args.runKey,
-      runDate: args.runDate,
-      slot: args.slot,
-      promptVersion: args.promptVersion,
-    }),
-  });
-  await ctx.runMutation(
-    internal.forumAgentEditorialData.attachRunInfrastructure,
-    {
-      runKey: args.runKey,
-      agentThreadId: threadId,
-      promptVersion: args.promptVersion,
-    },
-  );
-  return { agent, threadId };
-}
-
-export async function finishEditorialMemory(
-  ctx: ActionCtx,
-  args: {
-    agentSlug: string;
-    threadId: string;
-    result: Record<string, unknown>;
-  },
-) {
-  const { agent } = platform(requireApiKey(), args.agentSlug);
-  await agent.saveMessage(ctx, {
-    threadId: args.threadId,
-    userId: args.agentSlug,
-    message: {
-      role: "assistant",
-      content: JSON.stringify({
-        event: "editorial_run_completed",
-        ...args.result,
-      }),
-    },
-  });
 }
 
 export async function searchEditorialMemory(
@@ -143,7 +50,7 @@ export async function searchEditorialMemory(
   },
 ) {
   const startedAt = Date.now();
-  const { rag } = platform(requireApiKey(), args.agentSlug);
+  const { rag } = platform(requireApiKey());
   const result = await rag.search(ctx, {
     namespace: MEMORY_NAMESPACE,
     query: args.query,
@@ -190,13 +97,8 @@ async function indexThread(ctx: ActionCtx, threadId: Id<"forumThreads">) {
   if (source === null) return { status: "skipped" as const };
   const agentSlug = source.agentSlug === "human" ? "suki" : source.agentSlug;
   const startedAt = Date.now();
-  const { rag } = platform(requireApiKey(), agentSlug);
-  const text = [
-    source.title,
-    source.body,
-    ...source.replies.map((reply, index) => `Reply ${index + 1}: ${reply}`),
-    `Editorial evidence: ${JSON.stringify(source.editorialEvidence)}`,
-  ].join("\n\n");
+  const { rag } = platform(requireApiKey());
+  const text = [source.title, source.body].join("\n\n");
   const result = await rag.add(ctx, {
     namespace: MEMORY_NAMESPACE,
     key: `forum-thread:${source.threadId}`,
@@ -262,11 +164,3 @@ export const backfillForumMemory = internalAction({
     return { indexed: page.threadIds.length, done: page.isDone };
   },
 });
-
-function forumAgentName(agentSlug: string) {
-  return agentSlug
-    .split("-")
-    .filter(Boolean)
-    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
-    .join(" ");
-}

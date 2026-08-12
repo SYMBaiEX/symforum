@@ -31,11 +31,7 @@ import {
   modelGenerationSettings,
   modelInstructions,
 } from "../lib/muse-model-profile";
-import {
-  finishEditorialMemory,
-  searchEditorialMemory,
-  startEditorialMemory,
-} from "./forumAgentMemory";
+import { searchEditorialMemory } from "./forumAgentMemory";
 import {
   FORUM_AGENT_DRAFT_BODY_MAX_LENGTH,
   FORUM_THREAD_BODY_MAX_LENGTH,
@@ -312,23 +308,16 @@ export async function runForumResearchSlot(
   }
 
   try {
-    if (args.workflowId !== undefined) {
-      await ctx.runMutation(
-        internal.forumAgentEditorialData.attachRunInfrastructure,
-        {
-          runKey: claim.runKey,
-          workflowId: args.workflowId,
-          promptVersion: config.promptVersion,
-        },
-      );
-    }
-    const editorialMemory = await startEditorialMemory(ctx, {
-      agentSlug: config.slug,
-      runKey: claim.runKey,
-      promptVersion: config.promptVersion,
-      slot: args.slot,
-      runDate,
-    });
+    await ctx.runMutation(
+      internal.forumAgentEditorialData.attachRunInfrastructure,
+      {
+        runKey: claim.runKey,
+        ...(args.workflowId === undefined
+          ? {}
+          : { workflowId: args.workflowId }),
+        promptVersion: config.promptVersion,
+      },
+    );
     const routingConfig = convexModelRoutingConfig();
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
@@ -427,7 +416,7 @@ export async function runForumResearchSlot(
         feature: "forum-agent",
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 240_000,
+        totalTimeoutMs: 150_000,
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
@@ -513,11 +502,6 @@ export async function runForumResearchSlot(
             "Semantic editorial memory found an existing member discussion.",
           candidateCount: unusedCandidates.length,
           workflowManaged: args.workflowManaged,
-        });
-        await finishEditorialMemory(ctx, {
-          agentSlug: config.slug,
-          threadId: editorialMemory.threadId,
-          result: { status: "skipped", reason: "semantic-topic-covered" },
         });
         return { status: "skipped" as const, reason: "topic-covered" };
       }
@@ -610,7 +594,7 @@ export async function runForumResearchSlot(
         feature: "forum-agent",
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: options?.gatewayOnly ? 90_000 : 300_000,
+        totalTimeoutMs: options?.gatewayOnly ? 75_000 : 180_000,
         attemptOffset: options?.gatewayOnly ? 1 : 0,
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const forumWriter = new ToolLoopAgent({
@@ -838,19 +822,6 @@ export async function runForumResearchSlot(
             ...publicationArgs,
             threadId: followUpThreadId,
           });
-    await finishEditorialMemory(ctx, {
-      agentSlug: config.slug,
-      threadId: editorialMemory.threadId,
-      result: {
-        status: "published",
-        categorySlug: published.categorySlug,
-        threadSlug: published.threadSlug,
-        title: published.title,
-        contentFormat: effectiveSelection.contentFormat,
-        qualityScore: quality.qualityScore,
-        semanticReferences: semanticMemory.slice(0, 5),
-      },
-    });
     return {
       status: "published" as const,
       categorySlug: published.categorySlug,

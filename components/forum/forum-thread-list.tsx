@@ -37,7 +37,7 @@ import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const THREADS_PER_PAGE = 25;
 const PREFIX_FILTER_ALL = "all";
@@ -163,9 +163,23 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   const [error, setError] = useState("");
   const [boardActionError, setBoardActionError] = useState("");
   const [authAction, setAuthAction] = useState("post to the forum");
-  const deferredQuery = useDeferredValue(searchQuery.trim());
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearchQuery(searchQuery.trim()),
+      450,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
   const searchArgs =
-    deferredQuery.length >= 2 ? { query: deferredQuery, categorySlug } : "skip";
+    debouncedSearchQuery.length >= 3
+      ? {
+          query: debouncedSearchQuery,
+          categorySlug,
+          resultType: "threads" as const,
+          pageSize: 12,
+        }
+      : "skip";
   const searchResult = useQuery(forumRefs.search, searchArgs);
   const authRedirectTo = useMemo(
     () =>
@@ -593,10 +607,10 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
             />
           ) : null}
 
-          {deferredQuery.length >= 2 ? (
+          {debouncedSearchQuery.length >= 3 ? (
             <ForumSearchResults
               categorySlug={category.slug}
-              query={deferredQuery}
+              query={debouncedSearchQuery}
               searchResult={searchResult}
             />
           ) : null}

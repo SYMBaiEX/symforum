@@ -102,6 +102,20 @@ crons.cron(
 );
 
 crons.cron(
+  "cleanup forum agent operational data",
+  "35 6 * * *",
+  internal.forumAgentMaintenanceData.cleanupExpiredOperationalData,
+  {},
+);
+
+crons.cron(
+  "cleanup completed forum agent resources",
+  "45 6 * * *",
+  internal.forumAgentMaintenance.cleanupLegacyResources,
+  {},
+);
+
+crons.cron(
   "refresh forum editorial cohorts",
   "15 */6 * * *",
   internal.forumAgentEditorial.refreshEditorialCohorts,

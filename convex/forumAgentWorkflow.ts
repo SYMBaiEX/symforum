@@ -2,7 +2,7 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
@@ -12,7 +12,7 @@ const workflow = new WorkflowManager(components.workflow, {
     maxParallelism: 1,
     retryActionsByDefault: true,
     defaultRetryBehavior: {
-      maxAttempts: 3,
+      maxAttempts: 2,
       initialBackoffMs: 60_000,
       base: 3,
     },
@@ -55,7 +55,7 @@ export const publishForumSlot = workflow
     };
     const options = {
       name: `research-write-publish-${args.agentSlug}-${args.slot}`,
-      retry: { maxAttempts: 3, initialBackoffMs: 60_000, base: 3 },
+      retry: { maxAttempts: 2, initialBackoffMs: 60_000, base: 3 },
     } as const;
     if (args.agentSlug === "suki") {
       return await step.runAction(
@@ -88,10 +88,18 @@ export const queuePublication = internalMutation({
     ctx,
     args,
   ): Promise<
-    | { queued: false; retryAfter?: number }
+    | { queued: false; reason?: string; retryAfter?: number }
     | { queued: true; workflowId: string }
   > => {
     const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
+    const preflight = await publicationPreflight(ctx, {
+      agentSlug: args.agentSlug,
+      runDate,
+      slot: args.slot,
+    });
+    if (!preflight.ok) {
+      return { queued: false as const, reason: preflight.reason };
+    }
     const capacity = await rateLimiter.limit(ctx, "forumPublications", {
       key: args.agentSlug,
     });
@@ -112,6 +120,48 @@ export const queuePublication = internalMutation({
     return { queued: true as const, workflowId };
   },
 });
+
+async function publicationPreflight(
+  ctx: MutationCtx,
+  args: { agentSlug: string; runDate: string; slot: number },
+) {
+  const agent = await ctx.db
+    .query("forumAgents")
+    .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
+    .unique();
+  if (agent === null || !agent.enabled || agent.dailyPostTarget < 1) {
+    return { ok: false as const, reason: "agent-disabled" };
+  }
+
+  const runKey = `${args.agentSlug}:${args.runDate}:${args.slot}`;
+  const existing = await ctx.db
+    .query("forumAgentRuns")
+    .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+    .unique();
+  if (existing?.status === "published") {
+    return { ok: false as const, reason: "already-published" };
+  }
+  if (
+    existing?.status === "running" &&
+    Date.now() - existing.updatedAt < 30 * 60 * 1_000
+  ) {
+    return { ok: false as const, reason: "already-running" };
+  }
+
+  const todayRuns = await ctx.db
+    .query("forumAgentRuns")
+    .withIndex("by_agentSlug_and_runDate_and_slot", (q) =>
+      q.eq("agentSlug", args.agentSlug).eq("runDate", args.runDate),
+    )
+    .take(40);
+  if (
+    todayRuns.filter((run) => run.status === "published").length >=
+    agent.dailyPostTarget
+  ) {
+    return { ok: false as const, reason: "daily-target" };
+  }
+  return { ok: true as const };
+}
 
 function forumDateForTimestamp(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-CA", {
