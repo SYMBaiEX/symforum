@@ -104,7 +104,7 @@ export const readThreadForMemory = internalQuery({
   },
 });
 
-export const readAgentThreadsForBackfill = internalQuery({
+export const readForumThreadsForBackfill = internalQuery({
   args: {
     cursor: v.optional(v.string()),
   },

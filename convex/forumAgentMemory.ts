@@ -246,7 +246,7 @@ export const backfillForumMemory = internalAction({
       continueCursor: string;
       isDone: boolean;
     } = await ctx.runQuery(
-      internal.forumAgentEditorialData.readAgentThreadsForBackfill,
+      internal.forumAgentEditorialData.readForumThreadsForBackfill,
       cursor === undefined ? {} : { cursor },
     );
     for (const threadId of page.threadIds) await indexThread(ctx, threadId, 0);
