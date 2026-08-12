@@ -334,24 +334,31 @@ export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
 }
 
 export function forumBodyFactualStatements(body: string) {
-  const plain = plainForumText(
-    body
-      .replace(/\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi, " ")
-      .replace(/\[h[23]\][\s\S]*?\[\/h[23]\]/gi, "\n\n")
-      .replace(
-        /\[(?:chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]/gi,
-        "\n",
-      )
-      .replace(
-        /\[\/(?:chart|decision|riskmap|sourcecards|steps|timeline)\]/gi,
-        "\n",
-      ),
-  );
+  const separatedRows = body
+    .replace(/\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi, " ")
+    .replace(/\[h[23]\][\s\S]*?\[\/h[23]\]/gi, "\n\n")
+    .replace(
+      /\[(chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]([\s\S]*?)\[\/\1\]/gi,
+      (_block, _tag: string, rows: string) =>
+        `\n\n${rows
+          .split(/\r?\n/)
+          .map((row) => row.trim())
+          .filter(Boolean)
+          .join("\n\n")}\n\n`,
+    )
+    .replace(
+      /\[table(?:=[^\]]*)?\]([\s\S]*?)\[\/table\]/gi,
+      (_table, rows: string) =>
+        `\n\n${[...rows.matchAll(/\[tr\]([\s\S]*?)\[\/tr\]/gi)]
+          .map((row) => row[1]?.trim() ?? "")
+          .filter(Boolean)
+          .join("\n\n")}\n\n`,
+    );
   return [
     ...new Set(
-      plain
+      separatedRows
         .split(/(?<=[.!?])\s+|\n{2,}/)
-        .map((statement) => statement.replace(/\s+/g, " ").trim())
+        .map((statement) => plainForumText(statement))
         .filter(
           (statement) =>
             statement.split(/\s+/).length >= 7 &&
