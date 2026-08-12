@@ -1,5 +1,11 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import {
+  estimatedModelCostMicroUsd,
+  forumDayKey,
+  spendBucketForKey,
+} from "../lib/ai-model-costs";
+import { recordSpendBucket } from "./aiRoutingControlData";
 
 const AGENT_SLUG = v.string();
 const USAGE_STAGE = v.union(
@@ -42,13 +48,31 @@ export const recordUsage = internalMutation({
     categorySlug: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    qualityBefore: v.optional(v.number()),
+    qualityAfter: v.optional(v.number()),
     durationMs: v.number(),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
+    const estimatedCostMicroUsd = estimatedModelCostMicroUsd(
+      args.model,
+      args.inputTokens,
+      args.outputTokens,
+    );
     await ctx.db.insert("forumAgentUsageEvents", {
       ...args,
+      estimatedCostMicroUsd,
       durationMs: Math.max(0, Math.round(args.durationMs)),
-      createdAt: Date.now(),
+      createdAt: now,
+    });
+    await recordSpendBucket(ctx, {
+      dayKey: forumDayKey(now),
+      provider: "openrouter",
+      bucket: spendBucketForKey(args.runKey),
+      spentMicroUsd: estimatedCostMicroUsd,
+      inputTokens: args.inputTokens ?? 0,
+      outputTokens: args.outputTokens ?? 0,
+      now,
     });
     return null;
   },

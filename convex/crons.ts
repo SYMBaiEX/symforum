@@ -122,4 +122,11 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "verify forum agent structured inference",
+  "2 * * * *",
+  internal.modelRouting.runStructuredCanary,
+  {},
+);
+
 export default crons;

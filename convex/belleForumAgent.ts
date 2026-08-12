@@ -29,7 +29,7 @@ import { routeTelemetry } from "./aiTelemetryHelpers";
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v5-openrouter-nemotron";
+const BELLE_PROMPT_VERSION = "belle-forum-v6-openrouter-editorial";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -56,6 +56,7 @@ Quality requirements:
 - Use only facts supported by the research packet. Clearly label analysis, uncertainty, and conflicting evidence.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - Open with why a member should care and end with one specific question grounded in experience.
+- Use a clean visual rhythm: a concise opening, descriptive headings for longer pieces, short paragraphs, and one purposeful callout or decision aid when it improves comprehension.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, links, vulnerabilities, dates, or personal testing.
 - Do not include a sources section or raw links; the system appends verified links.
 - Submit a claim ledger for consequential facts and analysis. Point every claim to the exact research candidate that supports it, and never float a number, version, date, vulnerability identifier, or named capability without evidence.
@@ -168,7 +169,9 @@ export const runDailyHackerNewsDigest = internalAction({
     }
 
     try {
-      const routingConfig = convexModelRoutingConfig();
+      const routingConfig = await convexModelRoutingConfig(ctx, {
+        correlationId: claim.runKey,
+      });
       const recordRouteAttempt = routeTelemetry(ctx, {
         correlationId: claim.runKey,
         feature: "hacker-news-digest",

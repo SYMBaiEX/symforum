@@ -28,6 +28,7 @@ type Env = {
   readonly AI_GATEWAY_API_KEY: string | undefined;
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
+  readonly FORUM_AGENT_DAILY_PUBLICATION_LIMIT: string | undefined;
   readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;
   readonly FORUM_FROM_EMAIL: string | undefined;
   readonly FORUM_REPLY_TO: string | undefined;
@@ -40,6 +41,7 @@ type Env = {
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
+  readonly OPENROUTER_DAILY_BUDGET_USD: string | undefined;
   readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;

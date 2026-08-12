@@ -14,7 +14,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_TIME_ZONE = "America/Chicago";
-const PROMPT_VERSION = "forum-replies-v4-openrouter-nemotron";
+const PROMPT_VERSION = "forum-replies-v5-openrouter-editorial";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 
 type SukiReplyDecision =
@@ -96,8 +96,10 @@ async function runReplySweepForAgent(
   }
 
   try {
-    const routingConfig = convexModelRoutingConfig();
     const replyRunKey = `reply:${claim.runId}`;
+    const routingConfig = await convexModelRoutingConfig(ctx, {
+      correlationId: replyRunKey,
+    });
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: replyRunKey,
       feature: "forum-reply",

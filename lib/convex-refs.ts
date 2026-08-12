@@ -1449,6 +1449,10 @@ export type AiTelemetrySnapshotRecord = {
     averageDurationMs: number;
     p95DurationMs: number;
     averageQuality: number;
+    estimatedSpendUsd: number;
+    revisionRate: number;
+    averageRevisionGain: number;
+    averagePresentation: number;
   };
   models: Array<{
     model: string;
@@ -1459,6 +1463,7 @@ export type AiTelemetrySnapshotRecord = {
     inputTokens: number;
     outputTokens: number;
     durationMs: number;
+    estimatedCostMicroUsd: number;
   }>;
   agents: Array<{
     agentSlug: string;
@@ -1472,6 +1477,7 @@ export type AiTelemetrySnapshotRecord = {
     outputTokens: number;
     averageQuality: number;
     qualitySamples: number;
+    estimatedCostMicroUsd: number;
   }>;
   stages: Array<{
     stage: string;
@@ -1479,6 +1485,7 @@ export type AiTelemetrySnapshotRecord = {
     inputTokens: number;
     outputTokens: number;
     durationMs: number;
+    estimatedCostMicroUsd: number;
     averageDurationMs: number;
   }>;
   series: Array<{
@@ -1487,6 +1494,7 @@ export type AiTelemetrySnapshotRecord = {
     failures: number;
     inputTokens: number;
     outputTokens: number;
+    estimatedCostMicroUsd: number;
   }>;
   recent: Array<{
     kind: "route" | "publication" | "reply" | "newsletter";
@@ -1499,6 +1507,26 @@ export type AiTelemetrySnapshotRecord = {
     detail?: string;
     durationMs?: number;
   }>;
+  operations: {
+    budget: {
+      dayKey: string;
+      spentUsd: number;
+      limitUsd: number;
+    };
+    circuits: Array<{
+      model: string;
+      reason?: string;
+      disabledUntil: number;
+    }>;
+    canary: {
+      healthy: boolean;
+      provider?: string;
+      model?: string;
+      detail?: string;
+      checkedAt: number;
+      pauseUntil: number;
+    } | null;
+  };
   bounded: {
     routes: boolean;
     runs: boolean;

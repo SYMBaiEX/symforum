@@ -797,6 +797,7 @@ export default defineSchema({
     groundingScore: v.optional(v.number()),
     noveltyScore: v.optional(v.number()),
     utilityScore: v.optional(v.number()),
+    presentationScore: v.optional(v.number()),
     imageScore: v.optional(v.number()),
     sourceCount: v.optional(v.number()),
     followUpPostId: v.optional(v.id("forumPosts")),
@@ -875,6 +876,9 @@ export default defineSchema({
     categorySlug: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    estimatedCostMicroUsd: v.optional(v.number()),
+    qualityBefore: v.optional(v.number()),
+    qualityAfter: v.optional(v.number()),
     durationMs: v.number(),
     createdAt: v.number(),
   })
@@ -904,6 +908,49 @@ export default defineSchema({
     .index("by_correlationId_and_createdAt", ["correlationId", "createdAt"])
     .index("by_feature_and_createdAt", ["feature", "createdAt"])
     .index("by_outcome_and_createdAt", ["outcome", "createdAt"]),
+  aiProviderCircuits: defineTable({
+    model: v.string(),
+    consecutiveFailures: v.number(),
+    reason: v.optional(v.string()),
+    disabledUntil: v.number(),
+    lastFailureAt: v.optional(v.number()),
+    lastSuccessAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_model", ["model"])
+    .index("by_disabledUntil", ["disabledUntil"]),
+  aiProviderLeases: defineTable({
+    key: v.string(),
+    holder: v.string(),
+    expiresAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+  aiSpendBuckets: defineTable({
+    dayKey: v.string(),
+    provider: v.string(),
+    bucket: v.number(),
+    spentMicroUsd: v.number(),
+    requests: v.number(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_dayKey_and_provider_and_bucket", [
+      "dayKey",
+      "provider",
+      "bucket",
+    ])
+    .index("by_updatedAt", ["updatedAt"]),
+  aiOperationalStates: defineTable({
+    key: v.string(),
+    healthy: v.boolean(),
+    provider: v.optional(v.string()),
+    model: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    checkedAt: v.number(),
+    pauseUntil: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),

@@ -47,8 +47,9 @@ const MAX_FEED_BYTES = 2_500_000;
 const MAX_ARTICLE_BYTES = 1_200_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
+const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v7-openrouter-nemotron";
+const PROMPT_VERSION = "suki-forum-v8-openrouter-editorial";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -318,7 +319,9 @@ export async function runForumResearchSlot(
         promptVersion: config.promptVersion,
       },
     );
-    const routingConfig = convexModelRoutingConfig();
+    const routingConfig = await convexModelRoutingConfig(ctx, {
+      correlationId: claim.runKey,
+    });
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
       feature: "forum-agent",
@@ -391,6 +394,20 @@ export async function runForumResearchSlot(
       };
     }
 
+    const shortlistedCandidates = rankResearchCandidatesForTopic({
+      candidates: unusedCandidates,
+      deskDescription: config.deskDescription,
+      recentBoardSlugs: context.recentBoardSlugs,
+      editorialSignals: context.editorialSignals,
+    }).slice(0, TOPIC_MODEL_CANDIDATE_LIMIT);
+    const suggestedBoards = new Set(
+      shortlistedCandidates.flatMap((candidate) => candidate.boardSlugs),
+    );
+    const shortlistedCategories = context.categories.filter(
+      (category) =>
+        suggestedBoards.has(category.slug) || category.parentName === undefined,
+    );
+
     const gatewayOptions = {
       user: config.slug,
       tags: [
@@ -400,8 +417,8 @@ export async function runForumResearchSlot(
       ],
     } satisfies GatewayProviderOptions;
     const topicPrompt = topicSelectionPrompt({
-      candidates: unusedCandidates,
-      categories: context.categories,
+      candidates: shortlistedCandidates,
+      categories: shortlistedCategories.slice(0, 24),
       recentBoardSlugs: context.recentBoardSlugs,
       recentThreadTitles: context.recentThreadTitles,
       editorialSignals: context.editorialSignals,
@@ -474,7 +491,9 @@ export async function runForumResearchSlot(
       throw new Error(`${config.name} selected a board that does not exist`);
     }
     const selectedCandidates = selection.candidateIds
-      .map((id) => unusedCandidates.find((candidate) => candidate.id === id))
+      .map((id) =>
+        shortlistedCandidates.find((candidate) => candidate.id === id),
+      )
       .filter(
         (candidate): candidate is ResearchCandidate => candidate !== undefined,
       );
@@ -504,7 +523,7 @@ export async function runForumResearchSlot(
           slot: args.slot,
           reason:
             "Semantic editorial memory found an existing member discussion.",
-          candidateCount: unusedCandidates.length,
+          candidateCount: shortlistedCandidates.length,
           workflowManaged: args.workflowManaged,
         });
         return { status: "skipped" as const, reason: "topic-covered" };
@@ -523,7 +542,7 @@ export async function runForumResearchSlot(
         runKey: claim.runKey,
         slot: args.slot,
         reason: "A closely matching forum discussion already exists.",
-        candidateCount: unusedCandidates.length,
+        candidateCount: shortlistedCandidates.length,
         workflowManaged: args.workflowManaged,
       });
       return { status: "skipped" as const, reason: "topic-covered" };
@@ -563,7 +582,7 @@ export async function runForumResearchSlot(
         reason: covered
           ? `Editorial coverage already exists (${reservation.reason}).`
           : `Another agent reserved this coverage (${reservation.reason}).`,
-        candidateCount: unusedCandidates.length,
+        candidateCount: shortlistedCandidates.length,
         workflowManaged: args.workflowManaged,
       });
       return {
@@ -590,10 +609,10 @@ export async function runForumResearchSlot(
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-      options?: { gatewayOnly?: boolean },
+      options?: { gatewayOnly?: boolean; lightRevision?: boolean },
     ) => {
       const routeArgs = {
-        stage: `${config.slug}:forum-${stage}`,
+        stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}`,
         correlationId: claim.runKey,
         feature: "forum-agent",
         agent: config.slug,
@@ -672,16 +691,6 @@ export async function runForumResearchSlot(
       }),
     );
     const draftResult = draftGeneration.value.result;
-    await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
-      runKey: claim.runKey,
-      agentSlug: config.slug,
-      stage: "draft",
-      model: draftGeneration.route.persistedModel,
-      categorySlug: category.slug,
-      inputTokens: draftResult.usage.inputTokens,
-      outputTokens: draftResult.usage.outputTokens,
-      durationMs: Date.now() - draftStartedAt,
-    });
     let draft = repairForumDraftForReview(
       draftGeneration.value.draft,
       snapshots,
@@ -694,8 +703,21 @@ export async function runForumResearchSlot(
       snapshots,
       recentThreadTitles: context.recentThreadTitles,
     });
-    if (quality.qualityScore < FORUM_AGENT_QUALITY_THRESHOLD) {
+    await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+      runKey: claim.runKey,
+      agentSlug: config.slug,
+      stage: "draft",
+      model: draftGeneration.route.persistedModel,
+      categorySlug: category.slug,
+      inputTokens: draftResult.usage.inputTokens,
+      outputTokens: draftResult.usage.outputTokens,
+      qualityAfter: quality.qualityScore,
+      durationMs: Date.now() - draftStartedAt,
+    });
+    if (forumDraftNeedsRevision(quality)) {
       const revisionStartedAt = Date.now();
+      const qualityBefore = quality.qualityScore;
+      const revisionTier = forumRevisionTier(quality);
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -707,7 +729,10 @@ export async function runForumResearchSlot(
           previousDraft: draft,
           followUp: followUpThreadId !== undefined,
         }),
-        { gatewayOnly: draftGeneration.route.provider === "gateway" },
+        {
+          gatewayOnly: draftGeneration.route.provider === "gateway",
+          lightRevision: revisionTier === "nano",
+        },
       );
       const revision = revisionGeneration.value.result;
       draft = repairForumDraftForReview(
@@ -716,6 +741,12 @@ export async function runForumResearchSlot(
       );
       revisionInputTokens = revision.usage.inputTokens;
       revisionOutputTokens = revision.usage.outputTokens;
+      quality = evaluateForumDraft({
+        draft,
+        selection: effectiveSelection,
+        snapshots,
+        recentThreadTitles: context.recentThreadTitles,
+      });
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
         runKey: claim.runKey,
         agentSlug: config.slug,
@@ -724,18 +755,17 @@ export async function runForumResearchSlot(
         categorySlug: category.slug,
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,
+        qualityBefore,
+        qualityAfter: quality.qualityScore,
         durationMs: Date.now() - revisionStartedAt,
       });
-      quality = evaluateForumDraft({
-        draft,
-        selection: effectiveSelection,
-        snapshots,
-        recentThreadTitles: context.recentThreadTitles,
-      });
     }
-    if (quality.qualityScore < FORUM_AGENT_QUALITY_THRESHOLD) {
+    if (!forumDraftPassesGate(quality)) {
       throw new Error(
-        `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${quality.feedback.join("; ")}`,
+        `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${[
+          ...quality.blockingIssues,
+          ...quality.feedback,
+        ].join("; ")}`,
       );
     }
     const selectedImageCandidate =
@@ -807,13 +837,14 @@ export async function runForumResearchSlot(
               credit: cachedImage.credit,
               sourceUrl: cachedImage.articleUrl,
             },
-      candidateCount: unusedCandidates.length,
+      candidateCount: shortlistedCandidates.length,
       contentFormat: effectiveSelection.contentFormat,
       topicFingerprint,
       qualityScore: quality.qualityScore,
       groundingScore: quality.groundingScore,
       noveltyScore: quality.noveltyScore,
       utilityScore: quality.utilityScore,
+      presentationScore: quality.presentationScore,
       imageScore,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
@@ -939,6 +970,84 @@ export async function collectResearchCandidates(
       seen.add(candidate.sourceKey);
       return true;
     });
+}
+
+/**
+ * Shrinks the topic packet before inference while preserving source diversity,
+ * desk fit, fresh items, and boards that have not dominated recent coverage.
+ */
+export function rankResearchCandidatesForTopic(args: {
+  candidates: ResearchCandidate[];
+  deskDescription: string;
+  recentBoardSlugs: string[];
+  editorialSignals: Array<{
+    categorySlug: string;
+    recentPosts: number;
+    engagementScore: number;
+  }>;
+}) {
+  const now = Date.now();
+  const recentBoardCounts = new Map<string, number>();
+  for (const slug of args.recentBoardSlugs) {
+    recentBoardCounts.set(slug, (recentBoardCounts.get(slug) ?? 0) + 1);
+  }
+  const signalByBoard = new Map(
+    args.editorialSignals.map((signal) => [signal.categorySlug, signal]),
+  );
+  const deskTokens = significantTokens(args.deskDescription);
+  return args.candidates
+    .map((candidate) => {
+      const boardFreshness = Math.max(
+        ...candidate.boardSlugs.map(
+          (slug) => 1 / (1 + (recentBoardCounts.get(slug) ?? 0)),
+        ),
+        0,
+      );
+      const signalFreshness = Math.max(
+        ...candidate.boardSlugs.map((slug) => {
+          const signal = signalByBoard.get(slug);
+          return signal === undefined
+            ? 1
+            : 1 / (1 + signal.recentPosts + signal.engagementScore / 100);
+        }),
+        0,
+      );
+      const fit = lexicalEvidenceCoverage(
+        `${candidate.title} ${candidate.summary}`,
+        deskTokens.join(" "),
+      );
+      const ageHours = Math.max(
+        0,
+        (now - (candidate.publishedAt ?? now)) / 3_600_000,
+      );
+      const freshness = Math.max(0, 1 - ageHours / (24 * 7));
+      return {
+        candidate,
+        score:
+          fit * 0.38 +
+          freshness * 0.28 +
+          boardFreshness * 0.2 +
+          signalFreshness * 0.14,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        (right.candidate.publishedAt ?? 0) - (left.candidate.publishedAt ?? 0),
+    )
+    .reduce<ResearchCandidate[]>((selected, entry) => {
+      const sourceCount = selected.filter(
+        (candidate) => candidate.sourceName === entry.candidate.sourceName,
+      ).length;
+      const boardCount = selected.filter((candidate) =>
+        candidate.boardSlugs.some((slug) =>
+          entry.candidate.boardSlugs.includes(slug),
+        ),
+      ).length;
+      if (sourceCount >= 3 || boardCount >= 5) return selected;
+      selected.push(entry.candidate);
+      return selected;
+    }, []);
 }
 
 export function parseFeedXml(
@@ -1309,6 +1418,7 @@ function forumDraftPrompt(args: {
     return [
       "Revise the supplied forum draft. Return one complete replacement draft using the required tool schema.",
       "Fix every deterministic gate failure. Preserve supported facts and source IDs; delete any unsupported number or claim rather than improvising evidence.",
+      "Improve the reading experience too: use a concise opening hook, descriptive headings when useful, short phone-friendly paragraphs, and one practical evidence block that helps a reader decide or act.",
       "Selected board and angle:",
       JSON.stringify({ category: args.category, selection: args.selection }),
       "Exact gate feedback:",
@@ -1337,6 +1447,7 @@ function forumDraftPrompt(args: {
     `Editorial desk: ${args.config.deskDescription}`,
     `Target length and shape: ${contentFormatGuidance(args.selection.contentFormat)}`,
     "Editorial discipline: make one source-specific argument. Do not repeat the thesis in the opening, section headings, structured block, and conclusion. Prefer concrete nouns and verbs from the evidence over reusable frames such as operational ownership, a new era, shifting landscape, or the real story.",
+    "Presentation discipline: open with a concise reason to care; use 2-4 descriptive [h2]/[h3] sections for longer formats; include one [note] or [warning] only when it adds decision value; use [steps], [decision], [table], [timeline], or [riskmap] to make the evidence scannable; close with the single discussion question. Keep paragraphs short enough for a phone screen.",
     "Measurement discipline: distinguish totals from changes, gross from net, estimates from observations, and editorial scores from measured results. Every number or version in a factual claim must appear in that claim's cited source.",
     ...(args.followUp
       ? [
@@ -1620,8 +1731,32 @@ type EvaluatedForumDraft = {
   groundingScore: number;
   noveltyScore: number;
   utilityScore: number;
+  presentationScore: number;
+  blockingIssues: string[];
   feedback: string[];
 };
+
+export function forumDraftNeedsRevision(quality: EvaluatedForumDraft) {
+  return (
+    quality.qualityScore < FORUM_AGENT_QUALITY_THRESHOLD ||
+    quality.blockingIssues.length > 0
+  );
+}
+
+export function forumDraftPassesGate(quality: EvaluatedForumDraft) {
+  return (
+    quality.qualityScore >= FORUM_AGENT_QUALITY_THRESHOLD &&
+    quality.blockingIssues.length === 0
+  );
+}
+
+export function forumRevisionTier(quality: EvaluatedForumDraft) {
+  return quality.blockingIssues.some((issue) =>
+    /ground|claim|source|unsupported|evidence/i.test(issue),
+  )
+    ? ("super" as const)
+    : ("nano" as const);
+}
 
 export function evaluateForumDraft(args: {
   draft: z.infer<typeof forumDraftSchema>;
@@ -1630,6 +1765,7 @@ export function evaluateForumDraft(args: {
   recentThreadTitles: string[];
 }): EvaluatedForumDraft {
   const feedback: string[] = [];
+  const blockingIssues: string[] = [];
   const snapshotsById = new Map(
     args.snapshots.map((snapshot) => [snapshot.id, snapshot]),
   );
@@ -1690,7 +1826,9 @@ export function evaluateForumDraft(args: {
     ),
   );
   if (claimCoverage < 1) {
-    feedback.push("Every claim must reference a candidate ID in the packet");
+    const issue = "Every claim must reference a candidate ID in the packet";
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
   if (numberCoverage < 1) {
     for (const support of factualSupport.filter(
@@ -1700,12 +1838,14 @@ export function evaluateForumDraft(args: {
       feedback.push(
         `Fact claim ${support.index + 1} cites ${claim.sourceCandidateId} but that source does not contain: ${support.unsupported.join(", ")}`,
       );
+      blockingIssues.push(feedback.at(-1)!);
     }
   }
   if (factualEvidenceCoverage < 0.7) {
-    feedback.push(
-      "Rewrite factual claims around evidence actually present in their cited source",
-    );
+    const issue =
+      "Rewrite factual claims around evidence actually present in their cited source";
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
 
   const maximumFrameSimilarity = Math.max(
@@ -1740,11 +1880,11 @@ export function evaluateForumDraft(args: {
     const uncovered = bodyStatements.filter(
       (statement) => !ledgerCoveredStatements.includes(statement),
     );
-    feedback.push(
-      `Add every consequential body claim to the claim ledger, including: ${uncovered
-        .slice(0, 2)
-        .join(" / ")}`,
-    );
+    const issue = `Add every consequential body claim to the claim ledger, including: ${uncovered
+      .slice(0, 2)
+      .join(" / ")}`;
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
 
   const combinedSourceText = args.snapshots
@@ -1758,11 +1898,11 @@ export function evaluateForumDraft(args: {
     combinedSourceText,
   ).filter((token) => !/^\d{1,3}$/.test(token));
   if (unsupportedBodyTokens.length > 0) {
-    feedback.push(
-      `Remove or source unsupported factual tokens from the body: ${unsupportedBodyTokens
-        .slice(0, 8)
-        .join(", ")}`,
-    );
+    const issue = `Remove or source unsupported factual tokens from the body: ${unsupportedBodyTokens
+      .slice(0, 8)
+      .join(", ")}`;
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
 
   const questions = forumBodyQuestions(args.draft.body);
@@ -1797,6 +1937,8 @@ export function evaluateForumDraft(args: {
   }
   const markupValidation = validateForumAgentMarkup(args.draft.body);
   feedback.push(...markupValidation.feedback);
+  if (!markupValidation.valid)
+    blockingIssues.push(...markupValidation.feedback);
   const utilityScore = Math.round(
     Math.min(
       100,
@@ -1816,13 +1958,17 @@ export function evaluateForumDraft(args: {
       `Keep ${args.selection.contentFormat} between ${minimumWords} and ${maximumWords} words (draft: ${words})`,
     );
   }
+  const presentation = evaluateForumPresentation(args.draft.body, words);
+  feedback.push(...presentation.feedback);
+  if (presentation.blocking) blockingIssues.push(...presentation.feedback);
   const formatScore =
     (correctLength ? 55 : 20) + (markupValidation.valid ? 45 : 0);
   let qualityScore = Math.round(
-    groundingScore * 0.4 +
-      noveltyScore * 0.2 +
-      utilityScore * 0.3 +
-      formatScore * 0.1,
+    groundingScore * 0.35 +
+      noveltyScore * 0.15 +
+      utilityScore * 0.25 +
+      formatScore * 0.1 +
+      presentation.score * 0.15,
   );
   if (!markupValidation.valid) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
@@ -1835,14 +1981,60 @@ export function evaluateForumDraft(args: {
     !questionAtEnd
   ) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
+    blockingIssues.push("The post must end with exactly one focused question");
   }
   return {
     qualityScore,
     groundingScore,
     noveltyScore,
     utilityScore,
+    presentationScore: presentation.score,
+    blockingIssues: [...new Set(blockingIssues)],
     feedback,
   };
+}
+
+function evaluateForumPresentation(body: string, words: number) {
+  const headings = (body.match(/\[h[23]\][\s\S]*?\[\/h[23]\]/gi) ?? []).length;
+  const callouts = (
+    body.match(/\[(?:note|warning)\][\s\S]*?\[\/(?:note|warning)\]/gi) ?? []
+  ).length;
+  const practicalBlocks = (
+    body.match(/\[(?:list|steps|decision|table|timeline|riskmap|chart)\b/gi) ??
+    []
+  ).length;
+  const paragraphs = body
+    .split(/\n\s*\n/)
+    .map((paragraph) => plainWordCount(paragraph))
+    .filter((count) => count > 0);
+  const longestParagraph = Math.max(0, ...paragraphs);
+  const headingPoints =
+    words < 500 ? (headings >= 1 ? 20 : 12) : Math.min(20, headings * 10);
+  const rhythmPoints =
+    longestParagraph <= 110 ? 20 : longestParagraph <= 160 ? 12 : 4;
+  const score = Math.min(
+    100,
+    headingPoints +
+      (practicalBlocks > 0 ? 25 : 0) +
+      (callouts > 0 ? 15 : 0) +
+      rhythmPoints +
+      (paragraphs.length >= 3 ? 20 : 8),
+  );
+  const feedback: string[] = [];
+  if (words >= 500 && headings < 2) {
+    feedback.push(
+      "Break longer posts into at least two descriptive BBCode sections",
+    );
+  }
+  if (longestParagraph > 160) {
+    feedback.push("Split dense paragraphs so the post reads cleanly on mobile");
+  }
+  if (practicalBlocks === 0) {
+    feedback.push(
+      "Add one practical list, decision block, table, timeline, or steps block",
+    );
+  }
+  return { score, feedback, blocking: score < 48 };
 }
 
 function plainForumDraftText(value: string) {

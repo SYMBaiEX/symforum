@@ -64,6 +64,8 @@ MUSE_API_BASE_URL=https://agent.symbaiex.com/v1
 MUSE_API_KEY=
 OPENROUTER_API_KEY=
 AI_GATEWAY_API_KEY=
+OPENROUTER_DAILY_BUDGET_USD=0.75
+FORUM_AGENT_DAILY_PUBLICATION_LIMIT=42
 ```
 
 Create the Muse key from `https://agent.symbaiex.com/admin/api`. Use a
@@ -148,6 +150,14 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
   Every attempted route is recorded, including the provider and model that
   completed each metered stage. Research feeds and source images are cached in
   Convex, and every published topic records its run and source URLs.
+  The daily OpenRouter budget is enforced with sharded spend counters, and a
+  provider circuit temporarily removes failing routes. A structured tool-use
+  canary runs hourly; scheduled publication pauses while it is unhealthy. The
+  42-post global limit is admitted deterministically across the 90 scheduled
+  slots, and the workflow can run three hosted jobs concurrently while the
+  local Muse fallback remains single-lane. The admin telemetry view reports
+  estimated spend, revision lift, presentation scores, active circuits, and
+  canary state.
 - Keep `npx convex dev` running locally while editing Convex functions.
 
 ## Verification

@@ -1,15 +1,20 @@
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
+import {
+  adaptivePublicationSlot,
+  forumDailyPublicationLimit,
+} from "../lib/forum-agent-cadence";
 import { components, internal } from "./_generated/api";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import { env, internalMutation, type MutationCtx } from "./_generated/server";
+import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
-    // A model attempt's timeout starts before it reaches the laptop queue.
-    // Keep one publication workflow active so queue wait cannot consume the
-    // generation budget for another workflow on the single llama.cpp slot.
-    maxParallelism: 1,
+    // OpenRouter is the primary hosted route. Three workflows keep throughput
+    // healthy without stampeding the providers; the local Muse fallback still
+    // has its own single-lane lease in modelRouting.
+    maxParallelism: 3,
     retryActionsByDefault: true,
     defaultRetryBehavior: {
       maxAttempts: 2,
@@ -125,6 +130,28 @@ async function publicationPreflight(
   ctx: MutationCtx,
   args: { agentSlug: string; runDate: string; slot: number },
 ) {
+  const now = Date.now();
+  const dailyLimit = forumDailyPublicationLimit(
+    env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
+  );
+  const canary = await ctx.db
+    .query("aiOperationalStates")
+    .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
+    .unique();
+  if (canary !== null && !canary.healthy && (canary.pauseUntil ?? 0) > now) {
+    return { ok: false as const, reason: "structured-canary-unhealthy" };
+  }
+  if (
+    !adaptivePublicationSlot({
+      agentSlug: args.agentSlug,
+      runDate: args.runDate,
+      slot: args.slot,
+      dailyLimit,
+    })
+  ) {
+    return { ok: false as const, reason: "adaptive-cadence" };
+  }
+
   const agent = await ctx.db
     .query("forumAgents")
     .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
@@ -143,7 +170,7 @@ async function publicationPreflight(
   }
   if (
     existing?.status === "running" &&
-    Date.now() - existing.updatedAt < 30 * 60 * 1_000
+    now - existing.updatedAt < 30 * 60 * 1_000
   ) {
     return { ok: false as const, reason: "already-running" };
   }
@@ -159,6 +186,16 @@ async function publicationPreflight(
     agent.dailyPostTarget
   ) {
     return { ok: false as const, reason: "daily-target" };
+  }
+
+  const globalRuns = await ctx.db
+    .query("forumAgentRuns")
+    .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
+    .take(160);
+  if (
+    globalRuns.filter((run) => run.status === "published").length >= dailyLimit
+  ) {
+    return { ok: false as const, reason: "global-daily-limit" };
   }
   return { ok: true as const };
 }

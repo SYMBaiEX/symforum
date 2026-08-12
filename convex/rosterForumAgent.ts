@@ -19,7 +19,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v6-openrouter-nemotron-editorial-seeded-style-entropy";
+  "roster-forum-v7-openrouter-editorial-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -93,6 +93,7 @@ Quality requirements:
 - Use only facts supported by the research packet. Clearly label analysis, uncertainty, and conflicting evidence.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - Open in your own characteristic cadence with why a member should care. End with one specific question grounded in the topic and shaped by this habit: ${voice.discussionStyle}.
+- Use deliberate visual rhythm: a compact opening, descriptive headings for longer pieces, phone-friendly paragraphs, and one purposeful callout or decision aid when it clarifies the evidence.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, dates, vulnerabilities, links, or personal testing.
 - Preserve the source's caveats and scope. Never infer filters, controls, permissions, guarantees, or product behavior that the source does not explicitly describe.
 - Do not include a sources section or raw links; the system appends verified links.

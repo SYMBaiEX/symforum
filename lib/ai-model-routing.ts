@@ -33,6 +33,9 @@ export type ModelRoutingConfig = {
   museBaseUrl?: string;
   museApiKey?: string;
   gatewayApiKey?: string;
+  disabledModelIds?: readonly string[];
+  beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
+  afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
 };
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -64,6 +67,8 @@ export type RouteRunArgs<T> = RouteTelemetryContext & {
   attemptOffset?: number;
   run: (candidate: RoutedModel, signal: AbortSignal) => Promise<T>;
   onAttempt?: (event: ModelRouteAttempt) => void | Promise<void>;
+  beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
+  afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
 };
 
 let healthCache:
@@ -198,15 +203,21 @@ function openRouterModel(
 }
 
 export function openRouterModelForStage(stage: string) {
-  return stage.endsWith(":forum-topic")
+  return openRouterUsesNano(stage)
     ? OPENROUTER_TOPIC_MODEL
     : OPENROUTER_FORUM_MODEL;
 }
 
 export function openRouterModelsForStage(stage: string) {
-  return stage.endsWith(":forum-topic")
+  return openRouterUsesNano(stage)
     ? [OPENROUTER_TOPIC_MODEL, OPENROUTER_TOPIC_PAID_MODEL]
     : [OPENROUTER_FORUM_MODEL, OPENROUTER_FORUM_PAID_MODEL];
+}
+
+function openRouterUsesNano(stage: string) {
+  return (
+    stage.endsWith(":forum-topic") || stage.endsWith(":forum-revision-light")
+  );
 }
 
 function gatewayModel(
@@ -244,12 +255,14 @@ export async function routedModelCandidates(
   // optional Gateway attribution out of providerOptions (see gatewayModel).
   void gatewayOptions;
   const candidates: RoutedModel[] = [];
+  const disabled = new Set(config.disabledModelIds ?? []);
   for (const modelId of openRouterModelIds) {
+    if (disabled.has(modelId)) continue;
     const primary = openRouterModel(config, modelId);
     if (primary) candidates.push(primary);
   }
   const muse = museModel(config, telemetry);
-  if (muse) {
+  if (muse && !disabled.has(muse.persistedModel)) {
     // Avoid adding a health-probe delay to the OpenRouter primary path. If it
     // fails, Muse is attempted normally and remains bounded by route timeout.
     if (candidates.length > 0 || (await isMuseAvailable(config))) {
@@ -261,6 +274,7 @@ export async function routedModelCandidates(
     }
   }
   for (const modelId of gatewayModelIds) {
+    if (disabled.has(modelId)) continue;
     const fallback = gatewayModel(config, modelId);
     if (fallback) candidates.push(fallback);
   }
@@ -299,7 +313,10 @@ export async function runRoutedCandidates<T>(
         : 0;
     const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
     const attemptStartedAt = Date.now();
+    let attemptStarted = false;
     try {
+      await args.beforeAttempt?.(candidate);
+      attemptStarted = true;
       const value = await args.run(
         candidate,
         AbortSignal.timeout(attemptTimeout),
@@ -351,6 +368,19 @@ export async function runRoutedCandidates<T>(
         durationMs: Date.now() - attemptStartedAt,
         errorMessage: safeError(error),
       });
+    } finally {
+      if (attemptStarted && args.afterAttempt) {
+        try {
+          await args.afterAttempt(candidate);
+        } catch (error) {
+          console.warn("AI model attempt cleanup failed", {
+            stage: args.stage,
+            provider: candidate.provider,
+            model: candidate.persistedModel,
+            error: safeError(error),
+          });
+        }
+      }
     }
   }
   throw new Error(
@@ -386,7 +416,11 @@ export async function runWithModelFallback<T>(
     args,
     openRouterModelsForStage(args.stage),
   );
-  return runRoutedCandidates(candidates, args);
+  return runRoutedCandidates(candidates, {
+    ...args,
+    beforeAttempt: args.beforeAttempt ?? config.beforeAttempt,
+    afterAttempt: args.afterAttempt ?? config.afterAttempt,
+  });
 }
 
 export async function selectStreamingModel(

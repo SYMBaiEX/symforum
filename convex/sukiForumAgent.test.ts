@@ -9,6 +9,7 @@ import {
   finalizeForumBody,
   imageRelevanceScore,
   parseFeedXml,
+  rankResearchCandidatesForTopic,
   repairForumDraftForReview,
 } from "./sukiForumAgent";
 
@@ -405,5 +406,39 @@ Choose a bounded recovery decision under ambiguous saved state.
     );
     expect(contentFormatGuidance("guide")).toContain("verification step");
     expect(contentFormatGuidance("deep-dive")).toContain("counterpoint");
+  });
+
+  test("shortlists topic evidence by desk fit and source diversity", () => {
+    const base = {
+      boardSlugs: ["ai-frameworks"],
+      imageUrl: undefined,
+      publishedAt: Date.now(),
+      sourceFeedUrl: "https://example.com/feed.xml",
+      summary: "A practical workflow for checkpoint recovery.",
+      url: "https://example.com/article",
+    };
+    const ranked = rankResearchCandidatesForTopic({
+      candidates: [
+        {
+          ...base,
+          id: "fit",
+          sourceKey: "fit",
+          sourceName: "Example A",
+          title: "Checkpoint recovery workflow",
+        },
+        {
+          ...base,
+          id: "generic",
+          sourceKey: "generic",
+          sourceName: "Example B",
+          title: "A general culture roundup",
+          summary: "A broad community roundup.",
+        },
+      ],
+      deskDescription: "practical workflows and troubleshooting guides",
+      recentBoardSlugs: ["ai-frameworks", "ai-frameworks"],
+      editorialSignals: [],
+    });
+    expect(ranked[0]?.id).toBe("fit");
   });
 });

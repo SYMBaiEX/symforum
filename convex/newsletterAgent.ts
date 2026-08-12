@@ -211,7 +211,9 @@ async function generateEditorialPackage(
     stories: Doc<"hnStories">[];
   },
 ) {
-  const routingConfig = convexModelRoutingConfig();
+  const routingConfig = await convexModelRoutingConfig(ctx, {
+    correlationId: `newsletter:${args.edition}:${args.runDate}`,
+  });
   const recent = await ctx.runQuery(readRecentEditorialContextRef, {
     limit: args.edition === "daily-signal" ? 7 : 4,
   });
@@ -454,7 +456,7 @@ async function generateDraftWithFallback({
   edition: "daily-signal" | "weekly-field-note";
   runDate: string;
   stage: "draft" | "revision";
-  routingConfig: ReturnType<typeof convexModelRoutingConfig>;
+  routingConfig: Awaited<ReturnType<typeof convexModelRoutingConfig>>;
   gatewayTags: string[];
   prompt: string;
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;

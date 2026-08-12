@@ -525,6 +525,64 @@ export function AdminTelemetry() {
               )}
               detail={`${duration(editorial?.totals.p95DurationMs)} generation p95`}
             />
+            <MetricCard
+              icon={ShieldCheck}
+              label="Inference spend"
+              value={currency(editorial?.totals.estimatedSpendUsd)}
+              detail={`${percent(editorial?.totals.revisionRate)} revision rate`}
+            />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+            <Panel eyebrow="Budget governor" title="OpenRouter daily envelope">
+              <dl className="divide-y divide-row-border border-y border-row-border">
+                <RuntimeRow
+                  label="Day"
+                  value={editorial?.operations.budget.dayKey ?? "—"}
+                />
+                <RuntimeRow
+                  label="Spent"
+                  value={currency(editorial?.operations.budget.spentUsd)}
+                />
+                <RuntimeRow
+                  label="Limit"
+                  value={currency(editorial?.operations.budget.limitUsd)}
+                />
+                <RuntimeRow
+                  label="Canary"
+                  value={
+                    editorial?.operations.canary?.healthy
+                      ? "healthy"
+                      : "paused / unknown"
+                  }
+                />
+              </dl>
+            </Panel>
+            <Panel
+              eyebrow="Quality controls"
+              title="Circuits and revision lift"
+            >
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MetricCard
+                  icon={Gauge}
+                  label="Presentation"
+                  value={decimal(editorial?.totals.averagePresentation)}
+                  detail="average / 100"
+                />
+                <MetricCard
+                  icon={Zap}
+                  label="Revision lift"
+                  value={decimal(editorial?.totals.averageRevisionGain)}
+                  detail="quality points"
+                />
+                <MetricCard
+                  icon={Activity}
+                  label="Circuits"
+                  value={integer(editorial?.operations.circuits.length)}
+                  detail="currently paused"
+                  warning={(editorial?.operations.circuits.length ?? 0) > 0}
+                />
+              </div>
+            </Panel>
           </section>
           <Panel
             eyebrow="Editorial cadence"
@@ -942,6 +1000,7 @@ function AgentTable({
             <th className="pb-3 text-right font-normal">Replies</th>
             <th className="pb-3 text-right font-normal">Failed</th>
             <th className="pb-3 text-right font-normal">Quality</th>
+            <th className="pb-3 text-right font-normal">Spend</th>
             <th className="pb-3 text-right font-normal">Tokens</th>
           </tr>
         </thead>
@@ -968,6 +1027,9 @@ function AgentTable({
               </td>
               <td className="py-3 text-right font-mono">
                 {decimal(agent.averageQuality)}
+              </td>
+              <td className="py-3 text-right font-mono">
+                {currency(agent.estimatedCostMicroUsd / 1_000_000)}
               </td>
               <td className="py-3 text-right font-mono">
                 {integer(agent.inputTokens + agent.outputTokens)}
@@ -998,6 +1060,7 @@ function ModelTable({
             <th className="pb-3 text-right font-normal">Attempts</th>
             <th className="pb-3 text-right font-normal">Fallbacks</th>
             <th className="pb-3 text-right font-normal">Failures</th>
+            <th className="pb-3 text-right font-normal">Spend</th>
             <th className="pb-3 text-right font-normal">Tokens</th>
           </tr>
         </thead>
@@ -1023,6 +1086,9 @@ function ModelTable({
                 )}
               >
                 {integer(model.failures)}
+              </td>
+              <td className="py-3 text-right font-mono">
+                {currency(model.estimatedCostMicroUsd / 1_000_000)}
               </td>
               <td className="py-3 text-right font-mono">
                 {integer(model.inputTokens + model.outputTokens)}
@@ -1201,6 +1267,16 @@ function percent(value: number | undefined) {
   return value === undefined || !Number.isFinite(value)
     ? "—"
     : `${decimal(value)}%`;
+}
+
+function currency(value: number | undefined) {
+  return value === undefined || !Number.isFinite(value)
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 4,
+      }).format(value);
 }
 
 function duration(value: number | undefined) {

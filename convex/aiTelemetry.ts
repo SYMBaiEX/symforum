@@ -1,6 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { applyRouteCircuitEvent } from "./aiRoutingControlData";
 import { requireOwner } from "./authz";
+import {
+  forumDayKey,
+  openRouterDailyBudgetMicroUsd,
+} from "../lib/ai-model-costs";
+import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
+import { env } from "./_generated/server";
 
 export const recordRouteEvent = internalMutation({
   args: {
@@ -22,11 +29,19 @@ export const recordRouteEvent = internalMutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("aiRouteEvents", {
+    const createdAt = Date.now();
+    const eventId = await ctx.db.insert("aiRouteEvents", {
       ...args,
       errorMessage: args.errorMessage?.replace(/\s+/g, " ").slice(0, 400),
-      createdAt: Date.now(),
+      createdAt,
     });
+    await applyRouteCircuitEvent(ctx, {
+      model: args.model,
+      outcome: args.outcome,
+      errorMessage: args.errorMessage,
+      now: createdAt,
+    });
+    return eventId;
   },
 });
 
@@ -41,7 +56,18 @@ export const snapshotAdmin = query({
       Math.min(720, Math.floor(args.hours ?? 24)),
     );
     const cutoff = Date.now() - windowHours * 3_600_000;
-    const [routes, runs, replies, usage, newsletters] = await Promise.all([
+    const now = Date.now();
+    const dayKey = forumDayKey(now);
+    const [
+      routes,
+      runs,
+      replies,
+      usage,
+      newsletters,
+      circuits,
+      spendBuckets,
+      canary,
+    ] = await Promise.all([
       ctx.db
         .query("aiRouteEvents")
         .withIndex("by_createdAt", (q) => q.gte("createdAt", cutoff))
@@ -67,6 +93,17 @@ export const snapshotAdmin = query({
         .withIndex("by_startedAt", (q) => q.gte("startedAt", cutoff))
         .order("desc")
         .take(200),
+      ctx.db.query("aiProviderCircuits").take(20),
+      ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+          q.eq("dayKey", dayKey).eq("provider", "openrouter"),
+        )
+        .take(16),
+      ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
+        .unique(),
     ]);
 
     const qualityScores = runs
@@ -81,6 +118,20 @@ export const snapshotAdmin = query({
       (total, event) => total + (event.outputTokens ?? 0),
       0,
     );
+    const estimatedCostMicroUsd = usage.reduce(
+      (total, event) => total + (event.estimatedCostMicroUsd ?? 0),
+      0,
+    );
+    const revisionEvents = usage.filter((event) => event.stage === "revision");
+    const revisionGainValues = revisionEvents
+      .filter(
+        (event) =>
+          event.qualityBefore !== undefined && event.qualityAfter !== undefined,
+      )
+      .map((event) => event.qualityAfter! - event.qualityBefore!);
+    const presentationScores = runs
+      .map((run) => run.presentationScore)
+      .filter((score): score is number => score !== undefined);
 
     const models = new Map<
       string,
@@ -93,6 +144,7 @@ export const snapshotAdmin = query({
         inputTokens: number;
         outputTokens: number;
         durationMs: number;
+        estimatedCostMicroUsd: number;
       }
     >();
     for (const event of usage) {
@@ -105,11 +157,13 @@ export const snapshotAdmin = query({
         inputTokens: 0,
         outputTokens: 0,
         durationMs: 0,
+        estimatedCostMicroUsd: 0,
       };
       row.stages += 1;
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
       row.durationMs += event.durationMs;
+      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
       models.set(event.model, row);
     }
     for (const event of routes) {
@@ -121,6 +175,7 @@ export const snapshotAdmin = query({
         stages: 0,
         inputTokens: 0,
         outputTokens: 0,
+        estimatedCostMicroUsd: 0,
         durationMs: 0,
       };
       row.attempts += 1;
@@ -143,6 +198,7 @@ export const snapshotAdmin = query({
         outputTokens: number;
         averageQuality: number;
         qualitySamples: number;
+        estimatedCostMicroUsd: number;
       }
     >();
     const agentRow = (agentSlug: string) => {
@@ -158,6 +214,7 @@ export const snapshotAdmin = query({
         outputTokens: 0,
         averageQuality: 0,
         qualitySamples: 0,
+        estimatedCostMicroUsd: 0,
       };
       agents.set(agentSlug, row);
       return row;
@@ -183,6 +240,7 @@ export const snapshotAdmin = query({
       const row = agentRow(event.agentSlug);
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
+      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
     }
 
     const stages = new Map<
@@ -193,6 +251,7 @@ export const snapshotAdmin = query({
         inputTokens: number;
         outputTokens: number;
         durationMs: number;
+        estimatedCostMicroUsd: number;
       }
     >();
     for (const event of usage) {
@@ -202,11 +261,13 @@ export const snapshotAdmin = query({
         inputTokens: 0,
         outputTokens: 0,
         durationMs: 0,
+        estimatedCostMicroUsd: 0,
       };
       row.events += 1;
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
       row.durationMs += event.durationMs;
+      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
       stages.set(event.stage, row);
     }
 
@@ -219,6 +280,7 @@ export const snapshotAdmin = query({
         failures: number;
         inputTokens: number;
         outputTokens: number;
+        estimatedCostMicroUsd: number;
       }
     >();
     for (const event of usage) {
@@ -229,10 +291,12 @@ export const snapshotAdmin = query({
         failures: 0,
         inputTokens: 0,
         outputTokens: 0,
+        estimatedCostMicroUsd: 0,
       };
       row.generations += 1;
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
+      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
       series.set(at, row);
     }
     for (const event of routes) {
@@ -244,6 +308,7 @@ export const snapshotAdmin = query({
         failures: 0,
         inputTokens: 0,
         outputTokens: 0,
+        estimatedCostMicroUsd: 0,
       };
       row.failures += 1;
       series.set(at, row);
@@ -323,6 +388,16 @@ export const snapshotAdmin = query({
         averageDurationMs: average(durations),
         p95DurationMs: percentile(durations, 0.95),
         averageQuality: average(qualityScores),
+        estimatedSpendUsd: estimatedCostMicroUsd / 1_000_000,
+        revisionRate:
+          (usage.filter((event) => event.stage === "revision").length /
+            Math.max(
+              1,
+              usage.filter((event) => event.stage === "draft").length,
+            )) *
+          100,
+        averageRevisionGain: average(revisionGainValues),
+        averagePresentation: average(presentationScores),
       },
       models: [...models.values()].sort(
         (left, right) => right.outputTokens - left.outputTokens,
@@ -348,6 +423,25 @@ export const snapshotAdmin = query({
         .sort((left, right) => right.events - left.events),
       series: [...series.values()].sort((left, right) => left.at - right.at),
       recent,
+      operations: {
+        budget: {
+          dayKey,
+          spentUsd:
+            spendBuckets.reduce((sum, row) => sum + row.spentMicroUsd, 0) /
+            1_000_000,
+          limitUsd:
+            openRouterDailyBudgetMicroUsd(env.OPENROUTER_DAILY_BUDGET_USD) /
+            1_000_000,
+        },
+        circuits: circuits
+          .filter((circuit) => circuit.disabledUntil > now)
+          .map((circuit) => ({
+            model: circuit.model,
+            reason: circuit.reason,
+            disabledUntil: circuit.disabledUntil,
+          })),
+        canary,
+      },
       bounded: {
         routes: routes.length === 500,
         runs: runs.length === 500,

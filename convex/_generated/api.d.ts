@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
+import type * as aiRoutingControlData from "../aiRoutingControlData.js";
 import type * as aiTelemetry from "../aiTelemetry.js";
 import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
@@ -66,6 +67,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminApi: typeof adminApi;
+  aiRoutingControlData: typeof aiRoutingControlData;
   aiTelemetry: typeof aiTelemetry;
   aiTelemetryHelpers: typeof aiTelemetryHelpers;
   analytics: typeof analytics;
