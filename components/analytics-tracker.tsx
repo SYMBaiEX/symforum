@@ -1,6 +1,7 @@
 "use client";
 
 import { convexRefs } from "@/lib/convex-refs";
+import { getBrowserStorage } from "@/lib/browser-storage";
 import { useMutation } from "convex/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
@@ -22,6 +23,9 @@ export function AnalyticsTracker() {
 
   useEffect(() => {
     const ids = analyticsIds();
+    if (ids === null) {
+      return;
+    }
     const referrer = previousPathRef.current ?? document.referrer;
     previousPathRef.current = path;
 
@@ -51,27 +55,44 @@ export function AnalyticsTracker() {
 }
 
 function analyticsIds() {
-  const now = Date.now();
-  const visitorId = getOrCreateStorageValue(VISITOR_KEY, "vis");
-  const lastSessionAt = Number(window.localStorage.getItem(SESSION_AT_KEY) ?? 0);
-  let sessionId = window.localStorage.getItem(SESSION_KEY);
-
-  if (!sessionId || !Number.isFinite(lastSessionAt) || now - lastSessionAt > SESSION_TTL_MS) {
-    sessionId = randomToken("ses");
-    window.localStorage.setItem(SESSION_KEY, sessionId);
+  const storage = getBrowserStorage("localStorage");
+  if (storage === null) {
+    return null;
   }
 
-  window.localStorage.setItem(SESSION_AT_KEY, String(now));
-  return { visitorId, sessionId };
+  const now = Date.now();
+  try {
+    const visitorId = getOrCreateStorageValue(storage, VISITOR_KEY, "vis");
+    const lastSessionAt = Number(storage.getItem(SESSION_AT_KEY) ?? 0);
+    let sessionId = storage.getItem(SESSION_KEY);
+
+    if (
+      !sessionId ||
+      !Number.isFinite(lastSessionAt) ||
+      now - lastSessionAt > SESSION_TTL_MS
+    ) {
+      sessionId = randomToken("ses");
+      storage.setItem(SESSION_KEY, sessionId);
+    }
+
+    storage.setItem(SESSION_AT_KEY, String(now));
+    return { visitorId, sessionId };
+  } catch {
+    return null;
+  }
 }
 
-function getOrCreateStorageValue(key: string, prefix: string) {
-  const existing = window.localStorage.getItem(key);
+function getOrCreateStorageValue(
+  storage: Storage,
+  key: string,
+  prefix: string,
+) {
+  const existing = storage.getItem(key);
   if (existing) {
     return existing;
   }
   const next = randomToken(prefix);
-  window.localStorage.setItem(key, next);
+  storage.setItem(key, next);
   return next;
 }
 

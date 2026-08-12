@@ -62,7 +62,11 @@ function cleanRedirect(value: string | null) {
 function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
   return NextResponse.next({
     request: {
-      headers: nonceRequestHeaders(new Headers(request.headers), policy),
+      headers: nonceRequestHeaders(
+        new Headers(request.headers),
+        policy,
+        request.nextUrl.pathname,
+      ),
     },
   });
 }
@@ -83,7 +87,11 @@ function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
 
   return NextResponse.rewrite(forumRoute.url, {
     request: {
-      headers: nonceRequestHeaders(new Headers(request.headers), policy),
+      headers: nonceRequestHeaders(
+        new Headers(request.headers),
+        policy,
+        request.nextUrl.pathname,
+      ),
     },
   });
 }
@@ -152,8 +160,13 @@ function absoluteRedirect(url: URL) {
   });
 }
 
-function nonceRequestHeaders(headers: Headers, policy: SecurityPolicy) {
+function nonceRequestHeaders(
+  headers: Headers,
+  policy: SecurityPolicy,
+  pathname: string,
+) {
   headers.set("x-nonce", policy.nonce);
+  headers.set("x-symbaiex-pathname", pathname);
   headers.set("Content-Security-Policy", policy.value);
   return headers;
 }

@@ -1,13 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { convexRefs, type NewsletterSubscriberRecord } from "@/lib/convex-refs";
-import {
-  newsletterSiteUrlFromRequest,
-  newsletterTokenHash,
-} from "@/lib/newsletter-token";
+import { newsletterTokenHash } from "@/lib/newsletter-token";
 import { ConvexHttpClient } from "convex/browser";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -49,29 +45,6 @@ async function fetchSubscriber(
   }
 }
 
-async function confirmAction(formData: FormData): Promise<void> {
-  "use server";
-  const tokenHash = formData.get("tokenHash");
-  if (typeof tokenHash !== "string" || !TOKEN_HASH_PATTERN.test(tokenHash)) {
-    redirect("/newsletter/confirm");
-  }
-  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (convexUrl) {
-    try {
-      await new ConvexHttpClient(convexUrl).mutation(
-        convexRefs.newsletter.confirm,
-        {
-          tokenHash,
-          siteUrl: newsletterSiteUrlFromRequest("https://symbaiex.com"),
-        },
-      );
-    } catch {
-      // Ignore; the reloaded page re-reads state and shows the best message.
-    }
-  }
-  redirect(`/newsletter/confirm?hash=${tokenHash}&done=1`);
-}
-
 export default async function NewsletterConfirmPage({
   searchParams,
 }: {
@@ -109,7 +82,7 @@ export default async function NewsletterConfirmPage({
         <p className="page-lede mt-5">{lede}</p>
         <div className="mt-6 flex flex-wrap gap-2">
           {showConfirm && tokenHash ? (
-            <form action={confirmAction}>
+            <form action="/api/newsletter/confirm" method="post">
               <input type="hidden" name="tokenHash" value={tokenHash} />
               <Button type="submit">Confirm subscription</Button>
             </form>

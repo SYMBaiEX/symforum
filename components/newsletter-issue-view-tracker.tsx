@@ -1,6 +1,7 @@
 "use client";
 
 import { convexRefs } from "@/lib/convex-refs";
+import { getBrowserStorage } from "@/lib/browser-storage";
 import { useMutation } from "convex/react";
 import { useEffect } from "react";
 
@@ -10,10 +11,16 @@ export function NewsletterIssueViewTracker({ slug }: { slug: string }) {
   const record = useMutation(convexRefs.newsletter.recordPublicEngagement);
 
   useEffect(() => {
-    let visitorKey = window.localStorage.getItem(VISITOR_KEY);
-    if (!visitorKey) {
+    const storage = getBrowserStorage("localStorage");
+    let visitorKey: string | null = null;
+    try {
+      visitorKey = storage?.getItem(VISITOR_KEY) ?? null;
+      if (!visitorKey) {
+        visitorKey = crypto.randomUUID();
+        storage?.setItem(VISITOR_KEY, visitorKey);
+      }
+    } catch {
       visitorKey = crypto.randomUUID();
-      window.localStorage.setItem(VISITOR_KEY, visitorKey);
     }
     void record({
       slug,

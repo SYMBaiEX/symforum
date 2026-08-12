@@ -6,6 +6,7 @@ import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SiteShell } from "@/components/site-shell";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
+import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
@@ -60,6 +61,9 @@ export default async function RootLayout({
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
   const host = requestHeaders.get("host");
+  const useInMemoryAuthStorage = isStorageRestrictedNewsletterPath(
+    requestHeaders.get("x-symbaiex-pathname"),
+  );
   const initialForumHost = isForumSubdomainHost(host);
   const initialPrimarySiteHref = primarySiteHrefFromForumHost({
     host,
@@ -99,7 +103,11 @@ export default async function RootLayout({
   }
 
   return (
-    <ConvexAuthNextjsServerProvider>{document}</ConvexAuthNextjsServerProvider>
+    <ConvexAuthNextjsServerProvider
+      storage={useInMemoryAuthStorage ? "inMemory" : "localStorage"}
+    >
+      {document}
+    </ConvexAuthNextjsServerProvider>
   );
 }
 

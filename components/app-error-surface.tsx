@@ -1,5 +1,6 @@
 "use client";
 
+import { getBrowserStorage } from "@/lib/browser-storage";
 import { convexRefs, type SystemLogRecord } from "@/lib/convex-refs";
 import { useMutation } from "convex/react";
 import { usePathname } from "next/navigation";
@@ -74,24 +75,24 @@ function LiveAppErrorSurface() {
 
       void recordLog(
         withoutUndefined({
-        level: context.level ?? "error",
-        source: context.source ?? "client",
-        scope: context.scope ?? "ui",
-        eventType: context.eventType ?? "runtime_error",
-        message: normalized.message,
-        name: normalized.name,
-        stack: normalized.stack,
-        fingerprint,
-        path,
-        url,
-        sessionId,
-        userAgent:
-          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-        component: context.component,
-        action: context.action,
-        entityType: context.entityType,
-        entityId: context.entityId,
-        metadataJson,
+          level: context.level ?? "error",
+          source: context.source ?? "client",
+          scope: context.scope ?? "ui",
+          eventType: context.eventType ?? "runtime_error",
+          message: normalized.message,
+          name: normalized.name,
+          stack: normalized.stack,
+          fingerprint,
+          path,
+          url,
+          sessionId,
+          userAgent:
+            typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+          component: context.component,
+          action: context.action,
+          entityType: context.entityType,
+          entityId: context.entityId,
+          metadataJson,
         }),
       ).catch(() => {
         // Avoid recursive failures if the log write itself is unavailable.
@@ -215,10 +216,7 @@ function normalizeError(error: unknown, fallback?: string): NormalizedError {
   };
 }
 
-function isIgnorableError(
-  error: NormalizedError,
-  context: AppErrorContext,
-) {
+function isIgnorableError(error: NormalizedError, context: AppErrorContext) {
   const haystack = [
     error.name,
     error.message,
@@ -268,15 +266,26 @@ function getSessionId() {
   if (typeof window === "undefined") {
     return "server";
   }
-  const existing = window.sessionStorage.getItem(SESSION_KEY);
-  if (existing) {
-    return existing;
-  }
+
+  const storage = getBrowserStorage("sessionStorage");
   const value =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  window.sessionStorage.setItem(SESSION_KEY, value);
+
+  if (storage === null) {
+    return value;
+  }
+
+  try {
+    const existing = storage.getItem(SESSION_KEY);
+    if (existing) {
+      return existing;
+    }
+    storage.setItem(SESSION_KEY, value);
+  } catch {
+    return value;
+  }
   return value;
 }
 
