@@ -3,6 +3,7 @@ import type { LanguageModel } from "ai";
 import {
   clearMuseHealthCacheForTests,
   openRouterModelForStage,
+  openRouterModelsForStage,
   routedModelCandidates,
   runRoutedCandidates,
   type RoutedModel,
@@ -35,6 +36,14 @@ describe("AI model routing", () => {
     expect(openRouterModelForStage("suki:forum-draft")).toBe(
       "nvidia/nemotron-3-super-120b-a12b:free",
     );
+    expect(openRouterModelsForStage("suki:forum-topic")).toEqual([
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+      "nvidia/nemotron-3-nano-30b-a3b",
+    ]);
+    expect(openRouterModelsForStage("suki:forum-reply")).toEqual([
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "nvidia/nemotron-3-super-120b-a12b",
+    ]);
   });
 
   test("puts OpenRouter before Muse and the paid gateway", async () => {
@@ -50,11 +59,15 @@ describe("AI model routing", () => {
 
     expect(candidates.map(({ provider }) => provider)).toEqual([
       "openrouter",
+      "openrouter",
       "muse",
       "gateway",
     ]);
     expect(candidates[0].persistedModel).toBe(
       "nvidia/nemotron-3-super-120b-a12b:free",
+    );
+    expect(candidates[1].persistedModel).toBe(
+      "nvidia/nemotron-3-super-120b-a12b",
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });

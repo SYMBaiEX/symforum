@@ -11,7 +11,9 @@ import {
   MUSE_AGENT_MODEL,
   MUSE_API_MODEL_ID,
   OPENROUTER_FORUM_MODEL,
+  OPENROUTER_FORUM_PAID_MODEL,
   OPENROUTER_TOPIC_MODEL,
+  OPENROUTER_TOPIC_PAID_MODEL,
 } from "./ai-models";
 import { MUSE_TOP_K } from "./muse-model-profile";
 
@@ -201,6 +203,12 @@ export function openRouterModelForStage(stage: string) {
     : OPENROUTER_FORUM_MODEL;
 }
 
+export function openRouterModelsForStage(stage: string) {
+  return stage.endsWith(":forum-topic")
+    ? [OPENROUTER_TOPIC_MODEL, OPENROUTER_TOPIC_PAID_MODEL]
+    : [OPENROUTER_FORUM_MODEL, OPENROUTER_FORUM_PAID_MODEL];
+}
+
 function gatewayModel(
   config: ModelRoutingConfig,
   modelId: GatewayModelId,
@@ -227,7 +235,10 @@ export async function routedModelCandidates(
     DEEPSEEK_FALLBACK_MODEL as GatewayModelId,
   ],
   telemetry?: RouteTelemetryContext,
-  openRouterModelIds: readonly string[] = [OPENROUTER_FORUM_MODEL],
+  openRouterModelIds: readonly string[] = [
+    OPENROUTER_FORUM_MODEL,
+    OPENROUTER_FORUM_PAID_MODEL,
+  ],
 ) {
   // Preserve the public route-builder signature for callers while keeping
   // optional Gateway attribution out of providerOptions (see gatewayModel).
@@ -373,7 +384,7 @@ export async function runWithModelFallback<T>(
     gatewayOptions,
     gatewayModelIds,
     args,
-    [openRouterModelForStage(args.stage)],
+    openRouterModelsForStage(args.stage),
   );
   return runRoutedCandidates(candidates, args);
 }
