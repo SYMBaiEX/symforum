@@ -8,6 +8,7 @@ import {
   type ForumAttachmentDraft,
 } from "@/components/forum/forum-compose";
 import { MAX_FORUM_ATTACHMENTS } from "@/components/forum/forum-attachment-upload";
+import { forumPollInteractionState } from "@/components/forum/forum-poll-state";
 import {
   forumPath,
   forumMemberProfilePath,
@@ -1200,11 +1201,14 @@ function LiveForumThreadView({
         />
       ) : detail.poll ? (
         <ForumPollPanel
+          authLoading={authLoading}
           poll={detail.poll}
           selectedOptionId={selectedPollOptionId}
           pending={pollPending}
           error={pollError}
           canEdit={detail.poll.viewerCanEdit}
+          isAuthenticated={isAuthenticated}
+          pollAccess={detail.category.pollAccess}
           onEdit={() => openPollEditor(detail.poll!)}
           onSelect={setSelectedPollOptionId}
           onVote={() => submitPollVote(detail.poll!)}
@@ -1639,27 +1643,39 @@ function replyUnavailableMessage(
 }
 
 function ForumPollPanel({
+  authLoading,
   canEdit,
   error,
+  isAuthenticated,
   pending,
   poll,
+  pollAccess,
   selectedOptionId,
   onEdit,
   onSelect,
   onVote,
 }: {
+  authLoading: boolean;
   canEdit: boolean;
   error: string;
+  isAuthenticated: boolean;
   pending: boolean;
   poll: ForumPollRecord;
+  pollAccess?: ForumCategoryRecord["pollAccess"];
   selectedOptionId: string;
   onEdit: () => void;
   onSelect: (optionId: string) => void;
   onVote: () => void;
 }) {
   const hasVoted = Boolean(poll.viewerOptionId);
-  const resultsVisible =
-    hasVoted || poll.status === "closed" || !poll.viewerCanVote;
+  const resultsVisible = poll.viewerCanSeeResults;
+  const interaction = forumPollInteractionState({
+    authLoading,
+    isAuthenticated,
+    poll,
+    pollAccess,
+  });
+  const statusId = `poll-${poll._id}-status`;
 
   return (
     <section className="border border-row-border">
@@ -1681,68 +1697,87 @@ function ForumPollPanel({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-2 p-3">
-        {poll.options.map((option) => {
-          const selected = selectedOptionId === option._id;
-          const votedFor = poll.viewerOptionId === option._id;
+      <div className="grid gap-3 p-3">
+        <fieldset
+          className="grid gap-2"
+          aria-describedby={statusId}
+          disabled={pending || !interaction.canSelect}
+        >
+          <legend className="sr-only">Choose one poll option</legend>
+          {poll.options.map((option) => {
+            const selected = selectedOptionId === option._id;
+            const votedFor = poll.viewerOptionId === option._id;
 
-          return (
-            <label
-              key={option._id}
-              className="grid gap-1.5 border border-row-border p-2.5"
-            >
-              <span className="flex flex-wrap items-center justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <input
-                    className="size-4 accent-primary"
-                    type="radio"
-                    name={`poll-${poll._id}`}
-                    checked={selected}
-                    disabled={!poll.viewerCanVote || pending}
-                    onChange={() => onSelect(option._id)}
-                  />
-                  <span className="break-words text-sm font-semibold">
-                    {option.label}
+            return (
+              <label
+                key={option._id}
+                className={`grid gap-1.5 border border-row-border p-2.5 ${
+                  interaction.canSelect && !pending
+                    ? "cursor-pointer hover:border-primary/60"
+                    : "cursor-not-allowed"
+                }`}
+              >
+                <span className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <input
+                      className="size-4 accent-primary"
+                      type="radio"
+                      name={`poll-${poll._id}`}
+                      checked={selected}
+                      onChange={() => onSelect(option._id)}
+                    />
+                    <span className="break-words text-sm font-semibold">
+                      {option.label}
+                    </span>
+                    {votedFor ? (
+                      <span className="font-mono text-[10px] uppercase text-primary">
+                        Your vote
+                      </span>
+                    ) : null}
                   </span>
-                  {votedFor ? (
-                    <span className="font-mono text-[10px] uppercase text-primary">
-                      Your vote
+                  {resultsVisible ? (
+                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                      {option.voteCount} votes · {option.percent}%
                     </span>
                   ) : null}
                 </span>
                 {resultsVisible ? (
-                  <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                    {option.voteCount} votes · {option.percent}%
+                  <span className="h-2 border border-row-border bg-muted">
+                    <span
+                      className="block h-full bg-primary"
+                      style={{
+                        width: `${Math.max(0, Math.min(100, option.percent))}%`,
+                      }}
+                    />
                   </span>
                 ) : null}
-              </span>
-              {resultsVisible ? (
-                <span className="h-2 border border-row-border bg-muted">
-                  <span
-                    className="block h-full bg-primary"
-                    style={{
-                      width: `${Math.max(0, Math.min(100, option.percent))}%`,
-                    }}
-                  />
-                </span>
-              ) : null}
-            </label>
-          );
-        })}
+              </label>
+            );
+          })}
+        </fieldset>
+        <p
+          className="border border-row-border px-3 py-2 text-sm text-muted-foreground"
+          id={statusId}
+          aria-live="polite"
+        >
+          {interaction.statusMessage}
+        </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            {poll.totalVotes} total votes
-            {poll.status === "closed" ? " · Closed" : ""}
-            {hasVoted ? " · Voted" : ""}
+            {resultsVisible
+              ? `${poll.totalVotes} total votes${
+                  poll.status === "closed" ? " · Closed" : ""
+                }${hasVoted ? " · Voted" : ""}`
+              : "Results reveal after you vote"}
           </p>
-          {poll.viewerCanVote ? (
+          {interaction.showVoteButton ? (
             <Button
               className="rounded-none font-mono text-[10px] uppercase"
               type="button"
-              disabled={pending}
+              disabled={pending || interaction.voteButtonDisabled}
               onClick={onVote}
             >
-              {pending ? "Voting..." : "Vote"}
+              {pending ? "Voting..." : interaction.voteButtonLabel}
             </Button>
           ) : null}
         </div>

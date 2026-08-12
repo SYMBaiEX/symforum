@@ -4488,6 +4488,87 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/after voting has started/);
   });
 
+  test("member polls invite sign-in, accept a vote, and reveal results only afterward", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const pollId = await t.run(async (ctx) => {
+      await ctx.db.patch(seed.publicCategoryId, { pollAccess: "members" });
+      return await insertPoll(ctx, {
+        threadId: seed.publicThreadId,
+        categoryId: seed.publicCategoryId,
+        question: "Which launch window should we use?",
+        options: ["Morning", "Evening"],
+        now: 1_800_000_000_150,
+      });
+    });
+    const asMember = t.withIdentity({
+      subject: seed.untrustedUserId,
+      name: "New Member",
+    });
+
+    const guestDetail = await t.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+      pageSize: 5,
+    });
+    expect(guestDetail.poll).toMatchObject({
+      viewerCanSeeResults: false,
+      viewerCanVote: false,
+      totalVotes: 0,
+      options: [
+        { label: "Morning", voteCount: 0, percent: 0 },
+        { label: "Evening", voteCount: 0, percent: 0 },
+      ],
+    });
+
+    const memberDetail = await asMember.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+      pageSize: 5,
+    });
+    expect(memberDetail.poll).toMatchObject({
+      viewerCanSeeResults: false,
+      viewerCanVote: true,
+    });
+
+    await expect(
+      asMember.mutation(api.forum.votePoll, {
+        pollId,
+        optionId: memberDetail.poll!.options[0]._id,
+      }),
+    ).resolves.toMatchObject({ voted: true });
+
+    const votedDetail = await asMember.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+      pageSize: 5,
+    });
+    expect(votedDetail.poll).toMatchObject({
+      viewerCanSeeResults: true,
+      viewerCanVote: false,
+      viewerOptionId: memberDetail.poll!.options[0]._id,
+      totalVotes: 1,
+      options: [
+        { label: "Morning", voteCount: 1, percent: 100 },
+        { label: "Evening", voteCount: 0, percent: 0 },
+      ],
+    });
+
+    const guestAfterVote = await t.query(api.forum.getThread, {
+      categorySlug: "public-square",
+      threadSlug: "public-lunar-brief",
+      pageSize: 5,
+    });
+    expect(guestAfterVote.poll).toMatchObject({
+      viewerCanSeeResults: false,
+      totalVotes: 0,
+      options: [
+        { voteCount: 0, percent: 0 },
+        { voteCount: 0, percent: 0 },
+      ],
+    });
+  });
+
   test("closed zero-vote polls cannot be edited", async () => {
     const t = setup();
     const seed = await seedForum(t);

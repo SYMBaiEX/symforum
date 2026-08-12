@@ -522,6 +522,7 @@ export type ForumPollRecord = {
   closedAt?: number;
   viewerCanEdit: boolean;
   viewerOptionId?: string;
+  viewerCanSeeResults: boolean;
   viewerCanVote: boolean;
   options: ForumPollOptionRecord[];
 };

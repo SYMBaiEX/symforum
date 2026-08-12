@@ -17995,6 +17995,7 @@ async function publicPollRecord(
     closedAt: poll.closedAt,
     viewerCanEdit,
     viewerOptionId: viewerVote?.optionId,
+    viewerCanSeeResults,
     viewerCanVote:
       viewerId !== undefined &&
       viewerCanVoteInCategory &&
