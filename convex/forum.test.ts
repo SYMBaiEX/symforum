@@ -1604,6 +1604,181 @@ describe("forum notification preferences", () => {
     expect(deliveries).toEqual([]);
   });
 
+  test("direct mentions create one deduplicated in-app alert outside quoted and code blocks", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const asTrusted = t.withIdentity({
+      subject: seed.trustedUserId,
+      name: "Trusted Author",
+    });
+    const asOtherTrusted = t.withIdentity({
+      subject: seed.otherTrustedUserId,
+      name: "Other Trusted",
+    });
+
+    await expect(
+      asOtherTrusted.query(api.forum.getMyForumNotificationPreferences, {}),
+    ).resolves.toMatchObject({ inAppMentions: true });
+    await t.run(async (ctx) => {
+      const now = 1_800_000_001_000;
+      await ctx.db.insert("forumThreadSubscriptions", {
+        userId: seed.otherTrustedUserId,
+        threadId: seed.publicThreadId,
+        categoryId: seed.publicCategoryId,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_010_000);
+    const reply = await (async () => {
+      try {
+        return await asTrusted.mutation(api.forum.createReply, {
+          threadId: seed.publicThreadId,
+          body: [
+            "@othertrusted can you review this? @othertrusted",
+            "@trustedauthor should not notify the author.",
+            "[quote=New Member]@newmember said this earlier.[/quote]",
+            "[code]@syntheticemail[/code]",
+          ].join("\n\n"),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    })();
+
+    const notifications = await t.run(async (ctx) => {
+      return await ctx.db
+        .query("forumNotifications")
+        .withIndex("by_postId_and_createdAt", (q) =>
+          q.eq("postId", reply.postId),
+        )
+        .take(10);
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      recipientUserId: seed.otherTrustedUserId,
+      actorUserId: seed.trustedUserId,
+      threadId: seed.publicThreadId,
+      postId: reply.postId,
+      type: "mention",
+      status: "unread",
+    });
+    await expect(
+      asOtherTrusted.query(api.forum.listMyNotifications, {
+        limit: 10,
+        status: "unread",
+      }),
+    ).resolves.toMatchObject({
+      notifications: [
+        expect.objectContaining({
+          type: "mention",
+          postId: reply.postId,
+          actor: "trustedauthor",
+        }),
+      ],
+    });
+  });
+
+  test("new-topic mentions take precedence over generic watched-board alerts", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const asOtherTrusted = t.withIdentity({
+      subject: seed.otherTrustedUserId,
+      name: "Other Trusted",
+    });
+
+    await t.run(async (ctx) => {
+      const now = 1_800_000_001_000;
+      await ctx.db.insert("forumCategorySubscriptions", {
+        userId: seed.trustedUserId,
+        categoryId: seed.publicCategoryId,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const thread = await asOtherTrusted.mutation(api.forum.createThread, {
+      categorySlug: "public-square",
+      title: "Mentioned launch review",
+      body: "@trustedauthor can you review this launch plan?",
+    });
+    const notifications = await t.run(async (ctx) => {
+      return await ctx.db
+        .query("forumNotifications")
+        .withIndex("by_threadId_and_recipientUserId_and_type", (q) =>
+          q
+            .eq("threadId", thread.threadId)
+            .eq("recipientUserId", seed.trustedUserId),
+        )
+        .take(10);
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      recipientUserId: seed.trustedUserId,
+      actorUserId: seed.otherTrustedUserId,
+      threadId: thread.threadId,
+      type: "mention",
+      status: "unread",
+    });
+    expect(notifications[0]?.postId).toBeUndefined();
+  });
+
+  test("mentions respect alert preferences, ignored members, and board visibility", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const asTrusted = t.withIdentity({
+      subject: seed.trustedUserId,
+      name: "Trusted Author",
+    });
+    const asOtherTrusted = t.withIdentity({
+      subject: seed.otherTrustedUserId,
+      name: "Other Trusted",
+    });
+    const asUntrusted = t.withIdentity({
+      subject: seed.untrustedUserId,
+      name: "New Member",
+    });
+
+    await asOtherTrusted.mutation(api.forum.updateForumRelationship, {
+      username: "trustedauthor",
+      kind: "ignore",
+      enabled: true,
+    });
+    await asUntrusted.mutation(api.forum.updateMyForumNotificationPreferences, {
+      inAppReplies: true,
+      inAppNewThreads: true,
+      inAppMentions: false,
+      emailReplies: false,
+      emailNewThreads: false,
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_010_000);
+    const reply = await (async () => {
+      try {
+        return await asTrusted.mutation(api.forum.createReply, {
+          threadId: seed.trustedThreadId,
+          body: "@othertrusted @newmember @syntheticemail please review this.",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    })();
+    const notifications = await t.run(async (ctx) => {
+      return await ctx.db
+        .query("forumNotifications")
+        .withIndex("by_postId_and_createdAt", (q) =>
+          q.eq("postId", reply.postId),
+        )
+        .take(10);
+    });
+    expect(notifications).toEqual([]);
+  });
+
   test("reply fanout keeps in-app notifications on by default without email rows", async () => {
     const t = setup();
     const seed = await seedForum(t);

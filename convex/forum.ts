@@ -348,6 +348,7 @@ const MY_FORUM_WARNING_LIST_LIMIT = 20;
 const MY_PENDING_FORUM_CONTENT_LIMIT = 20;
 const REPLY_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
 const NEW_THREAD_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
+const FORUM_MENTION_LIMIT = 10;
 const THREAD_VISIBILITY_PROFILE_DELTA_BATCH_LIMIT = 100;
 const FORUM_PRESENCE_WINDOW_MS = 15 * 60 * 1_000;
 const FORUM_PRESENCE_HEARTBEAT_MIN_MS = 60 * 1_000;
@@ -358,6 +359,7 @@ const FORUM_PRESENCE_LABEL_MAX_LENGTH = 80;
 const DEFAULT_FORUM_NOTIFICATION_PREFERENCES = {
   inAppReplies: true,
   inAppNewThreads: true,
+  inAppMentions: true,
   emailReplies: false,
   emailNewThreads: false,
 } as const;
@@ -3933,6 +3935,7 @@ export const updateMyForumNotificationPreferences = mutation({
   args: {
     inAppReplies: v.boolean(),
     inAppNewThreads: v.boolean(),
+    inAppMentions: v.optional(v.boolean()),
     emailReplies: v.boolean(),
     emailNewThreads: v.boolean(),
   },
@@ -3943,9 +3946,11 @@ export const updateMyForumNotificationPreferences = mutation({
     );
     const now = Date.now();
     const existing = await loadForumNotificationPreferences(ctx, user._id);
+    const currentSettings = forumNotificationPreferenceSettings(existing);
     const nextSettings = {
       inAppReplies: args.inAppReplies,
       inAppNewThreads: args.inAppNewThreads,
+      inAppMentions: args.inAppMentions ?? currentSettings.inAppMentions,
       emailReplies: args.emailReplies,
       emailNewThreads: args.emailNewThreads,
     };
@@ -15010,7 +15015,7 @@ async function existingForumNotificationEmailDelivery(
     recipientUserId: Id<"users">;
     threadId: Id<"forumThreads">;
     postId?: Id<"forumPosts">;
-    type: ForumNotificationDoc["type"];
+    type: ForumNotificationEmailDeliveryDoc["type"];
   },
 ) {
   if (args.type === "reply" && args.postId !== undefined) {
@@ -15047,7 +15052,7 @@ async function maybeQueueForumNotificationEmailDelivery(
     postId?: Id<"forumPosts">;
     recipient: UserDoc;
     threadId: Id<"forumThreads">;
-    type: ForumNotificationDoc["type"];
+    type: ForumNotificationEmailDeliveryDoc["type"];
     now: number;
   },
 ) {
@@ -15101,6 +15106,19 @@ async function createReplyNotifications(
   const category = await ctx.db.get(args.categoryId);
   if (category === null) {
     return;
+  }
+  if (args.cursor === undefined) {
+    const post = await ctx.db.get(args.postId);
+    if (post !== null && post.status === "active") {
+      await createMentionNotifications(ctx, {
+        actorUserId: args.actorUserId,
+        body: post.body,
+        category,
+        postId: post._id,
+        threadId: args.threadId,
+        now: args.now,
+      });
+    }
   }
   const subscriptionPage = await ctx.db
     .query("forumThreadSubscriptions")
@@ -15194,6 +15212,16 @@ async function createNewThreadNotifications(
     return;
   }
 
+  if (args.cursor === undefined) {
+    await createMentionNotifications(ctx, {
+      actorUserId: args.actorUserId,
+      body: thread.body,
+      category,
+      threadId: thread._id,
+      now: args.now,
+    });
+  }
+
   const subscriptionPage = await ctx.db
     .query("forumCategorySubscriptions")
     .withIndex("by_categoryId_and_status", (q) =>
@@ -15223,8 +15251,7 @@ async function createNewThreadNotifications(
       .withIndex("by_threadId_and_recipientUserId_and_type", (q) =>
         q
           .eq("threadId", args.threadId)
-          .eq("recipientUserId", subscription.userId)
-          .eq("type", "newThread"),
+          .eq("recipientUserId", subscription.userId),
       )
       .take(1);
     let notificationId = existingNotification[0]?._id;
@@ -15266,6 +15293,102 @@ async function createNewThreadNotifications(
       },
     );
   }
+}
+
+async function createMentionNotifications(
+  ctx: MutationCtx,
+  args: {
+    actorUserId: Id<"users">;
+    body: string;
+    category: ForumCategoryDoc;
+    postId?: Id<"forumPosts">;
+    threadId: Id<"forumThreads">;
+    now: number;
+  },
+) {
+  const usernames = extractForumMentionUsernames(args.body);
+  for (const username of usernames) {
+    const recipient = await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized", (q) =>
+        q.eq("usernameNormalized", username),
+      )
+      .unique();
+    if (recipient === null || recipient._id === args.actorUserId) {
+      continue;
+    }
+    if (!(await canViewCategoryWithAncestors(ctx, recipient, args.category))) {
+      continue;
+    }
+    const ignoresActor = await loadForumUserRelationship(
+      ctx,
+      recipient._id,
+      args.actorUserId,
+      "ignore",
+    );
+    if (ignoresActor !== null) {
+      continue;
+    }
+    const preferences = forumNotificationPreferenceSettings(
+      await loadForumNotificationPreferences(ctx, recipient._id),
+    );
+    if (!preferences.inAppMentions) {
+      continue;
+    }
+
+    const existingNotification =
+      args.postId === undefined
+        ? await ctx.db
+            .query("forumNotifications")
+            .withIndex("by_threadId_and_recipientUserId_and_type", (q) =>
+              q
+                .eq("threadId", args.threadId)
+                .eq("recipientUserId", recipient._id)
+                .eq("type", "mention"),
+            )
+            .take(1)
+        : await ctx.db
+            .query("forumNotifications")
+            .withIndex("by_postId_and_recipientUserId", (q) =>
+              q.eq("postId", args.postId).eq("recipientUserId", recipient._id),
+            )
+            .take(1);
+    if (existingNotification.length > 0) {
+      continue;
+    }
+
+    await ctx.db.insert("forumNotifications", {
+      recipientUserId: recipient._id,
+      actorUserId: args.actorUserId,
+      threadId: args.threadId,
+      categoryId: args.category._id,
+      postId: args.postId,
+      type: "mention",
+      status: "unread",
+      createdAt: args.now,
+      updatedAt: args.now,
+    });
+  }
+}
+
+function extractForumMentionUsernames(body: string) {
+  const searchableBody = body
+    .replace(/\[quote(?:=[^\]]+)?\][\s\S]*?\[\/quote\]/gi, " ")
+    .replace(/\[code(?:=[^\]]+)?\][\s\S]*?\[\/code\]/gi, " ");
+  const usernames = new Set<string>();
+  const mentionPattern =
+    /(^|[^\w@])@([a-z0-9][a-z0-9_-]{2,31})(?![a-z0-9_-])/gi;
+
+  for (const match of searchableBody.matchAll(mentionPattern)) {
+    const username = match[2]?.toLowerCase();
+    if (username !== undefined) {
+      usernames.add(username);
+    }
+    if (usernames.size >= FORUM_MENTION_LIMIT) {
+      break;
+    }
+  }
+  return [...usernames];
 }
 
 async function loadVisibleForumNotifications(
@@ -15637,6 +15760,9 @@ function forumNotificationPreferenceSettings(
     inAppNewThreads:
       preferences?.inAppNewThreads ??
       DEFAULT_FORUM_NOTIFICATION_PREFERENCES.inAppNewThreads,
+    inAppMentions:
+      preferences?.inAppMentions ??
+      DEFAULT_FORUM_NOTIFICATION_PREFERENCES.inAppMentions,
     emailReplies:
       preferences?.emailReplies ??
       DEFAULT_FORUM_NOTIFICATION_PREFERENCES.emailReplies,

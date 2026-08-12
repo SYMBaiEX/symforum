@@ -318,8 +318,8 @@ function ForumNotificationPanel({
     unreadCountLimited && unreadCount === 0
       ? "Unread updates may exist beyond the latest bounded visibility scan."
       : unreadCountLimited
-        ? `Latest ${unreadLabel} unread updates from watched boards and threads.`
-        : `${unreadLabel} unread update${unreadCount === 1 ? "" : "s"} from watched boards and threads.`;
+        ? `Latest ${unreadLabel} unread alerts from watched activity and direct mentions.`
+        : `${unreadLabel} unread forum alert${unreadCount === 1 ? "" : "s"} from watched activity and direct mentions.`;
 
   return (
     <section className="border border-row-border">
@@ -383,7 +383,11 @@ function ForumNotificationRow({
     notification.postPage,
   );
   const notificationLabel =
-    notification.type === "newThread" ? "New topic" : "Reply";
+    notification.type === "newThread"
+      ? "New topic"
+      : notification.type === "mention"
+        ? "Mention"
+        : "Reply";
 
   return (
     <div className="grid gap-3 px-4 py-3 odd:bg-muted/15 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center">

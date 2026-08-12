@@ -1472,7 +1472,7 @@ function LiveForumThreadView({
                 {replyPreviewOpen ? "Hide preview" : "Preview"}
               </Button>
             }
-            note="Classic board layout, plain reading mode."
+            note="Mention a member with @handle to send an in-app alert."
             onSubmit={() => submitReply(thread._id)}
           >
             <ForumAttachmentDraftPanel

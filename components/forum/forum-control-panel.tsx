@@ -34,13 +34,18 @@ import { useEffect, useState } from "react";
 
 type ForumNotificationPreferencesDraft = Pick<
   ForumNotificationPreferencesRecord,
-  "inAppReplies" | "inAppNewThreads" | "emailReplies" | "emailNewThreads"
+  | "inAppReplies"
+  | "inAppNewThreads"
+  | "inAppMentions"
+  | "emailReplies"
+  | "emailNewThreads"
 >;
 
 const DEFAULT_NOTIFICATION_PREFERENCES_DRAFT: ForumNotificationPreferencesDraft =
   {
     inAppReplies: true,
     inAppNewThreads: true,
+    inAppMentions: true,
     emailReplies: false,
     emailNewThreads: false,
   };
@@ -147,6 +152,7 @@ function LiveForumControlPanel() {
     setNotificationDraft({
       inAppReplies: notificationPreferences.inAppReplies,
       inAppNewThreads: notificationPreferences.inAppNewThreads,
+      inAppMentions: notificationPreferences.inAppMentions,
       emailReplies: notificationPreferences.emailReplies,
       emailNewThreads: notificationPreferences.emailNewThreads,
     });
@@ -554,6 +560,7 @@ function forumNotificationDirectoryLabel(
   const activeChannels = [
     preferences.inAppReplies,
     preferences.inAppNewThreads,
+    preferences.inAppMentions,
     preferences.emailReplies,
     preferences.emailNewThreads,
   ].filter(Boolean).length;
@@ -563,7 +570,7 @@ function forumNotificationDirectoryLabel(
       : "queue"
     : "no email";
 
-  return `${activeChannels}/4 on / ${deliveryLabel}`;
+  return `${activeChannels}/5 on / ${deliveryLabel}`;
 }
 
 function ForumProfileForm({
@@ -793,7 +800,7 @@ function ForumNotificationPreferencesPanel({
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Notifications
           </p>
-          <h2 className="mt-2 text-lg font-semibold">Watched forums</h2>
+          <h2 className="mt-2 text-lg font-semibold">Forum alerts</h2>
         </div>
         <span className="border border-row-border px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
           {loading
@@ -819,6 +826,13 @@ function ForumNotificationPreferencesPanel({
           label="In-app new threads"
           meta="Watched boards"
           onChange={(value) => onChange({ inAppNewThreads: value })}
+        />
+        <ForumNotificationToggle
+          checked={draft.inAppMentions}
+          disabled={loading}
+          label="In-app mentions"
+          meta="Direct @handle alerts"
+          onChange={(value) => onChange({ inAppMentions: value })}
         />
         <ForumNotificationToggle
           checked={draft.emailReplies}

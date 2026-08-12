@@ -572,7 +572,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                   {threadPreviewOpen ? "Hide preview" : "Preview"}
                 </Button>
               }
-              note="Thread creation requires a signed-in SYM handle."
+              note="Thread creation requires a signed-in SYM handle. Mention a member with @handle to send an in-app alert."
               onSubmit={submitThread}
             >
               <ForumPrefixSelect

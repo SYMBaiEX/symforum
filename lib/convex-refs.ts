@@ -39,7 +39,7 @@ export type ForumReputationHistoryDirection = "received" | "given";
 export type ForumWarningStatus = "active" | "revoked" | "expired";
 export type ForumPollStatus = "open" | "closed";
 export type ForumNotificationStatus = "unread" | "read";
-export type ForumNotificationType = "reply" | "newThread";
+export type ForumNotificationType = "reply" | "newThread" | "mention";
 export type ForumPrivateMessageBox = "inbox" | "sent" | "trash";
 export type ForumMemberSortKey =
   | "posts-desc"
@@ -606,6 +606,7 @@ export type ForumNotificationPreferencesRecord = {
   userId: string;
   inAppReplies: boolean;
   inAppNewThreads: boolean;
+  inAppMentions: boolean;
   emailReplies: boolean;
   emailNewThreads: boolean;
   emailDestinationAvailable: boolean;
@@ -2641,6 +2642,7 @@ export const convexRefs = {
       {
         inAppReplies: boolean;
         inAppNewThreads: boolean;
+        inAppMentions?: boolean;
         emailReplies: boolean;
         emailNewThreads: boolean;
       },
