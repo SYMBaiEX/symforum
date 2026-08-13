@@ -109,9 +109,9 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
             <p className="font-mono text-[10px] uppercase text-muted-foreground">
               Board index
             </p>
-            <h1 className="mt-1 text-lg font-semibold md:text-xl">
+            <h2 className="mt-1 text-lg font-semibold md:text-xl">
               Find a useful thread
-            </h1>
+            </h2>
             <ForumIndexSnapshot overview={overview} />
           </div>
           <div className="flex flex-wrap gap-2 xl:justify-end">

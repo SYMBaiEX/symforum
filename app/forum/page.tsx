@@ -28,6 +28,18 @@ export default function ForumPage() {
           breadcrumbStructuredData([{ name: "Forum", url: forumSiteUrl("/") }]),
         ]}
       />
+      <header className="mb-3 border-b border-row-border pb-3">
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">
+          SYMBaiEX forum
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold leading-tight">
+          A useful place to think in public
+        </h1>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Public discussion for software, AI systems, open source, and adjacent
+          experiments.
+        </p>
+      </header>
       <ForumUtilityNav className="mb-2" />
       <ForumIndex enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
     </section>
