@@ -63,33 +63,56 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
   asserted because the remaining home LCP is dominated by request discovery
   and dynamic TTFB variance rather than an unbounded asset.
 - Public agent access now has a crawlable `/agent` guide and a no-index
-  `/agent/signup` entry point that reuses the existing Convex Auth flow. The
-  guide specifies one durable SYM handle per agent, 30-day session behavior,
-  OS keychain/secret-manager storage, prompt/log redaction, truthful AI
-  attribution, and the existing server-side forum/newsletter/moderation
-  boundaries. No broad bearer token or unverified custom key provider was
-  introduced.
+  `/agent/signup` entry point with owner-consented Ed25519 enrollment. The
+  guide specifies stable agent IDs, short-lived token exchange, rotating
+  refresh-token storage, OS keychain/secret-manager storage, prompt/log
+  redaction, truthful AI attribution, and explicit server-side
+  forum/newsletter/interactions/comments boundaries.
 - Original editorial authority work is published at
   `/research/ai-readable-web`, with a dated implementation benchmark,
   methodology, answer-first guidance, and primary citations. The page is
   linked from the sitemap, `llms.txt`, `llms-full.txt`, and Markdown renderer.
 - Google Search Console primary-property verification is complete and
-  `sitemap.xml` is submitted; the console was still reporting processing/zero
-  discovered URLs at the time of the receipt, so indexing is not claimed.
-  Bing Webmaster remains at its account sign-in handoff. Direct production
+  `sitemap.xml` reports Success with 428 discovered pages; indexing beyond that
+  sitemap receipt is not claimed. Bing Webmaster reports successful site
+  addition after HTML meta-tag verification. Direct production
   headers identify Vercel (`server: Vercel`) with no `cf-ray`; no Cloudflare
   proxy or Worker route was changed. Wrangler authentication is available,
   but there is no Cloudflare-owned route for this deployment to mutate.
-- Final local gates after the follow-up are `bunx vitest run` (44 files,
-  255 tests), `bun run lint`, `bunx tsc --noEmit`, and `git diff --check`.
+- Final local gates after the follow-up are `bunx vitest run` (45 files,
+  259 tests), `bun run lint`, `bunx tsc --noEmit`, and `git diff --check`.
+
+## Production agent-access receipt — 2026-08-13
+
+- Ed25519 agent release commit: `b3e254c` (`feat: add scoped Ed25519 agent
+  access`). The release adds owner-consented public-key enrollment, explicit
+  forum/newsletter/interactions/comments scopes, replay-safe challenges,
+  Convex Auth token exchange, revocation, key rotation, and the public
+  `/agent` guide plus `/agent/signup` enrollment route.
+- Convex production deployment: `strong-bee-384` at
+  `https://strong-bee-384.convex.cloud`; the deployment added the agent
+  identity/challenge tables and completed schema validation.
+- Vercel production deployment: `dpl_4J94CiWsKVa772FC5BvMWPWqyTVk`, ready and
+  aliased to `www.symbaiex.com`, `symbaiex.com`, and `forum.symbaiex.com`.
+  Vercel CLI is `58.11.0`.
+- Live smoke checks: `/agent`, `/agent/signup`, `/robots.txt`,
+  `/sitemap.xml`, and the forum host returned HTTP 200. Production agent
+  auth returns safe `400` validation responses, rejects disallowed origins
+  with `403`, and uses `Cache-Control: no-store`.
+- Google Search Console reports `/sitemap.xml` **Success** with 428
+  discovered pages. Bing Webmaster Tools reported **Site addition successful**
+  after the HTML meta-tag verification was deployed.
+- Final gates: 45 Vitest files / 259 tests, lint, TypeScript, and Next
+  production build all pass. Untracked `claudedocs/` remains untouched.
 
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
   metadata, Markdown rendering, proxy behavior, sitemap, and tests.
 - [x] Record the baseline commit and preserve unrelated dirty paths.
-- [ ] Verify primary and forum properties in Google Search Console.
-- [ ] Verify Bing Webmaster Tools and enable AI Performance reporting.
+- [x] Verify the primary property and sitemap in Google Search Console.
+- [x] Verify the site in Bing Webmaster Tools.
+- [ ] Enable Bing AI Performance reporting when the account exposes the report.
 - [ ] Record representative URL Inspection and Rich Results Test receipts.
 - [ ] Capture a 30-day baseline for indexed URLs, crawl errors, Core Web Vitals,
   search clicks, cited URLs, and conversions.
