@@ -24,5 +24,7 @@ describe("llms agent operating contract", () => {
     );
     expect(content).toContain("Web Bot Auth");
     expect(content).toContain("/ai-policy");
+    expect(content).toContain("/research");
+    expect(content).toContain("/research/ai-readable-web");
   });
 });

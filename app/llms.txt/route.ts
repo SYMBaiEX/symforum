@@ -15,7 +15,8 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [AI access policy](${PRIMARY_SITE_URL}/ai-policy): Public crawler, agent, training, and attribution policy.
 - [Agent access page](${PRIMARY_SITE_URL}/agent): Short human handoff with one copyable prompt.
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
-- [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
+ - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
+ - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
 - [Blog](${PRIMARY_SITE_URL}/blog): Essays and field notes.
 - [News](${PRIMARY_SITE_URL}/news): Source-linked Hacker News index and discussion layer.
 - [Portfolio](${PRIMARY_SITE_URL}/portfolio): Shipped systems, contributions, and open-source projects.

@@ -33,7 +33,11 @@ export default function AiReadableWebResearchPage() {
           },
           breadcrumbStructuredData([
             { name: "Home", url: primarySiteUrl("/") },
-            { name: "Research", url: canonical },
+            { name: "Research", url: primarySiteUrl("/research") },
+            {
+              name: "AI-readable web architecture",
+              url: canonical,
+            },
           ]),
         ]}
       />

@@ -72,6 +72,9 @@ export async function renderAiReadablePage({
   if (normalized === "/agent/instructions") {
     return renderAgentInstructions();
   }
+  if (normalized === "/research") {
+    return renderResearchHub();
+  }
   if (normalized === "/research/ai-readable-web") {
     return renderAiReadableResearch();
   }
@@ -265,6 +268,52 @@ function renderAiPolicyPage() {
       `- [llms.txt](${primarySiteUrl("/llms.txt")}) — curated site map for agents.`,
       `- [XML sitemap](${primarySiteUrl("/sitemap.xml")}) — canonical public URLs for search crawlers.`,
       `- [Robots policy](${primarySiteUrl("/robots.txt")}) — crawler access directives.`,
+    ].join("\n"),
+  );
+}
+
+function renderResearchHub() {
+  return page(
+    "Research hubs",
+    "A compact, source-grounded map for SYMBaiEX research topics with practical implementation notes.",
+    primarySiteUrl("/research"),
+    [
+      "# SYMBaiEX research hub",
+      "",
+      "> Choose a topic hub, then open the linked implementation note. This keeps discovery fast and faithful.",
+      "",
+      "## What you can do now",
+      "",
+      "- Read the current AI-readable web implementation note for one end-to-end pattern.",
+      "- Follow links from the hub to public policy, sitemap, and machine-readable index surfaces.",
+      "- Use explicit canonical URLs so all surfaces agree on the same authoritative content graph.",
+      "",
+      "## Current hubs",
+      "",
+      `- [AI-readable web architecture](${primarySiteUrl("/research/ai-readable-web")}) — publishing strategy, structured data, crawler policy, IndexNow, and performance evidence.`,
+      "",
+      "## Authority and disclosure",
+      "",
+      "Answer pages and Markdown snapshots share the same canonical references, and machine-readable lists should route through the public operating contract and policy pages before deeper crawling.",
+      `- [Machine-friendly contract](${primarySiteUrl("/llms.txt")})`,
+      `- [AI access policy](${primarySiteUrl("/ai-policy")})`,
+      `- [XML sitemap](${primarySiteUrl("/sitemap.xml")})`,
+      "",
+      "## Internal links",
+      "",
+      `- [Contact](${primarySiteUrl("/contact")})`,
+      `- [Research / AI-readable web note](${primarySiteUrl("/research/ai-readable-web")})`,
+      `- [Forum home](${primarySiteUrl("/forum")})`,
+      "",
+      "## Inclusion in AI-readable index files",
+      "",
+      "This page is now included in both `llms.txt` and `llms-full.txt` as a top-level research discovery hub.",
+      "",
+      "## Current scope",
+      "",
+      "- High-priority HTML content: /research",
+      "- Machine discovery surface: llms.txt + llms-full.txt",
+      "- Topic-level implementation detail page: /research/ai-readable-web",
     ].join("\n"),
   );
 }

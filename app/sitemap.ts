@@ -13,6 +13,7 @@ const PRIMARY_PATHS = [
   "/about",
   "/ai-policy",
   "/agent",
+  "/research",
   "/research/ai-readable-web",
   "/blog",
   "/contact",

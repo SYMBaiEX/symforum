@@ -10,6 +10,7 @@ const INDEX_PATHS = [
   "/about",
   "/ai-policy",
   "/agent",
+  "/research",
   "/research/ai-readable-web",
   "/blog",
   "/news",

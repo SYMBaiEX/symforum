@@ -24,4 +24,16 @@ describe("AI-readable agent guide", () => {
     expect(page?.markdown).toContain("Optional Cloudflare Web Bot Auth");
     expect(page?.markdown).toContain("/ai-policy");
   });
+
+  test("includes the research hub surface", async () => {
+    const page = await renderAiReadablePage({
+      pathname: "/research",
+    });
+
+    expect(page).not.toBeNull();
+    expect(page?.title).toBe("Research hubs");
+    expect(page?.markdown).toContain("# SYMBaiEX research hub");
+    expect(page?.markdown).toContain("AI-readable web architecture");
+    expect(page?.markdown).toContain("/research/ai-readable-web");
+  });
 });
