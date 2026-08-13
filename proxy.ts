@@ -324,7 +324,7 @@ function contentSecurityPolicy(): SecurityPolicy {
   const policy = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    "script-src-elem 'self'",
+    `script-src-elem 'self' 'nonce-${nonce}'`,
     `style-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-inline'" : ""}`,
     isDev
       ? "style-src-elem 'self' 'unsafe-inline'"
