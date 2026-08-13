@@ -10,8 +10,37 @@ import { primarySiteUrl } from "@/lib/site-urls";
 export const metadata: Metadata = {
   title: "Contact",
   description:
-    "Contact Austin Hamilton (SYMBaiEX) for AI systems, software engineering, open-source, and research conversations.",
+    "Contact Austin Hamilton (SYMBaIEX) for AI systems, software engineering, open-source, and research conversations.",
   alternates: { canonical: "/contact" },
+  openGraph: {
+    type: "website",
+    url: primarySiteUrl("/contact"),
+    title: "Contact",
+    description:
+      "Contact details and social links for Austin Hamilton (SYMBiEX).",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Contact Austin Hamilton at SYMBiEX.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Contact",
+    description:
+      "Use email, GitHub, or X/Twitter to reach Austin Hamilton at SYMBiEX.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Contact Austin Hamilton at SYMBiEX.",
+      },
+    ],
+  },
 };
 
 const socials = [

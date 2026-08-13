@@ -7,8 +7,37 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "Making a Next.js and Convex site AI-readable",
   description:
-    "An original SYMBaiEX implementation note on HTML, Markdown negotiation, crawler policy, structured data, IndexNow, and performance evidence.",
+    "An original SYMBaIEX implementation note on HTML, Markdown negotiation, crawler policy, structured data, IndexNow, and performance evidence.",
   alternates: { canonical: "/research/ai-readable-web" },
+  openGraph: {
+    type: "article",
+    url: primarySiteUrl("/research/ai-readable-web"),
+    title: "Making a Next.js and Convex site AI-readable",
+    description:
+      "An original SYMBaIEX implementation note on HTML, Markdown, structured data, and indexed freshness.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX research note: making a site AI-readable.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Making a Next.js and Convex site AI-readable",
+    description:
+      "Implementation notes on one truthful content graph for HTML, Markdown, sitemaps, feeds, and AI-discovery signals.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX research note: making a site AI-readable.",
+      },
+    ],
+  },
 };
 
 const canonical = primarySiteUrl("/research/ai-readable-web");

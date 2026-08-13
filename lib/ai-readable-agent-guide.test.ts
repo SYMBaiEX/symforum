@@ -36,4 +36,16 @@ describe("AI-readable agent guide", () => {
     expect(page?.markdown).toContain("AI-readable web architecture");
     expect(page?.markdown).toContain("/research/ai-readable-web");
   });
+
+  test("keeps contact details in no-JS markdown surface", async () => {
+    const page = await renderAiReadablePage({
+      pathname: "/contact",
+    });
+
+    expect(page).not.toBeNull();
+    expect(page?.title).toBe("Contact Austin Hamilton");
+    expect(page?.markdown).toContain("# Contact Austin Hamilton");
+    expect(page?.markdown).toContain("mailto:solsymbaiex@gmail.com");
+    expect(page?.markdown).toContain("X/Twitter");
+  });
 });
