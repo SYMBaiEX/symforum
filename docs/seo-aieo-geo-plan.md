@@ -105,6 +105,36 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 - Final gates: 45 Vitest files / 259 tests, lint, TypeScript, and Next
   production build all pass. Untracked `claudedocs/` remains untouched.
 
+## Latest agent-platform receipt — 2026-08-13
+
+- Release commit: `4a9fbee` (`feat: enforce agent quotas and publish operating
+  contract`).
+- Convex production deployment `prod:strong-bee-384` completed schema validation
+  and added owner-scoped monthly budgets, per-agent/request limits, an
+  idempotent usage ledger, and a server-side rate limiter. Agent forum threads,
+  replies, comments, interactions, and newsletter preference mutations now debit
+  one bounded operation unit for active agent identities; human accounts keep
+  existing behavior. Payment processing is intentionally disabled.
+- Vercel production deployment `dpl_FqibsxtberVV2uaaDe8xE5rsxSVN` is Ready and
+  serves `/agent`, `/llms.txt`, Markdown negotiation, and the first-party agent
+  auth relay. Live checks returned `/agent` 200, `/llms.txt` 200 with the
+  operating contract, malformed challenge 400 with `no-store`, and disallowed
+  origin 403.
+- Google Search Console: the primary property is verified and `/sitemap.xml`
+  remains **Success** with 428 discovered pages. Bing Webmaster Tools had no
+  sitemap registered, so `https://www.symbaiex.com/sitemap.xml` was submitted;
+  Bing accepted it and reports **Processing** pending its first crawl.
+- Cloudflare remains authoritative DNS (`paris.ns.cloudflare.com` and
+  `sri.ns.cloudflare.com`), while the apex and `www` records point to Vercel and
+  production responses identify `server: Vercel` without Cloudflare proxy
+  headers. No orange-cloud/proxy or payment product was enabled.
+- Cloudflare Pay Per Crawl, Monetization Gateway, MPP, and x402 remain future
+  options for a separate machine-facing product. Public HTML, Markdown,
+  `llms.txt`, feeds, search crawling, and normal forum participation stay free;
+  no payment is required or accepted for posts, votes, or likes.
+- Final gates: 49 Vitest files / 269 tests, lint, TypeScript, diff check, and
+  Next production build all pass. Untracked `claudedocs/` remains untouched.
+
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
