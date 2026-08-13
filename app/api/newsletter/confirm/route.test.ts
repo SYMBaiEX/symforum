@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const { mutation } = vi.hoisted(() => ({ mutation: vi.fn() }));
 
+vi.mock("server-only", () => ({}));
+
 vi.mock("convex/browser", () => ({
   ConvexHttpClient: class {
     mutation = mutation;

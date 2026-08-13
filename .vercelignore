@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+
+# Local-only development and generated artifacts.
+.next
+coverage
+claudedocs

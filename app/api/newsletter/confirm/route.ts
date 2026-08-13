@@ -1,7 +1,8 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { newsletterSiteUrlFromRequest } from "@/lib/newsletter-token";
+import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { ConvexHttpClient } from "convex/browser";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +26,27 @@ export async function POST(request: Request) {
           siteUrl: newsletterSiteUrlFromRequest(request.url),
         },
       );
-    } catch {
+    } catch (error) {
       // The confirmation page re-reads current state and keeps the action open
       // when the mutation did not complete.
+      after(() =>
+        recordSystemLog({
+          level: "warn",
+          source: "server",
+          scope: "newsletter-api",
+          eventType: "confirm_failed",
+          message: error instanceof Error ? error.message : "Could not confirm",
+          name: error instanceof Error ? error.name : undefined,
+          stack: error instanceof Error ? error.stack : undefined,
+          statusCode: 502,
+          fingerprint: [
+            "newsletter-api",
+            "confirm_failed",
+            error instanceof Error ? error.message : "unknown",
+          ].join("|"),
+          ...requestLogContext(request),
+        }),
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { getAuthenticatedServerConvexClient } from "@/lib/server-convex-auth";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
@@ -93,17 +94,19 @@ export async function GET(request: Request) {
         : error instanceof Error && error.name === "AbortError"
           ? "Muse telemetry timed out"
           : "Muse telemetry is unavailable";
-    void recordSystemLog({
-      level: "warn",
-      source: "server",
-      scope: "admin-telemetry",
-      eventType: "model_telemetry_request_failed",
-      message,
-      name: error instanceof Error ? error.name : undefined,
-      statusCode: status,
-      fingerprint: `admin-telemetry|model|${status}|${message}`,
-      ...requestLogContext(request),
-    });
+    after(() =>
+      recordSystemLog({
+        level: "warn",
+        source: "server",
+        scope: "admin-telemetry",
+        eventType: "model_telemetry_request_failed",
+        message,
+        name: error instanceof Error ? error.name : undefined,
+        statusCode: status,
+        fingerprint: `admin-telemetry|model|${status}|${message}`,
+        ...requestLogContext(request),
+      }),
+    );
     return noStore({ error: message }, status);
   }
 }

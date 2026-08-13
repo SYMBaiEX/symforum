@@ -19,7 +19,7 @@ import {
 } from "react-email";
 import { Resend as ResendSdk } from "resend";
 import { makeFunctionReference } from "convex/server";
-import { internalAction, type ActionCtx } from "./_generated/server";
+import { env, internalAction, type ActionCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { resend } from "./resendClient";
@@ -1011,26 +1011,24 @@ function BaseEmail({
 }
 
 function resendSdk() {
-  return new ResendSdk(process.env.RESEND_API_KEY);
+  return new ResendSdk(env.RESEND_API_KEY);
 }
 
 function isResendConfigured() {
-  return Boolean(process.env.RESEND_API_KEY);
+  return Boolean(env.RESEND_API_KEY);
 }
 
 function fromEmail() {
-  return (
-    process.env.NEWSLETTER_FROM_EMAIL || "SYMBaiEX <onboarding@resend.dev>"
-  );
+  return env.NEWSLETTER_FROM_EMAIL || "SYMBaiEX <onboarding@resend.dev>";
 }
 
 function replyToEmails() {
-  const value = process.env.NEWSLETTER_REPLY_TO;
+  const value = env.NEWSLETTER_REPLY_TO;
   return value ? [value] : undefined;
 }
 
 function testUnsubscribeUrl() {
-  const siteUrl = process.env.NEWSLETTER_SITE_URL || "https://symbaiex.com";
+  const siteUrl = env.NEWSLETTER_SITE_URL || "https://symbaiex.com";
   return `${siteUrl}/newsletter/preferences`;
 }
 

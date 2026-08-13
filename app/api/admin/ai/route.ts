@@ -15,6 +15,7 @@ import {
   modelGenerationSettings,
   modelInstructions,
 } from "@/lib/muse-model-profile";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -74,23 +75,25 @@ export async function POST(request: Request) {
       timeout: { totalMs: 240_000 },
     });
   } catch (error) {
-    void recordSystemLog({
-      level: "error",
-      source: "server",
-      scope: "admin-ai",
-      eventType: "admin_ai_request_failed",
-      message: error instanceof Error ? error.message : "Admin AI failed",
-      name: error instanceof Error ? error.name : undefined,
-      stack: error instanceof Error ? error.stack : undefined,
-      statusCode: error instanceof AdminAiError ? error.status : 500,
-      fingerprint: [
-        "admin-ai",
-        error instanceof AdminAiError ? error.status : 500,
-        error instanceof Error ? error.message : "unknown",
-      ].join("|"),
-      metadataJson: JSON.stringify({ correlationId }),
-      ...requestLogContext(request),
-    });
+    after(() =>
+      recordSystemLog({
+        level: "error",
+        source: "server",
+        scope: "admin-ai",
+        eventType: "admin_ai_request_failed",
+        message: error instanceof Error ? error.message : "Admin AI failed",
+        name: error instanceof Error ? error.name : undefined,
+        stack: error instanceof Error ? error.stack : undefined,
+        statusCode: error instanceof AdminAiError ? error.status : 500,
+        fingerprint: [
+          "admin-ai",
+          error instanceof AdminAiError ? error.status : 500,
+          error instanceof Error ? error.message : "unknown",
+        ].join("|"),
+        metadataJson: JSON.stringify({ correlationId }),
+        ...requestLogContext(request),
+      }),
+    );
 
     if (error instanceof AdminAiError) {
       return Response.json(
@@ -282,16 +285,18 @@ async function ownerConvexClient(request: Request) {
   convex.setAuth(token);
   const viewer = await convex.query(convexRefs.admin.viewer, {});
   if (!viewer.isOwner) {
-    void recordSystemLog({
-      level: "warn",
-      source: "server",
-      scope: "admin-ai",
-      eventType: "admin_ai_forbidden",
-      message: "Non-owner attempted to use admin AI",
-      statusCode: 403,
-      fingerprint: "admin-ai|forbidden",
-      ...requestLogContext(request),
-    });
+    after(() =>
+      recordSystemLog({
+        level: "warn",
+        source: "server",
+        scope: "admin-ai",
+        eventType: "admin_ai_forbidden",
+        message: "Non-owner attempted to use admin AI",
+        statusCode: 403,
+        fingerprint: "admin-ai|forbidden",
+        ...requestLogContext(request),
+      }),
+    );
     throw new AdminAiError(403, "Owner access required");
   }
   return convex;

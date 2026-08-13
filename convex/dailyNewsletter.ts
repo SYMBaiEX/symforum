@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
+  env,
   internalAction,
   internalMutation,
   mutation,
@@ -884,7 +885,7 @@ async function readDailyConfig(
 ) {
   const siteUrl =
     (await ctx.runQuery(getSettingRef, { key: "newsletter.siteUrl" })) ??
-    process.env.NEWSLETTER_SITE_URL ??
+    env.NEWSLETTER_SITE_URL ??
     "https://symbaiex.com";
   const enabledSetting = await ctx.runQuery(getSettingRef, {
     key: "dailyNewsletter.enabled",

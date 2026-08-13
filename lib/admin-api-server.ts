@@ -10,7 +10,7 @@ import {
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { makeFunctionReference } from "convex/server";
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getServerConvexClient } from "@/lib/server-convex";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
@@ -166,7 +166,7 @@ export function tokenHashFromRequest(request: Request) {
 
 export function apiError(error: unknown, request?: Request) {
   const status = apiErrorStatus(error);
-  void recordAdminApiError(error, status, request);
+  after(() => recordAdminApiError(error, status, request));
 
   if (error instanceof AdminApiError) {
     return NextResponse.json(
