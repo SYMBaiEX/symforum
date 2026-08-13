@@ -56,7 +56,15 @@ export default proxy;
 export const config = {
   // The following matcher runs Proxy on all routes
   // except static assets.
-  matcher: ["/((?!.*\\..*|_next).*)", "/(.*)\\.md", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!.*\\..*|_next).*)",
+    "/(.*)\\.md",
+    "/",
+    "/(api|trpc)(.*)",
+    "/llms.txt",
+    "/llms-full.txt",
+    "/feed/:path*",
+  ],
 };
 
 function cleanRedirect(value: string | null) {
