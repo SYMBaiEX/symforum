@@ -40,6 +40,17 @@ export default function ResearchHubPage() {
             })),
             dateModified: "2026-08-13",
           },
+          {
+            "@type": "ItemList",
+            "@id": `${canonical}#hubs`,
+            name: "SYMBaiEX research topics",
+            itemListElement: hubs.map((hub, index) => ({
+              "@type": "ListItem",
+              position: index + 1,
+              name: hub.name,
+              url: primarySiteUrl(hub.path),
+            })),
+          },
           breadcrumbStructuredData([
             { name: "Home", url: primarySiteUrl("/") },
             { name: "Research", url: canonical },

@@ -49,18 +49,40 @@ beforeEach(() => {
 });
 
 describe("sitemap health and fallback", () => {
+  test("always includes the canonical research hub", async () => {
+    const sitemapModule = await loadSitemapModule();
+    const { default: runSitemap, resetSitemapHealthForTests } = sitemapModule;
+    resetSitemapHealthForTests();
+
+    mocks.getPublishedPosts.mockResolvedValue([]);
+    mocks.getPortfolioProjects.mockResolvedValue([]);
+    mocks.getPublicNewsletterIssues.mockResolvedValue([]);
+    mocks.getNewsTimeline.mockResolvedValue(null);
+    mocks.getDailyNews.mockResolvedValue([]);
+
+    const rows = await runSitemap();
+    expect(rows).toContainEqual(
+      expect.objectContaining({ url: primarySiteUrl("/research") }),
+    );
+  });
+
   test("uses stale last-known-good snapshot when a source fails", async () => {
     const sitemapModule = await loadSitemapModule();
-    const { default: runSitemap, getSitemapHealthSnapshot, resetSitemapHealthForTests } =
-      sitemapModule;
+    const {
+      default: runSitemap,
+      getSitemapHealthSnapshot,
+      resetSitemapHealthForTests,
+    } = sitemapModule;
     resetSitemapHealthForTests();
 
     mocks.getPublishedPosts.mockResolvedValue([
-      { slug: "first-post", featured: true, publishedAt: "2026-01-10T00:00:00Z" },
+      {
+        slug: "first-post",
+        featured: true,
+        publishedAt: "2026-01-10T00:00:00Z",
+      },
     ]);
-    mocks.getPortfolioProjects.mockResolvedValue([
-      { slug: "symba-labs" },
-    ]);
+    mocks.getPortfolioProjects.mockResolvedValue([{ slug: "symba-labs" }]);
     mocks.getPublicNewsletterIssues.mockResolvedValue([
       { slug: "news-001", sentAt: "2026-01-10T00:00:00Z" },
     ]);
@@ -79,7 +101,9 @@ describe("sitemap health and fallback", () => {
     expect(warmupSnapshot.sources.blog.status).toBe("ok");
     expect(warmupSnapshot.staleSnapshotCount).toBeGreaterThan(0);
 
-    mocks.getPublishedPosts.mockRejectedValue(new Error("blog source unavailable"));
+    mocks.getPublishedPosts.mockRejectedValue(
+      new Error("blog source unavailable"),
+    );
     const fallbackRun = await runSitemap();
     expect(fallbackRun).toContainEqual(
       expect.objectContaining({
@@ -94,8 +118,11 @@ describe("sitemap health and fallback", () => {
 
   test("tracks source degradation when no stale snapshot exists", async () => {
     const sitemapModule = await loadSitemapModule();
-    const { default: runSitemap, getSitemapHealthSnapshot, resetSitemapHealthForTests } =
-      sitemapModule;
+    const {
+      default: runSitemap,
+      getSitemapHealthSnapshot,
+      resetSitemapHealthForTests,
+    } = sitemapModule;
     resetSitemapHealthForTests();
 
     mocks.getPublishedPosts.mockRejectedValue(new Error("blog source offline"));
