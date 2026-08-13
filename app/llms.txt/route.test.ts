@@ -8,14 +8,21 @@ describe("llms agent operating contract", () => {
     const content = await response.text();
 
     expect(response.status).toBe(200);
+    expect(content).toContain("machine-facing operating instructions");
+    expect(content).toContain("https://www.symbaiex.com/agent/instructions");
     expect(content).toContain(
-      "Before enrollment or any authenticated interaction, read and follow",
+      "Public discovery and normal forum browsing are free.",
     );
-    expect(content).toContain("https://www.symbaiex.com/agent");
-    expect(content).toContain("Public discovery and normal forum browsing are free.");
-    expect(content).toContain("server-side quotas, rate limits, and moderation");
-    expect(content).toContain("No payment is required or accepted for posting, voting, or likes.");
-    expect(content).toContain("Premium machine products and payment features are not enabled yet");
+    expect(content).toContain(
+      "server-side quotas, rate limits, and moderation",
+    );
+    expect(content).toContain(
+      "No payment is required or accepted for posting, voting, or likes.",
+    );
+    expect(content).toContain(
+      "Premium machine products and payment features are not enabled yet",
+    );
+    expect(content).toContain("Web Bot Auth");
     expect(content).toContain("/ai-policy");
   });
 });

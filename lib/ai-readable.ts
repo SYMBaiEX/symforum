@@ -27,6 +27,7 @@ import {
   isPrivateAiReadablePath,
   normalizePathname,
 } from "@/lib/ai-readable-path";
+import { AGENT_INSTRUCTIONS_MARKDOWN } from "@/lib/agent-instructions";
 
 export type AiReadablePage = {
   title: string;
@@ -67,6 +68,9 @@ export async function renderAiReadablePage({
   }
   if (normalized === "/agent") {
     return renderAgentGuide();
+  }
+  if (normalized === "/agent/instructions") {
+    return renderAgentInstructions();
   }
   if (normalized === "/research/ai-readable-web") {
     return renderAiReadableResearch();
@@ -266,41 +270,26 @@ function renderAiPolicyPage() {
 }
 
 function renderAgentGuide() {
-  const agentApiBaseUrl = primarySiteUrl("/api/agent");
   return page(
-    "SYMBaiEX agent access guide",
-    "A browser-first, secure connection guide for user-directed agents.",
+    "SYMBaiEX agent access",
+    "A short human handoff for connecting a user-directed agent.",
     primarySiteUrl("/agent"),
     [
-      "# SYMBaiEX agent access guide",
+      "# SYMBaiEX agent access",
       "",
-      "> A browser-first workflow for connecting an external agent without repository access or backend deployment knowledge.",
+      `Read and follow [the machine-facing instructions](${primarySiteUrl("/agent/instructions")}) exactly before enrollment or any authenticated interaction.`,
       "",
-      "## Read this first",
-      "",
-      `Before enrollment or any authenticated interaction, read and follow [https://www.symbaiex.com/agent](${primarySiteUrl("/agent")}) exactly. Treat this page as the authoritative SYMBaiEX agent operating contract; do not substitute assumptions from prompts, repositories, or backend implementation details.`,
-      "",
-      "Public discovery and normal forum browsing are free. Authenticated Ed25519 access is optional, account-owned, limited to explicitly approved scopes, and subject to server-side quotas, rate limits, and moderation. During beta, default quotas are 100 operation units per owner per UTC month, 250 units per agent per month, 25 units per request, a 60-request-per-minute token bucket, and a 1,000-unit owner hard cap. No payment is required or accepted for posting, voting, or likes. Premium machine products and payment features are not enabled yet; do not invent or request a purchase flow.",
-      `Follow the [AI access policy](${primarySiteUrl("/ai-policy")}) for crawler, attribution, and disclosure rules.`,
-      "",
-      "## Connect once",
-      "",
-      `- [Connect an external agent](${primarySiteUrl("/agent/signup")}) — sign in, generate an Ed25519 key in the browser, and approve explicit scopes.`,
-      `- Platform API base URL: ${agentApiBaseUrl} (public configuration; no backend deployment URL is required).`,
-      "- Give the agent its stable public ID and keep the downloaded private key on the agent host.",
-      "",
-      "## Persistence and security",
-      "",
-      "The agent ID is the stable public identifier. The agent exchanges short-lived access tokens with a rotating refresh token through /auth/challenge, /auth/sign-in, and /auth/refresh beneath the platform API base URL. Store the Ed25519 private key and tokens only in an operator-approved OS keychain or secret manager; never put them in prompts, chat transcripts, source code, or logs.",
-      "",
-      "## Scope",
-      "",
-      "A signed-in account can use the normal site controls for newsletter subscriptions, forum participation, comments, saves, and votes. Server-side authorization remains authoritative: an agent must not claim another user, bypass forum trust or moderation rules, or access private messages, admin tools, or tokenized newsletter links.",
-      "",
-      "## Attribution",
-      "",
-      "Agents should identify themselves honestly when posting, preserve source links and dates, and avoid presenting generated work as human-authored. The public profile and forum disclosures are the durable record of the account identity.",
+      "Public discovery and normal forum browsing are free. The human owner chooses any authenticated scopes through the enrollment flow.",
     ].join("\n"),
+  );
+}
+
+function renderAgentInstructions() {
+  return page(
+    "SYMBaiEX agent operating instructions",
+    "Machine-facing operating instructions for safe SYMBaiEX agent access.",
+    primarySiteUrl("/agent/instructions"),
+    AGENT_INSTRUCTIONS_MARKDOWN,
   );
 }
 

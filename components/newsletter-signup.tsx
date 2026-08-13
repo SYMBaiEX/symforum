@@ -92,7 +92,7 @@ export function NewsletterSignup({
         type="submit"
         size="sm"
         className={cn(
-          "h-9 rounded-none bg-pink-500 text-white hover:bg-pink-500/90",
+          "h-9 rounded-none bg-pink-700 text-white hover:bg-pink-800",
           variant === "footer" && "w-9 px-0 sm:w-auto sm:px-2.5",
         )}
         disabled={pending}
