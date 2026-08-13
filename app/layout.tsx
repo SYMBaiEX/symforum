@@ -148,7 +148,7 @@ export default async function RootLayout({
         ? `/forum${requestPath}`
         : requestPath;
   const noScriptFallback =
-    requestPath === "/" && !isForumSurface
+    requestPath === "/" || isForumSurface
       ? null
       : await renderAiReadablePage({ pathname: fallbackPath, host });
   const document = (
