@@ -117,9 +117,13 @@ export default async function RootLayout({
     initialForumHost ||
     requestPath === "/forum" ||
     requestPath.startsWith("/forum/");
-  const noScriptFallback = isForumSurface
-    ? null
-    : await renderAiReadablePage({ pathname: requestPath, host });
+  // The home page already renders its public content server-side. Avoid a
+  // second Convex-backed markdown render before the hero can stream; other
+  // public routes retain the no-JS fallback.
+  const noScriptFallback =
+    isForumSurface || requestPath === "/"
+      ? null
+      : await renderAiReadablePage({ pathname: requestPath, host });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
