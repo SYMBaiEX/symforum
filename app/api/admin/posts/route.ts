@@ -7,6 +7,9 @@ import {
   readJson,
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
+import { notifyIndexNow } from "@/lib/indexnow";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,9 @@ export async function POST(request: Request) {
       tokenHash,
       post,
     });
+    if (savedPost?.status === "published") {
+      after(() => notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(savedPost.slug)}`)]));
+    }
     return jsonOk({ post: savedPost }, 201);
   } catch (error) {
     return apiError(error, request);

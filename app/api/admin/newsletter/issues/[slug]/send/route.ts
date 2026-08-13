@@ -6,6 +6,9 @@ import {
   normalizeSlugParam,
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
+import { notifyIndexNow } from "@/lib/indexnow";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,11 @@ export async function POST(
       tokenHash,
       slug,
     });
+    after(() =>
+      notifyIndexNow([
+        primarySiteUrl(`/newsletter/${encodeURIComponent(slug)}`),
+      ]),
+    );
     return jsonOk(result);
   } catch (error) {
     return apiError(error, request);

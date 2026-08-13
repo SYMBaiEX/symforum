@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function ForumSavedThreadsPage() {
   return (
-    <main className="page-frame page-frame-dense">
+    <div className="page-frame page-frame-dense">
       <ForumUserCpShell
         description="Keep a private reading list without subscribing to reply notifications."
         title="Saved threads"
@@ -25,6 +25,6 @@ export default function ForumSavedThreadsPage() {
           enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         />
       </ForumUserCpShell>
-    </main>
+    </div>
   );
 }

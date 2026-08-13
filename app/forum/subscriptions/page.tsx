@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function ForumSubscriptionsPage() {
   return (
-    <main className="page-frame page-frame-dense">
+    <div className="page-frame page-frame-dense">
       <ForumUserCpShell
         description="Review watched boards, watched threads, and unread forum notifications."
         title="Subscriptions"
@@ -25,6 +25,6 @@ export default function ForumSubscriptionsPage() {
           enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         />
       </ForumUserCpShell>
-    </main>
+    </div>
   );
 }

@@ -9,6 +9,9 @@ import {
   readJson,
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
+import { notifyIndexNow } from "@/lib/indexnow";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +62,15 @@ export async function PATCH(
         issue,
       },
     );
+    if (savedIssue?.status === "sent" || existing?.status === "sent") {
+      after(() =>
+        notifyIndexNow([
+          primarySiteUrl(
+            `/newsletter/${encodeURIComponent(savedIssue?.slug ?? slug)}`,
+          ),
+        ]),
+      );
+    }
     return jsonOk({ issue: savedIssue });
   } catch (error) {
     return apiError(error, request);

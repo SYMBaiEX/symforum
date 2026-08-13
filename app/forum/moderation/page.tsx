@@ -16,10 +16,10 @@ export const metadata: Metadata = {
 
 export default function ForumModerationRoute() {
   return (
-    <main className="page-frame page-frame-dense">
+    <div className="page-frame page-frame-dense">
       <ForumModerationPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
       />
-    </main>
+    </div>
   );
 }

@@ -9,6 +9,9 @@ import {
   readJson,
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
+import { notifyIndexNow } from "@/lib/indexnow";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +62,13 @@ export async function PATCH(
       tokenHash,
       post,
     });
+    if (savedPost?.status === "published" || existing.status === "published") {
+      after(() =>
+        notifyIndexNow([
+          primarySiteUrl(`/blog/${encodeURIComponent(savedPost?.slug ?? slug)}`),
+        ]),
+      );
+    }
     return jsonOk({ post: savedPost });
   } catch (error) {
     return apiError(error, request);
@@ -85,6 +95,9 @@ export async function DELETE(
       tokenHash,
       slug,
     });
+    if (result.deleted) {
+      after(() => notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(slug)}`)]));
+    }
     return jsonOk(result);
   } catch (error) {
     return apiError(error, request);

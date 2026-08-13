@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function ForumControlPanelPage() {
   return (
-    <main className="page-frame page-frame-dense">
+    <div className="page-frame page-frame-dense">
       <ForumUserCpShell
         description="Profile, signature, and watched-thread tools for your forum account."
         title="Profile settings"
@@ -25,6 +25,6 @@ export default function ForumControlPanelPage() {
           enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         />
       </ForumUserCpShell>
-    </main>
+    </div>
   );
 }
