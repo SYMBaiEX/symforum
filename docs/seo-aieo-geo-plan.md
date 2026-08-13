@@ -46,6 +46,43 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
   rendering correctly; this is tracked as a framework/runtime investigation,
   separate from the clean Vercel server-error log.
 
+## Follow-up execution receipt — 2026-08-13
+
+- Performance release commits: `cbd8485`, `cf45bc2`, `cb1aaca`, `b87a930`,
+  `cfadd7d`, `8cf3eca`, `beca823`, `c71e0af`, and `da486af`.
+- The latest production content release is `d18f39b`, deployed as
+  `dpl_DZqyW193sFxhipwujM5Zs15ZPB3L` and aliased to the primary and forum
+  hosts. The Vercel build completed all generated routes successfully.
+- The largest confirmed performance wins are removal of the global idle route
+  warmer and 2.05 MB sprite request, deferred decorative media, responsive
+  hero delivery, streaming below-fold Convex content, and removal of duplicate
+  home fallback work. The measured home transfer fell from about 2,578 KiB to
+  about 489 KiB. Latest sampled production Lighthouse results are home
+  `93–94/100`, blog `95/100`, and forum `94/100` performance, with sampled
+  accessibility and SEO at `100/100`. A literal `100/100` lab score is not
+  asserted because the remaining home LCP is dominated by request discovery
+  and dynamic TTFB variance rather than an unbounded asset.
+- Public agent access now has a crawlable `/agent` guide and a no-index
+  `/agent/signup` entry point that reuses the existing Convex Auth flow. The
+  guide specifies one durable SYM handle per agent, 30-day session behavior,
+  OS keychain/secret-manager storage, prompt/log redaction, truthful AI
+  attribution, and the existing server-side forum/newsletter/moderation
+  boundaries. No broad bearer token or unverified custom key provider was
+  introduced.
+- Original editorial authority work is published at
+  `/research/ai-readable-web`, with a dated implementation benchmark,
+  methodology, answer-first guidance, and primary citations. The page is
+  linked from the sitemap, `llms.txt`, `llms-full.txt`, and Markdown renderer.
+- Google Search Console primary-property verification is complete and
+  `sitemap.xml` is submitted; the console was still reporting processing/zero
+  discovered URLs at the time of the receipt, so indexing is not claimed.
+  Bing Webmaster remains at its account sign-in handoff. Direct production
+  headers identify Vercel (`server: Vercel`) with no `cf-ray`; no Cloudflare
+  proxy or Worker route was changed. Wrangler authentication is available,
+  but there is no Cloudflare-owned route for this deployment to mutate.
+- Final local gates after the follow-up are `bunx vitest run` (44 files,
+  255 tests), `bun run lint`, `bunx tsc --noEmit`, and `git diff --check`.
+
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
