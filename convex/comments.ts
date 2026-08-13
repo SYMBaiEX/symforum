@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";
+import { enforceAgentScopeIfNeeded } from "./authz";
 
 const entityType = v.union(
   v.literal("post"),
@@ -39,12 +40,14 @@ export const list = query({
       .order("asc")
       .take(COMMENT_LIMIT);
     const viewerId = await getAuthUserId(ctx);
-    const viewer = viewerId === null ? null : await ctx.db.get("users", viewerId);
+    const viewer =
+      viewerId === null ? null : await ctx.db.get("users", viewerId);
     const viewerCanModerate = canModerate(viewer);
     const usersById = new Map(
       await Promise.all(
         [...new Set(rows.map((comment) => comment.userId))].map(
-          async (userId) => [userId, await ctx.db.get("users", userId)] as const,
+          async (userId) =>
+            [userId, await ctx.db.get("users", userId)] as const,
         ),
       ),
     );
@@ -218,6 +221,8 @@ async function requireSignedInUserId(ctx: QueryCtx | MutationCtx) {
       message: "Sign in with a SYM handle to join the thread.",
     });
   }
+  const user = await ctx.db.get("users", userId);
+  enforceAgentScopeIfNeeded(user, "comments");
   return userId;
 }
 

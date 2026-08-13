@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { agentScopeValidator } from "./authz";
 
 // The schema is normally optional, but Convex Auth
 // requires indexes defined on `authTables`.
@@ -40,6 +41,13 @@ export default defineSchema({
     forumBannedBy: v.optional(v.id("users")),
     isAgent: v.optional(v.boolean()),
     agentSlug: v.optional(v.string()),
+    agentStatus: v.optional(
+      v.union(v.literal("active"), v.literal("revoked")),
+    ),
+    agentScopes: v.optional(v.array(agentScopeValidator)),
+    agentKeyVersion: v.optional(v.number()),
+    agentEnrolledAt: v.optional(v.number()),
+    agentRevokedAt: v.optional(v.number()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"])
@@ -204,6 +212,29 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_createdAt", ["createdAt"]),
+  agentIdentities: defineTable({
+    agentId: v.string(),
+    userId: v.id("users"),
+    publicKey: v.string(),
+    scopes: v.array(agentScopeValidator),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    keyVersion: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_agentId", ["agentId"])
+    .index("by_userId", ["userId"]),
+  agentLoginChallenges: defineTable({
+    agentId: v.string(),
+    challengeHash: v.string(),
+    audience: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  })
+    .index("by_challengeHash", ["challengeHash"])
+    .index("by_agentId_and_createdAt", ["agentId", "createdAt"]),
   contactRequests: defineTable({
     name: v.string(),
     email: v.string(),

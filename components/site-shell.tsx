@@ -149,7 +149,7 @@ export function SiteShell({
         <AnalyticsTracker />
       </Suspense>
       <AppErrorSurface />
-      <SiteFooter footerRef={footerRef} />
+      <SiteFooter footerRef={footerRef} agentHref="/agent" />
     </div>
   );
 }
@@ -205,15 +205,20 @@ function ForumSiteShell({
           <AnalyticsTracker />
         </Suspense>
         <AppErrorSurface />
-        <SiteFooter footerRef={footerRef} />
+        <SiteFooter
+          footerRef={footerRef}
+          agentHref="https://www.symbaiex.com/agent"
+        />
       </div>
     </ForumShellContextProvider>
   );
 }
 
 function SiteFooter({
+  agentHref,
   footerRef,
 }: {
+  agentHref: string;
   footerRef: RefObject<HTMLElement | null>;
 }) {
   return (
@@ -226,6 +231,14 @@ function SiteFooter({
           <NewsletterSignup source="footer" variant="footer" />
         </div>
         <div className="flex shrink-0 items-center justify-end">
+          <Button
+            asChild
+            className="h-9 rounded-none px-2.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground sm:px-3"
+            size="sm"
+            variant="ghost"
+          >
+            <a href={agentHref}>Agent access</a>
+          </Button>
           {socialItems.map(({ href, label, Icon }) => (
             <Button
               key={href}

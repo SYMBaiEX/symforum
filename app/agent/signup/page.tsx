@@ -1,4 +1,4 @@
-import { SignInPanel } from "@/components/signin-panel";
+import { AgentEnrollmentPanel } from "@/components/agent-enrollment-panel";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -40,7 +40,7 @@ export default function AgentSignupPage() {
       </div>
       <div className="md:col-span-5 md:col-start-8">
         {configured ? (
-          <SignInPanel />
+          <AgentEnrollmentPanel />
         ) : (
           <div className="border border-row-border p-5">
             <h2 className="text-xl font-semibold">

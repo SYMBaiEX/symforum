@@ -1,7 +1,7 @@
 import { httpRouter } from "convex/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
-import { httpAction } from "./_generated/server";
+import { env, httpAction } from "./_generated/server";
 import { resend } from "./resendClient";
 
 const http = httpRouter();
@@ -27,8 +27,170 @@ const FORUM_ATTACHMENT_ALLOWED_ORIGINS = new Set([
   "https://www.symbaiex.com",
   "https://forum.symbaiex.com",
 ]);
+const AGENT_AUTH_ALLOWED_ORIGINS = new Set([
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://forum.localhost:3000",
+  "http://symbaiex.localhost:3000",
+  "https://symbaiex.com",
+  "https://www.symbaiex.com",
+  "https://forum.symbaiex.com",
+]);
+const AGENT_AUTH_MAX_BODY_BYTES = 16 * 1024;
 
 auth.addHttpRoutes(http);
+
+for (const path of [
+  "/agent/auth/challenge",
+  "/agent/auth/sign-in",
+  "/agent/auth/refresh",
+] as const) {
+  http.route({
+    path,
+    method: "OPTIONS",
+    handler: httpAction(
+      async (_ctx, request) =>
+        new Response(null, {
+          status: 204,
+          headers: agentAuthCorsHeaders(request),
+        }),
+    ),
+  });
+}
+
+http.route({
+  path: "/agent/auth/challenge",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = agentAuthCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request)) {
+      return agentAuthJson(
+        { error: "Origin is not allowed." },
+        403,
+        corsHeaders,
+      );
+    }
+    try {
+      const body = await readAgentAuthBody(request);
+      if (!isRecord(body) || typeof body.agentId !== "string") {
+        return agentAuthJson(
+          { error: "agentId is required." },
+          400,
+          corsHeaders,
+        );
+      }
+      const result = await ctx.runMutation(
+        api.agentIdentity.requestLoginChallenge,
+        {
+          agentId: body.agentId,
+          audience: agentAuthAudience(),
+        },
+      );
+      return agentAuthJson(result, 200, corsHeaders);
+    } catch (error) {
+      return agentAuthJson(agentAuthError(error), 400, corsHeaders);
+    }
+  }),
+});
+
+http.route({
+  path: "/agent/auth/sign-in",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = agentAuthCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request)) {
+      return agentAuthJson(
+        { error: "Origin is not allowed." },
+        403,
+        corsHeaders,
+      );
+    }
+    try {
+      const body = await readAgentAuthBody(request);
+      if (
+        !isRecord(body) ||
+        typeof body.agentId !== "string" ||
+        typeof body.challenge !== "string" ||
+        typeof body.signature !== "string"
+      ) {
+        return agentAuthJson(
+          { error: "agentId, challenge, and signature are required." },
+          400,
+          corsHeaders,
+        );
+      }
+      const result = await ctx.runAction(api.auth.signIn, {
+        provider: "agent-key",
+        params: {
+          agentId: body.agentId,
+          challenge: body.challenge,
+          audience: agentAuthAudience(),
+          signature: body.signature,
+        },
+        calledBy: "agent-http",
+      });
+      if (result.tokens === null || result.tokens === undefined) {
+        return agentAuthJson(
+          { error: "Agent authentication failed." },
+          401,
+          corsHeaders,
+        );
+      }
+      return agentAuthJson({ tokens: result.tokens }, 200, corsHeaders);
+    } catch (error) {
+      return agentAuthJson(
+        { error: "Agent authentication failed." },
+        401,
+        corsHeaders,
+      );
+    }
+  }),
+});
+
+http.route({
+  path: "/agent/auth/refresh",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = agentAuthCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request)) {
+      return agentAuthJson(
+        { error: "Origin is not allowed." },
+        403,
+        corsHeaders,
+      );
+    }
+    try {
+      const body = await readAgentAuthBody(request);
+      if (!isRecord(body) || typeof body.refreshToken !== "string") {
+        return agentAuthJson(
+          { error: "refreshToken is required." },
+          400,
+          corsHeaders,
+        );
+      }
+      const result = await ctx.runAction(api.auth.signIn, {
+        refreshToken: body.refreshToken,
+        calledBy: "agent-http-refresh",
+      });
+      if (result.tokens === null || result.tokens === undefined) {
+        return agentAuthJson(
+          { error: "Agent session refresh failed." },
+          401,
+          corsHeaders,
+        );
+      }
+      return agentAuthJson({ tokens: result.tokens }, 200, corsHeaders);
+    } catch (error) {
+      return agentAuthJson(
+        { error: "Agent session refresh failed." },
+        401,
+        corsHeaders,
+      );
+    }
+  }),
+});
 
 http.route({
   path: "/forum-attachment-upload",
@@ -145,6 +307,73 @@ function forumAttachmentUploadCorsHeaders(request: Request) {
     headers.set("Vary", "Origin");
   }
   return headers;
+}
+
+function agentAuthAudience() {
+  return env.SITE_URL?.trim() || "https://www.symbaiex.com";
+}
+
+function agentAuthCorsHeaders(request: Request) {
+  const headers = new Headers({
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Max-Age": "86400",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    Vary: "Origin",
+  });
+  const origin = request.headers.get("origin");
+  if (origin !== null && isAllowedAgentAuthOrigin(request)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+  }
+  return headers;
+}
+
+function isAllowedAgentAuthOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin === null) return true;
+  try {
+    return AGENT_AUTH_ALLOWED_ORIGINS.has(new URL(origin).origin);
+  } catch {
+    return false;
+  }
+}
+
+async function readAgentAuthBody(request: Request): Promise<unknown> {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > AGENT_AUTH_MAX_BODY_BYTES
+  ) {
+    throw new Error("Request body is too large.");
+  }
+  const bytes = await request.arrayBuffer();
+  if (bytes.byteLength > AGENT_AUTH_MAX_BODY_BYTES) {
+    throw new Error("Request body is too large.");
+  }
+  const text = new TextDecoder().decode(bytes);
+  if (text.trim().length === 0) throw new Error("Request body is required.");
+  return JSON.parse(text) as unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function agentAuthError(error: unknown) {
+  if (error instanceof Error && error.message.length <= 180) {
+    return { error: error.message };
+  }
+  return { error: "Agent challenge could not be issued." };
+}
+
+function agentAuthJson(payload: unknown, status: number, headers: Headers) {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: responseHeaders,
+  });
 }
 
 function isAllowedForumAttachmentOrigin(origin: string) {

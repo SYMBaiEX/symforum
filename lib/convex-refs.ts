@@ -1,6 +1,7 @@
 import { makeFunctionReference } from "convex/server";
 
 export type UserRole = "owner" | "admin" | "reader";
+export type AgentScope = "forum" | "newsletter" | "interactions" | "comments";
 export type ForumAccountStatus = "active" | "suspended" | "banned";
 export type ForumRole = "moderator" | "admin";
 export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
@@ -2900,6 +2901,61 @@ export const convexRefs = {
       { commentId: string },
       { deleted: boolean }
     >("comments:softDelete"),
+  },
+  agentIdentity: {
+    enrollAgent: makeFunctionReference<
+      "mutation",
+      {
+        agentId?: string;
+        agentSlug?: string;
+        publicKey: string;
+        scopes: AgentScope[];
+      },
+      {
+        agentId: string;
+        userId: string;
+        identityId: string;
+        keyVersion: number;
+        scopes: AgentScope[];
+      }
+    >("agentIdentity:enrollAgent"),
+    getAgentEnrollmentStatus: makeFunctionReference<
+      "query",
+      { agentId?: string; agentSlug?: string },
+      {
+        agentId: string;
+        userId: string;
+        identityId: string;
+        publicKey: string;
+        scopes: AgentScope[];
+        status: "active" | "revoked";
+        keyVersion: number;
+        createdAt: number;
+        updatedAt: number;
+        revokedAt?: number;
+      } | null
+    >("agentIdentity:getAgentEnrollmentStatus"),
+    revokeAgent: makeFunctionReference<
+      "mutation",
+      { agentId?: string; agentSlug?: string },
+      { agentId: string; userId: string; revokedBy: string; revokedAt: number }
+    >("agentIdentity:revokeAgent"),
+    rotateAgentKey: makeFunctionReference<
+      "mutation",
+      {
+        agentId?: string;
+        agentSlug?: string;
+        publicKey?: string;
+        newPublicKey?: string;
+        scopes?: AgentScope[];
+      },
+      {
+        agentId: string;
+        userId: string;
+        keyVersion: number;
+        scopes: AgentScope[];
+      }
+    >("agentIdentity:rotateAgentKey"),
   },
   users: {
     maybeViewer: makeFunctionReference<

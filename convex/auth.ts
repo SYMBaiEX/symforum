@@ -1,9 +1,12 @@
 import Google from "@auth/core/providers/google";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError, type Value } from "convex/values";
 import type { DataModel, Id } from "./_generated/dataModel";
 import { env, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { verifyEd25519Signature } from "./agentIdentityCrypto";
 
 const USERNAME_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/;
 const AUTH_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -148,6 +151,62 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   },
   providers: [
     Google,
+    ConvexCredentials<DataModel>({
+      id: "agent-key",
+      authorize: async (credentials, ctx) => {
+        const agentId =
+          typeof credentials.agentId === "string"
+            ? credentials.agentId
+            : undefined;
+        const challenge =
+          typeof credentials.challenge === "string"
+            ? credentials.challenge
+            : undefined;
+        const audience =
+          typeof credentials.audience === "string"
+            ? credentials.audience
+            : undefined;
+        const signature =
+          typeof credentials.signature === "string"
+            ? credentials.signature
+            : undefined;
+        if (
+          agentId === undefined ||
+          challenge === undefined ||
+          audience === undefined ||
+          signature === undefined
+        ) {
+          return null;
+        }
+
+        const loginContext = await ctx.runQuery(
+          internal.agentIdentity.getLoginContext,
+          { agentId, challenge, audience },
+        );
+        if (loginContext === null) return null;
+        const valid = await verifyEd25519Signature({
+          publicKey: loginContext.publicKey,
+          signature,
+          message: loginContext.message,
+        });
+        if (!valid) return null;
+        try {
+          const userId = await ctx.runMutation(
+            internal.agentIdentity.consumeLoginChallenge,
+            {
+              challengeId: loginContext.challengeId,
+              challengeHash: loginContext.challengeHash,
+              agentId: loginContext.agentId,
+              keyVersion: loginContext.keyVersion,
+            },
+          );
+          return { userId };
+        } catch {
+          // Revocation, key rotation, expiry, and replay all fail closed.
+          return null;
+        }
+      },
+    }),
     Password<DataModel>({
       profile(params: Record<string, Value | undefined>) {
         const usernameNormalized = normalizeUsername(params.username);

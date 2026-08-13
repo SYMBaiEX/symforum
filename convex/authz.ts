@@ -1,11 +1,75 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 type DatabaseCtx = QueryCtx | MutationCtx;
 
 export type SiteRole = NonNullable<Doc<"users">["role"]>;
+
+/** Capabilities that can be granted to a hardware-backed agent identity. */
+export const AGENT_SCOPES = [
+  "forum",
+  "newsletter",
+  "interactions",
+  "comments",
+] as const;
+
+export type AgentScope = (typeof AGENT_SCOPES)[number];
+
+export const agentScopeValidator = v.union(
+  v.literal("forum"),
+  v.literal("newsletter"),
+  v.literal("interactions"),
+  v.literal("comments"),
+);
+
+/** Whether a user is an enrolled agent whose key has not been revoked. */
+export function isActiveAgentUser(
+  user: Doc<"users"> | null | undefined,
+): user is Doc<"users"> & {
+  isAgent: true;
+  agentStatus: "active";
+  agentScopes: AgentScope[];
+} {
+  return (
+    user?.isAgent === true &&
+    user.agentStatus === "active" &&
+    Array.isArray(user.agentScopes)
+  );
+}
+
+export function hasAgentScope(
+  user: Doc<"users"> | null | undefined,
+  scope: AgentScope,
+) {
+  return isActiveAgentUser(user) && user.agentScopes.includes(scope);
+}
+
+/** Require an active agent identity with the requested explicit capability. */
+export function requireAgentScope(
+  user: Doc<"users"> | null | undefined,
+  scope: AgentScope,
+) {
+  if (!hasAgentScope(user, scope)) {
+    throw new ConvexError({
+      code: "AGENT_SCOPE_DENIED",
+      message: `An active agent identity with the ${scope} scope is required.`,
+    });
+  }
+  return user;
+}
+
+/** Keep human accounts unchanged while constraining enrolled agent accounts. */
+export function enforceAgentScopeIfNeeded(
+  user: Doc<"users"> | null | undefined,
+  scope: AgentScope,
+) {
+  if (user?.isAgent === true) {
+    return requireAgentScope(user, scope);
+  }
+  return user;
+}
 
 export function hasSiteAdminAccess(user: Doc<"users"> | null | undefined) {
   return user?.role === "owner" || user?.role === "admin";

@@ -18,6 +18,7 @@ import {
   FORUM_REPLY_BODY_MAX_LENGTH,
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
+import { enforceAgentScopeIfNeeded } from "./authz";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -1047,7 +1048,10 @@ export const getAnnouncement = query({
         if (candidate.categoryId === undefined) {
           continue;
         }
-        const candidateCategory = await ctx.db.get("forumCategories", candidate.categoryId);
+        const candidateCategory = await ctx.db.get(
+          "forumCategories",
+          candidate.categoryId,
+        );
         if (
           candidateCategory !== null &&
           (await canViewCategoryWithAncestors(ctx, viewer, candidateCategory))
@@ -2666,7 +2670,10 @@ export const markNotificationRead = mutation({
         "Choose a notification to mark read.",
       );
     }
-    const notification = await ctx.db.get("forumNotifications", args.notificationId);
+    const notification = await ctx.db.get(
+      "forumNotifications",
+      args.notificationId,
+    );
     if (notification === null || notification.recipientUserId !== user._id) {
       throw forumError(
         "NOTIFICATION_NOT_FOUND",
@@ -3966,7 +3973,10 @@ export const updateMyForumNotificationPreferences = mutation({
           updatedAt: now,
         },
       );
-      const created = await ctx.db.get("forumNotificationPreferences", preferencesId);
+      const created = await ctx.db.get(
+        "forumNotificationPreferences",
+        preferencesId,
+      );
       if (created === null) {
         throw new Error("Forum notification preferences could not be reloaded");
       }
@@ -3977,7 +3987,10 @@ export const updateMyForumNotificationPreferences = mutation({
       ...nextSettings,
       updatedAt: now,
     });
-    const updated = await ctx.db.get("forumNotificationPreferences", existing._id);
+    const updated = await ctx.db.get(
+      "forumNotificationPreferences",
+      existing._id,
+    );
     if (updated === null) {
       throw new Error("Forum notification preferences could not be reloaded");
     }
@@ -4322,7 +4335,10 @@ export const readForumNotificationEmailDelivery = internalQuery({
     deliveryId: v.id("forumNotificationEmailDeliveries"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
+    return await ctx.db.get(
+      "forumNotificationEmailDeliveries",
+      args.deliveryId,
+    );
   },
 });
 
@@ -4331,7 +4347,10 @@ export const readForumNotificationEmailDeliveryContext = internalQuery({
     deliveryId: v.id("forumNotificationEmailDeliveries"),
   },
   handler: async (ctx, args) => {
-    const delivery = await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
+    const delivery = await ctx.db.get(
+      "forumNotificationEmailDeliveries",
+      args.deliveryId,
+    );
     if (delivery === null) {
       return forumNotificationEmailNotReady(
         "Forum email delivery no longer exists",
@@ -4404,7 +4423,9 @@ export const readForumNotificationEmailDeliveryContext = internalQuery({
     }
 
     const post =
-      delivery.postId === undefined ? null : await ctx.db.get("forumPosts", delivery.postId);
+      delivery.postId === undefined
+        ? null
+        : await ctx.db.get("forumPosts", delivery.postId);
     if (delivery.type === "reply") {
       if (post === null || post.status !== "active") {
         return forumNotificationEmailNotReady(
@@ -4442,7 +4463,10 @@ export const markForumNotificationEmailDeliveryState = internalMutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const delivery = await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
+    const delivery = await ctx.db.get(
+      "forumNotificationEmailDeliveries",
+      args.deliveryId,
+    );
     if (delivery === null) {
       return null;
     }
@@ -5323,7 +5347,9 @@ export const updateThreadContent = mutation({
     }
 
     const now = Date.now();
-    const threadAuthorName = displayName(await ctx.db.get("users", thread.authorId));
+    const threadAuthorName = displayName(
+      await ctx.db.get("users", thread.authorId),
+    );
     await recordForumContentEdit(ctx, {
       entityType: "thread",
       threadId: thread._id,
@@ -6131,7 +6157,10 @@ export const removeCategoryModerator = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireForumAdmin(ctx);
-    const assignment = await ctx.db.get("forumCategoryModerators", args.moderatorId);
+    const assignment = await ctx.db.get(
+      "forumCategoryModerators",
+      args.moderatorId,
+    );
     if (assignment === null) {
       throw forumError(
         "CATEGORY_MODERATOR_NOT_FOUND",
@@ -7723,7 +7752,10 @@ export const upsertAnnouncementAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const announcement = await ctx.db.get("forumAnnouncements", announcementId);
+      const announcement = await ctx.db.get(
+        "forumAnnouncements",
+        announcementId,
+      );
       if (announcement === null) {
         throw new Error("Forum announcement could not be reloaded");
       }
@@ -7753,7 +7785,10 @@ export const upsertAnnouncementAdmin = mutation({
       );
     }
 
-    const announcement = await ctx.db.get("forumAnnouncements", args.announcementId);
+    const announcement = await ctx.db.get(
+      "forumAnnouncements",
+      args.announcementId,
+    );
     if (announcement === null) {
       throw forumError(
         "FORUM_ANNOUNCEMENT_NOT_FOUND",
@@ -7889,7 +7924,10 @@ export const upsertHelpDocumentAdmin = mutation({
       );
     }
 
-    const document = await ctx.db.get("forumHelpDocuments", args.helpDocumentId);
+    const document = await ctx.db.get(
+      "forumHelpDocuments",
+      args.helpDocumentId,
+    );
     if (document === null) {
       throw forumError(
         "FORUM_HELP_DOCUMENT_NOT_FOUND",
@@ -10893,7 +10931,10 @@ export const moveForumPosts = mutation({
         "Replies can only be moved into a visible target thread.",
       );
     }
-    const targetCategory = await ctx.db.get("forumCategories", targetThread.categoryId);
+    const targetCategory = await ctx.db.get(
+      "forumCategories",
+      targetThread.categoryId,
+    );
     if (targetCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -10950,7 +10991,10 @@ export const moveForumPosts = mutation({
         "Replies can only be moved out of visible source threads.",
       );
     }
-    const sourceCategory = await ctx.db.get("forumCategories", sourceThread.categoryId);
+    const sourceCategory = await ctx.db.get(
+      "forumCategories",
+      sourceThread.categoryId,
+    );
     if (sourceCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -11112,7 +11156,10 @@ export const splitForumPosts = mutation({
       );
     }
 
-    const targetCategory = await ctx.db.get("forumCategories", args.targetCategoryId);
+    const targetCategory = await ctx.db.get(
+      "forumCategories",
+      args.targetCategoryId,
+    );
     if (targetCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -11164,7 +11211,10 @@ export const splitForumPosts = mutation({
         "Replies can only be split out of visible source threads.",
       );
     }
-    const sourceCategory = await ctx.db.get("forumCategories", sourceThread.categoryId);
+    const sourceCategory = await ctx.db.get(
+      "forumCategories",
+      sourceThread.categoryId,
+    );
     if (sourceCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -11932,6 +11982,7 @@ async function requireSignedInUser(
   if (user === null) {
     throw forumError("AUTH_REQUIRED", message);
   }
+  enforceAgentScopeIfNeeded(user, "forum");
   return user;
 }
 
@@ -12574,7 +12625,10 @@ async function resolveCategoryParentId(
     categoryKind(parent) === "board" &&
     parent.parentCategoryId !== undefined
   ) {
-    const grandparent = await ctx.db.get("forumCategories", parent.parentCategoryId);
+    const grandparent = await ctx.db.get(
+      "forumCategories",
+      parent.parentCategoryId,
+    );
     if (isBoardCategory(grandparent)) {
       throw forumError(
         "INVALID_CATEGORY_PARENT",
@@ -14300,7 +14354,8 @@ async function loadThreadsById(
   const distinctThreadIds = [...new Set(threadIds)];
   const threads = await Promise.all(
     distinctThreadIds.map(
-      async (threadId) => [threadId, await ctx.db.get("forumThreads", threadId)] as const,
+      async (threadId) =>
+        [threadId, await ctx.db.get("forumThreads", threadId)] as const,
     ),
   );
   return new Map(
@@ -14317,7 +14372,8 @@ async function loadCategoriesById(
   const distinctCategoryIds = [...new Set(categoryIds)];
   const categories = await Promise.all(
     distinctCategoryIds.map(
-      async (categoryId) => [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
+      async (categoryId) =>
+        [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
     ),
   );
   return new Map(
@@ -14558,7 +14614,8 @@ async function loadPostsById(
   const distinctPostIds = [...new Set(postIds)];
   const posts = await Promise.all(
     distinctPostIds.map(
-      async (postId) => [postId, await ctx.db.get("forumPosts", postId)] as const,
+      async (postId) =>
+        [postId, await ctx.db.get("forumPosts", postId)] as const,
     ),
   );
   return new Map(
@@ -14643,7 +14700,8 @@ async function loadReportsById(
   const distinctReportIds = [...new Set(reportIds)];
   const reports = await Promise.all(
     distinctReportIds.map(
-      async (reportId) => [reportId, await ctx.db.get("forumReports", reportId)] as const,
+      async (reportId) =>
+        [reportId, await ctx.db.get("forumReports", reportId)] as const,
     ),
   );
   return new Map(
@@ -14660,7 +14718,11 @@ async function loadPrivateMessagesById(
   const distinctMessageIds = [...new Set(messageIds)];
   const messages = await Promise.all(
     distinctMessageIds.map(
-      async (messageId) => [messageId, await ctx.db.get("forumPrivateMessages", messageId)] as const,
+      async (messageId) =>
+        [
+          messageId,
+          await ctx.db.get("forumPrivateMessages", messageId),
+        ] as const,
     ),
   );
   return new Map(
@@ -16504,9 +16566,13 @@ async function resolveForumWarningContext(
       throw forumError("REPORT_NOT_FOUND", "That report no longer exists.");
     }
     const thread =
-      report.threadId === undefined ? null : await ctx.db.get("forumThreads", report.threadId);
+      report.threadId === undefined
+        ? null
+        : await ctx.db.get("forumThreads", report.threadId);
     const post =
-      report.postId === undefined ? null : await ctx.db.get("forumPosts", report.postId);
+      report.postId === undefined
+        ? null
+        : await ctx.db.get("forumPosts", report.postId);
     const message =
       report.messageId === undefined
         ? null
@@ -19002,7 +19068,8 @@ async function searchVisiblePosts(
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       continue;
     }
-    const threadCategory = category ?? (await ctx.db.get("forumCategories", thread.categoryId));
+    const threadCategory =
+      category ?? (await ctx.db.get("forumCategories", thread.categoryId));
     if (
       threadCategory === null ||
       !(await canViewCategoryWithAncestors(ctx, user, threadCategory))
@@ -19055,7 +19122,8 @@ async function searchVisiblePostsByAuthor(
     if (category !== null && thread.categoryId !== category._id) {
       continue;
     }
-    const threadCategory = category ?? (await ctx.db.get("forumCategories", thread.categoryId));
+    const threadCategory =
+      category ?? (await ctx.db.get("forumCategories", thread.categoryId));
     if (
       threadCategory === null ||
       !(await canViewCategoryWithAncestors(ctx, user, threadCategory))

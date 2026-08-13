@@ -11,7 +11,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { requireSiteAdmin } from "./authz";
+import { enforceAgentScopeIfNeeded, requireSiteAdmin } from "./authz";
 import {
   newsletterIssueInputValidator,
   normalizeEmail,
@@ -110,6 +110,7 @@ export const requestViewerSubscription = mutation({
     if (userId === null) {
       throw new Error("Sign in to manage newsletter preferences");
     }
+    enforceAgentScopeIfNeeded(await ctx.db.get("users", userId), "newsletter");
 
     const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
       email: args.email,
@@ -162,7 +163,11 @@ export const updateViewerTopics = mutation({
     if (userId === null) {
       throw new Error("Sign in to manage newsletter preferences");
     }
-    const subscriber = await ctx.db.get("newsletterSubscribers", args.subscriberId);
+    enforceAgentScopeIfNeeded(await ctx.db.get("users", userId), "newsletter");
+    const subscriber = await ctx.db.get(
+      "newsletterSubscribers",
+      args.subscriberId,
+    );
     if (subscriber === null || subscriber.userId !== userId) {
       throw new Error("Newsletter subscription not found");
     }

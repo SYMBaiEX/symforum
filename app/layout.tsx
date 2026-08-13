@@ -49,6 +49,9 @@ export const metadata: Metadata = {
   publisher: AUTHOR_NAME,
   verification: {
     google: "AVfFR1DDUluyBZUxPYC4UoxmzZK5E9tjV6zPHtxJs7k",
+    other: {
+      "msvalidate.01": "BB917F8600A2D07414E607FEA895A6B0",
+    },
   },
   keywords: [
     "Austin Hamilton",

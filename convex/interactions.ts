@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";
+import { enforceAgentScopeIfNeeded } from "./authz";
 
 const entityType = v.union(v.literal("post"), v.literal("hnStory"));
 
@@ -101,6 +102,10 @@ export const set = mutation({
     if (userId === null) {
       throw new Error("Not authenticated");
     }
+    enforceAgentScopeIfNeeded(
+      await ctx.db.get("users", userId),
+      "interactions",
+    );
     await requirePublicEntity(ctx, args.entityType, args.entityId);
     const existing = await ctx.db
       .query("interactions")
