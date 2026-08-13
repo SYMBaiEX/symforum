@@ -7,6 +7,7 @@ import { getFeaturedPost } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import katex from "katex";
 import Link from "next/link";
+import { Suspense } from "react";
 
 const identityEquation = katex.renderToString(
   '\\left(\\text{"}\\mathrm{SYMBiEX}\\text{"}\\right)\\;\\equiv\\;\\mathrm{Symbiosis}+\\mathrm{AI}+\\mathrm{Experiment}\\;\\rightarrow\\;\\mathrm{SYMBaiEX}',
@@ -16,7 +17,46 @@ const identityEquation = katex.renderToString(
   },
 );
 
-export default async function HomePage() {
+export default function HomePage() {
+  return (
+    <>
+      <HomeIntro />
+      <HomeBanner />
+      <Suspense fallback={<HomeContentFallback />}>
+        <HomeContent />
+      </Suspense>
+    </>
+  );
+}
+
+function HomeIntro() {
+  return (
+    <section>
+      <div className="page-frame page-frame-dense">
+        <h1 className="grid gap-4 break-words md:grid-cols-12 md:items-start">
+          <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-12 md:text-6xl lg:text-7xl">
+            Hi, I&apos;m
+          </span>
+          <span className="max-w-5xl text-5xl font-bold leading-[0.9] text-balance md:col-span-10 md:col-start-2 md:text-7xl lg:text-8xl">
+            <span className="block">Austin</span>
+            <span className="block pl-8 md:pl-20">Hamilton</span>
+          </span>
+        </h1>
+
+        <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
+          <div
+            role="img"
+            className="overflow-x-auto whitespace-nowrap text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl"
+            aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
+            dangerouslySetInnerHTML={{ __html: identityEquation }}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function HomeContent() {
   const [featured, dailyNews] = await Promise.all([
     getFeaturedPost(),
     getDailyNews(5),
@@ -24,31 +64,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <section>
-        <div className="page-frame page-frame-dense">
-          <h1 className="grid gap-4 break-words md:grid-cols-12 md:items-start">
-            <span className="font-mono text-4xl font-semibold leading-none text-foreground md:col-span-12 md:text-6xl lg:text-7xl">
-              Hi, I&apos;m
-            </span>
-            <span className="max-w-5xl text-5xl font-bold leading-[0.9] text-balance md:col-span-10 md:col-start-2 md:text-7xl lg:text-8xl">
-              <span className="block">Austin</span>
-              <span className="block pl-8 md:pl-20">Hamilton</span>
-            </span>
-          </h1>
-
-          <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
-            <div
-              role="img"
-              className="overflow-x-auto whitespace-nowrap text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl"
-              aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
-              dangerouslySetInnerHTML={{ __html: identityEquation }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <HomeBanner />
-
       <section className="page-frame page-frame-spacious">
         <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
@@ -83,5 +98,20 @@ export default async function HomePage() {
         </div>
       </section>
     </>
+  );
+}
+
+function HomeContentFallback() {
+  return (
+    <div aria-busy="true">
+      <section className="page-frame page-frame-spacious">
+        <SectionHeader title="Latest blog" divided={false} />
+        <div className="mt-8 h-24 border-y border-row-border bg-muted/10" />
+      </section>
+      <section className="page-frame page-frame-bottom">
+        <SectionHeader title="Daily news" divided={false} />
+        <div className="mt-6 h-40 border-y border-row-border bg-muted/10" />
+      </section>
+    </div>
   );
 }
