@@ -551,6 +551,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
           {composeOpen && viewerCanCreateThread ? (
             <ForumCompose
               title={threadTitle}
+              draftKey={`symbaiex:forum:draft:thread:${categorySlug}`}
               onTitleChange={setThreadTitle}
               titlePlaceholder="Short, specific thread title"
               body={threadBody}

@@ -1508,6 +1508,7 @@ function LiveForumThreadView({
           <ForumCompose
             body={replyBody}
             bodyTextareaRef={replyTextareaRef}
+            draftKey={`symbaiex:forum:draft:reply:${thread._id}`}
             onBodyChange={setReplyBody}
             bodyLabel="Reply body"
             bodyPlaceholder="Write the next post in the thread."

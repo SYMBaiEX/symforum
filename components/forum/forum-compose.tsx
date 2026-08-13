@@ -35,7 +35,14 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { useId, useRef, useState, type Ref, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type Ref,
+  type ReactNode,
+} from "react";
 
 export type ForumAttachmentDraft = ForumAttachmentInput & {
   contentType: string;
@@ -57,6 +64,7 @@ export function ForumCompose({
   bodyLabel,
   children,
   disabled = false,
+  draftKey,
   error,
   errorId,
   footerActions,
@@ -81,6 +89,7 @@ export function ForumCompose({
   bodyRows?: number;
   children?: ReactNode;
   disabled?: boolean;
+  draftKey?: string;
   error?: string;
   errorId?: string;
   footerActions?: ReactNode;
@@ -96,8 +105,75 @@ export function ForumCompose({
   onTitleChange?: (value: string) => void;
 }) {
   const bodyInputId = useId();
+  const [draftHydrated, setDraftHydrated] = useState(draftKey === undefined);
   const titleEnabled =
     typeof title === "string" && typeof onTitleChange === "function";
+
+  useEffect(() => {
+    if (!draftKey) {
+      setDraftHydrated(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          body?: unknown;
+          title?: unknown;
+        };
+        if (body.trim().length === 0 && typeof draft.body === "string") {
+          onBodyChange(draft.body);
+        }
+        if (
+          titleEnabled &&
+          title?.trim().length === 0 &&
+          typeof draft.title === "string"
+        ) {
+          onTitleChange?.(draft.title);
+        }
+      }
+    } catch {
+      // Storage can be unavailable in private or sandboxed browsers.
+    } finally {
+      setDraftHydrated(true);
+    }
+  }, [body, draftKey, onBodyChange, onTitleChange, title, titleEnabled]);
+
+  useEffect(() => {
+    if (!draftKey || !draftHydrated) {
+      return;
+    }
+    try {
+      if (
+        body.trim().length === 0 &&
+        (!titleEnabled || title?.trim().length === 0)
+      ) {
+        window.localStorage.removeItem(draftKey);
+        return;
+      }
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          body,
+          ...(titleEnabled ? { title } : {}),
+          savedAt: Date.now(),
+        }),
+      );
+    } catch {
+      // Storage can be unavailable in private or sandboxed browsers.
+    }
+  }, [body, draftHydrated, draftKey, title, titleEnabled]);
+
+  async function submitWithDraftCleanup() {
+    await onSubmit();
+    if (draftKey) {
+      try {
+        window.localStorage.removeItem(draftKey);
+      } catch {
+        // Ignore storage cleanup failures after a successful post.
+      }
+    }
+  }
   function appendMarkup(open: string, close: string, sample: string) {
     if (disabled) {
       return;
@@ -354,7 +430,7 @@ export function ForumCompose({
             className="rounded-none font-mono text-[10px] uppercase"
             type="button"
             onClick={() => {
-              void onSubmit();
+              void submitWithDraftCleanup();
             }}
             disabled={disabled || pending}
           >
