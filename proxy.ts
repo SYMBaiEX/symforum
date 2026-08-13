@@ -18,7 +18,7 @@ const SONNER_STYLE_HASHES = [
   "'sha256-441zG27rExd4/il+NvIqyL8zFx5XmyNQtE381kSkUJk='",
   "'sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo='",
 ];
-export default convexConfigured
+const proxy = convexConfigured
   ? convexAuthNextjsMiddleware(
       async (request, { convexAuth }) => {
         const policy = contentSecurityPolicy();
@@ -41,13 +41,15 @@ export default convexConfigured
         cookieConfig: { maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
       },
     )
-  : function middleware(request: NextRequest) {
+  : function proxy(request: NextRequest) {
       const policy = contentSecurityPolicy();
       return applySecurityHeaders(nextOrForumRewrite(request, policy), policy);
     };
 
+export default proxy;
+
 export const config = {
-  // The following matcher runs middleware on all routes
+  // The following matcher runs Proxy on all routes
   // except static assets.
   matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
 };

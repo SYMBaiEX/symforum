@@ -1,16 +1,12 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import convex from "@convex-dev/eslint-plugin";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const eslintConfig = [
+  ...nextCoreWebVitals,
   {
     ignores: [
       ".next/**",
@@ -20,7 +16,16 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    // These rules are opt-in quality checks in React Compiler 7. The app
+    // intentionally synchronizes client state from browser storage, URL
+    // params, and Convex query results inside effects.
+    rules: {
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
   {
     files: ["convex/**/*.ts"],
     languageOptions: {

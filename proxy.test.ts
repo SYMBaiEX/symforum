@@ -35,7 +35,7 @@ vi.mock("@convex-dev/auth/nextjs/server", () => ({
     }),
 }));
 
-describe("middleware forum routing", () => {
+describe("proxy forum routing", () => {
   beforeEach(() => {
     vi.resetModules();
     authState.authenticated = false;
@@ -46,7 +46,7 @@ describe("middleware forum routing", () => {
   test("keeps auth cookies after the browser session closes", async () => {
     process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
 
-    await loadMiddleware();
+    await loadProxy();
 
     expect(authState.middlewareOptions?.cookieConfig?.maxAge).toBe(
       30 * 24 * 60 * 60,
@@ -54,8 +54,8 @@ describe("middleware forum routing", () => {
   });
 
   test("rewrites bare forum subdomain paths and attaches security headers", async () => {
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("http://forum.localhost:3000/search"),
     );
 
@@ -70,8 +70,8 @@ describe("middleware forum routing", () => {
   });
 
   test("redirects prefixed forum subdomain paths to their forum-host path", async () => {
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("http://forum.localhost:3000/forum/search"),
     );
 
@@ -83,8 +83,8 @@ describe("middleware forum routing", () => {
   });
 
   test("does not rewrite site-owned routes on the forum host", async () => {
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("http://forum.localhost:3000/admin"),
     );
 
@@ -96,8 +96,8 @@ describe("middleware forum routing", () => {
   });
 
   test("redirects primary-site content routes from the forum host to the primary host", async () => {
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("http://forum.localhost:3000/blog/old-web-notes"),
     );
 
@@ -109,8 +109,8 @@ describe("middleware forum routing", () => {
   });
 
   test("redirects production forum primary-site routes to the canonical www host", async () => {
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("https://forum.symbaiex.com/about"),
     );
 
@@ -122,7 +122,7 @@ describe("middleware forum routing", () => {
     expect(policy).toContain("https://symbaiex.com");
     expect(policy).toContain("https://www.symbaiex.com");
 
-    const portedResponse = await middleware(
+    const portedResponse = await proxy(
       requestFor("https://forum.symbaiex.com:3001/news"),
     );
     expect(portedResponse.headers.get("location")).toBe(
@@ -134,8 +134,8 @@ describe("middleware forum routing", () => {
     process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
     authState.authenticated = true;
 
-    const middleware = await loadMiddleware();
-    const response = await middleware(
+    const proxy = await loadProxy();
+    const response = await proxy(
       requestFor("http://localhost:3000/signin?redirectTo=//evil.example"),
     );
 
@@ -145,8 +145,8 @@ describe("middleware forum routing", () => {
   });
 });
 
-async function loadMiddleware() {
-  const mod = await import("./middleware");
+async function loadProxy() {
+  const mod = await import("./proxy");
   return mod.default as (request: NextRequest) => Promise<Response> | Response;
 }
 
