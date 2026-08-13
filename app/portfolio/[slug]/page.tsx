@@ -1,6 +1,7 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
 import { safeExternalUrl } from "@/lib/safe-url";
+import { asRoute } from "@/lib/typed-route";
 import { getPortfolioProject, getPortfolioProjects } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
 import {
@@ -199,7 +200,7 @@ function ProjectPagerLink({
 
   return (
     <Link
-      href={href}
+      href={asRoute(href)}
       prefetch
       className={`focus-ring group flex items-center gap-3 border-b border-r border-row-border p-4 transition-colors hover:bg-muted/35 ${
         isPrevious ? "justify-start" : "justify-end text-right"

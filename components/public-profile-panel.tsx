@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { Button } from "@/components/ui/button";
 import { formatForumCount, forumPostPath } from "@/components/forum/forum-refs";
 import { ForumAvatar, ForumBody } from "@/components/forum/forum-primitives";
@@ -229,7 +231,7 @@ function ForumProfileSummary({
             </dt>
             <dd className="mt-1">
               {profile.onlineLocation.href ? (
-                <Link href={profile.onlineLocation.href} prefetch>
+                <Link href={asRoute(profile.onlineLocation.href)} prefetch>
                   {profile.onlineLocation.label}
                 </Link>
               ) : (
@@ -414,12 +416,12 @@ function commentLabel(comment: PublicProfileCommentRecord) {
 
 function commentPath(comment: PublicProfileCommentRecord) {
   if (comment.entityType === "post") {
-    return `/blog/${comment.entityId}`;
+    return asRoute(`/blog/${comment.entityId}`);
   }
   if (comment.entityType === "portfolioProject") {
-    return `/portfolio/${comment.entityId}`;
+    return asRoute(`/portfolio/${comment.entityId}`);
   }
-  return `/news/${comment.entityId}`;
+  return asRoute(`/news/${comment.entityId}`);
 }
 
 function formatSignedCount(value: number) {

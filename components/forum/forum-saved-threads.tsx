@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { reportAppError } from "@/components/app-error-surface";
 import {
   forumPath,
@@ -117,7 +119,7 @@ function LiveForumSavedThreads() {
             className="rounded-none font-mono text-[10px] uppercase"
             variant="outline"
           >
-            <Link href={signInHref}>Sign in</Link>
+            <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
       />

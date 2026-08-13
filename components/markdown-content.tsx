@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { asRoute } from "@/lib/typed-route";
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import type { Root } from "mdast";
@@ -52,7 +53,7 @@ export function MarkdownContent({
             }
             if (cleanHref.startsWith("/")) {
               return (
-                <Link href={cleanHref} prefetch>
+                <Link href={asRoute(cleanHref)} prefetch>
                   {children}
                 </Link>
               );

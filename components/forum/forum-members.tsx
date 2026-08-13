@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import {
   formatForumCount,
   formatForumDateTime,
@@ -112,9 +114,9 @@ function ForumMemberTable() {
       const queryString = nextParams.toString();
       const href = queryString ? `${pathname}?${queryString}` : pathname;
       if (mode === "push") {
-        router.push(href, { scroll: false });
+        router.push(asRoute(href), { scroll: false });
       } else {
-        router.replace(href, { scroll: false });
+        router.replace(asRoute(href), { scroll: false });
       }
     },
     [page, pageSize, pathname, query, router, searchParams, sortKey],

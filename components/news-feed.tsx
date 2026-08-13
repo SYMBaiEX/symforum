@@ -324,7 +324,7 @@ function NewsRowsView({
                     </span>
                   ) : null}
                   {sourceUrl ? (
-                    <Link
+                    <a
                       href={sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -333,7 +333,7 @@ function NewsRowsView({
                     >
                       source
                       <ArrowUpRight className="size-3" />
-                    </Link>
+                    </a>
                   ) : null}
                 </div>
               </div>

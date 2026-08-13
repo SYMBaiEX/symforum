@@ -28,6 +28,7 @@ import {
   type AdminSectionId,
 } from "@/lib/admin-sections";
 import { cn } from "@/lib/utils";
+import { asRoute } from "@/lib/typed-route";
 import { useMutation, useQuery } from "convex/react";
 import {
   Activity,
@@ -2076,13 +2077,13 @@ async function sha256Hex(value: string) {
 function entityHref(entityType: AdminEntityType, entityId: string) {
   switch (entityType) {
     case "post":
-      return `/blog/${entityId}`;
+      return asRoute(`/blog/${entityId}`);
     case "hnStory":
-      return `/news/${entityId}`;
+      return asRoute(`/news/${entityId}`);
     case "portfolioProject":
-      return `/portfolio/${entityId}`;
+      return asRoute(`/portfolio/${entityId}`);
     default:
-      return "/";
+      return asRoute("/");
   }
 }
 

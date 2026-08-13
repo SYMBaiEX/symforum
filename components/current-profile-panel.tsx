@@ -5,6 +5,7 @@ import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
 import { ProfileNewsletterPreferences } from "@/components/profile-newsletter-preferences";
 import { convexRefs } from "@/lib/convex-refs";
 import { formatDate } from "@/lib/format";
+import { asRoute } from "@/lib/typed-route";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
@@ -58,7 +59,7 @@ export function CurrentProfilePanel() {
         <div className="mt-5 flex flex-wrap gap-2">
           {publicHref ? (
             <Button asChild size="sm">
-              <Link href={publicHref} prefetch>
+              <Link href={asRoute(publicHref)} prefetch>
                 Open public profile
               </Link>
             </Button>

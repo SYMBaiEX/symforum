@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { AdminForum } from "@/components/admin-forum";
 import {
   ForumLoading,
@@ -62,7 +64,7 @@ function LiveForumModerationPanel() {
             className="rounded-none font-mono text-[10px] uppercase"
             variant="outline"
           >
-            <Link href={signInHref}>Sign in</Link>
+            <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
       />

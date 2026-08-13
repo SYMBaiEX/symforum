@@ -1,4 +1,5 @@
 import { compactNumber } from "@/lib/format";
+import { asRoute } from "@/lib/typed-route";
 import {
   convexRefs,
   type ForumAgentDirectoryRecord as ConvexForumAgentDirectoryRecord,
@@ -354,28 +355,28 @@ export function humanizeSlug(value: string) {
 
 export function forumPath(categorySlug?: string, threadSlug?: string) {
   if (!categorySlug) {
-    return "/forum";
+    return asRoute("/forum");
   }
   if (!threadSlug) {
-    return `/forum/${categorySlug}`;
+    return asRoute(`/forum/${categorySlug}`);
   }
-  return `/forum/${categorySlug}/${threadSlug}`;
+  return asRoute(`/forum/${categorySlug}/${threadSlug}`);
 }
 
 export function forumHrefForPathname(href: string, pathname: string | null) {
   if (pathname?.startsWith("/forum")) {
-    return href;
+    return asRoute(href);
   }
   if (href === "/forum") {
-    return "/";
+    return asRoute("/");
   }
   if (href.startsWith("/forum?") || href.startsWith("/forum#")) {
-    return `/${href.slice("/forum".length)}`;
+    return asRoute(`/${href.slice("/forum".length)}`);
   }
   if (href.startsWith("/forum/")) {
-    return href.slice("/forum".length);
+    return asRoute(href.slice("/forum".length));
   }
-  return href;
+  return asRoute(href);
 }
 
 export function normalizedForumPathname(pathname: string | null) {
@@ -389,7 +390,7 @@ export function normalizedForumPathname(pathname: string | null) {
 }
 
 export function forumMemberProfilePath(username: string) {
-  return `/forum/members/${encodeURIComponent(username)}`;
+  return asRoute(`/forum/members/${encodeURIComponent(username)}`);
 }
 
 export function forumAnnouncementPath(announcement: {
@@ -401,15 +402,17 @@ export function forumAnnouncementPath(announcement: {
     params.set("board", announcement.categorySlug);
   }
   const query = params.toString();
-  return `/forum/announcements/${announcement.slug}${query ? `?${query}` : ""}`;
+  return asRoute(
+    `/forum/announcements/${announcement.slug}${query ? `?${query}` : ""}`,
+  );
 }
 
 export function forumHelpPath(document: { slug: string }) {
-  return `/forum/help/${document.slug}`;
+  return asRoute(`/forum/help/${document.slug}`);
 }
 
 export function forumCalendarEventPath(event: { slug: string }) {
-  return `/forum/calendar/${event.slug}`;
+  return asRoute(`/forum/calendar/${event.slug}`);
 }
 
 export function currentForumCalendarMonth() {
@@ -495,7 +498,7 @@ export function forumPostPath(
   const base = forumPath(categorySlug, threadSlug);
   const query = postPage && postPage > 1 ? `?postPage=${postPage}` : "";
   const anchor = postNumber ? `#post-${postNumber}` : "";
-  return `${base}${query}${anchor}`;
+  return asRoute(`${base}${query}${anchor}`);
 }
 
 export function getThreadLastPostHref(

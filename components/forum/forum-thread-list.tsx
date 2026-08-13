@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import type { ForumAttachmentDraft } from "@/components/forum/forum-compose";
@@ -374,7 +376,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       params.set("prefix", value);
     }
     const query = params.toString();
-    router.push(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`);
+      router.push(asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`));
   }
 
   function updateBoardListParam(
@@ -390,7 +392,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       params.set(key, value);
     }
     const query = params.toString();
-    router.push(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`);
+      router.push(asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`));
   }
 
   function resetBoardView() {

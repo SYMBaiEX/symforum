@@ -1,3 +1,5 @@
+import { asRoute } from "@/lib/typed-route";
+
 export const adminSectionIds = [
   "overview",
   "forum",
@@ -29,5 +31,5 @@ export function isAdminSectionId(value: string): value is AdminSectionId {
 }
 
 export function adminSectionHref(section: AdminSectionId) {
-  return section === "overview" ? "/admin" : `/admin/${section}`;
+  return asRoute(section === "overview" ? "/admin" : `/admin/${section}`);
 }

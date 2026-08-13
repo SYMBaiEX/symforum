@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   isForumHostname,
@@ -301,7 +303,7 @@ function DesktopNavLink({
   ) : (
     <Link
       aria-current={active ? "page" : undefined}
-      href={href}
+      href={asRoute(href)}
       prefetch={!isExternalHeaderHref(href)}
     >
       {children}
@@ -395,7 +397,7 @@ function MobileNavMenu({
                 (item) => (
                   <MobileNavItem
                     active={resolveActive(item.href)}
-                    href={resolveHref(item.href)}
+                    href={asRoute(resolveHref(item.href))}
                     key={item.href}
                     label={item.label}
                   />
@@ -471,7 +473,7 @@ function DesktopOwnerMenu({
                 >
                   <Link
                     className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2.5"
-                    href={resolveHref(item.href)}
+                    href={asRoute(resolveHref(item.href))}
                     prefetch={!isExternalHeaderHref(item.href)}
                   >
                     <Icon className="size-4 text-emerald-500" />
@@ -532,7 +534,7 @@ function MobileNavItem({
       ) : (
         <Link
           aria-current={active ? "page" : undefined}
-          href={href}
+          href={asRoute(href)}
           prefetch={!isExternalHeaderHref(href)}
         >
           {content}

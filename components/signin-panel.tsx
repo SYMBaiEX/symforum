@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,7 +84,7 @@ function PasswordPanel() {
     try {
       await signIn("password", formData);
       toast.success(mode === "signUp" ? "Account created" : "Signed in");
-      router.push(redirectTo);
+      router.push(asRoute(redirectTo));
     } catch (error) {
       reportAppError(error, {
         scope: "auth",

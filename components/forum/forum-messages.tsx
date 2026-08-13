@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { reportAppError } from "@/components/app-error-surface";
 import {
   forumRefs,
@@ -310,7 +312,7 @@ function LiveForumMessages() {
             className="rounded-none font-mono text-[10px] uppercase"
             variant="outline"
           >
-            <Link href={signInHref}>Sign in</Link>
+            <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
       />
@@ -1536,7 +1538,7 @@ function messageHref(
   if (messageId) {
     params.set("message", messageId);
   }
-  return `/forum/messages?${params.toString()}`;
+  return asRoute(`/forum/messages?${params.toString()}`);
 }
 
 function mailboxLabel(box: ForumPrivateMessageBox) {

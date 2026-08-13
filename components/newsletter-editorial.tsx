@@ -59,14 +59,14 @@ export function NewsletterEditorial({
           <figcaption className="flex flex-wrap justify-between gap-2 border-t border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
             <span>{payload.heroImage.credit ?? "Source image"}</span>
             {payload.heroImage.sourceUrl ? (
-              <Link
+              <a
                 className="transition-colors hover:text-foreground"
                 href={payload.heroImage.sourceUrl}
                 rel="noopener noreferrer"
                 target="_blank"
               >
                 Image source
-              </Link>
+              </a>
             ) : null}
           </figcaption>
         </figure>

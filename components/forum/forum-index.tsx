@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { reportAppError } from "@/components/app-error-surface";
 import {
   formatForumCount,
@@ -352,7 +354,7 @@ function ForumOnlineMemberChip({
           {member.location.href ? (
             <Link
               className="focus-ring hover:text-foreground"
-              href={member.location.href}
+              href={asRoute(member.location.href)}
               prefetch
             >
               {member.location.label}

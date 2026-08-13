@@ -244,7 +244,7 @@ function SiteFooter({
               size="sm"
               variant="ghost"
             >
-              <Link
+              <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -254,7 +254,7 @@ function SiteFooter({
                 <span aria-hidden="true" className="hidden sm:inline">
                   {label}
                 </span>
-              </Link>
+              </a>
             </Button>
           ))}
         </div>
@@ -280,13 +280,12 @@ function SiteHeader({
     <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
         <div className="flex min-w-0 items-center">
-          <Link
+          <a
             href={brandHref}
-            prefetch={brandPrefetch}
             className="focus-ring truncate font-mono text-sm font-semibold uppercase"
           >
             {brandLabel}
-          </Link>
+          </a>
         </div>
         <HeaderNav
           initialForumHost={initialForumHost}

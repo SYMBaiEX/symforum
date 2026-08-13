@@ -1,5 +1,7 @@
 "use client";
 
+import { asRoute } from "@/lib/typed-route";
+
 import { isForumHostname } from "@/components/forum/forum-host-url";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -42,7 +44,7 @@ export function RouteImagePreloader() {
 
       if (shouldPrefetchPrimaryRoutes(window.location.hostname)) {
         for (const href of warmRoutes) {
-          router.prefetch(href);
+          router.prefetch(asRoute(href));
         }
       }
     };

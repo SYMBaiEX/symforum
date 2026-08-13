@@ -1,3 +1,5 @@
+import { asRoute } from "@/lib/typed-route";
+
 type NewsSlugStory = {
   hnItemId: number;
   title: string;
@@ -23,7 +25,7 @@ export function newsStorySlug(story: NewsSlugStory) {
 }
 
 export function newsStoryPath(story: NewsSlugStory) {
-  return `/news/${newsStorySlug(story)}`;
+  return asRoute(`/news/${newsStorySlug(story)}`);
 }
 
 export function parseNewsStoryParam(value: string) {

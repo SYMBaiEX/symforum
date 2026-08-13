@@ -46,14 +46,14 @@ export default function ContactPage() {
               size="icon"
               variant="outline"
             >
-              <Link
+              <a
                 aria-label={label}
                 href={href}
                 rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
                 target={href.startsWith("http") ? "_blank" : undefined}
               >
                 <Icon aria-hidden="true" />
-              </Link>
+              </a>
             </Button>
           ))}
         </nav>
