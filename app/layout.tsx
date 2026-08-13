@@ -97,7 +97,14 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Austin Hamilton (SYMBiEX)",
     description,
-    images: ["/opengraph-image"],
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX Open Graph social image: Austin Hamilton, software engineering, AI systems, and research notes.",
+      },
+    ],
     creator: "@symbiex",
   },
   icons: {

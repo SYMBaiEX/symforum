@@ -28,7 +28,14 @@ export const metadata: Metadata = {
     title: "SYMBaIEX research hubs",
     description:
       "A compact map to source-backed notes, implementation papers, and policy surfaces.",
-    images: ["/opengraph-image"],
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX research map and source-backed methodology notes.",
+      },
+    ],
   },
 };
 
