@@ -20,8 +20,9 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 
 ## Execution receipt — 2026-08-13
 
-- Code release commits: `fb2670e`, `ac071ef`, `f292e11`, and `65eea0f`.
-- Production deployment: Vercel deployment `dpl_3qymqqU6DZimr4ZavqEK25PcS4zi`,
+- Code release commits: `fb2670e`, `ac071ef`, `f292e11`, `65eea0f`,
+  `40d1276`, `08770bd`, and `1f5bc09`.
+- Production deployment: latest Vercel deployment `dpl_2R3zhZh6pLYJBvSyyE2FHpFNL9qQ`,
   aliased to `www.symbaiex.com`, `symbaiex.com`, and `forum.symbaiex.com`.
 - Production gates: 44 Vitest files / 255 tests, lint, TypeScript, and Next
   production build all pass.
@@ -38,6 +39,12 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 - Vercel production error logs: no errors found in the 30-minute post-release
   window. Search Console, Bing Webmaster, and WAF changes remain account-owned
   and have no local credentials or deployment receipt in this workspace.
+- Lighthouse field-style lab checks (desktop emulation, production URLs):
+  primary home `89/100` performance, blog `95/100`, forum host `94/100`; all
+  sampled pages scored `100/100` accessibility and SEO. The forum route still
+  emits four React server-streaming console exceptions in Lighthouse while
+  rendering correctly; this is tracked as a framework/runtime investigation,
+  separate from the clean Vercel server-error log.
 
 ## Wave 0 — baseline and evidence
 
