@@ -139,6 +139,35 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 - Final gates: 49 Vitest files / 269 tests, lint, TypeScript, diff check, and
   Next production build all pass. Untracked `claudedocs/` remains untouched.
 
+## Agent handoff, Web Bot Auth, and Lighthouse receipt — 2026-08-13
+
+- Agent handoff release: `90f4dc1` adds a concise human `/agent` page with one
+  copyable sentence. The sentence sends the agent to the non-client-facing
+  `/agent/instructions` Markdown contract, which is also linked from `llms.txt`.
+  The contract contains the platform endpoint, enrollment boundaries, stable
+  Ed25519 identity rules, credential handling, scopes, quotas, attribution, and
+  the free-beta/payment boundary without asking users for Convex URLs,
+  repositories, passwords, or private keys.
+- Web Bot Auth release: `90f4dc1` adds the HTTPS
+  `/.well-known/http-message-signatures-directory` route using an optional
+  operator Ed25519 JWK pair. `WEB_BOT_AUTH_PRIVATE_JWK` is Vercel-sensitive and
+  never leaves the server; the live directory returned HTTP 200, a signed
+  response, and public JWK material only. Cloudflare registration remains a
+  separate operator submission step; this directory does not authenticate
+  SYMBaiEX accounts or create a payment rail.
+- CSP quality fix: `5d79a4e` allowlists the exact Sonner stylesheet hash while
+  retaining nonce-based scripts/styles and no `unsafe-inline` in production.
+- Latest Vercel deployment: `dpl_rx6mUTGhj8N3oLHp5ECC1Hvwhy9a`, Ready and
+  aliased to `www.symbaiex.com` (the forum alias follows the same deployment).
+  Vercel CLI was upgraded to `59.0.0`; the lockfile was regenerated with Bun
+  `1.3.14` to match Vercel's frozen install runtime.
+- Fresh desktop Lighthouse after deployment: Home `100/100/100/100`, Blog
+  `100/100/100/100`, Forum `100/100/96/100`, and Agent `100/100/100/100` for
+  Performance / Accessibility / Best Practices / SEO. The Forum Best Practices
+  deduction is limited to four React server-streaming `parentNode` console
+  exceptions; no application 5xx was observed. A repeated Home run measured
+  `100` Performance with FCP `0.3s`, LCP `0.5s`, TBT `0ms`, and CLS `0`.
+
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
