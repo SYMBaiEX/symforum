@@ -231,6 +231,22 @@ contract`).
   Cloudflare but HTTP is currently DNS-only to Vercel (`server: Vercel`, no
   `cf-ray`), so Cloudflare edge verification is not claimed.
 
+## Final Forum performance receipt — 2026-08-13
+
+- Commits `d15fbe3` and `b435df4` move the forum heading into server-rendered
+  HTML and skip an unused forum Markdown render before the interactive board
+  mounts. This removes avoidable work from the first paint while keeping the
+  route-level loading boundaries empty.
+- Production deployment `dpl_431je1wKYiYXyAm16uqH3Pv6o1eu` is Ready and aliased
+  to `https://www.symbaiex.com`. A fresh Lighthouse run reports Best Practices,
+  Accessibility, SEO, and Agentic Browsing at `100`; Performance measured
+  `95–96` in the sampled runs with LCP `2.8s`, TBT `20–30ms`, and CLS `0.008`.
+  Additional immediate runs measured `87` when the dynamic Convex/browser
+  environment was cold. This variance is recorded rather than presented as a
+  false literal 100; the remaining score is LCP/render timing on a dynamic
+  authenticated-capable shell, not the removed React errors or an asset
+  transfer regression.
+
 ## Wave 1 — crawl policy, negotiation, and observability
 
 - [x] Publish explicit `robots.txt` sections for Googlebot, Bingbot,
