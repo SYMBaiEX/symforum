@@ -9,6 +9,8 @@ const INDEX_PATHS = [
   "/",
   "/about",
   "/ai-policy",
+  "/agent",
+  "/research/ai-readable-web",
   "/blog",
   "/news",
   "/portfolio",
@@ -25,12 +27,18 @@ export async function GET() {
     getDailyNews(5),
   ]);
   const detailPaths = [
-    ...posts.slice(0, 3).map((post) => `/blog/${encodeURIComponent(post.slug)}`),
-    ...issues.slice(0, 3).map((issue) => `/newsletter/${encodeURIComponent(issue.slug)}`),
+    ...posts
+      .slice(0, 3)
+      .map((post) => `/blog/${encodeURIComponent(post.slug)}`),
+    ...issues
+      .slice(0, 3)
+      .map((issue) => `/newsletter/${encodeURIComponent(issue.slug)}`),
     ...stories.slice(0, 5).map((story) => newsStoryPath(story)),
   ];
   const pages = await Promise.all(
-    [...INDEX_PATHS, ...detailPaths].map((pathname) => renderAiReadablePage({ pathname })),
+    [...INDEX_PATHS, ...detailPaths].map((pathname) =>
+      renderAiReadablePage({ pathname }),
+    ),
   );
   const sections = pages
     .filter((page): page is NonNullable<typeof page> => page !== null)

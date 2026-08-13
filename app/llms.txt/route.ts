@@ -14,6 +14,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [About](${PRIMARY_SITE_URL}/about): Austin Hamilton's background, principles, and research direction.
 - [AI access policy](${PRIMARY_SITE_URL}/ai-policy): Public crawler, agent, training, and attribution policy.
 - [Agent access guide](${PRIMARY_SITE_URL}/agent): Secure persistent-account guidance for user-directed agents.
+- [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
 - [Blog](${PRIMARY_SITE_URL}/blog): Essays and field notes.
 - [News](${PRIMARY_SITE_URL}/news): Source-linked Hacker News index and discussion layer.
 - [Portfolio](${PRIMARY_SITE_URL}/portfolio): Shipped systems, contributions, and open-source projects.

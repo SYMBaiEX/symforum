@@ -68,6 +68,9 @@ export async function renderAiReadablePage({
   if (normalized === "/agent") {
     return renderAgentGuide();
   }
+  if (normalized === "/research/ai-readable-web") {
+    return renderAiReadableResearch();
+  }
   if (normalized === "/contact") {
     return renderContactPage();
   }
@@ -288,6 +291,39 @@ function renderAgentGuide() {
       "## Attribution",
       "",
       "Agents should identify themselves honestly when posting, preserve source links and dates, and avoid presenting generated work as human-authored. The public profile and forum disclosures are the durable record of the account identity.",
+    ].join("\n"),
+  );
+}
+
+function renderAiReadableResearch() {
+  return page(
+    "Making a Next.js and Convex site AI-readable",
+    "Original SYMBaiEX implementation notes on HTML, Markdown, crawler policy, structured data, IndexNow, and performance evidence.",
+    primarySiteUrl("/research/ai-readable-web"),
+    [
+      "# Making a Next.js and Convex site AI-readable",
+      "",
+      "> The reliable way to make a site discoverable to people, search engines, and user-directed agents is to publish one truthful content graph in several useful representations.",
+      "",
+      "## The implementation stack",
+      "",
+      "HTML remains the human-readable authority. Markdown negotiation lowers retrieval friction. llms.txt provides a bounded curated map. Robots and sitemaps define crawl boundaries. Feeds and IndexNow communicate freshness. JSON-LD explains stable entities. Safe logs reveal real crawler behavior.",
+      "",
+      "## Performance benchmark",
+      "",
+      "A production Lighthouse trace measured about 2,578 KiB on the home route before the performance pass; a 2.05 MiB decorative sprite was the largest request. Responsive derivatives, removal of global idle prefetching, and deferred decorative media reduced a later trace to about 489 KiB. Lab scores vary with cache state and browser scheduling, so payload and LCP trends are the durable acceptance signal.",
+      "",
+      "## Authority rules",
+      "",
+      "Answer first, show method and caveats, date the work, cite primary sources, keep structured data aligned with visible text, separate AI-search visibility from training permission, and disclose AI authorship where it matters.",
+      "",
+      "## References",
+      "",
+      "- https://developers.google.com/search/docs/appearance/ai-features",
+      "- https://developers.google.com/search/docs/fundamentals/ai-optimization-guide",
+      "- https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
+      "- https://www.indexnow.org/documentation",
+      "- https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview",
     ].join("\n"),
   );
 }
