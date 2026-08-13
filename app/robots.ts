@@ -5,6 +5,7 @@ const PRIVATE_PATHS = [
   "/admin",
   "/profile",
   "/signin",
+  "/agent/signup",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

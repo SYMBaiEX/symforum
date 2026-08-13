@@ -16,7 +16,6 @@ export function HomeBanner() {
             fill
             priority
             sizes="(max-width: 768px) calc(100vw - 2rem), min(100vw - 4rem, 1280px)"
-            unoptimized
             decoding="async"
             className="h-full w-full object-cover object-bottom dark:hidden"
           />
@@ -24,9 +23,7 @@ export function HomeBanner() {
             src="/images/home-banner-dark.webp"
             alt="SYMBaiEX neon night city banner"
             fill
-            priority
             sizes="(max-width: 768px) calc(100vw - 2rem), min(100vw - 4rem, 1280px)"
-            unoptimized
             decoding="async"
             className="hidden h-full w-full object-cover object-bottom dark:block"
           />

@@ -2,6 +2,7 @@ const PRIVATE_PREFIXES = [
   "/admin",
   "/profile",
   "/signin",
+  "/agent/signup",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

@@ -12,6 +12,7 @@ const PRIMARY_PATHS = [
   "/",
   "/about",
   "/ai-policy",
+  "/agent",
   "/blog",
   "/contact",
   "/news",
@@ -104,7 +105,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const bounded = dedupeEntries(entries);
   if (bounded.length > MAX_SITEMAP_ENTRIES) {
-    console.warn(`Sitemap entry cap reached: ${bounded.length} > ${MAX_SITEMAP_ENTRIES}`);
+    console.warn(
+      `Sitemap entry cap reached: ${bounded.length} > ${MAX_SITEMAP_ENTRIES}`,
+    );
   }
   return bounded.slice(0, MAX_SITEMAP_ENTRIES);
 }
@@ -235,9 +238,12 @@ function logSitemapSourceFailure<T>(
   result: PromiseSettledResult<T>,
 ) {
   if (result.status !== "rejected") return;
-  const rawMessage = result.reason instanceof Error
-    ? result.reason.message
-    : "unknown sitemap source failure";
-  const message = rawMessage.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 240);
+  const rawMessage =
+    result.reason instanceof Error
+      ? result.reason.message
+      : "unknown sitemap source failure";
+  const message = rawMessage
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 240);
   console.error("Sitemap source unavailable", { source, message });
 }
