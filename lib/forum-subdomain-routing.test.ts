@@ -83,9 +83,13 @@ describe("forum subdomain routing", () => {
   test("redirects primary-site content routes off the forum host", () => {
     for (const pathname of [
       "/about",
+      "/ai-policy",
       "/blog",
       "/blog/old-web-notes",
       "/contact",
+      "/feed/blog.xml",
+      "/llms-full.txt",
+      "/llms.txt",
       "/news/123",
       "/newsletter/preferences",
       "/portfolio/elizaos",

@@ -17,8 +17,12 @@ const FORUM_SUBDOMAIN_SITE_PREFIXES = [
 ];
 const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/about",
+  "/ai-policy",
   "/blog",
   "/contact",
+  "/feed",
+  "/llms-full.txt",
+  "/llms.txt",
   "/manifest.webmanifest",
   "/news",
   "/newsletter",
