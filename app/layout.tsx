@@ -47,6 +47,9 @@ export const metadata: Metadata = {
   authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],
   creator: AUTHOR_NAME,
   publisher: AUTHOR_NAME,
+  verification: {
+    google: "AVfFR1DDUluyBZUxPYC4UoxmzZK5E9tjV6zPHtxJs7k",
+  },
   keywords: [
     "Austin Hamilton",
     "SYMBaiEX",
