@@ -25,6 +25,15 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
         .sort((left, right) => left.localeCompare(right)),
     [posts],
   );
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const post of posts) {
+      for (const tag of post.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [posts]);
   const selectedTag =
     tagParam && tags.includes(tagParam) ? tagParam : ALL_TAGS_VALUE;
   const visiblePosts = useMemo(() => {
@@ -71,21 +80,15 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
               >
                 All tags / {posts.length}
               </SelectItem>
-              {tags.map((tag) => {
-                const count = posts.filter((post) =>
-                  post.tags.includes(tag),
-                ).length;
-
-                return (
-                  <SelectItem
-                    key={tag}
-                    className="font-mono text-[10px] uppercase"
-                    value={tag}
-                  >
-                    {tag} / {count}
-                  </SelectItem>
-                );
-              })}
+              {tags.map((tag) => (
+                <SelectItem
+                  key={tag}
+                  className="font-mono text-[10px] uppercase"
+                  value={tag}
+                >
+                  {tag} / {tagCounts.get(tag) ?? 0}
+                </SelectItem>
+              ))}
             </SelectGroup>
           </SelectContent>
         </Select>

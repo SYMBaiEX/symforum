@@ -1,7 +1,6 @@
 "use client";
 
 import { reportAppError } from "@/components/app-error-surface";
-import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -30,14 +29,17 @@ import {
   ChevronUp,
   MessageSquare,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import {
-  Component,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
+
+const AuthRequiredDialog = dynamic(
+  () =>
+    import("@/components/auth-required-dialog").then(
+      (module) => module.AuthRequiredDialog,
+    ),
+  { ssr: false },
+);
 
 export function NewsFeed({
   enabled,
@@ -275,7 +277,7 @@ function NewsRowsView({
           return (
             <article
               key={story.hnItemId}
-              className="group grid items-center gap-2 py-2 transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:gap-4 md:px-2"
+              className="group grid items-center gap-2 py-2 [content-visibility:auto] [contain-intrinsic-size:0_3.25rem] transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:gap-4 md:px-2"
             >
               <div className="flex items-center font-mono text-[10px] uppercase text-muted-foreground md:justify-end md:text-right">
                 #{story.rank.toString().padStart(2, "0")}
@@ -524,12 +526,14 @@ function NewsVoteControl({
           {error}
         </span>
       ) : null}
-      <AuthRequiredDialog
-        action="vote and discuss"
-        open={authOpen}
-        redirectTo="/news"
-        setOpen={setAuthOpen}
-      />
+      {authOpen ? (
+        <AuthRequiredDialog
+          action="vote and discuss"
+          open
+          redirectTo="/news"
+          setOpen={setAuthOpen}
+        />
+      ) : null}
     </>
   );
 }

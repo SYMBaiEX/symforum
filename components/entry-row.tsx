@@ -25,6 +25,7 @@ export function EntryRow({
       prefetch
       className={cn(
         "focus-ring group grid grid-cols-[minmax(0,1fr)_auto] gap-3 transition-colors hover:bg-muted/45 md:items-center md:px-3",
+        "[content-visibility:auto] [contain-intrinsic-size:0_7rem]",
         imageUrl
           ? "md:grid-cols-[8.25rem_7.5rem_minmax(0,1fr)_4.5rem]"
           : "md:grid-cols-[8.25rem_minmax(0,1fr)_4.5rem]",
