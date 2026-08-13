@@ -22,6 +22,7 @@ const SONNER_STYLE_HASHES = [
   "'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='",
   "'sha256-441zG27rExd4/il+NvIqyL8zFx5XmyNQtE381kSkUJk='",
   "'sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo='",
+  "'sha256-StEa+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='",
 ];
 const proxy = convexConfigured
   ? convexAuthNextjsMiddleware(
