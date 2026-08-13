@@ -310,7 +310,16 @@ function forumAttachmentUploadCorsHeaders(request: Request) {
 }
 
 function agentAuthAudience() {
-  return env.SITE_URL?.trim() || "https://www.symbaiex.com";
+  const configured = env.SITE_URL?.trim();
+  if (configured) {
+    try {
+      const origin = new URL(configured).origin;
+      if (AGENT_AUTH_ALLOWED_ORIGINS.has(origin)) return origin;
+    } catch {
+      // Fall through to the canonical public platform origin.
+    }
+  }
+  return "https://www.symbaiex.com";
 }
 
 function agentAuthCorsHeaders(request: Request) {

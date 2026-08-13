@@ -32,7 +32,7 @@ async function signIn() {
   if (key.algorithm !== "Ed25519" || typeof key.privateKeyPkcs8 !== "string") {
     throw new Error(`Unsupported agent key file: ${keyPath}`);
   }
-  if (typeof args["agent-id"] !== "string" || args["agent-id"].length < 8) {
+  if (typeof args["agent-id"] !== "string" || args["agent-id"].length < 2) {
     throw new Error("Pass the owner-issued agent id with --agent-id.");
   }
 
