@@ -1678,7 +1678,7 @@ function ForumLatestPostCell({
             </ForumLink>
             {latestPostHref ? (
         <ForumJumpLink
-                ariaLabel={`Last: Go to last post in ${latestThread.title}`}
+                ariaLabel={`Last » — Go to last post in ${latestThread.title}`}
                 className="min-h-9 shrink-0 px-2 md:min-h-7"
                 href={latestPostHref}
               >
@@ -1923,7 +1923,7 @@ export function ForumThreadTable({
                     </div>
                     {firstUnreadHref ? (
                       <ForumJumpLink
-                        ariaLabel={`First unread: Go to first unread post in ${thread.title}`}
+                      ariaLabel={`First unread » — Go to first unread post in ${thread.title}`}
                         className="mt-2"
                         href={firstUnreadHref}
                       >
@@ -1974,7 +1974,7 @@ export function ForumThreadTable({
                       · {formatForumDateTime(getThreadLastActivityAt(thread))}
                     </p>
                     <ForumJumpLink
-                      ariaLabel={`Last: Go to last post in ${thread.title}`}
+                      ariaLabel={`Last » — Go to last post in ${thread.title}`}
                       className="shrink-0 px-2"
                       href={lastPostHref}
                     >
@@ -2134,7 +2134,7 @@ export function ForumThreadTable({
                   <td className="px-3 py-2.5 align-middle">
                     <div className="flex flex-wrap items-center gap-2">
                       <ForumJumpLink
-                        ariaLabel={`Last: Go to last post in ${thread.title}`}
+                        ariaLabel={`Last » — Go to last post in ${thread.title}`}
                         className="px-2"
                         href={lastPostHref}
                       >
@@ -2335,7 +2335,7 @@ function ForumCompactMobileThreadRow({
           <span>{formatForumCount(thread.viewCount)} views</span>
           {firstUnreadHref ? (
             <ForumLink
-              aria-label={`First unread: Go to first unread post in ${thread.title}`}
+              aria-label={`First unread » — Go to first unread post in ${thread.title}`}
               className="focus-ring text-primary hover:underline"
               href={firstUnreadHref}
               prefetch
@@ -2346,7 +2346,7 @@ function ForumCompactMobileThreadRow({
         </div>
       </div>
       <ForumJumpLink
-        ariaLabel={`Last: Go to last post in ${thread.title}`}
+        ariaLabel={`Last » — Go to last post in ${thread.title}`}
         className="min-h-8 px-2"
         href={lastPostHref}
       >
@@ -2465,7 +2465,7 @@ function ForumCompactDesktopThreadRow({
             </p>
           </div>
           <ForumJumpLink
-            ariaLabel={`Last: Go to last post in ${thread.title}`}
+            ariaLabel={`Last » — Go to last post in ${thread.title}`}
             className="min-h-7 shrink-0 px-2"
             href={lastPostHref}
           >
