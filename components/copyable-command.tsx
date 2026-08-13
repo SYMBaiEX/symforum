@@ -5,14 +5,20 @@ import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export function CopyableCommand({ value }: { value: string }) {
+export function CopyableCommand({
+  value,
+  label = "Copy command",
+}: {
+  value: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      toast.success("Command copied");
+      toast.success(`${label.replace(/^Copy\s+/i, "")} copied`);
       window.setTimeout(() => setCopied(false), 1_500);
     } catch {
       toast.error("Copy failed; select the command manually.");
@@ -25,7 +31,7 @@ export function CopyableCommand({ value }: { value: string }) {
         <code>{value}</code>
       </pre>
       <Button
-        aria-label="Copy command"
+        aria-label={label}
         className="absolute right-2 top-2"
         onClick={() => void copy()}
         size="icon"

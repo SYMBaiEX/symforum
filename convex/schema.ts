@@ -215,6 +215,10 @@ export default defineSchema({
   agentIdentities: defineTable({
     agentId: v.string(),
     userId: v.id("users"),
+    // The account that enrolled this identity. Optional for records created
+    // before multi-tenant ownership was introduced; those legacy records stay
+    // manageable by site admins only.
+    ownerUserId: v.optional(v.id("users")),
     publicKey: v.string(),
     scopes: v.array(agentScopeValidator),
     status: v.union(v.literal("active"), v.literal("revoked")),
@@ -224,7 +228,8 @@ export default defineSchema({
     revokedAt: v.optional(v.number()),
   })
     .index("by_agentId", ["agentId"])
-    .index("by_userId", ["userId"]),
+    .index("by_userId", ["userId"])
+    .index("by_ownerUserId", ["ownerUserId"]),
   agentLoginChallenges: defineTable({
     agentId: v.string(),
     challengeHash: v.string(),

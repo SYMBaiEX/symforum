@@ -1,6 +1,9 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireOwner } from "./authz";
+import {
+  hasSiteAdminAccess,
+  requireAuthenticatedUser,
+} from "./authz";
 import {
   buildAgentLoginMessage,
   randomBase64Url,
@@ -93,7 +96,13 @@ export const enrollAgent = mutation({
     scopes: v.array(agentScopeValidator),
   },
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
+    const owner = await requireAuthenticatedUser(ctx);
+    if (owner.isAgent === true) {
+      throw new ConvexError({
+        code: "HUMAN_ACCOUNT_REQUIRED",
+        message: "A human account must enroll an external agent.",
+      });
+    }
     const agentId = resolveAgentId(args);
     const scopes = normalizeScopes(args.scopes);
     if (!validateEd25519PublicKey(args.publicKey)) {
@@ -146,6 +155,7 @@ export const enrollAgent = mutation({
     const identityId = await ctx.db.insert("agentIdentities", {
       agentId,
       userId,
+      ownerUserId: owner._id,
       publicKey: args.publicKey,
       scopes,
       status: "active",
@@ -230,10 +240,10 @@ export const requestLoginChallenge = mutation({
 export const getAgentEnrollmentStatus = query({
   args: agentIdentifierArgs,
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
     const agentId = resolveAgentId(args);
     const identity = await findIdentityByAgentId(ctx, agentId);
     if (identity === null) return null;
+    await requireAgentManager(ctx, identity);
     return {
       agentId: identity.agentId,
       userId: identity.userId,
@@ -252,12 +262,12 @@ export const getAgentEnrollmentStatus = query({
 export const revokeAgent = mutation({
   args: agentIdentifierArgs,
   handler: async (ctx, args) => {
-    const owner = await requireOwner(ctx);
     const agentId = resolveAgentId(args);
     const identity = await findIdentityByAgentId(ctx, agentId);
     if (identity === null) {
       throw new ConvexError({ code: "AGENT_NOT_FOUND", message: "Agent not found." });
     }
+    const owner = await requireAgentManager(ctx, identity);
     const now = Date.now();
     const revokedAt = identity.revokedAt ?? now;
     if (identity.status === "active") {
@@ -283,18 +293,18 @@ export const rotateAgentKey = mutation({
     scopes: v.optional(v.array(agentScopeValidator)),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx);
     const agentId = resolveAgentId(args);
+    const identity = await findIdentityByAgentId(ctx, agentId);
+    if (identity === null) {
+      throw new ConvexError({ code: "AGENT_NOT_FOUND", message: "Agent not found." });
+    }
+    await requireAgentManager(ctx, identity);
     const publicKey = args.newPublicKey ?? args.publicKey;
     if (publicKey === undefined || !validateEd25519PublicKey(publicKey)) {
       throw new ConvexError({
         code: "INVALID_AGENT_PUBLIC_KEY",
         message: "newPublicKey must be an Ed25519 public key encoded as base64url.",
       });
-    }
-    const identity = await findIdentityByAgentId(ctx, agentId);
-    if (identity === null) {
-      throw new ConvexError({ code: "AGENT_NOT_FOUND", message: "Agent not found." });
     }
     if (identity.status !== "active") {
       throw new ConvexError({
@@ -401,3 +411,23 @@ export const consumeLoginChallenge = internalMutation({
     return identity.userId;
   },
 });
+
+/**
+ * Agent management belongs to the human account that enrolled the identity.
+ * Site owners and admins retain support access, while ordinary users cannot
+ * inspect, rotate, or revoke another user's agent by guessing its public ID.
+ */
+async function requireAgentManager(
+  ctx: QueryCtx | MutationCtx,
+  identity: Awaited<ReturnType<typeof findIdentityByAgentId>>,
+) {
+  const actor = await requireAuthenticatedUser(ctx);
+  if (hasSiteAdminAccess(actor)) return actor;
+  if (identity?.ownerUserId !== actor._id) {
+    throw new ConvexError({
+      code: "AGENT_OWNER_REQUIRED",
+      message: "Only the account owner can manage this agent.",
+    });
+  }
+  return actor;
+}

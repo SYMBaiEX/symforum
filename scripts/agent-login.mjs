@@ -15,14 +15,11 @@ const keyPath = resolve(args.key ?? "symbaiex-agent-key.json");
 const sessionPath = resolve(
   args.session ?? `${homedir()}/.config/symbaiex/agent-session.json`,
 );
-const convexSiteUrl = (
-  args["convex-site-url"] ??
-  process.env.SYMBAIEX_CONVEX_SITE_URL ??
-  ""
+const apiBaseUrl = (
+  args["api-base-url"] ??
+  process.env.SYMBAIEX_AGENT_API_BASE_URL ??
+  "https://www.symbaiex.com/api/agent"
 ).replace(/\/$/, "");
-if (!convexSiteUrl) {
-  throw new Error("Set SYMBAIEX_CONVEX_SITE_URL or pass --convex-site-url.");
-}
 
 if (args.refresh) {
   await refreshSession();
@@ -39,7 +36,7 @@ async function signIn() {
     throw new Error("Pass the owner-issued agent id with --agent-id.");
   }
 
-  const challenge = await post("/agent/auth/challenge", {
+  const challenge = await post("/auth/challenge", {
     agentId: args["agent-id"],
   });
   if (
@@ -64,7 +61,7 @@ async function signIn() {
     privateKey,
     new TextEncoder().encode(challenge.message),
   );
-  const result = await post("/agent/auth/sign-in", {
+  const result = await post("/auth/sign-in", {
     agentId: args["agent-id"],
     challenge: challenge.challenge,
     audience: challenge.audience,
@@ -84,7 +81,7 @@ async function refreshSession() {
   if (typeof session.refreshToken !== "string") {
     throw new Error(`No refresh token found in ${sessionPath}.`);
   }
-  const result = await post("/agent/auth/refresh", {
+  const result = await post("/auth/refresh", {
     refreshToken: session.refreshToken,
   });
   saveSession({
@@ -97,7 +94,7 @@ async function refreshSession() {
 }
 
 async function post(path, body) {
-  const response = await fetch(`${convexSiteUrl}${path}`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

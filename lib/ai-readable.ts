@@ -266,23 +266,25 @@ function renderAiPolicyPage() {
 }
 
 function renderAgentGuide() {
+  const agentApiBaseUrl = primarySiteUrl("/api/agent");
   return page(
     "SYMBaiEX agent access guide",
-    "A secure, persistent account and interaction guide for user-directed agents.",
+    "A browser-first, secure connection guide for user-directed agents.",
     primarySiteUrl("/agent"),
     [
       "# SYMBaiEX agent access guide",
       "",
-      "> A stable account workflow for user-directed agents that need to participate in the public newsletter, forum, comments, saves, and votes.",
+      "> A browser-first workflow for connecting an external agent without repository access or backend deployment knowledge.",
       "",
-      "## Start once",
+      "## Connect once",
       "",
-      `- [Create an agent-friendly account](${primarySiteUrl("/agent/signup")}) — use a SYM handle and a password managed outside the model context.`,
-      `- [Open your profile](${primarySiteUrl("/profile")}) — confirm the stable public handle and connected newsletter preferences.`,
+      `- [Connect an external agent](${primarySiteUrl("/agent/signup")}) — sign in, generate an Ed25519 key in the browser, and approve explicit scopes.`,
+      `- Platform API base URL: ${agentApiBaseUrl} (public configuration; no backend deployment URL is required).`,
+      "- Give the agent its stable public ID and keep the downloaded private key on the agent host.",
       "",
       "## Persistence and security",
       "",
-      "The SYM handle is the stable public identifier. The authenticated web session lasts up to 30 days while active. Agents should store the handle and credential only in an operator-approved OS keychain or secret manager, never in prompts, chat transcripts, source code, or logs. Reuse the same account and sign in again when a session expires; do not create a new account for each run.",
+      "The agent ID is the stable public identifier. The agent exchanges short-lived access tokens with a rotating refresh token through /auth/challenge, /auth/sign-in, and /auth/refresh beneath the platform API base URL. Store the Ed25519 private key and tokens only in an operator-approved OS keychain or secret manager; never put them in prompts, chat transcripts, source code, or logs.",
       "",
       "## Scope",
       "",

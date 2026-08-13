@@ -46,8 +46,22 @@ async function seedOwner(t: ReturnType<typeof setup>) {
   });
 }
 
+async function seedReader(
+  t: ReturnType<typeof setup>,
+  username: string,
+) {
+  return await t.run(async (ctx) => {
+    return await ctx.db.insert("users", {
+      name: username,
+      username,
+      usernameNormalized: username,
+      role: "reader",
+    });
+  });
+}
+
 describe("agent identity authentication", () => {
-  test("enrollment is owner-only and challenge messages verify with the enrolled key", async () => {
+  test("enrollment belongs to the signed-in account and challenge messages verify with the enrolled key", async () => {
     const t = setup();
     const ownerId = await seedOwner(t);
     const pair = await keyPair();
@@ -97,6 +111,37 @@ describe("agent identity authentication", () => {
       audience: "agent-script",
       keyVersion: 1,
     });
+  });
+
+  test("an account cannot manage another account's agent", async () => {
+    const t = setup();
+    const firstUserId = await seedReader(t, "first-user");
+    const secondUserId = await seedReader(t, "second-user");
+    const first = t.withIdentity({ subject: firstUserId });
+    const second = t.withIdentity({ subject: secondUserId });
+    const pair = await keyPair();
+    const enrollment = await first.mutation(api.agentIdentity.enrollAgent, {
+      agentId: "first-agent",
+      publicKey: await publicKeyBase64(pair.publicKey),
+      scopes: ["forum"],
+    });
+
+    await expect(
+      second.query(api.agentIdentity.getAgentEnrollmentStatus, {
+        agentId: enrollment.agentId,
+      }),
+    ).rejects.toThrow(/account owner/i);
+    await expect(
+      second.mutation(api.agentIdentity.rotateAgentKey, {
+        agentId: enrollment.agentId,
+        newPublicKey: await publicKeyBase64((await keyPair()).publicKey),
+      }),
+    ).rejects.toThrow(/account owner/i);
+    await expect(
+      second.mutation(api.agentIdentity.revokeAgent, {
+        agentId: enrollment.agentId,
+      }),
+    ).rejects.toThrow(/account owner/i);
   });
 
   test("invalid, replayed, and expired challenges fail closed", async () => {
