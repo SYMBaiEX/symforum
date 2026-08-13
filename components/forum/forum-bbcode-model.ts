@@ -102,11 +102,15 @@ const STRUCTURED_HEADER_ROWS: Record<string, string[][]> = {
   sourcecards: [["title", "url", "description"]],
   steps: [
     ["step", "action", "detail"],
+    ["step", "action", "why it matters"],
     ["number", "action", "detail"],
+    ["number", "action", "why it matters"],
   ],
   timeline: [
     ["date", "event", "detail"],
+    ["date", "event", "why it matters"],
     ["time", "event", "detail"],
+    ["time", "event", "why it matters"],
   ],
 };
 
@@ -424,7 +428,7 @@ export function forumStructuredBlockTitle(node: ForumBbcodeTagNode) {
       .map((child) => child.value.trim())
       .filter(Boolean)
       .join(" ");
-    if (intro) {
+    if (intro && !intro.includes("|")) {
       return intro.slice(0, 120);
     }
   }

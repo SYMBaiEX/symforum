@@ -92,29 +92,27 @@
   *::-webkit-scrollbar-thumb {
     border: 2px solid hsl(var(--scrollbar-track));
     border-radius: 0;
-    background:
-      linear-gradient(
-        180deg,
-        var(--accent-magenta) 0,
-        var(--accent-magenta) 0.1875rem,
-        hsl(var(--scrollbar-thumb)) 0.1875rem,
-        hsl(var(--scrollbar-thumb)) calc(100% - 0.1875rem),
-        var(--accent-cyan) calc(100% - 0.1875rem),
-        var(--accent-cyan) 100%
-      );
+    background: linear-gradient(
+      180deg,
+      var(--accent-magenta) 0,
+      var(--accent-magenta) 0.1875rem,
+      hsl(var(--scrollbar-thumb)) 0.1875rem,
+      hsl(var(--scrollbar-thumb)) calc(100% - 0.1875rem),
+      var(--accent-cyan) calc(100% - 0.1875rem),
+      var(--accent-cyan) 100%
+    );
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background:
-      linear-gradient(
-        180deg,
-        var(--accent-cyan) 0,
-        var(--accent-cyan) 0.1875rem,
-        hsl(var(--scrollbar-thumb-hover)) 0.1875rem,
-        hsl(var(--scrollbar-thumb-hover)) calc(100% - 0.1875rem),
-        var(--accent-canary) calc(100% - 0.1875rem),
-        var(--accent-canary) 100%
-      );
+    background: linear-gradient(
+      180deg,
+      var(--accent-cyan) 0,
+      var(--accent-cyan) 0.1875rem,
+      hsl(var(--scrollbar-thumb-hover)) 0.1875rem,
+      hsl(var(--scrollbar-thumb-hover)) calc(100% - 0.1875rem),
+      var(--accent-canary) calc(100% - 0.1875rem),
+      var(--accent-canary) 100%
+    );
   }
 
   *::-webkit-scrollbar-corner {
@@ -150,6 +148,17 @@
     background: var(--accent-canary);
     color: hsl(var(--foreground));
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer utilities {
@@ -172,7 +181,6 @@
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
-
 }
 
 @layer components {
@@ -314,8 +322,7 @@
     background-repeat: no-repeat;
     background-position: 0 12.5%;
     background-size: 800% 900%;
-    filter:
-      drop-shadow(0 0.08rem 0 hsl(var(--background) / 0.75))
+    filter: drop-shadow(0 0.08rem 0 hsl(var(--background) / 0.75))
       drop-shadow(0 0 0.45rem hsl(var(--accent) / 0.18));
     opacity: 0;
     will-change: background-position, opacity;
@@ -373,8 +380,7 @@
   }
 
   .dark .signal-moth-sprite {
-    filter:
-      drop-shadow(0 0.08rem 0 hsl(0 0% 0% / 0.78))
+    filter: drop-shadow(0 0.08rem 0 hsl(0 0% 0% / 0.78))
       drop-shadow(0 0 0.55rem hsl(var(--accent) / 0.26));
   }
 

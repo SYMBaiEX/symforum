@@ -229,7 +229,7 @@ function SiteFooter({
   return (
     <footer
       ref={footerRef}
-      className="fixed inset-x-0 bottom-0 z-50 bg-background/92 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-row-border/70 bg-background/92 backdrop-blur"
     >
       <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
         <div className="min-w-0">
@@ -277,7 +277,7 @@ function SiteHeader({
   initialPrimarySiteHref: string;
 }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-50 bg-background/92 backdrop-blur">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
         <div className="flex min-w-0 items-center">
           <Link

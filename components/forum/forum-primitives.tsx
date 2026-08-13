@@ -2659,7 +2659,9 @@ export function ForumPostFrame({
           Post #{String(postNumber).padStart(2, "0")} / {timestamp}
         </span>
         {actions ? (
-          <div className="flex flex-wrap justify-end gap-1.5">{actions}</div>
+          <div className="min-w-0 flex flex-wrap justify-end gap-1.5">
+            {actions}
+          </div>
         ) : null}
       </div>
       <div className="grid gap-px bg-row-border md:grid-cols-[11rem_minmax(0,1fr)]">

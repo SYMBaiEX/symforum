@@ -387,7 +387,7 @@ function renderForumTable(node: ForumBbcodeTagNode, key: string) {
           <tbody>
             {dataRows.map((row, rowIndex) => (
               <tr
-                className="border-b border-row-border last:border-b-0"
+                className="border-b border-row-border transition-colors duration-150 last:border-b-0 hover:bg-muted/15 motion-reduce:transition-none"
                 key={`${key}-row-${rowIndex}`}
               >
                 {row.map((cell, cellIndex) => {
@@ -440,6 +440,10 @@ function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
     return null;
   }
   const title = forumStructuredBlockTitle(node);
+
+  if (node.name === "steps" && rows.some((row) => row.length >= 3)) {
+    return renderForumStepsGrid(rows, key, title);
+  }
 
   if (node.name === "sourcecards") {
     const sources = rows.flatMap(([label, rawUrl, detail]) => {
@@ -503,15 +507,15 @@ function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
             <li
               className={
                 node.name === "timeline"
-                  ? "grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-3 py-3"
-                  : "grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 px-3 py-3"
+                  ? "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none"
+                  : "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] gap-3 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none"
               }
               key={`${key}-step-${index}`}
             >
               <span
                 className={
                   node.name === "timeline"
-                    ? "flex min-h-8 min-w-20 items-center justify-center border border-primary/50 px-2 py-1 text-center font-mono text-[10px] leading-4 text-primary"
+                    ? "flex min-h-8 min-w-20 items-center justify-center border border-primary/50 px-2 py-1 text-center font-mono text-[10px] leading-4 text-primary [overflow-wrap:anywhere]"
                     : "flex h-8 w-8 items-center justify-center border border-primary/50 font-mono text-[10px] text-primary"
                 }
               >
@@ -542,7 +546,7 @@ function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
           {rows.map(([risk, likelihood, impact, mitigation], index) => {
             return (
               <div
-                className="grid gap-2 px-3 py-3 md:grid-cols-[minmax(10rem,0.7fr)_minmax(12rem,1fr)_minmax(12rem,1fr)] md:items-center"
+                className="grid gap-2 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none md:grid-cols-[minmax(10rem,0.7fr)_minmax(12rem,1fr)_minmax(12rem,1fr)] md:items-center"
                 key={`${key}-risk-${index}`}
               >
                 <p className="text-sm font-semibold text-pretty [overflow-wrap:anywhere]">
@@ -571,7 +575,7 @@ function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
       <div className="divide-y divide-row-border">
         {rows.map(([option, verdict, reason], index) => (
           <div
-            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(8rem,0.45fr)_minmax(8rem,0.35fr)_minmax(0,1fr)] sm:items-start"
+            className="grid gap-2 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none sm:grid-cols-[minmax(8rem,0.45fr)_minmax(8rem,0.35fr)_minmax(0,1fr)] sm:items-start"
             key={`${key}-decision-${index}`}
           >
             <p className="text-sm font-semibold text-pretty [overflow-wrap:anywhere]">
@@ -593,13 +597,62 @@ function renderForumStructuredBlock(node: ForumBbcodeTagNode, key: string) {
   );
 }
 
+function renderForumStepsGrid(rows: string[][], key: string, title: string) {
+  return (
+    <section className="border-y border-row-border" key={key}>
+      <StructuredHeading label="Action sequence" title={title} />
+      <div className="hidden bg-muted/20 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground sm:grid sm:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,1fr)_minmax(0,1.4fr)] sm:gap-3">
+        <span>Step</span>
+        <span>Action</span>
+        <span>Why it matters</span>
+      </div>
+      <ol
+        aria-label={decodeForumEntities(title)}
+        className="divide-y divide-row-border"
+      >
+        {rows.map(([step, action, detail], index) => (
+          <li
+            className="grid min-w-0 gap-3 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none sm:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,1fr)_minmax(0,1.4fr)] sm:items-start"
+            key={`${key}-step-grid-${index}`}
+          >
+            <div className="min-w-0">
+              <span className="mb-1 block font-mono text-[10px] uppercase text-primary sm:hidden">
+                Step
+              </span>
+              <p className="text-sm font-semibold leading-5 text-pretty [overflow-wrap:anywhere]">
+                {decodeForumEntities(step || String(index + 1))}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <span className="mb-1 block font-mono text-[10px] uppercase text-muted-foreground sm:hidden">
+                Action
+              </span>
+              <p className="text-sm leading-5 text-pretty [overflow-wrap:anywhere]">
+                {decodeForumEntities(action || "Continue")}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <span className="mb-1 block font-mono text-[10px] uppercase text-muted-foreground sm:hidden">
+                Why it matters
+              </span>
+              <p className="text-sm leading-5 text-muted-foreground text-pretty [overflow-wrap:anywhere]">
+                {decodeForumEntities(detail || "No detail supplied.")}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function StructuredHeading({ label, title }: { label: string; title: string }) {
   return (
     <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-row-border px-3 py-2.5">
-      <h3 className="text-sm font-semibold text-pretty">
+      <h3 className="min-w-0 break-words text-sm font-semibold text-pretty">
         {decodeForumEntities(title)}
       </h3>
-      <span className="font-mono text-[10px] uppercase text-muted-foreground">
+      <span className="shrink-0 font-mono text-[10px] uppercase text-muted-foreground">
         {label}
       </span>
     </header>
@@ -717,7 +770,7 @@ function renderForumChart(node: ForumBbcodeTagNode, key: string) {
       <div className="divide-y divide-row-border">
         {rows.map((row, index) => (
           <div
-            className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(7rem,0.4fr)_minmax(12rem,1fr)] sm:items-center"
+            className="grid gap-2 px-3 py-3 transition-colors duration-150 hover:bg-muted/15 motion-reduce:transition-none sm:grid-cols-[minmax(7rem,0.4fr)_minmax(12rem,1fr)] sm:items-center"
             key={`${key}-chart-row-${index}`}
           >
             <div className="min-w-0">

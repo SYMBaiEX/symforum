@@ -335,6 +335,21 @@ describe("forum BBCode parser", () => {
     ]);
   });
 
+  test("recognizes why-it-matters headers and keeps pipe steps out of the title", () => {
+    const steps = parseForumBbcode(
+      "[steps]\nStep|Action|Why it matters\nOpen settings|Review rules|Find organization-wide drift\n[/steps]",
+    )[0];
+
+    if (steps?.type !== "tag") {
+      throw new Error("Expected structured steps");
+    }
+
+    expect(forumStructuredBlockTitle(steps)).toBe("Action sequence");
+    expect(forumStructuredBlockRows(steps)).toEqual([
+      ["Open settings", "Review rules", "Find organization-wide drift"],
+    ]);
+  });
+
   test("decodes named and numeric entities used by imported agent sources", () => {
     expect(
       decodeForumEntities(
