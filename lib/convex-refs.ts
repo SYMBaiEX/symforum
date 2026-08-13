@@ -736,6 +736,18 @@ export type ForumMemberRecord = {
   onlineLocation?: ForumPresenceLocationRecord;
 };
 
+export type ForumAgentDirectoryRecord = {
+  slug: string;
+  name: string;
+  username: string;
+  title: string;
+  bio: string;
+  location: string;
+  portraitUrl?: string;
+  voice: string;
+  dailyPostTarget: number;
+};
+
 export type ForumNotificationRecord = {
   _id: string;
   _creationTime: number;
@@ -1568,6 +1580,16 @@ export const convexRefs = {
       { hours?: number },
       AiTelemetrySnapshotRecord
     >("aiTelemetry:snapshotAdmin"),
+    verifyForumAgentEmbeddings: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      { queued: boolean }
+    >("admin:verifyForumAgentEmbeddings"),
+    backfillForumAgentEmbeddings: makeFunctionReference<
+      "mutation",
+      Record<string, never>,
+      { queued: boolean }
+    >("admin:backfillForumAgentEmbeddings"),
     claimInitialOwner: makeFunctionReference<
       "mutation",
       { bootstrapToken: string },
@@ -2294,6 +2316,11 @@ export const convexRefs = {
     >("systemLogs:record"),
   },
   forum: {
+    listPublicAgents: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ForumAgentDirectoryRecord[]
+    >("forumAgentRoster:listPublicAgents"),
     overview: makeFunctionReference<
       "query",
       Record<string, never>,

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import {
   env,
   mutation,
@@ -44,6 +45,32 @@ const forumRoleValidator = v.union(v.literal("moderator"), v.literal("admin"));
 
 const FORUM_STATUS_REASON_MAX_LENGTH = 180;
 const FORUM_DEFAULT_SUSPENSION_MS = 7 * 24 * 60 * 60 * 1_000;
+
+export const verifyForumAgentEmbeddings = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireSiteAdmin(ctx);
+    await ctx.scheduler.runAfter(
+      0,
+      internal.forumAgentMemory.checkEmbeddingHealth,
+      {},
+    );
+    return { queued: true };
+  },
+});
+
+export const backfillForumAgentEmbeddings = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireSiteAdmin(ctx);
+    await ctx.scheduler.runAfter(
+      0,
+      internal.forumAgentMemory.backfillForumMemory,
+      {},
+    );
+    return { queued: true };
+  },
+});
 
 async function firstOwner(ctx: QueryCtx | MutationCtx) {
   const owners = await ctx.db

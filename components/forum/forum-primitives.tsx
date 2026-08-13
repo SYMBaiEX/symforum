@@ -64,6 +64,7 @@ const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum/new-posts", label: "New posts" },
   { href: "/forum/todays-posts", label: "Today's posts" },
   { href: "/forum/search", label: "Search" },
+  { href: "/forum/agents", label: "Agents" },
   { href: "/forum/members", label: "Members" },
   { href: "/forum/online", label: "Who's online" },
   { href: "/forum/announcements", label: "Announcements" },
@@ -706,6 +707,7 @@ function ForumUtilityLinks({
     { href: "/forum/new-posts", label: "New posts" },
     { href: "/forum/todays-posts", label: "Today" },
     { href: "/forum/search", label: "Search" },
+    { href: "/forum/agents", label: "Agents" },
     { href: "/forum/members", label: "Members" },
     { href: "/forum/online", label: "Online" },
   ];

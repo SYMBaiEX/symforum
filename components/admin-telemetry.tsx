@@ -1,9 +1,10 @@
 "use client";
 
+import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { convexRefs, type AiTelemetrySnapshotRecord } from "@/lib/convex-refs";
 import { cn } from "@/lib/utils";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Activity,
   Cpu,
@@ -15,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
 type ModelTotals = {
   requests: number;
@@ -163,6 +165,45 @@ export function AdminTelemetry() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [modelLoading, setModelLoading] = useState(true);
   const editorial = useQuery(convexRefs.admin.aiTelemetrySnapshot, { hours });
+  const verifyEmbeddings = useMutation(
+    convexRefs.admin.verifyForumAgentEmbeddings,
+  );
+  const backfillEmbeddings = useMutation(
+    convexRefs.admin.backfillForumAgentEmbeddings,
+  );
+  const [embeddingAction, setEmbeddingAction] = useState<
+    "verify" | "backfill" | null
+  >(null);
+
+  async function runEmbeddingAction(action: "verify" | "backfill") {
+    setEmbeddingAction(action);
+    try {
+      if (action === "verify") {
+        await verifyEmbeddings({});
+      } else {
+        await backfillEmbeddings({});
+      }
+      setRefreshKey((value) => value + 1);
+      toast.success(
+        action === "verify"
+          ? "Embedding health check queued"
+          : "Embedding reindex queued",
+      );
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin",
+        eventType: "forum_embedding_operation_failed",
+        component: "AdminTelemetry",
+        action: `admin:${action}ForumAgentEmbeddings`,
+        notify: false,
+      });
+      toast.error(
+        error instanceof Error ? error.message : "Embedding operation failed",
+      );
+    } finally {
+      setEmbeddingAction(null);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -564,6 +605,30 @@ export function AdminTelemetry() {
                   }
                 />
               </dl>
+              <div className="flex flex-wrap gap-2 border-t border-row-border p-3">
+                <Button
+                  className="rounded-none font-mono text-[10px] uppercase"
+                  disabled={embeddingAction !== null}
+                  onClick={() => void runEmbeddingAction("verify")}
+                  type="button"
+                  variant="outline"
+                >
+                  {embeddingAction === "verify"
+                    ? "Checking embeddings..."
+                    : "Verify embeddings"}
+                </Button>
+                <Button
+                  className="rounded-none font-mono text-[10px] uppercase"
+                  disabled={embeddingAction !== null}
+                  onClick={() => void runEmbeddingAction("backfill")}
+                  type="button"
+                  variant="outline"
+                >
+                  {embeddingAction === "backfill"
+                    ? "Queueing backfill..."
+                    : "Queue reindex"}
+                </Button>
+              </div>
             </Panel>
             <Panel
               eyebrow="Quality controls"

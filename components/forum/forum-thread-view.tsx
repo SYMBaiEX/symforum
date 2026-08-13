@@ -33,6 +33,7 @@ import {
   type ForumPostRecord,
   type ForumPollRecord,
   type ForumReportTarget,
+  type ForumSearchRecord,
   type ForumThreadRecord,
   type ForumThreadPrefixRecord,
 } from "@/components/forum/forum-refs";
@@ -42,6 +43,7 @@ import {
   ForumBody,
   ForumBreadcrumbs,
   ForumJumpLink,
+  ForumLink,
   ForumLoading,
   ForumMetricBar,
   ForumPaginationBar,
@@ -145,6 +147,21 @@ function LiveForumThreadView({
   const threadPrefixes = useQuery(forumRefs.listThreadPrefixes, {
     categorySlug,
   });
+  const relatedSearchQuery = useMemo(
+    () => relatedThreadSearchQuery(detail?.thread?.title),
+    [detail?.thread?.title],
+  );
+  const relatedSearch = useQuery(
+    forumRefs.search,
+    relatedSearchQuery === null
+      ? "skip"
+      : {
+          query: relatedSearchQuery,
+          resultType: "threads",
+          sortKey: "relevance",
+          pageSize: 5,
+        },
+  );
   const reply = useMutation(forumRefs.reply);
   const recordThreadView = useMutation(forumRefs.recordThreadView);
   const markThreadRead = useMutation(forumRefs.markThreadRead);
@@ -1292,6 +1309,12 @@ function LiveForumThreadView({
         />
       ) : null}
 
+      <RelatedThreadsPanel
+        categorySlug={categorySlug}
+        currentThreadId={thread._id}
+        result={relatedSearch}
+      />
+
       <section className="space-y-3">
         <ForumPaginationBar
           buildHref={threadPageHref}
@@ -1866,6 +1889,75 @@ function ForumPollPanel({
             {error}
           </p>
         ) : null}
+      </div>
+    </section>
+  );
+}
+
+function RelatedThreadsPanel({
+  categorySlug,
+  currentThreadId,
+  result,
+}: {
+  categorySlug: string;
+  currentThreadId: string;
+  result: ForumSearchRecord | undefined;
+}) {
+  if (result === undefined) {
+    return null;
+  }
+  const threads = result.threads
+    .filter(
+      (candidate) => (candidate.threadId ?? candidate._id) !== currentThreadId,
+    )
+    .slice(0, 4);
+  if (threads.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="border-y border-row-border py-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            Discovery
+          </p>
+          <h2 className="mt-1 text-base font-semibold">
+            Related discussions
+          </h2>
+        </div>
+        <ForumLink
+          className="font-mono text-[10px] uppercase text-muted-foreground hover:text-foreground"
+          href={`/forum/search?q=${encodeURIComponent(
+            relatedThreadSearchQuery(threads[0]?.title) ?? categorySlug,
+          )}`}
+          prefetch
+        >
+          Open search →
+        </ForumLink>
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        {threads.map((candidate) => (
+          <ForumLink
+            className="border border-row-border p-2.5 hover:border-primary/60 hover:bg-muted/20"
+            href={forumPath(candidate.categorySlug ?? categorySlug, candidate.slug)}
+            key={candidate.threadId ?? candidate._id ?? candidate.slug}
+            prefetch
+          >
+            <span className="block text-sm font-semibold leading-5">
+              {candidate.title}
+            </span>
+            <span className="mt-1 block font-mono text-[10px] uppercase text-muted-foreground">
+              {candidate.categorySlug ?? categorySlug} · {candidate.replyCount ?? 0} replies ·{" "}
+              {candidate.viewCount ?? 0} views
+            </span>
+            {candidate.excerpt ? (
+              <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted-foreground">
+                {candidate.excerpt}
+              </span>
+            ) : null}
+          </ForumLink>
+        ))}
       </div>
     </section>
   );
@@ -2557,6 +2649,20 @@ function buildPollEditPayload(question: string, options: string[]) {
     return null;
   }
   return { question: cleanedQuestion, options: cleanedOptions };
+}
+
+function relatedThreadSearchQuery(title: string | undefined) {
+  if (!title) {
+    return null;
+  }
+  const terms = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((term) => term.length >= 4)
+    .filter((term, index, all) => all.indexOf(term) === index)
+    .slice(0, 5);
+  return terms.length >= 2 ? terms.join(" ") : title.trim().slice(0, 120);
 }
 
 function parsePage(value: string | null) {

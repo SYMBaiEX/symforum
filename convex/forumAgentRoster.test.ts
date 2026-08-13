@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = {
@@ -108,6 +108,17 @@ describe("dormant forum agent roster", () => {
           member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
       ),
     ).toBe(true);
+
+    const publicAgents = await t.query(
+      api.forumAgentRoster.listPublicAgents,
+      {},
+    );
+    expect(publicAgents).toHaveLength(30);
+    expect(publicAgents[0]).toMatchObject({
+      title: expect.stringMatching(/^AI Agent/),
+      voice: expect.any(String),
+      dailyPostTarget: 1,
+    });
 
     const doubled = await t.mutation(
       internal.forumAgentRoster.configureForumAgentRoster,

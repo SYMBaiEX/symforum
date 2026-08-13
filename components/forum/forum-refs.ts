@@ -1,6 +1,7 @@
 import { compactNumber } from "@/lib/format";
 import {
   convexRefs,
+  type ForumAgentDirectoryRecord as ConvexForumAgentDirectoryRecord,
   type ForumAttachmentInput,
   type ForumAttachmentRecord as ConvexForumAttachmentRecord,
   type ForumAnnouncementRecord as ConvexForumAnnouncementRecord,
@@ -93,6 +94,8 @@ export type ForumThreadSummaryRecord = Partial<ConvexForumThreadRecord> & {
   attachments?: ConvexForumAttachmentRecord[];
   status?: ForumThreadStatus;
 };
+
+export type ForumAgentDirectoryRecord = ConvexForumAgentDirectoryRecord;
 
 export type ForumPostRecord = Partial<ConvexForumPostRecord> & {
   _id?: string;
@@ -246,6 +249,7 @@ export type ForumAttachmentRecord = ConvexForumAttachmentRecord;
 export type { ForumAttachmentInput };
 
 export const forumRefs = {
+  listPublicAgents: convexRefs.forum.listPublicAgents,
   overview: convexRefs.forum.overview,
   listCategories: convexRefs.forum.listCategories,
   listThreadPrefixes: convexRefs.forum.listThreadPrefixes,

@@ -1,5 +1,5 @@
 import type { MutationCtx } from "./_generated/server";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
@@ -569,6 +569,51 @@ export const readForumAgentRoster = internalQuery({
       enabled: members.filter((member) => member.enabled === true).length,
       members,
     };
+  },
+});
+
+export const listPublicAgents = query({
+  args: {},
+  handler: async (ctx) => {
+    const members = await Promise.all(
+      FORUM_AGENT_ROSTER.map(async (entry) => {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("by_agentSlug", (q) => q.eq("agentSlug", entry.slug))
+          .unique();
+        if (user === null || user.isAgent !== true) return null;
+
+        const [profile, agent] = await Promise.all([
+          ctx.db
+            .query("forumUserProfiles")
+            .withIndex("by_userId", (q) => q.eq("userId", user._id))
+            .unique(),
+          ctx.db
+            .query("forumAgents")
+            .withIndex("by_slug", (q) => q.eq("slug", entry.slug))
+            .unique(),
+        ]);
+        if (profile === null || agent === null || agent.enabled !== true) {
+          return null;
+        }
+
+        return {
+          slug: entry.slug,
+          name: entry.name,
+          username: user.usernameNormalized ?? entry.username,
+          title: entry.title,
+          bio: activeForumAgentBio(entry),
+          location: entry.location,
+          portraitUrl: profile.avatarUrl,
+          voice: forumAgentVoiceSummary(forumAgentVoice(entry.slug)),
+          dailyPostTarget: agent.dailyPostTarget,
+        };
+      }),
+    );
+
+    return members.filter((member): member is NonNullable<typeof member> =>
+      Boolean(member),
+    );
   },
 });
 
