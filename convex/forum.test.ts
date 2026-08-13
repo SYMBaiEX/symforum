@@ -3822,6 +3822,17 @@ describe("forum privacy regressions", () => {
       "POST",
     );
 
+    const disallowedPreflight = await t.fetch("/forum-attachment-upload", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://evil.example",
+      },
+    });
+    expect(disallowedPreflight.status).toBe(204);
+    expect(
+      disallowedPreflight.headers.get("access-control-allow-origin"),
+    ).toBeNull();
+
     const guest = await t.fetch("/forum-attachment-upload", {
       method: "POST",
       headers: {

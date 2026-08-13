@@ -15,9 +15,12 @@ const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/about",
   "/blog",
   "/contact",
+  "/manifest.webmanifest",
   "/news",
   "/newsletter",
   "/portfolio",
+  "/robots.txt",
+  "/sitemap.xml",
 ];
 
 export type ForumSubdomainRoute =

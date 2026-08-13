@@ -7,11 +7,15 @@ import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SiteShell } from "@/components/site-shell";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
+import {
+  FORUM_SITE_URL,
+  PRIMARY_SITE_URL,
+} from "@/lib/site-urls";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
-const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
-const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
+const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
+const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +31,7 @@ const description =
   "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.symbaiex.com"),
+  metadataBase: new URL(PRIMARY_SITE_URL),
   title: {
     default: "Austin Hamilton (SYMBiEX)",
     template: "%s | Austin Hamilton",

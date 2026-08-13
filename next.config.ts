@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     process.env.VERCEL_GIT_COMMIT_SHA ??
     "local"
   ).slice(0, 32),
+  poweredByHeader: false,
   reactCompiler: true,
   typedRoutes: true,
   images: {

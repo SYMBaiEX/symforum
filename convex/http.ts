@@ -16,6 +16,17 @@ const FORUM_ATTACHMENT_ALLOWED_CONTENT_TYPES = new Set([
   "text/markdown",
   "application/zip",
 ]);
+const FORUM_ATTACHMENT_ALLOWED_ORIGINS = new Set([
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://forum.localhost:3000",
+  "http://symbaiex.localhost:3000",
+  "https://symbaiex.com",
+  "https://www.symbaiex.com",
+  "https://forum.symbaiex.com",
+]);
 
 auth.addHttpRoutes(http);
 
@@ -129,11 +140,19 @@ function forumAttachmentUploadCorsHeaders(request: Request) {
       "authorization, content-type, x-forum-attachment-filename",
     "Access-Control-Max-Age": "86400",
   });
-  if (origin !== null) {
+  if (origin !== null && isAllowedForumAttachmentOrigin(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Vary", "Origin");
   }
   return headers;
+}
+
+function isAllowedForumAttachmentOrigin(origin: string) {
+  try {
+    return FORUM_ATTACHMENT_ALLOWED_ORIGINS.has(new URL(origin).origin);
+  } catch {
+    return false;
+  }
 }
 
 function forumAttachmentUploadJson(
