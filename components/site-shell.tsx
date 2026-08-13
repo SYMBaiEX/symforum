@@ -1,7 +1,6 @@
 "use client";
 
 import { AppErrorSurface } from "@/components/app-error-surface";
-import { AnalyticsTracker } from "@/components/analytics-tracker";
 import {
   isForumHostname,
   primarySiteHrefForForumHost,
@@ -10,8 +9,8 @@ import {
 import { ForumShellContextProvider } from "@/components/forum/forum-shell-context";
 import { HeaderNav } from "@/components/header-nav";
 import { NewsletterSignup } from "@/components/newsletter-signup";
-import { RouteImagePreloader } from "@/components/route-image-preloader";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
 import { Github, Linkedin, Twitter } from "lucide-react";
 import Link from "next/link";
 import {
@@ -24,6 +23,22 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
+
+const AnalyticsTracker = dynamic(
+  () =>
+    import("@/components/analytics-tracker").then(
+      (module) => module.AnalyticsTracker,
+    ),
+  { ssr: false },
+);
+
+const RouteImagePreloader = dynamic(
+  () =>
+    import("@/components/route-image-preloader").then(
+      (module) => module.RouteImagePreloader,
+    ),
+  { ssr: false },
+);
 
 const socialItems = [
   {

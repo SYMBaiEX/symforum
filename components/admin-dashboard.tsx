@@ -1,14 +1,6 @@
 "use client";
 
-import { AdminAiChat } from "@/components/admin-ai-chat";
-import { AdminAnalytics } from "@/components/admin-analytics";
-import { AdminContactRequests } from "@/components/admin-contact-requests";
-import { AdminForum, adminForumOverviewRef } from "@/components/admin-forum";
-import { AdminSiteContent } from "@/components/admin-site-content";
-import { AdminNewsletter } from "@/components/admin-newsletter";
-import { AdminSystemLogs } from "@/components/admin-system-logs";
-import { AdminTelemetry } from "@/components/admin-telemetry";
-import { AdminUsers } from "@/components/admin-users";
+import dynamic from "next/dynamic";
 import { reportAppError } from "@/components/app-error-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +62,67 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { toast } from "sonner";
+
+const AdminPanelLoading = () => (
+  <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
+    Loading admin panel
+  </div>
+);
+
+const AdminAiChat = dynamic(
+  () => import("@/components/admin-ai-chat").then((module) => module.AdminAiChat),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminAnalytics = dynamic(
+  () =>
+    import("@/components/admin-analytics").then(
+      (module) => module.AdminAnalytics,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminContactRequests = dynamic(
+  () =>
+    import("@/components/admin-contact-requests").then(
+      (module) => module.AdminContactRequests,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminForum = dynamic(
+  () => import("@/components/admin-forum").then((module) => module.AdminForum),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminSiteContent = dynamic(
+  () =>
+    import("@/components/admin-site-content").then(
+      (module) => module.AdminSiteContent,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminNewsletter = dynamic(
+  () =>
+    import("@/components/admin-newsletter").then(
+      (module) => module.AdminNewsletter,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminSystemLogs = dynamic(
+  () =>
+    import("@/components/admin-system-logs").then(
+      (module) => module.AdminSystemLogs,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminTelemetry = dynamic(
+  () =>
+    import("@/components/admin-telemetry").then(
+      (module) => module.AdminTelemetry,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminUsers = dynamic(
+  () => import("@/components/admin-users").then((module) => module.AdminUsers),
+  { loading: AdminPanelLoading, ssr: false },
+);
 
 type PostForm = {
   slug: string;
@@ -296,12 +349,33 @@ function SiteAdminDashboard({
   isOwner: boolean;
 }) {
   const router = useRouter();
+  const activeTab =
+    !isOwner && ownerOnlyAdminSections.has(initialTab)
+      ? "overview"
+      : initialTab;
   const overview = useQuery(convexRefs.admin.overview, {});
-  const forumOverview = useQuery(adminForumOverviewRef, {});
-  const posts = useQuery(convexRefs.admin.listPosts, {});
-  const apiKeys = useQuery(convexRefs.admin.listApiKeys, isOwner ? {} : "skip");
-  const adminComments = useQuery(convexRefs.admin.listComments, {});
-  const adminInteractions = useQuery(convexRefs.admin.listInteractions, {});
+  const forumOverview = useQuery(
+    convexRefs.admin.forumOverview,
+    activeTab === "forum" ? {} : "skip",
+  );
+  const posts = useQuery(
+    convexRefs.admin.listPosts,
+    activeTab === "posts" ? {} : "skip",
+  );
+  const apiKeys = useQuery(
+    convexRefs.admin.listApiKeys,
+    isOwner && (activeTab === "overview" || activeTab === "api")
+      ? {}
+      : "skip",
+  );
+  const adminComments = useQuery(
+    convexRefs.admin.listComments,
+    activeTab === "comments" ? {} : "skip",
+  );
+  const adminInteractions = useQuery(
+    convexRefs.admin.listInteractions,
+    activeTab === "interactions" ? {} : "skip",
+  );
   const upsertPost = useMutation(convexRefs.admin.upsertPost);
   const deletePost = useMutation(convexRefs.admin.deletePost);
   const generateUploadUrl = useMutation(convexRefs.admin.generateUploadUrl);
@@ -319,10 +393,6 @@ function SiteAdminDashboard({
   >(null);
   const [apiKeyName, setApiKeyName] = useState("Blog writer");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const activeTab =
-    !isOwner && ownerOnlyAdminSections.has(initialTab)
-      ? "overview"
-      : initialTab;
   const navigateToTab = (tab: AdminTabId) => {
     router.push(adminSectionHref(tab));
   };
