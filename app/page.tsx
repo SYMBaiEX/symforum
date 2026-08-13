@@ -68,7 +68,7 @@ async function HomeContent() {
         <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
           {featured ? (
-            <EntryRow post={featured} divided={false} compact priority />
+            <EntryRow post={featured} divided={false} compact />
           ) : (
             <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
               No published posts yet.
