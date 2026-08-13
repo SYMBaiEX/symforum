@@ -6,8 +6,30 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Research hub",
   description:
-    "Curated research topic hubs for SYMBaiEX with practical guidance, implementation notes, and source-backed references.",
+    "Curated research topic hubs for SYMBaIEX with practical guidance, implementation notes, and source-backed references.",
   alternates: { canonical: "/research" },
+  openGraph: {
+    type: "website",
+    url: primarySiteUrl("/research"),
+    title: "Research hubs",
+    description:
+      "Curated topic hubs for SYMBiEX implementation notes and discoverability paths.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX research map and source-backed methodology notes.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SYMBaIEX research hubs",
+    description:
+      "A compact map to source-backed notes, implementation papers, and policy surfaces.",
+    images: ["/opengraph-image"],
+  },
 };
 
 const canonical = primarySiteUrl("/research");
@@ -16,7 +38,7 @@ const hubs = [
     name: "AI-readable web architecture",
     path: "/research/ai-readable-web",
     summary:
-      "How SYMBaiEX publishes one truthful content graph across HTML, Markdown, sitemap, and feeds.",
+      "How SYMBaIEX publishes one truthful content graph across HTML, Markdown, sitemap, and feeds.",
   },
 ];
 
@@ -43,7 +65,7 @@ export default function ResearchHubPage() {
           {
             "@type": "ItemList",
             "@id": `${canonical}#hubs`,
-            name: "SYMBaiEX research topics",
+            name: "SYMBaIEX research topics",
             itemListElement: hubs.map((hub, index) => ({
               "@type": "ListItem",
               position: index + 1,

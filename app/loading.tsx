@@ -1,13 +1,5 @@
-import { ForumLoading } from "@/components/forum/forum-primitives";
-
 export default function Loading() {
-  return (
-    <div
-      aria-busy="true"
-      aria-live="polite"
-      className="page-frame page-frame-spacious"
-    >
-      <ForumLoading label="Loading SYMBiEX" variant="line" />
-    </div>
-  );
+  // Avoid a global streaming skeleton on forum routes; the real page already
+  // provides readable no-JS fallback content and lighter client status.
+  return null;
 }

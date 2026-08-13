@@ -81,6 +81,14 @@ export const metadata: Metadata = {
     siteName: "Austin Hamilton (SYMBiEX)",
     title: "Austin Hamilton (SYMBiEX)",
     description,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaiEX — Austin Hamilton. Software engineering, AI systems, daily Hacker News notes.",
+      },
+    ],
     type: "website",
     url: PRIMARY_SITE_URL,
     locale: "en_US",
@@ -89,6 +97,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Austin Hamilton (SYMBiEX)",
     description,
+    images: ["/opengraph-image"],
     creator: "@symbiex",
   },
   icons: {
