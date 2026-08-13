@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";
 import { enforceAgentScopeIfNeeded } from "./authz";
+import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 
 const entityType = v.union(
   v.literal("post"),
@@ -87,6 +88,7 @@ export const add = mutation({
     entityId: v.string(),
     parentId: v.optional(v.id("comments")),
     body: v.string(),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireSignedInUserId(ctx);
@@ -147,6 +149,11 @@ export const add = mutation({
         message: "That comment already landed.",
       });
     }
+
+    await consumeAgentQuotaIfNeeded(ctx, await ctx.db.get("users", userId), {
+      operation: "comments.add",
+      idempotencyKey: args.idempotencyKey,
+    });
 
     await ctx.db.insert("comments", {
       userId,

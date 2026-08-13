@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";
 import { enforceAgentScopeIfNeeded } from "./authz";
+import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 
 const entityType = v.union(v.literal("post"), v.literal("hnStory"));
 
@@ -96,6 +97,7 @@ export const set = mutation({
     entityId: v.string(),
     vote: v.union(v.literal(-1), v.literal(0), v.literal(1)),
     saved: v.boolean(),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -106,6 +108,10 @@ export const set = mutation({
       await ctx.db.get("users", userId),
       "interactions",
     );
+    await consumeAgentQuotaIfNeeded(ctx, await ctx.db.get("users", userId), {
+      operation: "interactions.set",
+      idempotencyKey: args.idempotencyKey,
+    });
     await requirePublicEntity(ctx, args.entityType, args.entityId);
     const existing = await ctx.db
       .query("interactions")

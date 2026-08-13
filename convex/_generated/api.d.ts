@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
 import type * as agentIdentity from "../agentIdentity.js";
 import type * as agentIdentityCrypto from "../agentIdentityCrypto.js";
+import type * as agentQuota from "../agentQuota.js";
 import type * as aiRoutingControlData from "../aiRoutingControlData.js";
 import type * as aiTelemetry from "../aiTelemetry.js";
 import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   adminApi: typeof adminApi;
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
+  agentQuota: typeof agentQuota;
   aiRoutingControlData: typeof aiRoutingControlData;
   aiTelemetry: typeof aiTelemetry;
   aiTelemetryHelpers: typeof aiTelemetryHelpers;

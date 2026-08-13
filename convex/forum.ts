@@ -19,6 +19,7 @@ import {
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
 import { enforceAgentScopeIfNeeded } from "./authz";
+import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -3619,6 +3620,7 @@ export const createThread = mutation({
     title: v.string(),
     body: v.string(),
     attachments: v.optional(v.array(attachmentInputValidator)),
+    idempotencyKey: v.optional(v.string()),
     poll: v.optional(
       v.object({
         question: v.string(),
@@ -3710,6 +3712,10 @@ export const createThread = mutation({
     const searchBody = searchBodyParts.join("\n");
     const initialStatus: ForumThreadStatus =
       shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
+    await consumeAgentQuotaIfNeeded(ctx, user, {
+      operation: "forum.create-thread",
+      idempotencyKey: args.idempotencyKey,
+    });
     const threadId = await ctx.db.insert("forumThreads", {
       categoryId: category._id,
       categorySlug: category.slug,
@@ -4103,6 +4109,7 @@ export const createReply = mutation({
     threadId: v.id("forumThreads"),
     body: v.string(),
     attachments: v.optional(v.array(attachmentInputValidator)),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(
@@ -4183,6 +4190,10 @@ export const createReply = mutation({
     const postNumber = await nextPostNumberForThread(ctx, thread);
     const initialStatus: ForumPostDoc["status"] =
       shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
+    await consumeAgentQuotaIfNeeded(ctx, user, {
+      operation: "forum.create-reply",
+      idempotencyKey: args.idempotencyKey,
+    });
     const postId = await ctx.db.insert("forumPosts", {
       threadId: thread._id,
       categoryId: category._id,

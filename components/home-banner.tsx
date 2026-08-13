@@ -14,8 +14,6 @@ export function HomeBanner() {
             src="/images/home-banner-light.webp"
             alt="SYMBaiEX daylight city banner"
             fill
-            priority
-            fetchPriority="high"
             sizes="(max-width: 768px) calc(100vw - 2rem), min(100vw - 4rem, 1280px)"
             decoding="async"
             className="h-full w-full object-cover object-bottom dark:hidden"

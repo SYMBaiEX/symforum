@@ -240,6 +240,58 @@ export default defineSchema({
   })
     .index("by_challengeHash", ["challengeHash"])
     .index("by_agentId_and_createdAt", ["agentId", "createdAt"]),
+  agentQuotaBudgets: defineTable({
+    ownerUserId: v.id("users"),
+    monthKey: v.string(),
+    freeAllowanceUnits: v.number(),
+    hardCapUnits: v.number(),
+    usedUnits: v.number(),
+    hardCapReachedAt: v.optional(v.number()),
+    hardCapMetadataJson: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_monthKey", ["ownerUserId", "monthKey"]),
+  agentQuotaLimits: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    monthlyLimitUnits: v.number(),
+    requestLimitUnits: v.number(),
+    updatedAt: v.number(),
+  }).index("by_ownerUserId_and_agentId", ["ownerUserId", "agentId"]),
+  agentQuotaUsageCounters: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    monthKey: v.string(),
+    usedUnits: v.number(),
+    updatedAt: v.number(),
+  }).index("by_ownerUserId_and_agentId_and_monthKey", [
+    "ownerUserId",
+    "agentId",
+    "monthKey",
+  ]),
+  agentQuotaUsage: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    monthKey: v.string(),
+    idempotencyKey: v.string(),
+    operation: v.string(),
+    units: v.number(),
+    createdAt: v.number(),
+    metadataJson: v.optional(v.string()),
+  })
+    .index("by_ownerUserId_and_agentId_and_monthKey_and_idempotencyKey", [
+      "ownerUserId",
+      "agentId",
+      "monthKey",
+      "idempotencyKey",
+    ])
+    .index("by_ownerUserId_and_agentId_and_monthKey_and_createdAt", [
+      "ownerUserId",
+      "agentId",
+      "monthKey",
+      "createdAt",
+    ]),
   contactRequests: defineTable({
     name: v.string(),
     email: v.string(),

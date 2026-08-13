@@ -12,6 +12,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { enforceAgentScopeIfNeeded, requireSiteAdmin } from "./authz";
+import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 import {
   newsletterIssueInputValidator,
   normalizeEmail,
@@ -104,19 +105,26 @@ export const requestViewerSubscription = mutation({
     token: v.string(),
     tokenHash: v.string(),
     siteUrl: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       throw new Error("Sign in to manage newsletter preferences");
     }
-    enforceAgentScopeIfNeeded(await ctx.db.get("users", userId), "newsletter");
+    const user = await ctx.db.get("users", userId);
+    enforceAgentScopeIfNeeded(user, "newsletter");
 
     const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
       email: args.email,
       source: args.source ?? "profile",
       tokenHash: args.tokenHash,
       userId,
+    });
+
+    await consumeAgentQuotaIfNeeded(ctx, user, {
+      operation: "newsletter.subscribe",
+      idempotencyKey: args.idempotencyKey,
     });
 
     if (subscriber.status !== "confirmed" && tokenStored) {
@@ -157,13 +165,15 @@ export const updateViewerTopics = mutation({
     subscriberId: v.id("newsletterSubscribers"),
     dailyOptIn: v.boolean(),
     weeklyOptIn: v.boolean(),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       throw new Error("Sign in to manage newsletter preferences");
     }
-    enforceAgentScopeIfNeeded(await ctx.db.get("users", userId), "newsletter");
+    const user = await ctx.db.get("users", userId);
+    enforceAgentScopeIfNeeded(user, "newsletter");
     const subscriber = await ctx.db.get(
       "newsletterSubscribers",
       args.subscriberId,
@@ -171,6 +181,10 @@ export const updateViewerTopics = mutation({
     if (subscriber === null || subscriber.userId !== userId) {
       throw new Error("Newsletter subscription not found");
     }
+    await consumeAgentQuotaIfNeeded(ctx, user, {
+      operation: "newsletter.update-topics",
+      idempotencyKey: args.idempotencyKey,
+    });
     await ctx.db.patch("newsletterSubscribers", subscriber._id, {
       dailyOptIn: args.dailyOptIn,
       weeklyOptIn: args.weeklyOptIn,
