@@ -32,14 +32,6 @@ const AnalyticsTracker = dynamic(
   { ssr: false },
 );
 
-const RouteImagePreloader = dynamic(
-  () =>
-    import("@/components/route-image-preloader").then(
-      (module) => module.RouteImagePreloader,
-    ),
-  { ssr: false },
-);
-
 const socialItems = [
   {
     href: "https://github.com/symbaiex",
@@ -156,7 +148,6 @@ export function SiteShell({
       <Suspense fallback={null}>
         <AnalyticsTracker />
       </Suspense>
-      <RouteImagePreloader />
       <AppErrorSurface />
       <SiteFooter footerRef={footerRef} />
     </div>
@@ -213,7 +204,6 @@ function ForumSiteShell({
         <Suspense fallback={null}>
           <AnalyticsTracker />
         </Suspense>
-        <RouteImagePreloader />
         <AppErrorSurface />
         <SiteFooter footerRef={footerRef} />
       </div>
