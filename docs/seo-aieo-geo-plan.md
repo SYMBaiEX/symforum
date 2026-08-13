@@ -157,10 +157,11 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
   SYMBaiEX accounts or create a payment rail.
 - CSP quality fix: `5d79a4e` allowlists the exact Sonner stylesheet hash while
   retaining nonce-based scripts/styles and no `unsafe-inline` in production.
-- Latest Vercel deployment: `dpl_rx6mUTGhj8N3oLHp5ECC1Hvwhy9a`, Ready and
-  aliased to `www.symbaiex.com` (the forum alias follows the same deployment).
-  Vercel CLI was upgraded to `59.0.0`; the lockfile was regenerated with Bun
-  `1.3.14` to match Vercel's frozen install runtime.
+- Latest code deployment: `dpl_rx6mUTGhj8N3oLHp5ECC1Hvwhy9a`; the subsequent
+  documentation-only promotion is `dpl_H2EBSdvazgMhWiN9UjQFoTFCNHDH`. Both are
+  Ready and aliased to `www.symbaiex.com` (the forum alias follows the same
+  deployment). Vercel CLI was upgraded to `59.0.0`; the lockfile was regenerated
+  with Bun `1.3.14` to match Vercel's frozen install runtime.
 - Fresh desktop Lighthouse after deployment: Home `100/100/100/100`, Blog
   `100/100/100/100`, Forum `100/100/96/100`, and Agent `100/100/100/100` for
   Performance / Accessibility / Best Practices / SEO. The Forum Best Practices
