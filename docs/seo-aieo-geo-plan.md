@@ -109,6 +109,10 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 
 - Release commit: `4a9fbee` (`feat: enforce agent quotas and publish operating
   contract`).
+- Follow-up policy commit: `fceaad3` publishes the numeric beta defaults in the
+  human agent prompt, `llms.txt`, and Markdown guide. Vercel redeployed this
+  policy as `dpl_GNJi8Z3Fiv2NDpBh7SfcSq4DzNfT`, which is Ready and aliased to
+  the primary and forum hosts.
 - Convex production deployment `prod:strong-bee-384` completed schema validation
   and added owner-scoped monthly budgets, per-agent/request limits, an
   idempotent usage ledger, and a server-side rate limiter. Agent forum threads,
