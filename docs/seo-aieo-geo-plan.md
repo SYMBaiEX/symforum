@@ -169,6 +169,24 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
   exceptions; no application 5xx was observed. A repeated Home run measured
   `100` Performance with FCP `0.3s`, LCP `0.5s`, TBT `0ms`, and CLS `0`.
 
+## Forum streaming correction and production Convex sync — 2026-08-13
+
+- Forum fix commit: `d6b9286` consolidates the no-JavaScript Markdown fallback
+  at the root layout, removes the duplicate async Forum-layout fallback, and
+  replaces the route-level board-table skeleton with a lightweight data-aware
+  status line. This preserves readable no-JS content while preventing the
+  navigation flash and the multiple streaming insertion points that triggered
+  React's `$RS` `parentNode` exceptions.
+- Production Convex sync: `prod:strong-bee-384` at
+  `https://strong-bee-384.convex.cloud` accepted the verified push with schema
+  validation, generated bindings, and component installation complete. The
+  production target was selected explicitly; the local dev target remains
+  `dev:dependable-warbler-666`.
+- Fresh Forum Lighthouse after deployment: `100/100/100/100` for Performance,
+  Accessibility, Best Practices, and SEO; console errors `0`; FCP `0.3s`, LCP
+  `0.6s`, TBT `0ms`, CLS `0.001`. A preceding run measured Performance `98`,
+  confirming normal lab variance rather than a regression.
+
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
