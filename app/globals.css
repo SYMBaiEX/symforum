@@ -318,14 +318,20 @@
     display: block;
     position: absolute;
     inset: 0;
-    background-image: url("/images/pets/signal-moth-optimized.webp");
+    background-image: url("/images/pets/signal-moth-thumb.webp");
     background-repeat: no-repeat;
-    background-position: 0 12.5%;
-    background-size: 800% 900%;
+    background-position: center;
+    background-size: 100% 100%;
     filter: drop-shadow(0 0.08rem 0 hsl(var(--background) / 0.75))
       drop-shadow(0 0 0.45rem hsl(var(--accent) / 0.18));
     opacity: 0;
     will-change: background-position, opacity;
+  }
+
+  .signal-moth-track.is-ready .signal-moth-sprite {
+    background-image: url("/images/pets/signal-moth-optimized.webp");
+    background-position: 0 12.5%;
+    background-size: 800% 900%;
   }
 
   .signal-moth-sprite--right {
