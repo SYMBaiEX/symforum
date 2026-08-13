@@ -1,13 +1,5 @@
-import { ForumLoading } from "@/components/forum/forum-primitives";
-
 export default function Loading() {
-  return (
-    <div
-      aria-busy="true"
-      aria-live="polite"
-      className="page-frame page-frame-spacious"
-    >
-      <ForumLoading label="Loading forum" variant="index" />
-    </div>
-  );
+  // The forum renders its own data-aware client status. A route-level table
+  // skeleton creates a second streaming boundary and flashes during navigation.
+  return null;
 }

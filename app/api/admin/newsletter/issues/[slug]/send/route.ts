@@ -26,9 +26,16 @@ export async function POST(
       slug,
     });
     after(() =>
-      notifyIndexNow([
-        primarySiteUrl(`/newsletter/${encodeURIComponent(slug)}`),
-      ]),
+      notifyIndexNow(
+        [primarySiteUrl(`/newsletter/${encodeURIComponent(slug)}`)],
+        {
+          context: {
+            source: "newsletter_issue",
+            action: "send",
+            resourceId: slug,
+          },
+        },
+      ),
     );
     return jsonOk(result);
   } catch (error) {

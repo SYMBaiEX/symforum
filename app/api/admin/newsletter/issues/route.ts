@@ -43,7 +43,13 @@ export async function POST(request: Request) {
       after(() =>
         notifyIndexNow([
           primarySiteUrl(`/newsletter/${encodeURIComponent(savedIssue.slug)}`),
-        ]),
+        ], {
+          context: {
+            source: "newsletter_issue",
+            action: "create",
+            resourceId: savedIssue.slug,
+          },
+        }),
       );
     }
     return jsonOk({ issue: savedIssue }, 201);

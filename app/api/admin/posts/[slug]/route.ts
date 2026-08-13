@@ -63,10 +63,17 @@ export async function PATCH(
       post,
     });
     if (savedPost?.status === "published" || existing.status === "published") {
+      const resolvedSlug = savedPost?.slug ?? slug;
       after(() =>
         notifyIndexNow([
-          primarySiteUrl(`/blog/${encodeURIComponent(savedPost?.slug ?? slug)}`),
-        ]),
+          primarySiteUrl(`/blog/${encodeURIComponent(resolvedSlug)}`),
+        ], {
+          context: {
+            source: "post",
+            action: "update",
+            resourceId: existing.slug,
+          },
+        }),
       );
     }
     return jsonOk({ post: savedPost });
@@ -96,7 +103,15 @@ export async function DELETE(
       slug,
     });
     if (result.deleted) {
-      after(() => notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(slug)}`)]));
+      after(() =>
+        notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(slug)}`)], {
+          context: {
+            source: "post",
+            action: "delete",
+            resourceId: slug,
+          },
+        }),
+      );
     }
     return jsonOk(result);
   } catch (error) {

@@ -35,7 +35,15 @@ export async function POST(request: Request) {
       post,
     });
     if (savedPost?.status === "published") {
-      after(() => notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(savedPost.slug)}`)]));
+      after(() =>
+        notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(savedPost.slug)}`)], {
+          context: {
+            source: "post",
+            action: "create",
+            resourceId: savedPost.slug,
+          },
+        }),
+      );
     }
     return jsonOk({ post: savedPost }, 201);
   } catch (error) {

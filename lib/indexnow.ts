@@ -3,6 +3,10 @@ import "server-only";
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 const INDEXNOW_TIMEOUT_MS = 5_000;
 const INDEXNOW_MAX_URLS = 10_000;
+const INDEXNOW_MAX_RETRY_ATTEMPTS = 3;
+const INDEXNOW_RETRY_DELAY_MS = 250;
+const INDEXNOW_IDEMPOTENCY_WINDOW_MS = 90_000;
+const INDEXNOW_MAX_AUDIT_ENTRIES = 200;
 
 // IndexNow submissions are deliberately restricted to pages this application
 // can publish. Never submit an arbitrary URL supplied by an admin payload.
@@ -18,13 +22,62 @@ export type IndexNowPayload = {
   urlList: string[];
 };
 
+export type IndexNowEventSource = "post" | "newsletter_issue";
+export type IndexNowEventAction = "create" | "update" | "delete" | "send";
+
+export type IndexNowEventContext = {
+  source: IndexNowEventSource;
+  action: IndexNowEventAction;
+  resourceId?: string;
+};
+
+export type IndexNowAuditRecord = {
+  dedupeKey: string;
+  host: string;
+  status: "queued" | "skipped" | "succeeded" | "failed";
+  source?: IndexNowEventSource;
+  action?: IndexNowEventAction;
+  resourceId?: string;
+  urlCount: number;
+  attempts: number;
+  statusCode?: number;
+  error?: string;
+  createdAt: number;
+};
+
+type IndexNowOptions = {
+  context?: IndexNowEventContext;
+};
+
+type IndexNowSubmissionState = {
+  dedupeUntil: number;
+};
+
+type HostSubmissionResult = {
+  succeeded: boolean;
+  attempts: number;
+  statusCode?: number;
+  error?: string;
+};
+
+const indexNowDedup = new Map<string, IndexNowSubmissionState>();
+const indexNowAudit: IndexNowAuditRecord[] = [];
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 /** Notify IndexNow without ever making a publishing request fail. */
-export async function notifyIndexNow(urls: readonly string[]): Promise<void> {
+export async function notifyIndexNow(
+  urls: readonly string[],
+  options: IndexNowOptions = {},
+): Promise<void> {
   const key = process.env.INDEXNOW_KEY?.trim();
   if (!key || !isSafeKey(key)) return;
 
   const validUrls = normalizeUrls(urls).slice(0, INDEXNOW_MAX_URLS);
   if (validUrls.length === 0) return;
+
+  pruneExpiredIndexNowDedup();
 
   const byHost = new Map<string, string[]>();
   for (const url of validUrls) {
@@ -36,28 +89,200 @@ export async function notifyIndexNow(urls: readonly string[]): Promise<void> {
 
   await Promise.all(
     [...byHost.entries()].map(async ([host, urlList]) => {
+      const context = options.context;
+      const dedupeKey = buildDedupeKey({
+        host,
+        urls: urlList,
+        context,
+      });
+      const now = Date.now();
+
+      if (isInFlightDedupeWindow(dedupeKey, now)) {
+        indexNowAudit.push({
+          dedupeKey,
+          host,
+          status: "skipped",
+          source: context?.source,
+          action: context?.action,
+          resourceId: context?.resourceId,
+          urlCount: urlList.length,
+          attempts: 0,
+          createdAt: now,
+        });
+        trimAudit();
+        return;
+      }
+
       const payload: IndexNowPayload = {
         host,
         key,
         keyLocation: `https://${host}/indexnow-${key}.txt`,
         urlList,
       };
+      indexNowDedup.set(dedupeKey, {
+        dedupeUntil: now + INDEXNOW_IDEMPOTENCY_WINDOW_MS,
+      });
+      indexNowAudit.push({
+        dedupeKey,
+        host,
+        status: "queued",
+        source: context?.source,
+        action: context?.action,
+        resourceId: context?.resourceId,
+        urlCount: urlList.length,
+        attempts: 0,
+        createdAt: now,
+      });
+      trimAudit();
+
+      let result: HostSubmissionResult;
       try {
-        const response = await fetch(INDEXNOW_ENDPOINT, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(INDEXNOW_TIMEOUT_MS),
+        result = await notifyIndexNowWithRetry(payload);
+        indexNowAudit.push({
+          dedupeKey,
+          host,
+          status: result.succeeded ? "succeeded" : "failed",
+          source: context?.source,
+          action: context?.action,
+          resourceId: context?.resourceId,
+          urlCount: urlList.length,
+          attempts: result.attempts,
+          statusCode: result.statusCode,
+          error: result.error,
+          createdAt: Date.now(),
         });
-        if (!response.ok) {
-          console.warn("IndexNow submission failed", response.status);
-        }
-      } catch {
-        // IndexNow is best-effort and must never delay or fail an admin write.
+        trimAudit();
+      } catch (error) {
+        indexNowAudit.push({
+          dedupeKey,
+          host,
+          status: "failed",
+          source: context?.source,
+          action: context?.action,
+          resourceId: context?.resourceId,
+          urlCount: urlList.length,
+          attempts: 1,
+          error: stringifyError(error),
+          createdAt: Date.now(),
+        });
+        trimAudit();
         console.warn("IndexNow submission failed");
+        return;
       }
+
+      if (result.succeeded) return;
+
+      console.warn("IndexNow submission failed", {
+        status: result.statusCode,
+        attempts: result.attempts,
+        host,
+      });
     }),
   );
+}
+
+export function getIndexNowAuditSnapshot() {
+  return [...indexNowAudit];
+}
+
+export function resetIndexNowAuditForTests() {
+  indexNowAudit.length = 0;
+  indexNowDedup.clear();
+}
+
+function isInFlightDedupeWindow(dedupeKey: string, now: number) {
+  const state = indexNowDedup.get(dedupeKey);
+  return state !== undefined && state.dedupeUntil > now;
+}
+
+function buildDedupeKey(args: {
+  host: string;
+  urls: readonly string[];
+  context?: IndexNowEventContext;
+}) {
+  const normalized = [...args.urls].sort().join("|");
+  return [
+    args.host,
+    normalized,
+    args.context?.source ?? "unknown",
+    args.context?.action ?? "unspecified",
+    args.context?.resourceId ?? "n/a",
+  ].join("::");
+}
+
+function pruneExpiredIndexNowDedup() {
+  const now = Date.now();
+  for (const [key, state] of indexNowDedup.entries()) {
+    if (state.dedupeUntil <= now) {
+      indexNowDedup.delete(key);
+    }
+  }
+}
+
+async function notifyIndexNowWithRetry(
+  payload: IndexNowPayload,
+): Promise<HostSubmissionResult> {
+  let lastStatus: number | undefined;
+  let lastError: string | undefined;
+  for (let attempt = 1; attempt <= INDEXNOW_MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(INDEXNOW_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(INDEXNOW_TIMEOUT_MS),
+      });
+      lastStatus = response.status;
+      if (response.ok) {
+        return { succeeded: true, attempts: attempt, statusCode: response.status };
+      }
+
+      lastError = `non-ok:${response.status}`;
+      if (!isRetryableStatus(response.status) || attempt >= INDEXNOW_MAX_RETRY_ATTEMPTS) {
+        return {
+          succeeded: false,
+          attempts: attempt,
+          statusCode: response.status,
+          error: lastError,
+        };
+      }
+    } catch (error) {
+      lastError = stringifyError(error);
+      if (attempt >= INDEXNOW_MAX_RETRY_ATTEMPTS) {
+        return {
+          succeeded: false,
+          attempts: attempt,
+          error: lastError,
+        };
+      }
+    }
+
+    await sleep(INDEXNOW_RETRY_DELAY_MS * 2 ** (attempt - 1));
+  }
+
+  return {
+    succeeded: false,
+    attempts: INDEXNOW_MAX_RETRY_ATTEMPTS,
+    statusCode: lastStatus,
+    error: lastError,
+  };
+}
+
+function isRetryableStatus(status: number) {
+  return status === 429 || status === 500 || status >= 502;
+}
+
+function trimAudit() {
+  while (indexNowAudit.length > INDEXNOW_MAX_AUDIT_ENTRIES) {
+    indexNowAudit.shift();
+  }
+}
+
+function stringifyError(error: unknown) {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return "unknown error";
 }
 
 export function normalizeIndexNowUrls(urls: readonly string[]) {

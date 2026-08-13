@@ -21,7 +21,6 @@ import {
   ForumAnnouncementPanel,
   ForumLink,
   ForumIndexTable,
-  ForumLoading,
   ForumStatusBox,
   ForumThreadPrefixBadge,
   ForumThreadStateBadges,
@@ -52,7 +51,16 @@ function LiveForumIndex() {
   const overview = useQuery(forumRefs.overview, {});
 
   if (overview === undefined) {
-    return <ForumLoading variant="index" />;
+    return (
+      <p
+        aria-busy="true"
+        aria-live="polite"
+        className="border-y border-row-border py-2.5 font-mono text-[11px] uppercase text-muted-foreground"
+        role="status"
+      >
+        Loading forum
+      </p>
+    );
   }
 
   return <ForumIndexContent overview={overview} />;

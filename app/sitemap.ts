@@ -33,6 +33,74 @@ const FORUM_PATHS = [
   "/todays-posts",
 ];
 
+type SitemapSource = "blog" | "portfolio" | "newsletter" | "news" | "forum";
+
+type SitemapSourceResult<T> =
+  | {
+      status: "ok";
+      value: T;
+    }
+  | {
+      status: "rejected";
+      reason: string;
+    };
+
+type SitemapSourceState = {
+  status: "ok" | "degraded";
+  lastAttemptedAt: number;
+  lastSuccessAt: number | null;
+  lastFailureAt: number | null;
+  consecutiveFailures: number;
+  totalFailures: number;
+  lastFailureMessage: string | null;
+};
+
+type SitemapHealthState = {
+  generatedAt: number;
+  consecutiveRunFailures: number;
+  lastAlertAt: number | null;
+  staleSnapshotAt: number | null;
+  staleSnapshotCount: number;
+  sources: Record<SitemapSource, SitemapSourceState>;
+};
+
+type ForumSitemapResult = {
+  status: "ok" | "rejected";
+  entries: MetadataRoute.Sitemap;
+  reason: string | null;
+};
+
+const sourceHealthSeed: SitemapSourceState = {
+  status: "ok",
+  lastAttemptedAt: 0,
+  lastSuccessAt: null,
+  lastFailureAt: null,
+  consecutiveFailures: 0,
+  totalFailures: 0,
+  lastFailureMessage: null,
+};
+
+const sitemapHealthSeed: SitemapHealthState = {
+  generatedAt: 0,
+  consecutiveRunFailures: 0,
+  lastAlertAt: null,
+  staleSnapshotAt: null,
+  staleSnapshotCount: 0,
+  sources: {
+    blog: { ...sourceHealthSeed },
+    portfolio: { ...sourceHealthSeed },
+    newsletter: { ...sourceHealthSeed },
+    news: { ...sourceHealthSeed },
+    forum: { ...sourceHealthSeed },
+  },
+};
+
+const STALE_FALLBACK_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const ALERT_FALLBACK_FAILURE_STREAK = 3;
+
+let sitemapHealth: SitemapHealthState = structuredClone(sitemapHealthSeed);
+let lastKnownGoodSitemap: MetadataRoute.Sitemap = [];
+
 export const revalidate = 3600;
 // Google’s sitemap protocol permits up to 50,000 URLs per sitemap file.
 const MAX_SITEMAP_ENTRIES = 50_000;
@@ -46,19 +114,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       getPublicNewsStories(),
     ]);
 
-  logSitemapSourceFailure("blog", postsResult);
-  logSitemapSourceFailure("portfolio", projectsResult);
-  logSitemapSourceFailure("newsletter", issuesResult);
-  logSitemapSourceFailure("news", newsResult);
+  const postsSource = toSourceResult(postsResult);
+  const portfolioSource = toSourceResult(projectsResult);
+  const newsletterSource = toSourceResult(issuesResult);
+  const newsSource = toSourceResult(newsResult);
+  recordSitemapSourceResult("blog", postsSource);
+  recordSitemapSourceResult("portfolio", portfolioSource);
+  recordSitemapSourceResult("newsletter", newsletterSource);
+  recordSitemapSourceResult("news", newsSource);
 
   const entries: MetadataRoute.Sitemap = [
     ...PRIMARY_PATHS.map(primaryEntry),
     ...FORUM_PATHS.map(forumEntry),
   ];
 
-  if (postsResult.status === "fulfilled") {
+  if (postsSource.status === "ok") {
     entries.push(
-      ...postsResult.value.map((post) => ({
+      ...postsSource.value.map((post) => ({
         url: primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`),
         lastModified: validDate(post.publishedAt),
         changeFrequency: "monthly" as const,
@@ -67,9 +139,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
   }
 
-  if (projectsResult.status === "fulfilled") {
+  if (portfolioSource.status === "ok") {
     entries.push(
-      ...projectsResult.value.map((project) => ({
+      ...portfolioSource.value.map((project) => ({
         url: primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`),
         changeFrequency: "monthly" as const,
         priority: 0.6,
@@ -77,9 +149,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
   }
 
-  if (issuesResult.status === "fulfilled") {
+  if (newsletterSource.status === "ok") {
     entries.push(
-      ...issuesResult.value.map((issue) => ({
+      ...newsletterSource.value.map((issue) => ({
         url: primarySiteUrl(`/newsletter/${encodeURIComponent(issue.slug)}`),
         lastModified: validDate(issue.sentAt ?? issue.updatedAt),
         changeFrequency: "weekly" as const,
@@ -88,9 +160,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
   }
 
-  if (newsResult.status === "fulfilled") {
+  if (newsSource.status === "ok") {
     entries.push(
-      ...newsResult.value.map((story) => ({
+      ...newsSource.value.map((story) => ({
         url: primarySiteUrl(newsStoryPath(story)),
         lastModified: story.timePosted
           ? validDate(story.timePosted * 1000)
@@ -102,20 +174,53 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const forumResult = await getPublicForumSitemapEntries();
-  entries.push(...forumResult);
+  recordSitemapSourceResult(
+    "forum",
+    forumResult.status === "ok"
+      ? { status: "ok", value: forumResult.entries }
+      : {
+          status: "rejected",
+          reason: forumResult.reason ?? "Forum sitemap source unavailable",
+        },
+  );
+  entries.push(...forumResult.entries);
 
-  const bounded = dedupeEntries(entries);
+  const hadSourceFailures =
+    postsSource.status === "rejected" ||
+    portfolioSource.status === "rejected" ||
+    newsletterSource.status === "rejected" ||
+    newsSource.status === "rejected" ||
+    forumResult.status === "rejected";
+
+  const merged = applySitemapFallback(entries, hadSourceFailures);
+  if (merged.usedFallback) {
+    console.warn("Sitemap fallback: using stale snapshot", {
+      staleAgeMs: merged.staleAgeMs,
+      sourceFailures: getFailureSummary(),
+    });
+  }
+
+  const bounded = dedupeEntries(merged.entries);
   if (bounded.length > MAX_SITEMAP_ENTRIES) {
     console.warn(
       `Sitemap entry cap reached: ${bounded.length} > ${MAX_SITEMAP_ENTRIES}`,
     );
   }
-  return bounded.slice(0, MAX_SITEMAP_ENTRIES);
+
+  const clipped = bounded.slice(0, MAX_SITEMAP_ENTRIES);
+  if (!hadSourceFailures && clipped.length > 0) {
+    lastKnownGoodSitemap = [...clipped];
+    sitemapHealth.staleSnapshotAt = Date.now();
+    sitemapHealth.staleSnapshotCount = clipped.length;
+  }
+
+  updateRunHealthSummary(hadSourceFailures);
+  return clipped;
 }
 
-async function getPublicForumSitemapEntries(): Promise<MetadataRoute.Sitemap> {
+async function getPublicForumSitemapEntries(): Promise<ForumSitemapResult> {
   const convex = getServerConvexClient();
-  if (!convex) return [];
+  if (!convex) return { status: "ok", entries: [], reason: null };
 
   try {
     const [categories, announcements, helpDocuments, calendarEvents] =
@@ -187,10 +292,16 @@ async function getPublicForumSitemapEntries(): Promise<MetadataRoute.Sitemap> {
         priority: 0.3,
       })),
     ];
-    return entries;
+    return { status: "ok", entries, reason: null };
   } catch (error) {
-    console.warn("Unable to add public forum routes to sitemap", error);
-    return [];
+    return {
+      status: "rejected",
+      entries: [],
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Unable to add public forum routes to sitemap",
+    };
   }
 }
 
@@ -234,17 +345,131 @@ function dedupeEntries(entries: MetadataRoute.Sitemap) {
   });
 }
 
-function logSitemapSourceFailure<T>(
-  source: string,
-  result: PromiseSettledResult<T>,
+function toSourceResult<T>(result: PromiseSettledResult<T>): SitemapSourceResult<T> {
+  if (result.status === "fulfilled") {
+    return { status: "ok", value: result.value };
+  }
+
+  return {
+    status: "rejected",
+    reason:
+      result.reason instanceof Error
+        ? result.reason.message
+        : "unknown sitemap source failure",
+  };
+}
+
+function recordSitemapSourceResult<T extends unknown>(
+  source: SitemapSource,
+  result: SitemapSourceResult<T>,
 ) {
-  if (result.status !== "rejected") return;
-  const rawMessage =
-    result.reason instanceof Error
-      ? result.reason.message
-      : "unknown sitemap source failure";
-  const message = rawMessage
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .slice(0, 240);
-  console.error("Sitemap source unavailable", { source, message });
+  const state = sitemapHealth.sources[source];
+  const now = Date.now();
+  state.lastAttemptedAt = now;
+
+  if (result.status === "ok") {
+    state.status = "ok";
+    state.lastSuccessAt = now;
+    state.consecutiveFailures = 0;
+    state.lastFailureMessage = null;
+    return;
+  }
+
+  state.status = "degraded";
+  state.lastFailureAt = now;
+  state.lastFailureMessage = sanitizeLogMessage(result.reason);
+  state.consecutiveFailures += 1;
+  state.totalFailures += 1;
+  console.error("Sitemap source unavailable", {
+    source,
+    message: state.lastFailureMessage,
+  });
+}
+
+function applySitemapFallback(
+  entries: MetadataRoute.Sitemap,
+  hadSourceFailures: boolean,
+) {
+  if (!hadSourceFailures || !isRecentSitemapSnapshot()) {
+    return {
+      entries,
+      usedFallback: false,
+      staleAgeMs: null,
+    };
+  }
+
+  return {
+    entries: dedupeEntries([...entries, ...lastKnownGoodSitemap]),
+    usedFallback: true,
+    staleAgeMs: Date.now() - (sitemapHealth.staleSnapshotAt ?? 0),
+  };
+}
+
+function isRecentSitemapSnapshot(now = Date.now()) {
+  return (
+    sitemapHealth.staleSnapshotAt !== null &&
+    now - sitemapHealth.staleSnapshotAt <= STALE_FALLBACK_MAX_AGE_MS
+  );
+}
+
+function getFailureSummary() {
+  return Object.fromEntries(
+    Object.entries(sitemapHealth.sources).map(([source, state]) => [
+      source,
+      {
+        status: state.status,
+        consecutiveFailures: state.consecutiveFailures,
+        totalFailures: state.totalFailures,
+      },
+    ]),
+  );
+}
+
+function sanitizeLogMessage(message: string) {
+  return message.replace(/[\\u0000-\\u001f\\u007f]/g, " ").slice(0, 240);
+}
+
+function updateRunHealthSummary(hadSourceFailures: boolean) {
+  const now = Date.now();
+  sitemapHealth.generatedAt = now;
+
+  if (!hadSourceFailures) {
+    sitemapHealth.consecutiveRunFailures = 0;
+    return;
+  }
+
+  sitemapHealth.consecutiveRunFailures += 1;
+  if (
+    sitemapHealth.consecutiveRunFailures >= ALERT_FALLBACK_FAILURE_STREAK &&
+    (!sitemapHealth.lastAlertAt ||
+      now - sitemapHealth.lastAlertAt > STALE_FALLBACK_MAX_AGE_MS / 24)
+  ) {
+    sitemapHealth.lastAlertAt = now;
+    console.error("Sitemap generation remains degraded", {
+      entriesAtAlert: lastKnownGoodSitemap.length,
+      runFailures: sitemapHealth.consecutiveRunFailures,
+      sources: getFailureSummary(),
+    });
+  }
+}
+
+export function getSitemapHealthSnapshot() {
+  return {
+    generatedAt: sitemapHealth.generatedAt,
+    consecutiveRunFailures: sitemapHealth.consecutiveRunFailures,
+    lastAlertAt: sitemapHealth.lastAlertAt,
+    staleSnapshotAt: sitemapHealth.staleSnapshotAt,
+    staleSnapshotCount: sitemapHealth.staleSnapshotCount,
+    sources: Object.fromEntries(
+      Object.entries(sitemapHealth.sources).map(([source, state]) => [
+        source,
+        { ...state },
+      ]),
+    ) as SitemapHealthState["sources"],
+  };
+}
+
+export function resetSitemapHealthForTests() {
+  sitemapHealth = structuredClone(sitemapHealthSeed);
+  lastKnownGoodSitemap = [];
 }

@@ -120,13 +120,20 @@ export default async function RootLayout({
     initialForumHost ||
     requestPath === "/forum" ||
     requestPath.startsWith("/forum/");
-  // The home page already renders its public content server-side. Avoid a
-  // second Convex-backed markdown render before the hero can stream; other
-  // public routes retain the no-JS fallback.
+  // Render one no-JS representation at the root boundary. Keeping the Forum
+  // fallback here (rather than in its nested async layout) avoids multiple
+  // React streaming insertion points and preserves readable forum content
+  // without a second Convex-backed render.
+  const fallbackPath =
+    initialForumHost && requestPath === "/"
+      ? "/forum"
+      : initialForumHost && requestPath.startsWith("/")
+        ? `/forum${requestPath}`
+        : requestPath;
   const noScriptFallback =
-    isForumSurface || requestPath === "/"
+    requestPath === "/" && !isForumSurface
       ? null
-      : await renderAiReadablePage({ pathname: requestPath, host });
+      : await renderAiReadablePage({ pathname: fallbackPath, host });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme

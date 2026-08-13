@@ -1,9 +1,5 @@
-import { NoScriptFallback } from "@/components/no-script-fallback";
-import { renderAiReadablePage } from "@/lib/ai-readable";
-import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import type { Metadata } from "next";
 import { FORUM_SITE_URL } from "@/lib/site-urls";
-import { headers } from "next/headers";
 
 export const metadata: Metadata = {
   metadataBase: new URL(FORUM_SITE_URL),
@@ -31,24 +27,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function ForumLayout({
+export default function ForumLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const requestHeaders = await headers();
-  const requestPath = requestHeaders.get("x-symbaiex-pathname") ?? "/forum";
-  const host = requestHeaders.get("host");
-  const forumPath = isForumSubdomainHost(host)
-    ? requestPath === "/"
-      ? "/forum"
-      : `/forum${requestPath}`
-    : requestPath;
-  const fallback = await renderAiReadablePage({ pathname: forumPath, host });
-  return (
-    <div className="forum-surface">
-      {fallback ? <NoScriptFallback content={fallback.markdown} /> : null}
-      {children}
-    </div>
-  );
+  return <div className="forum-surface">{children}</div>;
 }

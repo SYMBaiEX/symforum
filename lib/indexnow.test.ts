@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-import { normalizeIndexNowUrls, notifyIndexNow } from "./indexnow";
+import {
+  getIndexNowAuditSnapshot,
+  normalizeIndexNowUrls,
+  notifyIndexNow,
+  resetIndexNowAuditForTests,
+} from "./indexnow";
 
 const originalKey = process.env.INDEXNOW_KEY;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  resetIndexNowAuditForTests();
   if (originalKey === undefined) delete process.env.INDEXNOW_KEY;
   else process.env.INDEXNOW_KEY = originalKey;
 });
@@ -53,5 +59,66 @@ describe("IndexNow publishing", () => {
       urlList: ["https://www.symbaiex.com/blog/hello"],
     });
     expect(warnMock.mock.calls.flat().join(" ")).not.toContain("test-key_123");
+  });
+
+  test("retries transient failures and captures the final result in audit", async () => {
+    process.env.INDEXNOW_KEY = "test-key_123";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyIndexNow(["https://www.symbaiex.com/blog/retry"], {
+      context: {
+        source: "post",
+        action: "update",
+        resourceId: "retry",
+      },
+    });
+
+    const audit = getIndexNowAuditSnapshot();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(audit.at(-1)).toMatchObject({
+      status: "succeeded",
+      attempts: 2,
+      source: "post",
+      action: "update",
+      resourceId: "retry",
+    });
+  });
+
+  test("skips duplicate calls in the idempotency window", async () => {
+    process.env.INDEXNOW_KEY = "test-key_123";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyIndexNow(["https://www.symbaiex.com/blog/dup"], {
+      context: {
+        source: "post",
+        action: "update",
+        resourceId: "dup",
+      },
+    });
+    await notifyIndexNow(["https://www.symbaiex.com/blog/dup"], {
+      context: {
+        source: "post",
+        action: "update",
+        resourceId: "dup",
+      },
+    });
+
+    const audit = getIndexNowAuditSnapshot().filter((record) =>
+      record.status !== "queued",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(audit.at(-1)).toMatchObject({
+      status: "skipped",
+      source: "post",
+      action: "update",
+      resourceId: "dup",
+      attempts: 0,
+      urlCount: 1,
+    });
   });
 });

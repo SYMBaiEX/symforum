@@ -63,12 +63,18 @@ export async function PATCH(
       },
     );
     if (savedIssue?.status === "sent" || existing?.status === "sent") {
+      const resolvedSlug = savedIssue?.slug ?? slug;
       after(() =>
-        notifyIndexNow([
-          primarySiteUrl(
-            `/newsletter/${encodeURIComponent(savedIssue?.slug ?? slug)}`,
-          ),
-        ]),
+        notifyIndexNow(
+          [primarySiteUrl(`/newsletter/${encodeURIComponent(resolvedSlug)}`)],
+          {
+            context: {
+              source: "newsletter_issue",
+              action: "update",
+              resourceId: slug,
+            },
+          },
+        ),
       );
     }
     return jsonOk({ issue: savedIssue });
