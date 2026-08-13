@@ -136,10 +136,11 @@ export default async function RootLayout({
     initialForumHost ||
     requestPath === "/forum" ||
     requestPath.startsWith("/forum/");
-  // Render one no-JS representation at the root boundary. Keeping the Forum
-  // fallback here (rather than in its nested async layout) avoids multiple
-  // React streaming insertion points and preserves readable forum content
-  // without a second Convex-backed render.
+  // Render one no-JS representation at the root boundary for primary pages.
+  // Forum routes intentionally omit the <noscript> stream: React's special
+  // noscript parser can race the forum's client boundary during navigation.
+  // The forum remains usable through its server/client route content, while
+  // primary pages retain their Markdown fallback.
   const fallbackPath =
     initialForumHost && requestPath === "/"
       ? "/forum"
@@ -187,7 +188,7 @@ export default async function RootLayout({
             __html: serializeJsonLd(siteStructuredData()),
           }}
         />
-        {noScriptFallback ? (
+        {noScriptFallback && !isForumSurface ? (
           <NoScriptFallback content={noScriptFallback.markdown} />
         ) : null}
         <ThemeProvider
