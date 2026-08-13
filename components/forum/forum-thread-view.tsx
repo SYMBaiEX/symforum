@@ -2,11 +2,7 @@
 
 import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
-import {
-  ForumAttachmentDraftPanel,
-  ForumCompose,
-  type ForumAttachmentDraft,
-} from "@/components/forum/forum-compose";
+import type { ForumAttachmentDraft } from "@/components/forum/forum-compose";
 import { MAX_FORUM_ATTACHMENTS } from "@/components/forum/forum-attachment-upload";
 import { canonicalForumHref } from "@/components/forum/forum-host-url";
 import { forumPollInteractionState } from "@/components/forum/forum-poll-state";
@@ -68,9 +64,32 @@ import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import { Paperclip, Star, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+const ForumCompose = dynamic(
+  () =>
+    import("@/components/forum/forum-compose").then(
+      (module) => module.ForumCompose,
+    ),
+  {
+    loading: () => (
+      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
+        Loading editor
+      </p>
+    ),
+    ssr: false,
+  },
+);
+const ForumAttachmentDraftPanel = dynamic(
+  () =>
+    import("@/components/forum/forum-compose").then(
+      (module) => module.ForumAttachmentDraftPanel,
+    ),
+  { ssr: false },
+);
 
 const POSTS_PER_PAGE = 20;
 const MAX_REPUTATION_COMMENT_CHARS = 180;
@@ -1923,9 +1942,7 @@ function RelatedThreadsPanel({
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Discovery
           </p>
-          <h2 className="mt-1 text-base font-semibold">
-            Related discussions
-          </h2>
+          <h2 className="mt-1 text-base font-semibold">Related discussions</h2>
         </div>
         <ForumLink
           className="font-mono text-[10px] uppercase text-muted-foreground hover:text-foreground"
@@ -1941,7 +1958,10 @@ function RelatedThreadsPanel({
         {threads.map((candidate) => (
           <ForumLink
             className="border border-row-border p-2.5 hover:border-primary/60 hover:bg-muted/20"
-            href={forumPath(candidate.categorySlug ?? categorySlug, candidate.slug)}
+            href={forumPath(
+              candidate.categorySlug ?? categorySlug,
+              candidate.slug,
+            )}
             key={candidate.threadId ?? candidate._id ?? candidate.slug}
             prefetch
           >
@@ -1949,8 +1969,9 @@ function RelatedThreadsPanel({
               {candidate.title}
             </span>
             <span className="mt-1 block font-mono text-[10px] uppercase text-muted-foreground">
-              {candidate.categorySlug ?? categorySlug} · {candidate.replyCount ?? 0} replies ·{" "}
-              {candidate.viewCount ?? 0} views
+              {candidate.categorySlug ?? categorySlug} ·{" "}
+              {candidate.replyCount ?? 0} replies · {candidate.viewCount ?? 0}{" "}
+              views
             </span>
             {candidate.excerpt ? (
               <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted-foreground">

@@ -2,11 +2,7 @@
 
 import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
-import {
-  ForumAttachmentDraftPanel,
-  ForumCompose,
-  type ForumAttachmentDraft,
-} from "@/components/forum/forum-compose";
+import type { ForumAttachmentDraft } from "@/components/forum/forum-compose";
 import {
   forumPath,
   forumPostPath,
@@ -36,8 +32,31 @@ import { Input } from "@/components/ui/input";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+
+const ForumCompose = dynamic(
+  () =>
+    import("@/components/forum/forum-compose").then(
+      (module) => module.ForumCompose,
+    ),
+  {
+    loading: () => (
+      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
+        Loading editor
+      </p>
+    ),
+    ssr: false,
+  },
+);
+const ForumAttachmentDraftPanel = dynamic(
+  () =>
+    import("@/components/forum/forum-compose").then(
+      (module) => module.ForumAttachmentDraftPanel,
+    ),
+  { ssr: false },
+);
 
 const THREADS_PER_PAGE = 25;
 const PREFIX_FILTER_ALL = "all";

@@ -1892,7 +1892,7 @@ export function ForumThreadTable({
                 <div
                   key={thread._id}
                   className={cn(
-                    "grid gap-2 border-l-2 border-transparent px-3 py-2.5",
+                    "grid gap-2 border-l-2 border-transparent px-3 py-2.5 [content-visibility:auto] [contain-intrinsic-size:0_8rem]",
                     section.showHeader
                       ? index % 2 === 0 && "bg-muted/15"
                       : "odd:bg-muted/15",
@@ -2650,7 +2650,10 @@ export function ForumPostFrame({
     normalizedRole.toLowerCase() !== "member";
 
   return (
-    <article className="border border-row-border" id={id}>
+    <article
+      className="border border-row-border [content-visibility:auto] [contain-intrinsic-size:0_24rem]"
+      id={id}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border bg-muted/20 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
         <span>
           Post #{String(postNumber).padStart(2, "0")} / {timestamp}

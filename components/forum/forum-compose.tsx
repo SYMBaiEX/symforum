@@ -53,6 +53,8 @@ type ForumAttachmentUploadResponse = ForumAttachmentDraft & {
   error?: string;
 };
 
+const FORUM_DRAFT_SCHEMA_VERSION = 1;
+
 export function ForumCompose({
   body,
   bodyAriaDescribedBy,
@@ -120,7 +122,14 @@ export function ForumCompose({
         const draft = JSON.parse(raw) as {
           body?: unknown;
           title?: unknown;
+          version?: unknown;
         };
+        if (
+          draft.version !== undefined &&
+          draft.version !== FORUM_DRAFT_SCHEMA_VERSION
+        ) {
+          return;
+        }
         if (body.trim().length === 0 && typeof draft.body === "string") {
           onBodyChange(draft.body);
         }
@@ -154,6 +163,7 @@ export function ForumCompose({
       window.localStorage.setItem(
         draftKey,
         JSON.stringify({
+          version: FORUM_DRAFT_SCHEMA_VERSION,
           body,
           ...(titleEnabled ? { title } : {}),
           savedAt: Date.now(),
@@ -401,8 +411,8 @@ export function ForumCompose({
           <p className="border-t border-row-border px-3 py-2.5 text-xs leading-5 text-muted-foreground">
             Use headings, bold, italic, quotes, code, links, images, bullet or
             numbered lists, notes, warnings, spoilers, tables, signal charts,
-            action sequences, decision matrices, keyboard keys, highlights,
-            and horizontal rules. Structured rows use pipe separators. Preview
+            action sequences, decision matrices, keyboard keys, highlights, and
+            horizontal rules. Structured rows use pipe separators. Preview
             before posting to check the final layout.
           </p>
         </details>

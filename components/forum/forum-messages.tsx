@@ -1,7 +1,6 @@
 "use client";
 
 import { reportAppError } from "@/components/app-error-surface";
-import { ForumCompose } from "@/components/forum/forum-compose";
 import {
   forumRefs,
   formatForumDateTime,
@@ -32,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
@@ -41,6 +41,21 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+
+const ForumCompose = dynamic(
+  () =>
+    import("@/components/forum/forum-compose").then(
+      (module) => module.ForumCompose,
+    ),
+  {
+    loading: () => (
+      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
+        Loading editor
+      </p>
+    ),
+    ssr: false,
+  },
+);
 
 export function ForumMessages({ enabled }: { enabled: boolean }) {
   if (!enabled) {
