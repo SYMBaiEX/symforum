@@ -2,10 +2,13 @@ import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
 import { MarkdownContent } from "@/components/markdown-content";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
 import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
+import { breadcrumbStructuredData, AUTHOR_NAME, AUTHOR_URL } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -18,9 +21,26 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const post = await getBlogPost(slug);
+  const canonical = post
+    ? primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`)
+    : primarySiteUrl(`/blog/${encodeURIComponent(slug)}`);
   return {
     title: post?.title ?? "Post",
     description: post?.excerpt,
+    alternates: { canonical },
+    authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],
+    robots: post ? undefined : { index: false, follow: false },
+    openGraph: post
+      ? {
+          type: "article",
+          url: canonical,
+          title: post.title,
+          description: post.excerpt,
+          publishedTime: post.publishedAt,
+          authors: [AUTHOR_URL],
+          tags: post.tags,
+        }
+      : undefined,
   };
 }
 
@@ -40,10 +60,31 @@ export default async function BlogPostPage({
   return (
     <>
       <article className="page-frame">
+        <StructuredData
+          data={[
+            {
+              "@type": "Article",
+              headline: post.title,
+              description: post.excerpt,
+              datePublished: post.publishedAt,
+              author: { "@type": "Person", name: AUTHOR_NAME, url: AUTHOR_URL },
+              mainEntityOfPage: primarySiteUrl(
+                `/blog/${encodeURIComponent(post.slug)}`,
+              ),
+              keywords: post.tags,
+            },
+            breadcrumbStructuredData([
+              { name: "Home", url: primarySiteUrl("/") },
+              { name: "Blog", url: primarySiteUrl("/blog") },
+              {
+                name: post.title,
+                url: primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`),
+              },
+            ]),
+          ]}
+        />
         <div className="page-content">
-          <h1 className="page-title mt-3">
-            {post.title}
-          </h1>
+          <h1 className="page-title mt-3">{post.title}</h1>
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
             <span>{formatDate(post.publishedAt)}</span>
             <span>{post.readingMinutes} min read</span>
@@ -57,9 +98,7 @@ export default async function BlogPostPage({
               </Link>
             ))}
           </div>
-          <p className="page-lede mt-5">
-            {post.excerpt}
-          </p>
+          <p className="page-lede mt-5">{post.excerpt}</p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="sm">
               <Link href="/blog" prefetch>

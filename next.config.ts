@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactCompiler: true,
   typedRoutes: true,
+  async headers() {
+    return [
+      {
+        source: "/((?!_next|api|.*\\..*).*)",
+        headers: [{ key: "Vary", value: "Accept, Host" }],
+      },
+    ];
+  },
   images: {
     minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [

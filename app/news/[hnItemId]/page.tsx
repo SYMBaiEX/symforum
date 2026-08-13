@@ -1,10 +1,17 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { InteractionBar } from "@/components/interaction-bar";
+import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { compactNumber, formatDate } from "@/lib/format";
 import { getIndexedStory, stripHnHtml } from "@/lib/indexed-news";
-import { newsStorySlug, parseNewsStoryParam } from "@/lib/news-slugs";
+import {
+  newsStoryPath,
+  newsStorySlug,
+  parseNewsStoryParam,
+} from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -20,11 +27,29 @@ export async function generateMetadata({
   const { hnItemId } = await params;
   const storyId = parseNewsStoryParam(hnItemId);
   const story = storyId === null ? null : await getIndexedStory(storyId);
+  const canonical = story
+    ? primarySiteUrl(newsStoryPath(story))
+    : primarySiteUrl(`/news/${encodeURIComponent(hnItemId)}`);
   return {
     title: story?.title ?? "Indexed story",
     description: story?.host
       ? `${story.host} indexed from Hacker News`
       : "Indexed Hacker News story",
+    alternates: { canonical },
+    robots: story ? undefined : { index: false, follow: false },
+    openGraph: story
+      ? {
+          type: "article",
+          url: canonical,
+          title: story.title,
+          description: story.host
+            ? `${story.host} indexed from Hacker News`
+            : "Indexed Hacker News story",
+          publishedTime: story.timePosted
+            ? new Date(story.timePosted * 1000).toISOString()
+            : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -56,10 +81,33 @@ export default async function NewsStoryPage({ params }: PageProps) {
   return (
     <>
       <article className="page-frame">
+        <StructuredData
+          data={[
+            {
+              "@type": "NewsArticle",
+              headline: story.title,
+              description: story.host
+                ? `${story.host} indexed from Hacker News`
+                : "Indexed Hacker News story",
+              datePublished: story.timePosted
+                ? new Date(story.timePosted * 1000).toISOString()
+                : undefined,
+              mainEntityOfPage: primarySiteUrl(newsStoryPath(story)),
+              isBasedOn: story.url,
+              author: { "@type": "Organization", name: "Hacker News" },
+            },
+            breadcrumbStructuredData([
+              { name: "Home", url: primarySiteUrl("/") },
+              { name: "News", url: primarySiteUrl("/news") },
+              {
+                name: story.title,
+                url: primarySiteUrl(newsStoryPath(story)),
+              },
+            ]),
+          ]}
+        />
         <div className="page-content">
-          <h1 className="page-title mt-3">
-            {story.title}
-          </h1>
+          <h1 className="page-title mt-3">{story.title}</h1>
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
             <a
               href={`https://news.ycombinator.com/item?id=${story.hnItemId}`}
@@ -82,11 +130,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
           <div className="mt-5 flex flex-wrap items-center gap-2">
             {sourceUrl ? (
               <Button asChild size="sm">
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
                   Read source
                   <ArrowUpRight />
                 </a>

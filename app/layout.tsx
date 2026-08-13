@@ -4,13 +4,19 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { NoScriptFallback } from "@/components/no-script-fallback";
 import { SiteShell } from "@/components/site-shell";
+import { renderAiReadablePage } from "@/lib/ai-readable";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
+import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
 import {
-  FORUM_SITE_URL,
-  PRIMARY_SITE_URL,
-} from "@/lib/site-urls";
+  AUTHOR_NAME,
+  AUTHOR_URL,
+  SITE_NAME,
+  siteStructuredData,
+  serializeJsonLd,
+} from "@/lib/seo";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
 
@@ -33,21 +39,51 @@ const description =
 export const metadata: Metadata = {
   metadataBase: new URL(PRIMARY_SITE_URL),
   title: {
-    default: "Austin Hamilton (SYMBiEX)",
+    default: SITE_NAME,
     template: "%s | Austin Hamilton",
   },
   description,
+  applicationName: "SYMBaiEX",
+  authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],
+  creator: AUTHOR_NAME,
+  publisher: AUTHOR_NAME,
+  keywords: [
+    "Austin Hamilton",
+    "SYMBaiEX",
+    "software engineering",
+    "AI systems",
+    "AI agents",
+    "open source",
+    "research notes",
+  ],
+  category: "technology",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   openGraph: {
     siteName: "Austin Hamilton (SYMBiEX)",
     title: "Austin Hamilton (SYMBiEX)",
     description,
     type: "website",
-    url: "./",
+    url: PRIMARY_SITE_URL,
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: "Austin Hamilton (SYMBiEX)",
     description,
+    creator: "@symbiex",
   },
   icons: {
     icon: [
@@ -73,6 +109,14 @@ export default async function RootLayout({
     host,
     protocol: requestHeaders.get("x-forwarded-proto"),
   });
+  const requestPath = requestHeaders.get("x-symbaiex-pathname") ?? "/";
+  const isForumSurface =
+    initialForumHost ||
+    requestPath === "/forum" ||
+    requestPath.startsWith("/forum/");
+  const noScriptFallback = isForumSurface
+    ? null
+    : await renderAiReadablePage({ pathname: requestPath, host });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -82,6 +126,17 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
+        <script
+          id="site-structured-data"
+          type="application/ld+json"
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: serializeJsonLd(siteStructuredData()),
+          }}
+        />
+        {noScriptFallback ? (
+          <NoScriptFallback content={noScriptFallback.markdown} />
+        ) : null}
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

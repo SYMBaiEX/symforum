@@ -3,7 +3,12 @@ import {
   createRouteMatcher,
   nextjsMiddlewareRedirect,
 } from "@convex-dev/auth/nextjs/server";
+import {
+  isPrivateAiReadablePath,
+  normalizePathname,
+} from "@/lib/ai-readable-path";
 import { resolveForumSubdomainRoute } from "@/lib/forum-subdomain-routing";
+import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -51,7 +56,7 @@ export default proxy;
 export const config = {
   // The following matcher runs Proxy on all routes
   // except static assets.
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ["/((?!.*\\..*|_next).*)", "/(.*)\\.md", "/", "/(api|trpc)(.*)"],
 };
 
 function cleanRedirect(value: string | null) {
@@ -62,7 +67,7 @@ function cleanRedirect(value: string | null) {
 }
 
 function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
-  return NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: nonceRequestHeaders(
         new Headers(request.headers),
@@ -71,9 +76,16 @@ function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
       ),
     },
   });
+  response.headers.set("Vary", "Accept, Host");
+  return response;
 }
 
 function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
+  const markdownResponse = markdownRewrite(request, policy);
+  if (markdownResponse !== null) {
+    return markdownResponse;
+  }
+
   const forumRoute = forumSubdomainRoute(request);
   if (forumRoute === null) {
     return nextWithNonce(request, policy);
@@ -95,6 +107,116 @@ function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
         request.nextUrl.pathname,
       ),
     },
+  });
+}
+
+function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
+  const markdownRequest = getMarkdownRequest(request);
+  if (markdownRequest === null) {
+    return null;
+  }
+
+  const sourcePath = normalizePathname(markdownRequest.sourcePath);
+  if (isPrivateAiReadablePath(sourcePath)) {
+    return applySecurityHeaders(
+      new NextResponse("Not found\n", {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      }),
+      policy,
+    );
+  }
+
+  const forumRoute = resolveForumSubdomainRoute({
+    host: request.headers.get("host"),
+    pathname: sourcePath,
+  });
+  if (forumRoute?.kind === "redirect") {
+    const destination = request.nextUrl.clone();
+    destination.pathname = `${forumRoute.pathname === "/" ? "" : forumRoute.pathname}.md`;
+    if (forumRoute.primaryHost) {
+      const primaryHost = primaryHostForForumHost(request.headers.get("host"));
+      if (primaryHost !== null) {
+        applyHost(destination, primaryHost);
+      }
+    }
+    return applySecurityHeaders(
+      NextResponse.redirect(destination, 308),
+      policy,
+    );
+  }
+
+  const internalPath =
+    forumRoute?.kind === "rewrite" ? forumRoute.pathname : sourcePath;
+  const url = request.nextUrl.clone();
+  url.pathname = `/markdown${internalPath === "/" ? "" : internalPath}`;
+  const headers = nonceRequestHeaders(
+    new Headers(request.headers),
+    policy,
+    sourcePath,
+  );
+  headers.set("x-symbaiex-markdown-source", sourcePath);
+  logAiReadableRequest(request, sourcePath, markdownRequest.explicitAlias);
+  return applySecurityHeaders(
+    NextResponse.rewrite(url, { request: { headers } }),
+    policy,
+  );
+}
+
+function getMarkdownRequest(request: NextRequest) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return null;
+  }
+
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/llms.txt" || pathname === "/llms-full.txt") {
+    return null;
+  }
+
+  const explicitAlias = /\.md$/i.test(pathname);
+  const acceptsMarkdown = acceptsMediaType(
+    request.headers.get("accept"),
+    "text/markdown",
+  );
+  if (!explicitAlias && !acceptsMarkdown) {
+    return null;
+  }
+
+  const sourcePath = explicitAlias
+    ? pathname.replace(/\.md$/i, "") || "/"
+    : pathname;
+  return { sourcePath, explicitAlias };
+}
+
+function acceptsMediaType(value: string | null, mediaType: string) {
+  if (!value) return false;
+  return value.split(",").some((part) => {
+    const [type, ...parameters] = part.trim().toLowerCase().split(";");
+    if (type !== mediaType && type !== "text/*") {
+      return false;
+    }
+    const quality = parameters.find((parameter) =>
+      parameter.trim().startsWith("q="),
+    );
+    return quality === undefined || Number(quality.split("=")[1]) > 0;
+  });
+}
+
+function logAiReadableRequest(
+  request: NextRequest,
+  pathname: string,
+  explicitAlias: boolean,
+) {
+  const userAgent = request.headers
+    .get("user-agent")
+    ?.replace(/[\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 180);
+  console.info("[ai-readable] request", {
+    host: request.headers.get("host"),
+    method: request.method,
+    pathname,
+    format: explicitAlias ? "markdown-alias" : "content-negotiated-markdown",
+    userAgent: userAgent || undefined,
   });
 }
 
@@ -213,7 +335,36 @@ function applySecurityHeaders(response: NextResponse, policy: SecurityPolicy) {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
+  response.headers.set(
+    "Vary",
+    mergeVary(response.headers.get("Vary"), "Accept, Host"),
+  );
+  response.headers.set(
+    "Link",
+    mergeLink(
+      response.headers.get("Link"),
+      `<${PRIMARY_SITE_URL}/llms.txt>; rel="describedby"; type="text/markdown"`,
+    ),
+  );
   return response;
+}
+
+function mergeVary(current: string | null, additional: string) {
+  const values = new Set(
+    (current ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  for (const value of additional.split(",")) {
+    values.add(value.trim());
+  }
+  return [...values].join(", ");
+}
+
+function mergeLink(current: string | null, additional: string) {
+  if (!current) return additional;
+  return current.includes(additional) ? current : `${current}, ${additional}`;
 }
 
 function randomNonce() {

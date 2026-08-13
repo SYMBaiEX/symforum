@@ -1,5 +1,8 @@
 import { PublicProfilePanel } from "@/components/public-profile-panel";
+import { StructuredData } from "@/components/structured-data";
 import type { Metadata } from "next";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 
 type PageProps = {
   params: Promise<{ username: string }>;
@@ -11,6 +14,10 @@ export async function generateMetadata({
   const { username } = await params;
   return {
     title: `Profile / ${username}`,
+    description: `Public SYMBaiEX profile for ${username}.`,
+    alternates: {
+      canonical: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
+    },
   };
 }
 
@@ -21,13 +28,30 @@ export default async function PublicProfilePage({ params }: PageProps) {
   return (
     <>
       <section className="page-frame">
+        <StructuredData
+          data={[
+            {
+              "@type": "ProfilePage",
+              name: `Profile / ${username}`,
+              url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
+              mainEntity: {
+                "@type": "Person",
+                name: username,
+                url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
+              },
+            },
+            breadcrumbStructuredData([
+              { name: "Home", url: primarySiteUrl("/") },
+              {
+                name: `Profile / ${username}`,
+                url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
+              },
+            ]),
+          ]}
+        />
         <div className="mb-7">
-          <p className="page-kicker">
-            Public handle
-          </p>
-          <h1 className="page-title-display mt-3">
-            /u/{username}
-          </h1>
+          <p className="page-kicker">Public handle</p>
+          <h1 className="page-title-display mt-3">/u/{username}</h1>
         </div>
         {configured ? (
           <PublicProfilePanel username={username} />

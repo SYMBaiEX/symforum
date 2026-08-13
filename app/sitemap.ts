@@ -4,6 +4,8 @@ import { newsStoryPath } from "@/lib/news-slugs";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
 import { forumSiteUrl, primarySiteUrl } from "@/lib/site-urls";
 import { getPortfolioProjects } from "@/lib/site-content";
+import { convexRefs } from "@/lib/convex-refs";
+import { getServerConvexClient } from "@/lib/server-convex";
 import type { MetadataRoute } from "next";
 
 const PRIMARY_PATHS = [
@@ -89,7 +91,91 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
   }
 
+  const forumResult = await getPublicForumSitemapEntries();
+  entries.push(...forumResult);
+
   return dedupeEntries(entries);
+}
+
+async function getPublicForumSitemapEntries(): Promise<MetadataRoute.Sitemap> {
+  const convex = getServerConvexClient();
+  if (!convex) return [];
+
+  try {
+    const [categories, announcements, helpDocuments, calendarEvents] =
+      await Promise.all([
+        convex.query(convexRefs.forum.listCategories, { limit: 200 }),
+        convex.query(convexRefs.forum.listAnnouncements, {
+          includeBoardAnnouncements: true,
+        }),
+        convex.query(convexRefs.forum.listHelpDocuments, { limit: 200 }),
+        convex.query(convexRefs.forum.listCalendarEvents, {
+          month: new Date().toISOString().slice(0, 7),
+        }),
+      ]);
+    const threadResults = await Promise.all(
+      categories
+        .filter(
+          (category) => category.isPostable && category.viewAccess === "public",
+        )
+        .map((category) =>
+          convex
+            .query(convexRefs.forum.listThreads, {
+              categorySlug: category.slug,
+              limit: 100,
+              pageSize: 100,
+            })
+            .catch(() => null),
+        ),
+    );
+    const entries: MetadataRoute.Sitemap = [
+      ...categories
+        .filter((category) => category.viewAccess === "public")
+        .map((category) => ({
+          url: forumSiteUrl(`/${encodeURIComponent(category.slug)}`),
+          lastModified: validDate(
+            category.lastPostAt ?? category._creationTime,
+          ),
+          changeFrequency: "daily" as const,
+          priority: 0.6,
+        })),
+      ...threadResults.flatMap(
+        (result) =>
+          result?.threads.map((thread) => ({
+            url: forumSiteUrl(
+              `/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}`,
+            ),
+            lastModified: validDate(thread.updatedAt),
+            changeFrequency: "daily" as const,
+            priority: 0.5,
+          })) ?? [],
+      ),
+      ...announcements.map((announcement) => ({
+        url: forumSiteUrl(
+          `/announcements/${encodeURIComponent(announcement.slug)}`,
+        ),
+        lastModified: validDate(announcement.updatedAt),
+        changeFrequency: "weekly" as const,
+        priority: 0.4,
+      })),
+      ...helpDocuments.map((document) => ({
+        url: forumSiteUrl(`/help/${encodeURIComponent(document.slug)}`),
+        lastModified: validDate(document.updatedAt),
+        changeFrequency: "monthly" as const,
+        priority: 0.4,
+      })),
+      ...calendarEvents.map((event) => ({
+        url: forumSiteUrl(`/calendar/${encodeURIComponent(event.slug)}`),
+        lastModified: validDate(event.updatedAt),
+        changeFrequency: "monthly" as const,
+        priority: 0.3,
+      })),
+    ];
+    return entries;
+  } catch (error) {
+    console.warn("Unable to add public forum routes to sitemap", error);
+    return [];
+  }
 }
 
 function primaryEntry(path: string): MetadataRoute.Sitemap[number] {

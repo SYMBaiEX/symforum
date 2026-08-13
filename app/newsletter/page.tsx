@@ -1,14 +1,18 @@
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { parseEditorialNewsletterPayload } from "@/convex/newsletterPayload";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 
 export const metadata: Metadata = {
   title: "Newsletter",
   description:
     "Belle's source-grounded daily signals and weekly SYMBaiEX field notes.",
+  alternates: { canonical: "/newsletter" },
 };
 
 export const revalidate = 60;
@@ -22,6 +26,12 @@ export default async function NewsletterArchivePage() {
 
   return (
     <section className="page-frame page-frame-spacious">
+      <StructuredData
+        data={breadcrumbStructuredData([
+          { name: "Home", url: primarySiteUrl("/") },
+          { name: "Newsletter", url: primarySiteUrl("/newsletter") },
+        ])}
+      />
       <div className="grid gap-3 border-y border-row-border py-4 md:grid-cols-12 md:items-center">
         <p className="page-kicker md:col-span-3">Belle&apos;s desk</p>
         <NewsletterSignup

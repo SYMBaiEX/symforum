@@ -1,11 +1,14 @@
 import { MarkdownContent } from "@/components/markdown-content";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
+import { StructuredData } from "@/components/structured-data";
 import {
   type GithubPortfolioMetrics,
   type GithubPortfolioProjectMetric,
 } from "@/lib/github-portfolio";
 import { getCachedGithubPortfolioMetrics } from "@/lib/portfolio-metrics";
 import { safeExternalUrl } from "@/lib/safe-url";
+import { breadcrumbStructuredData, AUTHOR_NAME } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 import { getPortfolioProjects, getSitePage } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
 import { ArrowUpRight, Plus } from "lucide-react";
@@ -19,6 +22,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: page?.title ?? "Portfolio",
     description: page?.heroBody,
+    alternates: { canonical: "/portfolio" },
+    openGraph: {
+      type: "website",
+      url: primarySiteUrl("/portfolio"),
+      title: page?.title ?? "Portfolio",
+      description: page?.heroBody,
+    },
   };
 }
 
@@ -31,6 +41,29 @@ export default async function PortfolioPage() {
 
   return (
     <article className="page-frame page-frame-dense">
+      <StructuredData
+        data={[
+          {
+            "@type": "CollectionPage",
+            name: page?.title ?? "Portfolio",
+            description: page?.heroBody,
+            url: primarySiteUrl("/portfolio"),
+            author: { "@type": "Person", name: AUTHOR_NAME },
+            hasPart: projects.map((project) => ({
+              "@type": "CreativeWork",
+              name: project.name,
+              url: primarySiteUrl(
+                `/portfolio/${encodeURIComponent(project.slug)}`,
+              ),
+              description: project.summary,
+            })),
+          },
+          breadcrumbStructuredData([
+            { name: "Home", url: primarySiteUrl("/") },
+            { name: "Portfolio", url: primarySiteUrl("/portfolio") },
+          ]),
+        ]}
+      />
       <header className="grid border-y border-row-border md:grid-cols-12">
         <div className="py-7 md:col-span-5 md:py-9 md:pr-8">
           <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">

@@ -5,4 +5,10 @@ export const config: VercelConfig = {
   installCommand: "bun install --frozen-lockfile",
   buildCommand: "bun run build",
   devCommand: "bun run dev",
+  headers: [
+    {
+      source: "/((?!_next|api|.*\\..*).*)",
+      headers: [{ key: "Vary", value: "Accept, Host" }],
+    },
+  ],
 };

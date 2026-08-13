@@ -1,6 +1,9 @@
 import { CommentsPanel } from "@/components/comments-panel";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
+import { StructuredData } from "@/components/structured-data";
 import { safeExternalUrl } from "@/lib/safe-url";
+import { AUTHOR_NAME, breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import { getPortfolioProject, getPortfolioProjects } from "@/lib/site-content";
 import type { PortfolioProjectRecord } from "@/lib/site-content-defaults";
@@ -29,9 +32,22 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const project = await getPortfolioProject(slug);
+  const canonical = project
+    ? primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`)
+    : primarySiteUrl(`/portfolio/${encodeURIComponent(slug)}`);
   return {
     title: project?.name ?? "Project",
     description: project?.summary ?? "Portfolio project",
+    alternates: { canonical },
+    robots: project ? undefined : { index: false, follow: false },
+    openGraph: project
+      ? {
+          type: "article",
+          url: canonical,
+          title: project.name,
+          description: project.summary,
+        }
+      : undefined,
   };
 }
 
@@ -57,6 +73,36 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
 
   return (
     <article className="page-frame page-frame-dense">
+      <StructuredData
+        data={[
+          {
+            "@type": "CreativeWork",
+            name: project.name,
+            description: project.summary,
+            url: primarySiteUrl(
+              `/portfolio/${encodeURIComponent(project.slug)}`,
+            ),
+            author: { "@type": "Person", name: AUTHOR_NAME },
+            genre: project.type,
+            keywords: project.tags,
+            sameAs: [
+              project.homepageUrl,
+              project.repoUrl,
+              project.writeupUrl,
+            ].filter(Boolean),
+          },
+          breadcrumbStructuredData([
+            { name: "Home", url: primarySiteUrl("/") },
+            { name: "Portfolio", url: primarySiteUrl("/portfolio") },
+            {
+              name: project.name,
+              url: primarySiteUrl(
+                `/portfolio/${encodeURIComponent(project.slug)}`,
+              ),
+            },
+          ]),
+        ]}
+      />
       <nav
         aria-label="Portfolio breadcrumb"
         className="mb-4 flex items-center justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground"

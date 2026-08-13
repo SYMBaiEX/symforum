@@ -95,6 +95,39 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("rewrites explicit markdown aliases and negotiated markdown requests", async () => {
+    const proxy = await loadProxy();
+
+    const aliasResponse = await proxy(
+      requestFor("http://localhost:3000/about.md"),
+    );
+    expect(aliasResponse.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3000/markdown/about",
+    );
+    expect(aliasResponse.headers.get("vary")).toContain("Accept");
+    expect(aliasResponse.headers.get("vary")).toContain("Host");
+
+    const negotiatedResponse = await proxy(
+      requestFor("http://localhost:3000/about", {
+        accept: "text/markdown",
+      }),
+    );
+    expect(negotiatedResponse.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3000/markdown/about",
+    );
+  });
+
+  test("does not negotiate markdown for wildcard or refused media types", async () => {
+    const proxy = await loadProxy();
+
+    for (const accept of ["*/*", "text/markdown;q=0, text/html"]) {
+      const response = await proxy(
+        requestFor("http://localhost:3000/about", { accept }),
+      );
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    }
+  });
+
   test("redirects primary-site content routes from the forum host to the primary host", async () => {
     const proxy = await loadProxy();
     const response = await proxy(
@@ -150,11 +183,12 @@ async function loadProxy() {
   return mod.default as (request: NextRequest) => Promise<Response> | Response;
 }
 
-function requestFor(url: string) {
+function requestFor(url: string, headers: Record<string, string> = {}) {
   const parsed = new URL(url);
   return new NextRequest(url, {
     headers: {
       host: parsed.host,
+      ...headers,
     },
   });
 }

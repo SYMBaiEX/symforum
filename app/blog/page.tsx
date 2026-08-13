@@ -6,6 +6,9 @@ import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Blog",
+  description:
+    "Essays and field notes by Austin Hamilton about software, AI systems, and engineering practice.",
+  alternates: { canonical: "/blog" },
 };
 
 export default async function BlogPage() {

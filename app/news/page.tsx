@@ -1,12 +1,16 @@
 import { NewsFeed } from "@/components/news-feed";
 import { SectionHeader } from "@/components/section-header";
+import { StructuredData } from "@/components/structured-data";
 import { getLiveHnFallback, getNewsTimeline } from "@/lib/news-data";
 import type { Metadata } from "next";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 
 export const metadata: Metadata = {
   title: "News",
   description:
     "Daily index of top Hacker News stories with on-site votes, saves, and comments.",
+  alternates: { canonical: "/news" },
 };
 
 export default async function NewsPage() {
@@ -22,6 +26,12 @@ export default async function NewsPage() {
   return (
     <>
       <section className="page-frame page-frame-spacious">
+        <StructuredData
+          data={breadcrumbStructuredData([
+            { name: "Home", url: primarySiteUrl("/") },
+            { name: "News", url: primarySiteUrl("/news") },
+          ])}
+        />
         <SectionHeader title="Daily news" divided={false} />
         <div className="mt-8">
           <NewsFeed

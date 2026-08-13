@@ -1,5 +1,8 @@
 import { MarkdownContent } from "@/components/markdown-content";
+import { StructuredData } from "@/components/structured-data";
 import { getSitePage } from "@/lib/site-content";
+import { AUTHOR_NAME, AUTHOR_URL, breadcrumbStructuredData } from "@/lib/seo";
+import { primarySiteUrl } from "@/lib/site-urls";
 import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -9,6 +12,17 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: page?.title ?? "About",
     description: page?.heroBody,
+    alternates: { canonical: "/about" },
+    authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],
+    openGraph: {
+      type: "profile",
+      url: primarySiteUrl("/about"),
+      title: page?.title ?? "About Austin Hamilton",
+      description: page?.heroBody,
+      firstName: "Austin",
+      lastName: "Hamilton",
+      username: "symbiex",
+    },
   };
 }
 
@@ -24,6 +38,29 @@ export default async function AboutPage() {
   return (
     <>
       <article className="page-frame page-frame-dense">
+        <StructuredData
+          data={[
+            {
+              "@type": "ProfilePage",
+              url: primarySiteUrl("/about"),
+              name: page?.title ?? "About Austin Hamilton",
+              description: page?.heroBody,
+              mainEntity: {
+                "@type": "Person",
+                name: AUTHOR_NAME,
+                url: AUTHOR_URL,
+                description: page?.heroBody,
+              },
+              dateModified: page?.updatedAt
+                ? new Date(page.updatedAt).toISOString()
+                : undefined,
+            },
+            breadcrumbStructuredData([
+              { name: "Home", url: primarySiteUrl("/") },
+              { name: "About", url: primarySiteUrl("/about") },
+            ]),
+          ]}
+        />
         <section className="page-content-wide mx-auto">
           {imageUrl ? (
             <figure className="mb-6 md:float-right md:mb-6 md:ml-8 md:w-[min(38vw,28rem)]">
@@ -74,12 +111,8 @@ export default async function AboutPage() {
           ) : null}
 
           <div className="page-content-readable">
-            <h1 className="page-title">
-              {page?.heroHeading ?? "About"}
-            </h1>
-            <p className="page-lede mt-5 md:mt-6">
-              {page?.heroBody}
-            </p>
+            <h1 className="page-title">{page?.heroHeading ?? "About"}</h1>
+            <p className="page-lede mt-5 md:mt-6">{page?.heroBody}</p>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
               The path runs from early game-hacking curiosity into open-source
               systems, AI agents, protocol work, and the long-term lens of
