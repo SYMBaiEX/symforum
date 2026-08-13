@@ -136,7 +136,7 @@ export const submit = mutation({
     });
 
     await ctx.scheduler.runAfter(0, sendContactRequestEmailRef, { requestId });
-    const request = await ctx.db.get(requestId);
+    const request = await ctx.db.get("contactRequests", requestId);
     if (request === null) {
       throw new Error("Contact request could not be loaded");
     }
@@ -147,7 +147,7 @@ export const submit = mutation({
 export const readContactRequest = internalQuery({
   args: { requestId: v.id("contactRequests") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.requestId);
+    return await ctx.db.get("contactRequests", args.requestId);
   },
 });
 
@@ -169,7 +169,7 @@ export const markContactRequestEmailState = internalMutation({
       patch.emailedAt = args.emailedAt;
     }
     patch.emailError = args.emailError;
-    await ctx.db.patch(args.requestId, patch);
+    await ctx.db.patch("contactRequests", args.requestId, patch);
     return null;
   },
 });

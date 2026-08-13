@@ -410,7 +410,7 @@ export const markSnapshotStarted = internalMutation({
       return null;
     }
 
-    await ctx.db.patch(existingSnapshot._id, {
+    await ctx.db.patch("newsSnapshots", existingSnapshot._id, {
       status: "running",
       startedAt: args.startedAt,
       errorMessage: undefined,
@@ -447,7 +447,7 @@ export const markSnapshotFailed = internalMutation({
       return null;
     }
 
-    await ctx.db.patch(existingSnapshot._id, {
+    await ctx.db.patch("newsSnapshots", existingSnapshot._id, {
       status: "failed",
       startedAt: args.startedAt,
       completedAt: Date.now(),
@@ -496,7 +496,7 @@ export const storeSnapshot = internalMutation({
         storyCount: args.stories.length,
       });
     } else {
-      await ctx.db.patch(existingSnapshot._id, {
+      await ctx.db.patch("newsSnapshots", existingSnapshot._id, {
         status: "complete",
         completedAt: Date.now(),
         storyCount: args.stories.length,
@@ -511,7 +511,7 @@ export const storeSnapshot = internalMutation({
       )
       .take(100);
     for (const story of current) {
-      await ctx.db.delete(story._id);
+      await ctx.db.delete("hnStories", story._id);
     }
     for (const story of args.stories) {
       await ctx.db.insert("hnStories", story);

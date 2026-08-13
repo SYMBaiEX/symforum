@@ -83,7 +83,7 @@ async function ensureUserDefaults(
   userId: Id<"users">,
   type: "oauth" | "credentials" | "email" | "phone" | "verification",
 ) {
-  const user = await ctx.db.get(userId);
+  const user = await ctx.db.get("users", userId);
   if (user === null) {
     throw new Error("Authenticated user could not be loaded");
   }
@@ -124,7 +124,7 @@ async function ensureUserDefaults(
   }
 
   if (Object.keys(patch).length > 0) {
-    await ctx.db.patch(userId, patch);
+    await ctx.db.patch("users", userId, patch);
   }
 }
 

@@ -129,7 +129,7 @@ describe("dormant forum agent roster", () => {
     await t.run(async (ctx) => {
       const legacy = await ctx.db.query("forumAgents").first();
       if (!legacy) throw new Error("missing test agent");
-      await ctx.db.patch(legacy._id, {
+      await ctx.db.patch("forumAgents", legacy._id, {
         model: "deepseek/deepseek-v4-flash-0731",
       });
     });

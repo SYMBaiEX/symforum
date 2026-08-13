@@ -9,6 +9,7 @@ export const MUSE_LEASE_KEY = "muse-generation";
 const FREE_QUOTA_RETRY_MS = 60 * 60 * 1_000;
 const GENERAL_CIRCUIT_MS = 15 * 60 * 1_000;
 const FAILURE_WINDOW_MS = 30 * 60 * 1_000;
+const OPERATIONAL_STATE_WRITE_MIN_INTERVAL_MS = 30 * 1_000;
 
 type CircuitEvent = {
   model: string;
@@ -32,7 +33,7 @@ export async function applyRouteCircuitEvent(
       existing !== null &&
       (existing.consecutiveFailures > 0 || existing.disabledUntil > now)
     ) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("aiProviderCircuits", existing._id, {
         consecutiveFailures: 0,
         reason: undefined,
         disabledUntil: 0,
@@ -69,7 +70,7 @@ export async function applyRouteCircuitEvent(
   if (existing === null) {
     await ctx.db.insert("aiProviderCircuits", value);
   } else {
-    await ctx.db.patch(existing._id, value);
+    await ctx.db.patch("aiProviderCircuits", existing._id, value);
   }
 }
 
@@ -109,7 +110,7 @@ export async function recordSpendBucket(
     });
     return;
   }
-  await ctx.db.patch(existing._id, {
+  await ctx.db.patch("aiSpendBuckets", existing._id, {
     spentMicroUsd: existing.spentMicroUsd + args.spentMicroUsd,
     requests: existing.requests + 1,
     inputTokens: existing.inputTokens + args.inputTokens,
@@ -197,7 +198,7 @@ export const acquireMuseLease = internalMutation({
       updatedAt: now,
     };
     if (existing === null) await ctx.db.insert("aiProviderLeases", value);
-    else await ctx.db.patch(existing._id, value);
+    else await ctx.db.patch("aiProviderLeases", existing._id, value);
     return { acquired: true as const, retryAfterMs: 0 };
   },
 });
@@ -212,7 +213,7 @@ export const releaseMuseLease = internalMutation({
     if (existing === null || existing.holder !== args.holder) {
       return { released: false as const };
     }
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("aiProviderLeases", existing._id, {
       expiresAt: 0,
       updatedAt: Date.now(),
     });
@@ -244,8 +245,18 @@ export const recordCanaryState = internalMutation({
       pauseUntil: args.pauseUntil,
       updatedAt: now,
     };
+    if (
+      existing !== null &&
+      now - existing.updatedAt < OPERATIONAL_STATE_WRITE_MIN_INTERVAL_MS &&
+      existing.healthy === value.healthy &&
+      existing.provider === value.provider &&
+      existing.model === value.model &&
+      existing.pauseUntil === value.pauseUntil
+    ) {
+      return value;
+    }
     if (existing === null) await ctx.db.insert("aiOperationalStates", value);
-    else await ctx.db.patch(existing._id, value);
+    else await ctx.db.patch("aiOperationalStates", existing._id, value);
     return value;
   },
 });
@@ -275,8 +286,18 @@ export const recordOperationalState = internalMutation({
       pauseUntil: args.pauseUntil ?? 0,
       updatedAt: now,
     };
+    if (
+      existing !== null &&
+      now - existing.updatedAt < OPERATIONAL_STATE_WRITE_MIN_INTERVAL_MS &&
+      existing.healthy === value.healthy &&
+      existing.provider === value.provider &&
+      existing.model === value.model &&
+      existing.pauseUntil === value.pauseUntil
+    ) {
+      return value;
+    }
     if (existing === null) await ctx.db.insert("aiOperationalStates", value);
-    else await ctx.db.patch(existing._id, value);
+    else await ctx.db.patch("aiOperationalStates", existing._id, value);
     return value;
   },
 });

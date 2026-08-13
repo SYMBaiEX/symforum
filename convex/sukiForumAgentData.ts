@@ -117,7 +117,7 @@ export const reserveResearchTopic = internalMutation({
       if (existing === null) {
         await ctx.db.insert("forumAgentSourceReservations", value);
       } else {
-        await ctx.db.patch(existing._id, value);
+        await ctx.db.patch("forumAgentSourceReservations", existing._id, value);
       }
     }
     const topicValue = {
@@ -133,9 +133,9 @@ export const reserveResearchTopic = internalMutation({
     if (topic === null) {
       await ctx.db.insert("forumAgentTopicReservations", topicValue);
     } else {
-      await ctx.db.patch(topic._id, topicValue);
+      await ctx.db.patch("forumAgentTopicReservations", topic._id, topicValue);
     }
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       topicFingerprint: args.topicFingerprint,
       updatedAt: now,
     });
@@ -166,7 +166,10 @@ export const releaseResearchReservations = internalMutation({
     ]);
     for (const row of [...sources, ...topics]) {
       if (row.status === "reserved") {
-        await ctx.db.patch(row._id, {
+        const table = "sourceKey" in row
+          ? "forumAgentSourceReservations"
+          : "forumAgentTopicReservations";
+        await ctx.db.patch(table, row._id, {
           status: "released",
           expiresAt: now,
           updatedAt: now,
@@ -272,7 +275,7 @@ export const claimRun = internalMutation({
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("forumAgentRuns", existing._id, {
         attempt: args.attempt,
         status: "running",
         model: agent.model,
@@ -298,7 +301,7 @@ export const readRun = internalQuery({
       return null;
     }
     const thread =
-      run.threadId === undefined ? null : await ctx.db.get(run.threadId);
+      run.threadId === undefined ? null : await ctx.db.get("forumThreads", run.threadId);
     return {
       run,
       thread:
@@ -327,7 +330,7 @@ export const markRunFailed = internalMutation({
       return { updated: false };
     }
     const now = Date.now();
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       status: "failed",
       errorMessage: args.errorMessage.trim().slice(0, 500),
       completedAt: now,
@@ -352,7 +355,7 @@ export const markRunSkipped = internalMutation({
       return { updated: false };
     }
     const now = Date.now();
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       status: "skipped",
       candidateCount: args.candidateCount,
       errorMessage: args.reason.trim().slice(0, 500),
@@ -396,7 +399,7 @@ export const writeResearchCache = internalMutation({
     if (existing === null) {
       return await ctx.db.insert("forumAgentResearchCache", args);
     }
-    await ctx.db.patch(existing._id, args);
+    await ctx.db.patch("forumAgentResearchCache", existing._id, args);
     return existing._id;
   },
 });
@@ -438,7 +441,7 @@ export const writeMediaCache = internalMutation({
     if (existing === null) {
       return await ctx.db.insert("forumAgentMediaCache", args);
     }
-    await ctx.db.patch(existing._id, args);
+    await ctx.db.patch("forumAgentMediaCache", existing._id, args);
     return existing._id;
   },
 });
@@ -455,8 +458,11 @@ export const cleanupExpiredResearchCache = internalMutation({
       .query("forumAgentMediaCache")
       .withIndex("by_expiresAt", (q) => q.lt("expiresAt", now))
       .take(SUKI_CACHE_CLEANUP_BATCH_SIZE);
-    for (const row of [...expiredResearch, ...expiredMedia]) {
-      await ctx.db.delete(row._id);
+    for (const row of expiredResearch) {
+      await ctx.db.delete("forumAgentResearchCache", row._id);
+    }
+    for (const row of expiredMedia) {
+      await ctx.db.delete("forumAgentMediaCache", row._id);
     }
     return {
       deletedMedia: expiredMedia.length,

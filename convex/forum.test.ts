@@ -518,12 +518,12 @@ describe("forum notification preferences", () => {
         trustedCategory,
         storedReport,
       ] = await Promise.all([
-        ctx.db.get(seed.publicThreadId),
-        ctx.db.get(seed.publicCategoryId),
-        ctx.db.get(seed.trustedPostId),
-        ctx.db.get(seed.trustedThreadId),
-        ctx.db.get(seed.trustedCategoryId),
-        ctx.db.get(report.reportId),
+        ctx.db.get("forumThreads", seed.publicThreadId),
+        ctx.db.get("forumCategories", seed.publicCategoryId),
+        ctx.db.get("forumPosts", seed.trustedPostId),
+        ctx.db.get("forumThreads", seed.trustedThreadId),
+        ctx.db.get("forumCategories", seed.trustedCategoryId),
+        ctx.db.get("forumReports", report.reportId),
       ]);
       const [threadEvents, postEvents, reportEvents] = await Promise.all([
         ctx.db
@@ -731,7 +731,7 @@ describe("forum notification preferences", () => {
     expect(suspended.forumRole).toBeUndefined();
     expect(suspended.forumSuspendedUntil).toBe(1_800_000_100_000);
     await expect(
-      t.run(async (ctx) => await ctx.db.get(presenceId)),
+      t.run(async (ctx) => await ctx.db.get("forumPresence", presenceId)),
     ).resolves.toBeNull();
   });
 
@@ -949,7 +949,7 @@ describe("forum notification preferences", () => {
 
     const stored = await t.run(async (ctx) => {
       const [thread, run, source, profile, poll] = await Promise.all([
-        ctx.db.get(published.threadId),
+        ctx.db.get("forumThreads", published.threadId),
         ctx.db
           .query("forumAgentRuns")
           .withIndex("by_runKey", (q) => q.eq("runKey", claim.runKey))
@@ -1013,7 +1013,7 @@ describe("forum notification preferences", () => {
       if (agent === null) {
         throw new Error("Expected Suki's agent record");
       }
-      await ctx.db.patch(agent._id, { enabled: false });
+      await ctx.db.patch("forumAgents", agent._id, { enabled: false });
     });
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
     const disabledClaim = await t.mutation(
@@ -1060,7 +1060,7 @@ describe("forum notification preferences", () => {
         authorId,
         now,
       });
-      await ctx.db.patch(threadId, {
+      await ctx.db.patch("forumThreads", threadId, {
         replyCount: 0,
         lastAssignedPostNumber: 1,
       });
@@ -1123,9 +1123,9 @@ describe("forum notification preferences", () => {
 
     const stored = await t.run(async (ctx) => {
       const [thread, category, run, profile] = await Promise.all([
-        ctx.db.get(seeded.threadId),
-        ctx.db.get(seeded.categoryId),
-        ctx.db.get(claim.runId),
+        ctx.db.get("forumThreads", seeded.threadId),
+        ctx.db.get("forumCategories", seeded.categoryId),
+        ctx.db.get("forumAgentReplyRuns", claim.runId),
         ctx.db
           .query("forumUserProfiles")
           .withIndex("by_userId", (q) =>
@@ -1270,7 +1270,7 @@ describe("forum notification preferences", () => {
 
     const stored = await t.run(async (ctx) => {
       const [thread, profile] = await Promise.all([
-        ctx.db.get(published.threadId),
+        ctx.db.get("forumThreads", published.threadId),
         ctx.db
           .query("forumUserProfiles")
           .withIndex("by_userId", (q) =>
@@ -2038,7 +2038,7 @@ describe("forum notification preferences", () => {
       if (delivery === null) {
         throw new Error("Expected queued forum email delivery");
       }
-      await ctx.db.patch(seed.trustedUserId, {
+      await ctx.db.patch("users", seed.trustedUserId, {
         forumTrustedAt: undefined,
         forumTrustedBy: undefined,
         forumTrustRevokedAt: 1_800_000_002_000,
@@ -2103,7 +2103,7 @@ describe("forum notification preferences", () => {
       if (delivery === null) {
         throw new Error("Expected queued forum email delivery");
       }
-      await ctx.db.patch(seed.trustedUserId, {
+      await ctx.db.patch("users", seed.trustedUserId, {
         contactEmail: "updated-trusted@example.com",
       });
       return delivery._id;
@@ -2588,8 +2588,8 @@ describe("forum privacy regressions", () => {
       body: replyBody,
     });
     const stored = await t.run(async (ctx) => ({
-      thread: await ctx.db.get(thread.threadId),
-      reply: await ctx.db.get(reply.postId),
+      thread: await ctx.db.get("forumThreads", thread.threadId),
+      reply: await ctx.db.get("forumPosts", reply.postId),
     }));
 
     expect(stored.thread?.body).toBe(threadBody);
@@ -2620,6 +2620,7 @@ describe("forum privacy regressions", () => {
     });
     const recent = await asTrusted.query(api.forum.listRecentThreads, {
       mode: "new",
+      now,
       pageSize: 10,
     });
     const slugs = recent.threads.map((thread) => thread.slug);
@@ -2659,6 +2660,7 @@ describe("forum privacy regressions", () => {
     try {
       const recent = await t.query(api.forum.listRecentThreads, {
         mode: "today",
+        now: fakeNow,
         pageSize: 10,
       });
       const visibleSlugs = recent.threads.map((thread) => thread.slug);
@@ -2709,7 +2711,7 @@ describe("forum privacy regressions", () => {
         authorId: seed.trustedUserId,
         now: now + 2,
       });
-      await ctx.db.patch(seed.publicCategoryId, {
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, {
         threadCount: 3,
         postCount: 4,
         updatedAt: now + 3,
@@ -2787,10 +2789,10 @@ describe("forum privacy regressions", () => {
         now: now + 1,
       });
       await Promise.all([
-        ctx.db.patch(publicChildId, {
+        ctx.db.patch("forumCategories", publicChildId, {
           parentCategoryId: seed.publicCategoryId,
         }),
-        ctx.db.patch(trustedChildId, {
+        ctx.db.patch("forumCategories", trustedChildId, {
           parentCategoryId: seed.publicCategoryId,
         }),
       ]);
@@ -2853,7 +2855,7 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 2 * dayMs,
         });
-        await ctx.db.patch(freshPopularId, {
+        await ctx.db.patch("forumThreads", freshPopularId, {
           replyCount: 20,
           viewCount: 5,
           updatedAt: now - 2 * dayMs,
@@ -2867,7 +2869,7 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 10 * dayMs,
         });
-        await ctx.db.patch(freshQuietId, {
+        await ctx.db.patch("forumThreads", freshQuietId, {
           replyCount: 5,
           viewCount: 50,
           updatedAt: now - 10 * dayMs,
@@ -2881,12 +2883,12 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 45 * dayMs,
         });
-        await ctx.db.patch(stalePopularId, {
+        await ctx.db.patch("forumThreads", stalePopularId, {
           replyCount: 90,
           viewCount: 100,
           updatedAt: now - 45 * dayMs,
         });
-        await ctx.db.patch(seed.publicCategoryId, {
+        await ctx.db.patch("forumCategories", seed.publicCategoryId, {
           threadCount: 4,
           postCount: 5,
           updatedAt: now,
@@ -2941,7 +2943,7 @@ describe("forum privacy regressions", () => {
       name: "Trusted Author",
     });
     await t.run(async (ctx) => {
-      await ctx.db.patch(seed.trustedThreadId, {
+      await ctx.db.patch("forumThreads", seed.trustedThreadId, {
         body: "[h2]Trusted launch</h2] Trusted members can read this lunar launch discussion.",
       });
     });
@@ -2964,7 +2966,7 @@ describe("forum privacy regressions", () => {
     const t = setup();
     const seed = await seedForum(t);
     await t.run(async (ctx) => {
-      await ctx.db.patch(seed.publicCategoryId, {
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, {
         lastThreadId: seed.publicThreadId,
         lastPostAt: 1_800_000_000_001,
       });
@@ -3047,7 +3049,7 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 2 * dayMs,
         });
-        await ctx.db.patch(titleThreadId, {
+        await ctx.db.patch("forumThreads", titleThreadId, {
           replyCount: 4,
           viewCount: 20,
         });
@@ -3060,7 +3062,7 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 3 * dayMs,
         });
-        await ctx.db.patch(bodyLowThreadId, {
+        await ctx.db.patch("forumThreads", bodyLowThreadId, {
           replyCount: 2,
           viewCount: 15,
         });
@@ -3073,7 +3075,7 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 4 * dayMs,
         });
-        await ctx.db.patch(bodyHighThreadId, {
+        await ctx.db.patch("forumThreads", bodyHighThreadId, {
           replyCount: 30,
           viewCount: 80,
         });
@@ -3086,11 +3088,11 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: now - 60 * dayMs,
         });
-        await ctx.db.patch(staleThreadId, {
+        await ctx.db.patch("forumThreads", staleThreadId, {
           replyCount: 99,
           viewCount: 200,
         });
-        await ctx.db.patch(seed.publicCategoryId, {
+        await ctx.db.patch("forumCategories", seed.publicCategoryId, {
           threadCount: 5,
           postCount: 6,
           updatedAt: now,
@@ -4016,14 +4018,14 @@ describe("forum privacy regressions", () => {
 
     const after = await t.run(async (ctx) => {
       return {
-        activeAttachment: await ctx.db.get(ids.activeAttachmentId),
+        activeAttachment: await ctx.db.get("forumAttachments", ids.activeAttachmentId),
         activeStorage: await ctx.db.system.get("_storage", ids.activeStorageId),
-        deletedAttachment: await ctx.db.get(ids.deletedAttachmentId),
+        deletedAttachment: await ctx.db.get("forumAttachments", ids.deletedAttachmentId),
         deletedStorage: await ctx.db.system.get(
           "_storage",
           ids.deletedStorageId,
         ),
-        expiredPendingUpload: await ctx.db.get(ids.expiredPendingUploadId),
+        expiredPendingUpload: await ctx.db.get("forumPendingUploads", ids.expiredPendingUploadId),
         expiredStorage: await ctx.db.system.get(
           "_storage",
           ids.expiredStorageId,
@@ -4133,7 +4135,7 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/attachment upload is not available/i);
 
     await expect(
-      t.run(async (ctx) => await ctx.db.get(pendingUploadId)),
+      t.run(async (ctx) => await ctx.db.get("forumPendingUploads", pendingUploadId)),
     ).resolves.toMatchObject({
       status: "pending",
     });
@@ -4156,7 +4158,7 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/attachment upload is not available/i);
 
     const pendingUpload = await t.run(
-      async (ctx) => await ctx.db.get(pendingUploadId),
+      async (ctx) => await ctx.db.get("forumPendingUploads", pendingUploadId),
     );
     expect(pendingUpload).toMatchObject({
       userId: seed.otherTrustedUserId,
@@ -4272,8 +4274,8 @@ describe("forum privacy regressions", () => {
     ).toEqual([attachmentIds.replyKeep]);
 
     const rows = await t.run(async (ctx) => ({
-      rootRemove: await ctx.db.get(attachmentIds.rootRemove),
-      replyRemove: await ctx.db.get(attachmentIds.replyRemove),
+      rootRemove: await ctx.db.get("forumAttachments", attachmentIds.rootRemove),
+      replyRemove: await ctx.db.get("forumAttachments", attachmentIds.replyRemove),
     }));
     expect(rows.rootRemove).toMatchObject({
       status: "deleted",
@@ -4508,7 +4510,7 @@ describe("forum privacy regressions", () => {
       body: "A reply-free thread can still be withdrawn by its author.",
     });
     const before = await t.run(async (ctx) => ({
-      category: await ctx.db.get(seed.publicCategoryId),
+      category: await ctx.db.get("forumCategories", seed.publicCategoryId),
       profile: await ctx.db
         .query("forumUserProfiles")
         .withIndex("by_userId", (q) => q.eq("userId", seed.otherTrustedUserId))
@@ -4542,7 +4544,7 @@ describe("forum privacy regressions", () => {
         .take(5);
       const event = events.find((row) => row.entityId === thread.threadId);
       return {
-        category: await ctx.db.get(seed.publicCategoryId),
+        category: await ctx.db.get("forumCategories", seed.publicCategoryId),
         event:
           event === undefined
             ? null
@@ -4553,7 +4555,7 @@ describe("forum privacy regressions", () => {
             q.eq("userId", seed.otherTrustedUserId),
           )
           .unique(),
-        thread: await ctx.db.get(thread.threadId),
+        thread: await ctx.db.get("forumThreads", thread.threadId),
       };
     });
 
@@ -4629,17 +4631,17 @@ describe("forum privacy regressions", () => {
         .take(5);
       const event = events.find((row) => row.entityId === seed.publicPostId);
       return {
-        category: await ctx.db.get(seed.publicCategoryId),
+        category: await ctx.db.get("forumCategories", seed.publicCategoryId),
         event:
           event === undefined
             ? null
             : { ...event, metadata: JSON.parse(event.metadataJson) },
-        post: await ctx.db.get(seed.publicPostId),
+        post: await ctx.db.get("forumPosts", seed.publicPostId),
         profile: await ctx.db
           .query("forumUserProfiles")
           .withIndex("by_userId", (q) => q.eq("userId", seed.trustedUserId))
           .unique(),
-        thread: await ctx.db.get(seed.publicThreadId),
+        thread: await ctx.db.get("forumThreads", seed.publicThreadId),
       };
     });
 
@@ -4758,7 +4760,7 @@ describe("forum privacy regressions", () => {
     const t = setup();
     const seed = await seedForum(t);
     const pollId = await t.run(async (ctx) => {
-      await ctx.db.patch(seed.publicCategoryId, { pollAccess: "members" });
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, { pollAccess: "members" });
       return await insertPoll(ctx, {
         threadId: seed.publicThreadId,
         categoryId: seed.publicCategoryId,
@@ -4846,7 +4848,7 @@ describe("forum privacy regressions", () => {
         options: ["Yes", "No"],
         now: 1_800_000_000_200,
       });
-      await ctx.db.patch(insertedPollId, {
+      await ctx.db.patch("forumPolls", insertedPollId, {
         status: "closed",
         closedAt: 1_800_000_000_250,
         closedBy: seed.ownerId,
@@ -5233,7 +5235,7 @@ describe("forum privacy regressions", () => {
     });
 
     await t.run(async (ctx) => {
-      await ctx.db.patch(seededPresenceId, {
+      await ctx.db.patch("forumPresence", seededPresenceId, {
         locationType: "calendar",
         path: "/forum/calendar",
         label: "Browsing calendar",
@@ -5593,7 +5595,7 @@ describe("forum privacy regressions", () => {
     });
 
     const snapshot = await t.run(async (ctx) => {
-      const thread = await ctx.db.get(seed.publicThreadId);
+      const thread = await ctx.db.get("forumThreads", seed.publicThreadId);
       const ratings = await ctx.db
         .query("forumThreadRatings")
         .withIndex("by_threadId_and_updatedAt", (q) =>
@@ -5775,18 +5777,18 @@ describe("forum privacy regressions", () => {
         emailDelivery,
         relatedEvent,
       ] = await Promise.all([
-        ctx.db.get(seed.publicPostId),
-        ctx.db.get(seed.publicThreadId),
-        ctx.db.get(seed.trustedThreadId),
-        ctx.db.get(seed.publicCategoryId),
-        ctx.db.get(seed.trustedCategoryId),
-        ctx.db.get(related.editId),
-        ctx.db.get(related.reportId),
-        ctx.db.get(related.warningId),
-        ctx.db.get(related.reputationId),
-        ctx.db.get(related.notificationId),
-        ctx.db.get(related.emailDeliveryId),
-        ctx.db.get(related.relatedEventId),
+        ctx.db.get("forumPosts", seed.publicPostId),
+        ctx.db.get("forumThreads", seed.publicThreadId),
+        ctx.db.get("forumThreads", seed.trustedThreadId),
+        ctx.db.get("forumCategories", seed.publicCategoryId),
+        ctx.db.get("forumCategories", seed.trustedCategoryId),
+        ctx.db.get("forumContentEdits", related.editId),
+        ctx.db.get("forumReports", related.reportId),
+        ctx.db.get("forumWarnings", related.warningId),
+        ctx.db.get("forumReputations", related.reputationId),
+        ctx.db.get("forumNotifications", related.notificationId),
+        ctx.db.get("forumNotificationEmailDeliveries", related.emailDeliveryId),
+        ctx.db.get("forumModerationEvents", related.relatedEventId),
       ]);
       const moveEvent = await ctx.db
         .query("forumModerationEvents")
@@ -5915,7 +5917,7 @@ describe("forum privacy regressions", () => {
         postNumber: 3,
         now,
       });
-      await ctx.db.patch(seed.publicThreadId, {
+      await ctx.db.patch("forumThreads", seed.publicThreadId, {
         replyCount: 2,
         lastAssignedPostNumber: 3,
         lastPostId: postId,
@@ -5923,7 +5925,7 @@ describe("forum privacy regressions", () => {
         lastPostUserId: seed.otherTrustedUserId,
         updatedAt: now,
       });
-      await ctx.db.patch(seed.publicCategoryId, {
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, {
         postCount: 3,
         lastThreadId: seed.publicThreadId,
         lastPostId: postId,
@@ -5999,14 +6001,14 @@ describe("forum privacy regressions", () => {
         targetCategory,
         profile,
       ] = await Promise.all([
-        ctx.db.get(related.emailDeliveryId),
-        ctx.db.get(related.moderationEventId),
-        ctx.db.get(seed.publicPostId),
-        ctx.db.get(related.extraPublicPostId),
-        ctx.db.get(seed.publicThreadId),
-        ctx.db.get(result.newThread._id as Id<"forumThreads">),
-        ctx.db.get(seed.publicCategoryId),
-        ctx.db.get(seed.trustedCategoryId),
+        ctx.db.get("forumNotificationEmailDeliveries", related.emailDeliveryId),
+        ctx.db.get("forumModerationEvents", related.moderationEventId),
+        ctx.db.get("forumPosts", seed.publicPostId),
+        ctx.db.get("forumPosts", related.extraPublicPostId),
+        ctx.db.get("forumThreads", seed.publicThreadId),
+        ctx.db.get("forumThreads", result.newThread._id as Id<"forumThreads">),
+        ctx.db.get("forumCategories", seed.publicCategoryId),
+        ctx.db.get("forumCategories", seed.trustedCategoryId),
         ctx.db
           .query("forumUserProfiles")
           .withIndex("by_userId", (q) => q.eq("userId", seed.trustedUserId))
@@ -6140,7 +6142,7 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/one source thread/);
 
     await t.run(async (ctx) => {
-      await ctx.db.patch(seed.publicPostId, {
+      await ctx.db.patch("forumPosts", seed.publicPostId, {
         status: "hidden",
         updatedAt: 1_800_000_000_600,
       });
@@ -6224,14 +6226,14 @@ describe("forum privacy regressions", () => {
         targetCategory,
         profile,
       ] = await Promise.all([
-        ctx.db.get(related.emailDeliveryId),
-        ctx.db.get(related.moderationEventId),
-        ctx.db.get(result.sourceOpenerPostId as Id<"forumPosts">),
-        ctx.db.get(seed.publicPostId),
-        ctx.db.get(seed.publicThreadId),
-        ctx.db.get(seed.trustedThreadId),
-        ctx.db.get(seed.publicCategoryId),
-        ctx.db.get(seed.trustedCategoryId),
+        ctx.db.get("forumNotificationEmailDeliveries", related.emailDeliveryId),
+        ctx.db.get("forumModerationEvents", related.moderationEventId),
+        ctx.db.get("forumPosts", result.sourceOpenerPostId as Id<"forumPosts">),
+        ctx.db.get("forumPosts", seed.publicPostId),
+        ctx.db.get("forumThreads", seed.publicThreadId),
+        ctx.db.get("forumThreads", seed.trustedThreadId),
+        ctx.db.get("forumCategories", seed.publicCategoryId),
+        ctx.db.get("forumCategories", seed.trustedCategoryId),
         ctx.db
           .query("forumUserProfiles")
           .withIndex("by_userId", (q) => q.eq("userId", seed.trustedUserId))
@@ -6364,7 +6366,7 @@ describe("forum privacy regressions", () => {
           postNumber: 3,
           now,
         });
-        await ctx.db.patch(seed.publicThreadId, {
+        await ctx.db.patch("forumThreads", seed.publicThreadId, {
           replyCount: 2,
           lastAssignedPostNumber: 3,
           lastPostId: postId,
@@ -6372,7 +6374,7 @@ describe("forum privacy regressions", () => {
           lastPostUserId: seed.otherTrustedUserId,
           updatedAt: now,
         });
-        await ctx.db.patch(seed.publicCategoryId, {
+        await ctx.db.patch("forumCategories", seed.publicCategoryId, {
           postCount: 3,
           lastThreadId: seed.publicThreadId,
           lastPostId: postId,
@@ -6453,9 +6455,9 @@ describe("forum privacy regressions", () => {
       const stored = await t.run(async (ctx) => {
         const [firstMovedPost, secondMovedPost, targetThread] =
           await Promise.all([
-            ctx.db.get(seed.publicPostId),
-            ctx.db.get(extraPublicPostId),
-            ctx.db.get(seed.trustedThreadId),
+            ctx.db.get("forumPosts", seed.publicPostId),
+            ctx.db.get("forumPosts", extraPublicPostId),
+            ctx.db.get("forumThreads", seed.trustedThreadId),
           ]);
         return { firstMovedPost, secondMovedPost, targetThread };
       });
@@ -6578,10 +6580,10 @@ describe("forum privacy regressions", () => {
       const stored = await t.run(async (ctx) => {
         const [emailDelivery, moderationEvent, movedReply, movedThreadRecord] =
           await Promise.all([
-            ctx.db.get(related.emailDeliveryId),
-            ctx.db.get(related.moderationEventId),
-            ctx.db.get(seed.publicPostId),
-            ctx.db.get(seed.publicThreadId),
+            ctx.db.get("forumNotificationEmailDeliveries", related.emailDeliveryId),
+            ctx.db.get("forumModerationEvents", related.moderationEventId),
+            ctx.db.get("forumPosts", seed.publicPostId),
+            ctx.db.get("forumThreads", seed.publicThreadId),
           ]);
         return {
           emailDelivery,
@@ -6634,7 +6636,7 @@ describe("forum privacy regressions", () => {
           postNumber: 3,
           now,
         });
-        await ctx.db.patch(seed.publicThreadId, {
+        await ctx.db.patch("forumThreads", seed.publicThreadId, {
           replyCount: 2,
           lastAssignedPostNumber: 3,
           lastPostId: postId,
@@ -6642,7 +6644,7 @@ describe("forum privacy regressions", () => {
           lastPostUserId: seed.otherTrustedUserId,
           updatedAt: now,
         });
-        await ctx.db.patch(seed.publicCategoryId, {
+        await ctx.db.patch("forumCategories", seed.publicCategoryId, {
           postCount: 3,
           lastThreadId: seed.publicThreadId,
           lastPostId: postId,
@@ -6853,7 +6855,7 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/admin access/i);
 
     await t.run(async (ctx) => {
-      await ctx.db.patch(seed.publicPostId, {
+      await ctx.db.patch("forumPosts", seed.publicPostId, {
         status: "hidden",
         updatedAt: 1_800_000_000_600,
       });
@@ -7035,10 +7037,10 @@ async function insertPoll(
       updatedAt: poll.now,
     });
   }
-  const thread = await ctx.db.get(poll.threadId);
-  const category = await ctx.db.get(poll.categoryId);
+  const thread = await ctx.db.get("forumThreads", poll.threadId);
+  const category = await ctx.db.get("forumCategories", poll.categoryId);
   if (thread !== null && category !== null) {
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       searchText: [
         thread.title,
         [thread.body, poll.question, ...poll.options].join("\n"),

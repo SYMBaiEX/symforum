@@ -129,7 +129,7 @@ async function markRunFailed(
     if (run === null) {
       throw new Error("Expected a daily newsletter run");
     }
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("dailyNewsletterRuns", run._id, {
       status: "failed",
       completedAt,
       updatedAt: completedAt,

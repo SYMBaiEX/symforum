@@ -1,3 +1,5 @@
+import "server-only";
+
 import {
   type AdminCommentRecord,
   type AdminInteractionRecord,
@@ -6,10 +8,10 @@ import {
   type NewsletterSubscriberRecord,
 } from "@/lib/convex-refs";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
-import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getServerConvexClient } from "@/lib/server-convex";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -146,11 +148,11 @@ export class AdminApiError extends Error {
 }
 
 export function adminConvexClient() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) {
+  const client = getServerConvexClient();
+  if (!client) {
     throw new AdminApiError(503, "Convex is not configured");
   }
-  return new ConvexHttpClient(url);
+  return client;
 }
 
 export function tokenHashFromRequest(request: Request) {

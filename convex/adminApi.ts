@@ -45,7 +45,7 @@ async function authorize(ctx: MutationCtx, tokenHash: string) {
     throwUnauthorized();
   }
 
-  await ctx.db.patch(key._id, { lastUsedAt: Date.now() });
+  await ctx.db.patch("apiKeys", key._id, { lastUsedAt: Date.now() });
   return key;
 }
 
@@ -54,7 +54,7 @@ function throwUnauthorized(): never {
 }
 
 async function authorName(ctx: MutationCtx, userId: Id<"users">) {
-  const user = await ctx.db.get(userId);
+  const user = await ctx.db.get("users", userId);
   return user?.username ?? user?.name ?? "SYM-UNKNOWN";
 }
 
@@ -70,7 +70,7 @@ async function softDeleteComment(
     apiKeyId: Id<"apiKeys">;
   },
 ) {
-  const comment = await ctx.db.get(args.commentId);
+  const comment = await ctx.db.get("comments", args.commentId);
   if (comment === null) {
     return { deleted: false };
   }
@@ -78,7 +78,7 @@ async function softDeleteComment(
     return { deleted: true };
   }
   const now = Date.now();
-  await ctx.db.patch(comment._id, {
+  await ctx.db.patch("comments", comment._id, {
     body: "",
     status: "deleted",
     updatedAt: now,
@@ -146,11 +146,11 @@ export const upsertPost = mutation({
 
     if (existing === null) {
       const id = await ctx.db.insert("posts", post);
-      return await ctx.db.get(id);
+      return await ctx.db.get("posts", id);
     }
 
-    await ctx.db.patch(existing._id, post);
-    return await ctx.db.get(existing._id);
+    await ctx.db.patch("posts", existing._id, post);
+    return await ctx.db.get("posts", existing._id);
   },
 });
 
@@ -165,7 +165,7 @@ export const deletePost = mutation({
     if (existing === null) {
       return { deleted: false };
     }
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete("posts", existing._id);
     return { deleted: true };
   },
 });
@@ -274,7 +274,7 @@ export const deleteInteraction = mutation({
   args: { tokenHash: v.string(), interactionId: v.id("interactions") },
   handler: async (ctx, args) => {
     await authorize(ctx, args.tokenHash);
-    await ctx.db.delete(args.interactionId);
+    await ctx.db.delete("interactions", args.interactionId);
     return { deleted: true };
   },
 });
@@ -329,11 +329,11 @@ export const upsertNewsletterIssue = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      return await ctx.db.get(id);
+      return await ctx.db.get("newsletterIssues", id);
     }
 
-    await ctx.db.patch(existing._id, { ...issue, updatedAt: now });
-    return await ctx.db.get(existing._id);
+    await ctx.db.patch("newsletterIssues", existing._id, { ...issue, updatedAt: now });
+    return await ctx.db.get("newsletterIssues", existing._id);
   },
 });
 
@@ -372,7 +372,7 @@ export const scheduleNewsletterIssue = mutation({
     if (issue.status === "sent") {
       throw new ConvexError({ code: "ALREADY_SENT" });
     }
-    await ctx.db.patch(issue._id, {
+    await ctx.db.patch("newsletterIssues", issue._id, {
       status: "scheduled",
       scheduledAt: args.scheduledAt,
       errorMessage: undefined,
@@ -396,7 +396,7 @@ export const sendNewsletterIssueNow = mutation({
     if (issue.status === "sent") {
       throw new ConvexError({ code: "ALREADY_SENT" });
     }
-    await ctx.db.patch(issue._id, {
+    await ctx.db.patch("newsletterIssues", issue._id, {
       status: "scheduled",
       scheduledAt: Date.now(),
       errorMessage: undefined,

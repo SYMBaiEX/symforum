@@ -708,7 +708,7 @@ export const startDailyRun = internalMutation({
     }
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("dailyNewsletterRuns", existing._id, {
         status: "running",
         mode: args.mode,
         sendEnabled: args.sendEnabled,
@@ -792,7 +792,7 @@ export const upsertDailyIssue = internalMutation({
         throw new Error("Daily newsletter issue has already been sent");
       }
       issueId = existingIssue._id;
-      await ctx.db.patch(issueId, {
+      await ctx.db.patch("newsletterIssues", issueId, {
         subject: args.subject,
         previewText: args.previewText.slice(0, 240),
         body: args.payloadJson,
@@ -808,7 +808,7 @@ export const upsertDailyIssue = internalMutation({
       });
     }
 
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("dailyNewsletterRuns", args.runId, {
       status: "generated",
       snapshotDate: args.snapshotDate,
       issueId,
@@ -843,9 +843,9 @@ export const markDailyRunSkipped = internalMutation({
     issueId: v.optional(v.id("newsletterIssues")),
   },
   handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("dailyNewsletterRuns", args.runId);
     const now = Date.now();
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("dailyNewsletterRuns", args.runId, {
       status: "skipped",
       completedAt: now,
       issueId: args.issueId ?? run?.issueId,
@@ -863,7 +863,7 @@ export const markDailyRunFailed = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("dailyNewsletterRuns", args.runId, {
       status: "failed",
       completedAt: now,
       errorMessage: args.errorMessage.slice(0, 1000),
@@ -1038,7 +1038,7 @@ async function setSettingDirect(ctx: MutationCtx, key: string, value: string) {
     .unique();
   const now = Date.now();
   if (existing) {
-    await ctx.db.patch(existing._id, { value, updatedAt: now });
+    await ctx.db.patch("newsletterSettings", existing._id, { value, updatedAt: now });
   } else {
     await ctx.db.insert("newsletterSettings", { key, value, updatedAt: now });
   }

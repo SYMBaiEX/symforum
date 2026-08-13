@@ -1047,7 +1047,7 @@ export const getAnnouncement = query({
         if (candidate.categoryId === undefined) {
           continue;
         }
-        const candidateCategory = await ctx.db.get(candidate.categoryId);
+        const candidateCategory = await ctx.db.get("forumCategories", candidate.categoryId);
         if (
           candidateCategory !== null &&
           (await canViewCategoryWithAncestors(ctx, viewer, candidateCategory))
@@ -1535,13 +1535,14 @@ export const listThreads = query({
 export const listRecentThreads = query({
   args: {
     mode: recentThreadModeValidator,
+    now: v.number(),
     limit: v.optional(v.number()),
     page: v.optional(v.number()),
     pageSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const viewer = await maybeCurrentUser(ctx);
-    const now = Date.now();
+    const now = args.now;
     const pageSize = normalizePageSize(
       args.pageSize ?? args.limit,
       THREAD_PAGE_SIZE,
@@ -2618,7 +2619,7 @@ export const recordPresence = mutation({
       return { recorded: true, presenceId, lastSeenAt: now };
     }
 
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("forumPresence", existing._id, {
       locationType: args.locationType,
       path: forumPath,
       label,
@@ -2650,7 +2651,7 @@ export const markNotificationRead = mutation({
       });
       const visibleUnread = unread.visible;
       for (const { notification } of visibleUnread) {
-        await ctx.db.patch(notification._id, {
+        await ctx.db.patch("forumNotifications", notification._id, {
           status: "read",
           readAt: now,
           updatedAt: now,
@@ -2665,7 +2666,7 @@ export const markNotificationRead = mutation({
         "Choose a notification to mark read.",
       );
     }
-    const notification = await ctx.db.get(args.notificationId);
+    const notification = await ctx.db.get("forumNotifications", args.notificationId);
     if (notification === null || notification.recipientUserId !== user._id) {
       throw forumError(
         "NOTIFICATION_NOT_FOUND",
@@ -2675,7 +2676,7 @@ export const markNotificationRead = mutation({
     if (notification.status === "read") {
       return { marked: 0 };
     }
-    await ctx.db.patch(notification._id, {
+    await ctx.db.patch("forumNotifications", notification._id, {
       status: "read",
       readAt: now,
       updatedAt: now,
@@ -2944,7 +2945,7 @@ export const markPrivateMessageRead = mutation({
       user,
       "Ask the site owner to approve your forum access before using private messages.",
     );
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("forumPrivateMessages", args.messageId);
     if (
       message === null ||
       message.recipientUserId !== user._id ||
@@ -2958,7 +2959,7 @@ export const markPrivateMessageRead = mutation({
     if (message.readAt !== undefined) {
       return { marked: false };
     }
-    await ctx.db.patch(message._id, {
+    await ctx.db.patch("forumPrivateMessages", message._id, {
       readAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -2980,7 +2981,7 @@ export const deletePrivateMessage = mutation({
       user,
       "Ask the site owner to approve your forum access before using private messages.",
     );
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("forumPrivateMessages", args.messageId);
     if (message === null) {
       throw forumError(
         "PRIVATE_MESSAGE_NOT_FOUND",
@@ -2999,7 +3000,7 @@ export const deletePrivateMessage = mutation({
           "That private message is not available.",
         );
       }
-      await ctx.db.patch(message._id, {
+      await ctx.db.patch("forumPrivateMessages", message._id, {
         senderDeletedAt: now,
         updatedAt: now,
       });
@@ -3012,7 +3013,7 @@ export const deletePrivateMessage = mutation({
         message.recipientDeletedAt !== undefined &&
         message.recipientPurgedAt === undefined
       ) {
-        await ctx.db.patch(message._id, {
+        await ctx.db.patch("forumPrivateMessages", message._id, {
           recipientPurgedAt: now,
           updatedAt: now,
         });
@@ -3023,7 +3024,7 @@ export const deletePrivateMessage = mutation({
         message.senderDeletedAt !== undefined &&
         message.senderPurgedAt === undefined
       ) {
-        await ctx.db.patch(message._id, {
+        await ctx.db.patch("forumPrivateMessages", message._id, {
           senderPurgedAt: now,
           updatedAt: now,
         });
@@ -3045,7 +3046,7 @@ export const deletePrivateMessage = mutation({
         "That private message is not available.",
       );
     }
-    await ctx.db.patch(message._id, {
+    await ctx.db.patch("forumPrivateMessages", message._id, {
       recipientDeletedAt: now,
       readAt: message.readAt ?? now,
       updatedAt: now,
@@ -3067,7 +3068,7 @@ export const restorePrivateMessage = mutation({
       user,
       "Ask the site owner to approve your forum access before using private messages.",
     );
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("forumPrivateMessages", args.messageId);
     if (message === null) {
       throw forumError(
         "PRIVATE_MESSAGE_NOT_FOUND",
@@ -3080,7 +3081,7 @@ export const restorePrivateMessage = mutation({
       message.recipientDeletedAt !== undefined &&
       message.recipientPurgedAt === undefined
     ) {
-      await ctx.db.patch(message._id, {
+      await ctx.db.patch("forumPrivateMessages", message._id, {
         recipientDeletedAt: undefined,
         updatedAt: now,
       });
@@ -3091,7 +3092,7 @@ export const restorePrivateMessage = mutation({
       message.senderDeletedAt !== undefined &&
       message.senderPurgedAt === undefined
     ) {
-      await ctx.db.patch(message._id, {
+      await ctx.db.patch("forumPrivateMessages", message._id, {
         senderDeletedAt: undefined,
         updatedAt: now,
       });
@@ -3142,7 +3143,7 @@ export const listMembers = query({
     const rowsByUserId = new Map<Id<"users">, ForumMemberListRecord>();
     const profileRows = await Promise.all(
       profiles.map(async (profile) => {
-        const user = await ctx.db.get(profile.userId);
+        const user = await ctx.db.get("users", profile.userId);
         return { profile, user };
       }),
     );
@@ -3228,7 +3229,7 @@ export const listOnlineMembers = query({
     const activePresenceUsers = await Promise.all(
       activePresences.map(
         async (presence) =>
-          [presence, await ctx.db.get(presence.userId)] as const,
+          [presence, await ctx.db.get("users", presence.userId)] as const,
       ),
     );
     const visiblePresenceUsers = activePresenceUsers.flatMap(
@@ -3440,7 +3441,7 @@ export const listMyForumRelationships = query({
     const targetUserEntries = await Promise.all(
       [...new Set(rows.map((row) => row.targetUserId))].map(
         async (targetUserId) =>
-          [targetUserId, await ctx.db.get(targetUserId)] as const,
+          [targetUserId, await ctx.db.get("users", targetUserId)] as const,
       ),
     );
     const targetUsersById = new Map(
@@ -3535,7 +3536,7 @@ export const claimStoredForumAttachmentUpload = internalMutation({
           "That attachment upload is not available.",
         );
       }
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("forumPendingUploads", existing._id, {
         filename: normalized.filename,
         contentType: normalized.contentType,
         size: normalized.size,
@@ -3589,12 +3590,12 @@ export const cleanupForumAttachmentStorage = internalMutation({
 
     for (const pendingUpload of expiredPendingUploads) {
       await deleteForumStorageObjectIfPresent(ctx, pendingUpload.storageId);
-      await ctx.db.delete(pendingUpload._id);
+      await ctx.db.delete("forumPendingUploads", pendingUpload._id);
     }
 
     for (const attachment of deletedAttachments) {
       await deleteForumStorageObjectIfPresent(ctx, attachment.storageId);
-      await ctx.db.delete(attachment._id);
+      await ctx.db.delete("forumAttachments", attachment._id);
     }
 
     return {
@@ -3766,7 +3767,7 @@ export const createThread = mutation({
         now,
       });
 
-      await ctx.db.patch(category._id, {
+      await ctx.db.patch("forumCategories", category._id, {
         threadCount: category.threadCount + 1,
         postCount: category.postCount + 1,
         lastThreadId: threadId,
@@ -3894,7 +3895,7 @@ export const updateMyForumProfile = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const created = await ctx.db.get(profileId);
+      const created = await ctx.db.get("forumUserProfiles", profileId);
       if (created === null) {
         throw new Error("Forum profile could not be reloaded");
       }
@@ -3906,7 +3907,7 @@ export const updateMyForumProfile = mutation({
       return myForumProfileRecord(user, created, warningSummary);
     }
 
-    await ctx.db.patch(profile._id, {
+    await ctx.db.patch("forumUserProfiles", profile._id, {
       avatarUrl,
       bio,
       birthday,
@@ -3918,7 +3919,7 @@ export const updateMyForumProfile = mutation({
       websiteUrl,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(profile._id);
+    const updated = await ctx.db.get("forumUserProfiles", profile._id);
     if (updated === null) {
       throw new Error("Forum profile could not be reloaded");
     }
@@ -3965,18 +3966,18 @@ export const updateMyForumNotificationPreferences = mutation({
           updatedAt: now,
         },
       );
-      const created = await ctx.db.get(preferencesId);
+      const created = await ctx.db.get("forumNotificationPreferences", preferencesId);
       if (created === null) {
         throw new Error("Forum notification preferences could not be reloaded");
       }
       return myForumNotificationPreferencesRecord(user, created);
     }
 
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("forumNotificationPreferences", existing._id, {
       ...nextSettings,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(existing._id);
+    const updated = await ctx.db.get("forumNotificationPreferences", existing._id);
     if (updated === null) {
       throw new Error("Forum notification preferences could not be reloaded");
     }
@@ -4057,7 +4058,7 @@ export const updateForumRelationship = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const record = await ctx.db.get(relationshipId);
+      const record = await ctx.db.get("forumUserRelationships", relationshipId);
       if (record === null) {
         throw new Error("Forum relationship record could not be reloaded");
       }
@@ -4073,7 +4074,7 @@ export const updateForumRelationship = mutation({
     }
 
     if (existing !== null) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete("forumUserRelationships", existing._id);
     }
     return {
       enabled: false,
@@ -4095,7 +4096,7 @@ export const createReply = mutation({
       ctx,
       "Sign in with a SYM handle to reply.",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError(
         "THREAD_NOT_FOUND",
@@ -4189,7 +4190,7 @@ export const createReply = mutation({
     });
 
     if (initialStatus === "pending") {
-      await ctx.db.patch(thread._id, {
+      await ctx.db.patch("forumThreads", thread._id, {
         lastAssignedPostNumber: postNumber,
         updatedAt: now,
       });
@@ -4221,7 +4222,7 @@ export const createReply = mutation({
       };
     }
 
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
       lastPostId: postId,
@@ -4230,7 +4231,7 @@ export const createReply = mutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
       lastPostId: postId,
@@ -4321,7 +4322,7 @@ export const readForumNotificationEmailDelivery = internalQuery({
     deliveryId: v.id("forumNotificationEmailDeliveries"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.deliveryId);
+    return await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
   },
 });
 
@@ -4330,7 +4331,7 @@ export const readForumNotificationEmailDeliveryContext = internalQuery({
     deliveryId: v.id("forumNotificationEmailDeliveries"),
   },
   handler: async (ctx, args) => {
-    const delivery = await ctx.db.get(args.deliveryId);
+    const delivery = await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
     if (delivery === null) {
       return forumNotificationEmailNotReady(
         "Forum email delivery no longer exists",
@@ -4343,10 +4344,10 @@ export const readForumNotificationEmailDeliveryContext = internalQuery({
     }
 
     const [recipient, actor, category, thread] = await Promise.all([
-      ctx.db.get(delivery.recipientUserId),
-      ctx.db.get(delivery.actorUserId),
-      ctx.db.get(delivery.categoryId),
-      ctx.db.get(delivery.threadId),
+      ctx.db.get("users", delivery.recipientUserId),
+      ctx.db.get("users", delivery.actorUserId),
+      ctx.db.get("forumCategories", delivery.categoryId),
+      ctx.db.get("forumThreads", delivery.threadId),
     ]);
     if (recipient === null) {
       return forumNotificationEmailNotReady("Forum email recipient is missing");
@@ -4403,7 +4404,7 @@ export const readForumNotificationEmailDeliveryContext = internalQuery({
     }
 
     const post =
-      delivery.postId === undefined ? null : await ctx.db.get(delivery.postId);
+      delivery.postId === undefined ? null : await ctx.db.get("forumPosts", delivery.postId);
     if (delivery.type === "reply") {
       if (post === null || post.status !== "active") {
         return forumNotificationEmailNotReady(
@@ -4441,11 +4442,11 @@ export const markForumNotificationEmailDeliveryState = internalMutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const delivery = await ctx.db.get(args.deliveryId);
+    const delivery = await ctx.db.get("forumNotificationEmailDeliveries", args.deliveryId);
     if (delivery === null) {
       return null;
     }
-    await ctx.db.patch(args.deliveryId, {
+    await ctx.db.patch("forumNotificationEmailDeliveries", args.deliveryId, {
       status: args.status,
       reason: args.reason,
       sentAt: args.sentAt,
@@ -4498,7 +4499,7 @@ export const recordThreadView = mutation({
   },
   handler: async (ctx, args) => {
     const user = await maybeCurrentUser(ctx);
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       return { recorded: false, viewCount: null };
     }
@@ -4535,12 +4536,12 @@ export const recordThreadView = mutation({
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("forumThreadViews", existing._id, {
         lastViewedAt: now,
         updatedAt: now,
       });
     }
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       viewCount: nextViewCount,
       updatedAt: now,
     });
@@ -4561,7 +4562,7 @@ export const markThreadRead = mutation({
       ctx,
       "Sign in to mark forum threads read.",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -4666,7 +4667,7 @@ export const toggleThreadSubscription = mutation({
       ctx,
       "Sign in to subscribe to threads.",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -4691,7 +4692,7 @@ export const toggleThreadSubscription = mutation({
     }
 
     const nextStatus = existing.status === "active" ? "muted" : "active";
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("forumThreadSubscriptions", existing._id, {
       status: nextStatus,
       updatedAt: now,
     });
@@ -4712,7 +4713,7 @@ export const setThreadBookmark = mutation({
       ctx,
       "Sign in to save forum threads.",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -4725,7 +4726,7 @@ export const setThreadBookmark = mutation({
 
     if (!args.saved) {
       if (existing !== null) {
-        await ctx.db.delete(existing._id);
+        await ctx.db.delete("forumThreadBookmarks", existing._id);
       }
       return { saved: false, bookmarkId: existing?._id ?? null };
     }
@@ -4774,7 +4775,7 @@ export const toggleCategorySubscription = mutation({
     }
 
     const nextStatus = existing.status === "active" ? "muted" : "active";
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("forumCategorySubscriptions", existing._id, {
       status: nextStatus,
       updatedAt: now,
     });
@@ -4795,11 +4796,11 @@ export const votePoll = mutation({
       ctx,
       "Sign in with a SYM handle to vote.",
     );
-    const poll = await ctx.db.get(args.pollId);
+    const poll = await ctx.db.get("forumPolls", args.pollId);
     if (poll === null) {
       throw forumError("POLL_NOT_FOUND", "That poll is not available.");
     }
-    const thread = await ctx.db.get(poll.threadId);
+    const thread = await ctx.db.get("forumThreads", poll.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -4823,7 +4824,7 @@ export const votePoll = mutation({
       throw forumError("POLL_CLOSED", "That poll is closed.");
     }
 
-    const option = await ctx.db.get(args.optionId);
+    const option = await ctx.db.get("forumPollOptions", args.optionId);
     if (
       option === null ||
       option.pollId !== poll._id ||
@@ -4838,8 +4839,8 @@ export const votePoll = mutation({
     const existingVote = await loadPollVote(ctx, poll._id, user._id);
     if (existingVote !== null) {
       if (existingVote.optionId === option._id) {
-        const currentPoll = await ctx.db.get(poll._id);
-        const currentThread = await ctx.db.get(thread._id);
+        const currentPoll = await ctx.db.get("forumPolls", poll._id);
+        const currentThread = await ctx.db.get("forumThreads", thread._id);
         return {
           voted: false,
           poll:
@@ -4865,16 +4866,16 @@ export const votePoll = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.patch(option._id, {
+    await ctx.db.patch("forumPollOptions", option._id, {
       voteCount: option.voteCount + 1,
       updatedAt: now,
     });
-    await ctx.db.patch(poll._id, {
+    await ctx.db.patch("forumPolls", poll._id, {
       totalVotes: poll.totalVotes + 1,
       updatedAt: now,
     });
 
-    const updatedPoll = await ctx.db.get(poll._id);
+    const updatedPoll = await ctx.db.get("forumPolls", poll._id);
     if (updatedPoll === null) {
       throw new Error("Poll could not be reloaded");
     }
@@ -4893,11 +4894,11 @@ export const updatePollContent = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(ctx, "Sign in to edit this poll.");
-    const poll = await ctx.db.get(args.pollId);
+    const poll = await ctx.db.get("forumPolls", args.pollId);
     if (poll === null) {
       throw forumError("POLL_NOT_FOUND", "That poll is not available.");
     }
-    const thread = await ctx.db.get(poll.threadId);
+    const thread = await ctx.db.get("forumThreads", poll.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -4970,13 +4971,13 @@ export const updatePollContent = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(poll._id, {
+    await ctx.db.patch("forumPolls", poll._id, {
       question: normalized.question,
       optionCount: normalized.options.length,
       updatedAt: now,
     });
     for (const option of existingOptions) {
-      await ctx.db.delete(option._id);
+      await ctx.db.delete("forumPollOptions", option._id);
     }
     for (const [position, label] of normalized.options.entries()) {
       await ctx.db.insert("forumPollOptions", {
@@ -4990,8 +4991,8 @@ export const updatePollContent = mutation({
       });
     }
 
-    const author = displayName(await ctx.db.get(thread.authorId));
-    await ctx.db.patch(thread._id, {
+    const author = displayName(await ctx.db.get("users", thread.authorId));
+    await ctx.db.patch("forumThreads", thread._id, {
       searchText: buildThreadSearchText(
         category,
         thread.title,
@@ -5004,7 +5005,7 @@ export const updatePollContent = mutation({
       updatedAt: now,
     });
 
-    const updatedPoll = await ctx.db.get(poll._id);
+    const updatedPoll = await ctx.db.get("forumPolls", poll._id);
     if (updatedPoll === null) {
       throw new Error("Poll could not be reloaded");
     }
@@ -5037,7 +5038,7 @@ export const setForumReputation = mutation({
       "Ask the site owner to approve your forum access before rating posts.",
     );
     await assertForumParticipationAllowed(ctx, user, "rate forum posts");
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5055,7 +5056,7 @@ export const setForumReputation = mutation({
       if (args.postId === undefined) {
         throw forumError("POST_NOT_FOUND", "Choose a reply to rate.");
       }
-      post = await ctx.db.get(args.postId);
+      post = await ctx.db.get("forumPosts", args.postId);
       if (
         post === null ||
         post.threadId !== thread._id ||
@@ -5119,9 +5120,9 @@ export const setForumReputation = mutation({
         updatedAt: now,
       });
     } else if (existing !== null && nextScore === 0) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete("forumReputations", existing._id);
     } else if (existing !== null && nextScore !== 0) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("forumReputations", existing._id, {
         score: nextScore,
         comment,
         updatedAt: now,
@@ -5157,7 +5158,7 @@ export const rateThread = mutation({
     );
     await assertForumParticipationAllowed(ctx, user, "rate threads");
 
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5189,9 +5190,9 @@ export const rateThread = mutation({
         updatedAt: now,
       });
     } else if (existing !== null && nextStoredScore === null) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete("forumThreadRatings", existing._id);
     } else if (existing !== null && nextStoredScore !== null) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("forumThreadRatings", existing._id, {
         score: nextStoredScore,
         categoryId: category._id,
         updatedAt: now,
@@ -5210,7 +5211,7 @@ export const rateThread = mutation({
             : 0),
     );
     const nextTotal = Math.max(0, previousTotal - previousScore + nextScore);
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       ratingCount: nextCount,
       ratingTotal: nextTotal,
     });
@@ -5236,7 +5237,7 @@ export const updateThreadContent = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(ctx, "Sign in to edit this thread.");
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5283,14 +5284,14 @@ export const updateThreadContent = mutation({
       !prefixChanged &&
       attachmentEditPlan?.changed !== true
     ) {
-      const author = displayName(await ctx.db.get(thread.authorId));
+      const author = displayName(await ctx.db.get("users", thread.authorId));
       const lastPostAuthor = displayName(
-        await ctx.db.get(thread.lastPostUserId),
+        await ctx.db.get("users", thread.lastPostUserId),
       );
       const lastEditedByName =
         thread.lastEditedBy === undefined
           ? undefined
-          : displayName(await ctx.db.get(thread.lastEditedBy));
+          : displayName(await ctx.db.get("users", thread.lastEditedBy));
       const attachments = await hydrateForumAttachments(
         ctx,
         attachmentEditPlan?.currentAttachments ??
@@ -5322,7 +5323,7 @@ export const updateThreadContent = mutation({
     }
 
     const now = Date.now();
-    const threadAuthorName = displayName(await ctx.db.get(thread.authorId));
+    const threadAuthorName = displayName(await ctx.db.get("users", thread.authorId));
     await recordForumContentEdit(ctx, {
       entityType: "thread",
       threadId: thread._id,
@@ -5339,7 +5340,7 @@ export const updateThreadContent = mutation({
       editReason,
       createdAt: now,
     });
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       ...nextPrefixSnapshot,
       title,
       body,
@@ -5368,13 +5369,13 @@ export const updateThreadContent = mutation({
       });
     }
 
-    const updated = await ctx.db.get(thread._id);
+    const updated = await ctx.db.get("forumThreads", thread._id);
     if (updated === null) {
       throw new Error("Thread could not be reloaded");
     }
     const author = threadAuthorName;
     const lastPostAuthor = displayName(
-      await ctx.db.get(updated.lastPostUserId),
+      await ctx.db.get("users", updated.lastPostUserId),
     );
     const attachments = await hydrateForumAttachments(
       ctx,
@@ -5416,11 +5417,11 @@ export const updatePostContent = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(ctx, "Sign in to edit this reply.");
-    const post = await ctx.db.get(args.postId);
+    const post = await ctx.db.get("forumPosts", args.postId);
     if (post === null || post.status !== "active") {
       throw forumError("POST_NOT_FOUND", "That reply is not available.");
     }
-    const thread = await ctx.db.get(post.threadId);
+    const thread = await ctx.db.get("forumThreads", post.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5454,7 +5455,7 @@ export const updatePostContent = mutation({
       const lastEditedByName =
         post.lastEditedBy === undefined
           ? undefined
-          : displayName(await ctx.db.get(post.lastEditedBy));
+          : displayName(await ctx.db.get("users", post.lastEditedBy));
       const attachments = await hydrateForumAttachments(
         ctx,
         attachmentEditPlan?.currentAttachments ??
@@ -5464,7 +5465,7 @@ export const updatePostContent = mutation({
         updated: false,
         post: publicPostRecord(
           post,
-          displayName(await ctx.db.get(post.authorId)),
+          displayName(await ctx.db.get("users", post.authorId)),
           {
             viewerCanEdit: true,
             viewerCanDelete: canDeletePost(
@@ -5493,7 +5494,7 @@ export const updatePostContent = mutation({
       editReason,
       createdAt: now,
     });
-    await ctx.db.patch(post._id, {
+    await ctx.db.patch("forumPosts", post._id, {
       body,
       updatedAt: now,
       lastEditedAt: now,
@@ -5512,7 +5513,7 @@ export const updatePostContent = mutation({
         now,
       });
     }
-    const updated = await ctx.db.get(post._id);
+    const updated = await ctx.db.get("forumPosts", post._id);
     if (updated === null) {
       throw new Error("Post could not be reloaded");
     }
@@ -5547,7 +5548,7 @@ export const deleteThread = mutation({
       ctx,
       "Sign in to delete this thread.",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5579,7 +5580,7 @@ export const deleteThread = mutation({
       false,
       now,
     );
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       status: "deleted",
       deletedAt: now,
       deletedBy: user._id,
@@ -5587,7 +5588,7 @@ export const deleteThread = mutation({
       visibilityProfileDeltaToken,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       threadCount: Math.max(0, category.threadCount - 1),
       postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
       updatedAt: now,
@@ -5627,11 +5628,11 @@ export const deletePost = mutation({
       ctx,
       "Sign in to delete this reply.",
     );
-    const post = await ctx.db.get(args.postId);
+    const post = await ctx.db.get("forumPosts", args.postId);
     if (post === null || post.status !== "active") {
       throw forumError("POST_NOT_FOUND", "That reply is not available.");
     }
-    const thread = await ctx.db.get(post.threadId);
+    const thread = await ctx.db.get("forumThreads", post.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5653,18 +5654,18 @@ export const deletePost = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(post._id, {
+    await ctx.db.patch("forumPosts", post._id, {
       status: "deleted",
       deletedAt: now,
       deletedBy: user._id,
       updatedAt: now,
     });
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       replyCount: Math.max(0, thread.replyCount - 1),
       updatedAt: now,
     });
     await recomputeThreadActivity(ctx, thread._id);
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       postCount: Math.max(0, category.postCount - 1),
       updatedAt: now,
     });
@@ -5717,7 +5718,7 @@ export const createReport = mutation({
       reporter,
       "report forum content",
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -5732,7 +5733,7 @@ export const createReport = mutation({
       if (args.postId === undefined) {
         throw forumError("INVALID_REPORT", "Choose a post to report.");
       }
-      post = await ctx.db.get(args.postId);
+      post = await ctx.db.get("forumPosts", args.postId);
       if (
         post === null ||
         post.threadId !== thread._id ||
@@ -5800,7 +5801,7 @@ export const createReport = mutation({
     }
 
     const snapshotAuthorId = post?.authorId ?? thread.authorId;
-    const snapshotAuthor = await ctx.db.get(snapshotAuthorId);
+    const snapshotAuthor = await ctx.db.get("users", snapshotAuthorId);
     const snapshotBody = post?.body ?? thread.body;
     const reportId = await ctx.db.insert("forumReports", {
       reporterId: reporter._id,
@@ -5868,7 +5869,7 @@ export const createPrivateMessageReport = mutation({
       "report private messages",
     );
 
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("forumPrivateMessages", args.messageId);
     if (
       message === null ||
       message.recipientUserId !== reporter._id ||
@@ -5935,7 +5936,7 @@ export const createPrivateMessageReport = mutation({
       );
     }
 
-    const sender = await ctx.db.get(message.senderUserId);
+    const sender = await ctx.db.get("users", message.senderUserId);
     const reportId = await ctx.db.insert("forumReports", {
       reporterId: reporter._id,
       entityType: "privateMessage",
@@ -6038,7 +6039,7 @@ export const assignCategoryModerator = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireForumAdmin(ctx);
-    const category = await ctx.db.get(args.categoryId);
+    const category = await ctx.db.get("forumCategories", args.categoryId);
     if (category === null || !isBoardCategory(category)) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -6107,7 +6108,7 @@ export const assignCategoryModerator = mutation({
       },
     });
 
-    const moderator = await ctx.db.get(moderatorId);
+    const moderator = await ctx.db.get("forumCategoryModerators", moderatorId);
     if (moderator === null) {
       throw new Error("Category moderator assignment could not be reloaded");
     }
@@ -6130,7 +6131,7 @@ export const removeCategoryModerator = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireForumAdmin(ctx);
-    const assignment = await ctx.db.get(args.moderatorId);
+    const assignment = await ctx.db.get("forumCategoryModerators", args.moderatorId);
     if (assignment === null) {
       throw forumError(
         "CATEGORY_MODERATOR_NOT_FOUND",
@@ -6138,10 +6139,10 @@ export const removeCategoryModerator = mutation({
       );
     }
     const [category, target] = await Promise.all([
-      ctx.db.get(assignment.categoryId),
-      ctx.db.get(assignment.userId),
+      ctx.db.get("forumCategories", assignment.categoryId),
+      ctx.db.get("users", assignment.userId),
     ]);
-    await ctx.db.delete(assignment._id);
+    await ctx.db.delete("forumCategoryModerators", assignment._id);
 
     await recordModerationLog(ctx, {
       actorUserId: actor._id,
@@ -6779,7 +6780,7 @@ export const listForumModerationEvents = query({
           ? []
           : threadId !== undefined
             ? await (async () => {
-                const thread = await ctx.db.get(threadId);
+                const thread = await ctx.db.get("forumThreads", threadId);
                 if (
                   thread === null ||
                   !includesCategoryId(scopedCategoryIds, thread.categoryId)
@@ -6942,7 +6943,7 @@ export const issueForumWarning = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const target = await ctx.db.get(args.targetUserId);
+    const target = await ctx.db.get("users", args.targetUserId);
     if (target === null) {
       throw forumError(
         "WARNING_TARGET_NOT_FOUND",
@@ -6990,7 +6991,7 @@ export const issueForumWarning = mutation({
       await assertCanModerateCategory(
         ctx,
         actor,
-        await ctx.db.get(targetContext.categoryId),
+        await ctx.db.get("forumCategories", targetContext.categoryId),
       );
     }
 
@@ -7011,7 +7012,7 @@ export const issueForumWarning = mutation({
     });
 
     if (targetContext.report !== null) {
-      await ctx.db.patch(targetContext.report._id, {
+      await ctx.db.patch("forumReports", targetContext.report._id, {
         status: "reviewed",
         updatedAt: now,
         reviewedAt: now,
@@ -7062,14 +7063,14 @@ export const issueForumWarning = mutation({
       },
     });
 
-    const warning = await ctx.db.get(warningId);
+    const warning = await ctx.db.get("forumWarnings", warningId);
     if (warning === null) {
       throw new Error("Warning could not be reloaded");
     }
     const report =
       targetContext.report === null
         ? null
-        : await ctx.db.get(targetContext.report._id);
+        : await ctx.db.get("forumReports", targetContext.report._id);
 
     return {
       issued: true,
@@ -7094,7 +7095,7 @@ export const updateForumWarningStatus = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const warning = await ctx.db.get(args.warningId);
+    const warning = await ctx.db.get("forumWarnings", args.warningId);
     if (warning === null) {
       throw forumError("WARNING_NOT_FOUND", "That warning no longer exists.");
     }
@@ -7109,7 +7110,7 @@ export const updateForumWarningStatus = mutation({
       await assertCanModerateCategory(
         ctx,
         actor,
-        await ctx.db.get(warning.categoryId),
+        await ctx.db.get("forumCategories", warning.categoryId),
       );
     }
     const moderationNote =
@@ -7126,7 +7127,7 @@ export const updateForumWarningStatus = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(warning._id, {
+    await ctx.db.patch("forumWarnings", warning._id, {
       status: args.status,
       moderationNote,
       revokedAt: args.status === "revoked" ? now : undefined,
@@ -7154,7 +7155,7 @@ export const updateForumWarningStatus = mutation({
       },
     });
 
-    const updated = await ctx.db.get(warning._id);
+    const updated = await ctx.db.get("forumWarnings", warning._id);
     if (updated === null) {
       throw new Error("Warning could not be reloaded");
     }
@@ -7173,7 +7174,7 @@ export const updateForumReportStatus = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const report = await ctx.db.get(args.reportId);
+    const report = await ctx.db.get("forumReports", args.reportId);
     if (report === null) {
       throw forumError("REPORT_NOT_FOUND", "That report no longer exists.");
     }
@@ -7188,7 +7189,7 @@ export const updateForumReportStatus = mutation({
       await assertCanModerateCategory(
         ctx,
         actor,
-        await ctx.db.get(report.categoryId),
+        await ctx.db.get("forumCategories", report.categoryId),
       );
     }
 
@@ -7211,7 +7212,7 @@ export const updateForumReportStatus = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(report._id, {
+    await ctx.db.patch("forumReports", report._id, {
       status: args.status,
       updatedAt: now,
       reviewedAt: args.status === "open" ? undefined : now,
@@ -7238,7 +7239,7 @@ export const updateForumReportStatus = mutation({
       },
     });
 
-    const updated = await ctx.db.get(report._id);
+    const updated = await ctx.db.get("forumReports", report._id);
     if (updated === null) {
       throw new Error("Report could not be reloaded");
     }
@@ -7261,15 +7262,15 @@ export const updateForumPollStatus = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const poll = await ctx.db.get(args.pollId);
+    const poll = await ctx.db.get("forumPolls", args.pollId);
     if (poll === null) {
       throw forumError("POLL_NOT_FOUND", "That poll no longer exists.");
     }
-    const thread = await ctx.db.get(poll.threadId);
+    const thread = await ctx.db.get("forumThreads", poll.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
-    const category = await ctx.db.get(poll.categoryId);
+    const category = await ctx.db.get("forumCategories", poll.categoryId);
     await assertCanModerateCategory(ctx, actor, category);
     if (args.status === "open") {
       if (thread.status !== "active" || category?.status !== "active") {
@@ -7288,7 +7289,7 @@ export const updateForumPollStatus = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(poll._id, {
+    await ctx.db.patch("forumPolls", poll._id, {
       status: args.status,
       updatedAt: now,
       closedAt: args.status === "closed" ? now : undefined,
@@ -7311,7 +7312,7 @@ export const updateForumPollStatus = mutation({
       },
     });
 
-    const updated = await ctx.db.get(poll._id);
+    const updated = await ctx.db.get("forumPolls", poll._id);
     if (updated === null) {
       throw new Error("Poll could not be reloaded");
     }
@@ -7402,7 +7403,7 @@ export const upsertForumCategory = mutation({
         updatedAt: now,
       });
 
-      const category = await ctx.db.get(categoryId);
+      const category = await ctx.db.get("forumCategories", categoryId);
       if (category === null) {
         throw new Error("Category could not be reloaded");
       }
@@ -7429,7 +7430,7 @@ export const upsertForumCategory = mutation({
       return adminCategoryRecord(category, undefined, []);
     }
 
-    const category = await ctx.db.get(args.categoryId);
+    const category = await ctx.db.get("forumCategories", args.categoryId);
     if (category === null) {
       throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
     }
@@ -7456,7 +7457,7 @@ export const upsertForumCategory = mutation({
       );
     }
 
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       slug,
       name,
       description,
@@ -7474,7 +7475,7 @@ export const upsertForumCategory = mutation({
       updatedAt: now,
     });
 
-    const updated = await ctx.db.get(category._id);
+    const updated = await ctx.db.get("forumCategories", category._id);
     if (updated === null) {
       throw new Error("Category could not be reloaded");
     }
@@ -7579,7 +7580,7 @@ export const upsertThreadPrefixAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const prefix = await ctx.db.get(prefixId);
+      const prefix = await ctx.db.get("forumThreadPrefixes", prefixId);
       if (prefix === null) {
         throw new Error("Thread prefix could not be reloaded");
       }
@@ -7602,7 +7603,7 @@ export const upsertThreadPrefixAdmin = mutation({
       return adminThreadPrefixRecord(prefix, category);
     }
 
-    const prefix = await ctx.db.get(args.prefixId);
+    const prefix = await ctx.db.get("forumThreadPrefixes", args.prefixId);
     if (prefix === null) {
       throw forumError(
         "THREAD_PREFIX_NOT_FOUND",
@@ -7614,7 +7615,7 @@ export const upsertThreadPrefixAdmin = mutation({
         ? prefix.position
         : normalizePosition(args.position);
 
-    await ctx.db.patch(prefix._id, {
+    await ctx.db.patch("forumThreadPrefixes", prefix._id, {
       categoryId: category?._id,
       key,
       slug,
@@ -7625,7 +7626,7 @@ export const upsertThreadPrefixAdmin = mutation({
       position,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(prefix._id);
+    const updated = await ctx.db.get("forumThreadPrefixes", prefix._id);
     if (updated === null) {
       throw new Error("Thread prefix could not be reloaded");
     }
@@ -7722,7 +7723,7 @@ export const upsertAnnouncementAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const announcement = await ctx.db.get(announcementId);
+      const announcement = await ctx.db.get("forumAnnouncements", announcementId);
       if (announcement === null) {
         throw new Error("Forum announcement could not be reloaded");
       }
@@ -7752,7 +7753,7 @@ export const upsertAnnouncementAdmin = mutation({
       );
     }
 
-    const announcement = await ctx.db.get(args.announcementId);
+    const announcement = await ctx.db.get("forumAnnouncements", args.announcementId);
     if (announcement === null) {
       throw forumError(
         "FORUM_ANNOUNCEMENT_NOT_FOUND",
@@ -7764,7 +7765,7 @@ export const upsertAnnouncementAdmin = mutation({
         ? announcement.position
         : normalizePosition(args.position);
 
-    await ctx.db.patch(announcement._id, {
+    await ctx.db.patch("forumAnnouncements", announcement._id, {
       categoryId: category?._id,
       key,
       slug,
@@ -7775,7 +7776,7 @@ export const upsertAnnouncementAdmin = mutation({
       updatedBy: actor._id,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(announcement._id);
+    const updated = await ctx.db.get("forumAnnouncements", announcement._id);
     if (updated === null) {
       throw new Error("Forum announcement could not be reloaded");
     }
@@ -7862,7 +7863,7 @@ export const upsertHelpDocumentAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const document = await ctx.db.get(helpDocumentId);
+      const document = await ctx.db.get("forumHelpDocuments", helpDocumentId);
       if (document === null) {
         throw new Error("Forum help document could not be reloaded");
       }
@@ -7888,7 +7889,7 @@ export const upsertHelpDocumentAdmin = mutation({
       );
     }
 
-    const document = await ctx.db.get(args.helpDocumentId);
+    const document = await ctx.db.get("forumHelpDocuments", args.helpDocumentId);
     if (document === null) {
       throw forumError(
         "FORUM_HELP_DOCUMENT_NOT_FOUND",
@@ -7900,7 +7901,7 @@ export const upsertHelpDocumentAdmin = mutation({
         ? document.position
         : normalizePosition(args.position);
 
-    await ctx.db.patch(document._id, {
+    await ctx.db.patch("forumHelpDocuments", document._id, {
       slug,
       title,
       body,
@@ -7909,7 +7910,7 @@ export const upsertHelpDocumentAdmin = mutation({
       updatedBy: actor._id,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(document._id);
+    const updated = await ctx.db.get("forumHelpDocuments", document._id);
     if (updated === null) {
       throw new Error("Forum help document could not be reloaded");
     }
@@ -8000,7 +8001,7 @@ export const upsertCalendarEventAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const event = await ctx.db.get(eventId);
+      const event = await ctx.db.get("forumCalendarEvents", eventId);
       if (event === null) {
         throw new Error("Forum calendar event could not be reloaded");
       }
@@ -8030,7 +8031,7 @@ export const upsertCalendarEventAdmin = mutation({
       );
     }
 
-    const event = await ctx.db.get(args.eventId);
+    const event = await ctx.db.get("forumCalendarEvents", args.eventId);
     if (event === null) {
       throw forumError(
         "FORUM_CALENDAR_EVENT_NOT_FOUND",
@@ -8038,7 +8039,7 @@ export const upsertCalendarEventAdmin = mutation({
       );
     }
 
-    await ctx.db.patch(event._id, {
+    await ctx.db.patch("forumCalendarEvents", event._id, {
       slug,
       title,
       body,
@@ -8051,7 +8052,7 @@ export const upsertCalendarEventAdmin = mutation({
       updatedBy: actor._id,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(event._id);
+    const updated = await ctx.db.get("forumCalendarEvents", event._id);
     if (updated === null) {
       throw new Error("Forum calendar event could not be reloaded");
     }
@@ -8126,7 +8127,7 @@ export const upsertBoardRulesAdmin = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      const rules = await ctx.db.get(rulesId);
+      const rules = await ctx.db.get("forumBoardRules", rulesId);
       if (rules === null) {
         throw new Error("Forum board rules could not be reloaded");
       }
@@ -8154,7 +8155,7 @@ export const upsertBoardRulesAdmin = mutation({
       );
     }
 
-    const rules = await ctx.db.get(args.rulesId);
+    const rules = await ctx.db.get("forumBoardRules", args.rulesId);
     if (rules === null) {
       throw forumError(
         "FORUM_BOARD_RULES_NOT_FOUND",
@@ -8174,7 +8175,7 @@ export const upsertBoardRulesAdmin = mutation({
       }
     }
 
-    await ctx.db.patch(rules._id, {
+    await ctx.db.patch("forumBoardRules", rules._id, {
       categoryId: category._id,
       title,
       body,
@@ -8182,7 +8183,7 @@ export const upsertBoardRulesAdmin = mutation({
       updatedBy: actor._id,
       updatedAt: now,
     });
-    const updated = await ctx.db.get(rules._id);
+    const updated = await ctx.db.get("forumBoardRules", rules._id);
     if (updated === null) {
       throw new Error("Forum board rules could not be reloaded");
     }
@@ -8251,7 +8252,7 @@ export const reorderForumCategories = mutation({
 
     const now = Date.now();
     for (const [position, categoryId] of args.categoryIds.entries()) {
-      await ctx.db.patch(categoryId, {
+      await ctx.db.patch("forumCategories", categoryId, {
         position,
         updatedAt: now,
       });
@@ -8362,15 +8363,15 @@ export const ensureSukiForumInfrastructure = internalMutation({
         onboardedAt: now,
         forumTrustedAt: now,
       });
-      user = await ctx.db.get(userId);
+      user = await ctx.db.get("users", userId);
     } else {
-      await ctx.db.patch(user._id, {
+      await ctx.db.patch("users", user._id, {
         name: "Suki",
         isAgent: true,
         agentSlug: "suki",
         forumTrustedAt: user.forumTrustedAt ?? now,
       });
-      user = await ctx.db.get(user._id);
+      user = await ctx.db.get("users", user._id);
     }
     if (user === null) {
       throw new Error("Suki's forum user could not be created");
@@ -8405,7 +8406,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
         createdAt: now,
       });
     } else {
-      await ctx.db.patch(profile._id, profileValues);
+      await ctx.db.patch("forumUserProfiles", profile._id, profileValues);
     }
 
     const existingAgent = await ctx.db
@@ -8429,7 +8430,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
         createdAt: now,
       });
     } else {
-      await ctx.db.patch(existingAgent._id, agentValues);
+      await ctx.db.patch("forumAgents", existingAgent._id, agentValues);
     }
 
     return {
@@ -8470,15 +8471,15 @@ export const ensureBelleForumInfrastructure = internalMutation({
         onboardedAt: now,
         forumTrustedAt: now,
       });
-      user = await ctx.db.get(userId);
+      user = await ctx.db.get("users", userId);
     } else {
-      await ctx.db.patch(user._id, {
+      await ctx.db.patch("users", user._id, {
         name: "Belle",
         isAgent: true,
         agentSlug: "belle",
         forumTrustedAt: user.forumTrustedAt ?? now,
       });
-      user = await ctx.db.get(user._id);
+      user = await ctx.db.get("users", user._id);
     }
     if (user === null) {
       throw new Error("Belle's forum user could not be created");
@@ -8512,7 +8513,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
         createdAt: now,
       });
     } else {
-      await ctx.db.patch(profile._id, profileValues);
+      await ctx.db.patch("forumUserProfiles", profile._id, profileValues);
     }
 
     const existingAgent = await ctx.db
@@ -8536,7 +8537,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
         createdAt: now,
       });
     } else {
-      await ctx.db.patch(existingAgent._id, agentValues);
+      await ctx.db.patch("forumAgents", existingAgent._id, agentValues);
     }
 
     return {
@@ -8592,14 +8593,14 @@ async function upsertForumThreadEditorialDigest(
   ) {
     return;
   }
-  await ctx.db.patch(existing._id, values);
+  await ctx.db.patch("forumThreadEditorialDigests", existing._id, values);
 }
 
 async function syncForumThreadEditorialDigest(
   ctx: MutationCtx,
   threadId: Id<"forumThreads">,
 ) {
-  const thread = await ctx.db.get(threadId);
+  const thread = await ctx.db.get("forumThreads", threadId);
   if (thread !== null) await upsertForumThreadEditorialDigest(ctx, thread);
 }
 
@@ -8626,7 +8627,7 @@ async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
   if (agent === null) {
     throw new Error(`${agentSlug} is not configured`);
   }
-  const user = await ctx.db.get(agent.userId);
+  const user = await ctx.db.get("users", agent.userId);
   if (user === null || user.isAgent !== true || user.agentSlug !== agentSlug) {
     throw new Error(`${agent.name}'s forum identity is not configured`);
   }
@@ -8810,7 +8811,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
     if (agent === null || !agent.enabled) {
       return { claimed: false as const, reason: "disabled" };
     }
-    const agentUser = await ctx.db.get(agent.userId);
+    const agentUser = await ctx.db.get("users", agent.userId);
     if (
       agentUser === null ||
       agentUser.isAgent !== true ||
@@ -8832,9 +8833,9 @@ export const claimSukiForumReplyCandidate = internalMutation({
         : SUKI_REPLY_DAILY_LIMIT);
     if (dailyLimitReached) {
       if (args.runId !== undefined) {
-        const queuedRun = await ctx.db.get(args.runId);
+        const queuedRun = await ctx.db.get("forumAgentReplyRuns", args.runId);
         if (queuedRun?.status === "queued") {
-          await ctx.db.patch(queuedRun._id, {
+          await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
             status: "ignored",
             reason: "daily-limit",
             completedAt: Date.now(),
@@ -8847,7 +8848,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
 
     const now = Date.now();
     if (args.runId !== undefined) {
-      const run = await ctx.db.get(args.runId);
+      const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
       if (
         run === null ||
         run.agentSlug !== agentSlug ||
@@ -8866,7 +8867,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       }
       const candidate = await loadSukiReplyCandidate(ctx, run, agent.userId);
       if (candidate === null) {
-        await ctx.db.patch(run._id, {
+        await ctx.db.patch("forumAgentReplyRuns", run._id, {
           status: "ignored",
           reason: "source-unavailable",
           completedAt: now,
@@ -8874,7 +8875,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         return { claimed: false as const, reason: "source-unavailable" };
       }
-      await ctx.db.patch(run._id, {
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
         attempt: args.attempt,
         status: "running",
         reason: undefined,
@@ -8900,7 +8901,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
     for (const queuedRun of queuedRuns) {
       if (now - queuedRun.startedAt < SUKI_REPLY_MIN_AGE_MS) continue;
       if (now - queuedRun.startedAt > SUKI_REPLY_MAX_AGE_MS) {
-        await ctx.db.patch(queuedRun._id, {
+        await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
           status: "ignored",
           reason: "recovery-window-expired",
           completedAt: now,
@@ -8914,7 +8915,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
         agent.userId,
       );
       if (candidate === null) {
-        await ctx.db.patch(queuedRun._id, {
+        await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
           status: "ignored",
           reason: "source-unavailable",
           completedAt: now,
@@ -8923,7 +8924,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
         continue;
       }
       if (!forumReplyDeskMatches(agentSlug, candidate.categorySlug)) {
-        await ctx.db.patch(queuedRun._id, {
+        await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
           status: "ignored",
           reason: "desk-mismatch",
           completedAt: now,
@@ -8931,7 +8932,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         continue;
       }
-      await ctx.db.patch(queuedRun._id, {
+      await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
         attempt: args.attempt,
         status: "running",
         model: agent.model,
@@ -8956,7 +8957,7 @@ export const markSukiForumReplyIgnored = internalMutation({
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
     if (
       run === null ||
       run.agentSlug !== agentSlug ||
@@ -8965,7 +8966,7 @@ export const markSukiForumReplyIgnored = internalMutation({
       return { updated: false };
     }
     const now = Date.now();
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentReplyRuns", run._id, {
       status: "ignored",
       reason: compactForumText(args.reason, 160),
       inputTokens: args.inputTokens,
@@ -8985,7 +8986,7 @@ export const markSukiForumReplyFailed = internalMutation({
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
     if (
       run === null ||
       run.agentSlug !== agentSlug ||
@@ -8994,7 +8995,7 @@ export const markSukiForumReplyFailed = internalMutation({
       return { updated: false };
     }
     const now = Date.now();
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentReplyRuns", run._id, {
       status: "failed",
       reason: compactForumText(args.reason, 160),
       completedAt: now,
@@ -9016,7 +9017,7 @@ export const publishSukiForumReply = internalMutation({
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
     const agentName = agentSlug === "belle" ? "Belle" : "Suki";
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
     if (
       run === null ||
       run.agentSlug !== agentSlug ||
@@ -9031,7 +9032,7 @@ export const publishSukiForumReply = internalMutation({
     if (agent === null || !agent.enabled) {
       throw new Error(`${agentName} is disabled`);
     }
-    const user = await ctx.db.get(agent.userId);
+    const user = await ctx.db.get("users", agent.userId);
     if (
       user === null ||
       user.isAgent !== true ||
@@ -9042,7 +9043,7 @@ export const publishSukiForumReply = internalMutation({
     const candidate = await loadSukiReplyCandidate(ctx, run, user._id);
     const now = Date.now();
     if (candidate === null) {
-      await ctx.db.patch(run._id, {
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
         status: "ignored",
         reason: "source-unavailable",
         completedAt: now,
@@ -9050,8 +9051,8 @@ export const publishSukiForumReply = internalMutation({
       });
       return { status: "ignored" as const, reason: "source-unavailable" };
     }
-    const thread = await ctx.db.get(candidate.threadId);
-    const category = await ctx.db.get(candidate.categoryId);
+    const thread = await ctx.db.get("forumThreads", candidate.threadId);
+    const category = await ctx.db.get("forumCategories", candidate.categoryId);
     if (
       thread === null ||
       thread.status !== "active" ||
@@ -9059,7 +9060,7 @@ export const publishSukiForumReply = internalMutation({
       category.status !== "active" ||
       categoryViewAccess(category) !== "public"
     ) {
-      await ctx.db.patch(run._id, {
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
         status: "ignored",
         reason: "thread-unavailable",
         completedAt: now,
@@ -9080,7 +9081,7 @@ export const publishSukiForumReply = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
       lastPostId: postId,
@@ -9089,7 +9090,7 @@ export const publishSukiForumReply = internalMutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
       lastPostId: postId,
@@ -9113,7 +9114,7 @@ export const publishSukiForumReply = internalMutation({
       threadId: thread._id,
       now,
     });
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentReplyRuns", run._id, {
       status: "replied",
       reason: compactForumText(args.reason, 160),
       replyPostId: postId,
@@ -9139,7 +9140,7 @@ async function loadSukiReplyCandidate(
   source: SukiReplyRunSource,
   sukiUserId: Id<"users">,
 ): Promise<SukiReplyCandidate | null> {
-  const thread = await ctx.db.get(source.threadId);
+  const thread = await ctx.db.get("forumThreads", source.threadId);
   if (
     thread === null ||
     thread.status !== "active" ||
@@ -9147,8 +9148,8 @@ async function loadSukiReplyCandidate(
   ) {
     return null;
   }
-  const category = await ctx.db.get(source.categoryId);
-  const sukiUser = await ctx.db.get(sukiUserId);
+  const category = await ctx.db.get("forumCategories", source.categoryId);
+  const sukiUser = await ctx.db.get("users", sukiUserId);
   if (
     category === null ||
     category.status !== "active" ||
@@ -9178,7 +9179,7 @@ async function loadSukiReplyCandidate(
     if (source.sourcePostId === undefined) {
       return null;
     }
-    const post = await ctx.db.get(source.sourcePostId);
+    const post = await ctx.db.get("forumPosts", source.sourcePostId);
     if (
       post === null ||
       post.status !== "active" ||
@@ -9193,7 +9194,7 @@ async function loadSukiReplyCandidate(
     sourcePostNumber = post.postNumber ?? 2;
   }
 
-  const author = await ctx.db.get(source.authorId);
+  const author = await ctx.db.get("users", source.authorId);
   if (
     author === null ||
     author._id === sukiUserId ||
@@ -9226,7 +9227,7 @@ async function loadSukiReplyCandidate(
     .slice(0, 6)
     .reverse();
   const contextualAuthors = await Promise.all(
-    contextualPosts.map((post) => ctx.db.get(post.authorId)),
+    contextualPosts.map((post) => ctx.db.get("users", post.authorId)),
   );
 
   return {
@@ -9313,8 +9314,8 @@ async function scheduleForumAgentReview(
   },
 ) {
   const [category, author] = await Promise.all([
-    ctx.db.get(args.categoryId),
-    ctx.db.get(args.authorId),
+    ctx.db.get("forumCategories", args.categoryId),
+    ctx.db.get("users", args.authorId),
   ]);
   if (
     category === null ||
@@ -9453,7 +9454,7 @@ export const publishSukiForumThread = internalMutation({
     if (agent === null || !agent.enabled) {
       throw new Error(`${agentName} is disabled`);
     }
-    const user = await ctx.db.get(agent.userId);
+    const user = await ctx.db.get("users", agent.userId);
     if (
       user === null ||
       user.isAgent !== true ||
@@ -9624,7 +9625,7 @@ export const publishSukiForumThread = internalMutation({
       });
     }
 
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       threadCount: category.threadCount + 1,
       postCount: category.postCount + 1,
       lastThreadId: threadId,
@@ -9655,7 +9656,7 @@ export const publishSukiForumThread = internalMutation({
           usedAt: now,
         });
       } else {
-        await ctx.db.patch(previousUse._id, {
+        await ctx.db.patch("forumAgentSourceUses", previousUse._id, {
           sourceUrl: source.sourceUrl,
           agentSlug,
           categoryId: category._id,
@@ -9664,7 +9665,7 @@ export const publishSukiForumThread = internalMutation({
         });
       }
     }
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       status: "published",
       candidateCount: args.candidateCount,
       categoryId: category._id,
@@ -9699,7 +9700,7 @@ export const publishSukiForumThread = internalMutation({
         .take(1),
     ]);
     for (const reservation of sourceReservations) {
-      await ctx.db.patch(reservation._id, {
+      await ctx.db.patch("forumAgentSourceReservations", reservation._id, {
         status: "published",
         threadId,
         expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
@@ -9707,7 +9708,7 @@ export const publishSukiForumThread = internalMutation({
       });
     }
     for (const reservation of topicReservations) {
-      await ctx.db.patch(reservation._id, {
+      await ctx.db.patch("forumAgentTopicReservations", reservation._id, {
         status: "published",
         threadId,
         expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
@@ -9781,7 +9782,7 @@ export const publishForumAgentFollowUp = internalMutation({
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
       .unique();
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (
       agent === null ||
       !agent.enabled ||
@@ -9790,8 +9791,8 @@ export const publishForumAgentFollowUp = internalMutation({
     ) {
       throw new Error("Forum follow-up target is unavailable");
     }
-    const user = await ctx.db.get(agent.userId);
-    const category = await ctx.db.get(thread.categoryId);
+    const user = await ctx.db.get("users", agent.userId);
+    const category = await ctx.db.get("forumCategories", thread.categoryId);
     if (
       user === null ||
       user.isAgent !== true ||
@@ -9820,7 +9821,7 @@ export const publishForumAgentFollowUp = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
       lastPostId: postId,
@@ -9829,7 +9830,7 @@ export const publishForumAgentFollowUp = internalMutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
-    await ctx.db.patch(category._id, {
+    await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
       lastPostId: postId,
@@ -9856,7 +9857,7 @@ export const publishForumAgentFollowUp = internalMutation({
         });
       }
     }
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       status: "published",
       candidateCount: args.candidateCount,
       categoryId: category._id,
@@ -9891,7 +9892,7 @@ export const publishForumAgentFollowUp = internalMutation({
         .take(1),
     ]);
     for (const reservation of sourceReservations) {
-      await ctx.db.patch(reservation._id, {
+      await ctx.db.patch("forumAgentSourceReservations", reservation._id, {
         status: "published",
         threadId: thread._id,
         expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
@@ -9899,7 +9900,7 @@ export const publishForumAgentFollowUp = internalMutation({
       });
     }
     for (const reservation of topicReservations) {
-      await ctx.db.patch(reservation._id, {
+      await ctx.db.patch("forumAgentTopicReservations", reservation._id, {
         status: "published",
         threadId: thread._id,
         expiresAt: now + FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS,
@@ -9958,7 +9959,7 @@ async function ensureDefaultForumCategory(
     createdAt: args.now,
     updatedAt: args.now,
   });
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (category === null) {
     throw new Error("Default forum category could not be reloaded");
   }
@@ -10100,7 +10101,7 @@ async function migrateEmptyLegacyNewsBoardSlug(ctx: MutationCtx, now: number) {
   if (legacy === null || legacy.threadCount !== 0 || legacy.postCount !== 0) {
     return;
   }
-  await ctx.db.patch(legacy._id, {
+  await ctx.db.patch("forumCategories", legacy._id, {
     slug: "forum-news",
     updatedAt: now,
   });
@@ -10462,7 +10463,7 @@ export const listForumPosts = query({
       ? null
       : await loadModeratedCategoryIdsForUser(ctx, actor._id);
     if (args.threadId !== undefined && scopedCategoryIds !== null) {
-      const thread = await ctx.db.get(args.threadId);
+      const thread = await ctx.db.get("forumThreads", args.threadId);
       if (
         thread === null ||
         !includesCategoryId(scopedCategoryIds, thread.categoryId)
@@ -10583,11 +10584,11 @@ export const getForumThread = query({
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
 
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
     }
-    const category = await ctx.db.get(thread.categoryId);
+    const category = await ctx.db.get("forumCategories", thread.categoryId);
     if (category === null) {
       throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
     }
@@ -10603,7 +10604,7 @@ export const getForumThread = query({
     const focusPost =
       args.focusPostId === undefined
         ? null
-        : await ctx.db.get(args.focusPostId);
+        : await ctx.db.get("forumPosts", args.focusPostId);
     const visibleFocusPost =
       focusPost !== null && focusPost.threadId === thread._id
         ? focusPost
@@ -10663,14 +10664,14 @@ export const listForumContentEdits = query({
       CONTENT_EDIT_LIST_LIMIT,
       CONTENT_EDIT_LIST_LIMIT,
     );
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
     }
     await assertCanModerateCategory(
       ctx,
       actor,
-      await ctx.db.get(thread.categoryId),
+      await ctx.db.get("forumCategories", thread.categoryId),
     );
 
     const edits =
@@ -10713,13 +10714,13 @@ export const moveForumThread = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireModerator(ctx);
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
     }
     const [sourceCategory, targetCategory] = await Promise.all([
-      ctx.db.get(thread.categoryId),
-      ctx.db.get(args.targetCategoryId),
+      ctx.db.get("forumCategories", thread.categoryId),
+      ctx.db.get("forumCategories", args.targetCategoryId),
     ]);
     if (sourceCategory === null) {
       throw forumError(
@@ -10750,7 +10751,7 @@ export const moveForumThread = mutation({
     }
 
     const now = Date.now();
-    const author = displayName(await ctx.db.get(thread.authorId));
+    const author = displayName(await ctx.db.get("users", thread.authorId));
     const nextSlug = await movedThreadSlug(ctx, thread, targetCategory);
     const nextPrefixSnapshot = await threadPrefixSnapshotForMove(
       ctx,
@@ -10766,7 +10767,7 @@ export const moveForumThread = mutation({
       now,
     );
 
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       categoryId: targetCategory._id,
       categorySlug: targetCategory.slug,
       ...nextPrefixSnapshot,
@@ -10794,12 +10795,12 @@ export const moveForumThread = mutation({
     });
 
     if (visible) {
-      await ctx.db.patch(sourceCategory._id, {
+      await ctx.db.patch("forumCategories", sourceCategory._id, {
         threadCount: Math.max(0, sourceCategory.threadCount - 1),
         postCount: Math.max(0, sourceCategory.postCount - postTotal),
         updatedAt: now,
       });
-      await ctx.db.patch(targetCategory._id, {
+      await ctx.db.patch("forumCategories", targetCategory._id, {
         threadCount: targetCategory.threadCount + 1,
         postCount: targetCategory.postCount + postTotal,
         updatedAt: now,
@@ -10835,12 +10836,12 @@ export const moveForumThread = mutation({
       },
     });
 
-    const updated = await ctx.db.get(thread._id);
+    const updated = await ctx.db.get("forumThreads", thread._id);
     if (updated === null) {
       throw new Error("Thread could not be reloaded");
     }
     const lastPostAuthor = displayName(
-      await ctx.db.get(updated.lastPostUserId),
+      await ctx.db.get("users", updated.lastPostUserId),
     );
     return {
       updated: true,
@@ -10879,7 +10880,7 @@ export const moveForumPosts = mutation({
       );
     }
 
-    const targetThread = await ctx.db.get(args.targetThreadId);
+    const targetThread = await ctx.db.get("forumThreads", args.targetThreadId);
     if (targetThread === null) {
       throw forumError(
         "THREAD_NOT_FOUND",
@@ -10892,7 +10893,7 @@ export const moveForumPosts = mutation({
         "Replies can only be moved into a visible target thread.",
       );
     }
-    const targetCategory = await ctx.db.get(targetThread.categoryId);
+    const targetCategory = await ctx.db.get("forumCategories", targetThread.categoryId);
     if (targetCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -10907,7 +10908,7 @@ export const moveForumPosts = mutation({
     }
 
     const posts = await Promise.all(
-      postIds.map(async (postId) => await ctx.db.get(postId)),
+      postIds.map(async (postId) => await ctx.db.get("forumPosts", postId)),
     );
     if (posts.some((post) => post === null)) {
       throw forumError(
@@ -10936,7 +10937,7 @@ export const moveForumPosts = mutation({
         "Choose a different target thread.",
       );
     }
-    const sourceThread = await ctx.db.get(sourceThreadId);
+    const sourceThread = await ctx.db.get("forumThreads", sourceThreadId);
     if (sourceThread === null) {
       throw forumError(
         "THREAD_NOT_FOUND",
@@ -10949,7 +10950,7 @@ export const moveForumPosts = mutation({
         "Replies can only be moved out of visible source threads.",
       );
     }
-    const sourceCategory = await ctx.db.get(sourceThread.categoryId);
+    const sourceCategory = await ctx.db.get("forumCategories", sourceThread.categoryId);
     if (sourceCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -10974,7 +10975,7 @@ export const moveForumPosts = mutation({
 
     for (const [index, post] of sortedPosts.entries()) {
       const nextPostNumber = firstTargetPostNumber + index;
-      await ctx.db.patch(post._id, {
+      await ctx.db.patch("forumPosts", post._id, {
         threadId: targetThread._id,
         categoryId: targetCategory._id,
         postNumber: nextPostNumber,
@@ -10996,11 +10997,11 @@ export const moveForumPosts = mutation({
       });
     }
 
-    await ctx.db.patch(sourceThread._id, {
+    await ctx.db.patch("forumThreads", sourceThread._id, {
       replyCount: Math.max(0, sourceThread.replyCount - sortedPosts.length),
       updatedAt: now,
     });
-    await ctx.db.patch(targetThread._id, {
+    await ctx.db.patch("forumThreads", targetThread._id, {
       replyCount: targetThread.replyCount + sortedPosts.length,
       lastAssignedPostNumber: firstTargetPostNumber + sortedPosts.length - 1,
       moderationActivityAt: now,
@@ -11011,11 +11012,11 @@ export const moveForumPosts = mutation({
     await recomputeThreadActivity(ctx, targetThread._id);
 
     if (sourceCategory._id !== targetCategory._id) {
-      await ctx.db.patch(sourceCategory._id, {
+      await ctx.db.patch("forumCategories", sourceCategory._id, {
         postCount: Math.max(0, sourceCategory.postCount - sortedPosts.length),
         updatedAt: now,
       });
-      await ctx.db.patch(targetCategory._id, {
+      await ctx.db.patch("forumCategories", targetCategory._id, {
         postCount: targetCategory.postCount + sortedPosts.length,
         updatedAt: now,
       });
@@ -11052,8 +11053,8 @@ export const moveForumPosts = mutation({
     });
 
     const [updatedSourceThread, updatedTargetThread] = await Promise.all([
-      ctx.db.get(sourceThread._id),
-      ctx.db.get(targetThread._id),
+      ctx.db.get("forumThreads", sourceThread._id),
+      ctx.db.get("forumThreads", targetThread._id),
     ]);
     if (updatedSourceThread === null || updatedTargetThread === null) {
       throw new Error("Moved threads could not be reloaded");
@@ -11111,7 +11112,7 @@ export const splitForumPosts = mutation({
       );
     }
 
-    const targetCategory = await ctx.db.get(args.targetCategoryId);
+    const targetCategory = await ctx.db.get("forumCategories", args.targetCategoryId);
     if (targetCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -11126,7 +11127,7 @@ export const splitForumPosts = mutation({
     }
 
     const posts = await Promise.all(
-      postIds.map(async (postId) => await ctx.db.get(postId)),
+      postIds.map(async (postId) => await ctx.db.get("forumPosts", postId)),
     );
     if (posts.some((post) => post === null)) {
       throw forumError(
@@ -11150,7 +11151,7 @@ export const splitForumPosts = mutation({
     }
 
     const sourceThreadId = selectedPosts[0]!.threadId;
-    const sourceThread = await ctx.db.get(sourceThreadId);
+    const sourceThread = await ctx.db.get("forumThreads", sourceThreadId);
     if (sourceThread === null) {
       throw forumError(
         "THREAD_NOT_FOUND",
@@ -11163,7 +11164,7 @@ export const splitForumPosts = mutation({
         "Replies can only be split out of visible source threads.",
       );
     }
-    const sourceCategory = await ctx.db.get(sourceThread.categoryId);
+    const sourceCategory = await ctx.db.get("forumCategories", sourceThread.categoryId);
     if (sourceCategory === null) {
       throw forumError(
         "CATEGORY_NOT_FOUND",
@@ -11189,7 +11190,7 @@ export const splitForumPosts = mutation({
       targetCategory.slug,
       title,
     );
-    const openerAuthor = await ctx.db.get(openerPost.authorId);
+    const openerAuthor = await ctx.db.get("users", openerPost.authorId);
     const newThreadId = await ctx.db.insert("forumThreads", {
       categoryId: targetCategory._id,
       categorySlug: targetCategory.slug,
@@ -11218,7 +11219,7 @@ export const splitForumPosts = mutation({
     });
     await syncForumThreadEditorialDigest(ctx, newThreadId);
 
-    await ctx.db.patch(openerPost._id, {
+    await ctx.db.patch("forumPosts", openerPost._id, {
       status: "deleted",
       deletedAt: now,
       deletedBy: actor._id,
@@ -11240,7 +11241,7 @@ export const splitForumPosts = mutation({
 
     for (const [index, post] of replyPosts.entries()) {
       const nextPostNumber = index + 2;
-      await ctx.db.patch(post._id, {
+      await ctx.db.patch("forumPosts", post._id, {
         threadId: newThreadId,
         categoryId: targetCategory._id,
         postNumber: nextPostNumber,
@@ -11262,7 +11263,7 @@ export const splitForumPosts = mutation({
       });
     }
 
-    await ctx.db.patch(sourceThread._id, {
+    await ctx.db.patch("forumThreads", sourceThread._id, {
       replyCount: Math.max(0, sourceThread.replyCount - sortedPosts.length),
       updatedAt: now,
     });
@@ -11270,16 +11271,16 @@ export const splitForumPosts = mutation({
     await recomputeThreadActivity(ctx, newThreadId);
 
     if (sourceCategory._id === targetCategory._id) {
-      await ctx.db.patch(targetCategory._id, {
+      await ctx.db.patch("forumCategories", targetCategory._id, {
         threadCount: targetCategory.threadCount + 1,
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch(sourceCategory._id, {
+      await ctx.db.patch("forumCategories", sourceCategory._id, {
         postCount: Math.max(0, sourceCategory.postCount - sortedPosts.length),
         updatedAt: now,
       });
-      await ctx.db.patch(targetCategory._id, {
+      await ctx.db.patch("forumCategories", targetCategory._id, {
         threadCount: targetCategory.threadCount + 1,
         postCount: targetCategory.postCount + sortedPosts.length,
         updatedAt: now,
@@ -11322,8 +11323,8 @@ export const splitForumPosts = mutation({
     });
 
     const [updatedSourceThread, newThread] = await Promise.all([
-      ctx.db.get(sourceThread._id),
-      ctx.db.get(newThreadId),
+      ctx.db.get("forumThreads", sourceThread._id),
+      ctx.db.get("forumThreads", newThreadId),
     ]);
     if (updatedSourceThread === null || newThread === null) {
       throw new Error("Split threads could not be reloaded");
@@ -11372,8 +11373,8 @@ export const mergeForumThread = mutation({
     }
 
     const [sourceThread, targetThread] = await Promise.all([
-      ctx.db.get(args.sourceThreadId),
-      ctx.db.get(args.targetThreadId),
+      ctx.db.get("forumThreads", args.sourceThreadId),
+      ctx.db.get("forumThreads", args.targetThreadId),
     ]);
     if (sourceThread === null || targetThread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
@@ -11392,8 +11393,8 @@ export const mergeForumThread = mutation({
     }
 
     const [sourceCategory, targetCategory] = await Promise.all([
-      ctx.db.get(sourceThread.categoryId),
-      ctx.db.get(targetThread.categoryId),
+      ctx.db.get("forumCategories", sourceThread.categoryId),
+      ctx.db.get("forumCategories", targetThread.categoryId),
     ]);
     if (sourceCategory === null || targetCategory === null) {
       throw forumError(
@@ -11465,7 +11466,7 @@ export const mergeForumThread = mutation({
 
     for (const [index, post] of sourceReplies.entries()) {
       const nextPostNumber = firstTargetPostNumber + index + 1;
-      await ctx.db.patch(post._id, {
+      await ctx.db.patch("forumPosts", post._id, {
         threadId: targetThread._id,
         categoryId: targetCategory._id,
         postNumber: nextPostNumber,
@@ -11488,7 +11489,7 @@ export const mergeForumThread = mutation({
     }
 
     const mergedPostCount = 1 + sourceReplies.length;
-    await ctx.db.patch(sourceThread._id, {
+    await ctx.db.patch("forumThreads", sourceThread._id, {
       status: "deleted",
       replyCount: 0,
       deletedAt: now,
@@ -11496,7 +11497,7 @@ export const mergeForumThread = mutation({
       moderationReason,
       updatedAt: now,
     });
-    await ctx.db.patch(targetThread._id, {
+    await ctx.db.patch("forumThreads", targetThread._id, {
       replyCount: targetThread.replyCount + mergedPostCount,
       lastAssignedPostNumber: firstTargetPostNumber + mergedPostCount - 1,
       moderationActivityAt: now,
@@ -11507,17 +11508,17 @@ export const mergeForumThread = mutation({
     await recomputeThreadActivity(ctx, targetThread._id);
 
     if (sourceCategory._id === targetCategory._id) {
-      await ctx.db.patch(sourceCategory._id, {
+      await ctx.db.patch("forumCategories", sourceCategory._id, {
         threadCount: Math.max(0, sourceCategory.threadCount - 1),
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch(sourceCategory._id, {
+      await ctx.db.patch("forumCategories", sourceCategory._id, {
         threadCount: Math.max(0, sourceCategory.threadCount - 1),
         postCount: Math.max(0, sourceCategory.postCount - mergedPostCount),
         updatedAt: now,
       });
-      await ctx.db.patch(targetCategory._id, {
+      await ctx.db.patch("forumCategories", targetCategory._id, {
         postCount: targetCategory.postCount + mergedPostCount,
         updatedAt: now,
       });
@@ -11564,8 +11565,8 @@ export const mergeForumThread = mutation({
     });
 
     const [updatedSourceThread, updatedTargetThread] = await Promise.all([
-      ctx.db.get(sourceThread._id),
-      ctx.db.get(targetThread._id),
+      ctx.db.get("forumThreads", sourceThread._id),
+      ctx.db.get("forumThreads", targetThread._id),
     ]);
     if (updatedSourceThread === null || updatedTargetThread === null) {
       throw new Error("Merged threads could not be reloaded");
@@ -11610,11 +11611,11 @@ export const updateForumThreadModeration = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
     }
-    const category = await ctx.db.get(thread.categoryId);
+    const category = await ctx.db.get("forumCategories", thread.categoryId);
     if (category === null) {
       throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
     }
@@ -11668,7 +11669,7 @@ export const updateForumThreadModeration = mutation({
       wasVisible === isVisible
         ? undefined
         : forumVisibilityProfileDeltaToken(thread._id, isVisible, now);
-    await ctx.db.patch(thread._id, {
+    await ctx.db.patch("forumThreads", thread._id, {
       status: nextStatus,
       pinned: nextPinned,
       updatedAt: now,
@@ -11687,7 +11688,7 @@ export const updateForumThreadModeration = mutation({
     await syncForumThreadEditorialDigest(ctx, thread._id);
 
     if (wasVisible !== isVisible) {
-      await ctx.db.patch(category._id, {
+      await ctx.db.patch("forumCategories", category._id, {
         threadCount: Math.max(0, category.threadCount + (isVisible ? 1 : -1)),
         postCount: Math.max(
           0,
@@ -11757,7 +11758,7 @@ export const updateForumThreadModeration = mutation({
       },
     });
 
-    const updated = await ctx.db.get(thread._id);
+    const updated = await ctx.db.get("forumThreads", thread._id);
     if (updated === null) {
       throw new Error("Thread could not be reloaded");
     }
@@ -11777,15 +11778,15 @@ export const updateForumPostModeration = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireAnyForumModerator(ctx);
-    const post = await ctx.db.get(args.postId);
+    const post = await ctx.db.get("forumPosts", args.postId);
     if (post === null) {
       throw forumError("POST_NOT_FOUND", "That reply no longer exists.");
     }
-    const thread = await ctx.db.get(post.threadId);
+    const thread = await ctx.db.get("forumThreads", post.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread no longer exists.");
     }
-    const category = await ctx.db.get(thread.categoryId);
+    const category = await ctx.db.get("forumCategories", thread.categoryId);
     if (category === null) {
       throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
     }
@@ -11823,7 +11824,7 @@ export const updateForumPostModeration = mutation({
     const isActive = args.status === "active";
     const now = Date.now();
 
-    await ctx.db.patch(post._id, {
+    await ctx.db.patch("forumPosts", post._id, {
       status: args.status,
       updatedAt: now,
       moderationReason,
@@ -11834,7 +11835,7 @@ export const updateForumPostModeration = mutation({
     });
 
     if (wasActive !== isActive) {
-      await ctx.db.patch(thread._id, {
+      await ctx.db.patch("forumThreads", thread._id, {
         replyCount: Math.max(0, thread.replyCount + (isActive ? 1 : -1)),
         updatedAt: now,
       });
@@ -11845,7 +11846,7 @@ export const updateForumPostModeration = mutation({
       await recomputeThreadActivity(ctx, thread._id);
 
       if (isVisibleThreadStatus(thread.status)) {
-        await ctx.db.patch(category._id, {
+        await ctx.db.patch("forumCategories", category._id, {
           postCount: Math.max(0, category.postCount + (isActive ? 1 : -1)),
           updatedAt: now,
         });
@@ -11903,7 +11904,7 @@ export const updateForumPostModeration = mutation({
       },
     });
 
-    const updated = await ctx.db.get(post._id);
+    const updated = await ctx.db.get("forumPosts", post._id);
     if (updated === null) {
       throw new Error("Post could not be reloaded");
     }
@@ -11920,7 +11921,7 @@ async function maybeCurrentUser(ctx: QueryCtx | MutationCtx) {
   if (userId === null) {
     return null;
   }
-  return await ctx.db.get(userId);
+  return await ctx.db.get("users", userId);
 }
 
 async function requireSignedInUser(
@@ -12062,7 +12063,7 @@ async function visibleCategoryById(
   categoryId: Id<"forumCategories">,
   user: UserDoc | null,
 ) {
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (
     category === null ||
     !isBoardCategory(category) ||
@@ -12390,7 +12391,7 @@ async function canViewCategoryWithAncestors(
     depth < 10 && parentCategoryId !== undefined;
     depth += 1
   ) {
-    const parent = await ctx.db.get(parentCategoryId);
+    const parent = await ctx.db.get("forumCategories", parentCategoryId);
     if (
       parent === null ||
       !canViewCategory(
@@ -12427,7 +12428,7 @@ async function canHostVisibleThreads(
     depth < 10 && parentCategoryId !== undefined;
     depth += 1
   ) {
-    const parent = await ctx.db.get(parentCategoryId);
+    const parent = await ctx.db.get("forumCategories", parentCategoryId);
     if (parent === null || parent.status !== "active") {
       return false;
     }
@@ -12546,7 +12547,7 @@ async function resolveCategoryParentId(
     );
   }
 
-  const parent = await ctx.db.get(options.parentCategoryId);
+  const parent = await ctx.db.get("forumCategories", options.parentCategoryId);
   if (parent === null) {
     throw forumError(
       "INVALID_CATEGORY_PARENT",
@@ -12573,7 +12574,7 @@ async function resolveCategoryParentId(
     categoryKind(parent) === "board" &&
     parent.parentCategoryId !== undefined
   ) {
-    const grandparent = await ctx.db.get(parent.parentCategoryId);
+    const grandparent = await ctx.db.get("forumCategories", parent.parentCategoryId);
     if (isBoardCategory(grandparent)) {
       throw forumError(
         "INVALID_CATEGORY_PARENT",
@@ -12597,7 +12598,7 @@ async function resolveCategoryParentId(
         "That parent would create a category cycle.",
       );
     }
-    cursor = await ctx.db.get(cursor.parentCategoryId);
+    cursor = await ctx.db.get("forumCategories", cursor.parentCategoryId);
   }
 
   return options.parentCategoryId;
@@ -13636,7 +13637,7 @@ async function applyForumAttachmentEditPlan(
 ) {
   for (const attachment of args.plan.currentAttachments) {
     if (!args.plan.attachmentIdsToKeep.has(attachment._id)) {
-      await ctx.db.patch(attachment._id, {
+      await ctx.db.patch("forumAttachments", attachment._id, {
         status: "deleted",
         deletedAt: args.now,
         deletedBy: args.actorUserId,
@@ -13969,7 +13970,7 @@ async function syncMovedThreadCategoryReferenceBatch(
     cursor?: string;
   },
 ) {
-  const thread = await ctx.db.get(args.threadId);
+  const thread = await ctx.db.get("forumThreads", args.threadId);
   if (
     thread === null ||
     thread.categoryId !== args.targetCategoryId ||
@@ -13994,7 +13995,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const post of page.page) {
-        await ctx.db.patch(post._id, {
+        await ctx.db.patch("forumPosts", post._id, {
           categoryId: args.targetCategoryId,
           moderationMovedAt: args.now,
           updatedAt: args.now,
@@ -14012,7 +14013,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const attachment of page.page) {
-        await ctx.db.patch(attachment._id, {
+        await ctx.db.patch("forumAttachments", attachment._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14027,7 +14028,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         .withIndex("by_threadId", (q) => q.eq("threadId", args.threadId))
         .paginate(paginationOpts);
       for (const poll of page.page) {
-        await ctx.db.patch(poll._id, {
+        await ctx.db.patch("forumPolls", poll._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14044,7 +14045,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const report of page.page) {
-        await ctx.db.patch(report._id, {
+        await ctx.db.patch("forumReports", report._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14061,7 +14062,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const notification of page.page) {
-        await ctx.db.patch(notification._id, {
+        await ctx.db.patch("forumNotifications", notification._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14078,7 +14079,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const delivery of page.page) {
-        await ctx.db.patch(delivery._id, {
+        await ctx.db.patch("forumNotificationEmailDeliveries", delivery._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14095,7 +14096,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const reputation of page.page) {
-        await ctx.db.patch(reputation._id, {
+        await ctx.db.patch("forumReputations", reputation._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14112,7 +14113,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const warning of page.page) {
-        await ctx.db.patch(warning._id, {
+        await ctx.db.patch("forumWarnings", warning._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14129,7 +14130,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const event of page.page) {
-        await ctx.db.patch(event._id, {
+        await ctx.db.patch("forumModerationEvents", event._id, {
           categoryId: args.targetCategoryId,
         });
       }
@@ -14145,7 +14146,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const view of page.page) {
-        await ctx.db.patch(view._id, {
+        await ctx.db.patch("forumThreadViews", view._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14162,7 +14163,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const read of page.page) {
-        await ctx.db.patch(read._id, {
+        await ctx.db.patch("forumThreadReads", read._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14181,7 +14182,7 @@ async function syncMovedThreadCategoryReferenceBatch(
         )
         .paginate(paginationOpts);
       for (const subscription of page.page) {
-        await ctx.db.patch(subscription._id, {
+        await ctx.db.patch("forumThreadSubscriptions", subscription._id, {
           categoryId: args.targetCategoryId,
           updatedAt: args.now,
         });
@@ -14212,7 +14213,7 @@ async function syncMovedThreadCategoryReferenceBatch(
     return;
   }
 
-  await ctx.db.patch(thread._id, {
+  await ctx.db.patch("forumThreads", thread._id, {
     categoryReferenceSyncToken: undefined,
     updatedAt: args.now,
   });
@@ -14225,7 +14226,7 @@ async function loadUserNamesById(
   const distinctUserIds = [...new Set(userIds)];
   const users = await Promise.all(
     distinctUserIds.map(
-      async (userId) => [userId, await ctx.db.get(userId)] as const,
+      async (userId) => [userId, await ctx.db.get("users", userId)] as const,
     ),
   );
   return new Map(users.map(([userId, user]) => [userId, displayName(user)]));
@@ -14238,7 +14239,7 @@ async function loadPublicUserIdentitiesById(
   const distinctUserIds = [...new Set(userIds)];
   const users = await Promise.all(
     distinctUserIds.map(
-      async (userId) => [userId, await ctx.db.get(userId)] as const,
+      async (userId) => [userId, await ctx.db.get("users", userId)] as const,
     ),
   );
   return new Map(
@@ -14299,7 +14300,7 @@ async function loadThreadsById(
   const distinctThreadIds = [...new Set(threadIds)];
   const threads = await Promise.all(
     distinctThreadIds.map(
-      async (threadId) => [threadId, await ctx.db.get(threadId)] as const,
+      async (threadId) => [threadId, await ctx.db.get("forumThreads", threadId)] as const,
     ),
   );
   return new Map(
@@ -14316,7 +14317,7 @@ async function loadCategoriesById(
   const distinctCategoryIds = [...new Set(categoryIds)];
   const categories = await Promise.all(
     distinctCategoryIds.map(
-      async (categoryId) => [categoryId, await ctx.db.get(categoryId)] as const,
+      async (categoryId) => [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
     ),
   );
   return new Map(
@@ -14445,7 +14446,7 @@ async function resolveThreadPrefixForCategory(
   if (prefixId === null) {
     return null;
   }
-  const prefix = await ctx.db.get(prefixId);
+  const prefix = await ctx.db.get("forumThreadPrefixes", prefixId);
   if (
     prefix === null ||
     prefix.status !== "active" ||
@@ -14463,7 +14464,7 @@ async function requirePrefixCategory(
   ctx: QueryCtx | MutationCtx,
   categoryId: Id<"forumCategories">,
 ) {
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (category === null) {
     throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
   }
@@ -14480,7 +14481,7 @@ async function requireForumPageCategory(
   ctx: QueryCtx | MutationCtx,
   categoryId: Id<"forumCategories">,
 ) {
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (category === null) {
     throw forumError("CATEGORY_NOT_FOUND", "That board no longer exists.");
   }
@@ -14501,7 +14502,7 @@ async function threadPrefixSnapshotForMove(
   if (thread.prefixId === undefined) {
     return threadPrefixSnapshotFromThread(thread);
   }
-  const prefix = await ctx.db.get(thread.prefixId);
+  const prefix = await ctx.db.get("forumThreadPrefixes", thread.prefixId);
   if (
     prefix !== null &&
     (prefix.categoryId === undefined || prefix.categoryId === targetCategoryId)
@@ -14522,7 +14523,7 @@ async function syncThreadsForPrefixUpdate(
   const syncThreads = affectedThreads.slice(0, THREAD_PREFIX_THREAD_SYNC_LIMIT);
 
   for (const thread of syncThreads) {
-    const category = await ctx.db.get(thread.categoryId);
+    const category = await ctx.db.get("forumCategories", thread.categoryId);
     if (category === null) {
       continue;
     }
@@ -14530,8 +14531,8 @@ async function syncThreadsForPrefixUpdate(
       prefix.categoryId === undefined || prefix.categoryId === thread.categoryId
         ? threadPrefixSnapshot(prefix)
         : threadPrefixSnapshot(null);
-    const author = displayName(await ctx.db.get(thread.authorId));
-    await ctx.db.patch(thread._id, {
+    const author = displayName(await ctx.db.get("users", thread.authorId));
+    await ctx.db.patch("forumThreads", thread._id, {
       ...nextSnapshot,
       searchText: await movedThreadSearchText(
         ctx,
@@ -14557,7 +14558,7 @@ async function loadPostsById(
   const distinctPostIds = [...new Set(postIds)];
   const posts = await Promise.all(
     distinctPostIds.map(
-      async (postId) => [postId, await ctx.db.get(postId)] as const,
+      async (postId) => [postId, await ctx.db.get("forumPosts", postId)] as const,
     ),
   );
   return new Map(
@@ -14598,7 +14599,7 @@ async function insertForumAttachments(
       createdAt: args.now,
       updatedAt: args.now,
     });
-    await ctx.db.patch(attachment.pendingUploadId, {
+    await ctx.db.patch("forumPendingUploads", attachment.pendingUploadId, {
       status: "consumed",
       consumedAt: args.now,
       updatedAt: args.now,
@@ -14642,7 +14643,7 @@ async function loadReportsById(
   const distinctReportIds = [...new Set(reportIds)];
   const reports = await Promise.all(
     distinctReportIds.map(
-      async (reportId) => [reportId, await ctx.db.get(reportId)] as const,
+      async (reportId) => [reportId, await ctx.db.get("forumReports", reportId)] as const,
     ),
   );
   return new Map(
@@ -14659,7 +14660,7 @@ async function loadPrivateMessagesById(
   const distinctMessageIds = [...new Set(messageIds)];
   const messages = await Promise.all(
     distinctMessageIds.map(
-      async (messageId) => [messageId, await ctx.db.get(messageId)] as const,
+      async (messageId) => [messageId, await ctx.db.get("forumPrivateMessages", messageId)] as const,
     ),
   );
   return new Map(
@@ -14720,7 +14721,7 @@ async function upsertThreadRead(
     });
   }
 
-  await ctx.db.patch(existing._id, {
+  await ctx.db.patch("forumThreadReads", existing._id, {
     lastReadAt: args.lastReadAt,
     lastReadPostNumber: args.lastReadPostNumber,
     lastPostAt: args.lastPostAt,
@@ -14750,7 +14751,7 @@ async function upsertCategoryRead(
     });
   }
 
-  await ctx.db.patch(existing._id, {
+  await ctx.db.patch("forumCategoryReads", existing._id, {
     lastReadAt: Math.max(existing.lastReadAt, args.lastReadAt),
     lastPostAt: Math.max(existing.lastPostAt, args.lastPostAt),
     updatedAt: args.lastReadAt,
@@ -15107,12 +15108,12 @@ async function createReplyNotifications(
     cursor?: string;
   },
 ) {
-  const category = await ctx.db.get(args.categoryId);
+  const category = await ctx.db.get("forumCategories", args.categoryId);
   if (category === null) {
     return;
   }
   if (args.cursor === undefined) {
-    const post = await ctx.db.get(args.postId);
+    const post = await ctx.db.get("forumPosts", args.postId);
     if (post !== null && post.status === "active") {
       await createMentionNotifications(ctx, {
         actorUserId: args.actorUserId,
@@ -15138,7 +15139,7 @@ async function createReplyNotifications(
     if (subscription.userId === args.actorUserId) {
       continue;
     }
-    const recipient = await ctx.db.get(subscription.userId);
+    const recipient = await ctx.db.get("users", subscription.userId);
     if (!(await canViewCategoryWithAncestors(ctx, recipient, category))) {
       continue;
     }
@@ -15205,8 +15206,8 @@ async function createNewThreadNotifications(
   },
 ) {
   const [category, thread] = await Promise.all([
-    ctx.db.get(args.categoryId),
-    ctx.db.get(args.threadId),
+    ctx.db.get("forumCategories", args.categoryId),
+    ctx.db.get("forumThreads", args.threadId),
   ]);
   if (
     category === null ||
@@ -15240,7 +15241,7 @@ async function createNewThreadNotifications(
     if (subscription.userId === args.actorUserId) {
       continue;
     }
-    const recipient = await ctx.db.get(subscription.userId);
+    const recipient = await ctx.db.get("users", subscription.userId);
     if (!(await canViewCategoryWithAncestors(ctx, recipient, category))) {
       continue;
     }
@@ -15421,7 +15422,7 @@ async function loadVisibleForumNotifications(
     }
     let thread = threadsById.get(notification.threadId);
     if (thread === undefined) {
-      thread = await ctx.db.get(notification.threadId);
+      thread = await ctx.db.get("forumThreads", notification.threadId);
       threadsById.set(notification.threadId, thread);
     }
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
@@ -15430,7 +15431,7 @@ async function loadVisibleForumNotifications(
 
     let category = categoriesById.get(thread.categoryId);
     if (category === undefined) {
-      category = await ctx.db.get(thread.categoryId);
+      category = await ctx.db.get("forumCategories", thread.categoryId);
       categoriesById.set(thread.categoryId, category);
     }
     if (category === null) {
@@ -15641,7 +15642,7 @@ async function ensureThreadParticipantSubscription(
   }
 
   if (existing.categoryId !== args.categoryId) {
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("forumThreadSubscriptions", existing._id, {
       categoryId: args.categoryId,
       updatedAt: args.now,
     });
@@ -15851,7 +15852,7 @@ async function bumpForumUserProfileReputation(
   }
 
   const reputationScore = profileReputationScore(profile) + reputationDelta;
-  await ctx.db.patch(profile._id, {
+  await ctx.db.patch("forumUserProfiles", profile._id, {
     reputationScore,
     updatedAt: now,
   });
@@ -15882,7 +15883,7 @@ async function bumpForumUserProfileStats(
     return;
   }
 
-  await ctx.db.patch(profile._id, {
+  await ctx.db.patch("forumUserProfiles", profile._id, {
     threadCount: Math.max(0, profile.threadCount + threadDelta),
     postCount: Math.max(0, profile.postCount + postDelta),
     updatedAt: args.now,
@@ -15923,7 +15924,7 @@ async function applyThreadVisibilityReplyProfileDeltaBatch(
     cursor?: string;
   },
 ) {
-  const thread = await ctx.db.get(args.threadId);
+  const thread = await ctx.db.get("forumThreads", args.threadId);
   if (thread === null || thread.visibilityProfileDeltaToken !== args.token) {
     return;
   }
@@ -16498,18 +16499,18 @@ async function resolveForumWarningContext(
   },
 ): Promise<ForumWarningContext> {
   if (args.reportId !== undefined) {
-    const report = await ctx.db.get(args.reportId);
+    const report = await ctx.db.get("forumReports", args.reportId);
     if (report === null) {
       throw forumError("REPORT_NOT_FOUND", "That report no longer exists.");
     }
     const thread =
-      report.threadId === undefined ? null : await ctx.db.get(report.threadId);
+      report.threadId === undefined ? null : await ctx.db.get("forumThreads", report.threadId);
     const post =
-      report.postId === undefined ? null : await ctx.db.get(report.postId);
+      report.postId === undefined ? null : await ctx.db.get("forumPosts", report.postId);
     const message =
       report.messageId === undefined
         ? null
-        : await ctx.db.get(report.messageId);
+        : await ctx.db.get("forumPrivateMessages", report.messageId);
     const targetUserId = reportTargetUserId(
       report,
       thread ?? undefined,
@@ -16531,7 +16532,7 @@ async function resolveForumWarningContext(
   }
 
   if (args.postId !== undefined) {
-    const post = await ctx.db.get(args.postId);
+    const post = await ctx.db.get("forumPosts", args.postId);
     if (post === null) {
       throw forumError("POST_NOT_FOUND", "That reply is not available.");
     }
@@ -16550,7 +16551,7 @@ async function resolveForumWarningContext(
   }
 
   if (args.threadId !== undefined) {
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) {
       throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
     }
@@ -17054,7 +17055,7 @@ async function hydrateCategoryModeratorRecords(
   ]);
   const users = await Promise.all(
     [...new Set(userIds)].map(
-      async (userId) => [userId, await ctx.db.get(userId)] as const,
+      async (userId) => [userId, await ctx.db.get("users", userId)] as const,
     ),
   );
   const usersById = new Map(users);
@@ -17093,7 +17094,7 @@ async function publicCategoryRecordWithAncestors(
     depth < 10 && parentCategoryId !== undefined;
     depth += 1
   ) {
-    const parent = await ctx.db.get(parentCategoryId);
+    const parent = await ctx.db.get("forumCategories", parentCategoryId);
     if (
       parent === null ||
       !(await canViewCategoryWithAncestors(ctx, user, parent))
@@ -17641,7 +17642,7 @@ async function requirePrivateMessageForUser(
   user: UserDoc,
   box?: ForumPrivateMessageBox,
 ) {
-  const message = await ctx.db.get(messageId);
+  const message = await ctx.db.get("forumPrivateMessages", messageId);
   if (message === null) {
     throw forumError(
       "PRIVATE_MESSAGE_NOT_FOUND",
@@ -17875,7 +17876,7 @@ async function firstForumStatisticsMember(
   profiles: ForumUserProfileDoc[],
 ) {
   for (const profile of profiles) {
-    const user = await ctx.db.get(profile.userId);
+    const user = await ctx.db.get("users", profile.userId);
     if (user !== null && isTrustedForumUser(user)) {
       return publicForumStatisticsMemberRecord(user, profile);
     }
@@ -18038,7 +18039,7 @@ async function onlineForumSummary(ctx: QueryCtx, now: number, limit: number) {
   const activePresenceUsers = await Promise.all(
     activePresences.map(
       async (presence) =>
-        [presence, await ctx.db.get(presence.userId)] as const,
+        [presence, await ctx.db.get("users", presence.userId)] as const,
     ),
   );
   const visiblePresenceUsers = activePresenceUsers.flatMap(
@@ -18079,7 +18080,7 @@ async function loadActivePresenceByUserIds(
           .query("forumPresence")
           .withIndex("by_userId", (q) => q.eq("userId", userId))
           .unique(),
-        ctx.db.get(userId),
+        ctx.db.get("users", userId),
       ]);
       return [
         userId,
@@ -18564,7 +18565,7 @@ async function resolveThreadListPrefixFilter(
   if (prefixId === null) {
     return { kind: "none" };
   }
-  const prefix = await ctx.db.get(prefixId);
+  const prefix = await ctx.db.get("forumThreadPrefixes", prefixId);
   if (prefix === null || prefix.categoryId !== category._id) {
     throw forumError(
       "THREAD_PREFIX_NOT_FOUND",
@@ -18997,11 +18998,11 @@ async function searchVisiblePosts(
 
   const results: Array<{ post: ForumPostDoc; thread: ForumThreadDoc }> = [];
   for (const post of postHits) {
-    const thread = await ctx.db.get(post.threadId);
+    const thread = await ctx.db.get("forumThreads", post.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       continue;
     }
-    const threadCategory = category ?? (await ctx.db.get(thread.categoryId));
+    const threadCategory = category ?? (await ctx.db.get("forumCategories", thread.categoryId));
     if (
       threadCategory === null ||
       !(await canViewCategoryWithAncestors(ctx, user, threadCategory))
@@ -19047,14 +19048,14 @@ async function searchVisiblePostsByAuthor(
 
   const results: Array<{ post: ForumPostDoc; thread: ForumThreadDoc }> = [];
   for (const post of postHits) {
-    const thread = await ctx.db.get(post.threadId);
+    const thread = await ctx.db.get("forumThreads", post.threadId);
     if (thread === null || !isVisibleThreadStatus(thread.status)) {
       continue;
     }
     if (category !== null && thread.categoryId !== category._id) {
       continue;
     }
-    const threadCategory = category ?? (await ctx.db.get(thread.categoryId));
+    const threadCategory = category ?? (await ctx.db.get("forumCategories", thread.categoryId));
     if (
       threadCategory === null ||
       !(await canViewCategoryWithAncestors(ctx, user, threadCategory))
@@ -19077,7 +19078,7 @@ async function recomputeThreadActivity(
   ctx: MutationCtx,
   threadId: Id<"forumThreads">,
 ) {
-  const thread = await ctx.db.get(threadId);
+  const thread = await ctx.db.get("forumThreads", threadId);
   if (thread === null) {
     return;
   }
@@ -19091,7 +19092,7 @@ async function recomputeThreadActivity(
     .take(1);
 
   const newestReply = latestPost[0];
-  await ctx.db.patch(threadId, {
+  await ctx.db.patch("forumThreads", threadId, {
     lastPostId: newestReply?._id,
     lastPostAt: newestReply?.createdAt ?? thread.createdAt,
     lastPostUserId: newestReply?.authorId ?? thread.authorId,
@@ -19175,7 +19176,7 @@ async function movePromotedPostAttachmentsToThread(
   ]);
 
   for (const attachment of [...activeAttachments, ...deletedAttachments]) {
-    await ctx.db.patch(attachment._id, {
+    await ctx.db.patch("forumAttachments", attachment._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: undefined,
@@ -19183,7 +19184,7 @@ async function movePromotedPostAttachmentsToThread(
     });
   }
   for (const delivery of notificationEmails) {
-    await ctx.db.patch(delivery._id, {
+    await ctx.db.patch("forumNotificationEmailDeliveries", delivery._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: undefined,
@@ -19191,7 +19192,7 @@ async function movePromotedPostAttachmentsToThread(
     });
   }
   for (const event of moderationEvents) {
-    await ctx.db.patch(event._id, {
+    await ctx.db.patch("forumModerationEvents", event._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: undefined,
@@ -19255,7 +19256,7 @@ async function moveThreadRootRecordsToPost(
   ]);
 
   for (const attachment of [...activeAttachments, ...deletedAttachments]) {
-    await ctx.db.patch(attachment._id, {
+    await ctx.db.patch("forumAttachments", attachment._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: args.targetPostId,
@@ -19266,7 +19267,7 @@ async function moveThreadRootRecordsToPost(
     if (edit.entityType !== "thread" || edit.postId !== undefined) {
       continue;
     }
-    await ctx.db.patch(edit._id, {
+    await ctx.db.patch("forumContentEdits", edit._id, {
       entityType: "post",
       threadId: args.targetThreadId,
       postId: args.targetPostId,
@@ -19276,7 +19277,7 @@ async function moveThreadRootRecordsToPost(
     if (delivery.postId !== undefined) {
       continue;
     }
-    await ctx.db.patch(delivery._id, {
+    await ctx.db.patch("forumNotificationEmailDeliveries", delivery._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: args.targetPostId,
@@ -19287,7 +19288,7 @@ async function moveThreadRootRecordsToPost(
     if (event.postId !== undefined) {
       continue;
     }
-    await ctx.db.patch(event._id, {
+    await ctx.db.patch("forumModerationEvents", event._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       postId: args.targetPostId,
@@ -19360,54 +19361,54 @@ async function movePostRelatedRecords(
   ]);
 
   for (const attachment of [...activeAttachments, ...deletedAttachments]) {
-    await ctx.db.patch(attachment._id, {
+    await ctx.db.patch("forumAttachments", attachment._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const edit of edits) {
-    await ctx.db.patch(edit._id, {
+    await ctx.db.patch("forumContentEdits", edit._id, {
       threadId: args.targetThreadId,
     });
   }
   for (const report of reports) {
-    await ctx.db.patch(report._id, {
+    await ctx.db.patch("forumReports", report._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const warning of warnings) {
-    await ctx.db.patch(warning._id, {
+    await ctx.db.patch("forumWarnings", warning._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const reputation of reputations) {
-    await ctx.db.patch(reputation._id, {
+    await ctx.db.patch("forumReputations", reputation._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const notification of notifications) {
-    await ctx.db.patch(notification._id, {
+    await ctx.db.patch("forumNotifications", notification._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const delivery of notificationEmails) {
-    await ctx.db.patch(delivery._id, {
+    await ctx.db.patch("forumNotificationEmailDeliveries", delivery._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
       updatedAt: args.now,
     });
   }
   for (const event of moderationEvents) {
-    await ctx.db.patch(event._id, {
+    await ctx.db.patch("forumModerationEvents", event._id, {
       threadId: args.targetThreadId,
       categoryId: args.targetCategoryId,
     });
@@ -19420,8 +19421,8 @@ async function maybePromoteCategorySummary(
   threadId: Id<"forumThreads">,
 ) {
   const [category, thread] = await Promise.all([
-    ctx.db.get(categoryId),
-    ctx.db.get(threadId),
+    ctx.db.get("forumCategories", categoryId),
+    ctx.db.get("forumThreads", threadId),
   ]);
   if (
     category === null ||
@@ -19432,7 +19433,7 @@ async function maybePromoteCategorySummary(
   }
 
   if ((category.lastPostAt ?? 0) <= thread.lastPostAt) {
-    await ctx.db.patch(categoryId, {
+    await ctx.db.patch("forumCategories", categoryId, {
       lastThreadId: thread._id,
       lastPostId: thread.lastPostId,
       lastPostAt: thread.lastPostAt,
@@ -19445,7 +19446,7 @@ async function recomputeCategorySummary(
   ctx: MutationCtx,
   categoryId: Id<"forumCategories">,
 ) {
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (category === null) {
     return;
   }
@@ -19499,7 +19500,7 @@ async function recomputeCategorySummary(
 
   const latestThread = candidates[0];
 
-  await ctx.db.patch(categoryId, {
+  await ctx.db.patch("forumCategories", categoryId, {
     lastThreadId: latestThread?._id,
     lastPostId: latestThread?.lastPostId,
     lastPostAt: latestThread?.lastPostAt,
@@ -19512,11 +19513,11 @@ async function bumpCategoryModerationActivity(
   categoryId: Id<"forumCategories">,
   now: number,
 ) {
-  const category = await ctx.db.get(categoryId);
+  const category = await ctx.db.get("forumCategories", categoryId);
   if (category === null) {
     return;
   }
-  await ctx.db.patch(categoryId, {
+  await ctx.db.patch("forumCategories", categoryId, {
     moderationActivityAt: Math.max(category.moderationActivityAt ?? 0, now),
     updatedAt: now,
   });
@@ -19568,7 +19569,7 @@ async function recordModerationLog(
     .order("desc")
     .take(1);
   if (existing[0] !== undefined) {
-    await ctx.db.patch(existing[0]._id, {
+    await ctx.db.patch("systemLogs", existing[0]._id, {
       updatedAt: now,
       lastSeenAt: now,
       occurrences: existing[0].occurrences + 1,

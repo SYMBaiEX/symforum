@@ -64,6 +64,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@convex-dev/eslint-plugin": "^3.0.0",
     "@edge-runtime/vm": "^5.0.0",
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",

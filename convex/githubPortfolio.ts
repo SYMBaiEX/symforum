@@ -131,7 +131,7 @@ export const storeSnapshot = internalMutation({
         ...nextSnapshot,
       });
     } else {
-      await ctx.db.patch(existing._id, nextSnapshot);
+      await ctx.db.patch("githubPortfolioSnapshots", existing._id, nextSnapshot);
     }
 
     return { stored: true };
@@ -154,7 +154,7 @@ export const markRefreshFailed = internalMutation({
       return { marked: false };
     }
 
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("githubPortfolioSnapshots", existing._id, {
       lastErrorAt: args.failedAt,
       lastErrorMessage: args.errorMessage.slice(0, 500),
     });

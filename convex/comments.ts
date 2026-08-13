@@ -39,12 +39,12 @@ export const list = query({
       .order("asc")
       .take(COMMENT_LIMIT);
     const viewerId = await getAuthUserId(ctx);
-    const viewer = viewerId === null ? null : await ctx.db.get(viewerId);
+    const viewer = viewerId === null ? null : await ctx.db.get("users", viewerId);
     const viewerCanModerate = canModerate(viewer);
     const usersById = new Map(
       await Promise.all(
         [...new Set(rows.map((comment) => comment.userId))].map(
-          async (userId) => [userId, await ctx.db.get(userId)] as const,
+          async (userId) => [userId, await ctx.db.get("users", userId)] as const,
         ),
       ),
     );
@@ -99,7 +99,7 @@ export const add = mutation({
 
     let parentId: Id<"comments"> | undefined;
     if (args.parentId !== undefined) {
-      const parent = await ctx.db.get(args.parentId);
+      const parent = await ctx.db.get("comments", args.parentId);
       if (
         parent === null ||
         parent.entityType !== args.entityType ||
@@ -164,7 +164,7 @@ export const softDelete = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireSignedInUserId(ctx);
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get("users", userId);
     if (user === null) {
       throw new ConvexError({
         code: "AUTH_REQUIRED",
@@ -172,7 +172,7 @@ export const softDelete = mutation({
       });
     }
 
-    const comment = await ctx.db.get(args.commentId);
+    const comment = await ctx.db.get("comments", args.commentId);
     if (comment === null) {
       return { deleted: false };
     }
@@ -188,7 +188,7 @@ export const softDelete = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(comment._id, {
+    await ctx.db.patch("comments", comment._id, {
       body: "",
       status: "deleted",
       updatedAt: now,

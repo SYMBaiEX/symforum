@@ -81,7 +81,7 @@ async function firstOwner(ctx: QueryCtx | MutationCtx) {
 }
 
 async function authorName(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
-  const user = await ctx.db.get(userId);
+  const user = await ctx.db.get("users", userId);
   return user?.username ?? user?.name ?? "SYM-UNKNOWN";
 }
 
@@ -102,7 +102,7 @@ async function softDeleteComment(
   commentId: Id<"comments">,
   actorUserId: Id<"users">,
 ) {
-  const comment = await ctx.db.get(commentId);
+  const comment = await ctx.db.get("comments", commentId);
   if (comment === null) {
     return { deleted: false };
   }
@@ -110,7 +110,7 @@ async function softDeleteComment(
     return { deleted: true };
   }
   const now = Date.now();
-  await ctx.db.patch(comment._id, {
+  await ctx.db.patch("comments", comment._id, {
     body: "",
     status: "deleted",
     updatedAt: now,
@@ -284,7 +284,7 @@ export const claimInitialOwner = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(user._id, {
+    await ctx.db.patch("users", user._id, {
       role: "owner",
       roleAssignedAt: now,
       roleAssignedBy: user._id,
@@ -306,7 +306,7 @@ export const claimInitialOwner = mutation({
       entityId: user._id,
     });
 
-    const updated = await ctx.db.get(user._id);
+    const updated = await ctx.db.get("users", user._id);
     if (updated === null) {
       throw new Error("User could not be reloaded");
     }
@@ -454,7 +454,7 @@ export const updateUserRole = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireOwner(ctx);
-    const user = await ctx.db.get(args.userId);
+    const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
     }
@@ -470,7 +470,7 @@ export const updateUserRole = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(args.userId, {
+    await ctx.db.patch("users", args.userId, {
       role: args.role,
       roleAssignedAt: now,
       roleAssignedBy: actor._id,
@@ -497,7 +497,7 @@ export const updateUserRole = mutation({
       }),
     });
 
-    const updated = await ctx.db.get(args.userId);
+    const updated = await ctx.db.get("users", args.userId);
     if (updated === null) {
       throw new Error("User could not be reloaded");
     }
@@ -512,7 +512,7 @@ export const updateUserForumRole = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireOwner(ctx);
-    const user = await ctx.db.get(args.userId);
+    const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
     }
@@ -524,7 +524,7 @@ export const updateUserForumRole = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(args.userId, {
+    await ctx.db.patch("users", args.userId, {
       forumRole: args.forumRole ?? undefined,
       forumRoleAssignedAt: args.forumRole === null ? undefined : now,
       forumRoleAssignedBy: args.forumRole === null ? undefined : actor._id,
@@ -551,7 +551,7 @@ export const updateUserForumRole = mutation({
       }),
     });
 
-    const updated = await ctx.db.get(args.userId);
+    const updated = await ctx.db.get("users", args.userId);
     if (updated === null) {
       throw new Error("User could not be reloaded");
     }
@@ -566,13 +566,13 @@ export const updateUserForumTrust = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireOwner(ctx);
-    const user = await ctx.db.get(args.userId);
+    const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
     }
 
     const now = Date.now();
-    await ctx.db.patch(args.userId, {
+    await ctx.db.patch("users", args.userId, {
       forumTrustedAt: args.trusted ? (user.forumTrustedAt ?? now) : undefined,
       forumTrustedBy: args.trusted
         ? (user.forumTrustedBy ?? actor._id)
@@ -586,7 +586,7 @@ export const updateUserForumTrust = mutation({
         .withIndex("by_userId", (q) => q.eq("userId", args.userId))
         .unique();
       if (presence !== null) {
-        await ctx.db.delete(presence._id);
+        await ctx.db.delete("forumPresence", presence._id);
       }
     }
     await ctx.db.insert("systemLogs", {
@@ -610,7 +610,7 @@ export const updateUserForumTrust = mutation({
       }),
     });
 
-    const updated = await ctx.db.get(args.userId);
+    const updated = await ctx.db.get("users", args.userId);
     if (updated === null) {
       throw new Error("User could not be reloaded");
     }
@@ -627,7 +627,7 @@ export const updateUserForumStatus = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireOwner(ctx);
-    const user = await ctx.db.get(args.userId);
+    const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
     }
@@ -655,7 +655,7 @@ export const updateUserForumStatus = mutation({
     const clearingStaffRole =
       args.status !== "active" && user.forumRole !== undefined;
 
-    await ctx.db.patch(args.userId, {
+    await ctx.db.patch("users", args.userId, {
       forumRole: clearingStaffRole ? undefined : user.forumRole,
       forumRoleAssignedAt: clearingStaffRole
         ? undefined
@@ -678,7 +678,7 @@ export const updateUserForumStatus = mutation({
         .withIndex("by_userId", (q) => q.eq("userId", args.userId))
         .unique();
       if (presence !== null) {
-        await ctx.db.delete(presence._id);
+        await ctx.db.delete("forumPresence", presence._id);
       }
     }
 
@@ -709,7 +709,7 @@ export const updateUserForumStatus = mutation({
       }),
     });
 
-    const updated = await ctx.db.get(args.userId);
+    const updated = await ctx.db.get("users", args.userId);
     if (updated === null) {
       throw new Error("User could not be reloaded");
     }
@@ -752,11 +752,11 @@ export const upsertPost = mutation({
 
     if (existing === null) {
       const id = await ctx.db.insert("posts", post);
-      return await ctx.db.get(id);
+      return await ctx.db.get("posts", id);
     }
 
-    await ctx.db.patch(existing._id, post);
-    return await ctx.db.get(existing._id);
+    await ctx.db.patch("posts", existing._id, post);
+    return await ctx.db.get("posts", existing._id);
   },
 });
 
@@ -771,7 +771,7 @@ export const deletePost = mutation({
     if (existing === null) {
       return { deleted: false };
     }
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete("posts", existing._id);
     return { deleted: true };
   },
 });
@@ -816,10 +816,10 @@ export const upsertSitePage = mutation({
 
     if (existing === null) {
       const id = await ctx.db.insert("sitePages", page);
-      return await ctx.db.get(id);
+      return await ctx.db.get("sitePages", id);
     }
 
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("sitePages", existing._id, {
       ...page,
       showImage: page.showImage === true ? true : undefined,
       imageUrl: page.imageUrl,
@@ -827,7 +827,7 @@ export const upsertSitePage = mutation({
       imageAlt: page.imageAlt,
       imageCredit: page.imageCredit,
     });
-    return await ctx.db.get(existing._id);
+    return await ctx.db.get("sitePages", existing._id);
   },
 });
 
@@ -842,7 +842,7 @@ export const deleteSitePage = mutation({
     if (existing === null) {
       return { deleted: false };
     }
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete("sitePages", existing._id);
     return { deleted: true };
   },
 });
@@ -871,11 +871,11 @@ export const upsertPortfolioProject = mutation({
 
     if (existing === null) {
       const id = await ctx.db.insert("portfolioProjects", project);
-      return await ctx.db.get(id);
+      return await ctx.db.get("portfolioProjects", id);
     }
 
-    await ctx.db.patch(existing._id, project);
-    return await ctx.db.get(existing._id);
+    await ctx.db.patch("portfolioProjects", existing._id, project);
+    return await ctx.db.get("portfolioProjects", existing._id);
   },
 });
 
@@ -890,7 +890,7 @@ export const deletePortfolioProject = mutation({
     if (existing === null) {
       return { deleted: false };
     }
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete("portfolioProjects", existing._id);
     return { deleted: true };
   },
 });
@@ -977,7 +977,7 @@ export const deleteInteraction = mutation({
   args: { interactionId: v.id("interactions") },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
-    await ctx.db.delete(args.interactionId);
+    await ctx.db.delete("interactions", args.interactionId);
     return { deleted: true };
   },
 });
@@ -1024,7 +1024,7 @@ export const createApiKey = mutation({
       createdBy: owner._id,
       createdAt: Date.now(),
     });
-    const key = await ctx.db.get(id);
+    const key = await ctx.db.get("apiKeys", id);
     if (key === null) {
       throw new Error("API key could not be created");
     }
@@ -1036,7 +1036,7 @@ export const revokeApiKey = mutation({
   args: { keyId: v.id("apiKeys") },
   handler: async (ctx, args) => {
     await requireOwner(ctx);
-    await ctx.db.patch(args.keyId, { revokedAt: Date.now() });
+    await ctx.db.patch("apiKeys", args.keyId, { revokedAt: Date.now() });
     return { revoked: true };
   },
 });
@@ -1069,7 +1069,7 @@ export const updateContactRequestStatus = mutation({
   },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
-    await ctx.db.patch(args.requestId, {
+    await ctx.db.patch("contactRequests", args.requestId, {
       status: args.status,
       updatedAt: Date.now(),
     });

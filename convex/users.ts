@@ -179,7 +179,7 @@ async function recentForumActivity(
   ]);
   const postThreads = await Promise.all(
     postRows.map(
-      async (post) => [post, await ctx.db.get(post.threadId)] as const,
+      async (post) => [post, await ctx.db.get("forumThreads", post.threadId)] as const,
     ),
   );
   const categoryIds = [
@@ -190,7 +190,7 @@ async function recentForumActivity(
   ];
   const categories = await Promise.all(
     [...new Set(categoryIds)].map(
-      async (categoryId) => [categoryId, await ctx.db.get(categoryId)] as const,
+      async (categoryId) => [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
     ),
   );
   const visibleCategoryIds = new Set(
@@ -259,7 +259,7 @@ export const viewer = query({
     if (userId === null) {
       throw new Error("Not signed in");
     }
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get("users", userId);
     if (user === null) {
       throw new Error("User was deleted");
     }
@@ -274,7 +274,7 @@ export const maybeViewer = query({
     if (userId === null) {
       return null;
     }
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get("users", userId);
     if (user === null) {
       return null;
     }
@@ -307,7 +307,7 @@ export const publicProfile = query({
     }
 
     const viewerId = await getAuthUserId(ctx);
-    const viewer = viewerId === null ? null : await ctx.db.get(viewerId);
+    const viewer = viewerId === null ? null : await ctx.db.get("users", viewerId);
     const [comments, forumActivity, forumProfile] = await Promise.all([
       recentComments(ctx, user._id),
       recentForumActivity(ctx, user._id, viewer),
@@ -425,7 +425,7 @@ async function canViewForumCategoryWithAncestors(
     depth < 10 && parentCategoryId !== undefined;
     depth += 1
   ) {
-    const parent = await ctx.db.get(parentCategoryId);
+    const parent = await ctx.db.get("forumCategories", parentCategoryId);
     if (parent === null || !canUseForumCategoryViewAccess(user, parent)) {
       return false;
     }

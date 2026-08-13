@@ -2419,6 +2419,7 @@ export const convexRefs = {
       "query",
       {
         mode: ForumRecentThreadMode;
+        now: number;
         limit?: number;
         page?: number;
         pageSize?: number;

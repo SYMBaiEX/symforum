@@ -16,7 +16,7 @@ export async function getCurrentUser(ctx: DatabaseCtx) {
   if (userId === null) {
     return null;
   }
-  return await ctx.db.get(userId);
+  return await ctx.db.get("users", userId);
 }
 
 export async function requireAuthenticatedUser(ctx: DatabaseCtx) {

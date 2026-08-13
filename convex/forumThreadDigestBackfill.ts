@@ -31,7 +31,7 @@ async function upsertDigest(ctx: MutationCtx, thread: Doc<"forumThreads">) {
   if (existing === null) {
     await ctx.db.insert("forumThreadEditorialDigests", values);
   } else {
-    await ctx.db.patch(existing._id, values);
+    await ctx.db.patch("forumThreadEditorialDigests", existing._id, values);
   }
 }
 
@@ -61,7 +61,7 @@ export const run = internalMutation({
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch(existing._id, { completedAt: now, updatedAt: now });
+      await ctx.db.patch("forumAgentMaintenanceState", existing._id, { completedAt: now, updatedAt: now });
     }
     return { processed: page.page.length, done: true };
   },

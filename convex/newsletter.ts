@@ -137,7 +137,7 @@ export const viewerPreferences = query({
     if (userId === null) {
       return null;
     }
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get("users", userId);
     const subscriptions = await ctx.db
       .query("newsletterSubscribers")
       .withIndex("by_userId_and_createdAt", (q) => q.eq("userId", userId))
@@ -162,11 +162,11 @@ export const updateViewerTopics = mutation({
     if (userId === null) {
       throw new Error("Sign in to manage newsletter preferences");
     }
-    const subscriber = await ctx.db.get(args.subscriberId);
+    const subscriber = await ctx.db.get("newsletterSubscribers", args.subscriberId);
     if (subscriber === null || subscriber.userId !== userId) {
       throw new Error("Newsletter subscription not found");
     }
-    await ctx.db.patch(subscriber._id, {
+    await ctx.db.patch("newsletterSubscribers", subscriber._id, {
       dailyOptIn: args.dailyOptIn,
       weeklyOptIn: args.weeklyOptIn,
       resendSyncStatus: "idle",
@@ -176,7 +176,7 @@ export const updateViewerTopics = mutation({
     await ctx.scheduler.runAfter(0, syncSubscriberRef, {
       subscriberId: subscriber._id,
     });
-    const updated = await ctx.db.get(subscriber._id);
+    const updated = await ctx.db.get("newsletterSubscribers", subscriber._id);
     return updated ? publicSubscriber(updated) : null;
   },
 });
@@ -192,7 +192,7 @@ export const updateTopicsByToken = mutation({
     if (subscriber === null || subscriber.status !== "confirmed") {
       throw new Error("Confirmed newsletter subscription not found");
     }
-    await ctx.db.patch(subscriber._id, {
+    await ctx.db.patch("newsletterSubscribers", subscriber._id, {
       dailyOptIn: args.dailyOptIn,
       weeklyOptIn: args.weeklyOptIn,
       resendSyncStatus: "idle",
@@ -202,7 +202,7 @@ export const updateTopicsByToken = mutation({
     await ctx.scheduler.runAfter(0, syncSubscriberRef, {
       subscriberId: subscriber._id,
     });
-    const updated = await ctx.db.get(subscriber._id);
+    const updated = await ctx.db.get("newsletterSubscribers", subscriber._id);
     return updated ? publicSubscriber(updated) : null;
   },
 });
@@ -226,7 +226,7 @@ export const confirm = mutation({
 
     const now = Date.now();
     if (subscriber.status !== "confirmed") {
-      await ctx.db.patch(subscriber._id, {
+      await ctx.db.patch("newsletterSubscribers", subscriber._id, {
         status: "confirmed",
         confirmedAt: now,
         unsubscribedAt: undefined,
@@ -247,7 +247,7 @@ export const confirm = mutation({
       });
     }
 
-    const updated = await ctx.db.get(subscriber._id);
+    const updated = await ctx.db.get("newsletterSubscribers", subscriber._id);
     return { ok: true, subscriber: updated ? publicSubscriber(updated) : null };
   },
 });
@@ -261,7 +261,7 @@ export const unsubscribe = mutation({
       return { ok: false, subscriber: null };
     }
 
-    await ctx.db.patch(subscriber._id, {
+    await ctx.db.patch("newsletterSubscribers", subscriber._id, {
       status: "unsubscribed",
       unsubscribedAt: Date.now(),
       resendSyncStatus: "idle",
@@ -271,7 +271,7 @@ export const unsubscribe = mutation({
       subscriberId: subscriber._id,
     });
 
-    const updated = await ctx.db.get(subscriber._id);
+    const updated = await ctx.db.get("newsletterSubscribers", subscriber._id);
     return { ok: true, subscriber: updated ? publicSubscriber(updated) : null };
   },
 });
@@ -601,7 +601,7 @@ export const sendAdminIssueNow = mutation({
     if (issue.status === "sent") {
       throw new Error("Newsletter issue already sent");
     }
-    await ctx.db.patch(issue._id, {
+    await ctx.db.patch("newsletterIssues", issue._id, {
       status: "scheduled",
       scheduledAt: Date.now(),
       errorMessage: undefined,
@@ -623,7 +623,7 @@ export const scheduleAdminIssue = mutation({
     if (issue.status === "sent") {
       throw new Error("Newsletter issue already sent");
     }
-    await ctx.db.patch(issue._id, {
+    await ctx.db.patch("newsletterIssues", issue._id, {
       status: "scheduled",
       scheduledAt: args.scheduledAt,
       errorMessage: undefined,
@@ -646,7 +646,7 @@ export const cancelAdminIssue = mutation({
     if (issue.status === "sent") {
       throw new Error("Newsletter issue already sent");
     }
-    await ctx.db.patch(issue._id, {
+    await ctx.db.patch("newsletterIssues", issue._id, {
       status: "cancelled",
       updatedAt: Date.now(),
     });
@@ -657,7 +657,7 @@ export const cancelAdminIssue = mutation({
 export const readSubscriber = internalQuery({
   args: { subscriberId: v.id("newsletterSubscribers") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.subscriberId);
+    return await ctx.db.get("newsletterSubscribers", args.subscriberId);
   },
 });
 
@@ -676,7 +676,7 @@ export const listConfirmedSubscribersForResendSync = internalQuery({
 export const readIssue = internalQuery({
   args: { issueId: v.id("newsletterIssues") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.issueId);
+    return await ctx.db.get("newsletterIssues", args.issueId);
   },
 });
 
@@ -706,7 +706,7 @@ export const setSetting = internalMutation({
       });
       return null;
     }
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("newsletterSettings", existing._id, {
       value: args.value,
       updatedAt: Date.now(),
     });
@@ -727,7 +727,7 @@ export const markSubscriberResendState = internalMutation({
     resendError: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.subscriberId, {
+    await ctx.db.patch("newsletterSubscribers", args.subscriberId, {
       resendContactId: args.resendContactId,
       resendSyncStatus: args.resendSyncStatus,
       resendSyncedAt:
@@ -747,8 +747,8 @@ export const markIssueBroadcast = internalMutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const issue = await ctx.db.get(args.issueId);
-    await ctx.db.patch(args.issueId, {
+    const issue = await ctx.db.get("newsletterIssues", args.issueId);
+    await ctx.db.patch("newsletterIssues", args.issueId, {
       status: args.status,
       resendBroadcastId: args.resendBroadcastId,
       errorMessage: args.errorMessage,
@@ -762,7 +762,7 @@ export const markIssueBroadcast = internalMutation({
       .unique();
     if (dailyRun !== null) {
       const now = Date.now();
-      await ctx.db.patch(dailyRun._id, {
+      await ctx.db.patch("dailyNewsletterRuns", dailyRun._id, {
         status: args.status,
         sentAt: args.status === "sent" ? now : undefined,
         completedAt: now,
@@ -843,7 +843,7 @@ export const handleEmailEvent = internalMutation({
     });
 
     if (subscriber && args.event.type === "email.bounced") {
-      await ctx.db.patch(subscriber._id, {
+      await ctx.db.patch("newsletterSubscribers", subscriber._id, {
         status: "bounced",
         resendSyncStatus: "failed",
         resendError: "Email bounced",
@@ -851,7 +851,7 @@ export const handleEmailEvent = internalMutation({
       });
     }
     if (subscriber && args.event.type === "email.complained") {
-      await ctx.db.patch(subscriber._id, {
+      await ctx.db.patch("newsletterSubscribers", subscriber._id, {
         status: "unsubscribed",
         unsubscribedAt: Date.now(),
         resendSyncStatus: "failed",
@@ -899,7 +899,7 @@ async function upsertPendingSubscriber(
       createdAt: now,
       updatedAt: now,
     });
-    const created = await ctx.db.get(id);
+    const created = await ctx.db.get("newsletterSubscribers", id);
     if (created === null) {
       throw new Error("Could not create newsletter subscription");
     }
@@ -916,7 +916,7 @@ async function upsertPendingSubscriber(
     return { subscriber: existing, tokenStored: false };
   }
 
-  await ctx.db.patch(existing._id, {
+  await ctx.db.patch("newsletterSubscribers", existing._id, {
     email,
     userId: args.userId ?? existing.userId,
     status: existing.status === "confirmed" ? "confirmed" : "pending",
@@ -928,7 +928,7 @@ async function upsertPendingSubscriber(
     unsubscribedAt: undefined,
     updatedAt: now,
   });
-  const updated = await ctx.db.get(existing._id);
+  const updated = await ctx.db.get("newsletterSubscribers", existing._id);
   if (updated === null) {
     throw new Error("Could not update newsletter subscription");
   }
@@ -1012,14 +1012,14 @@ async function upsertIssue(
       createdAt: now,
       updatedAt: now,
     });
-    return await ctx.db.get(id);
+    return await ctx.db.get("newsletterIssues", id);
   }
 
-  await ctx.db.patch(existing._id, {
+  await ctx.db.patch("newsletterIssues", existing._id, {
     ...issue,
     updatedAt: now,
   });
-  return await ctx.db.get(existing._id);
+  return await ctx.db.get("newsletterIssues", existing._id);
 }
 
 function publicSubscriber(subscriber: Doc<"newsletterSubscribers">) {

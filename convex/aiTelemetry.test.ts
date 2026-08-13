@@ -16,6 +16,34 @@ function setup() {
 }
 
 describe("AI telemetry", () => {
+  test("deduplicates healthy operational heartbeats within the write window", async () => {
+    const t = setup();
+    const input = {
+      key: "forum-agent-embedding",
+      healthy: true,
+      provider: "gateway",
+      model: "openai/text-embedding-3-small",
+      detail: "Embedding search is available; 4 entries available.",
+    };
+
+    await t.mutation(internal.aiRoutingControlData.recordOperationalState, input);
+    const first = await t.run(async (ctx) =>
+      await ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) => q.eq("key", input.key))
+        .unique(),
+    );
+    await t.mutation(internal.aiRoutingControlData.recordOperationalState, input);
+    const second = await t.run(async (ctx) =>
+      await ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) => q.eq("key", input.key))
+        .unique(),
+    );
+
+    expect(first?.updatedAt).toBe(second?.updatedAt);
+  });
+
   test("aggregates route, agent, and usage history for the owner", async () => {
     const t = setup();
     const now = Date.now();

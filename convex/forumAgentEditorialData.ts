@@ -29,7 +29,7 @@ export const attachRunInfrastructure = internalMutation({
       .withIndex("by_runKey", (q) => q.eq("runKey", args.runKey))
       .unique();
     if (run === null) return { updated: false as const };
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       agentThreadId: args.agentThreadId ?? run.agentThreadId,
       workflowId: args.workflowId ?? run.workflowId,
       promptVersion: args.promptVersion ?? run.promptVersion,
@@ -81,11 +81,11 @@ export const recordUsage = internalMutation({
 export const readThreadForMemory = internalQuery({
   args: { threadId: v.id("forumThreads") },
   handler: async (ctx, args) => {
-    const thread = await ctx.db.get(args.threadId);
+    const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || thread.status !== "active") return null;
     const [category, author] = await Promise.all([
-      ctx.db.get(thread.categoryId),
-      ctx.db.get(thread.authorId),
+      ctx.db.get("forumCategories", thread.categoryId),
+      ctx.db.get("users", thread.authorId),
     ]);
     if (category === null || author === null) return null;
     return {
@@ -152,7 +152,7 @@ export const writeEmbeddingBackfillState = internalMutation({
     };
     if (existing === null)
       await ctx.db.insert("forumAgentMaintenanceState", value);
-    else await ctx.db.patch(existing._id, value);
+    else await ctx.db.patch("forumAgentMaintenanceState", existing._id, value);
     return value;
   },
 });
@@ -171,7 +171,7 @@ export const readEditorialOutcomeSnapshot = internalQuery({
     return await Promise.all(
       published.map(async (run) => {
         const [thread, poll] = await Promise.all([
-          ctx.db.get(run.threadId!),
+          ctx.db.get("forumThreads", run.threadId!),
           ctx.db
             .query("forumPolls")
             .withIndex("by_threadId", (q) => q.eq("threadId", run.threadId!))
@@ -224,7 +224,7 @@ export const replaceEditorialCohorts = internalMutation({
           updatedAt: now,
         });
       } else {
-        await ctx.db.patch(existing._id, { ...cohort, updatedAt: now });
+        await ctx.db.patch("forumAgentEditorialCohorts", existing._id, { ...cohort, updatedAt: now });
       }
     }
     return { updated: Math.min(args.cohorts.length, 160) };

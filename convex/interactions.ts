@@ -124,7 +124,7 @@ export const set = mutation({
     if (existing === null) {
       await ctx.db.insert("interactions", fields);
     } else {
-      await ctx.db.patch(existing._id, fields);
+      await ctx.db.patch("interactions", existing._id, fields);
     }
   },
 });

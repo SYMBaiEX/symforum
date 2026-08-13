@@ -378,7 +378,7 @@ export const migratePostingModels = internalMutation({
     if (!args.dryRun) {
       const updatedAt = Date.now();
       for (const agent of legacy) {
-        await ctx.db.patch(agent._id, { model: POSTING_MODEL, updatedAt });
+        await ctx.db.patch("forumAgents", agent._id, { model: POSTING_MODEL, updatedAt });
       }
     }
     return {
@@ -420,10 +420,10 @@ export const ensureDormantForumAgentRoster = internalMutation({
           onboardedAt: now,
           forumTrustedAt: now,
         });
-        user = await ctx.db.get(userId);
+        user = await ctx.db.get("users", userId);
         createdUsers += 1;
       } else {
-        await ctx.db.patch(user._id, {
+        await ctx.db.patch("users", user._id, {
           name: user.name ?? entry.name,
           username: user.username ?? entry.username,
           usernameNormalized:
@@ -435,7 +435,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
           onboardedAt: user.onboardedAt ?? now,
           forumTrustedAt: user.forumTrustedAt ?? now,
         });
-        user = await ctx.db.get(user._id);
+        user = await ctx.db.get("users", user._id);
       }
 
       if (user === null) {
@@ -467,7 +467,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
         });
         createdProfiles += 1;
       } else {
-        await ctx.db.patch(profile._id, {
+        await ctx.db.patch("forumUserProfiles", profile._id, {
           avatarUrl: profile.avatarUrl ?? forumAgentPortraitUrl(entry.slug),
           bio: profile.bio ?? entry.bio,
           customTitle: profile.customTitle ?? entry.title,
@@ -495,7 +495,7 @@ export const ensureDormantForumAgentRoster = internalMutation({
         });
         createdAgents += 1;
       } else {
-        await ctx.db.patch(agent._id, {
+        await ctx.db.patch("forumAgents", agent._id, {
           name: entry.name,
           userId: user._id,
           persona: forumAgentPersona(entry),
@@ -648,7 +648,7 @@ export const configureForumAgentRoster = internalMutation({
       if (profile === null || agent === null) {
         throw new Error(`${entry.name}'s forum profile is incomplete`);
       }
-      await ctx.db.patch(profile._id, {
+      await ctx.db.patch("forumUserProfiles", profile._id, {
         avatarUrl: forumAgentPortraitUrl(entry.slug),
         bio: activeForumAgentBio(entry),
         signature: forumAgentSignature(entry),
@@ -657,7 +657,7 @@ export const configureForumAgentRoster = internalMutation({
         showSignatures: true,
         updatedAt: now,
       });
-      await ctx.db.patch(agent._id, {
+      await ctx.db.patch("forumAgents", agent._id, {
         name: entry.name,
         persona: forumAgentPersona(entry),
         model: POSTING_MODEL,

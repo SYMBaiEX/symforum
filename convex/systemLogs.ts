@@ -85,7 +85,7 @@ export const record = mutation({
       existing.status !== "resolved" &&
       now - existing.lastSeenAt < DEDUPE_WINDOW_MS
     ) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("systemLogs", existing._id, {
         lastSeenAt: now,
         updatedAt: now,
         occurrences: existing.occurrences + 1,
@@ -232,7 +232,7 @@ export const updateStatusAdmin = mutation({
   },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
-    const existing = await ctx.db.get(args.logId);
+    const existing = await ctx.db.get("systemLogs", args.logId);
     if (existing === null) {
       throw new ConvexError({
         code: "NOT_FOUND",
@@ -240,7 +240,7 @@ export const updateStatusAdmin = mutation({
       });
     }
 
-    await ctx.db.patch(args.logId, {
+    await ctx.db.patch("systemLogs", args.logId, {
       status: args.status,
       updatedAt: Date.now(),
     });
@@ -253,11 +253,11 @@ export const deleteAdmin = mutation({
   args: { logId: v.id("systemLogs") },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
-    const existing = await ctx.db.get(args.logId);
+    const existing = await ctx.db.get("systemLogs", args.logId);
     if (existing === null) {
       return { deleted: false };
     }
-    await ctx.db.delete(args.logId);
+    await ctx.db.delete("systemLogs", args.logId);
     return { deleted: true };
   },
 });

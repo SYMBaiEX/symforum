@@ -125,11 +125,11 @@ describe("forum agent maintenance", () => {
       continuing: false,
     });
     await t.run(async (ctx) => {
-      expect(await ctx.db.get(ids.oldUsageId)).toBeNull();
-      expect(await ctx.db.get(ids.oldRunId)).toBeNull();
-      expect(await ctx.db.get(ids.freshUsageId)).not.toBeNull();
-      expect(await ctx.db.get(ids.referencedRunId)).not.toBeNull();
-      expect(await ctx.db.get(ids.threadId)).toMatchObject({
+      expect(await ctx.db.get("forumAgentUsageEvents", ids.oldUsageId)).toBeNull();
+      expect(await ctx.db.get("forumAgentRuns", ids.oldRunId)).toBeNull();
+      expect(await ctx.db.get("forumAgentUsageEvents", ids.freshUsageId)).not.toBeNull();
+      expect(await ctx.db.get("forumAgentRuns", ids.referencedRunId)).not.toBeNull();
+      expect(await ctx.db.get("forumThreads", ids.threadId)).toMatchObject({
         title: "Durable published thread",
         status: "active",
       });

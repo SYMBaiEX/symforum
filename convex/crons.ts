@@ -6,7 +6,7 @@ const crons = cronJobs();
 
 crons.cron(
   "refresh Hacker News snapshot",
-  "0 11 * * *",
+  "5 11 * * *",
   internal.news.refreshTopStories,
   {
     limit: 40,
@@ -14,7 +14,7 @@ crons.cron(
 );
 crons.cron(
   "refresh GitHub portfolio metrics",
-  "0 */6 * * *",
+  "35 */6 * * *",
   internal.githubPortfolio.refreshPortfolioMetrics,
   { source: "cron" },
 );

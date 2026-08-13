@@ -192,7 +192,6 @@ export const indexForumThread = internalAction({
 export const checkEmbeddingHealth = internalAction({
   args: {},
   handler: async (ctx) => {
-    const startedAt = Date.now();
     try {
       const { rag } = platform(requireApiKey());
       await rag.getOrCreateNamespace(ctx, {
@@ -213,7 +212,7 @@ export const checkEmbeddingHealth = internalAction({
           healthy: true,
           provider: "gateway",
           model: EMBEDDING_MODEL,
-          detail: `Embedding search completed in ${Date.now() - startedAt}ms; ${result.entries.length} entries available.`,
+          detail: `Embedding search is available; ${result.entries.length} entries available.`,
         },
       );
       return {

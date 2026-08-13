@@ -1,5 +1,7 @@
-import { ConvexHttpClient } from "convex/browser";
+import "server-only";
+
 import { makeFunctionReference } from "convex/server";
+import { getServerConvexClient } from "@/lib/server-convex";
 
 type ServerLogInput = {
   level?: "info" | "warn" | "error";
@@ -27,13 +29,12 @@ const systemLogRefs = {
 };
 
 export async function recordSystemLog(input: ServerLogInput) {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) {
+  const client = getServerConvexClient();
+  if (!client) {
     return;
   }
 
   try {
-    const client = new ConvexHttpClient(url);
     await client.mutation(systemLogRefs.record, withoutUndefined(input));
   } catch {
     // Logging cannot be allowed to break a request path.

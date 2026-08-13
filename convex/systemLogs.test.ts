@@ -66,7 +66,7 @@ describe("system log fingerprints", () => {
     });
 
     const stored = await t.run(async (ctx) => {
-      return await ctx.db.get(result.id!);
+      return await ctx.db.get("systemLogs", result.id!);
     });
     expect(stored?.fingerprint).toBe(
       "client|application|runtime_error|/portfolio/elizaos|[CONVEX Q(comments:list)] [Request ID] Server Error Called by client",

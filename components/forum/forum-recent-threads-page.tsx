@@ -16,6 +16,7 @@ import {
 } from "@/components/forum/forum-primitives";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 const RECENT_THREADS_PAGE_SIZE = 25;
 const EMPTY_THREADS: ForumThreadSummaryRecord[] = [];
@@ -54,9 +55,11 @@ export function ForumRecentThreadsPage({
 function LiveForumRecentThreadsPage({ mode }: { mode: ForumRecentThreadMode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [queryNow] = useState(() => Date.now());
   const page = parsePage(searchParams.get("page"));
   const recentThreads = useQuery(forumRefs.listRecentThreads, {
     mode,
+    now: queryNow,
     page,
     pageSize: RECENT_THREADS_PAGE_SIZE,
   });

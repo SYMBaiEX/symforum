@@ -122,6 +122,14 @@ export const cleanupExpiredOperationalData = internalMutation({
       (run) => run.agentThreadId === undefined && run.workflowId === undefined,
     );
     const replyRuns = [...repliedRuns, ...ignoredRuns, ...failedReplyRuns];
+    const [
+      reservedSources,
+      reservedTopics,
+      publishedSources,
+      publishedTopics,
+      releasedSources,
+      releasedTopics,
+    ] = reservationGroups;
     const reservations = reservationGroups.flat();
     const rows = [
       ...agentRuns,
@@ -132,7 +140,31 @@ export const cleanupExpiredOperationalData = internalMutation({
       ...spendBuckets,
       ...reservations,
     ];
-    for (const row of rows) await ctx.db.delete(row._id);
+    for (const row of agentRuns) await ctx.db.delete("forumAgentRuns", row._id);
+    for (const row of replyRuns)
+      await ctx.db.delete("forumAgentReplyRuns", row._id);
+    for (const row of usageEvents)
+      await ctx.db.delete("forumAgentUsageEvents", row._id);
+    for (const row of routeEvents) await ctx.db.delete("aiRouteEvents", row._id);
+    for (const row of sourceUses)
+      await ctx.db.delete("forumAgentSourceUses", row._id);
+    for (const row of spendBuckets) await ctx.db.delete("aiSpendBuckets", row._id);
+    for (const row of [
+      ...reservedSources,
+      ...publishedSources,
+      ...releasedSources,
+    ]) {
+      await ctx.db.delete(
+        "forumAgentSourceReservations",
+        row._id as Id<"forumAgentSourceReservations">,
+      );
+    }
+    for (const row of [...reservedTopics, ...publishedTopics, ...releasedTopics]) {
+      await ctx.db.delete(
+        "forumAgentTopicReservations",
+        row._id as Id<"forumAgentTopicReservations">,
+      );
+    }
 
     // A full agent-run page can be made entirely of rows whose component
     // resources have not been cleaned yet. Only continue immediately when
@@ -210,9 +242,9 @@ export const clearLegacyResourceReferences = internalMutation({
     clearWorkflow: v.boolean(),
   },
   handler: async (ctx, args): Promise<{ updated: boolean }> => {
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("forumAgentRuns", args.runId);
     if (run === null) return { updated: false as const };
-    await ctx.db.patch(run._id, {
+    await ctx.db.patch("forumAgentRuns", run._id, {
       ...(args.clearAgentThread ? { agentThreadId: undefined } : {}),
       ...(args.clearWorkflow ? { workflowId: undefined } : {}),
       updatedAt: run.updatedAt,
