@@ -31,7 +31,9 @@ export function safeImageUrl(value: string | undefined | null) {
 
   const url = new URL(externalUrl);
   if (
-    (url.hostname === "symbaiex.com" || url.hostname === "www.symbaiex.com") &&
+    (url.hostname === "symbaiex.com" ||
+      url.hostname === "www.symbaiex.com" ||
+      url.hostname === "forum.symbaiex.com") &&
     url.pathname.startsWith("/images/")
   ) {
     return `${url.pathname}${url.search}`;

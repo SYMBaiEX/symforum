@@ -10,6 +10,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import { Star } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Fragment,
@@ -1676,8 +1677,8 @@ function ForumLatestPostCell({
               {latestThread.title}
             </ForumLink>
             {latestPostHref ? (
-              <ForumJumpLink
-                ariaLabel={`Go to last post in ${latestThread.title}`}
+        <ForumJumpLink
+                ariaLabel={`Last: Go to last post in ${latestThread.title}`}
                 className="min-h-9 shrink-0 px-2 md:min-h-7"
                 href={latestPostHref}
               >
@@ -1922,7 +1923,7 @@ export function ForumThreadTable({
                     </div>
                     {firstUnreadHref ? (
                       <ForumJumpLink
-                        ariaLabel={`Go to first unread post in ${thread.title}`}
+                        ariaLabel={`First unread: Go to first unread post in ${thread.title}`}
                         className="mt-2"
                         href={firstUnreadHref}
                       >
@@ -1973,7 +1974,7 @@ export function ForumThreadTable({
                       · {formatForumDateTime(getThreadLastActivityAt(thread))}
                     </p>
                     <ForumJumpLink
-                      ariaLabel={`Go to last post in ${thread.title}`}
+                      ariaLabel={`Last: Go to last post in ${thread.title}`}
                       className="shrink-0 px-2"
                       href={lastPostHref}
                     >
@@ -2133,7 +2134,7 @@ export function ForumThreadTable({
                   <td className="px-3 py-2.5 align-middle">
                     <div className="flex flex-wrap items-center gap-2">
                       <ForumJumpLink
-                        ariaLabel={`Go to last post in ${thread.title}`}
+                        ariaLabel={`Last: Go to last post in ${thread.title}`}
                         className="px-2"
                         href={lastPostHref}
                       >
@@ -2334,7 +2335,7 @@ function ForumCompactMobileThreadRow({
           <span>{formatForumCount(thread.viewCount)} views</span>
           {firstUnreadHref ? (
             <ForumLink
-              aria-label={`Go to first unread post in ${thread.title}`}
+              aria-label={`First unread: Go to first unread post in ${thread.title}`}
               className="focus-ring text-primary hover:underline"
               href={firstUnreadHref}
               prefetch
@@ -2345,7 +2346,7 @@ function ForumCompactMobileThreadRow({
         </div>
       </div>
       <ForumJumpLink
-        ariaLabel={`Go to last post in ${thread.title}`}
+        ariaLabel={`Last: Go to last post in ${thread.title}`}
         className="min-h-8 px-2"
         href={lastPostHref}
       >
@@ -2464,7 +2465,7 @@ function ForumCompactDesktopThreadRow({
             </p>
           </div>
           <ForumJumpLink
-            ariaLabel={`Go to last post in ${thread.title}`}
+            ariaLabel={`Last: Go to last post in ${thread.title}`}
             className="min-h-7 shrink-0 px-2"
             href={lastPostHref}
           >
@@ -3000,14 +3001,26 @@ export function ForumAvatar({
       )}
     >
       {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- Auth avatars may come from hosts outside next/image config.
-        <img
-          alt={alt ?? `${name} avatar`}
-          className="size-full object-cover"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          src={imageUrl}
-        />
+        imageUrl.startsWith("/images/") ? (
+          <Image
+            alt={alt ?? `${name} avatar`}
+            className="size-full object-cover"
+            height={48}
+            loading="lazy"
+            sizes="48px"
+            src={imageUrl}
+            width={48}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- Auth avatars may come from hosts outside next/image config.
+          <img
+            alt={alt ?? `${name} avatar`}
+            className="size-full object-cover"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            src={imageUrl}
+          />
+        )
       ) : (
         <span>{initials}</span>
       )}
