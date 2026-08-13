@@ -85,7 +85,7 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 ## Production agent-access receipt — 2026-08-13
 
 - Ed25519 agent release commit: `b3e254c` (`feat: add scoped Ed25519 agent
-  access`). The release adds owner-consented public-key enrollment, explicit
+access`). The release adds owner-consented public-key enrollment, explicit
   forum/newsletter/interactions/comments scopes, replay-safe challenges,
   Convex Auth token exchange, revocation, key rotation, and the public
   `/agent` guide plus `/agent/signup` enrollment route.
@@ -108,7 +108,7 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 ## Latest agent-platform receipt — 2026-08-13
 
 - Release commit: `4a9fbee` (`feat: enforce agent quotas and publish operating
-  contract`).
+contract`).
 - Follow-up policy commit: `fceaad3` publishes the numeric beta defaults in the
   human agent prompt, `llms.txt`, and Markdown guide. Vercel redeployed this
   policy as `dpl_GNJi8Z3Fiv2NDpBh7SfcSq4DzNfT`, which is Ready and aliased to
@@ -190,105 +190,139 @@ runtime evidence; an external-only item needs an owner and a recorded receipt.
 ## Wave 0 — baseline and evidence
 
 - [x] Map route ownership, public/private boundaries, Convex references, current
-  metadata, Markdown rendering, proxy behavior, sitemap, and tests.
+      metadata, Markdown rendering, proxy behavior, sitemap, and tests.
 - [x] Record the baseline commit and preserve unrelated dirty paths.
 - [x] Verify the primary property and sitemap in Google Search Console.
 - [x] Verify the site in Bing Webmaster Tools.
 - [ ] Enable Bing AI Performance reporting when the account exposes the report.
 - [ ] Record representative URL Inspection and Rich Results Test receipts.
 - [ ] Capture a 30-day baseline for indexed URLs, crawl errors, Core Web Vitals,
-  search clicks, cited URLs, and conversions.
+      search clicks, cited URLs, and conversions.
+
+## Latest verification receipt — 2026-08-13
+
+- Research discoverability release commits: `275a6df` and `8d3e583`. The new
+  `/research` hub is canonical, linked from `llms.txt`, `llms-full.txt`, and the
+  sitemap, and emits both `CollectionPage` and `ItemList` JSON-LD. Focused
+  sitemap, Markdown, and agent-guide tests passed.
+- Social-preview release commits: `a9ec22c` and `a865d60`. Contact and research
+  pages now have page-specific Open Graph/Twitter image metadata with meaningful
+  alt text; the root Twitter card uses the same crawlable 1200x630 image. The
+  metadata regression test passes.
+- Forum streaming release commits: `4ac62db` and `69c4df1`. Global and forum
+  loading boundaries now render no skeleton markup; forum routes omit the
+  competing `<noscript>` stream while preserving the Markdown endpoint and
+  server/client route content. A clean Chrome tab reported no application
+  console errors; the only warnings were from a browser extension
+  (`chrome-extension://.../contentscript.js`). Fresh production Lighthouse on
+  `/forum?streamcheck=2`: Performance `96`, Accessibility `100`, Best Practices
+  `100`, SEO `100`, Agentic Browsing `100`; `errors-in-console` was empty.
+- Production deployment: Vercel `dpl_4n4tswGz6M7YcmhbRv6iru4mp6hZ`, Ready and
+  aliased to `https://www.symbaiex.com`.
+- Google Search Console (signed-in property): `/sitemap.xml` status **Success**,
+  last read Aug 13, 2026, 428 discovered pages. Bing Webmaster Tools:
+  `https://www.symbaiex.com/sitemap.xml` status **Success**, 431 URLs
+  discovered. Bing AI Performance is available for the property, but its
+  current 3-month report has 0 citations / 0 cited pages; this is a baseline,
+  not evidence of a defect.
+- Cloudflare Web Bot Auth: the signed HTTPS directory is live at
+  `https://www.symbaiex.com/.well-known/http-message-signatures-directory`.
+  Cloudflare dashboard submission remains owner action. DNS is authoritative at
+  Cloudflare but HTTP is currently DNS-only to Vercel (`server: Vercel`, no
+  `cf-ray`), so Cloudflare edge verification is not claimed.
 
 ## Wave 1 — crawl policy, negotiation, and observability
 
 - [x] Publish explicit `robots.txt` sections for Googlebot, Bingbot,
-  OAI-SearchBot, GPTBot, and Google-Extended. Decide search, training, and
-  user-agent policies independently before production rollout.
+      OAI-SearchBot, GPTBot, and Google-Extended. Decide search, training, and
+      user-agent policies independently before production rollout.
 - [ ] Verify legitimate bots at the WAF/origin using published IPs, reverse DNS,
-  cryptographic bot authentication, or a trusted verified-bot facility. Never
-  allow based only on `User-Agent`.
+      cryptographic bot authentication, or a trusted verified-bot facility. Never
+      allow based only on `User-Agent`.
 - [x] Keep Markdown public-only, canonicalized to HTML, `noindex`ed, and varied
-  by `Accept` and `Host`.
+      by `Accept` and `Host`.
 - [x] Reject wildcard and zero-quality Markdown negotiation when Markdown was not
-  actually requested.
+      actually requested.
 - [x] Log safe crawl dimensions: host, method, path, representation, Accept,
-  referrer, and bounded user-agent. Do not log cookies, authorization, IPs, or
-  secrets.
+      referrer, and bounded user-agent. Do not log cookies, authorization, IPs, or
+      secrets.
 - [ ] Aggregate logs into daily route/bot/status/latency/cache reports and alert
-  on crawler-facing 4xx/5xx, latency, and volume anomalies.
+      on crawler-facing 4xx/5xx, latency, and volume anomalies.
 - [x] Run a deployed edge matrix for GET, HEAD, q-values, aliases, private paths,
-  both hosts, redirects, and cache hits.
+      both hosts, redirects, and cache hits.
 
 ## Wave 2 — canonical entities and structured data
 
 - [x] Remove obsolete Google sitelinks `SearchAction` markup.
 - [x] Give Person, Organization, WebSite, Article, ProfilePage, forum entities,
-  and breadcrumbs stable `@id` values and truthful relationships.
+      and breadcrumbs stable `@id` values and truthful relationships.
 - [x] Add author URLs, profile pages, images, datePublished, and dateModified
-  wherever the underlying content has those facts.
+      wherever the underlying content has those facts.
 - [x] Add CollectionPage/ItemList markup only to visible indexes that actually
-  list those items.
+      list those items.
 - [x] Add DiscussionForumPosting only to real user-generated forum posts; include
-  full text, author, date, replies, and disclosed AI-source metadata where true.
+      full text, author, date, replies, and disclosed AI-source metadata where true.
 - [ ] Validate a representative sample with Rich Results Test and URL Inspection.
 - [x] Add CI tests for JSON-LD parsing, canonical consistency, visible-content
-  agreement, and private-route exclusion.
+      agreement, and private-route exclusion.
 
 ## Wave 3 — AI-readable discovery and syndication
 
 - [x] Maintain concise `/llms.txt` with canonical HTML and Markdown links.
 - [x] Keep `/llms-full.txt` bounded, current, and representative of high-value
-  primary and forum detail pages; never turn it into an unbounded database dump.
+      primary and forum detail pages; never turn it into an unbounded database dump.
 - [x] Make unavailable dynamic data explicit instead of rendering a misleading
-  empty list.
+      empty list.
 - [x] Add canonical RSS/Atom feeds for blog, news, newsletter, and any genuinely
-  public forum feed. Include title, canonical URL, author, publication time,
-  modification time, summary/full content, and safe XML escaping.
+      public forum feed. Include title, canonical URL, author, publication time,
+      modification time, summary/full content, and safe XML escaping.
 - [x] Advertise feeds with `rel="alternate"` and test validators.
 - [ ] Submit IndexNow events for every real public create/update/delete operation
-  with durable idempotency, retry backoff, and an audit record. The current
-  release covers admin blog/newsletter writes with bounded deduplication and
-  best-effort `after()` notifications; Convex-originated news changes still
-  need a durable event source before this item is fully closed.
+      with durable idempotency, retry backoff, and an audit record. The current
+      release covers admin blog/newsletter writes with bounded deduplication and
+      best-effort `after()` notifications; Convex-originated news changes still
+      need a durable event source before this item is fully closed.
 
 ## Wave 4 — sitemap and internal graph
 
 - [x] Include only canonical, indexable, 200-response URLs in XML sitemaps.
 - [ ] Remove silent omission: expose sitemap query failures through metrics,
-  stale-last-known-good fallback, and operator alerts.
+      stale-last-known-good fallback, and operator alerts.
 - [ ] Bound or paginate forum discovery deliberately; document any cap.
 - [x] Provide correct forum-host robots and sitemap discovery without redirect
-  loops or duplicate-host canonicals.
+      loops or duplicate-host canonicals.
 - [ ] Add image, video, news, or localized sitemap extensions only when the
-  corresponding content genuinely exists.
-- [ ] Add topic hubs, related links, crawlable archive links, and breadcrumbs;
-  avoid thin tag-page expansion.
+      corresponding content genuinely exists.
+- [x] Add a compact canonical research topic hub, related link path, and
+      breadcrumbs; avoid thin tag-page expansion. Additional hubs remain editorial
+      work, not an automatic tag-page expansion.
 
 ## Wave 5 — content quality and authority
 
 - [ ] Build a small set of canonical topic pages around actual SYMBiEX expertise.
 - [ ] Use answer-first summaries, definitions, examples, caveats, dates, and
-  primary-source citations.
+      primary-source citations.
 - [ ] Publish original research, benchmarks, case studies, implementation notes,
-  methodology, and changelog content.
+      methodology, and changelog content.
 - [ ] Add visible AI-generation disclosure and human editorial review policy.
 - [ ] Refresh stale content, set accurate modification dates, canonicalize aliases,
-  and archive or 410 thin/empty pages.
+      and archive or 410 thin/empty pages.
 - [ ] Earn authority through real open-source work, references, and relevant links;
-  do not manufacture reviews, identities, engagement, or backlinks.
+      do not manufacture reviews, identities, engagement, or backlinks.
 
 ## Wave 6 — media, performance, accessibility, and progressive enhancement
 
 - [ ] Audit every public page for page-specific Open Graph/Twitter images, stable
-  filenames, meaningful alt text, captions, and crawlable image URLs.
+      filenames, meaningful alt text, captions, and crawlable image URLs. Shared
+      root, contact, and research surfaces are covered; forum/detail parity remains.
 - [ ] For real video, add a watch page, transcript, poster, VideoObject, and
-  optional video sitemap; do not mark up links as watch pages.
+      optional video sitemap; do not mark up links as watch pages.
 - [ ] Measure field LCP, INP, and CLS plus TTFB on representative routes; use
-  Lighthouse for regressions and CrUX/Search Console for release decisions.
+      Lighthouse for regressions and CrUX/Search Console for release decisions.
 - [ ] Audit Convex waterfalls, hydration, fonts, hero media, third-party scripts,
-  and layout shifts.
+      and layout shifts.
 - [ ] Complete WCAG 2.2 keyboard, focus, labels, contrast, motion, forms, dialog,
-  live-region, and screen-reader testing.
+      live-region, and screen-reader testing.
 - [ ] Ensure important content, links, and forms remain usable without JavaScript.
 
 ## Acceptance gates
