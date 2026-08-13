@@ -2,10 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Keep client assets and Server Functions aligned during Vercel rollouts.
-  deploymentId:
+  deploymentId: (
     process.env.NEXT_DEPLOYMENT_ID ??
     process.env.VERCEL_GIT_COMMIT_SHA ??
-    "local",
+    "local"
+  ).slice(0, 32),
   reactCompiler: true,
   typedRoutes: true,
   images: {
