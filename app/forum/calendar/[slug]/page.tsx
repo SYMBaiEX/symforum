@@ -1,7 +1,11 @@
 import { ForumCalendarDetailPage } from "@/components/forum/forum-calendar-detail-page";
 import { humanizeSlug } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { StructuredData } from "@/components/structured-data";
 import { convexRefs } from "@/lib/convex-refs";
+import { safeForumIsoDate } from "@/lib/forum-metadata";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { forumSiteUrl } from "@/lib/site-urls";
 import { getServerConvexClient } from "@/lib/server-convex";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -19,13 +23,33 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { slug: rawSlug } = await params;
   const slug = normalizeCalendarEventSlugParam(rawSlug) ?? rawSlug;
+  const event = process.env.NEXT_PUBLIC_CONVEX_URL
+    ? await resolveForumCalendarEvent(slug)
+    : null;
+  if (process.env.NEXT_PUBLIC_CONVEX_URL && event === null) {
+    notFound();
+  }
+  const title = event?.title ?? `Forum Calendar / ${humanizeSlug(slug)}`;
+  const description = "A SYMBaiEX forum calendar event.";
+  const canonical = forumSiteUrl(`/calendar/${encodeURIComponent(slug)}`);
   return {
-    title: `Forum Calendar / ${humanizeSlug(slug)}`,
-    description: "A SYMBaiEX forum calendar event.",
+    title,
+    description,
     alternates: {
-      canonical: `https://forum.symbaiex.com/calendar/${encodeURIComponent(
-        slug,
-      )}`,
+      canonical,
+    },
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: canonical,
+      publishedTime: safeForumIsoDate(event?.createdAt),
+      modifiedTime: safeForumIsoDate(event?.updatedAt),
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
     },
   };
 }
@@ -37,15 +61,42 @@ export default async function ForumCalendarDetailRoute({ params }: PageProps) {
     notFound();
   }
 
+  const event = process.env.NEXT_PUBLIC_CONVEX_URL
+    ? await resolveForumCalendarEvent(slug)
+    : null;
   if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-    const event = await resolveForumCalendarEvent(slug);
     if (event === null) {
       notFound();
     }
   }
 
+  const title = event?.title ?? `Forum Calendar / ${humanizeSlug(slug)}`;
+  const description = "A SYMBaiEX forum calendar event.";
+  const canonical = forumSiteUrl(`/calendar/${encodeURIComponent(slug)}`);
+
   return (
     <section className="page-frame page-frame-dense">
+      <StructuredData
+        data={[
+          {
+            "@type": "WebPage",
+            name: title,
+            description,
+            url: canonical,
+            ...(event
+              ? {
+                  datePublished: safeForumIsoDate(event.createdAt),
+                  dateModified: safeForumIsoDate(event.updatedAt),
+                }
+              : {}),
+          },
+          breadcrumbStructuredData([
+            { name: "Forum", url: forumSiteUrl("/") },
+            { name: "Calendar", url: forumSiteUrl("/calendar") },
+            { name: title, url: canonical },
+          ]),
+        ]}
+      />
       <ForumUtilityNav className="mb-2" />
       <ForumCalendarDetailPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}

@@ -17,11 +17,14 @@ const PRIVATE_PATHS = [
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-      disallow: PRIVATE_PATHS,
-    },
+    rules: [
+      { userAgent: "*", allow: "/", disallow: PRIVATE_PATHS },
+      // Search discovery is allowed; training-oriented crawlers remain explicit.
+      { userAgent: "OAI-SearchBot", allow: "/", disallow: PRIVATE_PATHS },
+      { userAgent: "GPTBot", disallow: "/" },
+      { userAgent: "Google-Extended", disallow: "/" },
+      { userAgent: "Bingbot", allow: "/", disallow: PRIVATE_PATHS },
+    ],
     sitemap: primarySiteUrl("/sitemap.xml"),
     host: PRIMARY_SITE_URL,
   };

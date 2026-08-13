@@ -1,6 +1,8 @@
 import { ForumCalendarPage } from "@/components/forum/forum-calendar-page";
 import { normalizeForumCalendarMonthParam } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { StructuredData } from "@/components/structured-data";
+import { forumCollectionStructuredData } from "@/lib/seo";
 import type { Metadata } from "next";
 
 type PageProps = {
@@ -21,6 +23,13 @@ export default async function ForumCalendarRoute({ searchParams }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense">
+      <StructuredData
+        data={forumCollectionStructuredData(
+          "Forum Calendar",
+          "Calendar events for the SYMBaiEX forum.",
+          "/calendar",
+        )}
+      />
       <ForumUtilityNav className="mb-2" />
       <ForumCalendarPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}

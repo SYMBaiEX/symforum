@@ -11,6 +11,7 @@ import type { MetadataRoute } from "next";
 const PRIMARY_PATHS = [
   "/",
   "/about",
+  "/ai-policy",
   "/blog",
   "/contact",
   "/news",
@@ -31,6 +32,8 @@ const FORUM_PATHS = [
 ];
 
 export const revalidate = 3600;
+// Google’s sitemap protocol permits up to 50,000 URLs per sitemap file.
+const MAX_SITEMAP_ENTRIES = 50_000;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [postsResult, projectsResult, issuesResult, newsResult] =
@@ -40,6 +43,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       getPublicNewsletterIssues(30),
       getPublicNewsStories(),
     ]);
+
+  logSitemapSourceFailure("blog", postsResult);
+  logSitemapSourceFailure("portfolio", projectsResult);
+  logSitemapSourceFailure("newsletter", issuesResult);
+  logSitemapSourceFailure("news", newsResult);
 
   const entries: MetadataRoute.Sitemap = [
     ...PRIMARY_PATHS.map(primaryEntry),
@@ -94,7 +102,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const forumResult = await getPublicForumSitemapEntries();
   entries.push(...forumResult);
 
-  return dedupeEntries(entries);
+  const bounded = dedupeEntries(entries);
+  if (bounded.length > MAX_SITEMAP_ENTRIES) {
+    console.warn(`Sitemap entry cap reached: ${bounded.length} > ${MAX_SITEMAP_ENTRIES}`);
+  }
+  return bounded.slice(0, MAX_SITEMAP_ENTRIES);
 }
 
 async function getPublicForumSitemapEntries(): Promise<MetadataRoute.Sitemap> {
@@ -104,11 +116,11 @@ async function getPublicForumSitemapEntries(): Promise<MetadataRoute.Sitemap> {
   try {
     const [categories, announcements, helpDocuments, calendarEvents] =
       await Promise.all([
-        convex.query(convexRefs.forum.listCategories, { limit: 200 }),
+        convex.query(convexRefs.forum.listCategories, { limit: 100 }),
         convex.query(convexRefs.forum.listAnnouncements, {
           includeBoardAnnouncements: true,
         }),
-        convex.query(convexRefs.forum.listHelpDocuments, { limit: 200 }),
+        convex.query(convexRefs.forum.listHelpDocuments, { limit: 100 }),
         convex.query(convexRefs.forum.listCalendarEvents, {
           month: new Date().toISOString().slice(0, 7),
         }),
@@ -216,4 +228,16 @@ function dedupeEntries(entries: MetadataRoute.Sitemap) {
     seen.add(entry.url);
     return true;
   });
+}
+
+function logSitemapSourceFailure<T>(
+  source: string,
+  result: PromiseSettledResult<T>,
+) {
+  if (result.status !== "rejected") return;
+  const rawMessage = result.reason instanceof Error
+    ? result.reason.message
+    : "unknown sitemap source failure";
+  const message = rawMessage.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 240);
+  console.error("Sitemap source unavailable", { source, message });
 }

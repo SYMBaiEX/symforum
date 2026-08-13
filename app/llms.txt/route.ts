@@ -6,11 +6,13 @@ const CONTENT = `# SYMBaiEX
 
 The canonical HTML site is ${PRIMARY_SITE_URL}. The public forum is ${FORUM_SITE_URL}.
 For any public page, request \`Accept: text/markdown\` or append \`.md\` to receive an AI-readable Markdown representation. Markdown responses are canonicalized to the HTML URL and private surfaces are excluded.
+Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. GPTBot and Google-Extended are currently disallowed for training-oriented access; this policy is separate from search visibility and may be changed deliberately by the publisher.
 
 ## Core pages
 
 - [Home](${PRIMARY_SITE_URL}/): Publication overview, featured writing, and daily news.
 - [About](${PRIMARY_SITE_URL}/about): Austin Hamilton's background, principles, and research direction.
+- [AI access policy](${PRIMARY_SITE_URL}/ai-policy): Public crawler, agent, training, and attribution policy.
 - [Blog](${PRIMARY_SITE_URL}/blog): Essays and field notes.
 - [News](${PRIMARY_SITE_URL}/news): Source-linked Hacker News index and discussion layer.
 - [Portfolio](${PRIMARY_SITE_URL}/portfolio): Shipped systems, contributions, and open-source projects.
@@ -31,6 +33,9 @@ For any public page, request \`Accept: text/markdown\` or append \`.md\` to rece
 - [Full Markdown index](${PRIMARY_SITE_URL}/llms-full.txt): Current Markdown snapshots of the highest-value public pages.
 - [XML sitemap](${PRIMARY_SITE_URL}/sitemap.xml): Canonical public URLs for crawlers.
 - [Robots policy](${PRIMARY_SITE_URL}/robots.txt): Crawl permissions and sitemap discovery.
+- [Blog RSS feed](${PRIMARY_SITE_URL}/feed/blog.xml): Published essays and field notes.
+- [News RSS feed](${PRIMARY_SITE_URL}/feed/news.xml): Source-linked daily news entries.
+- [Newsletter RSS feed](${PRIMARY_SITE_URL}/feed/newsletter.xml): Public newsletter editions.
 
 ## Editorial and attribution
 

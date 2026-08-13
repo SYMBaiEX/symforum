@@ -10,6 +10,10 @@ const FORUM_SUBDOMAIN_SITE_PREFIXES = [
   "/profile",
   "/signin",
   "/u",
+  // Metadata endpoints are served without a host redirect; redirecting them
+  // causes crawler loops and this app has no separate forum metadata handler.
+  "/robots.txt",
+  "/sitemap.xml",
 ];
 const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/about",
@@ -19,8 +23,6 @@ const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/news",
   "/newsletter",
   "/portfolio",
-  "/robots.txt",
-  "/sitemap.xml",
 ];
 
 export type ForumSubdomainRoute =

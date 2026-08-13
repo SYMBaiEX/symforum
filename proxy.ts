@@ -211,11 +211,21 @@ function logAiReadableRequest(
     .get("user-agent")
     ?.replace(/[\u0000-\u001f\u007f]/g, " ")
     .slice(0, 180);
+  const accept = request.headers
+    .get("accept")
+    ?.replace(/[\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 180);
+  const referer = request.headers
+    .get("referer")
+    ?.replace(/[\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 240);
   console.info("[ai-readable] request", {
     host: request.headers.get("host"),
     method: request.method,
     pathname,
     format: explicitAlias ? "markdown-alias" : "content-negotiated-markdown",
+    accept: accept || undefined,
+    referer: referer || undefined,
     userAgent: userAgent || undefined,
   });
 }

@@ -55,17 +55,20 @@ export default async function NewsletterIssuePage({ params }: PageProps) {
           return [
             {
               "@type": "Article",
+              "@id": `${primarySiteUrl(`/newsletter/${encodeURIComponent(issue.slug)}`)}#article`,
               headline: payload?.headline ?? issue.subject,
               description: payload?.dek ?? issue.previewText,
               datePublished: new Date(
                 issue.sentAt ?? issue.updatedAt,
               ).toISOString(),
+              dateModified: new Date(issue.updatedAt).toISOString(),
               author: { "@type": "Person", name: "Belle" },
               url: primarySiteUrl(
                 `/newsletter/${encodeURIComponent(issue.slug)}`,
               ),
               isPartOf: {
                 "@type": "CreativeWorkSeries",
+                "@id": `${primarySiteUrl("/newsletter")}#series`,
                 name: "SYMBaiEX newsletter",
               },
             },

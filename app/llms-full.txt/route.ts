@@ -1,9 +1,14 @@
 import { renderAiReadablePage } from "@/lib/ai-readable";
+import { getPublishedPosts } from "@/lib/blog-data";
+import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
+import { getDailyNews } from "@/lib/news-data";
+import { newsStoryPath } from "@/lib/news-slugs";
 import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 
 const INDEX_PATHS = [
   "/",
   "/about",
+  "/ai-policy",
   "/blog",
   "/news",
   "/portfolio",
@@ -14,8 +19,18 @@ const INDEX_PATHS = [
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const [posts, issues, stories] = await Promise.all([
+    getPublishedPosts(),
+    getPublicNewsletterIssues(3),
+    getDailyNews(5),
+  ]);
+  const detailPaths = [
+    ...posts.slice(0, 3).map((post) => `/blog/${encodeURIComponent(post.slug)}`),
+    ...issues.slice(0, 3).map((issue) => `/newsletter/${encodeURIComponent(issue.slug)}`),
+    ...stories.slice(0, 5).map((story) => newsStoryPath(story)),
+  ];
   const pages = await Promise.all(
-    INDEX_PATHS.map((pathname) => renderAiReadablePage({ pathname })),
+    [...INDEX_PATHS, ...detailPaths].map((pathname) => renderAiReadablePage({ pathname })),
   );
   const sections = pages
     .filter((page): page is NonNullable<typeof page> => page !== null)

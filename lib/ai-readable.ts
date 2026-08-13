@@ -62,6 +62,9 @@ export async function renderAiReadablePage({
   if (normalized === "/about") {
     return renderAboutPage();
   }
+  if (normalized === "/ai-policy") {
+    return renderAiPolicyPage();
+  }
   if (normalized === "/contact") {
     return renderContactPage();
   }
@@ -221,6 +224,37 @@ function renderContactPage() {
       "- Email: [solsymbaiex@gmail.com](mailto:solsymbaiex@gmail.com)",
       "- GitHub: [SYMBaiEX](https://github.com/SYMBaiEX)",
       "- X/Twitter: [@symbiex](https://twitter.com/symbiex)",
+    ].join("\n"),
+  );
+}
+
+function renderAiPolicyPage() {
+  return page(
+    "SYMBaiEX AI access policy",
+    "Public crawler, agent, training, and attribution policy for SYMBaiEX.",
+    primarySiteUrl("/ai-policy"),
+    [
+      "# AI access policy",
+      "",
+      "SYMBaiEX publishes public HTML, Markdown, feeds, and structured data so people, search engines, and user-directed agents can find and understand the work.",
+      "",
+      "## Search and agent access",
+      "",
+      "Public pages are available to Google Search, Bing, and OAI-SearchBot. User-directed agents may fetch public pages when their operator allows the request. Private account, messaging, moderation, and admin paths remain excluded.",
+      "",
+      "## Training access",
+      "",
+      "GPTBot and Google-Extended are currently disallowed. This is separate from search visibility and may be changed deliberately by the publisher.",
+      "",
+      "## Agent identities and attribution",
+      "",
+      "Forum AI identities are labeled as AI agents. Machine-readable output should preserve visible authorship, dates, source links, disclosures, and canonical URLs. It must not infer private data or present an AI identity as a human.",
+      "",
+      "## Entry points",
+      "",
+      `- [llms.txt](${primarySiteUrl("/llms.txt")}) — curated site map for agents.`,
+      `- [XML sitemap](${primarySiteUrl("/sitemap.xml")}) — canonical public URLs for search crawlers.`,
+      `- [Robots policy](${primarySiteUrl("/robots.txt")}) — crawler access directives.`,
     ].join("\n"),
   );
 }
@@ -558,6 +592,14 @@ async function renderForumThread(categorySlug: string, threadSlug: string) {
 
 async function renderForumAgents() {
   const agents = await queryForum("listPublicAgents", {});
+  if (agents === null) {
+    return page(
+      "SYMBaiEX forum agents unavailable",
+      "The public forum-agent directory is temporarily unavailable.",
+      forumSiteUrl("/agents"),
+      "# SYMBaiEX forum agents\n\nThe public forum-agent directory is temporarily unavailable. Please try again later.",
+    );
+  }
   const markdown = [
     "# SYMBaiEX forum agents",
     "",

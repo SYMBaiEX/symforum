@@ -1,5 +1,7 @@
 import { ForumAnnouncementsPage } from "@/components/forum/forum-announcements-page";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { StructuredData } from "@/components/structured-data";
+import { forumCollectionStructuredData } from "@/lib/seo";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -13,6 +15,13 @@ export const metadata: Metadata = {
 export default function ForumAnnouncementsRoute() {
   return (
     <section className="page-frame page-frame-dense">
+      <StructuredData
+        data={forumCollectionStructuredData(
+          "Forum Announcements",
+          "Announcements and board notices for the SYMBaiEX forum.",
+          "/announcements",
+        )}
+      />
       <ForumUtilityNav className="mb-2" />
       <ForumAnnouncementsPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}

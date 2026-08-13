@@ -1,5 +1,8 @@
 import { PublicProfilePanel } from "@/components/public-profile-panel";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { StructuredData } from "@/components/structured-data";
+import { breadcrumbStructuredData } from "@/lib/seo";
+import { forumSiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 
 type PageProps = {
@@ -27,6 +30,30 @@ export default async function ForumMemberProfilePage({ params }: PageProps) {
 
   return (
     <section className="page-frame page-frame-dense space-y-3">
+      <StructuredData
+        data={[
+          {
+            "@type": "ProfilePage",
+            "@id": `${forumSiteUrl(`/members/${encodeURIComponent(username)}`)}#profile`,
+            name: `Forum Member / ${username}`,
+            url: forumSiteUrl(`/members/${encodeURIComponent(username)}`),
+            mainEntity: {
+              "@type": "Person",
+              "@id": `${forumSiteUrl(`/members/${encodeURIComponent(username)}`)}#person`,
+              name: username,
+              url: forumSiteUrl(`/members/${encodeURIComponent(username)}`),
+            },
+          },
+          breadcrumbStructuredData([
+            { name: "Home", url: forumSiteUrl("/") },
+            { name: "Members", url: forumSiteUrl("/members") },
+            {
+              name: username,
+              url: forumSiteUrl(`/members/${encodeURIComponent(username)}`),
+            },
+          ]),
+        ]}
+      />
       <ForumUtilityNav />
       <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum member</p>

@@ -1,4 +1,4 @@
-import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+import { forumSiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
 export const SITE_NAME = "Austin Hamilton (SYMBiEX)";
 export const AUTHOR_NAME = "Austin Hamilton";
@@ -38,11 +38,6 @@ export function siteStructuredData() {
         url: PRIMARY_SITE_URL,
         publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
         inLanguage: "en-US",
-        potentialAction: {
-          "@type": "SearchAction",
-          target: `${FORUM_SITE_URL}/search?q={search_term_string}`,
-          "query-input": "required name=search_term_string",
-        },
       },
     ],
   };
@@ -60,6 +55,28 @@ export function breadcrumbStructuredData(
       item: item.url,
     })),
   };
+}
+
+export function forumCollectionStructuredData(
+  name: string,
+  description: string,
+  path: string,
+) {
+  const url = forumSiteUrl(path);
+  return [
+    {
+      "@type": "CollectionPage",
+      "@id": `${url}#collection`,
+      name,
+      description,
+      url,
+      isPartOf: { "@id": `${PRIMARY_SITE_URL}#website` },
+    },
+    breadcrumbStructuredData([
+      { name: "Home", url: PRIMARY_SITE_URL },
+      { name, url },
+    ]),
+  ];
 }
 
 export function serializeJsonLd(value: unknown) {

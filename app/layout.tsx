@@ -122,6 +122,26 @@ export default async function RootLayout({
     // and is needed by `ThemeProvider` which sets the theme
     // class attribute on it */
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="SYMBaiEX Blog"
+          href="/feed/blog.xml"
+        />
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="SYMBaiEX News"
+          href="/feed/news.xml"
+        />
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="SYMBaiEX Newsletter"
+          href="/feed/newsletter.xml"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
         suppressHydrationWarning

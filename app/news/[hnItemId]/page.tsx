@@ -85,6 +85,7 @@ export default async function NewsStoryPage({ params }: PageProps) {
           data={[
             {
               "@type": "NewsArticle",
+              "@id": `${primarySiteUrl(newsStoryPath(story))}#article`,
               headline: story.title,
               description: story.host
                 ? `${story.host} indexed from Hacker News`
@@ -92,7 +93,9 @@ export default async function NewsStoryPage({ params }: PageProps) {
               datePublished: story.timePosted
                 ? new Date(story.timePosted * 1000).toISOString()
                 : undefined,
-              mainEntityOfPage: primarySiteUrl(newsStoryPath(story)),
+              mainEntityOfPage: {
+                "@id": primarySiteUrl(newsStoryPath(story)),
+              },
               isBasedOn: story.url,
               author: { "@type": "Organization", name: "Hacker News" },
             },

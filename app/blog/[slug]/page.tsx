@@ -56,6 +56,7 @@ export default async function BlogPostPage({
   }
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
   const imageUrl = safeImageUrl(post.imageUrl);
+  const canonical = primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`);
 
   return (
     <>
@@ -64,13 +65,14 @@ export default async function BlogPostPage({
           data={[
             {
               "@type": "Article",
+              "@id": `${canonical}#article`,
               headline: post.title,
               description: post.excerpt,
               datePublished: post.publishedAt,
+              dateModified: post.publishedAt,
               author: { "@type": "Person", name: AUTHOR_NAME, url: AUTHOR_URL },
-              mainEntityOfPage: primarySiteUrl(
-                `/blog/${encodeURIComponent(post.slug)}`,
-              ),
+              image: imageUrl ?? undefined,
+              mainEntityOfPage: { "@id": canonical },
               keywords: post.tags,
             },
             breadcrumbStructuredData([
@@ -78,7 +80,7 @@ export default async function BlogPostPage({
               { name: "Blog", url: primarySiteUrl("/blog") },
               {
                 name: post.title,
-                url: primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`),
+                url: canonical,
               },
             ]),
           ]}

@@ -62,7 +62,14 @@ describe("forum subdomain routing", () => {
   });
 
   test("preserves site-owned routes on the forum host", () => {
-    for (const pathname of ["/api/health", "/admin", "/signin", "/u/austin"]) {
+    for (const pathname of [
+      "/api/health",
+      "/admin",
+      "/signin",
+      "/u/austin",
+      "/robots.txt",
+      "/sitemap.xml",
+    ]) {
       expect(
         resolveForumSubdomainRoute({
           host: "forum.symbaiex.com",

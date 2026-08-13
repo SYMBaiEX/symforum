@@ -45,18 +45,29 @@ export default async function PortfolioPage() {
         data={[
           {
             "@type": "CollectionPage",
+            "@id": `${primarySiteUrl("/portfolio")}#collection`,
             name: page?.title ?? "Portfolio",
             description: page?.heroBody,
             url: primarySiteUrl("/portfolio"),
-            author: { "@type": "Person", name: AUTHOR_NAME },
-            hasPart: projects.map((project) => ({
-              "@type": "CreativeWork",
-              name: project.name,
-              url: primarySiteUrl(
-                `/portfolio/${encodeURIComponent(project.slug)}`,
-              ),
-              description: project.summary,
-            })),
+            author: { "@id": `${primarySiteUrl("/about")}#austin-hamilton` },
+            mainEntity: {
+              "@type": "ItemList",
+              "@id": `${primarySiteUrl("/portfolio")}#projects`,
+              numberOfItems: projects.length,
+              itemListElement: projects.map((project, index) => ({
+                "@type": "ListItem",
+                position: index + 1,
+                item: {
+                  "@type": "CreativeWork",
+                  "@id": `${primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`)}#work`,
+                  name: project.name,
+                  url: primarySiteUrl(
+                    `/portfolio/${encodeURIComponent(project.slug)}`,
+                  ),
+                  description: project.summary,
+                },
+              })),
+            },
           },
           breadcrumbStructuredData([
             { name: "Home", url: primarySiteUrl("/") },

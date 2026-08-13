@@ -2,7 +2,7 @@ import { CommentsPanel } from "@/components/comments-panel";
 import { PortfolioProjectMark } from "@/components/portfolio-project-mark";
 import { StructuredData } from "@/components/structured-data";
 import { safeExternalUrl } from "@/lib/safe-url";
-import { AUTHOR_NAME, breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import { getPortfolioProject, getPortfolioProjects } from "@/lib/site-content";
@@ -77,12 +77,18 @@ export default async function PortfolioProjectPage({ params }: PageProps) {
         data={[
           {
             "@type": "CreativeWork",
+            "@id": `${primarySiteUrl(`/portfolio/${encodeURIComponent(project.slug)}`)}#work`,
             name: project.name,
             description: project.summary,
             url: primarySiteUrl(
               `/portfolio/${encodeURIComponent(project.slug)}`,
             ),
-            author: { "@type": "Person", name: AUTHOR_NAME },
+            author: { "@id": `${primarySiteUrl("/about")}#austin-hamilton` },
+            mainEntityOfPage: {
+              "@id": primarySiteUrl(
+                `/portfolio/${encodeURIComponent(project.slug)}`,
+              ),
+            },
             genre: project.type,
             keywords: project.tags,
             sameAs: [

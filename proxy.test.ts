@@ -117,6 +117,35 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("records safe negotiation context without logging credentials", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const proxy = await loadProxy();
+
+    await proxy(
+      requestFor("http://localhost:3000/about", {
+        accept: "text/markdown",
+        referer: "https://agent.example.test/task/42",
+        authorization: "Bearer should-not-be-logged",
+        cookie: "session=should-not-be-logged",
+        "user-agent": "ExampleAgent/1.0",
+      }),
+    );
+
+    expect(info).toHaveBeenCalledTimes(1);
+    const details = info.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(details).toMatchObject({
+      host: "localhost:3000",
+      method: "GET",
+      pathname: "/about",
+      format: "content-negotiated-markdown",
+      accept: "text/markdown",
+      referer: "https://agent.example.test/task/42",
+      userAgent: "ExampleAgent/1.0",
+    });
+    expect(JSON.stringify(details)).not.toContain("should-not-be-logged");
+    info.mockRestore();
+  });
+
   test("does not negotiate markdown for wildcard or refused media types", async () => {
     const proxy = await loadProxy();
 

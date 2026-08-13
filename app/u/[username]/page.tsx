@@ -32,10 +32,12 @@ export default async function PublicProfilePage({ params }: PageProps) {
           data={[
             {
               "@type": "ProfilePage",
+              "@id": `${primarySiteUrl(`/u/${encodeURIComponent(username)}`)}#profile`,
               name: `Profile / ${username}`,
               url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
               mainEntity: {
                 "@type": "Person",
+                "@id": `${primarySiteUrl(`/u/${encodeURIComponent(username)}`)}#person`,
                 name: username,
                 url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
               },
