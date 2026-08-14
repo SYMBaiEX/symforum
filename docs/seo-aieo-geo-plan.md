@@ -227,9 +227,14 @@ contract`).
   not evidence of a defect.
 - Cloudflare Web Bot Auth: the signed HTTPS directory is live at
   `https://www.symbaiex.com/.well-known/http-message-signatures-directory`.
-  Cloudflare dashboard submission remains owner action. DNS is authoritative at
-  Cloudflare but HTTP is currently DNS-only to Vercel (`server: Vercel`, no
-  `cf-ray`), so Cloudflare edge verification is not claimed.
+  On Aug 13, 2026, the Cloudflare dashboard accepted a **Signed Agent / Request
+  signature** submission for “SYMBiEX Signed Agents” using the public
+  `/agent/instructions` documentation page and that validation directory. The
+  dashboard reports that the submission was received and will be reviewed;
+  Cloudflare directory approval and verified-traffic status are not claimed
+  until that review completes. DNS is authoritative at Cloudflare but HTTP is
+  currently DNS-only to Vercel (`server: Vercel`, no `cf-ray`), so no Cloudflare
+  edge proxy or DNS change was made.
 
 ## Final Forum performance receipt — 2026-08-13
 
