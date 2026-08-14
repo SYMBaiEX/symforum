@@ -275,6 +275,10 @@ export type ForumResearchAgentConfig = {
   name: string;
   promptVersion: string;
   slug: string;
+  /** Optional telemetry/routing feature label for a specialized research desk. */
+  routeFeature?: string;
+  /** Optional board pin for desks that publish into a dedicated public surface. */
+  forcedCategorySlug?: string;
   topicInstructions: string;
   writerInstructions: string;
   deskDescription: string;
@@ -297,6 +301,8 @@ export async function runForumResearchSlot(
     await ctx.runMutation(internal.forum.ensureSukiForumInfrastructure, {});
   } else if (config.slug === "belle") {
     await ctx.runMutation(internal.forum.ensureBelleForumInfrastructure, {});
+  } else if (config.slug === "nyx") {
+    await ctx.runMutation(internal.forum.ensureNyxForumInfrastructure, {});
   }
   const claim = await ctx.runMutation(internal.sukiForumAgentData.claimRun, {
     agentSlug: config.slug,
@@ -319,12 +325,19 @@ export async function runForumResearchSlot(
         promptVersion: config.promptVersion,
       },
     );
+    const routeFeature = config.routeFeature ?? "forum-agent";
+    const researchGatewayTag = config.routeFeature
+      ? `feature:${config.routeFeature}`
+      : "feature:forum-research";
+    const writingGatewayTag = config.routeFeature
+      ? `feature:${config.routeFeature}-writing`
+      : "feature:forum-writing";
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
-      feature: "forum-agent",
+      feature: routeFeature,
       runKey: claim.runKey,
       agentSlug: config.slug,
     });
@@ -403,16 +416,26 @@ export async function runForumResearchSlot(
     const suggestedBoards = new Set(
       shortlistedCandidates.flatMap((candidate) => candidate.boardSlugs),
     );
-    const shortlistedCategories = context.categories.filter(
-      (category) =>
-        suggestedBoards.has(category.slug) || category.parentName === undefined,
+    const shortlistedCategories = context.categories.filter((category) =>
+      config.forcedCategorySlug !== undefined
+        ? category.slug === config.forcedCategorySlug
+        : suggestedBoards.has(category.slug) ||
+          category.parentName === undefined,
     );
+    if (
+      config.forcedCategorySlug !== undefined &&
+      shortlistedCategories.length === 0
+    ) {
+      throw new Error(
+        `${config.name} is pinned to a board that does not exist: ${config.forcedCategorySlug}`,
+      );
+    }
 
     const gatewayOptions = {
       user: config.slug,
       tags: [
         `agent:${config.slug}`,
-        "feature:forum-research",
+        researchGatewayTag,
         `prompt:${config.promptVersion}`,
       ],
     } satisfies GatewayProviderOptions;
@@ -434,7 +457,7 @@ export async function runForumResearchSlot(
       {
         stage: `${config.slug}:forum-topic`,
         correlationId: claim.runKey,
-        feature: "forum-agent",
+        feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: 150_000,
@@ -484,8 +507,10 @@ export async function runForumResearchSlot(
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
     });
+    const selectedCategorySlug =
+      config.forcedCategorySlug ?? selection.categorySlug;
     const category = context.categories.find(
-      (candidate) => candidate.slug === selection.categorySlug,
+      (candidate) => candidate.slug === selectedCategorySlug,
     );
     if (category === undefined) {
       throw new Error(`${config.name} selected a board that does not exist`);
@@ -601,7 +626,7 @@ export async function runForumResearchSlot(
       ...gatewayOptions,
       tags: [
         `agent:${config.slug}`,
-        "feature:forum-writing",
+        writingGatewayTag,
         `board:${category.slug}`,
         `prompt:${config.promptVersion}`,
       ],
@@ -614,7 +639,7 @@ export async function runForumResearchSlot(
       const routeArgs = {
         stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}`,
         correlationId: claim.runKey,
-        feature: "forum-agent",
+        feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: options?.gatewayOnly

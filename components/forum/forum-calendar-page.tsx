@@ -59,9 +59,9 @@ function LiveForumCalendarPage({ month }: { month: string }) {
         <p className="page-kicker">Forum calendar</p>
         <div className="mt-1.5 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-xl font-semibold md:text-2xl">
+            <h2 className="text-xl font-semibold md:text-2xl">
               {forumCalendarMonthLabel(month)}
-            </h1>
+            </h2>
             <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
               Community events, meetups, publishing windows, and forum
               reminders.

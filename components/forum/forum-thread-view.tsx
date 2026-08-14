@@ -1126,9 +1126,9 @@ function LiveForumThreadView({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <ForumThreadPrefixBadge thread={thread} />
-              <h1 className="text-lg font-semibold leading-tight sm:text-xl md:text-2xl">
+              <h2 className="text-lg font-semibold leading-tight sm:text-xl md:text-2xl">
                 {thread.title}
-              </h1>
+              </h2>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <ForumThreadStateBadges thread={thread} />

@@ -23,6 +23,12 @@ export default function ForumAnnouncementsRoute() {
         )}
       />
       <ForumUtilityNav className="mb-2" />
+      <header className="border-y border-row-border py-2">
+        <p className="page-kicker">Forum bulletin</p>
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+          Announcements
+        </h1>
+      </header>
       <ForumAnnouncementsPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
       />

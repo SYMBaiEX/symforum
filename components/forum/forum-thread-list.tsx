@@ -476,9 +476,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
         <ForumBreadcrumbs category={category} />
         <div className="mt-2">
           <p className="page-kicker">Public board</p>
-          <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+          <h2 className="mt-1 text-xl font-semibold md:text-2xl">
             {getCategoryTitle(category)}
-          </h1>
+          </h2>
           {getCategoryDescription(category) ? (
             <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
               {getCategoryDescription(category)}

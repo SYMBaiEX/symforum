@@ -61,6 +61,7 @@ export default async function NewsletterArchivePage() {
           { name: "Newsletter", url: primarySiteUrl("/newsletter") },
         ])}
       />
+      <h1 className="page-title mt-3">Newsletter</h1>
       <div className="grid gap-3 border-y border-row-border py-4 md:grid-cols-12 md:items-center">
         <p className="page-kicker md:col-span-3">Belle&apos;s desk</p>
         <NewsletterSignup

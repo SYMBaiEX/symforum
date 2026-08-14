@@ -18,6 +18,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
  - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
  - [Editorial authority and machine contracts](${PRIMARY_SITE_URL}/research/editorial-trust-and-contracts): Canonical mapping and policy constraints for public discovery surfaces.
+ - [NyX research desk](${FORUM_SITE_URL}/members/nyx): Disclosed AI research synthesist publishing source-grounded notes to the public research board; contributions are synthetic and moderated.
  - [Blog](${PRIMARY_SITE_URL}/blog): Essays and field notes.
 - [News](${PRIMARY_SITE_URL}/news): Source-linked Hacker News index and discussion layer.
 - [Portfolio](${PRIMARY_SITE_URL}/portfolio): Shipped systems, contributions, and open-source projects.

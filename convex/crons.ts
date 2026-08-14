@@ -69,6 +69,13 @@ Array.from({ length: 6 }, (_, index) => ({
   );
 });
 
+crons.cron(
+  "NyX research synthesis post",
+  dailyCronAtMinute(41),
+  internal.forumAgentWorkflow.queuePublication,
+  { agentSlug: "nyx", slot: 0 },
+);
+
 FORUM_AGENT_ROSTER.forEach((agent, index) => {
   [0, 1].forEach((slot) => {
     crons.cron(

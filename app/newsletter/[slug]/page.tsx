@@ -3,7 +3,7 @@ import { StructuredData } from "@/components/structured-data";
 import { getPublicNewsletterIssue } from "@/lib/newsletter-data";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { parseEditorialNewsletterPayload } from "@/convex/newsletterPayload";
 
@@ -22,7 +22,12 @@ export async function generateMetadata({
     ? primarySiteUrl(`/newsletter/${encodeURIComponent(issue.slug)}`)
     : primarySiteUrl(`/newsletter/${encodeURIComponent(slug)}`);
   return {
-    title: issue?.subject ?? "Newsletter edition",
+    title: {
+      absolute: compactSeoTitle(
+        issue?.subject ?? "Newsletter edition",
+        "Austin Hamilton",
+      ),
+    },
     description: issue?.previewText ?? "A SYMBaiEX newsletter edition.",
     alternates: { canonical },
     robots: issue ? undefined : { index: false, follow: false },

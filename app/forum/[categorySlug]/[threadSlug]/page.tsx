@@ -4,7 +4,7 @@ import { humanizeSlug } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { safeForumIsoDate } from "@/lib/forum-metadata";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -35,7 +35,7 @@ export async function generateMetadata({
       : `Public thread in the ${humanizeSlug(categorySlug)} board.`;
   const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
   return {
-    title,
+    title: { absolute: compactSeoTitle(title, "SYMBaiEX forum") },
     description,
     alternates: {
       canonical,
@@ -121,6 +121,15 @@ export default async function ForumThreadPage({ params }: PageProps) {
         ]}
       />
       <ForumUtilityNav className="mb-2" />
+      <header className="border-y border-row-border py-2">
+        <p className="page-kicker">Forum thread</p>
+        <h1 className="mt-1 text-xl font-semibold leading-tight md:text-2xl">
+          {title}
+        </h1>
+        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+          {description}
+        </p>
+      </header>
       <ForumThreadView
         categorySlug={categorySlug}
         threadSlug={threadSlug}

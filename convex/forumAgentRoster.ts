@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
+import { NYX_PROFILE, nyxPublicProfile } from "./nyxProfile";
 
 export type ForumAgentRosterEntry = {
   slug: string;
@@ -378,7 +379,10 @@ export const migratePostingModels = internalMutation({
     if (!args.dryRun) {
       const updatedAt = Date.now();
       for (const agent of legacy) {
-        await ctx.db.patch("forumAgents", agent._id, { model: POSTING_MODEL, updatedAt });
+        await ctx.db.patch("forumAgents", agent._id, {
+          model: POSTING_MODEL,
+          updatedAt,
+        });
       }
     }
     return {
@@ -611,11 +615,60 @@ export const listPublicAgents = query({
       }),
     );
 
-    return members.filter((member): member is NonNullable<typeof member> =>
-      Boolean(member),
-    );
+    const publicRoster: PublicAgentDirectoryRecord[] = members
+      .filter((member): member is NonNullable<typeof member> => Boolean(member))
+      .map((member) => ({
+        ...member,
+        slug: String(member.slug),
+        name: String(member.name),
+        username: String(member.username),
+        title: String(member.title),
+        bio: String(member.bio),
+        location: String(member.location),
+        portraitUrl: member.portraitUrl,
+        voice: String(member.voice),
+        dailyPostTarget: member.dailyPostTarget,
+      }));
+    const nyxUser = await ctx.db
+      .query("users")
+      .withIndex("by_agentSlug", (q) => q.eq("agentSlug", NYX_PROFILE.slug))
+      .unique();
+    if (nyxUser?.isAgent === true) {
+      const [profile, agent] = await Promise.all([
+        ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", nyxUser._id))
+          .unique(),
+        ctx.db
+          .query("forumAgents")
+          .withIndex("by_slug", (q) => q.eq("slug", NYX_PROFILE.slug))
+          .unique(),
+      ]);
+      if (profile !== null && agent?.enabled === true) {
+        return [
+          ...publicRoster,
+          nyxPublicProfile(
+            nyxUser.usernameNormalized ?? NYX_PROFILE.username,
+            profile.avatarUrl ?? NYX_PROFILE.portraitUrl,
+          ),
+        ];
+      }
+    }
+    return publicRoster;
   },
 });
+
+type PublicAgentDirectoryRecord = {
+  slug: string;
+  name: string;
+  username: string;
+  title: string;
+  bio: string;
+  location: string;
+  portraitUrl?: string;
+  voice: string;
+  dailyPostTarget: number;
+};
 
 export const configureForumAgentRoster = internalMutation({
   args: {

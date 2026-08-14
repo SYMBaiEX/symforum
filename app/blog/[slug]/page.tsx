@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
 import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
-import { breadcrumbStructuredData, AUTHOR_NAME, AUTHOR_URL } from "@/lib/seo";
+import {
+  breadcrumbStructuredData,
+  compactSeoTitle,
+  AUTHOR_NAME,
+  AUTHOR_URL,
+} from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -26,7 +31,9 @@ export async function generateMetadata({
     ? primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`)
     : primarySiteUrl(`/blog/${encodeURIComponent(slug)}`);
   return {
-    title: post?.title ?? "Post",
+    title: {
+      absolute: compactSeoTitle(post?.title ?? "Post", "Austin Hamilton"),
+    },
     description: post?.excerpt,
     alternates: { canonical },
     authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],

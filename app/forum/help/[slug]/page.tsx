@@ -4,7 +4,7 @@ import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { convexRefs } from "@/lib/convex-refs";
 import { safeForumIsoDate } from "@/lib/forum-metadata";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { getServerConvexClient } from "@/lib/server-convex";
 import type { Metadata } from "next";
@@ -30,7 +30,7 @@ export async function generateMetadata({
   const description = "A SYMBaiEX forum help or FAQ document.";
   const canonical = forumSiteUrl(`/help/${encodeURIComponent(slug)}`);
   return {
-    title,
+    title: { absolute: compactSeoTitle(title, "SYMBaiEX forum") },
     description,
     alternates: {
       canonical,

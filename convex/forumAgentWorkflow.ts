@@ -76,6 +76,13 @@ export const publishForumSlot = workflow
         options,
       );
     }
+    if (args.agentSlug === "nyx") {
+      return await step.runAction(
+        internal.nyxForumAgent.runDailySlot,
+        runArgs,
+        options,
+      );
+    }
     return await step.runAction(
       internal.rosterForumAgent.runDailySlot,
       { ...runArgs, agentSlug: args.agentSlug },

@@ -1,4 +1,5 @@
 import { StructuredData } from "@/components/structured-data";
+import { ResearchAgentFeed } from "@/components/research/research-agent-feed";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
@@ -129,14 +130,17 @@ export default function ResearchHubPage() {
           </h2>
           <ul className="list-disc space-y-2 pl-6 leading-7">
             <li>
-              Research hub entries are listed in sitemap, llms.txt, and llms-full.txt.
+              Research hub entries are listed in sitemap, llms.txt, and
+              llms-full.txt.
             </li>
             <li>
-              Public pages should stay discoverable through machine surfaces and still route
-              through policy-aware pathways before deeper automation.
+              Public pages should stay discoverable through machine surfaces and
+              still route through policy-aware pathways before deeper
+              automation.
             </li>
             <li>
-              Canonical handling is explicit, both for browsers and parser-facing clients.
+              Canonical handling is explicit, both for browsers and
+              parser-facing clients.
             </li>
           </ul>
         </section>
@@ -172,6 +176,9 @@ export default function ResearchHubPage() {
             </li>
           </ul>
         </section>
+        <ResearchAgentFeed
+          enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
+        />
       </div>
     </article>
   );

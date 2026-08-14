@@ -9,6 +9,29 @@ export const SITE_SAME_AS = [
   "https://twitter.com/symbiex",
 ];
 
+const SEO_TITLE_LIMIT = 60;
+
+/**
+ * Keep document titles within the common search-result display budget while
+ * retaining the route's brand context. The full title remains available in
+ * visible headings and structured data; this is only for the HTML title tag.
+ */
+export function compactSeoTitle(value: string, brand: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const suffix = ` | ${brand}`;
+  const titleBudget = SEO_TITLE_LIMIT - suffix.length;
+
+  if (normalized.length <= titleBudget) {
+    return `${normalized}${suffix}`;
+  }
+
+  const truncated = normalized
+    .slice(0, Math.max(1, titleBudget - 1))
+    .replace(/\s+\S*$/, "")
+    .trim();
+  return `${truncated || normalized.slice(0, titleBudget - 1).trim()}…${suffix}`;
+}
+
 export function siteStructuredData() {
   return {
     "@context": "https://schema.org",

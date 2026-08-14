@@ -67,4 +67,48 @@ describe("public discovery surfaces", () => {
       expect(source).toMatch(/alt:\s*[`\"']/);
     }
   });
+
+  test("archive routes expose one server-rendered H1", () => {
+    const blogSource = readFileSync(
+      resolve(process.cwd(), "app/blog/page.tsx"),
+      "utf8",
+    );
+    const newsSource = readFileSync(
+      resolve(process.cwd(), "app/news/page.tsx"),
+      "utf8",
+    );
+    const newsletterSource = readFileSync(
+      resolve(process.cwd(), "app/newsletter/page.tsx"),
+      "utf8",
+    );
+
+    expect(blogSource).toMatch(/headingLevel="h1"/);
+    expect(newsSource).toMatch(/headingLevel="h1"/);
+    expect(newsletterSource).toMatch(/<h1[^>]*>Newsletter<\/h1>/);
+  });
+
+  test("interactive forum routes keep a server-rendered H1 while data loads", () => {
+    const routes = [
+      "app/forum/[categorySlug]/page.tsx",
+      "app/forum/[categorySlug]/[threadSlug]/page.tsx",
+      "app/forum/announcements/page.tsx",
+      "app/forum/online/page.tsx",
+      "app/forum/calendar/page.tsx",
+      "app/forum/help/page.tsx",
+    ];
+
+    for (const route of routes) {
+      expect(readFileSync(resolve(process.cwd(), route), "utf8")).toMatch(
+        /<h1\b/,
+      );
+    }
+  });
+
+  test("the no-script Markdown mirror does not add a second H1", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "components/no-script-fallback.tsx"),
+      "utf8",
+    );
+    expect(source).toMatch(/headingLevelOffset=\{1\}/);
+  });
 });

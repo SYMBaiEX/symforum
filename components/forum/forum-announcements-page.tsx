@@ -42,9 +42,9 @@ function LiveForumAnnouncementsPage() {
     <div className="space-y-3">
       <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum bulletin</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+        <h2 className="mt-1 text-xl font-semibold md:text-2xl">
           Announcements
-        </h1>
+        </h2>
       </div>
 
       {announcements.length === 0 ? (

@@ -3,7 +3,7 @@ import { ForumThreadList } from "@/components/forum/forum-thread-list";
 import { humanizeSlug } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { Metadata } from "next";
@@ -35,7 +35,7 @@ export async function generateMetadata({
       : `Public thread list for the ${categoryName} board.`;
   const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}`;
   return {
-    title: categoryName,
+    title: { absolute: compactSeoTitle(categoryName, "SYMBaiEX forum") },
     description,
     alternates: {
       canonical,
@@ -105,6 +105,17 @@ export default async function ForumCategoryPage({ params }: PageProps) {
         ]}
       />
       <ForumUtilityNav className="mb-2" />
+      <header className="border-y border-row-border py-2">
+        <p className="page-kicker">Public board</p>
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+          {categoryName}
+        </h1>
+        {description ? (
+          <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+      </header>
       <ForumThreadList categorySlug={categorySlug} enabled={enabled} />
     </section>
   );

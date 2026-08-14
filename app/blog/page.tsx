@@ -47,7 +47,7 @@ export default async function BlogPage() {
   return (
     <>
       <section className="page-frame page-frame-spacious">
-        <SectionHeader title="All posts" divided={false} />
+        <SectionHeader title="All posts" headingLevel="h1" divided={false} />
         <div className="mt-8">
           <Suspense fallback={null}>
             <BlogPostFilter posts={posts} />

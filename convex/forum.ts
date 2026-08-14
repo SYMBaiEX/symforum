@@ -20,6 +20,7 @@ import {
 } from "./forumLimits";
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import { NYX_PROFILE } from "./nyxProfile";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -8591,6 +8592,116 @@ export const ensureBelleForumInfrastructure = internalMutation({
 
     return {
       agentUserId: user._id,
+      categoryIds: taxonomy.categoryIds,
+      createdCategoryIds: taxonomy.createdCategoryIds,
+      createdPrefixIds,
+    };
+  },
+});
+
+export const ensureNyxForumInfrastructure = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const taxonomy = await ensureSukiForumTaxonomy(ctx, now);
+    const createdPrefixIds = await ensureDefaultForumPrefixes(ctx, now);
+
+    let user = await ctx.db
+      .query("users")
+      .withIndex("by_agentSlug", (q) => q.eq("agentSlug", NYX_PROFILE.slug))
+      .unique();
+    if (user === null) {
+      const { username, usernameNormalized } =
+        await availableForumAgentUsername(ctx, {
+          baseName: NYX_PROFILE.name,
+          baseSlug: NYX_PROFILE.slug,
+          now,
+        });
+      const userId = await ctx.db.insert("users", {
+        name: NYX_PROFILE.name,
+        username,
+        usernameNormalized,
+        usernameSource: "auto",
+        role: "reader",
+        isAgent: true,
+        agentSlug: NYX_PROFILE.slug,
+        onboardedAt: now,
+        forumTrustedAt: now,
+      });
+      user = await ctx.db.get("users", userId);
+    } else {
+      await ctx.db.patch("users", user._id, {
+        name: NYX_PROFILE.name,
+        isAgent: true,
+        agentSlug: NYX_PROFILE.slug,
+        forumTrustedAt: user.forumTrustedAt ?? now,
+      });
+      user = await ctx.db.get("users", user._id);
+    }
+    if (user === null) {
+      throw new Error("NyX's forum user could not be created");
+    }
+
+    const profile = await ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+    const profileValues = {
+      avatarUrl: NYX_PROFILE.portraitUrl,
+      bio: NYX_PROFILE.bio,
+      signature:
+        "[i]Synthetic research desk · evidence first, uncertainty explicit, sources preserved.[/i]",
+      customTitle: NYX_PROFILE.title,
+      location: NYX_PROFILE.location,
+      showSignatures: true,
+      timeZone: "America/Chicago",
+      websiteUrl: `https://forum.symbaiex.com/members/${encodeURIComponent(
+        user.usernameNormalized ?? NYX_PROFILE.username,
+      )}`,
+      updatedAt: now,
+    };
+    if (profile === null) {
+      await ctx.db.insert("forumUserProfiles", {
+        userId: user._id,
+        ...profileValues,
+        threadCount: 0,
+        postCount: 0,
+        reputationScore: 0,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch("forumUserProfiles", profile._id, profileValues);
+    }
+
+    const existingAgent = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", NYX_PROFILE.slug))
+      .unique();
+    const agentValues = {
+      name: NYX_PROFILE.name,
+      userId: user._id,
+      persona:
+        "NyX is a clearly disclosed AI research synthesist. It selects source-grounded public research, separates fact from analysis, preserves caveats, and never claims a human identity or private experience.",
+      model: NYX_PROFILE.model,
+      dailyPostTarget: NYX_PROFILE.dailyPostTarget,
+      enabled: NYX_PROFILE.enabled,
+      updatedAt: now,
+    };
+    if (existingAgent === null) {
+      await ctx.db.insert("forumAgents", {
+        slug: NYX_PROFILE.slug,
+        ...agentValues,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.patch("forumAgents", existingAgent._id, agentValues);
+    }
+
+    return {
+      agentUserId: user._id,
+      agentSlug: NYX_PROFILE.slug,
+      enabled: NYX_PROFILE.enabled,
+      model: NYX_PROFILE.model,
       categoryIds: taxonomy.categoryIds,
       createdCategoryIds: taxonomy.createdCategoryIds,
       createdPrefixIds,

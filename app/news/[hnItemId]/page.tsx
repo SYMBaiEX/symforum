@@ -10,7 +10,7 @@ import {
   parseNewsStoryParam,
 } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
@@ -31,7 +31,12 @@ export async function generateMetadata({
     ? primarySiteUrl(newsStoryPath(story))
     : primarySiteUrl(`/news/${encodeURIComponent(hnItemId)}`);
   return {
-    title: story?.title ?? "Indexed story",
+    title: {
+      absolute: compactSeoTitle(
+        story?.title ?? "Indexed story",
+        "Austin Hamilton",
+      ),
+    },
     description: story?.host
       ? `${story.host} indexed from Hacker News`
       : "Indexed Hacker News story",

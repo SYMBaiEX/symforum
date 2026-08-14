@@ -1,9 +1,29 @@
 import { describe, expect, test } from "vitest";
 import {
+  compactSeoTitle,
   serializeJsonLd,
   siteStructuredData,
   forumCollectionStructuredData,
 } from "@/lib/seo";
+
+describe("compactSeoTitle", () => {
+  test("keeps dynamic titles within the title-tag budget", () => {
+    const title = compactSeoTitle(
+      "From Hollerith's holes to agentic threads: a day about how we encode trust and memory",
+      "SYMBaiEX forum",
+    );
+
+    expect(title.length).toBeLessThanOrEqual(60);
+    expect(title).toMatch(/\| SYMBaiEX forum$/);
+    expect(title).toContain("From Hollerith's holes");
+  });
+
+  test("normalizes short titles without changing their words", () => {
+    expect(
+      compactSeoTitle("  About   Austin Hamilton ", "Austin Hamilton"),
+    ).toBe("About Austin Hamilton | Austin Hamilton");
+  });
+});
 
 describe("serializeJsonLd", () => {
   test("escapes script-breaking characters", () => {

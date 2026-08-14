@@ -5,12 +5,16 @@ export function SectionHeader({
   title,
   children,
   divided = true,
+  headingLevel = "h2",
 }: {
   kicker?: string;
   title: string;
   children?: ReactNode;
   divided?: boolean;
+  headingLevel?: "h1" | "h2";
 }) {
+  const Heading = headingLevel;
+
   return (
     <div
       className={`grid gap-3 md:grid-cols-12 ${divided ? "border-t border-row-border pt-4" : ""}`}
@@ -21,7 +25,9 @@ export function SectionHeader({
         </div>
       ) : null}
       <div className={kicker ? "md:col-span-9" : "md:col-span-12"}>
-        <h2 className="text-2xl font-semibold md:text-3xl">{title}</h2>
+        <Heading className="text-2xl font-semibold md:text-3xl">
+          {title}
+        </Heading>
         {children ? (
           <div className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
             {children}

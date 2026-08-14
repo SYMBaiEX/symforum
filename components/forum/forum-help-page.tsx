@@ -38,7 +38,7 @@ function LiveForumHelpPage() {
     <div className="space-y-3">
       <div className="border-y border-row-border py-2">
         <p className="page-kicker">Forum helpdesk</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">Help / FAQ</h1>
+        <h2 className="mt-1 text-xl font-semibold md:text-2xl">Help / FAQ</h2>
         <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
           Read posting guidelines, account information, and forum policies
           before opening a new thread.

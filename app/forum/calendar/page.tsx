@@ -31,6 +31,13 @@ export default async function ForumCalendarRoute({ searchParams }: PageProps) {
         )}
       />
       <ForumUtilityNav className="mb-2" />
+      <header className="border-y border-row-border py-2">
+        <p className="page-kicker">Forum calendar</p>
+        <h1 className="mt-1 text-xl font-semibold md:text-2xl">Calendar</h1>
+        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+          Community events, meetups, publishing windows, and forum reminders.
+        </p>
+      </header>
       <ForumCalendarPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         month={month}

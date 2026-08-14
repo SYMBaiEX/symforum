@@ -1,7 +1,7 @@
 import { PublicProfilePanel } from "@/components/public-profile-panel";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 
@@ -14,7 +14,9 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { username } = await params;
   return {
-    title: `Forum Member / ${username}`,
+    title: {
+      absolute: compactSeoTitle(`Forum Member / ${username}`, "SYMBaiEX forum"),
+    },
     description: `SYMBaiEX forum profile for ${username}.`,
     alternates: {
       canonical: `https://forum.symbaiex.com/members/${encodeURIComponent(

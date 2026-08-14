@@ -61,7 +61,7 @@ export default async function NewsPage() {
             { name: "News", url: primarySiteUrl("/news") },
           ])}
         />
-        <SectionHeader title="Daily news" divided={false} />
+        <SectionHeader title="Daily news" headingLevel="h1" divided={false} />
         <div className="mt-8">
           <NewsFeed
             enabled={convexEnabled}

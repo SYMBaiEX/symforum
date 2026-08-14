@@ -10,6 +10,7 @@ import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import type { Plugin } from "unified";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 type MarkdownNode = {
   type: string;
@@ -36,10 +37,17 @@ const remarkEditorRichText: Plugin<[], Root> = () => (tree) => {
 export function MarkdownContent({
   className,
   content,
+  headingLevelOffset = 0,
 }: {
   className?: string;
   content: string;
+  headingLevelOffset?: number;
 }) {
+  const normalizedHeadingOffset = Math.max(
+    0,
+    Math.min(5, Math.floor(headingLevelOffset)),
+  );
+
   return (
     <div className={cn("markdown-body", className)}>
       <ReactMarkdown
@@ -102,12 +110,86 @@ export function MarkdownContent({
               />
             );
           },
+          h1({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              1,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
+          h2({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              2,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
+          h3({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              3,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
+          h4({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              4,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
+          h5({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              5,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
+          h6({ children, node: _node, ...props }) {
+            return renderMarkdownHeading(
+              6,
+              normalizedHeadingOffset,
+              children,
+              props,
+            );
+          },
         }}
       >
         {content}
       </ReactMarkdown>
     </div>
   );
+}
+
+type MarkdownHeadingProps = ComponentPropsWithoutRef<"h1">;
+
+function renderMarkdownHeading(
+  level: number,
+  offset: number,
+  children: ReactNode,
+  props: MarkdownHeadingProps,
+) {
+  const shiftedLevel = Math.min(6, level + offset);
+
+  switch (shiftedLevel) {
+    case 1:
+      return <h1 {...props}>{children}</h1>;
+    case 2:
+      return <h2 {...props}>{children}</h2>;
+    case 3:
+      return <h3 {...props}>{children}</h3>;
+    case 4:
+      return <h4 {...props}>{children}</h4>;
+    case 5:
+      return <h5 {...props}>{children}</h5>;
+    default:
+      return <h6 {...props}>{children}</h6>;
+  }
 }
 
 function transformMarkdownTree(node: MarkdownNode) {

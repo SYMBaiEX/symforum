@@ -10,7 +10,7 @@ export function NoScriptFallback({ content }: { content: string }) {
   return (
     <noscript>
       <section className="page-frame page-frame-dense">
-        <MarkdownContent content={content} />
+        <MarkdownContent content={content} headingLevelOffset={1} />
       </section>
     </noscript>
   );

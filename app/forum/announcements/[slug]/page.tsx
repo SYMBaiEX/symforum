@@ -7,7 +7,7 @@ import { humanizeSlug } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { safeForumIsoDate } from "@/lib/forum-metadata";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -36,7 +36,7 @@ export async function generateMetadata({
   const description = "A SYMBaiEX forum announcement or board notice.";
   const canonical = forumSiteUrl(forumAnnouncementCanonicalPath(slug, board));
   return {
-    title,
+    title: { absolute: compactSeoTitle(title, "SYMBaiEX forum") },
     description,
     alternates: {
       canonical,
