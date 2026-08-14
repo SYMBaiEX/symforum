@@ -279,6 +279,8 @@ export type ForumResearchAgentConfig = {
   routeFeature?: string;
   /** Optional board pin for desks that publish into a dedicated public surface. */
   forcedCategorySlug?: string;
+  /** Optional desk-specific floor for a non-blocking draft. */
+  qualityThreshold?: number;
   topicInstructions: string;
   writerInstructions: string;
   deskDescription: string;
@@ -335,6 +337,13 @@ export async function runForumResearchSlot(
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
+    // NyX is the public research desk. Prefer the AI Gateway route for its
+    // scheduled synthesis because free OpenRouter lanes can queue for minutes;
+    // the configured provider fallbacks remain available if Gateway is down.
+    const effectiveRoutingConfig =
+      config.routeFeature === "research"
+        ? { ...routingConfig, preferredProvider: "gateway" as const }
+        : routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
       feature: routeFeature,
@@ -342,11 +351,12 @@ export async function runForumResearchSlot(
       agentSlug: config.slug,
     });
     if (
-      !routingConfig.openRouterApiKey?.trim() &&
+      !effectiveRoutingConfig.openRouterApiKey?.trim() &&
       !(
-        routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
+        effectiveRoutingConfig.museBaseUrl?.trim() &&
+        effectiveRoutingConfig.museApiKey?.trim()
       ) &&
-      !routingConfig.gatewayApiKey?.trim()
+      !effectiveRoutingConfig.gatewayApiKey?.trim()
     ) {
       throw new ForumAgentConfigurationError(
         "OPENROUTER_API_KEY, Muse API access, and AI_GATEWAY_API_KEY are all unconfigured in Convex.",
@@ -452,7 +462,7 @@ export async function runForumResearchSlot(
     });
     const topicStartedAt = Date.now();
     const selectionGeneration = await runWithModelFallback(
-      routingConfig,
+      effectiveRoutingConfig,
       gatewayOptions,
       {
         stage: `${config.slug}:forum-topic`,
@@ -643,7 +653,9 @@ export async function runForumResearchSlot(
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: options?.gatewayOnly
-          ? 105_000
+          ? config.slug === "nyx"
+            ? 180_000
+            : 105_000
           : stage === "revision"
             ? 210_000
             : 270_000,
@@ -665,7 +677,13 @@ export async function runForumResearchSlot(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
             ),
-            maxOutputTokens: stage === "revision" ? 5_500 : 4_800,
+            maxOutputTokens: options?.lightRevision
+              ? 2_800
+              : config.slug === "nyx"
+                ? 2_800
+                : stage === "revision"
+                  ? 5_500
+                  : 4_800,
             instructions: modelInstructions(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
@@ -687,13 +705,13 @@ export async function runForumResearchSlot(
       };
       if (!options?.gatewayOnly) {
         return await runWithModelFallback(
-          routingConfig,
+          effectiveRoutingConfig,
           writerGatewayOptions,
           routeArgs,
         );
       }
       const candidates = await routedModelCandidates(
-        routingConfig,
+        effectiveRoutingConfig,
         writerGatewayOptions,
         undefined,
         routeArgs,
@@ -739,7 +757,7 @@ export async function runForumResearchSlot(
       qualityAfter: quality.qualityScore,
       durationMs: Date.now() - draftStartedAt,
     });
-    if (forumDraftNeedsRevision(quality)) {
+    if (forumDraftNeedsRevision(quality, config.qualityThreshold)) {
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
       const revisionTier = forumRevisionTier(quality);
@@ -785,7 +803,7 @@ export async function runForumResearchSlot(
         durationMs: Date.now() - revisionStartedAt,
       });
     }
-    if (!forumDraftPassesGate(quality)) {
+    if (!forumDraftPassesGate(quality, config.qualityThreshold)) {
       throw new Error(
         `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${[
           ...quality.blockingIssues,
@@ -1761,17 +1779,19 @@ type EvaluatedForumDraft = {
   feedback: string[];
 };
 
-export function forumDraftNeedsRevision(quality: EvaluatedForumDraft) {
-  return (
-    quality.qualityScore < FORUM_AGENT_QUALITY_THRESHOLD ||
-    quality.blockingIssues.length > 0
-  );
+export function forumDraftNeedsRevision(
+  quality: EvaluatedForumDraft,
+  threshold = FORUM_AGENT_QUALITY_THRESHOLD,
+) {
+  return quality.qualityScore < threshold || quality.blockingIssues.length > 0;
 }
 
-export function forumDraftPassesGate(quality: EvaluatedForumDraft) {
+export function forumDraftPassesGate(
+  quality: EvaluatedForumDraft,
+  threshold = FORUM_AGENT_QUALITY_THRESHOLD,
+) {
   return (
-    quality.qualityScore >= FORUM_AGENT_QUALITY_THRESHOLD &&
-    quality.blockingIssues.length === 0
+    quality.qualityScore >= threshold && quality.blockingIssues.length === 0
   );
 }
 

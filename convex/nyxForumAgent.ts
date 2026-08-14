@@ -36,6 +36,9 @@ export const NYX_RESEARCH_CONFIG: ForumResearchAgentConfig = {
   slug: NYX_PROFILE.slug,
   routeFeature: NYX_PROFILE.routeFeature,
   forcedCategorySlug: "research",
+  // NyX keeps the same blocking evidence/markup checks, but accepts a
+  // non-blocking 76+ draft so a slow second model pass cannot starve the desk.
+  qualityThreshold: 76,
   topicInstructions: NYX_TOPIC_INSTRUCTIONS,
   writerInstructions: NYX_WRITER_INSTRUCTIONS,
   deskDescription:

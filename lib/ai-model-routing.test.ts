@@ -72,6 +72,20 @@ describe("AI model routing", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  test("can prefer the gateway while retaining provider fallbacks", async () => {
+    const candidates = await routedModelCandidates({
+      openRouterApiKey: "test-openrouter-key",
+      gatewayApiKey: "test-gateway-key",
+      preferredProvider: "gateway",
+    });
+
+    expect(candidates.map(({ provider }) => provider)).toEqual([
+      "gateway",
+      "openrouter",
+      "openrouter",
+    ]);
+  });
+
   test("uses Muse when the primary route succeeds", async () => {
     const run = vi.fn(async (route: RoutedModel) => `${route.provider}-result`);
     const result = await runRoutedCandidates(

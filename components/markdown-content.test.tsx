@@ -7,7 +7,7 @@ describe("MarkdownContent headings", () => {
   test("can demote mirrored Markdown headings below a page H1", () => {
     const html = renderToStaticMarkup(
       <MarkdownContent
-        content="# Primary heading\n\n## Section heading"
+        content={"# Primary heading\n\n## Section heading"}
         headingLevelOffset={1}
       />,
     );

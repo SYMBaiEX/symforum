@@ -33,6 +33,8 @@ export type ModelRoutingConfig = {
   museBaseUrl?: string;
   museApiKey?: string;
   gatewayApiKey?: string;
+  /** Prefer this provider when available while retaining fallbacks. */
+  preferredProvider?: ModelRoute["provider"];
   disabledModelIds?: readonly string[];
   beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
   afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
@@ -282,6 +284,15 @@ export async function routedModelCandidates(
     throw new Error(
       "No AI model route is available. Configure OPENROUTER_API_KEY, Muse API access, or AI_GATEWAY_API_KEY.",
     );
+  }
+  if (config.preferredProvider !== undefined) {
+    const preferred = candidates.filter(
+      (candidate) => candidate.provider === config.preferredProvider,
+    );
+    const fallback = candidates.filter(
+      (candidate) => candidate.provider !== config.preferredProvider,
+    );
+    return [...preferred, ...fallback];
   }
   return candidates;
 }
