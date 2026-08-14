@@ -5,6 +5,7 @@ import {
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
+import { OPENROUTER_TOOL_FALLBACK_MODEL } from "./ai-models";
 
 describe("AI model cost controls", () => {
   test("estimates only the configured paid Nemotron routes", () => {
@@ -22,6 +23,16 @@ describe("AI model cost controls", () => {
         1_000_000,
       ),
     ).toBe(0);
+  });
+
+  test("uses the current OpenRouter GPT-5.6 Luna fallback price", () => {
+    expect(
+      estimatedModelCostMicroUsd(
+        OPENROUTER_TOOL_FALLBACK_MODEL,
+        1_000_000,
+        1_000_000,
+      ),
+    ).toBe(700_000);
   });
 
   test("uses a bounded default budget and stable spend shards", () => {

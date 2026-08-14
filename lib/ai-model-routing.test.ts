@@ -28,7 +28,7 @@ describe("OpenRouter-only model routing", () => {
     expect(openRouterModelsForStage("suki:forum-topic")).toEqual([
       "nvidia/nemotron-3-nano-30b-a3b:free",
       "nvidia/nemotron-3-nano-30b-a3b",
-      "openai/gpt-4.1-mini",
+      "openai/gpt-5.6-luna",
     ]);
   });
 
@@ -45,7 +45,7 @@ describe("OpenRouter-only model routing", () => {
     expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual([
       "nvidia/nemotron-3-super-120b-a12b:free",
       "nvidia/nemotron-3-super-120b-a12b",
-      "openai/gpt-4.1-mini",
+      "openai/gpt-5.6-luna",
     ]);
   });
 
@@ -58,7 +58,7 @@ describe("OpenRouter-only model routing", () => {
     expect(candidates[0].persistedModel).toBe(
       "nvidia/nemotron-3-super-120b-a12b",
     );
-    expect(candidates[1].persistedModel).toBe("openai/gpt-4.1-mini");
+    expect(candidates[1].persistedModel).toBe("openai/gpt-5.6-luna");
   });
 
   test("falls through OpenRouter models and records the successful attempt", async () => {

@@ -19,8 +19,8 @@ const MODEL_PRICES: Record<string, TokenPrice> = {
     outputUsdPerMillion: 0.4,
   },
   [OPENROUTER_TOOL_FALLBACK_MODEL]: {
-    inputUsdPerMillion: 0.4,
-    outputUsdPerMillion: 1.6,
+    inputUsdPerMillion: 0.1,
+    outputUsdPerMillion: 0.6,
   },
 };
 
