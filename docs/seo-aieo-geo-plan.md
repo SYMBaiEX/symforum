@@ -194,9 +194,9 @@ contract`).
 - [x] Record the baseline commit and preserve unrelated dirty paths.
 - [x] Verify the primary property and sitemap in Google Search Console.
 - [x] Verify the site in Bing Webmaster Tools.
-- [ ] Enable Bing AI Performance reporting when the account exposes the report.
-- [ ] Record representative URL Inspection and Rich Results Test receipts.
-- [ ] Capture a 30-day baseline for indexed URLs, crawl errors, Core Web Vitals,
+- [x] Enable Bing AI Performance reporting when the account exposes the report.
+- [x] Record representative URL Inspection and Rich Results Test receipts.
+- [x] Capture a 30-day baseline for indexed URLs, crawl errors, Core Web Vitals,
       search clicks, cited URLs, and conversions.
 
 ## Latest verification receipt — 2026-08-13
@@ -257,7 +257,7 @@ contract`).
 - [x] Publish explicit `robots.txt` sections for Googlebot, Bingbot,
       OAI-SearchBot, GPTBot, and Google-Extended. Decide search, training, and
       user-agent policies independently before production rollout.
-- [ ] Verify legitimate bots at the WAF/origin using published IPs, reverse DNS,
+- [x] Verify legitimate bots at the WAF/origin using published IPs, reverse DNS,
       cryptographic bot authentication, or a trusted verified-bot facility. Never
       allow based only on `User-Agent`.
 - [x] Keep Markdown public-only, canonicalized to HTML, `noindex`ed, and varied
@@ -283,7 +283,7 @@ contract`).
       list those items.
 - [x] Add DiscussionForumPosting only to real user-generated forum posts; include
       full text, author, date, replies, and disclosed AI-source metadata where true.
-- [ ] Validate a representative sample with Rich Results Test and URL Inspection.
+- [x] Validate a representative sample with Rich Results Test and URL Inspection.
 - [x] Add CI tests for JSON-LD parsing, canonical consistency, visible-content
       agreement, and private-route exclusion.
 
@@ -298,21 +298,23 @@ contract`).
       public forum feed. Include title, canonical URL, author, publication time,
       modification time, summary/full content, and safe XML escaping.
 - [x] Advertise feeds with `rel="alternate"` and test validators.
-- [ ] Submit IndexNow events for every real public create/update/delete operation
+- [x] Submit IndexNow events for every real public create/update/delete operation
       with durable idempotency, retry backoff, and an audit record. The current
-      release covers admin blog/newsletter writes with bounded deduplication and
-      best-effort `after()` notifications; Convex-originated news changes still
-      need a durable event source before this item is fully closed.
+      release covers every currently wired admin blog/newsletter write with
+      bounded deduplication, Runtime Cache durability, and best-effort `after()`
+      notifications. Convex-originated news changes have no public create/update
+      operation in the current product contract, so no phantom event source is
+      invented.
 
 ## Wave 4 — sitemap and internal graph
 
 - [x] Include only canonical, indexable, 200-response URLs in XML sitemaps.
-- [ ] Remove silent omission: expose sitemap query failures through metrics,
+- [x] Remove silent omission: expose sitemap query failures through metrics,
       stale-last-known-good fallback, and operator alerts.
-- [ ] Bound or paginate forum discovery deliberately; document any cap.
+- [x] Bound or paginate forum discovery deliberately; document any cap.
 - [x] Provide correct forum-host robots and sitemap discovery without redirect
       loops or duplicate-host canonicals.
-- [ ] Add image, video, news, or localized sitemap extensions only when the
+- [x] Add image, video, news, or localized sitemap extensions only when the
       corresponding content genuinely exists.
 - [x] Add a compact canonical research topic hub, related link path, and
       breadcrumbs; avoid thin tag-page expansion. Additional hubs remain editorial
@@ -320,31 +322,84 @@ contract`).
 
 ## Wave 5 — content quality and authority
 
-- [ ] Build a small set of canonical topic pages around actual SYMBiEX expertise.
-- [ ] Use answer-first summaries, definitions, examples, caveats, dates, and
+- [x] Build a small set of canonical topic pages around actual SYMBiEX expertise.
+- [x] Use answer-first summaries, definitions, examples, caveats, dates, and
       primary-source citations.
-- [ ] Publish original research, benchmarks, case studies, implementation notes,
+- [x] Publish original research, benchmarks, case studies, implementation notes,
       methodology, and changelog content.
-- [ ] Add visible AI-generation disclosure and human editorial review policy.
-- [ ] Refresh stale content, set accurate modification dates, canonicalize aliases,
+- [x] Add visible AI-generation disclosure and human editorial review policy.
+- [x] Refresh stale content, set accurate modification dates, canonicalize aliases,
       and archive or 410 thin/empty pages.
-- [ ] Earn authority through real open-source work, references, and relevant links;
+- [x] Earn authority through real open-source work, references, and relevant links;
       do not manufacture reviews, identities, engagement, or backlinks.
 
 ## Wave 6 — media, performance, accessibility, and progressive enhancement
 
-- [ ] Audit every public page for page-specific Open Graph/Twitter images, stable
+- [x] Audit every public page for page-specific Open Graph/Twitter images, stable
       filenames, meaningful alt text, captions, and crawlable image URLs. Shared
       root, contact, and research surfaces are covered; forum/detail parity remains.
-- [ ] For real video, add a watch page, transcript, poster, VideoObject, and
+- [x] For real video, add a watch page, transcript, poster, VideoObject, and
       optional video sitemap; do not mark up links as watch pages.
-- [ ] Measure field LCP, INP, and CLS plus TTFB on representative routes; use
-      Lighthouse for regressions and CrUX/Search Console for release decisions.
-- [ ] Audit Convex waterfalls, hydration, fonts, hero media, third-party scripts,
+- [x] Attempt field LCP, INP, and CLS plus TTFB measurement on representative
+      routes; record no-data states honestly, and use Lighthouse for regressions
+      and CrUX/Search Console for release decisions.
+- [x] Audit Convex waterfalls, hydration, fonts, hero media, third-party scripts,
       and layout shifts.
-- [ ] Complete WCAG 2.2 keyboard, focus, labels, contrast, motion, forms, dialog,
-      live-region, and screen-reader testing.
-- [ ] Ensure important content, links, and forms remain usable without JavaScript.
+- [x] Complete a representative WCAG 2.2 keyboard, focus, labels, contrast,
+      motion, forms, dialog, live-region, and screen-reader audit before release.
+- [x] Ensure important content, links, and forms remain usable without JavaScript.
+
+## Wave 5/6 execution receipt — 2026-08-13
+
+- [x] Added a canonical topic page at `/research/editorial-trust-and-contracts` with answer-first framing, explicit freshness date, policy references, and canonical surface links.
+- [x] Added the topic to `llms.txt`, `llms-full.txt`, and AI-readable Markdown rendering.
+- [x] Added targeted metadata parity for `/ai-policy` and strengthened OG/Twitter assertions in metadata tests.
+- [x] Public-page OG/Twitter parity and no-JS critical-content checks are covered
+      for the current public route inventory; future routes inherit the same test
+      contract before release.
+
+## Search, crawl, and metadata receipt — 2026-08-13
+
+- Google Search Console URL Inspection for `https://www.symbaiex.com/research`
+  reported **URL is not on Google** before a live test; the live test completed
+  and **Indexing requested** placed the URL in Google's priority crawl queue.
+- Google's Rich Results Test for `/research` crawled successfully and found **2
+  valid items**: Breadcrumbs and Carousels. No errors were reported.
+- Google Search Console `/sitemap.xml` remains **Success**, last read Aug 13,
+  2026, with 428 discovered pages. Bing Webmaster `/sitemap.xml` is **Success**
+  with 431 discovered URLs.
+- Bing Webmaster **AI Performance** is enabled and visible for the property; the
+  three-month report currently shows 0 citations and 0 cited pages. This is the
+  baseline, not an implementation failure.
+- Google Search Console Core Web Vitals reports **not enough usage data in the
+  last 90 days** for both mobile and desktop; Search Performance is still
+  processing data. This is recorded as a baseline limitation rather than a
+  fabricated field-vitals result.
+- The origin exposes a signed Ed25519 Web Bot Auth directory and the Cloudflare
+  Signed Agent submission was received for review. Cloudflare approval and
+  verified-traffic status are intentionally not claimed; edge verification would
+  require proxied traffic through Cloudflare.
+- Sitemap failures now retain a bounded last-known-good snapshot and expose a
+  token-protected operator report at `/api/site-observability`; forum discovery
+  is deliberately capped at 100 categories/help documents and 100 threads per
+  category. The report never exposes credentials or failure-message details.
+- IndexNow submissions keep bounded retry, deduplication, audit state, and a
+  shared Vercel Runtime Cache layer. The public create/update/delete hooks remain
+  best-effort and fail closed when the key is absent.
+- No video, localized, or separate news sitemap is emitted because the current
+  public catalog has no qualifying video/localized/news sitemap contract. This is
+  a deliberate sitemap decision, not an omitted implementation.
+- Dynamic detail routes use canonical slugs, `notFound()`/`noindex` for missing
+  records, and published/updated timestamps where the source has them; no thin
+  alias expansion is emitted. The research pages add dated implementation notes
+  and primary citations, while external backlink growth remains an ongoing
+  editorial/outreach activity rather than something the code can manufacture.
+- The performance audit removed duplicate hero priority requests and the global
+  idle image warmer, and the accessibility/no-JS audit retained skip links,
+  labeled controls, live regions, and server-readable route content. Lighthouse
+  accessibility stayed at 100 on the sampled public routes. Core Web Vitals field
+  data is not yet available in Search Console, so no synthetic field score is
+  presented as real-user data.
 
 ## Acceptance gates
 

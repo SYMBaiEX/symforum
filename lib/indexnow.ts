@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getCache } from "@vercel/functions";
+
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 const INDEXNOW_TIMEOUT_MS = 5_000;
 const INDEXNOW_MAX_URLS = 10_000;
@@ -7,6 +9,8 @@ const INDEXNOW_MAX_RETRY_ATTEMPTS = 3;
 const INDEXNOW_RETRY_DELAY_MS = 250;
 const INDEXNOW_IDEMPOTENCY_WINDOW_MS = 90_000;
 const INDEXNOW_MAX_AUDIT_ENTRIES = 200;
+const INDEXNOW_RUNTIME_CACHE_KEY = "indexnow-state-v1";
+const INDEXNOW_RUNTIME_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 // IndexNow submissions are deliberately restricted to pages this application
 // can publish. Never submit an arbitrary URL supplied by an admin payload.
@@ -62,9 +66,11 @@ type HostSubmissionResult = {
 
 const indexNowDedup = new Map<string, IndexNowSubmissionState>();
 const indexNowAudit: IndexNowAuditRecord[] = [];
+const indexNowRuntimeCache = getCache({ namespace: "symbaiex-indexnow" });
+let durableStateLoaded = false;
+let durableStateLoad: Promise<void> | null = null;
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Notify IndexNow without ever making a publishing request fail. */
 export async function notifyIndexNow(
@@ -73,6 +79,8 @@ export async function notifyIndexNow(
 ): Promise<void> {
   const key = process.env.INDEXNOW_KEY?.trim();
   if (!key || !isSafeKey(key)) return;
+
+  await loadDurableIndexNowState();
 
   const validUrls = normalizeUrls(urls).slice(0, INDEXNOW_MAX_URLS);
   if (validUrls.length === 0) return;
@@ -110,6 +118,7 @@ export async function notifyIndexNow(
           createdAt: now,
         });
         trimAudit();
+        await persistDurableIndexNowState();
         return;
       }
 
@@ -134,6 +143,7 @@ export async function notifyIndexNow(
         createdAt: now,
       });
       trimAudit();
+      await persistDurableIndexNowState();
 
       let result: HostSubmissionResult;
       try {
@@ -152,6 +162,7 @@ export async function notifyIndexNow(
           createdAt: Date.now(),
         });
         trimAudit();
+        await persistDurableIndexNowState();
       } catch (error) {
         indexNowAudit.push({
           dedupeKey,
@@ -166,6 +177,7 @@ export async function notifyIndexNow(
           createdAt: Date.now(),
         });
         trimAudit();
+        await persistDurableIndexNowState();
         console.warn("IndexNow submission failed");
         return;
       }
@@ -188,6 +200,80 @@ export function getIndexNowAuditSnapshot() {
 export function resetIndexNowAuditForTests() {
   indexNowAudit.length = 0;
   indexNowDedup.clear();
+  durableStateLoaded = false;
+  durableStateLoad = null;
+}
+
+/**
+ * Vercel Runtime Cache provides a shared, best-effort durable layer for the
+ * short idempotency window and bounded audit trail. The in-memory maps remain
+ * the local fast path and the feature still fails closed when the cache is not
+ * available (for example in local tests).
+ */
+async function loadDurableIndexNowState() {
+  if (process.env.VERCEL !== "1" || durableStateLoaded) return;
+  if (durableStateLoad) return durableStateLoad;
+
+  durableStateLoad = (async () => {
+    try {
+      const state = (await indexNowRuntimeCache.get(
+        INDEXNOW_RUNTIME_CACHE_KEY,
+      )) as {
+        dedupe?: Record<string, IndexNowSubmissionState>;
+        audit?: IndexNowAuditRecord[];
+      } | null;
+
+      for (const [dedupeKey, entry] of Object.entries(state?.dedupe ?? {})) {
+        if (entry && Number.isFinite(entry.dedupeUntil)) {
+          indexNowDedup.set(dedupeKey, entry);
+        }
+      }
+      for (const record of state?.audit ?? []) {
+        if (isValidAuditRecord(record)) indexNowAudit.push(record);
+      }
+      trimAudit();
+    } catch {
+      // Runtime Cache is an optimization and audit durability aid; never make
+      // a content publish fail because the optional cache is unavailable.
+    } finally {
+      durableStateLoaded = true;
+      durableStateLoad = null;
+    }
+  })();
+
+  return durableStateLoad;
+}
+
+async function persistDurableIndexNowState() {
+  if (process.env.VERCEL !== "1") return;
+
+  try {
+    const dedupe = Object.fromEntries(indexNowDedup.entries());
+    await indexNowRuntimeCache.set(
+      INDEXNOW_RUNTIME_CACHE_KEY,
+      { dedupe, audit: indexNowAudit.slice(-INDEXNOW_MAX_AUDIT_ENTRIES) },
+      {
+        name: "symbaiex:indexnow-state",
+        tags: ["symbaiex-indexnow"],
+        ttl: INDEXNOW_RUNTIME_CACHE_TTL_SECONDS,
+      },
+    );
+  } catch {
+    // Best effort by design. The external publisher remains fail-closed.
+  }
+}
+
+function isValidAuditRecord(record: unknown): record is IndexNowAuditRecord {
+  if (!record || typeof record !== "object") return false;
+  const candidate = record as Partial<IndexNowAuditRecord>;
+  return (
+    typeof candidate.dedupeKey === "string" &&
+    typeof candidate.host === "string" &&
+    typeof candidate.status === "string" &&
+    typeof candidate.urlCount === "number" &&
+    typeof candidate.attempts === "number" &&
+    typeof candidate.createdAt === "number"
+  );
 }
 
 function isInFlightDedupeWindow(dedupeKey: string, now: number) {
@@ -234,11 +320,18 @@ async function notifyIndexNowWithRetry(
       });
       lastStatus = response.status;
       if (response.ok) {
-        return { succeeded: true, attempts: attempt, statusCode: response.status };
+        return {
+          succeeded: true,
+          attempts: attempt,
+          statusCode: response.status,
+        };
       }
 
       lastError = `non-ok:${response.status}`;
-      if (!isRetryableStatus(response.status) || attempt >= INDEXNOW_MAX_RETRY_ATTEMPTS) {
+      if (
+        !isRetryableStatus(response.status) ||
+        attempt >= INDEXNOW_MAX_RETRY_ATTEMPTS
+      ) {
         return {
           succeeded: false,
           attempts: attempt,

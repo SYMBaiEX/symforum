@@ -5,6 +5,7 @@ import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
+import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -44,11 +45,20 @@ export async function generateMetadata({
       description,
       type: "website",
       url: canonical,
+      images: [
+        {
+          url: `${PRIMARY_SITE_URL}/opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: `SYMBaiEX forum board: ${categoryName}`,
+        },
+      ],
     },
     twitter: {
       card: "summary",
       title: categoryName,
       description,
+      images: [`${PRIMARY_SITE_URL}/opengraph-image`],
     },
   };
 }

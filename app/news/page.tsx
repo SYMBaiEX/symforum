@@ -11,6 +11,35 @@ export const metadata: Metadata = {
   description:
     "Daily index of top Hacker News stories with on-site votes, saves, and comments.",
   alternates: { canonical: "/news" },
+  openGraph: {
+    type: "website",
+    url: primarySiteUrl("/news"),
+    title: "News",
+    description:
+      "Daily index of top Hacker News stories with on-site votes, saves, and comments.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX daily news index and signal collection.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Daily news index",
+    description:
+      "Daily index of top Hacker News stories with on-site votes, saves, and comments.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX daily news index and signal collection.",
+      },
+    ],
+  },
 };
 
 export default async function NewsPage() {

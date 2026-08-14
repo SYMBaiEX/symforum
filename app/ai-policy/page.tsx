@@ -6,8 +6,37 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "AI access policy",
   description:
-    "SYMBaiEX policy for search crawlers, user-directed agents, training crawlers, and machine-readable public content.",
+    "SYMBaIEX policy for search crawlers, user-directed agents, training crawlers, and machine-readable public content.",
   alternates: { canonical: "/ai-policy" },
+  openGraph: {
+    type: "website",
+    url: primarySiteUrl("/ai-policy"),
+    title: "AI access policy",
+    description:
+      "SYMBaIEX policy for search crawlers, user-directed agents, training crawlers, and machine-readable public content.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX policy page with crawler, agent, and training boundaries.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AI access policy",
+    description:
+      "SYMBaIEX policy for search crawlers, user-directed agents, training crawlers, and machine-readable public content.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX policy page with crawler, agent, and training boundaries.",
+      },
+    ],
+  },
 };
 
 export default function AiPolicyPage() {
@@ -19,7 +48,7 @@ export default function AiPolicyPage() {
           {
             "@type": "WebPage",
             "@id": `${canonical}#webpage`,
-            name: "SYMBaiEX AI access policy",
+            name: "SYMBaIEX AI access policy",
             description: metadata.description,
             url: canonical,
             isPartOf: { "@id": `${primarySiteUrl("/")}#website` },
@@ -35,7 +64,7 @@ export default function AiPolicyPage() {
         <p className="page-kicker">Machine-readable access</p>
         <h1 className="page-title mt-3">AI access policy</h1>
         <p className="page-lede mt-5">
-          SYMBaiEX publishes public HTML, Markdown, feeds, and structured data
+          SYMBaIEX publishes public HTML, Markdown, feeds, and structured data
           so people, search engines, and user-directed agents can find and
           understand the work.
         </p>

@@ -18,6 +18,26 @@ export async function generateMetadata({
     alternates: {
       canonical: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
     },
+    openGraph: {
+      title: `Profile / ${username}`,
+      description: `Public SYMBaiEX profile for ${username}.`,
+      type: "profile",
+      url: primarySiteUrl(`/u/${encodeURIComponent(username)}`),
+      images: [
+        {
+          url: `${primarySiteUrl("/")}opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: `SYMBaiEX public profile for ${username}`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary",
+      title: `Profile / ${username}`,
+      description: `Public SYMBaiEX profile for ${username}.`,
+      images: [`${primarySiteUrl("/")}opengraph-image`],
+    },
   };
 }
 

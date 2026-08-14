@@ -64,6 +64,11 @@ describe("sitemap health and fallback", () => {
     expect(rows).toContainEqual(
       expect.objectContaining({ url: primarySiteUrl("/research") }),
     );
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        url: primarySiteUrl("/research/editorial-trust-and-contracts"),
+      }),
+    );
   });
 
   test("uses stale last-known-good snapshot when a source fails", async () => {

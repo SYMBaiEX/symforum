@@ -21,6 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const post = await getBlogPost(slug);
+  const imageUrl = safeImageUrl(post?.imageUrl);
   const canonical = post
     ? primarySiteUrl(`/blog/${encodeURIComponent(post.slug)}`)
     : primarySiteUrl(`/blog/${encodeURIComponent(slug)}`);
@@ -39,6 +40,20 @@ export async function generateMetadata({
           publishedTime: post.publishedAt,
           authors: [AUTHOR_URL],
           tags: post.tags,
+          images: [
+            {
+              url: imageUrl ?? `${primarySiteUrl("/")}opengraph-image`,
+              alt: post.imageAlt ?? post.title,
+            },
+          ],
+        }
+      : undefined,
+    twitter: post
+      ? {
+          card: "summary_large_image",
+          title: post.title,
+          description: post.excerpt,
+          images: [imageUrl ?? `${primarySiteUrl("/")}opengraph-image`],
         }
       : undefined,
   };

@@ -35,6 +35,20 @@ export async function generateMetadata({
           publishedTime: new Date(
             issue.sentAt ?? issue.updatedAt,
           ).toISOString(),
+          images: [
+            {
+              url: `${primarySiteUrl("/")}opengraph-image`,
+              alt: `SYMBaiEX newsletter issue: ${issue.subject}`,
+            },
+          ],
+        }
+      : undefined,
+    twitter: issue
+      ? {
+          card: "summary_large_image",
+          title: issue.subject,
+          description: issue.previewText ?? "A SYMBaiEX newsletter edition.",
+          images: [`${primarySiteUrl("/")}opengraph-image`],
         }
       : undefined,
   };

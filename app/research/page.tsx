@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: primarySiteUrl("/research"),
-    title: "Research hubs",
+    title: "SYMBaIEX research hubs",
     description:
-      "Curated topic hubs for SYMBiEX implementation notes and discoverability paths.",
+      "Curated topic hubs for SYMBaIEX implementation notes and discoverability paths.",
     images: [
       {
         url: "/opengraph-image",
@@ -46,6 +46,12 @@ const hubs = [
     path: "/research/ai-readable-web",
     summary:
       "How SYMBaIEX publishes one truthful content graph across HTML, Markdown, sitemap, and feeds.",
+  },
+  {
+    name: "Editorial authority and machine contracts",
+    path: "/research/editorial-trust-and-contracts",
+    summary:
+      "How policy boundaries, canonical URLs, and machine-facing surfaces stay aligned.",
   },
 ];
 
@@ -119,8 +125,22 @@ export default function ResearchHubPage() {
 
         <section className="mt-10 space-y-4">
           <h2 className="text-xl font-semibold">
-            How SYMBiEX keeps this discoverable
+            How SYMBaIEX keeps this discoverable
           </h2>
+          <ul className="list-disc space-y-2 pl-6 leading-7">
+            <li>
+              Research hub entries are listed in sitemap, llms.txt, and llms-full.txt.
+            </li>
+            <li>
+              Public pages should stay discoverable through machine surfaces and still route
+              through policy-aware pathways before deeper automation.
+            </li>
+            <li>
+              Canonical handling is explicit, both for browsers and parser-facing clients.
+            </li>
+          </ul>
+        </section>
+        <section className="mt-10 space-y-4">
           <p>
             A research hub entry is published as HTML with matching JSON-LD and
             mirrored in machine-readable surfaces.

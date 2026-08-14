@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { FORUM_SITE_URL } from "@/lib/site-urls";
+import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+
+const forumSocialImage = {
+  url: `${PRIMARY_SITE_URL}/opengraph-image`,
+  width: 1200,
+  height: 630,
+  alt: "SYMBaiEX forum social preview: public discussion about software, AI, and open source.",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(FORUM_SITE_URL),
@@ -18,12 +25,14 @@ export const metadata: Metadata = {
       "A public discussion board for software, AI systems, open source, and adjacent experiments.",
     type: "website",
     url: FORUM_SITE_URL,
+    images: [forumSocialImage],
   },
   twitter: {
     card: "summary",
     title: "SYMBaiEX forum",
     description:
       "A public discussion board for software, AI systems, open source, and adjacent experiments.",
+    images: [forumSocialImage],
   },
 };
 

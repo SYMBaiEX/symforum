@@ -46,6 +46,20 @@ export async function generateMetadata({
           url: canonical,
           title: project.name,
           description: project.summary,
+          images: [
+            {
+              url: `${primarySiteUrl("/")}opengraph-image`,
+              alt: `SYMBaiEX portfolio project: ${project.name}`,
+            },
+          ],
+        }
+      : undefined,
+    twitter: project
+      ? {
+          card: "summary_large_image",
+          title: project.name,
+          description: project.summary,
+          images: [`${primarySiteUrl("/")}opengraph-image`],
         }
       : undefined,
   };

@@ -2,6 +2,7 @@ import { primarySiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { MetadataRoute } from "next";
 
 const PRIVATE_PATHS = [
+  "/api",
   "/admin",
   "/profile",
   "/signin",

@@ -11,8 +11,37 @@ import { primarySiteUrl } from "@/lib/site-urls";
 export const metadata: Metadata = {
   title: "Newsletter",
   description:
-    "Belle's source-grounded daily signals and weekly SYMBaiEX field notes.",
+    "Belle's source-grounded daily signals and weekly SYMBaEX field notes.",
   alternates: { canonical: "/newsletter" },
+  openGraph: {
+    type: "website",
+    url: primarySiteUrl("/newsletter"),
+    title: "Newsletter",
+    description:
+      "Belle's source-grounded daily signals and weekly SYMBaEX field notes.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX newsletter archive and latest source-grounded editions.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Newsletter",
+    description:
+      "Belle's source-grounded daily signals and weekly SYMBaEX field notes.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX newsletter archive and latest source-grounded editions.",
+      },
+    ],
+  },
 };
 
 export const revalidate = 60;

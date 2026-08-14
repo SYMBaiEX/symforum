@@ -5,6 +5,7 @@ import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { safeForumIsoDate } from "@/lib/forum-metadata";
 import { breadcrumbStructuredData } from "@/lib/seo";
+import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -52,11 +53,20 @@ export async function generateMetadata({
         routeStatus?.kind === "thread"
           ? safeForumIsoDate(routeStatus.updatedAt)
           : undefined,
+      images: [
+        {
+          url: `${PRIMARY_SITE_URL}/opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: `SYMBaiEX forum thread: ${title}`,
+        },
+      ],
     },
     twitter: {
       card: "summary",
       title,
       description,
+      images: [`${PRIMARY_SITE_URL}/opengraph-image`],
     },
   };
 }

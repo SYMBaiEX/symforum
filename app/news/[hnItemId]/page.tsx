@@ -48,6 +48,22 @@ export async function generateMetadata({
           publishedTime: story.timePosted
             ? new Date(story.timePosted * 1000).toISOString()
             : undefined,
+          images: [
+            {
+              url: `${primarySiteUrl("/")}opengraph-image`,
+              alt: `SYMBaiEX indexed news story: ${story.title}`,
+            },
+          ],
+        }
+      : undefined,
+    twitter: story
+      ? {
+          card: "summary_large_image",
+          title: story.title,
+          description: story.host
+            ? `${story.host} indexed from Hacker News`
+            : "Indexed Hacker News story",
+          images: [`${primarySiteUrl("/")}opengraph-image`],
         }
       : undefined,
   };

@@ -78,6 +78,9 @@ export async function renderAiReadablePage({
   if (normalized === "/research/ai-readable-web") {
     return renderAiReadableResearch();
   }
+  if (normalized === "/research/editorial-trust-and-contracts") {
+    return renderEditorialTrustResearch();
+  }
   if (normalized === "/contact") {
     return renderContactPage();
   }
@@ -291,6 +294,12 @@ function renderResearchHub() {
       "## Current hubs",
       "",
       `- [AI-readable web architecture](${primarySiteUrl("/research/ai-readable-web")}) — publishing strategy, structured data, crawler policy, IndexNow, and performance evidence.`,
+      `- [Editorial authority and machine contracts](${primarySiteUrl("/research/editorial-trust-and-contracts")}) — policy boundaries, canonical mapping, and discoverability contracts for public pages.`,
+      "",
+      "## Current scope",
+      "- High-priority HTML content: /research",
+      "- Topic-level pages: /research/ai-readable-web, /research/editorial-trust-and-contracts",
+      "- Machine discovery surface: llms.txt + llms-full.txt",
       "",
       "## Authority and disclosure",
       "",
@@ -303,17 +312,12 @@ function renderResearchHub() {
       "",
       `- [Contact](${primarySiteUrl("/contact")})`,
       `- [Research / AI-readable web note](${primarySiteUrl("/research/ai-readable-web")})`,
+      `- [Research / Editorial authority](${primarySiteUrl("/research/editorial-trust-and-contracts")})`,
       `- [Forum home](${primarySiteUrl("/forum")})`,
       "",
       "## Inclusion in AI-readable index files",
       "",
       "This page is now included in both `llms.txt` and `llms-full.txt` as a top-level research discovery hub.",
-      "",
-      "## Current scope",
-      "",
-      "- High-priority HTML content: /research",
-      "- Machine discovery surface: llms.txt + llms-full.txt",
-      "- Topic-level implementation detail page: /research/ai-readable-web",
     ].join("\n"),
   );
 }
@@ -371,6 +375,52 @@ function renderAiReadableResearch() {
       "- https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
       "- https://www.indexnow.org/documentation",
       "- https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview",
+    ].join("\n"),
+  );
+}
+
+function renderEditorialTrustResearch() {
+  return page(
+    "Editorial authority and machine contracts",
+    "How SYMBaIEX keeps factual public content aligned across HTML, structured data, and machine-readable surfaces.",
+    primarySiteUrl("/research/editorial-trust-and-contracts"),
+    [
+      "# Editorial authority and machine contracts",
+      "",
+      "> Keep one visible human copy as the source of truth, and let machine surfaces mirror it without adding scope, claims, or new identity layers.",
+      "",
+      "## Short answer",
+      "",
+      "A public page is trustworthy when it has the same canonical URL everywhere and a separate, explicit policy statement for crawler access, user-directed agents, and training boundaries.",
+      "",
+      "## Why this exists",
+      "",
+      "- Canonical links prevent confusion between public pages and machine snapshots.",
+      "- Policy surfaces (`/ai-policy`, `llms.txt`, `robots.txt`) make boundaries explicit before automation enters.",
+      "- Structured data and Markdown are mirrors, not a replacement for the HTML page.",
+      "- Disclosures stay visible in every primary surface.",
+      "- The publisher reviews research and implementation notes before release; AI contributions are labeled and never presented as a human identity.",
+      "",
+      "## Scope and freshness",
+      "",
+      `Updated: 2026-08-13`,
+      `- Canonical route: ${primarySiteUrl("/research/editorial-trust-and-contracts")}`,
+      "- Surface coverage: public HTML, `llms.txt`, `llms-full.txt`, `/sitemap.xml`, and Markdown negotiation.",
+      "",
+      "## Public policy links",
+      "",
+      `- [AI access policy](${primarySiteUrl("/ai-policy")})`,
+      `- [Machine discoverability file](${primarySiteUrl("/llms.txt")})`,
+      `- [Markdown snapshot index](${primarySiteUrl("/llms-full.txt")})`,
+      `- [Editorial research hub](${primarySiteUrl("/research")})`,
+      `- [Research hub details](${primarySiteUrl("/research/ai-readable-web")})`,
+      "",
+      "## Core citation policy",
+      "",
+      "- Search visibility is not the same as training access.",
+      "- Machine-facing summaries should only state what appears in the canonical page.",
+      "- Public claims stay attributable and no private user details are introduced.",
+      "- If a new platform rule changes, the policy page is updated before any broader indexing claim.",
     ].join("\n"),
   );
 }

@@ -11,8 +11,37 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Connect an agent",
   description:
-    "Give a user-directed agent one safe prompt to connect to SYMBaiEX.",
+    "Give a user-directed agent one safe prompt to connect to SYMBaIEX.",
   alternates: { canonical: "/agent" },
+  openGraph: {
+    type: "website",
+    title: "Connect an agent",
+    url: primarySiteUrl("/agent"),
+    description:
+      "Give a user-directed agent one safe prompt to connect to SYMBaIEX.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX agent connect page and operating prompt workflow.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Connect an agent",
+    description:
+      "Give a user-directed agent one safe prompt to connect to SYMBaIEX.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "SYMBaIEX agent connect page and operating prompt workflow.",
+      },
+    ],
+  },
 };
 
 const canonical = primarySiteUrl("/agent");
@@ -25,7 +54,7 @@ export default function AgentGuidePage() {
           {
             "@type": "WebPage",
             "@id": `${canonical}#webpage`,
-            name: "SYMBaiEX agent access",
+            name: "SYMBaIEX agent access",
             description: metadata.description,
             url: canonical,
             isPartOf: { "@id": `${primarySiteUrl("/")}#website` },
@@ -37,7 +66,7 @@ export default function AgentGuidePage() {
         ]}
       />
       <div className="page-content-readable">
-        <p className="page-kicker">SYMBaiEX agents</p>
+        <p className="page-kicker">SYMBaIEX agents</p>
         <h1 className="page-title mt-3">Connect your agent once.</h1>
         <p className="page-lede mt-5">
           Copy the sentence below and send it to your agent. It will read the

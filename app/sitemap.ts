@@ -6,6 +6,16 @@ import { forumSiteUrl, primarySiteUrl } from "@/lib/site-urls";
 import { getPortfolioProjects } from "@/lib/site-content";
 import { convexRefs } from "@/lib/convex-refs";
 import { getServerConvexClient } from "@/lib/server-convex";
+import {
+  buildSiteObservabilityReport,
+  FORUM_SITEMAP_PAGE_SIZE,
+  FORUM_SITEMAP_QUERY_LIMIT,
+  SITEMAP_ENTRY_CAP,
+  SITEMAP_REVALIDATE_SECONDS,
+  type SiteObservabilitySnapshot,
+  type SiteObservabilitySourceName,
+  type SiteObservabilitySourceState,
+} from "@/lib/site-observability";
 import type { MetadataRoute } from "next";
 
 const PRIMARY_PATHS = [
@@ -15,6 +25,7 @@ const PRIMARY_PATHS = [
   "/agent",
   "/research",
   "/research/ai-readable-web",
+  "/research/editorial-trust-and-contracts",
   "/blog",
   "/contact",
   "/news",
@@ -34,7 +45,7 @@ const FORUM_PATHS = [
   "/todays-posts",
 ];
 
-type SitemapSource = "blog" | "portfolio" | "newsletter" | "news" | "forum";
+type SitemapSource = SiteObservabilitySourceName;
 
 type SitemapSourceResult<T> =
   | {
@@ -46,13 +57,7 @@ type SitemapSourceResult<T> =
       reason: string;
     };
 
-type SitemapSourceState = {
-  status: "ok" | "degraded";
-  lastAttemptedAt: number;
-  lastSuccessAt: number | null;
-  lastFailureAt: number | null;
-  consecutiveFailures: number;
-  totalFailures: number;
+type SitemapSourceState = SiteObservabilitySourceState & {
   lastFailureMessage: string | null;
 };
 
@@ -62,6 +67,8 @@ type SitemapHealthState = {
   lastAlertAt: number | null;
   staleSnapshotAt: number | null;
   staleSnapshotCount: number;
+  lastRunDurationMs: number | null;
+  lastRunEntryCount: number | null;
   sources: Record<SitemapSource, SitemapSourceState>;
 };
 
@@ -87,6 +94,8 @@ const sitemapHealthSeed: SitemapHealthState = {
   lastAlertAt: null,
   staleSnapshotAt: null,
   staleSnapshotCount: 0,
+  lastRunDurationMs: null,
+  lastRunEntryCount: null,
   sources: {
     blog: { ...sourceHealthSeed },
     portfolio: { ...sourceHealthSeed },
@@ -102,11 +111,12 @@ const ALERT_FALLBACK_FAILURE_STREAK = 3;
 let sitemapHealth: SitemapHealthState = structuredClone(sitemapHealthSeed);
 let lastKnownGoodSitemap: MetadataRoute.Sitemap = [];
 
+// Next's segment config must be statically analyzable; keep this literal in
+// the export while sharing the same value with the operator report.
 export const revalidate = 3600;
-// Google’s sitemap protocol permits up to 50,000 URLs per sitemap file.
-const MAX_SITEMAP_ENTRIES = 50_000;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const runStartedAt = Date.now();
   const [postsResult, projectsResult, issuesResult, newsResult] =
     await Promise.allSettled([
       getPublishedPosts(),
@@ -202,19 +212,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const bounded = dedupeEntries(merged.entries);
-  if (bounded.length > MAX_SITEMAP_ENTRIES) {
+  if (bounded.length > SITEMAP_ENTRY_CAP) {
     console.warn(
-      `Sitemap entry cap reached: ${bounded.length} > ${MAX_SITEMAP_ENTRIES}`,
+      `Sitemap entry cap reached: ${bounded.length} > ${SITEMAP_ENTRY_CAP}`,
     );
   }
 
-  const clipped = bounded.slice(0, MAX_SITEMAP_ENTRIES);
+  const clipped = bounded.slice(0, SITEMAP_ENTRY_CAP);
   if (!hadSourceFailures && clipped.length > 0) {
     lastKnownGoodSitemap = [...clipped];
     sitemapHealth.staleSnapshotAt = Date.now();
     sitemapHealth.staleSnapshotCount = clipped.length;
   }
 
+  sitemapHealth.lastRunDurationMs = Date.now() - runStartedAt;
+  sitemapHealth.lastRunEntryCount = clipped.length;
   updateRunHealthSummary(hadSourceFailures);
   return clipped;
 }
@@ -226,11 +238,17 @@ async function getPublicForumSitemapEntries(): Promise<ForumSitemapResult> {
   try {
     const [categories, announcements, helpDocuments, calendarEvents] =
       await Promise.all([
-        convex.query(convexRefs.forum.listCategories, { limit: 100 }),
+        // Keep forum sitemap discovery bounded; the XML sitemap should not mirror
+        // unbounded forum tables.
+        convex.query(convexRefs.forum.listCategories, {
+          limit: FORUM_SITEMAP_QUERY_LIMIT,
+        }),
         convex.query(convexRefs.forum.listAnnouncements, {
           includeBoardAnnouncements: true,
         }),
-        convex.query(convexRefs.forum.listHelpDocuments, { limit: 100 }),
+        convex.query(convexRefs.forum.listHelpDocuments, {
+          limit: FORUM_SITEMAP_QUERY_LIMIT,
+        }),
         convex.query(convexRefs.forum.listCalendarEvents, {
           month: new Date().toISOString().slice(0, 7),
         }),
@@ -244,8 +262,8 @@ async function getPublicForumSitemapEntries(): Promise<ForumSitemapResult> {
           convex
             .query(convexRefs.forum.listThreads, {
               categorySlug: category.slug,
-              limit: 100,
-              pageSize: 100,
+              limit: FORUM_SITEMAP_QUERY_LIMIT,
+              pageSize: FORUM_SITEMAP_PAGE_SIZE,
             })
             .catch(() => null),
         ),
@@ -346,7 +364,9 @@ function dedupeEntries(entries: MetadataRoute.Sitemap) {
   });
 }
 
-function toSourceResult<T>(result: PromiseSettledResult<T>): SitemapSourceResult<T> {
+function toSourceResult<T>(
+  result: PromiseSettledResult<T>,
+): SitemapSourceResult<T> {
   if (result.status === "fulfilled") {
     return { status: "ok", value: result.value };
   }
@@ -461,6 +481,8 @@ export function getSitemapHealthSnapshot() {
     lastAlertAt: sitemapHealth.lastAlertAt,
     staleSnapshotAt: sitemapHealth.staleSnapshotAt,
     staleSnapshotCount: sitemapHealth.staleSnapshotCount,
+    lastRunDurationMs: sitemapHealth.lastRunDurationMs,
+    lastRunEntryCount: sitemapHealth.lastRunEntryCount,
     sources: Object.fromEntries(
       Object.entries(sitemapHealth.sources).map(([source, state]) => [
         source,
@@ -470,7 +492,40 @@ export function getSitemapHealthSnapshot() {
   };
 }
 
+export function getSitemapObservabilityReport() {
+  return buildSiteObservabilityReport(
+    stripFailureMessages(getSitemapHealthSnapshot()),
+  );
+}
+
 export function resetSitemapHealthForTests() {
   sitemapHealth = structuredClone(sitemapHealthSeed);
   lastKnownGoodSitemap = [];
+}
+
+function stripFailureMessages(
+  snapshot: SitemapHealthState,
+): SiteObservabilitySnapshot {
+  return {
+    generatedAt: snapshot.generatedAt,
+    consecutiveRunFailures: snapshot.consecutiveRunFailures,
+    lastAlertAt: snapshot.lastAlertAt,
+    staleSnapshotAt: snapshot.staleSnapshotAt,
+    staleSnapshotCount: snapshot.staleSnapshotCount,
+    lastRunDurationMs: snapshot.lastRunDurationMs,
+    lastRunEntryCount: snapshot.lastRunEntryCount,
+    sources: Object.fromEntries(
+      Object.entries(snapshot.sources).map(([source, state]) => [
+        source,
+        {
+          status: state.status,
+          lastAttemptedAt: state.lastAttemptedAt,
+          lastSuccessAt: state.lastSuccessAt,
+          lastFailureAt: state.lastFailureAt,
+          consecutiveFailures: state.consecutiveFailures,
+          totalFailures: state.totalFailures,
+        },
+      ]),
+    ) as SiteObservabilitySnapshot["sources"],
+  };
 }
