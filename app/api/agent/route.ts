@@ -23,6 +23,7 @@ const MANIFEST = {
     markdown: true,
     feeds: true,
     authenticatedIdentity: true,
+    authenticatedQuota: true,
     authenticatedResourceTransport: "typed-platform-functions",
     authenticatedResourceProxy: "planned-incrementally",
   },

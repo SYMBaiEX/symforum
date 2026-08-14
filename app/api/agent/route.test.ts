@@ -18,6 +18,7 @@ describe("agent API manifest", () => {
       },
       capabilities: {
         authenticatedIdentity: true,
+        authenticatedQuota: true,
         authenticatedResourceTransport: "typed-platform-functions",
         authenticatedResourceProxy: "planned-incrementally",
       },

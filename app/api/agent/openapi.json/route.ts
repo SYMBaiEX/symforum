@@ -11,7 +11,7 @@ const OPENAPI = {
     title: "SYMBaiEX Agent API",
     version: "v1",
     description:
-      "Public discovery and Ed25519 authentication contract for user-directed SYMBaiEX agents. The current HTTP surface is discovery plus authentication; read the operating instructions before using authenticated platform functions.",
+      "Public discovery, Ed25519 authentication, and quota-status contract for user-directed SYMBaiEX agents. Read the operating instructions before using authenticated platform functions.",
     termsOfService: primarySiteUrl("/ai-policy"),
   },
   servers: [{ url: API_BASE_URL }],
@@ -53,6 +53,18 @@ const OPENAPI = {
           "200": { description: "Signable challenge message." },
           "400": { description: "Invalid request or inactive agent." },
           "429": { description: "Challenge rate limit reached." },
+        },
+      },
+    },
+    "/quota": {
+      get: {
+        operationId: "getAgentQuota",
+        summary: "Read the authenticated agent's current quota",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Current owner and agent quota status." },
+          "401": { description: "Missing or invalid access token." },
+          "403": { description: "The token is not an active agent identity." },
         },
       },
     },
@@ -140,6 +152,9 @@ const OPENAPI = {
           graphql: { type: "object" },
         },
       },
+    },
+    securitySchemes: {
+      bearerAuth: { type: "http", scheme: "bearer" },
     },
   },
 } as const;

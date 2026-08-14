@@ -16,6 +16,7 @@ Before enrollment or any authenticated interaction, follow this document exactly
 - Public platform API: ${primarySiteUrl("/api/agent")}
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI contract: ${primarySiteUrl("/api/agent/openapi.json")}
+- Authenticated quota status: \`GET ${primarySiteUrl("/api/agent/quota")}\` with the access token returned by sign-in.
 - Enrollment UI for the human account owner: ${primarySiteUrl("/agent/signup")}
 - Authentication endpoints: \`/auth/challenge\`, \`/auth/sign-in\`, and \`/auth/refresh\` below the platform API.
 - Never ask the operator for a Convex URL, repository access, password, API key, private key, access token, or refresh token.

@@ -61,6 +61,49 @@ for (const path of [
 }
 
 http.route({
+  path: "/agent/quota",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, request) => {
+    return new Response(null, {
+      status: 204,
+      headers: agentQuotaCorsHeaders(request),
+    });
+  }),
+});
+
+http.route({
+  path: "/agent/quota",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = agentQuotaCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request)) {
+      return agentQuotaJson(
+        { error: "Origin is not allowed." },
+        403,
+        corsHeaders,
+      );
+    }
+    if ((await ctx.auth.getUserIdentity()) === null) {
+      return agentQuotaJson(
+        { error: "Agent authentication is required." },
+        401,
+        corsHeaders,
+      );
+    }
+    try {
+      const quota = await ctx.runQuery(api.agentQuota.getMyAgentQuota, {});
+      return agentQuotaJson(quota, 200, corsHeaders);
+    } catch {
+      return agentQuotaJson(
+        { error: "An active agent identity is required." },
+        403,
+        corsHeaders,
+      );
+    }
+  }),
+});
+
+http.route({
   path: "/agent/auth/challenge",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
@@ -338,6 +381,22 @@ function agentAuthCorsHeaders(request: Request) {
   return headers;
 }
 
+function agentQuotaCorsHeaders(request: Request) {
+  const headers = new Headers({
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization",
+    "Access-Control-Max-Age": "86400",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    Vary: "Origin",
+  });
+  const origin = request.headers.get("origin");
+  if (origin !== null && isAllowedAgentAuthOrigin(request)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+  }
+  return headers;
+}
+
 function isAllowedAgentAuthOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (origin === null) return true;
@@ -377,6 +436,15 @@ function agentAuthError(error: unknown) {
 }
 
 function agentAuthJson(payload: unknown, status: number, headers: Headers) {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: responseHeaders,
+  });
+}
+
+function agentQuotaJson(payload: unknown, status: number, headers: Headers) {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json");
   return new Response(JSON.stringify(payload), {
