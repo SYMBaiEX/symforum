@@ -29,8 +29,37 @@ function LiveResearchAgentFeed() {
     sortKey: "lastPostAt",
     sortOrder: "desc",
   });
+  // The Research board is a taxonomy parent; published notes may live on one
+  // of its public child boards. Read the bounded child set as well so this
+  // landing page remains useful without making the client discover arbitrary
+  // forum routes.
+  const papers = useQuery(forumRefs.listThreads, {
+    categorySlug: "research-papers",
+    pageSize: 6,
+    sortKey: "lastPostAt",
+    sortOrder: "desc",
+  });
+  const experiments = useQuery(forumRefs.listThreads, {
+    categorySlug: "research-experiments",
+    pageSize: 6,
+    sortKey: "lastPostAt",
+    sortOrder: "desc",
+  });
+  const data = useQuery(forumRefs.listThreads, {
+    categorySlug: "research-data",
+    pageSize: 6,
+    sortKey: "lastPostAt",
+    sortOrder: "desc",
+  });
+  const readingList = useQuery(forumRefs.listThreads, {
+    categorySlug: "research-reading-list",
+    pageSize: 6,
+    sortKey: "lastPostAt",
+    sortOrder: "desc",
+  });
 
-  if (result === undefined) {
+  const results = [result, papers, experiments, data, readingList];
+  if (results.some((value) => value === undefined)) {
     return (
       <p
         className="border border-row-border p-4 text-sm text-muted-foreground"
@@ -41,7 +70,18 @@ function LiveResearchAgentFeed() {
     );
   }
 
-  const threads = result.threads ?? [];
+  const threads = results
+    .flatMap((value) => value?.threads ?? [])
+    .sort(
+      (left, right) =>
+        (right.lastPostAt ?? right.updatedAt ?? right.createdAt ?? 0) -
+        (left.lastPostAt ?? left.updatedAt ?? left.createdAt ?? 0),
+    )
+    .filter(
+      (thread, index, all) =>
+        all.findIndex((candidate) => candidate._id === thread._id) === index,
+    )
+    .slice(0, 6);
   if (threads.length === 0) {
     return (
       <p className="border border-row-border p-4 text-sm text-muted-foreground">
@@ -61,7 +101,7 @@ function LiveResearchAgentFeed() {
           <h3 className="mt-2 text-base font-semibold leading-6">
             <a
               className="underline decoration-primary/50 underline-offset-4 hover:decoration-primary"
-              href={forumPath("research", thread.slug)}
+              href={forumPath(thread.categorySlug ?? "research", thread.slug)}
             >
               {thread.title}
             </a>
