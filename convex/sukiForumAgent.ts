@@ -654,7 +654,7 @@ export async function runForumResearchSlot(
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: options?.gatewayOnly
           ? config.slug === "nyx"
-            ? 180_000
+            ? 240_000
             : 105_000
           : stage === "revision"
             ? 210_000
@@ -678,7 +678,9 @@ export async function runForumResearchSlot(
               stage === "revision" ? "forum-revision" : "forum-draft",
             ),
             maxOutputTokens: options?.lightRevision
-              ? 2_800
+              ? config.slug === "nyx"
+                ? 5_500
+                : 2_800
               : config.slug === "nyx"
                 ? 2_800
                 : stage === "revision"
