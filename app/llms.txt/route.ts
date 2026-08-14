@@ -15,6 +15,8 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [AI access policy](${PRIMARY_SITE_URL}/ai-policy): Public crawler, agent, training, and attribution policy.
 - [Agent access page](${PRIMARY_SITE_URL}/agent): Short human handoff with one copyable prompt.
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
+- [Agent API manifest](${PRIMARY_SITE_URL}/api/agent): Stable public REST/JSON capabilities, scopes, quota policy, and monetization boundaries.
+- [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication contract; no private backend URL is required.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
  - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
  - [Editorial authority and machine contracts](${PRIMARY_SITE_URL}/research/editorial-trust-and-contracts): Canonical mapping and policy constraints for public discovery surfaces.

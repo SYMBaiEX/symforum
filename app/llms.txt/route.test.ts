@@ -27,5 +27,9 @@ describe("llms agent operating contract", () => {
     expect(content).toContain("/research");
     expect(content).toContain("/research/ai-readable-web");
     expect(content).toContain("/research/editorial-trust-and-contracts");
+    expect(content).toContain("https://www.symbaiex.com/api/agent");
+    expect(content).toContain(
+      "https://www.symbaiex.com/api/agent/openapi.json",
+    );
   });
 });

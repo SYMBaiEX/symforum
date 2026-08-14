@@ -11,7 +11,8 @@ describe("robots policy", () => {
     expect(publicRule).toMatchObject({ allow: "/" });
     expect(publicRule?.disallow).toEqual(
       expect.arrayContaining([
-        "/api",
+        "/api/admin",
+        "/api/agent/auth",
         "/admin",
         "/profile",
         "/signin",
@@ -23,5 +24,6 @@ describe("robots policy", () => {
         "/forum/subscriptions",
       ]),
     );
+    expect(publicRule?.disallow).not.toContain("/api");
   });
 });
