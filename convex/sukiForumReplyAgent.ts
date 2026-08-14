@@ -1,15 +1,17 @@
 "use node";
 
-import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { APICallError, generateText } from "ai";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  runWithModelFallback,
+  type OpenRouterRequestContext,
+} from "../lib/ai-model-routing";
 import {
   modelGenerationSettings,
   modelInstructions,
-} from "../lib/muse-model-profile";
+} from "../lib/openrouter-model-profile";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
@@ -106,18 +108,12 @@ async function runReplySweepForAgent(
       runKey: replyRunKey,
       agentSlug,
     });
-    if (
-      !routingConfig.openRouterApiKey?.trim() &&
-      !(
-        routingConfig.museBaseUrl?.trim() && routingConfig.museApiKey?.trim()
-      ) &&
-      !routingConfig.gatewayApiKey?.trim()
-    ) {
+    if (!routingConfig.openRouterApiKey?.trim()) {
       throw new SukiReplyConfigurationError(
-        "OPENROUTER_API_KEY, Muse API access, and AI_GATEWAY_API_KEY are all unconfigured.",
+        "OPENROUTER_API_KEY is not configured.",
       );
     }
-    const gatewayOptions = {
+    const requestContext = {
       user: agentSlug,
       tags: [
         `agent:${agentSlug}`,
@@ -125,11 +121,11 @@ async function runReplySweepForAgent(
         `prompt:${PROMPT_VERSION}`,
         `board:${claim.candidate.categorySlug}`,
       ],
-    } satisfies GatewayProviderOptions;
+    } satisfies OpenRouterRequestContext;
     const generationStartedAt = Date.now();
     const generation = await runWithModelFallback(
       routingConfig,
-      gatewayOptions,
+      requestContext,
       {
         stage: `${agentSlug}:forum-reply`,
         correlationId: replyRunKey,
@@ -358,15 +354,15 @@ function publicSukiReplyErrorMessage(error: unknown) {
   }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {
-      return "AI Gateway authentication failed.";
+      return "OpenRouter authentication failed.";
     }
     if (error.statusCode === 402) {
-      return "AI Gateway credits or budget are exhausted.";
+      return "OpenRouter credits or budget are exhausted.";
     }
     if (error.statusCode === 429) {
-      return "AI Gateway rate limited Suki.";
+      return "OpenRouter rate limited Suki.";
     }
-    return `AI Gateway request failed with HTTP ${error.statusCode ?? "unknown"}.`;
+    return `OpenRouter request failed with HTTP ${error.statusCode ?? "unknown"}.`;
   }
   return error instanceof Error
     ? compactText(error.message, 500)

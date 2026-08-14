@@ -1,4 +1,4 @@
-export type MuseTask =
+export type ModelTask =
   | "topic-selection"
   | "forum-draft"
   | "forum-revision"
@@ -9,71 +9,61 @@ export type MuseTask =
   | "reply"
   | "owner-console";
 
-export type ModelProvider = "openrouter" | "muse" | "gateway";
-
-export const MUSE_TOP_K = 64;
+export type ModelProvider = "openrouter";
 
 const TASK_PROFILES = {
   "topic-selection": {
     reasoning: "high",
-    muse: { temperature: 0.8, topP: 0.95 },
-    gateway: { temperature: 0.2 },
+    openrouter: { temperature: 0.2 },
   },
   "forum-draft": {
     reasoning: "xhigh",
-    muse: { temperature: 1, topP: 0.95 },
-    gateway: { temperature: 0.45 },
+    openrouter: { temperature: 0.45 },
   },
   "forum-revision": {
     reasoning: "high",
-    muse: { temperature: 0.7, topP: 0.9 },
-    gateway: { temperature: 0.35 },
+    openrouter: { temperature: 0.35 },
   },
   "newsletter-daily": {
     reasoning: "xhigh",
-    muse: { temperature: 1, topP: 0.95 },
-    gateway: { temperature: 0.35 },
+    openrouter: { temperature: 0.35 },
   },
   "newsletter-weekly": {
     reasoning: "xhigh",
-    muse: { temperature: 1, topP: 0.95 },
-    gateway: { temperature: 0.45 },
+    openrouter: { temperature: 0.45 },
   },
   "newsletter-revision": {
     reasoning: "high",
-    muse: { temperature: 0.7, topP: 0.9 },
-    gateway: { temperature: 0.35 },
+    openrouter: { temperature: 0.35 },
   },
   digest: {
     reasoning: "high",
-    muse: { temperature: 1, topP: 0.95 },
-    gateway: { temperature: 0.45 },
+    openrouter: { temperature: 0.45 },
   },
   reply: {
     reasoning: "medium",
-    muse: { temperature: 0.65, topP: 0.9 },
-    gateway: { temperature: 0.3 },
+    openrouter: { temperature: 0.3 },
   },
   "owner-console": {
     reasoning: "high",
-    muse: { temperature: 0.7, topP: 0.9 },
-    gateway: { temperature: 0.3 },
+    openrouter: { temperature: 0.3 },
   },
 } as const;
 
 export function modelGenerationSettings(
   provider: ModelProvider,
-  task: MuseTask,
+  task: ModelTask,
 ) {
-  return TASK_PROFILES[task][provider === "muse" ? "muse" : "gateway"];
+  void provider;
+  return TASK_PROFILES[task].openrouter;
 }
 
 export function modelInstructions(
   provider: ModelProvider,
-  task: MuseTask,
+  task: ModelTask,
   instructions: string,
 ) {
-  if (provider !== "muse") return instructions;
+  void provider;
   const reasoning = TASK_PROFILES[task].reasoning;
   return [
     `Reasoning strength: ${reasoning}`,

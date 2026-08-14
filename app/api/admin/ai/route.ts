@@ -14,7 +14,7 @@ import { selectStreamingModel } from "@/lib/ai-model-routing";
 import {
   modelGenerationSettings,
   modelInstructions,
-} from "@/lib/muse-model-profile";
+} from "@/lib/openrouter-model-profile";
 import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -35,9 +35,7 @@ export async function POST(request: Request) {
 
     const routedModel = await selectStreamingModel(
       {
-        museBaseUrl: process.env.MUSE_API_BASE_URL,
-        museApiKey: process.env.MUSE_API_KEY,
-        gatewayApiKey: process.env.AI_GATEWAY_API_KEY,
+        openRouterApiKey: process.env.OPENROUTER_API_KEY,
       },
       {
         tags: ["feature:admin-ai", "surface:owner-console"],

@@ -1,6 +1,5 @@
 "use node";
 
-import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { generateText, tool } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
@@ -32,9 +31,6 @@ export async function convexModelRoutingConfig(
 ): Promise<ModelRoutingConfig> {
   const base: ModelRoutingConfig = {
     openRouterApiKey: env.OPENROUTER_API_KEY,
-    museBaseUrl: env.MUSE_API_BASE_URL,
-    museApiKey: env.MUSE_API_KEY,
-    gatewayApiKey: env.AI_GATEWAY_API_KEY,
   };
   if (ctx === undefined) return base;
 
@@ -56,47 +52,20 @@ export async function convexModelRoutingConfig(
     disabledModelIds.add(OPENROUTER_FORUM_PAID_MODEL);
   }
 
-  const holder = `${options?.correlationId ?? "ai-route"}:${crypto.randomUUID()}`;
-  let museLeaseHeld = false;
-  return {
-    ...base,
-    disabledModelIds: [...disabledModelIds],
-    beforeAttempt: async (candidate) => {
-      if (candidate.provider !== "muse") return;
-      const lease: { acquired: boolean; retryAfterMs: number } =
-        await ctx.runMutation(internal.aiRoutingControlData.acquireMuseLease, {
-          holder,
-          leaseMs: 180_000,
-        });
-      if (!lease.acquired) {
-        throw new Error(
-          `Muse fallback lane is busy; retry after ${lease.retryAfterMs}ms`,
-        );
-      }
-      museLeaseHeld = true;
-    },
-    afterAttempt: async (candidate) => {
-      if (candidate.provider !== "muse" || !museLeaseHeld) return;
-      museLeaseHeld = false;
-      await ctx.runMutation(internal.aiRoutingControlData.releaseMuseLease, {
-        holder,
-      });
-    },
-  };
+  void options;
+  return { ...base, disabledModelIds: [...disabledModelIds] };
 }
 
 /** Non-publishing structured smoke test for operators. */
 export const probe = internalAction({
   args: {
     provider: v.optional(
-      v.union(v.literal("openrouter"), v.literal("muse"), v.literal("gateway")),
+      v.literal("openrouter"),
     ),
   },
   returns: v.object({
     provider: v.union(
       v.literal("openrouter"),
-      v.literal("muse"),
-      v.literal("gateway"),
     ),
     model: v.string(),
     response: v.string(),
@@ -142,14 +111,14 @@ export const runStructuredCanary = internalAction({
 
 async function runStructuredProbe(
   ctx: ActionCtx,
-  provider?: "openrouter" | "muse" | "gateway",
+  provider?: "openrouter",
 ) {
   const correlationId = `model-canary:${Date.now()}`;
   const config = await convexModelRoutingConfig(ctx, { correlationId });
-  const gatewayOptions = {
+  const requestContext = {
     user: "operator-route-probe",
     tags: ["feature:model-route-probe"],
-  } satisfies GatewayProviderOptions;
+  };
   const routeArgs = {
     stage: `operator:model-route-probe:${provider ?? "auto"}`,
     correlationId,
@@ -191,11 +160,11 @@ async function runStructuredProbe(
     provider === undefined
       ? await runWithModelFallback<{ response: string }>(
           config,
-          gatewayOptions,
+          requestContext,
           routeArgs,
         )
       : await runRoutedCandidates(
-          (await routedModelCandidates(config, gatewayOptions)).filter(
+          (await routedModelCandidates(config, requestContext)).filter(
             (candidate) => candidate.provider === provider,
           ),
           {

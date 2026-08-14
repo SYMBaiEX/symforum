@@ -1,5 +1,6 @@
 import {
   OPENROUTER_FORUM_PAID_MODEL,
+  OPENROUTER_TOOL_FALLBACK_MODEL,
   OPENROUTER_TOPIC_PAID_MODEL,
 } from "./ai-models";
 
@@ -16,6 +17,10 @@ const MODEL_PRICES: Record<string, TokenPrice> = {
   [OPENROUTER_FORUM_PAID_MODEL]: {
     inputUsdPerMillion: 0.085,
     outputUsdPerMillion: 0.4,
+  },
+  [OPENROUTER_TOOL_FALLBACK_MODEL]: {
+    inputUsdPerMillion: 0.4,
+    outputUsdPerMillion: 1.6,
   },
 };
 

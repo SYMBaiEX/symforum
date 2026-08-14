@@ -8,7 +8,6 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const environmentPath = resolve(projectRoot, ".env");
 
 const convexEnvironmentKeys = [
-  "AI_GATEWAY_API_KEY",
   "AUTH_GOOGLE_ID",
   "AUTH_GOOGLE_SECRET",
   "CONTACT_FROM_EMAIL",
@@ -22,8 +21,6 @@ const convexEnvironmentKeys = [
   "GITHUB_TOKEN",
   "JWKS",
   "JWT_PRIVATE_KEY",
-  "MUSE_API_BASE_URL",
-  "MUSE_API_KEY",
   "OPENROUTER_API_KEY",
   "OPENROUTER_DAILY_BUDGET_USD",
   "NEWSLETTER_FROM_EMAIL",

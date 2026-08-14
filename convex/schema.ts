@@ -980,6 +980,8 @@ export default defineSchema({
     agentSlug: v.optional(v.string()),
     stage: v.string(),
     attempt: v.number(),
+    // Legacy provider values remain accepted so existing telemetry can be
+    // read after the runtime migrated to OpenRouter-only routing.
     provider: v.union(
       v.literal("openrouter"),
       v.literal("muse"),

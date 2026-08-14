@@ -1,6 +1,5 @@
 "use node";
 
-import type { GatewayModelId, GatewayProviderOptions } from "@ai-sdk/gateway";
 import { tool, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -8,10 +7,13 @@ import { z } from "zod";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
-  DEEPSEEK_FALLBACK_MODEL,
-  NEWSLETTER_LAST_RESORT_MODEL,
+  OPENROUTER_DEEPSEEK_MODEL,
+  OPENROUTER_NEWSLETTER_LAST_RESORT_MODEL,
 } from "../lib/ai-models";
-import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  runWithModelFallback,
+  type OpenRouterRequestContext,
+} from "../lib/ai-model-routing";
 import {
   extractVerifiableTokens,
   lexicalSimilarity,
@@ -20,7 +22,7 @@ import {
 import {
   modelGenerationSettings,
   modelInstructions,
-} from "../lib/muse-model-profile";
+} from "../lib/openrouter-model-profile";
 import type { EditorialNewsletterPayload } from "./newsletterPayload";
 import {
   cacheResearchImage,
@@ -31,10 +33,10 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
-const NEWSLETTER_GATEWAY_MODELS = [
-  DEEPSEEK_FALLBACK_MODEL,
-  NEWSLETTER_LAST_RESORT_MODEL,
-] as const satisfies readonly GatewayModelId[];
+const NEWSLETTER_FALLBACK_MODELS = [
+  OPENROUTER_DEEPSEEK_MODEL,
+  OPENROUTER_NEWSLETTER_LAST_RESORT_MODEL,
+] as const;
 const PROMPT_VERSION = "belle-newsletter-v4-openrouter-nemotron";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
@@ -219,7 +221,7 @@ async function generateEditorialPackage(
   });
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
   const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
-  const gatewayTags = [
+  const routeTags = [
     "agent:belle",
     `feature:${args.edition}`,
     `snapshot:${args.snapshotDate}`,
@@ -237,7 +239,7 @@ async function generateEditorialPackage(
     runDate: args.runDate,
     stage: "draft",
     routingConfig,
-    gatewayTags,
+    routeTags,
     prompt: editorialPrompt(args, snapshots, recent),
     schema,
     toolName,
@@ -299,7 +301,7 @@ async function generateEditorialPackage(
       runDate: args.runDate,
       stage: "revision",
       routingConfig,
-      gatewayTags,
+      routeTags,
       prompt: editorialPrompt(args, snapshots, recent, {
         feedback: evaluation.feedback,
         previousDraft: draft,
@@ -447,7 +449,7 @@ async function generateDraftWithFallback({
   runDate,
   stage,
   routingConfig,
-  gatewayTags,
+  routeTags,
   prompt,
   schema,
   toolName,
@@ -457,19 +459,19 @@ async function generateDraftWithFallback({
   runDate: string;
   stage: "draft" | "revision";
   routingConfig: Awaited<ReturnType<typeof convexModelRoutingConfig>>;
-  gatewayTags: string[];
+  routeTags: string[];
   prompt: string;
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
   toolName: "submitDailySignal" | "submitWeeklyFieldNote";
 }) {
   const correlationId = `newsletter:${edition}:${runDate}`;
-  const gatewayOptions = {
+  const requestContext = {
     user: "belle",
-    tags: [...gatewayTags, `stage:${stage}`],
-  } satisfies GatewayProviderOptions;
+    tags: [...routeTags, `stage:${stage}`],
+  } satisfies OpenRouterRequestContext;
   const generation = await runWithModelFallback(
     routingConfig,
-    gatewayOptions,
+    requestContext,
     {
       stage: `belle:${edition}:${stage}`,
       correlationId,
@@ -528,7 +530,7 @@ async function generateDraftWithFallback({
         };
       },
     },
-    NEWSLETTER_GATEWAY_MODELS,
+    NEWSLETTER_FALLBACK_MODELS,
   );
   return generation.value;
 }

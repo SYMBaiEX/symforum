@@ -6,33 +6,14 @@ import { after } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
 
+/**
+ * The owner observatory uses the same OpenRouter route telemetry used by Convex,
+ * keeping the dashboard truthful and eliminating a second inference service.
+ */
 export async function GET(request: Request) {
   try {
     const convex = await getAuthenticatedServerConvexClient();
-    if (!convex) {
-      return noStore({ error: "Convex is not configured" }, 503);
-    }
-
-    const viewer = await convex.query(convexRefs.admin.viewer, {});
-    if (!viewer.user) return noStore({ error: "Sign in required" }, 401);
-    if (!viewer.isOwner)
-      return noStore({ error: "Owner access required" }, 403);
-
-    const apiKey = process.env.MUSE_API_KEY?.trim();
-    const configuredBaseUrl = process.env.MUSE_API_BASE_URL?.trim();
-    if (!apiKey || !configuredBaseUrl) {
-      return noStore({ error: "Muse telemetry is not configured" }, 503);
-    }
-
-    const baseUrl = new URL(configuredBaseUrl);
-    const isLocal =
-      baseUrl.hostname === "127.0.0.1" || baseUrl.hostname === "localhost";
-    if (
-      baseUrl.protocol !== "https:" &&
-      !(isLocal && baseUrl.protocol === "http:")
-    ) {
-      return noStore({ error: "Muse telemetry URL is invalid" }, 503);
-    }
+    if (!convex) return noStore({ error: "Convex is not configured" }, 503);
 
     const requestedHours = Number(
       new URL(request.url).searchParams.get("hours"),
@@ -40,60 +21,82 @@ export async function GET(request: Request) {
     const hours = Number.isFinite(requestedHours)
       ? Math.max(1, Math.min(720, Math.floor(requestedHours)))
       : 24;
-    const telemetryUrl = new URL(
-      `${baseUrl.toString().replace(/\/$/, "")}/telemetry`,
+    const snapshot = await convex.query(
+      convexRefs.admin.aiTelemetrySnapshot,
+      { hours },
     );
-    telemetryUrl.searchParams.set("hours", String(hours));
-    const gatewayUrl = new URL("/api/status", baseUrl.origin);
+    const attempts = snapshot.totals.routeAttempts;
+    const failures = snapshot.totals.routeFailures;
+    const generatedAt = new Date(snapshot.generatedAt).toISOString();
+    const recent = snapshot.recent.map((event, index) => ({
+      id: `${event.correlationId ?? "route"}:${event.at}:${index}`,
+      at: new Date(event.at).toISOString(),
+      type: event.kind,
+      correlationId: event.correlationId,
+      feature: event.stage,
+      agent: event.agentSlug,
+      model: event.model,
+      outcome: event.status,
+      totalMs: event.durationMs,
+    }));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    try {
-      const [telemetryResponse, gatewayResponse] = await Promise.all([
-        fetch(telemetryUrl, {
-          headers: {
-            accept: "application/json",
-            authorization: `Bearer ${apiKey}`,
+    return noStore(
+      {
+        model: {
+          generatedAt,
+          windowHours: hours,
+          retentionDays: 30,
+          totals: {
+            requests: attempts,
+            completed: Math.max(0, attempts - failures),
+            failed: failures,
+            rejected: 0,
+            cancelled: 0,
+            errorRate: attempts ? failures / attempts : 0,
+            inputTokens: snapshot.totals.inputTokens,
+            outputTokens: snapshot.totals.outputTokens,
+            totalTokens:
+              snapshot.totals.inputTokens + snapshot.totals.outputTokens,
+            averageLatencyMs: snapshot.totals.averageDurationMs,
+            p50LatencyMs: snapshot.totals.averageDurationMs,
+            p95LatencyMs: snapshot.totals.p95DurationMs,
+            averageQueueWaitMs: 0,
+            p95QueueWaitMs: 0,
+            averageFirstByteMs: 0,
+            p95FirstByteMs: 0,
+            averageTokensPerSecond: 0,
+            p50TokensPerSecond: 0,
           },
-          cache: "no-store",
-          signal: controller.signal,
-        }),
-        fetch(gatewayUrl, {
-          headers: { accept: "application/json" },
-          cache: "no-store",
-          signal: controller.signal,
-        }).catch(() => null),
-      ]);
-
-      if (!telemetryResponse.ok) {
-        const status =
-          telemetryResponse.status === 401 || telemetryResponse.status === 403
-            ? 503
-            : telemetryResponse.status;
-        throw new TelemetryProxyError(
-          status,
-          telemetryResponse.status === 403
-            ? "The configured Muse API key needs telemetry:read scope"
-            : `Muse telemetry returned HTTP ${telemetryResponse.status}`,
-        );
-      }
-
-      const model = await telemetryResponse.json();
-      const gateway = gatewayResponse?.ok
-        ? await gatewayResponse.json().catch(() => null)
-        : null;
-      return noStore({ model, gateway }, 200);
-    } finally {
-      clearTimeout(timeout);
-    }
+          speculativeDecoding: {
+            draftTokens: 0,
+            acceptedDraftTokens: 0,
+            acceptanceRate: 0,
+          },
+          keys: [],
+          series: [],
+          runtime: {
+            latest: snapshot.operations.canary
+              ? {
+                  id: "openrouter-canary",
+                  at: new Date(snapshot.operations.canary.checkedAt).toISOString(),
+                  modelHealthy: snapshot.operations.canary.healthy,
+                }
+              : null,
+            history: [],
+          },
+          recent,
+          storage: {
+            eventCount: attempts,
+            oldestAt: recent.at(recent.length - 1)?.at ?? null,
+            newestAt: recent.at(0)?.at ?? null,
+          },
+        },
+      },
+      200,
+    );
   } catch (error) {
-    const status = error instanceof TelemetryProxyError ? error.status : 503;
     const message =
-      error instanceof TelemetryProxyError
-        ? error.message
-        : error instanceof Error && error.name === "AbortError"
-          ? "Muse telemetry timed out"
-          : "Muse telemetry is unavailable";
+      error instanceof Error ? error.message : "OpenRouter telemetry unavailable";
     after(() =>
       recordSystemLog({
         level: "warn",
@@ -102,12 +105,12 @@ export async function GET(request: Request) {
         eventType: "model_telemetry_request_failed",
         message,
         name: error instanceof Error ? error.name : undefined,
-        statusCode: status,
-        fingerprint: `admin-telemetry|model|${status}|${message}`,
+        statusCode: 503,
+        fingerprint: `admin-telemetry|openrouter|503|${message}`,
         ...requestLogContext(request),
       }),
     );
-    return noStore({ error: message }, status);
+    return noStore({ error: "OpenRouter telemetry is unavailable" }, 503);
   }
 }
 
@@ -116,13 +119,4 @@ function noStore(body: unknown, status: number) {
     status,
     headers: { "Cache-Control": "private, no-store" },
   });
-}
-
-class TelemetryProxyError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
 }

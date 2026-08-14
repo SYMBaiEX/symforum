@@ -21,7 +21,7 @@ describe("AI telemetry", () => {
     const input = {
       key: "forum-agent-embedding",
       healthy: true,
-      provider: "gateway",
+      provider: "openrouter",
       model: "openai/text-embedding-3-small",
       detail: "Embedding search is available; 4 entries available.",
     };
@@ -61,7 +61,7 @@ describe("AI telemetry", () => {
         slot: 1,
         attempt: 1,
         status: "published",
-        model: "muse/Muse-Glimmer-30B",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         sourceUrls: [],
         qualityScore: 8.6,
         startedAt: now - 2_000,
@@ -72,7 +72,7 @@ describe("AI telemetry", () => {
         runKey: "suki:2026-08-11:1",
         agentSlug: "suki",
         stage: "draft",
-        model: "muse/Muse-Glimmer-30B",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         inputTokens: 120,
         outputTokens: 360,
         durationMs: 1_200,
@@ -88,8 +88,8 @@ describe("AI telemetry", () => {
       agentSlug: "suki",
       stage: "draft",
       attempt: 1,
-      provider: "muse",
-      model: "muse/Muse-Glimmer-30B",
+      provider: "openrouter",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
       outcome: "completed",
       fallback: false,
       durationMs: 1_100,
@@ -111,7 +111,7 @@ describe("AI telemetry", () => {
     });
     expect(result.models).toEqual([
       expect.objectContaining({
-        model: "muse/Muse-Glimmer-30B",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         attempts: 1,
         inputTokens: 120,
         outputTokens: 360,

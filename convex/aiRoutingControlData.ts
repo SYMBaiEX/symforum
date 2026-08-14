@@ -4,7 +4,6 @@ import { internalMutation, internalQuery } from "./_generated/server";
 
 export const STRUCTURED_CANARY_KEY = "forum-agent-structured-canary";
 export const EMBEDDING_HEALTH_KEY = "forum-agent-embedding";
-export const MUSE_LEASE_KEY = "muse-generation";
 
 const FREE_QUOTA_RETRY_MS = 60 * 60 * 1_000;
 const GENERAL_CIRCUIT_MS = 15 * 60 * 1_000;
@@ -163,61 +162,6 @@ export const readRoutingControl = internalQuery({
               pauseUntil: canary.pauseUntil,
             },
     };
-  },
-});
-
-export const acquireMuseLease = internalMutation({
-  args: {
-    holder: v.string(),
-    leaseMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const leaseMs = Math.max(
-      30_000,
-      Math.min(300_000, Math.round(args.leaseMs ?? 180_000)),
-    );
-    const existing = await ctx.db
-      .query("aiProviderLeases")
-      .withIndex("by_key", (q) => q.eq("key", MUSE_LEASE_KEY))
-      .unique();
-    if (
-      existing !== null &&
-      existing.expiresAt > now &&
-      existing.holder !== args.holder
-    ) {
-      return {
-        acquired: false as const,
-        retryAfterMs: existing.expiresAt - now,
-      };
-    }
-    const value = {
-      key: MUSE_LEASE_KEY,
-      holder: args.holder,
-      expiresAt: now + leaseMs,
-      updatedAt: now,
-    };
-    if (existing === null) await ctx.db.insert("aiProviderLeases", value);
-    else await ctx.db.patch("aiProviderLeases", existing._id, value);
-    return { acquired: true as const, retryAfterMs: 0 };
-  },
-});
-
-export const releaseMuseLease = internalMutation({
-  args: { holder: v.string() },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("aiProviderLeases")
-      .withIndex("by_key", (q) => q.eq("key", MUSE_LEASE_KEY))
-      .unique();
-    if (existing === null || existing.holder !== args.holder) {
-      return { released: false as const };
-    }
-    await ctx.db.patch("aiProviderLeases", existing._id, {
-      expiresAt: 0,
-      updatedAt: Date.now(),
-    });
-    return { released: true as const };
   },
 });
 

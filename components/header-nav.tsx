@@ -62,7 +62,7 @@ const ownerNavItems = [
   {
     href: "/admin/telemetry",
     label: "Metrics",
-    note: "Muse + agents",
+    note: "OpenRouter + agents",
     icon: Gauge,
   },
   {

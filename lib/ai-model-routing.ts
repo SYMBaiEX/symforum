@@ -1,24 +1,16 @@
-import {
-  createGateway,
-  type GatewayModelId,
-  type GatewayProviderOptions,
-} from "@ai-sdk/gateway";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
 import {
-  DEEPSEEK_FALLBACK_MODEL,
-  MUSE_AGENT_MODEL,
-  MUSE_API_MODEL_ID,
   OPENROUTER_FORUM_MODEL,
   OPENROUTER_FORUM_PAID_MODEL,
+  OPENROUTER_TOOL_FALLBACK_MODEL,
   OPENROUTER_TOPIC_MODEL,
   OPENROUTER_TOPIC_PAID_MODEL,
 } from "./ai-models";
-import { MUSE_TOP_K } from "./muse-model-profile";
 
 export type ModelRoute = {
-  provider: "openrouter" | "muse" | "gateway";
+  provider: "openrouter";
   modelId: string;
   persistedModel: string;
 };
@@ -30,11 +22,6 @@ export type RoutedModel = ModelRoute & {
 
 export type ModelRoutingConfig = {
   openRouterApiKey?: string;
-  museBaseUrl?: string;
-  museApiKey?: string;
-  gatewayApiKey?: string;
-  /** Prefer this provider when available while retaining fallbacks. */
-  preferredProvider?: ModelRoute["provider"];
   disabledModelIds?: readonly string[];
   beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
   afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
@@ -57,6 +44,11 @@ export type ModelRouteAttempt = {
   errorMessage?: string;
 };
 
+export type OpenRouterRequestContext = {
+  user?: string;
+  tags?: readonly string[];
+};
+
 type RouteTelemetryContext = {
   correlationId?: string;
   feature?: string;
@@ -73,111 +65,9 @@ export type RouteRunArgs<T> = RouteTelemetryContext & {
   afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
 };
 
-let healthCache:
-  | { baseUrl: string; expiresAt: number; result: Promise<boolean> }
-  | undefined;
-
 function clean(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function museBaseUrl(value: string | undefined) {
-  const configured = clean(value);
-  if (!configured) return undefined;
-  const url = new URL(configured);
-  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
-    throw new Error("MUSE_API_BASE_URL must use HTTPS");
-  }
-  url.hash = "";
-  url.search = "";
-  return url.toString().replace(/\/$/, "");
-}
-
-async function checkMuseHealth(baseUrl: string, apiKey: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const response = await fetch(`${baseUrl}/models`, {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      signal: controller.signal,
-    });
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function isMuseAvailable(config: ModelRoutingConfig) {
-  const baseUrl = museBaseUrl(config.museBaseUrl);
-  const apiKey = clean(config.museApiKey);
-  if (!baseUrl || !apiKey) return false;
-  const now = Date.now();
-  if (healthCache?.baseUrl === baseUrl && healthCache.expiresAt > now) {
-    return healthCache.result;
-  }
-  const result = checkMuseHealth(baseUrl, apiKey);
-  healthCache = { baseUrl, expiresAt: now + 30_000, result };
-  return result;
-}
-
-export function clearMuseHealthCacheForTests() {
-  healthCache = undefined;
-}
-
-function safeTelemetryHeader(value: string | undefined) {
-  const cleaned = clean(value);
-  return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned)
-    ? cleaned
-    : undefined;
-}
-
-function museModel(
-  config: ModelRoutingConfig,
-  telemetry?: RouteTelemetryContext,
-): RoutedModel | undefined {
-  const baseURL = museBaseUrl(config.museBaseUrl);
-  const apiKey = clean(config.museApiKey);
-  if (!baseURL || !apiKey) return undefined;
-  const provider = createOpenAICompatible({
-    name: "symbaiexMuse",
-    apiKey,
-    baseURL,
-    includeUsage: true,
-    headers: {
-      ...(safeTelemetryHeader(telemetry?.correlationId)
-        ? {
-            "x-symbaiex-correlation-id": safeTelemetryHeader(
-              telemetry?.correlationId,
-            )!,
-          }
-        : {}),
-      ...(safeTelemetryHeader(telemetry?.feature)
-        ? { "x-symbaiex-feature": safeTelemetryHeader(telemetry?.feature)! }
-        : {}),
-      ...(safeTelemetryHeader(telemetry?.agent)
-        ? { "x-symbaiex-agent": safeTelemetryHeader(telemetry?.agent)! }
-        : {}),
-    },
-  });
-  return {
-    provider: "muse",
-    modelId: MUSE_API_MODEL_ID,
-    persistedModel: MUSE_AGENT_MODEL,
-    model: provider(MUSE_API_MODEL_ID),
-    // The generic OpenAI-compatible adapter treats topK as unsupported, but it
-    // forwards unknown provider options into the request body. Muse's server
-    // accepts the native snake_case field recommended by its model card.
-    providerOptions: {
-      symbaiexMuse: { top_k: MUSE_TOP_K },
-    } as ProviderOptions,
-  };
 }
 
 function openRouterModel(
@@ -212,8 +102,16 @@ export function openRouterModelForStage(stage: string) {
 
 export function openRouterModelsForStage(stage: string) {
   return openRouterUsesNano(stage)
-    ? [OPENROUTER_TOPIC_MODEL, OPENROUTER_TOPIC_PAID_MODEL]
-    : [OPENROUTER_FORUM_MODEL, OPENROUTER_FORUM_PAID_MODEL];
+    ? [
+        OPENROUTER_TOPIC_MODEL,
+        OPENROUTER_TOPIC_PAID_MODEL,
+        OPENROUTER_TOOL_FALLBACK_MODEL,
+      ]
+    : [
+        OPENROUTER_FORUM_MODEL,
+        OPENROUTER_FORUM_PAID_MODEL,
+        OPENROUTER_TOOL_FALLBACK_MODEL,
+      ];
 }
 
 function openRouterUsesNano(stage: string) {
@@ -222,40 +120,22 @@ function openRouterUsesNano(stage: string) {
   );
 }
 
-function gatewayModel(
-  config: ModelRoutingConfig,
-  modelId: GatewayModelId,
-): RoutedModel | undefined {
-  const apiKey = clean(config.gatewayApiKey);
-  if (!apiKey) return undefined;
-  const gateway = createGateway({ apiKey });
-  return {
-    provider: "gateway",
-    modelId,
-    persistedModel: modelId,
-    model: gateway(modelId),
-    // Route attribution already lives in aiRouteEvents. Avoid duplicating it
-    // in providerOptions because older Gateway deployments reject that shape
-    // before a fallback request can run.
-    providerOptions: undefined,
-  };
-}
-
 export async function routedModelCandidates(
   config: ModelRoutingConfig,
-  gatewayOptions?: GatewayProviderOptions,
-  gatewayModelIds: readonly GatewayModelId[] = [
-    DEEPSEEK_FALLBACK_MODEL as GatewayModelId,
-  ],
+  requestContext?: OpenRouterRequestContext,
+  _unusedModelIds?: readonly string[],
   telemetry?: RouteTelemetryContext,
   openRouterModelIds: readonly string[] = [
     OPENROUTER_FORUM_MODEL,
     OPENROUTER_FORUM_PAID_MODEL,
+    OPENROUTER_TOOL_FALLBACK_MODEL,
   ],
 ) {
-  // Preserve the public route-builder signature for callers while keeping
-  // optional Gateway attribution out of providerOptions (see gatewayModel).
-  void gatewayOptions;
+  // Keep request context in the routing contract so callers can continue to
+  // attach stable attribution metadata without introducing another provider.
+  void requestContext;
+  void _unusedModelIds;
+  void telemetry;
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
   for (const modelId of openRouterModelIds) {
@@ -263,36 +143,10 @@ export async function routedModelCandidates(
     const primary = openRouterModel(config, modelId);
     if (primary) candidates.push(primary);
   }
-  const muse = museModel(config, telemetry);
-  if (muse && !disabled.has(muse.persistedModel)) {
-    // Avoid adding a health-probe delay to the OpenRouter primary path. If it
-    // fails, Muse is attempted normally and remains bounded by route timeout.
-    if (candidates.length > 0 || (await isMuseAvailable(config))) {
-      candidates.push(muse);
-    } else {
-      console.warn(
-        "Muse model route unavailable; using configured gateway fallback",
-      );
-    }
-  }
-  for (const modelId of gatewayModelIds) {
-    if (disabled.has(modelId)) continue;
-    const fallback = gatewayModel(config, modelId);
-    if (fallback) candidates.push(fallback);
-  }
   if (!candidates.length) {
     throw new Error(
-      "No AI model route is available. Configure OPENROUTER_API_KEY, Muse API access, or AI_GATEWAY_API_KEY.",
+      "No AI model route is available. Configure OPENROUTER_API_KEY.",
     );
-  }
-  if (config.preferredProvider !== undefined) {
-    const preferred = candidates.filter(
-      (candidate) => candidate.provider === config.preferredProvider,
-    );
-    const fallback = candidates.filter(
-      (candidate) => candidate.provider !== config.preferredProvider,
-    );
-    return [...preferred, ...fallback];
   }
   return candidates;
 }
@@ -416,16 +270,16 @@ async function emitRouteAttempt<T>(
 
 export async function runWithModelFallback<T>(
   config: ModelRoutingConfig,
-  gatewayOptions: GatewayProviderOptions | undefined,
+  requestContext: OpenRouterRequestContext | undefined,
   args: RouteRunArgs<T>,
-  gatewayModelIds?: readonly GatewayModelId[],
+  fallbackModelIds?: readonly string[],
 ) {
   const candidates = await routedModelCandidates(
     config,
-    gatewayOptions,
-    gatewayModelIds,
+    requestContext,
+    fallbackModelIds,
     args,
-    openRouterModelsForStage(args.stage),
+    fallbackModelIds ?? openRouterModelsForStage(args.stage),
   );
   return runRoutedCandidates(candidates, {
     ...args,
@@ -436,12 +290,12 @@ export async function runWithModelFallback<T>(
 
 export async function selectStreamingModel(
   config: ModelRoutingConfig,
-  gatewayOptions?: GatewayProviderOptions,
+  requestContext?: OpenRouterRequestContext,
   telemetry?: RouteTelemetryContext,
 ) {
   const [candidate] = await routedModelCandidates(
     config,
-    gatewayOptions,
+    requestContext,
     undefined,
     telemetry,
   );

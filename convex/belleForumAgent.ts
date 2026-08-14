@@ -1,17 +1,19 @@
 "use node";
 
 import { APICallError, tool, ToolLoopAgent } from "ai";
-import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
-import { runWithModelFallback } from "../lib/ai-model-routing";
+import {
+  runWithModelFallback,
+  type OpenRouterRequestContext,
+} from "../lib/ai-model-routing";
 import {
   modelGenerationSettings,
   modelInstructions,
-} from "../lib/muse-model-profile";
+} from "../lib/openrouter-model-profile";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
@@ -195,7 +197,7 @@ export const runDailyHackerNewsDigest = internalAction({
 
       const candidates = indexed.stories.map(hackerNewsCandidate);
       const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
-      const gatewayOptions = {
+      const requestContext = {
         user: "belle",
         tags: [
           "agent:belle",
@@ -203,10 +205,10 @@ export const runDailyHackerNewsDigest = internalAction({
           `snapshot:${runDate}`,
           `prompt:${BELLE_PROMPT_VERSION}`,
         ],
-      } satisfies GatewayProviderOptions;
+      } satisfies OpenRouterRequestContext;
       const generation = await runWithModelFallback(
         routingConfig,
-        gatewayOptions,
+        requestContext,
         {
           stage: "belle:hacker-news-digest",
           correlationId: claim.runKey,
@@ -535,15 +537,15 @@ function safeBbcodeUrl(value: string) {
 function belleErrorMessage(error: unknown) {
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {
-      return "AI Gateway authentication failed.";
+      return "OpenRouter authentication failed.";
     }
     if (error.statusCode === 402) {
-      return "AI Gateway credits or budget are exhausted.";
+      return "OpenRouter credits or budget are exhausted.";
     }
     if (error.statusCode === 429) {
-      return "AI Gateway rate limited Belle.";
+      return "OpenRouter rate limited Belle.";
     }
-    return `AI Gateway request failed with HTTP ${error.statusCode ?? "unknown"}.`;
+    return `OpenRouter request failed with HTTP ${error.statusCode ?? "unknown"}.`;
   }
   return error instanceof Error
     ? plainForumText(error.message, 500)

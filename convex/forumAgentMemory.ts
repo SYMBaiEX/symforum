@@ -1,14 +1,15 @@
 "use node";
 
 import { RAG } from "@convex-dev/rag";
-import { createGateway } from "@ai-sdk/gateway-v3";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
 import { v } from "convex/values";
+import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { EMBEDDING_HEALTH_KEY } from "./aiRoutingControlData";
 
-const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
 const MEMORY_NAMESPACE = "forum-editorial-v1";
 const EMBEDDING_RETRY_DELAYS_MS = [30_000, 120_000] as const;
 
@@ -26,8 +27,16 @@ type MemoryMetadata = {
 };
 
 function platform(apiKey: string) {
-  const gateway = createGateway({ apiKey });
-  const embeddingModel = gateway.embeddingModel(EMBEDDING_MODEL);
+  const openRouter = createOpenAICompatible({
+    name: "openrouter",
+    apiKey,
+    baseURL: "https://openrouter.ai/api/v1",
+    headers: {
+      "HTTP-Referer": "https://forum.symbaiex.com",
+      "X-OpenRouter-Title": "SYMBiEX Forum Agents",
+    },
+  });
+  const embeddingModel = openRouter.embeddingModel(EMBEDDING_MODEL);
   const rag = new RAG<MemoryFilters, MemoryMetadata>(components.rag, {
     embeddingDimension: 1536,
     textEmbeddingModel: embeddingModel,
@@ -37,8 +46,8 @@ function platform(apiKey: string) {
 }
 
 function requireApiKey() {
-  const apiKey = env.AI_GATEWAY_API_KEY?.trim();
-  if (!apiKey) throw new Error("AI_GATEWAY_API_KEY is not configured.");
+  const apiKey = env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured.");
   return apiKey;
 }
 
@@ -72,7 +81,7 @@ export async function searchEditorialMemory(
       {
         key: EMBEDDING_HEALTH_KEY,
         healthy: true,
-        provider: "gateway",
+        provider: "openrouter",
         model: EMBEDDING_MODEL,
         detail: `Semantic search ready; ${result.entries.length} entries matched.`,
       },
@@ -164,7 +173,7 @@ async function indexThread(
   await ctx.runMutation(internal.aiRoutingControlData.recordOperationalState, {
     key: EMBEDDING_HEALTH_KEY,
     healthy: true,
-    provider: "gateway",
+    provider: "openrouter",
     model: EMBEDDING_MODEL,
     detail: `Indexed forum thread ${source.threadId}; ${result.status}.`,
   });
@@ -210,7 +219,7 @@ export const checkEmbeddingHealth = internalAction({
         {
           key: EMBEDDING_HEALTH_KEY,
           healthy: true,
-          provider: "gateway",
+          provider: "openrouter",
           model: EMBEDDING_MODEL,
           detail: `Embedding search is available; ${result.entries.length} entries available.`,
         },
@@ -273,7 +282,7 @@ async function recordEmbeddingFailure(ctx: ActionCtx, error: unknown) {
   await ctx.runMutation(internal.aiRoutingControlData.recordOperationalState, {
     key: EMBEDDING_HEALTH_KEY,
     healthy: false,
-    provider: "gateway",
+    provider: "openrouter",
     model: EMBEDDING_MODEL,
     detail: safeError(error),
     pauseUntil: Date.now() + 15 * 60_000,

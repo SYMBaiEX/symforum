@@ -20,6 +20,8 @@ export const recordRouteEvent = internalMutation({
     agentSlug: v.optional(v.string()),
     stage: v.string(),
     attempt: v.number(),
+    // Keep legacy provider literals readable for historical telemetry rows;
+    // all new route events are emitted as OpenRouter.
     provider: v.union(
       v.literal("openrouter"),
       v.literal("muse"),

@@ -2,14 +2,17 @@
 
 import { Agent } from "@convex-dev/agent";
 import { WorkflowManager, type WorkflowId } from "@convex-dev/workflow";
-import { createGateway, type GatewayModelId } from "@ai-sdk/gateway-v3";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
 import { v } from "convex/values";
-import { DEEPSEEK_FALLBACK_MODEL } from "../lib/ai-models";
+import {
+  OPENROUTER_DEEPSEEK_MODEL,
+  OPENROUTER_EMBEDDING_MODEL,
+} from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
 
-const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
 const workflow = new WorkflowManager(components.workflow);
 
 type LegacyResource = {
@@ -25,13 +28,21 @@ type LegacyResourceCleanupResult = {
 };
 
 function legacyAgent() {
-  const apiKey = env.AI_GATEWAY_API_KEY?.trim();
+  const apiKey = env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) return null;
-  const gateway = createGateway({ apiKey });
+  const openRouter = createOpenAICompatible({
+    name: "openrouter",
+    apiKey,
+    baseURL: "https://openrouter.ai/api/v1",
+    headers: {
+      "HTTP-Referer": "https://forum.symbaiex.com",
+      "X-OpenRouter-Title": "SYMBiEX Forum Agents",
+    },
+  });
   return new Agent(components.agent, {
     name: "Legacy Forum Editorial Cleanup",
-    languageModel: gateway(DEEPSEEK_FALLBACK_MODEL as GatewayModelId),
-    embeddingModel: gateway.embeddingModel(EMBEDDING_MODEL),
+    languageModel: openRouter(OPENROUTER_DEEPSEEK_MODEL),
+    embeddingModel: openRouter.embeddingModel(EMBEDDING_MODEL),
   });
 }
 

@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { LanguageModel } from "ai";
 import {
-  clearMuseHealthCacheForTests,
   openRouterModelForStage,
   openRouterModelsForStage,
   routedModelCandidates,
@@ -9,26 +8,16 @@ import {
   type RoutedModel,
 } from "./ai-model-routing";
 
-const originalFetch = globalThis.fetch;
-
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  clearMuseHealthCacheForTests();
-});
-
-function candidate(
-  provider: "openrouter" | "muse" | "gateway",
-  persistedModel: string,
-): RoutedModel {
+function candidate(persistedModel: string): RoutedModel {
   return {
-    provider,
+    provider: "openrouter",
     modelId: persistedModel,
     persistedModel,
     model: {} as LanguageModel,
   };
 }
 
-describe("AI model routing", () => {
+describe("OpenRouter-only model routing", () => {
   test("routes forum topic selection to Nano and writing to Super", () => {
     expect(openRouterModelForStage("suki:forum-topic")).toBe(
       "nvidia/nemotron-3-nano-30b-a3b:free",
@@ -39,82 +28,54 @@ describe("AI model routing", () => {
     expect(openRouterModelsForStage("suki:forum-topic")).toEqual([
       "nvidia/nemotron-3-nano-30b-a3b:free",
       "nvidia/nemotron-3-nano-30b-a3b",
-    ]);
-    expect(openRouterModelsForStage("suki:forum-reply")).toEqual([
-      "nvidia/nemotron-3-super-120b-a12b:free",
-      "nvidia/nemotron-3-super-120b-a12b",
+      "openai/gpt-4.1-mini",
     ]);
   });
 
-  test("puts OpenRouter before Muse and the paid gateway", async () => {
-    globalThis.fetch = vi.fn(
-      async () => new Response("{}", { status: 200 }),
-    ) as typeof fetch;
+  test("only creates OpenRouter candidates and preserves paid fallbacks", async () => {
     const candidates = await routedModelCandidates({
       openRouterApiKey: "test-openrouter-key",
-      museBaseUrl: "https://agent.example.com/v1",
-      museApiKey: "test-muse-key",
-      gatewayApiKey: "test-gateway-key",
     });
 
     expect(candidates.map(({ provider }) => provider)).toEqual([
       "openrouter",
       "openrouter",
-      "muse",
-      "gateway",
+      "openrouter",
     ]);
+    expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual([
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "nvidia/nemotron-3-super-120b-a12b",
+      "openai/gpt-4.1-mini",
+    ]);
+  });
+
+  test("skips circuit-disabled OpenRouter models", async () => {
+    const candidates = await routedModelCandidates({
+      openRouterApiKey: "test-openrouter-key",
+      disabledModelIds: ["nvidia/nemotron-3-super-120b-a12b:free"],
+    });
+    expect(candidates).toHaveLength(2);
     expect(candidates[0].persistedModel).toBe(
-      "nvidia/nemotron-3-super-120b-a12b:free",
-    );
-    expect(candidates[1].persistedModel).toBe(
       "nvidia/nemotron-3-super-120b-a12b",
     );
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(candidates[1].persistedModel).toBe("openai/gpt-4.1-mini");
   });
 
-  test("can prefer the gateway while retaining provider fallbacks", async () => {
-    const candidates = await routedModelCandidates({
-      openRouterApiKey: "test-openrouter-key",
-      gatewayApiKey: "test-gateway-key",
-      preferredProvider: "gateway",
-    });
-
-    expect(candidates.map(({ provider }) => provider)).toEqual([
-      "gateway",
-      "openrouter",
-      "openrouter",
-    ]);
-  });
-
-  test("uses Muse when the primary route succeeds", async () => {
-    const run = vi.fn(async (route: RoutedModel) => `${route.provider}-result`);
-    const result = await runRoutedCandidates(
-      [
-        candidate("muse", "muse/Muse-Glimmer-30B"),
-        candidate("gateway", "deepseek/fallback"),
-      ],
-      { stage: "test-primary", totalTimeoutMs: 5_000, run },
-    );
-
-    expect(result.value).toBe("muse-result");
-    expect(result.route.provider).toBe("muse");
-    expect(run).toHaveBeenCalledTimes(1);
-  });
-
-  test("falls through OpenRouter and Muse and records the gateway completion", async () => {
+  test("falls through OpenRouter models and records the successful attempt", async () => {
     const run = vi.fn(async (route: RoutedModel) => {
-      if (route.provider !== "gateway") throw new Error("route unavailable");
-      return "fallback-result";
+      if (route.persistedModel.endsWith(":free")) {
+        throw new Error("free route unavailable");
+      }
+      return "paid-result";
     });
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
       [
-        candidate("openrouter", "nvidia/nemotron:free"),
-        candidate("muse", "muse/Muse-Glimmer-30B"),
-        candidate("gateway", "deepseek/fallback"),
+        candidate("nvidia/nemotron-3-super-120b-a12b:free"),
+        candidate("nvidia/nemotron-3-super-120b-a12b"),
       ],
       {
-        stage: "test-fallback",
+        stage: "test-openrouter-fallback",
         correlationId: "test:route-fallback",
         feature: "routing-test",
         totalTimeoutMs: 5_000,
@@ -123,83 +84,25 @@ describe("AI model routing", () => {
       },
     );
 
-    expect(result.value).toBe("fallback-result");
+    expect(result.value).toBe("paid-result");
     expect(result.route).toMatchObject({
-      provider: "gateway",
-      persistedModel: "deepseek/fallback",
+      provider: "openrouter",
+      persistedModel: "nvidia/nemotron-3-super-120b-a12b",
     });
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(2);
     expect(onAttempt).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({
-        correlationId: "test:route-fallback",
-        outcome: "failed",
-        fallback: false,
-      }),
+      expect.objectContaining({ outcome: "failed", fallback: false }),
     );
     expect(onAttempt).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        correlationId: "test:route-fallback",
-        outcome: "completed",
-        fallback: true,
-      }),
+      2,
+      expect.objectContaining({ outcome: "completed", fallback: true }),
     );
   });
 
-  test("marks an explicitly gateway-only continuation as a fallback", async () => {
-    const onAttempt = vi.fn();
-    const result = await runRoutedCandidates(
-      [candidate("gateway", "deepseek/fallback")],
-      {
-        stage: "test-gateway-continuation",
-        totalTimeoutMs: 5_000,
-        attemptOffset: 1,
-        run: async () => "gateway-result",
-        onAttempt,
-      },
+  test("fails clearly when no OpenRouter key is configured", async () => {
+    await expect(routedModelCandidates({})).rejects.toThrow(
+      /OPENROUTER_API_KEY/,
     );
-
-    expect(result.route.provider).toBe("gateway");
-    expect(onAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ attempt: 2, fallback: true }),
-    );
-  });
-
-  test("passes Muse's native top_k setting through provider options", async () => {
-    globalThis.fetch = vi.fn(
-      async () => new Response("{}", { status: 200 }),
-    ) as typeof fetch;
-    const [muse] = await routedModelCandidates({
-      museBaseUrl: "https://agent.example.com/v1",
-      museApiKey: "test-key",
-    });
-
-    expect(muse.provider).toBe("muse");
-    expect(muse.providerOptions).toEqual({
-      symbaiexMuse: { top_k: 64 },
-    });
-  });
-
-  test("omits optional attribution provider options from gateway fallbacks", async () => {
-    globalThis.fetch = vi.fn(
-      async () => new Response("{}", { status: 200 }),
-    ) as typeof fetch;
-    const candidates = await routedModelCandidates(
-      {
-        museBaseUrl: "https://agent.example.com/v1",
-        museApiKey: "test-muse-key",
-        gatewayApiKey: "test-gateway-key",
-      },
-      {
-        user: "iris-kellan",
-        tags: ["agent:iris-kellan", "feature:forum-writing"],
-      },
-    );
-
-    expect(candidates[1]).toMatchObject({
-      provider: "gateway",
-    });
-    expect(candidates[1].providerOptions).toBeUndefined();
   });
 });

@@ -1,7 +1,6 @@
 "use node";
 
 import { APICallError, tool, ToolLoopAgent } from "ai";
-import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { v } from "convex/values";
@@ -10,9 +9,8 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import {
-  routedModelCandidates,
-  runRoutedCandidates,
   runWithModelFallback,
+  type OpenRouterRequestContext,
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import {
@@ -30,7 +28,7 @@ import {
 import {
   modelGenerationSettings,
   modelInstructions,
-} from "../lib/muse-model-profile";
+} from "../lib/openrouter-model-profile";
 import { searchEditorialMemory } from "./forumAgentMemory";
 import {
   FORUM_AGENT_DRAFT_BODY_MAX_LENGTH,
@@ -328,22 +326,18 @@ export async function runForumResearchSlot(
       },
     );
     const routeFeature = config.routeFeature ?? "forum-agent";
-    const researchGatewayTag = config.routeFeature
+    const researchRouteTag = config.routeFeature
       ? `feature:${config.routeFeature}`
       : "feature:forum-research";
-    const writingGatewayTag = config.routeFeature
+    const writingRouteTag = config.routeFeature
       ? `feature:${config.routeFeature}-writing`
       : "feature:forum-writing";
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
-    // NyX is the public research desk. Prefer the AI Gateway route for its
-    // scheduled synthesis because free OpenRouter lanes can queue for minutes;
-    // the configured provider fallbacks remain available if Gateway is down.
-    const effectiveRoutingConfig =
-      config.routeFeature === "research"
-        ? { ...routingConfig, preferredProvider: "gateway" as const }
-        : routingConfig;
+    // All editorial generations use OpenRouter. Paid model IDs remain in the
+    // same provider route so budget controls and circuit breakers still apply.
+    const effectiveRoutingConfig = routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
       feature: routeFeature,
@@ -352,14 +346,10 @@ export async function runForumResearchSlot(
     });
     if (
       !effectiveRoutingConfig.openRouterApiKey?.trim() &&
-      !(
-        effectiveRoutingConfig.museBaseUrl?.trim() &&
-        effectiveRoutingConfig.museApiKey?.trim()
-      ) &&
-      !effectiveRoutingConfig.gatewayApiKey?.trim()
+      !effectiveRoutingConfig.openRouterApiKey?.trim()
     ) {
       throw new ForumAgentConfigurationError(
-        "OPENROUTER_API_KEY, Muse API access, and AI_GATEWAY_API_KEY are all unconfigured in Convex.",
+        "OPENROUTER_API_KEY is not configured in Convex.",
       );
     }
     const context =
@@ -441,14 +431,14 @@ export async function runForumResearchSlot(
       );
     }
 
-    const gatewayOptions = {
+    const requestContext = {
       user: config.slug,
       tags: [
         `agent:${config.slug}`,
-        researchGatewayTag,
+        researchRouteTag,
         `prompt:${config.promptVersion}`,
       ],
-    } satisfies GatewayProviderOptions;
+    } satisfies OpenRouterRequestContext;
     const topicPrompt = topicSelectionPrompt({
       candidates: shortlistedCandidates,
       categories: shortlistedCategories.slice(0, 24),
@@ -463,7 +453,7 @@ export async function runForumResearchSlot(
     const topicStartedAt = Date.now();
     const selectionGeneration = await runWithModelFallback(
       effectiveRoutingConfig,
-      gatewayOptions,
+      requestContext,
       {
         stage: `${config.slug}:forum-topic`,
         correlationId: claim.runKey,
@@ -632,19 +622,19 @@ export async function runForumResearchSlot(
     const snapshots = await Promise.all(
       selectedCandidates.map(fetchArticleSnapshot),
     );
-    const writerGatewayOptions = {
-      ...gatewayOptions,
+    const writerRequestContext = {
+      ...requestContext,
       tags: [
         `agent:${config.slug}`,
-        writingGatewayTag,
+        writingRouteTag,
         `board:${category.slug}`,
         `prompt:${config.promptVersion}`,
       ],
-    } satisfies GatewayProviderOptions;
+    } satisfies OpenRouterRequestContext;
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-      options?: { gatewayOnly?: boolean; lightRevision?: boolean },
+      options?: { lightRevision?: boolean },
     ) => {
       const routeArgs = {
         stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}`,
@@ -652,14 +642,10 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: options?.gatewayOnly
-          ? config.slug === "nyx"
-            ? 240_000
-            : 105_000
-          : stage === "revision"
+        totalTimeoutMs:
+          stage === "revision"
             ? 210_000
             : 270_000,
-        attemptOffset: options?.gatewayOnly ? 1 : 0,
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
@@ -705,22 +691,9 @@ export async function runForumResearchSlot(
           return { result, draft: call.input };
         },
       };
-      if (!options?.gatewayOnly) {
-        return await runWithModelFallback(
-          effectiveRoutingConfig,
-          writerGatewayOptions,
-          routeArgs,
-        );
-      }
-      const candidates = await routedModelCandidates(
+      return await runWithModelFallback(
         effectiveRoutingConfig,
-        writerGatewayOptions,
-        undefined,
-        routeArgs,
-        [],
-      );
-      return await runRoutedCandidates(
-        candidates.filter((candidate) => candidate.provider === "gateway"),
+        writerRequestContext,
         routeArgs,
       );
     };
@@ -775,7 +748,6 @@ export async function runForumResearchSlot(
           followUp: followUpThreadId !== undefined,
         }),
         {
-          gatewayOnly: draftGeneration.route.provider === "gateway",
           lightRevision: revisionTier === "nano",
         },
       );
@@ -2605,15 +2577,15 @@ function publicErrorMessage(error: unknown, agentName = "Suki") {
   }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {
-      return "AI Gateway authentication failed.";
+      return "OpenRouter authentication failed.";
     }
     if (error.statusCode === 402) {
-      return "AI Gateway credits or budget are exhausted.";
+      return "OpenRouter credits or budget are exhausted.";
     }
     if (error.statusCode === 429) {
-      return `AI Gateway rate limited ${agentName}.`;
+      return `OpenRouter rate limited ${agentName}.`;
     }
-    return `AI Gateway request failed with HTTP ${error.statusCode ?? "unknown"}.`;
+    return `OpenRouter request failed with HTTP ${error.statusCode ?? "unknown"}.`;
   }
   return error instanceof Error
     ? compactText(error.message, 500)

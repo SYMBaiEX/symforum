@@ -12,8 +12,7 @@ import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
     // OpenRouter is the primary hosted route. Three workflows keep throughput
-    // healthy without stampeding the providers; the local Muse fallback still
-    // has its own single-lane lease in modelRouting.
+    // healthy without stampeding the OpenRouter provider routes.
     maxParallelism: 3,
     retryActionsByDefault: true,
     defaultRetryBehavior: {

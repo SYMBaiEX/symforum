@@ -603,7 +603,7 @@ function SiteAdminDashboard({
         {
           id: "telemetry",
           label: "Telemetry",
-          note: "Muse + agents",
+          note: "OpenRouter + agents",
           icon: Gauge,
         },
       ].filter(

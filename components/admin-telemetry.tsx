@@ -112,13 +112,6 @@ type ModelTelemetry = {
 
 type ModelTelemetryEnvelope = {
   model: ModelTelemetry;
-  gateway: {
-    gateway_running?: boolean;
-    gateway_busy?: boolean;
-    active_agents?: number;
-    overall?: string;
-    version?: string;
-  } | null;
 };
 
 const windows = [
@@ -281,8 +274,8 @@ export function AdminTelemetry() {
               The machine and the voices, on one signal board.
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Muse inference, GPU pressure, queue health, model routing, and
-              editorial output are correlated without retaining prompts or
+              OpenRouter inference, route health, model routing, and editorial
+              output are correlated without retaining prompts or
               generated content.
             </p>
           </div>
@@ -788,7 +781,7 @@ function SystemStatusGrid({
   return (
     <section className="grid gap-px overflow-hidden border border-row-border bg-row-border md:grid-cols-2 xl:grid-cols-5">
       <StatusCell
-        label="Muse model"
+        label="OpenRouter route"
         value={
           runtime?.modelHealthy
             ? "Healthy"
@@ -802,12 +795,10 @@ function SystemStatusGrid({
         }
       />
       <StatusCell
-        label="Hermes gateway"
-        value={modelEnvelope?.gateway?.gateway_running ? "Running" : "Unknown"}
-        tone={modelEnvelope?.gateway?.gateway_running ? "good" : "neutral"}
-        detail={
-          modelEnvelope?.gateway?.gateway_busy ? "agent processing" : "idle"
-        }
+        label="OpenRouter model pool"
+        value={model ? "Available" : "Unknown"}
+        tone={model ? "good" : "neutral"}
+        detail="OpenRouter-only routing"
       />
       <StatusCell
         label="Inference queue"
