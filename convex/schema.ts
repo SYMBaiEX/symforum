@@ -41,9 +41,7 @@ export default defineSchema({
     forumBannedBy: v.optional(v.id("users")),
     isAgent: v.optional(v.boolean()),
     agentSlug: v.optional(v.string()),
-    agentStatus: v.optional(
-      v.union(v.literal("active"), v.literal("revoked")),
-    ),
+    agentStatus: v.optional(v.union(v.literal("active"), v.literal("revoked"))),
     agentScopes: v.optional(v.array(agentScopeValidator)),
     agentKeyVersion: v.optional(v.number()),
     agentEnrolledAt: v.optional(v.number()),
@@ -250,8 +248,7 @@ export default defineSchema({
     hardCapMetadataJson: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_ownerUserId_and_monthKey", ["ownerUserId", "monthKey"]),
+  }).index("by_ownerUserId_and_monthKey", ["ownerUserId", "monthKey"]),
   agentQuotaLimits: defineTable({
     ownerUserId: v.id("users"),
     agentId: v.string(),
@@ -279,6 +276,7 @@ export default defineSchema({
     units: v.number(),
     createdAt: v.number(),
     metadataJson: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
   })
     .index("by_ownerUserId_and_agentId_and_monthKey_and_idempotencyKey", [
       "ownerUserId",
@@ -1758,4 +1756,490 @@ export default defineSchema({
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_sessionId_and_createdAt", ["sessionId", "createdAt"])
     .index("by_visitorId_and_createdAt", ["visitorId", "createdAt"]),
+  evidenceSources: defineTable({
+    sourceKey: v.string(),
+    name: v.string(),
+    sourceType: v.union(
+      v.literal("rss"),
+      v.literal("api"),
+      v.literal("dataset"),
+      v.literal("manual"),
+      v.literal("derived"),
+    ),
+    ingestionEnabled: v.boolean(),
+    baseUrl: v.string(),
+    homepageUrl: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("retired"),
+    ),
+    licenseClass: v.union(
+      v.literal("public-domain"),
+      v.literal("open"),
+      v.literal("attributed"),
+      v.literal("restricted"),
+      v.literal("unknown"),
+    ),
+    provenanceClass: v.union(
+      v.literal("primary"),
+      v.literal("official"),
+      v.literal("dataset"),
+      v.literal("research"),
+      v.literal("derived"),
+    ),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    termsUrl: v.string(),
+    etag: v.string(),
+    lastModified: v.string(),
+    cursor: v.string(),
+    lastFetchedAt: v.number(),
+    lastSucceededAt: v.number(),
+    lastErrorAt: v.number(),
+    lastErrorMessage: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sourceKey", ["sourceKey"])
+    .index("by_status_and_visibility", ["status", "visibility"]),
+  evidenceDocuments: defineTable({
+    sourceId: v.id("evidenceSources"),
+    externalKey: v.string(),
+    canonicalUrl: v.string(),
+    canonicalUrlHash: v.string(),
+    kind: v.union(
+      v.literal("document"),
+      v.literal("advisory"),
+      v.literal("release"),
+      v.literal("paper"),
+      v.literal("dataset"),
+      v.literal("benchmark"),
+    ),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    title: v.string(),
+    excerpt: v.string(),
+    searchText: v.string(),
+    tags: v.array(v.string()),
+    authors: v.array(v.string()),
+    licenseClass: v.union(
+      v.literal("public-domain"),
+      v.literal("open"),
+      v.literal("attributed"),
+      v.literal("restricted"),
+      v.literal("unknown"),
+    ),
+    currentVersionId: v.union(v.id("evidenceDocumentVersions"), v.null()),
+    publishedAt: v.union(v.number(), v.null()),
+    firstSeenAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sourceId_and_externalKey", ["sourceId", "externalKey"])
+    .index("by_visibility_and_updatedAt", ["visibility", "updatedAt"])
+    .searchIndex("search_by_searchText", {
+      searchField: "searchText",
+      filterFields: ["visibility", "sourceId"],
+    }),
+  evidenceDocumentVersions: defineTable({
+    documentId: v.id("evidenceDocuments"),
+    version: v.number(),
+    contentHash: v.string(),
+    title: v.string(),
+    excerpt: v.string(),
+    searchText: v.string(),
+    fetchedAt: v.number(),
+    publishedAt: v.union(v.number(), v.null()),
+    sourceRevision: v.string(),
+    sourceUpdatedAt: v.number(),
+    rawStorageId: v.union(v.id("_storage"), v.null()),
+    retrievalUrl: v.string(),
+    licenseClass: v.union(
+      v.literal("public-domain"),
+      v.literal("open"),
+      v.literal("attributed"),
+      v.literal("restricted"),
+      v.literal("unknown"),
+    ),
+    metadataJson: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_documentId_and_version", ["documentId", "version"])
+    .index("by_documentId_and_contentHash", ["documentId", "contentHash"]),
+  evidenceEntities: defineTable({
+    entityKey: v.string(),
+    kind: v.union(
+      v.literal("organization"),
+      v.literal("product"),
+      v.literal("model"),
+      v.literal("project"),
+      v.literal("person"),
+      v.literal("concept"),
+    ),
+    name: v.string(),
+    aliases: v.array(v.string()),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_entityKey", ["entityKey"])
+    .index("by_visibility_and_updatedAt", ["visibility", "updatedAt"]),
+  evidenceDocumentEntities: defineTable({
+    documentVersionId: v.id("evidenceDocumentVersions"),
+    entityId: v.id("evidenceEntities"),
+    role: v.union(
+      v.literal("subject"),
+      v.literal("publisher"),
+      v.literal("mentioned"),
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_documentVersionId", ["documentVersionId"])
+    .index("by_entityId", ["entityId"])
+    .index("by_documentVersionId_and_entityId", [
+      "documentVersionId",
+      "entityId",
+    ]),
+  evidenceClaims: defineTable({
+    claimKey: v.string(),
+    statement: v.string(),
+    subjectEntityId: v.union(v.id("evidenceEntities"), v.null()),
+    predicate: v.string(),
+    objectText: v.string(),
+    status: v.union(
+      v.literal("supported"),
+      v.literal("contradicted"),
+      v.literal("unresolved"),
+      v.literal("outdated"),
+    ),
+    confidence: v.number(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    observedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_claimKey", ["claimKey"])
+    .index("by_visibility_and_status_and_observedAt", [
+      "visibility",
+      "status",
+      "observedAt",
+    ]),
+  evidenceClaimCitations: defineTable({
+    claimId: v.id("evidenceClaims"),
+    documentVersionId: v.id("evidenceDocumentVersions"),
+    citationKey: v.string(),
+    relation: v.union(
+      v.literal("supports"),
+      v.literal("contradicts"),
+      v.literal("context"),
+    ),
+    locator: v.string(),
+    excerpt: v.string(),
+    confidence: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_claimId", ["claimId"])
+    .index("by_documentVersionId", ["documentVersionId"])
+    .index("by_citationKey", ["citationKey"])
+    .index("by_claimId_and_documentVersionId_and_citationKey", [
+      "claimId",
+      "documentVersionId",
+      "citationKey",
+    ]),
+  evidenceChangeEvents: defineTable({
+    eventKey: v.string(),
+    entityType: v.union(
+      v.literal("document"),
+      v.literal("claim"),
+      v.literal("dataset"),
+      v.literal("benchmark"),
+    ),
+    entityId: v.string(),
+    kind: v.union(
+      v.literal("created"),
+      v.literal("updated"),
+      v.literal("status-changed"),
+    ),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    summary: v.string(),
+    occurredAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_eventKey", ["eventKey"])
+    .index("by_visibility_and_occurredAt", ["visibility", "occurredAt"]),
+  evidenceDatasets: defineTable({
+    datasetKey: v.string(),
+    name: v.string(),
+    description: v.string(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    licenseClass: v.union(
+      v.literal("public-domain"),
+      v.literal("open"),
+      v.literal("attributed"),
+      v.literal("restricted"),
+      v.literal("unknown"),
+    ),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_datasetKey", ["datasetKey"])
+    .index("by_visibility_and_status_and_updatedAt", [
+      "visibility",
+      "status",
+      "updatedAt",
+    ]),
+  evidenceDatasetVersions: defineTable({
+    datasetId: v.id("evidenceDatasets"),
+    version: v.string(),
+    checksum: v.string(),
+    recordCount: v.number(),
+    manifestStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+  })
+    .index("by_datasetId_and_version", ["datasetId", "version"])
+    .index("by_datasetId_and_checksum", ["datasetId", "checksum"]),
+  evidenceBenchmarks: defineTable({
+    benchmarkKey: v.string(),
+    name: v.string(),
+    description: v.string(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_benchmarkKey", ["benchmarkKey"])
+    .index("by_visibility_and_status_and_updatedAt", [
+      "visibility",
+      "status",
+      "updatedAt",
+    ]),
+  evidenceBenchmarkRuns: defineTable({
+    benchmarkId: v.id("evidenceBenchmarks"),
+    runKey: v.string(),
+    model: v.string(),
+    score: v.number(),
+    metricsJson: v.string(),
+    executedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_benchmarkId_and_executedAt", ["benchmarkId", "executedAt"])
+    .index("by_runKey", ["runKey"]),
+  evidenceResearchJobs: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    requestKey: v.string(),
+    requestFingerprint: v.string(),
+    idempotencyKey: v.string(),
+    quotaUnits: v.number(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    query: v.string(),
+    resultJson: v.string(),
+    resultStorageId: v.optional(v.id("_storage")),
+    errorMessage: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_idempotencyKey", [
+      "ownerUserId",
+      "idempotencyKey",
+    ])
+    .index("by_ownerUserId_and_requestFingerprint", [
+      "ownerUserId",
+      "requestFingerprint",
+    ])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  evidenceExportJobs: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    datasetId: v.id("evidenceDatasets"),
+    requestKey: v.string(),
+    requestFingerprint: v.string(),
+    idempotencyKey: v.string(),
+    quotaUnits: v.number(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    format: v.union(v.literal("jsonl"), v.literal("parquet")),
+    checksum: v.string(),
+    recordCount: v.number(),
+    resultJson: v.string(),
+    resultStorageId: v.optional(v.id("_storage")),
+    errorMessage: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_idempotencyKey", [
+      "ownerUserId",
+      "idempotencyKey",
+    ])
+    .index("by_ownerUserId_and_requestFingerprint", [
+      "ownerUserId",
+      "requestFingerprint",
+    ])
+    .index("by_datasetId_and_createdAt", ["datasetId", "createdAt"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  apiProducts: defineTable({
+    productKey: v.string(),
+    name: v.string(),
+    description: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    unitPriceMicroUsd: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_productKey", ["productKey"])
+    .index("by_visibility_and_status_and_updatedAt", [
+      "visibility",
+      "status",
+      "updatedAt",
+    ]),
+  apiEntitlements: defineTable({
+    ownerUserId: v.id("users"),
+    productId: v.id("apiProducts"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("revoked"),
+      v.literal("expired"),
+    ),
+    startsAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_productId", ["ownerUserId", "productId"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"]),
+  apiBillingAccounts: defineTable({
+    ownerUserId: v.id("users"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("delinquent"),
+      v.literal("closed"),
+    ),
+    providerCustomerRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId", ["ownerUserId"])
+    .index("by_providerCustomerRef", ["providerCustomerRef"]),
+  apiUsageLedger: defineTable({
+    entryKey: v.string(),
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    productId: v.optional(v.id("apiProducts")),
+    commandId: v.optional(v.id("apiCommands")),
+    idempotencyKey: v.string(),
+    operation: v.string(),
+    entryType: v.union(
+      v.literal("debit"),
+      v.literal("credit"),
+      v.literal("reversal"),
+    ),
+    units: v.number(),
+    entitlementSnapshotJson: v.string(),
+    costBasisJson: v.string(),
+    metadataJson: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_entryKey", ["entryKey"])
+    .index("by_ownerUserId_and_idempotencyKey", [
+      "ownerUserId",
+      "idempotencyKey",
+    ])
+    .index("by_ownerUserId_and_createdAt", ["ownerUserId", "createdAt"]),
+  apiBillingOutbox: defineTable({
+    eventKey: v.string(),
+    kind: v.union(
+      v.literal("usage"),
+      v.literal("entitlement"),
+      v.literal("invoice"),
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("failed"),
+    ),
+    providerEventId: v.string(),
+    attempts: v.number(),
+    payloadJson: v.string(),
+    availableAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventKey", ["eventKey"])
+    .index("by_status_and_availableAt", ["status", "availableAt"]),
+  apiWebhookEvents: defineTable({
+    provider: v.string(),
+    eventKey: v.string(),
+    payloadJson: v.string(),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+  })
+    .index("by_provider_and_eventKey", ["provider", "eventKey"])
+    .index("by_receivedAt", ["receivedAt"]),
+  apiCommands: defineTable({
+    ownerUserId: v.id("users"),
+    commandKey: v.string(),
+    requestFingerprint: v.string(),
+    kind: v.string(),
+    status: v.union(
+      v.literal("accepted"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    payloadJson: v.string(),
+    resultJson: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_commandKey", ["ownerUserId", "commandKey"])
+    .index("by_ownerUserId_and_requestFingerprint", [
+      "ownerUserId",
+      "requestFingerprint",
+    ])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  apiWebhookSubscriptions: defineTable({
+    ownerUserId: v.id("users"),
+    subscriptionKey: v.string(),
+    url: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("revoked"),
+    ),
+    eventTypes: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_subscriptionKey", [
+      "ownerUserId",
+      "subscriptionKey",
+    ])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  apiWebhookDeliveries: defineTable({
+    subscriptionId: v.id("apiWebhookSubscriptions"),
+    eventKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("delivered"),
+      v.literal("failed"),
+    ),
+    attempt: v.number(),
+    responseCode: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_subscriptionId_and_eventKey", ["subscriptionId", "eventKey"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
 });

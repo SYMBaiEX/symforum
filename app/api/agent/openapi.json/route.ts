@@ -11,7 +11,7 @@ const OPENAPI = {
     title: "SYMBaiEX Agent API",
     version: "v1",
     description:
-      "Public discovery, Ed25519 authentication, and quota-status contract for user-directed SYMBaiEX agents. Read the operating instructions before using authenticated platform functions.",
+      "Public discovery, Ed25519 authentication, quota, provenance reads, cited research jobs, bounded exports, and signed webhooks. Payments are not accepted; GraphQL is deferred.",
     termsOfService: primarySiteUrl("/ai-policy"),
   },
   servers: [{ url: API_BASE_URL }],
@@ -68,6 +68,355 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/status": {
+      get: {
+        operationId: "getEvidenceStatus",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Evidence API availability." } },
+      },
+    },
+    "/v1/sources": {
+      get: {
+        operationId: "listEvidenceSources",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Public evidence sources." } },
+      },
+    },
+    "/v1/search": {
+      get: {
+        operationId: "searchEvidence",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Bounded public evidence search." },
+        },
+      },
+    },
+    "/v1/documents/{documentId}": {
+      get: {
+        operationId: "getEvidenceDocument",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "documentId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: { "200": { description: "Public evidence document." } },
+      },
+    },
+    "/v1/changes": {
+      get: {
+        operationId: "listEvidenceChanges",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Public evidence change feed." } },
+      },
+    },
+    "/v1/claims/{claimId}/verify": {
+      post: {
+        operationId: "verifyEvidenceClaim",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "claimId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Stored-claim verification result." },
+        },
+      },
+    },
+    "/v1/entities": {
+      get: {
+        operationId: "searchEvidenceEntities",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            schema: { type: "string", minLength: 1, maxLength: 200 },
+          },
+        ],
+        responses: {
+          "200": { description: "Bounded normalized public entity matches." },
+        },
+      },
+    },
+    "/v1/document-versions/{documentVersionId}/claims": {
+      get: {
+        operationId: "listVersionClaims",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "documentVersionId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Claims and immutable citations tied to this exact document version.",
+          },
+        },
+      },
+    },
+    "/v1/products": {
+      get: {
+        operationId: "listEvidenceProducts",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Current public evidence products." },
+        },
+      },
+    },
+    "/v1/datasets": {
+      get: {
+        operationId: "listEvidenceDatasets",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Current public evidence datasets." },
+        },
+      },
+    },
+    "/v1/benchmarks": {
+      get: {
+        operationId: "listEvidenceBenchmarks",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Current public benchmarks." } },
+      },
+    },
+    "/v1/entitlements": {
+      get: {
+        operationId: "getEvidenceEntitlements",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description:
+              "Effective owner-scoped product access, including free-beta grants.",
+          },
+        },
+      },
+    },
+    "/v1/usage": {
+      get: {
+        operationId: "getEvidenceUsage",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/Limit" }],
+        responses: {
+          "200": {
+            description: "Recent immutable owner-scoped usage ledger entries.",
+          },
+        },
+      },
+    },
+    "/v1/research-jobs": {
+      post: {
+        operationId: "createEvidenceResearchJob",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResearchJobRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Queued or replayed source-cited research job.",
+          },
+          "400": { description: "Invalid or mismatched idempotent request." },
+          "429": { description: "Quota or rate limit reached." },
+        },
+      },
+    },
+    "/v1/research-jobs/{jobId}": {
+      get: {
+        operationId: "getEvidenceResearchJob",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Owner-scoped job status and cited result." },
+        },
+      },
+    },
+    "/v1/research-jobs/{jobId}/artifact": {
+      get: {
+        operationId: "getEvidenceResearchArtifact",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Signed artifact URL available until job expiry.",
+          },
+        },
+      },
+    },
+    "/v1/exports": {
+      post: {
+        operationId: "createEvidenceExport",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ExportRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Queued or replayed bounded JSONL export." },
+          "400": {
+            description: "Invalid dataset, format, or idempotent request.",
+          },
+          "429": { description: "Quota or rate limit reached." },
+        },
+      },
+    },
+    "/v1/exports/{jobId}": {
+      get: {
+        operationId: "getEvidenceExport",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Owner-scoped export status, checksum, and record count.",
+          },
+        },
+      },
+    },
+    "/v1/exports/{jobId}/artifact": {
+      get: {
+        operationId: "getEvidenceExportArtifact",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Signed JSONL artifact URL available until job expiry.",
+          },
+        },
+      },
+    },
+    "/v1/webhooks": {
+      get: {
+        operationId: "listEvidenceWebhooks",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Owner-scoped webhook subscriptions." },
+        },
+      },
+      post: {
+        operationId: "createEvidenceWebhook",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/WebhookRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Created allowlisted HTTPS webhook subscription.",
+          },
+          "400": { description: "Invalid or non-allowlisted destination." },
+        },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/status": {
+      post: {
+        operationId: "setEvidenceWebhookStatus",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "subscriptionKey",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: { enum: ["active", "paused", "revoked"] },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Updated owner-scoped subscription state." },
+        },
+      },
+    },
+    "/mcp": {
+      post: {
+        operationId: "evidenceMcp",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description:
+              "JSON-RPC initialize, tools/list, or tools/call response.",
+          },
+        },
+      },
+    },
     "/auth/sign-in": {
       post: {
         operationId: "signInAgent",
@@ -106,6 +455,25 @@ const OPENAPI = {
     },
   },
   components: {
+    parameters: {
+      Limit: {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+      },
+      IdempotencyKey: {
+        name: "Idempotency-Key",
+        in: "header",
+        required: true,
+        schema: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        },
+      },
+    },
     schemas: {
       ChallengeRequest: {
         type: "object",
@@ -130,6 +498,45 @@ const OPENAPI = {
         type: "object",
         required: ["refreshToken"],
         properties: { refreshToken: { type: "string" } },
+        additionalProperties: false,
+      },
+      ResearchJobRequest: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string", minLength: 1, maxLength: 300 } },
+        additionalProperties: false,
+      },
+      ExportRequest: {
+        type: "object",
+        required: ["datasetId"],
+        properties: {
+          datasetId: { type: "string" },
+          format: { const: "jsonl", default: "jsonl" },
+        },
+        additionalProperties: false,
+      },
+      WebhookRequest: {
+        type: "object",
+        required: ["subscriptionKey", "url", "eventTypes"],
+        properties: {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          url: { type: "string", format: "uri", maxLength: 2000 },
+          eventTypes: {
+            type: "array",
+            minItems: 1,
+            maxItems: 12,
+            uniqueItems: true,
+            items: {
+              enum: [
+                "evidence.document.changed",
+                "evidence.research.completed",
+                "evidence.export.completed",
+                "evidence.benchmark.completed",
+                "evidence.claim.verified",
+              ],
+            },
+          },
+        },
         additionalProperties: false,
       },
       Manifest: {

@@ -1,7 +1,12 @@
 import { makeFunctionReference } from "convex/server";
 
 export type UserRole = "owner" | "admin" | "reader";
-export type AgentScope = "forum" | "newsletter" | "interactions" | "comments";
+export type AgentScope =
+  | "forum"
+  | "newsletter"
+  | "interactions"
+  | "comments"
+  | "evidence";
 export type ForumAccountStatus = "active" | "suspended" | "banned";
 export type ForumRole = "moderator" | "admin";
 export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
@@ -1558,6 +1563,72 @@ export type AiTelemetrySnapshotRecord = {
 };
 
 export const convexRefs = {
+  evidenceAdmin: {
+    dashboard: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      {
+        bounds: { sources: number; documents: number; jobs: number };
+        counts: {
+          sources: number;
+          documents: number;
+          changes: number;
+          researchJobs: number;
+          exportJobs: number;
+          products: number;
+          datasets: number;
+          benchmarks: number;
+        };
+        sources: Array<{
+          sourceId: string;
+          sourceKey: string;
+          name: string;
+          status: "active" | "paused" | "retired";
+          ingestionEnabled: boolean;
+          lastSucceededAt: number;
+          lastErrorAt: number;
+          lastErrorMessage: string;
+          updatedAt: number;
+        }>;
+        changes: Array<{
+          eventKey: string;
+          entityType: string;
+          kind: string;
+          summary: string;
+          occurredAt: number;
+        }>;
+        jobs: Array<{
+          id: string;
+          type: "export" | "research";
+          status: string;
+          errorMessage: string;
+          updatedAt: number;
+        }>;
+      }
+    >("evidenceAdmin:dashboard"),
+    setSourceStatus: makeFunctionReference<
+      "mutation",
+      { sourceId: string; status: "active" | "paused" },
+      { sourceId: string; status: "active" | "paused"; updatedAt: number }
+    >("evidenceAdmin:setSourceStatus"),
+    runIngestion: makeFunctionReference<
+      "action",
+      {
+        adapter:
+          | "cisa-kev"
+          | "github-advisories"
+          | "github-releases"
+          | "crossref"
+          | "first-party-research";
+      },
+      { adapter: string; result: unknown }
+    >("evidenceAdmin:runIngestion"),
+    initializeCatalog: makeFunctionReference<
+      "action",
+      Record<string, never>,
+      { initialized: boolean; message: string }
+    >("evidenceAdmin:initializeCatalog"),
+  },
   admin: {
     viewer: makeFunctionReference<
       "query",

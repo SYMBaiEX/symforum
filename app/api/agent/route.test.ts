@@ -19,8 +19,8 @@ describe("agent API manifest", () => {
       capabilities: {
         authenticatedIdentity: true,
         authenticatedQuota: true,
-        authenticatedResourceTransport: "typed-platform-functions",
-        authenticatedResourceProxy: "planned-incrementally",
+        authenticatedEvidenceData: true,
+        mcp: true,
       },
       monetization: {
         enabled: false,
@@ -33,6 +33,13 @@ describe("agent API manifest", () => {
     expect(manifest.openapi).toBe(
       "https://www.symbaiex.com/api/agent/openapi.json",
     );
+    expect(manifest.scopes).toContain("evidence");
+    expect(manifest.endpoints.evidenceRest).toBe(
+      "https://www.symbaiex.com/api/agent/v1",
+    );
+    expect(manifest.researchJobs.enabled).toBe(true);
+    expect(manifest.exports).toMatchObject({ enabled: true, format: "jsonl" });
+    expect(manifest.webhooks.infrastructureEnabled).toBe(true);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
   });
 

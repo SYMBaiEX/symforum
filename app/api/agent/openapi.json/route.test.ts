@@ -24,5 +24,23 @@ describe("agent API OpenAPI contract", () => {
     expect(document.components.schemas.SignInRequest.required).toEqual(
       expect.arrayContaining(["agentId", "challenge", "signature"]),
     );
+    expect(document.paths["/v1/search"].get.operationId).toBe("searchEvidence");
+    expect(document.paths["/v1/research-jobs"].post.operationId).toBe(
+      "createEvidenceResearchJob",
+    );
+    expect(document.paths["/v1/exports"].post.operationId).toBe(
+      "createEvidenceExport",
+    );
+    expect(document.paths["/v1/webhooks"].post.operationId).toBe(
+      "createEvidenceWebhook",
+    );
+    expect(document.paths["/v1/entitlements"].get.operationId).toBe(
+      "getEvidenceEntitlements",
+    );
+    expect(document.paths["/v1/usage"].get.operationId).toBe(
+      "getEvidenceUsage",
+    );
+    expect(document.components.parameters.IdempotencyKey.required).toBe(true);
+    expect(document.paths["/mcp"].post.operationId).toBe("evidenceMcp");
   });
 });

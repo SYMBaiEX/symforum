@@ -15,6 +15,7 @@ export const adminSectionIds = [
   "content",
   "ai",
   "telemetry",
+  "evidence",
 ] as const;
 
 export type AdminSectionId = (typeof adminSectionIds)[number];

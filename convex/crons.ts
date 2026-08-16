@@ -1,8 +1,72 @@
-import { cronJobs } from "convex/server";
+import { cronJobs, makeFunctionReference } from "convex/server";
 import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+
+const syncCisaKevRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceIngestion:syncCisaKev");
+const syncGithubAdvisoriesRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceIngestion:syncGithubAdvisories");
+const syncGithubReleasesRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceIngestion:syncGithubReleases");
+const syncCrossrefRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceIngestion:syncCrossref");
+const syncFirstPartyResearchRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceFirstParty:sync");
+
+crons.cron("ingest CISA KEV evidence", "7 * * * *", syncCisaKevRef, {});
+crons.cron(
+  "ingest GitHub security advisories",
+  "23 */6 * * *",
+  syncGithubAdvisoriesRef,
+  {},
+);
+crons.cron(
+  "ingest GitHub allowlisted releases",
+  "37 */2 * * *",
+  syncGithubReleasesRef,
+  {},
+);
+crons.cron(
+  "ingest Crossref curated metadata",
+  "51 */12 * * *",
+  syncCrossrefRef,
+  {},
+);
+crons.cron(
+  "index first-party research evidence",
+  "5 8 * * *",
+  syncFirstPartyResearchRef,
+  {},
+);
+crons.interval(
+  "cleanup expired evidence artifacts",
+  { hours: 1 },
+  internal.evidenceJobs.cleanupExpiredArtifacts,
+  {},
+);
+crons.cron(
+  "benchmark evidence citation coverage",
+  "20 8 * * *",
+  internal.evidenceBenchmarks.runDailyCitationCoverage,
+  {},
+);
 
 crons.cron(
   "refresh Hacker News snapshot",

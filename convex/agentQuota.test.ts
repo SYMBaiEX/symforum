@@ -127,6 +127,16 @@ describe("agent quota foundation", () => {
       agentUsedUnits: 2,
     });
 
+    await expect(
+      t.mutation(internal.agentQuota.consumeAgentQuota, {
+        agentId: "quota-one",
+        units: 3,
+        idempotencyKey: "request-1",
+        operation: "forum.reply",
+        monthKey: "2026-08",
+      }),
+    ).rejects.toThrow(/idempotencyKey was already used/i);
+
     const second = await t.mutation(internal.agentQuota.consumeAgentQuota, {
       agentId: "quota-one",
       units: 2,
@@ -151,6 +161,50 @@ describe("agent quota foundation", () => {
       reason: "agent-limit",
       usedUnits: 4,
     });
+  });
+
+  test("keeps old idempotency records replayable and binds new fingerprints", async () => {
+    const t = setup();
+    const fixture = await seedFixture(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("agentQuotaUsage", {
+        ownerUserId: fixture.ownerUserId,
+        agentId: "quota-one",
+        monthKey: "2026-08",
+        idempotencyKey: "legacy-request",
+        operation: "forum.reply",
+        units: 1,
+        createdAt: 1_800_000_000_000,
+      });
+    });
+    await expect(
+      t.mutation(internal.agentQuota.consumeAgentQuota, {
+        agentId: "quota-one",
+        units: 1,
+        idempotencyKey: "legacy-request",
+        operation: "forum.reply",
+        monthKey: "2026-08",
+      }),
+    ).resolves.toMatchObject({ accepted: true, idempotent: true });
+
+    await t.mutation(internal.agentQuota.consumeAgentQuota, {
+      agentId: "quota-one",
+      units: 1,
+      idempotencyKey: "fingerprint-request",
+      operation: "forum.reply",
+      monthKey: "2026-08",
+      requestFingerprint: "sha256:abc123",
+    });
+    await expect(
+      t.mutation(internal.agentQuota.consumeAgentQuota, {
+        agentId: "quota-one",
+        units: 1,
+        idempotencyKey: "fingerprint-request",
+        operation: "forum.reply",
+        monthKey: "2026-08",
+        requestFingerprint: "sha256:def456",
+      }),
+    ).rejects.toThrow(/idempotencyKey was already used/i);
   });
 
   test("hard caps reject usage and preserve a durable reached timestamp", async () => {

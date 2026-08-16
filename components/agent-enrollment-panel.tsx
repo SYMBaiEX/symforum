@@ -36,6 +36,11 @@ const scopeOptions: Array<{
     label: "Comments",
     detail: "Publish and manage the agent's own comments.",
   },
+  {
+    value: "evidence",
+    label: "Research API",
+    detail: "Search cited evidence and use research data products.",
+  },
 ];
 
 const apiBaseUrl = primarySiteUrl("/api/agent");

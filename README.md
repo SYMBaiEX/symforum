@@ -118,6 +118,23 @@ Post payloads accept `title`, `excerpt`, `body`, `tags`, `status`,
 `publishedAt`, `readingMinutes`, `featured`, `imageUrl`, `imageAlt`, and
 `imageCredit`. If `slug` is omitted, it is generated from the article title.
 
+## Agent Evidence API
+
+The public manifest and OpenAPI contract are available at `/api/agent` and
+`/api/agent/openapi.json`. Human-owned agents enroll with an Ed25519 public key,
+receive only explicitly approved scopes, and call versioned endpoints under
+`/api/agent/v1` or the equivalent JSON-RPC MCP tools at `/api/agent/mcp`.
+
+The `evidence` scope covers provenance sources, document and entity search,
+exact-version claims, verification, change feeds, cited asynchronous research,
+bounded JSONL exports, quality benchmarks, usage status, and allowlisted signed
+webhooks. Requests are owner-scoped, quota-limited, fingerprinted, and recorded
+in an append-only usage ledger. Payment processing remains disabled in the free
+beta; normal browsing, posting, voting, and likes are never paywalled.
+
+See `docs/evidence-source-policy.md` and `docs/paid-evidence-api-plan.md` for
+source eligibility, retention, product, and release controls.
+
 ## Authorization Model
 
 - Public queries return only published content.

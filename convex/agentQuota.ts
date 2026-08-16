@@ -24,6 +24,7 @@ export const DEFAULT_REQUEST_LIMIT_UNITS = 25;
 export const MAX_QUOTA_UNITS = 1_000_000_000;
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 160;
 export const MAX_OPERATION_LENGTH = 80;
+export const MAX_REQUEST_FINGERPRINT_LENGTH = 128;
 export const DEFAULT_HARD_CAP_METADATA_JSON = JSON.stringify({
   source: "free-allowance",
   paymentProcessing: false,
@@ -78,6 +79,52 @@ type QuotaState = {
   agentRemainingUnits: number;
   requestLimitUnits: number;
 };
+
+const quotaStateFields = {
+  agentId: v.string(),
+  ownerUserId: v.id("users"),
+  monthKey: v.string(),
+  freeAllowanceUnits: v.number(),
+  hardCapUnits: v.number(),
+  usedUnits: v.number(),
+  remainingUnits: v.number(),
+  hardCapReached: v.boolean(),
+  hardCapReachedAt: v.optional(v.number()),
+  hardCapMetadataJson: v.string(),
+  monthlyLimitUnits: v.number(),
+  agentUsedUnits: v.number(),
+  agentRemainingUnits: v.number(),
+  requestLimitUnits: v.number(),
+};
+
+const quotaStateValidator = v.object(quotaStateFields);
+const quotaConsumeResultValidator = v.object({
+  accepted: v.boolean(),
+  idempotent: v.boolean(),
+  agentId: v.string(),
+  ownerUserId: v.id("users"),
+  monthKey: v.string(),
+  units: v.number(),
+  usedUnits: v.number(),
+  remainingUnits: v.number(),
+  agentUsedUnits: v.number(),
+  agentRemainingUnits: v.number(),
+  freeAllowanceUnits: v.number(),
+  hardCapUnits: v.number(),
+  hardCapReached: v.boolean(),
+  hardCapReachedAt: v.optional(v.number()),
+  hardCapMetadataJson: v.string(),
+  reason: v.optional(
+    v.union(
+      v.literal("hard-cap"),
+      v.literal("agent-limit"),
+      v.literal("request-limit"),
+      v.literal("rate-limited"),
+    ),
+  ),
+  retryAfter: v.optional(v.number()),
+  usageId: v.optional(v.id("agentQuotaUsage")),
+});
 
 function monthKeyForTimestamp(timestamp: number) {
   const date = new Date(timestamp);
@@ -140,6 +187,23 @@ function normalizeOperation(value: string) {
     });
   }
   return operation;
+}
+
+function normalizeRequestFingerprint(value: string | undefined) {
+  if (value === undefined) return undefined;
+  const fingerprint = value.trim();
+  if (
+    fingerprint.length === 0 ||
+    fingerprint.length > MAX_REQUEST_FINGERPRINT_LENGTH ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(fingerprint)
+  ) {
+    throw new ConvexError({
+      code: "INVALID_QUOTA_REQUEST_FINGERPRINT",
+      message:
+        "requestFingerprint must be a bounded hash or identifier no longer than 128 characters.",
+    });
+  }
+  return fingerprint;
 }
 
 function normalizeMetadataJson(value: string | undefined) {
@@ -383,6 +447,7 @@ export const configureAgentQuota = mutation({
     requestLimitUnits: v.optional(v.number()),
     hardCapMetadataJson: v.optional(v.string()),
   },
+  returns: quotaStateValidator,
   handler: async (ctx, args) => {
     const { identity, ownerUserId } = await requireQuotaManager(
       ctx,
@@ -465,6 +530,7 @@ export const getAgentQuota = query({
     agentId: v.string(),
     monthKey: v.optional(v.string()),
   },
+  returns: quotaStateValidator,
   handler: async (ctx, args) => {
     const { identity, ownerUserId } = await requireQuotaManager(
       ctx,
@@ -492,6 +558,7 @@ export const getAgentQuota = query({
 
 export const getMyAgentQuota = query({
   args: { monthKey: v.optional(v.string()) },
+  returns: quotaStateValidator,
   handler: async (ctx, args) => {
     const actor = await requireAuthenticatedUser(ctx);
     const identity = await findIdentityForUser(ctx, actor._id);
@@ -532,6 +599,7 @@ export async function consumeAgentQuotaForRequest(
     operation: string;
     monthKey?: string;
     metadataJson?: string;
+    requestFingerprint?: string;
     now?: number;
   },
 ): Promise<AgentQuotaConsumeResult> {
@@ -540,6 +608,9 @@ export async function consumeAgentQuotaForRequest(
   const idempotencyKey = normalizeIdempotencyKey(args.idempotencyKey);
   const operation = normalizeOperation(args.operation);
   const metadataJson = normalizeMetadataJson(args.metadataJson);
+  const requestFingerprint = normalizeRequestFingerprint(
+    args.requestFingerprint,
+  );
   const now = args.now ?? Date.now();
   const identity = await findIdentity(ctx, agentId);
   if (identity === null) {
@@ -592,6 +663,17 @@ export async function consumeAgentQuotaForRequest(
     )
     .unique();
   if (existingUsage !== null) {
+    if (
+      existingUsage.operation !== operation ||
+      existingUsage.units !== units ||
+      existingUsage.requestFingerprint !== requestFingerprint
+    ) {
+      throw new ConvexError({
+        code: "QUOTA_IDEMPOTENCY_MISMATCH",
+        message:
+          "idempotencyKey was already used with a different operation, units, or request fingerprint.",
+      });
+    }
     const state = await readQuotaState(ctx, identity, ownerUserId, monthKey);
     return quotaResult(state, {
       accepted: true,
@@ -664,6 +746,7 @@ export async function consumeAgentQuotaForRequest(
     units,
     createdAt: now,
     metadataJson,
+    requestFingerprint,
   });
   await ctx.db.patch("agentQuotaBudgets", budget._id, {
     usedUnits: nextUsedUnits,
@@ -743,8 +826,10 @@ export const consumeAgentQuota = internalMutation({
     operation: v.string(),
     monthKey: v.optional(v.string()),
     metadataJson: v.optional(v.string()),
+    requestFingerprint: v.optional(v.string()),
     now: v.optional(v.number()),
   },
+  returns: quotaConsumeResultValidator,
   handler: async (ctx, args) => consumeAgentQuotaForRequest(ctx, args),
 });
 

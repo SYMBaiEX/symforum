@@ -14,6 +14,7 @@ describe("admin section routing", () => {
     expect(new Set(routes).size).toBe(adminSectionIds.length);
     expect(adminSectionHref("overview")).toBe("/admin");
     expect(adminSectionHref("telemetry")).toBe("/admin/telemetry");
+    expect(adminSectionHref("evidence")).toBe("/admin/evidence");
     expect(adminSectionHref("ai")).toBe("/admin/ai");
     expect(adminSectionHref("api")).toBe("/admin/api");
   });

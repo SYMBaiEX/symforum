@@ -39,6 +39,7 @@ const AGENT_AUTH_ALLOWED_ORIGINS = new Set([
   "https://forum.symbaiex.com",
 ]);
 const AGENT_AUTH_MAX_BODY_BYTES = 16 * 1024;
+const AGENT_DATA_MAX_BODY_BYTES = 32 * 1024;
 
 auth.addHttpRoutes(http);
 
@@ -68,6 +69,76 @@ http.route({
       status: 204,
       headers: agentQuotaCorsHeaders(request),
     });
+  }),
+});
+
+http.route({
+  path: "/agent/v1",
+  method: "OPTIONS",
+  handler: httpAction(
+    async (_ctx, request) =>
+      new Response(null, {
+        status: 204,
+        headers: agentDataCorsHeaders(request),
+      }),
+  ),
+});
+
+http.route({
+  path: "/agent/v1",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const headers = agentDataCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request))
+      return agentDataJson({ error: "Origin is not allowed." }, 403, headers);
+    if ((await ctx.auth.getUserIdentity()) === null)
+      return agentDataJson(
+        { error: "A bearer access token is required." },
+        401,
+        headers,
+      );
+    try {
+      const body = await readAgentDataBody(request);
+      if (
+        !isRecord(body) ||
+        typeof body.operation !== "string" ||
+        !isAgentDataOperation(body.operation) ||
+        !isRecord(body.input) ||
+        typeof body.idempotencyKey !== "string" ||
+        typeof body.requestFingerprint !== "string"
+      ) {
+        return agentDataJson(
+          {
+            error:
+              "operation, input, idempotencyKey, and requestFingerprint are required.",
+          },
+          400,
+          headers,
+        );
+      }
+      const result = await ctx.runMutation(
+        (internal as unknown as { agentDataApi: { dispatch: never } })
+          .agentDataApi.dispatch,
+        {
+          operation: body.operation,
+          input: body.input,
+          idempotencyKey: body.idempotencyKey,
+          requestFingerprint: body.requestFingerprint,
+        } as never,
+      );
+      return agentDataJson(result, 200, headers);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.length <= 240
+          ? error.message
+          : "Agent data request could not be completed.";
+      const status = /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
+        ? 403
+        : /quota|rate limit/i.test(message)
+          ? 429
+          : 400;
+      return agentDataJson({ error: message }, status, headers);
+    }
   }),
 });
 
@@ -397,6 +468,21 @@ function agentQuotaCorsHeaders(request: Request) {
   return headers;
 }
 
+function agentDataCorsHeaders(request: Request) {
+  const headers = new Headers({
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Max-Age": "86400",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    Vary: "Origin",
+  });
+  const origin = request.headers.get("origin");
+  if (origin !== null && isAllowedAgentAuthOrigin(request))
+    headers.set("Access-Control-Allow-Origin", origin);
+  return headers;
+}
+
 function isAllowedAgentAuthOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (origin === null) return true;
@@ -424,6 +510,79 @@ async function readAgentAuthBody(request: Request): Promise<unknown> {
   return JSON.parse(text) as unknown;
 }
 
+async function readAgentDataBody(request: Request): Promise<unknown> {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > AGENT_DATA_MAX_BODY_BYTES
+  )
+    throw new Error("Request body is too large.");
+  if (
+    !/^application\/json(?:;|$)/i.test(
+      request.headers.get("content-type") ?? "",
+    )
+  )
+    throw new Error("Content-Type must be application/json.");
+  const bytes = await request.arrayBuffer();
+  if (bytes.byteLength === 0) throw new Error("Request body is required.");
+  if (bytes.byteLength > AGENT_DATA_MAX_BODY_BYTES)
+    throw new Error("Request body is too large.");
+  return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+}
+
+function isAgentDataOperation(
+  value: string,
+): value is
+  | "status"
+  | "sources"
+  | "search"
+  | "document"
+  | "changes"
+  | "verify"
+  | "entities"
+  | "version_claims"
+  | "products"
+  | "datasets"
+  | "benchmarks"
+  | "quota"
+  | "entitlements"
+  | "usage"
+  | "research_create"
+  | "research_get"
+  | "research_artifact"
+  | "export_create"
+  | "export_get"
+  | "export_artifact"
+  | "webhooks_list"
+  | "webhooks_create"
+  | "webhooks_status" {
+  return [
+    "status",
+    "sources",
+    "search",
+    "document",
+    "changes",
+    "verify",
+    "entities",
+    "version_claims",
+    "products",
+    "datasets",
+    "benchmarks",
+    "quota",
+    "entitlements",
+    "usage",
+    "research_create",
+    "research_get",
+    "research_artifact",
+    "export_create",
+    "export_get",
+    "export_artifact",
+    "webhooks_list",
+    "webhooks_create",
+    "webhooks_status",
+  ].includes(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -445,6 +604,15 @@ function agentAuthJson(payload: unknown, status: number, headers: Headers) {
 }
 
 function agentQuotaJson(payload: unknown, status: number, headers: Headers) {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: responseHeaders,
+  });
+}
+
+function agentDataJson(payload: unknown, status: number, headers: Headers) {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json");
   return new Response(JSON.stringify(payload), {

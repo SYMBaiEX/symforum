@@ -71,7 +71,8 @@ const AdminPanelLoading = () => (
 );
 
 const AdminAiChat = dynamic(
-  () => import("@/components/admin-ai-chat").then((module) => module.AdminAiChat),
+  () =>
+    import("@/components/admin-ai-chat").then((module) => module.AdminAiChat),
   { loading: AdminPanelLoading, ssr: false },
 );
 const AdminAnalytics = dynamic(
@@ -117,6 +118,13 @@ const AdminTelemetry = dynamic(
   () =>
     import("@/components/admin-telemetry").then(
       (module) => module.AdminTelemetry,
+    ),
+  { loading: AdminPanelLoading, ssr: false },
+);
+const AdminEvidence = dynamic(
+  () =>
+    import("@/components/admin-evidence").then(
+      (module) => module.AdminEvidence,
     ),
   { loading: AdminPanelLoading, ssr: false },
 );
@@ -365,9 +373,7 @@ function SiteAdminDashboard({
   );
   const apiKeys = useQuery(
     convexRefs.admin.listApiKeys,
-    isOwner && (activeTab === "overview" || activeTab === "api")
-      ? {}
-      : "skip",
+    isOwner && (activeTab === "overview" || activeTab === "api") ? {} : "skip",
   );
   const adminComments = useQuery(
     convexRefs.admin.listComments,
@@ -605,6 +611,12 @@ function SiteAdminDashboard({
           label: "Telemetry",
           note: "OpenRouter + agents",
           icon: Gauge,
+        },
+        {
+          id: "evidence",
+          label: "Evidence",
+          note: "Sources + jobs",
+          icon: FileText,
         },
       ].filter(
         (tab): tab is AdminTab =>
@@ -1545,6 +1557,7 @@ function SiteAdminDashboard({
         {activeTab === "content" ? <AdminSiteContent /> : null}
         {isOwner && activeTab === "ai" ? <AdminAiChat /> : null}
         {isOwner && activeTab === "telemetry" ? <AdminTelemetry /> : null}
+        {activeTab === "evidence" ? <AdminEvidence /> : null}
       </div>
     </>
   );

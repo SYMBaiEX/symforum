@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
+import type * as agentDataApi from "../agentDataApi.js";
 import type * as agentIdentity from "../agentIdentity.js";
 import type * as agentIdentityCrypto from "../agentIdentityCrypto.js";
 import type * as agentQuota from "../agentQuota.js";
@@ -17,6 +18,7 @@ import type * as aiRoutingControlData from "../aiRoutingControlData.js";
 import type * as aiTelemetry from "../aiTelemetry.js";
 import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
 import type * as analytics from "../analytics.js";
+import type * as apiCommerce from "../apiCommerce.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
 import type * as belleForumAgent from "../belleForumAgent.js";
@@ -26,6 +28,16 @@ import type * as contactEmails from "../contactEmails.js";
 import type * as contentAccess from "../contentAccess.js";
 import type * as crons from "../crons.js";
 import type * as dailyNewsletter from "../dailyNewsletter.js";
+import type * as evidence from "../evidence.js";
+import type * as evidenceAdmin from "../evidenceAdmin.js";
+import type * as evidenceBenchmarks from "../evidenceBenchmarks.js";
+import type * as evidenceFirstParty from "../evidenceFirstParty.js";
+import type * as evidenceIngestion from "../evidenceIngestion.js";
+import type * as evidenceJobActions from "../evidenceJobActions.js";
+import type * as evidenceJobWorkflows from "../evidenceJobWorkflows.js";
+import type * as evidenceJobs from "../evidenceJobs.js";
+import type * as evidenceWebhookActions from "../evidenceWebhookActions.js";
+import type * as evidenceWebhooks from "../evidenceWebhooks.js";
 import type * as forum from "../forum.js";
 import type * as forumAgentEditorial from "../forumAgentEditorial.js";
 import type * as forumAgentEditorialData from "../forumAgentEditorialData.js";
@@ -72,6 +84,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminApi: typeof adminApi;
+  agentDataApi: typeof agentDataApi;
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
   agentQuota: typeof agentQuota;
@@ -79,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   aiTelemetry: typeof aiTelemetry;
   aiTelemetryHelpers: typeof aiTelemetryHelpers;
   analytics: typeof analytics;
+  apiCommerce: typeof apiCommerce;
   auth: typeof auth;
   authz: typeof authz;
   belleForumAgent: typeof belleForumAgent;
@@ -88,6 +102,16 @@ declare const fullApi: ApiFromModules<{
   contentAccess: typeof contentAccess;
   crons: typeof crons;
   dailyNewsletter: typeof dailyNewsletter;
+  evidence: typeof evidence;
+  evidenceAdmin: typeof evidenceAdmin;
+  evidenceBenchmarks: typeof evidenceBenchmarks;
+  evidenceFirstParty: typeof evidenceFirstParty;
+  evidenceIngestion: typeof evidenceIngestion;
+  evidenceJobActions: typeof evidenceJobActions;
+  evidenceJobWorkflows: typeof evidenceJobWorkflows;
+  evidenceJobs: typeof evidenceJobs;
+  evidenceWebhookActions: typeof evidenceWebhookActions;
+  evidenceWebhooks: typeof evidenceWebhooks;
   forum: typeof forum;
   forumAgentEditorial: typeof forumAgentEditorial;
   forumAgentEditorialData: typeof forumAgentEditorialData;

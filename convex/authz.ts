@@ -13,6 +13,7 @@ export const AGENT_SCOPES = [
   "newsletter",
   "interactions",
   "comments",
+  "evidence",
 ] as const;
 
 export type AgentScope = (typeof AGENT_SCOPES)[number];
@@ -22,6 +23,7 @@ export const agentScopeValidator = v.union(
   v.literal("newsletter"),
   v.literal("interactions"),
   v.literal("comments"),
+  v.literal("evidence"),
 );
 
 /** Whether a user is an enrolled agent whose key has not been revoked. */
