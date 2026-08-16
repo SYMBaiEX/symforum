@@ -83,6 +83,21 @@ export const dashboard = query({
       datasets: v.number(),
       benchmarks: v.number(),
     }),
+    health: v.union(
+      v.null(),
+      v.object({
+        status: v.union(v.literal("healthy"), v.literal("degraded")),
+        sourceCount: v.number(),
+        staleSourceKeys: v.array(v.string()),
+        failedSourceKeys: v.array(v.string()),
+        stuckResearchJobs: v.number(),
+        stuckExportJobs: v.number(),
+        truncated: v.boolean(),
+        summary: v.string(),
+        lastCheckedAt: v.number(),
+        lastChangedAt: v.number(),
+      }),
+    ),
     sources: v.array(
       v.object({
         sourceId: v.id("evidenceSources"),
@@ -147,6 +162,7 @@ export const dashboard = query({
       benchmarks,
       researchJobs,
       exportJobs,
+      health,
     ] = await Promise.all([
       ctx.db
         .query("evidenceSources")
@@ -205,6 +221,12 @@ export const dashboard = query({
         .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "queued"))
         .order("desc")
         .take(12),
+      ctx.db
+        .query("evidenceOperationalHealth")
+        .withIndex("by_healthKey", (q) =>
+          q.eq("healthKey", "evidence-production"),
+        )
+        .unique(),
     ]);
     const sources = [...activeSources, ...pausedSources, ...retiredSources]
       .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -232,6 +254,21 @@ export const dashboard = query({
         datasets: datasets.length,
         benchmarks: benchmarks.length,
       },
+      health:
+        health === null
+          ? null
+          : {
+              status: health.status,
+              sourceCount: health.sourceCount,
+              staleSourceKeys: health.staleSourceKeys,
+              failedSourceKeys: health.failedSourceKeys,
+              stuckResearchJobs: health.stuckResearchJobs,
+              stuckExportJobs: health.stuckExportJobs,
+              truncated: health.truncated,
+              summary: health.summary,
+              lastCheckedAt: health.lastCheckedAt,
+              lastChangedAt: health.lastChangedAt,
+            },
       sources,
       changes: changes.map((event) => ({
         eventKey: event.eventKey,

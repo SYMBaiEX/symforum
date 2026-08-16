@@ -1579,6 +1579,18 @@ export const convexRefs = {
           datasets: number;
           benchmarks: number;
         };
+        health: null | {
+          status: "healthy" | "degraded";
+          sourceCount: number;
+          staleSourceKeys: string[];
+          failedSourceKeys: string[];
+          stuckResearchJobs: number;
+          stuckExportJobs: number;
+          truncated: boolean;
+          summary: string;
+          lastCheckedAt: number;
+          lastChangedAt: number;
+        };
         sources: Array<{
           sourceId: string;
           sourceKey: string;

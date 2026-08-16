@@ -57,8 +57,10 @@ the first production version of SYMBaiEX's provenance-first data products.
       build.
 - [x] Convex deployment and safe source/product initialization.
 - [x] Vercel production deployment of the exact verified Git commit.
-- [ ] Live unauthenticated, insufficient-scope, authenticated, OpenAPI, MCP,
-      dataset, and change-feed smoke checks.
+- [x] Live manifest, OpenAPI, unauthenticated REST/MCP, public dataset, and
+      change-feed smoke checks.
+- [ ] Live insufficient-scope, authenticated, refresh, and revocation smoke
+      checks with human-owned agent identities.
 
 Production proof on 2026-08-16: Git release `3321146`, Convex production
 `strong-bee-384`, and Vercel deployment `dpl_DLHuiVP4NLY4oa4y44WPurjU3TBg`
@@ -69,3 +71,11 @@ feed returned production records. The final checkbox remains open until a
 human-owned evidence agent supplies a real token for authenticated and
 insufficient-scope smoke checks; no dummy identity was created for release
 theater.
+
+Follow-up operational audit on 2026-08-16 sampled 479 completed Convex
+executions with zero failures or retries. All seven configured evidence sources
+were active without retained errors, and no research or export jobs were
+backlogged. The release adds an hourly persisted evidence-health check for
+stale sources and stuck jobs, an admin health summary, and a secret-safe public
+and authenticated smoke harness. The remaining authenticated checks require an
+owner to sign in and explicitly enroll the temporary test agents.

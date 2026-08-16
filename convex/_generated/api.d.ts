@@ -32,6 +32,7 @@ import type * as evidence from "../evidence.js";
 import type * as evidenceAdmin from "../evidenceAdmin.js";
 import type * as evidenceBenchmarks from "../evidenceBenchmarks.js";
 import type * as evidenceFirstParty from "../evidenceFirstParty.js";
+import type * as evidenceHealth from "../evidenceHealth.js";
 import type * as evidenceIngestion from "../evidenceIngestion.js";
 import type * as evidenceJobActions from "../evidenceJobActions.js";
 import type * as evidenceJobWorkflows from "../evidenceJobWorkflows.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   evidenceAdmin: typeof evidenceAdmin;
   evidenceBenchmarks: typeof evidenceBenchmarks;
   evidenceFirstParty: typeof evidenceFirstParty;
+  evidenceHealth: typeof evidenceHealth;
   evidenceIngestion: typeof evidenceIngestion;
   evidenceJobActions: typeof evidenceJobActions;
   evidenceJobWorkflows: typeof evidenceJobWorkflows;

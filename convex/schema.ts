@@ -1802,6 +1802,19 @@ export default defineSchema({
   })
     .index("by_sourceKey", ["sourceKey"])
     .index("by_status_and_visibility", ["status", "visibility"]),
+  evidenceOperationalHealth: defineTable({
+    healthKey: v.string(),
+    status: v.union(v.literal("healthy"), v.literal("degraded")),
+    sourceCount: v.number(),
+    staleSourceKeys: v.array(v.string()),
+    failedSourceKeys: v.array(v.string()),
+    stuckResearchJobs: v.number(),
+    stuckExportJobs: v.number(),
+    truncated: v.boolean(),
+    summary: v.string(),
+    lastCheckedAt: v.number(),
+    lastChangedAt: v.number(),
+  }).index("by_healthKey", ["healthKey"]),
   evidenceDocuments: defineTable({
     sourceId: v.id("evidenceSources"),
     externalKey: v.string(),

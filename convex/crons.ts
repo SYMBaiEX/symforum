@@ -61,6 +61,12 @@ crons.interval(
   internal.evidenceJobs.cleanupExpiredArtifacts,
   {},
 );
+crons.interval(
+  "check evidence operational health",
+  { hours: 1 },
+  internal.evidenceHealth.check,
+  {},
+);
 crons.cron(
   "benchmark evidence citation coverage",
   "20 8 * * *",

@@ -109,6 +109,34 @@ export function AdminEvidence() {
         ))}
       </div>
 
+      <section className="border-y border-row-border py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Operational health
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {data.health?.summary ??
+                "The first scheduled evidence health check has not run yet."}
+            </p>
+          </div>
+          <div className="text-right">
+            <Badge
+              variant={
+                data.health?.status === "degraded" ? "destructive" : "outline"
+              }
+            >
+              {data.health?.status ?? "pending"}
+            </Badge>
+            {data.health ? (
+              <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+                Checked {formatDate(data.health.lastCheckedAt)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

@@ -13,7 +13,9 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "smoke:agent:public": "bun scripts/smoke-agent-api.mjs --public-only",
+    "smoke:agent:auth": "bun scripts/smoke-agent-api.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.29",
