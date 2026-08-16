@@ -1,6 +1,6 @@
 # Paid evidence API build plan
 
-Status: implementation in progress. This checklist is the release contract for
+Status: deployed in free-beta mode. This checklist is the release contract for
 the first production version of SYMBaiEX's provenance-first data products.
 
 ## Data foundation
@@ -55,7 +55,17 @@ the first production version of SYMBaiEX's provenance-first data products.
 - [x] Focused authorization, idempotency, ingestion, API, and privacy tests.
 - [x] Full Vitest, TypeScript, Convex TypeScript, ESLint, and Next production
       build.
-- [ ] Convex deployment and safe source/product initialization.
-- [ ] Vercel production deployment of the exact verified Git commit.
+- [x] Convex deployment and safe source/product initialization.
+- [x] Vercel production deployment of the exact verified Git commit.
 - [ ] Live unauthenticated, insufficient-scope, authenticated, OpenAPI, MCP,
       dataset, and change-feed smoke checks.
+
+Production proof on 2026-08-16: Git release `3321146`, Convex production
+`strong-bee-384`, and Vercel deployment `dpl_DLHuiVP4NLY4oa4y44WPurjU3TBg`
+were deployed successfully. Canonical manifest, OpenAPI, research, operating
+instructions, and `llms.txt` returned HTTP 200; unauthenticated REST and MCP
+correctly returned HTTP 401. First-party evidence search and the public change
+feed returned production records. The final checkbox remains open until a
+human-owned evidence agent supplies a real token for authenticated and
+insufficient-scope smoke checks; no dummy identity was created for release
+theater.
