@@ -233,11 +233,13 @@ describe("evidence webhooks", () => {
       eventKey: "usage:owner-scope:2026-08:threshold-80",
       eventType: "evidence.usage.threshold_reached",
       payloadJson,
+      ownerUserId: ids.owner,
     });
     const replay = await t.mutation(webhooks.enqueue, {
       eventKey: "usage:owner-scope:2026-08:threshold-80",
       eventType: "evidence.usage.threshold_reached",
       payloadJson,
+      ownerUserId: ids.owner,
     });
     expect(first.enqueued).toBe(1);
     expect(replay.enqueued).toBe(0);
@@ -247,6 +249,104 @@ describe("evidence webhooks", () => {
       const event = await ctx.db.query("apiWebhookEvents").unique();
       expect(event?.payloadJson).not.toMatch(/token|secret|price|request/i);
     });
+  });
+
+  test("isolates account events by owner while preserving global fanout and replay idempotence", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    const t = setup();
+    const a = await fixture(t);
+    const b = await fixture(t);
+    const eventTypes = [
+      "evidence.usage.threshold_reached",
+      "evidence.entitlement.status_changed",
+      "evidence.research.completed",
+    ] as const;
+    await t.withIdentity({ subject: a.agent }).mutation(webhooks.create, {
+      subscriptionKey: "a-events",
+      url: subscriptionArgs.url,
+      eventTypes,
+    });
+    await t.withIdentity({ subject: b.agent }).mutation(webhooks.create, {
+      subscriptionKey: "b-events",
+      url: subscriptionArgs.url,
+      eventTypes,
+    });
+    const payloadJson = JSON.stringify({
+      scope: "account",
+      period: "2026-08",
+      usedUnits: 80,
+      hardCapUnits: 100,
+      remainingUnits: 20,
+      thresholdPercent: 80,
+    });
+    const first = await t.mutation(webhooks.enqueue, {
+      eventKey: "usage:owner-a:threshold",
+      eventType: "evidence.usage.threshold_reached",
+      payloadJson,
+      ownerUserId: a.owner,
+    });
+    const replay = await t.mutation(webhooks.enqueue, {
+      eventKey: "usage:owner-a:threshold",
+      eventType: "evidence.usage.threshold_reached",
+      payloadJson,
+      ownerUserId: a.owner,
+    });
+    expect(first.enqueued).toBe(1);
+    expect(replay.enqueued).toBe(0);
+    const entitlement = await t.mutation(webhooks.enqueue, {
+      eventKey: "entitlement:owner-a:version-1",
+      eventType: "evidence.entitlement.status_changed",
+      payloadJson: JSON.stringify({
+        scope: "account",
+        productKey: "evidence-beta",
+        status: "active",
+        startsAt: 1_700_000_000,
+      }),
+      ownerUserId: a.owner,
+    });
+    expect(entitlement.enqueued).toBe(1);
+    const global = await t.mutation(webhooks.enqueue, {
+      eventKey: "research:global",
+      eventType: "evidence.research.completed",
+      payloadJson: JSON.stringify({ status: "completed" }),
+    });
+    expect(global.enqueued).toBe(2);
+    await t.run(async (ctx) => {
+      const subscriptions = await ctx.db.query("apiWebhookSubscriptions").collect();
+      const deliveries = await ctx.db.query("apiWebhookDeliveries").collect();
+      const aSubscription = subscriptions.find((item) => item.ownerUserId === a.owner);
+      const bSubscription = subscriptions.find((item) => item.ownerUserId === b.owner);
+      expect(aSubscription).toBeDefined();
+      expect(bSubscription).toBeDefined();
+      expect(deliveries.filter((item) => item.subscriptionId === aSubscription!._id)).toHaveLength(3);
+      expect(deliveries.filter((item) => item.subscriptionId === bSubscription!._id)).toHaveLength(1);
+      expect(deliveries.filter((item) => item.eventKey === "usage:owner-a:threshold")).toHaveLength(1);
+    });
+  });
+
+  test("fails closed when account scope is missing or attached to a global event", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    const t = setup();
+    const ids = await fixture(t);
+    await t.withIdentity({ subject: ids.agent }).mutation(webhooks.create, {
+      subscriptionKey: "usage-events",
+      url: subscriptionArgs.url,
+      eventTypes: ["evidence.usage.threshold_reached", "evidence.research.completed"],
+    });
+    const payloadJson = JSON.stringify({ scope: "account", period: "2026-08", usedUnits: 80, hardCapUnits: 100, remainingUnits: 20, thresholdPercent: 80 });
+    await expect(t.mutation(webhooks.enqueue, {
+      eventKey: "usage:missing-owner",
+      eventType: "evidence.usage.threshold_reached",
+      payloadJson,
+    })).rejects.toThrow(/owner scope/i);
+    await expect(t.mutation(webhooks.enqueue, {
+      eventKey: "research:owner-supplied",
+      eventType: "evidence.research.completed",
+      payloadJson: JSON.stringify({ status: "completed" }),
+      ownerUserId: ids.owner,
+    })).rejects.toThrow(/global webhook events/i);
   });
 
   test("does not persist delivery events when no subscriber can receive them", async () => {

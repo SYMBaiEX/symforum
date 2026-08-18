@@ -2899,6 +2899,12 @@ export default defineSchema({
       "eventType",
       "status",
       "updatedAt",
+    ])
+    .index("by_ownerUserId_and_eventType_and_status_and_updatedAt", [
+      "ownerUserId",
+      "eventType",
+      "status",
+      "updatedAt",
     ]),
   apiWebhookDeliveries: defineTable({
     subscriptionId: v.id("apiWebhookSubscriptions"),

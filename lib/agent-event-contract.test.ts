@@ -142,6 +142,32 @@ describe("agent event envelope contract", () => {
     ).toBe(false);
   });
 
+  test("enforces AsyncAPI bounds for account usage and entitlement fields", () => {
+    const usage = {
+      id: "usage:bounds",
+      type: "evidence.usage.budget_reached" as const,
+      occurredAt,
+      data: {
+        scope: "account" as const,
+        period: "2026-08",
+        usedUnits: 1,
+        hardCapUnits: 1,
+        remainingUnits: 0 as const,
+      },
+    };
+    expect(isAgentEventEnvelope(usage)).toBe(true);
+    expect(isAgentEventEnvelope({ ...usage, data: { ...usage.data, period: "x".repeat(17) } })).toBe(false);
+    expect(isAgentEventEnvelope({ ...usage, data: { ...usage.data, hardCapUnits: 0 } })).toBe(false);
+    const entitlement = {
+      id: "entitlement:bounds",
+      type: "evidence.entitlement.status_changed" as const,
+      occurredAt,
+      data: { scope: "account" as const, productKey: "x", status: "active" as const, startsAt: occurredAt },
+    };
+    expect(isAgentEventEnvelope({ ...entitlement, data: { ...entitlement.data, productKey: "x".repeat(120) } })).toBe(true);
+    expect(isAgentEventEnvelope({ ...entitlement, data: { ...entitlement.data, productKey: "x".repeat(121) } })).toBe(false);
+  });
+
   test("accepts NVD and ingestion changedFields while retaining first-party compatibility", () => {
     const base = {
       id: "document:doc_1:version:2",

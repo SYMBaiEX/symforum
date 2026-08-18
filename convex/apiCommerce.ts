@@ -13,7 +13,7 @@ import { entitlementStatusEvent, stableEventScope } from "../lib/usage-budget-ev
 
 const entitlementWebhookRef = makeFunctionReference<
   "mutation",
-  { eventKey: string; eventType: "evidence.entitlement.status_changed"; payloadJson: string },
+  { eventKey: string; eventType: "evidence.entitlement.status_changed"; payloadJson: string; ownerUserId: Id<"users"> },
   { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
@@ -604,6 +604,7 @@ async function emitEntitlementStatusEvent(
       eventKey: event.id,
       eventType: event.type,
       payloadJson: JSON.stringify(event),
+      ownerUserId,
     });
   } catch (error) {
     console.warn("Entitlement webhook event enqueue failed", error);

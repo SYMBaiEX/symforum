@@ -20,7 +20,7 @@ import { stableEventScope, usageEvent } from "../lib/usage-budget-events";
 
 const usageWebhookRef = makeFunctionReference<
   "mutation",
-  { eventKey: string; eventType: "evidence.usage.threshold_reached" | "evidence.usage.budget_reached"; payloadJson: string },
+  { eventKey: string; eventType: "evidence.usage.threshold_reached" | "evidence.usage.budget_reached"; payloadJson: string; ownerUserId: Id<"users"> },
   { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
@@ -760,7 +760,7 @@ export async function consumeAgentQuotaForRequest(
       `usage:${eventScope}:${monthKey}:threshold-80`,
       Math.floor(now / 1_000),
       { ...eventBase, thresholdPercent: 80 },
-    ));
+    ), ownerUserId);
   }
   if (priorUsedUnits < budget.hardCapUnits && nextUsedUnits >= budget.hardCapUnits) {
     await emitUsageEvent(ctx, usageWebhookRef, usageEvent(
@@ -768,7 +768,7 @@ export async function consumeAgentQuotaForRequest(
       `usage:${eventScope}:${monthKey}:budget-reached`,
       Math.floor(now / 1_000),
       { ...eventBase, remainingUnits: 0 },
-    ));
+    ), ownerUserId);
   }
   return quotaResult(
     {
@@ -791,12 +791,14 @@ async function emitUsageEvent(
   ctx: MutationCtx,
   reference: typeof usageWebhookRef,
   event: ReturnType<typeof usageEvent>,
+  ownerUserId: Id<"users">,
 ) {
   try {
     await ctx.runMutation(reference, {
       eventKey: event.id,
       eventType: event.type,
       payloadJson: JSON.stringify(event),
+      ownerUserId,
     });
   } catch (error) {
     console.warn("Usage webhook event enqueue failed", error);

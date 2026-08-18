@@ -38,6 +38,11 @@ const EVENT_TYPES = [
   "evidence.usage.budget_reached",
   "evidence.entitlement.status_changed",
 ] as const;
+const ACCOUNT_SCOPED_EVENT_TYPES = new Set<EventType>([
+  "evidence.usage.threshold_reached",
+  "evidence.usage.budget_reached",
+  "evidence.entitlement.status_changed",
+]);
 type EventType = (typeof EVENT_TYPES)[number];
 
 const subscriptionStatusValidator = v.union(
@@ -678,6 +683,7 @@ export const enqueueEvent = internalMutation({
     eventKey: v.string(),
     eventType: eventTypeValidator,
     payloadJson: v.string(),
+    ownerUserId: v.optional(v.id("users")),
   },
   returns: v.object({
     eventId: v.union(v.id("apiWebhookEvents"), v.null()),
@@ -690,10 +696,28 @@ export const enqueueEvent = internalMutation({
       MAX_EVENT_KEY_LENGTH,
     );
     const payloadJson = parseObjectJson(args.payloadJson, MAX_PAYLOAD_LENGTH);
+    const accountScoped = ACCOUNT_SCOPED_EVENT_TYPES.has(args.eventType);
+    if (accountScoped !== (args.ownerUserId !== undefined)) {
+      throw new ConvexError({
+        code: "WEBHOOK_OWNER_SCOPE_REQUIRED",
+        message: accountScoped
+          ? "Account-scoped webhook events require an owner scope."
+          : "Global webhook events cannot include an owner scope.",
+      });
+    }
     const targets = await ctx.db
       .query("apiWebhookTargets")
-      .withIndex("by_eventType_and_status_and_updatedAt", (q) =>
-        q.eq("eventType", args.eventType).eq("status", "active"),
+      .withIndex(
+        accountScoped
+          ? "by_ownerUserId_and_eventType_and_status_and_updatedAt"
+          : "by_eventType_and_status_and_updatedAt",
+        (q) =>
+          accountScoped
+            ? q
+                .eq("ownerUserId", args.ownerUserId!)
+                .eq("eventType", args.eventType)
+                .eq("status", "active")
+            : q.eq("eventType", args.eventType).eq("status", "active"),
       )
       .take(MAX_DELIVERIES_PER_EVENT + 1);
     if (targets.length === 0) {

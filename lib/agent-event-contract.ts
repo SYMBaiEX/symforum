@@ -84,6 +84,8 @@ export type AgentEventEnvelope<T extends AgentEventType = AgentEventType> = {
 type UnknownRecord = Record<string, unknown>;
 const MAX_CHANGED_FIELDS = 32;
 const MAX_CHANGED_FIELD_LENGTH = 128;
+const MAX_USAGE_PERIOD_LENGTH = 16;
+const MAX_PRODUCT_KEY_LENGTH = 120;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -95,6 +97,10 @@ function hasOnlyKeys(value: UnknownRecord, keys: readonly string[]) {
 
 function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.length > 0;
+}
+
+function isBoundedString(value: unknown, maxLength: number) {
+  return typeof value === "string" && value.length > 0 && value.length <= maxLength;
 }
 
 function isTimestamp(value: unknown): value is number {
@@ -218,9 +224,10 @@ function isUsageThresholdData(value: unknown) {
       "thresholdPercent",
     ]) &&
     value.scope === "account" &&
-    isNonEmptyString(value.period) &&
+    isBoundedString(value.period, MAX_USAGE_PERIOD_LENGTH) &&
     isTimestamp(value.usedUnits) &&
     isTimestamp(value.hardCapUnits) &&
+    value.hardCapUnits >= 1 &&
     isTimestamp(value.remainingUnits) &&
     value.thresholdPercent === 80 &&
     value.usedUnits >= value.hardCapUnits * 0.8 &&
@@ -233,9 +240,10 @@ function isUsageBudgetData(value: unknown) {
     isRecord(value) &&
     hasOnlyKeys(value, ["scope", "period", "usedUnits", "hardCapUnits", "remainingUnits"]) &&
     value.scope === "account" &&
-    isNonEmptyString(value.period) &&
+    isBoundedString(value.period, MAX_USAGE_PERIOD_LENGTH) &&
     isTimestamp(value.usedUnits) &&
     isTimestamp(value.hardCapUnits) &&
+    value.hardCapUnits >= 1 &&
     value.remainingUnits === 0 &&
     value.usedUnits >= value.hardCapUnits
   );
@@ -246,7 +254,7 @@ function isEntitlementStatusData(value: unknown) {
     isRecord(value) &&
     hasOnlyKeys(value, ["scope", "productKey", "status", "startsAt", "expiresAt"]) &&
     value.scope === "account" &&
-    isNonEmptyString(value.productKey) &&
+    isBoundedString(value.productKey, MAX_PRODUCT_KEY_LENGTH) &&
     (value.status === "active" || value.status === "revoked" || value.status === "expired") &&
     isTimestamp(value.startsAt) &&
     (value.expiresAt === undefined || isTimestamp(value.expiresAt))
