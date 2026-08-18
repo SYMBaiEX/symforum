@@ -98,4 +98,13 @@ describe("semantic search safety controls", () => {
     });
     expect(await t.mutation(cleanupOperationsRef, { now: 11 })).toMatchObject({ refunded: 100, hasMore: true });
   });
+
+  test("completed index records cannot starve an expired lease", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 101; index += 1) await ctx.db.insert("semanticSearchOperations", { operationKey: `semantic:index:${index}`, kind: "index", fingerprint: "done", model: OPENROUTER_EMBEDDING_MODEL, status: "completed", holder: "worker", reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 1, reservedInputTokens: 1, settledMicroUsd: 1, settledInputTokens: 1, createdAt: 1, updatedAt: 1, completedAt: 1 });
+      await ctx.db.insert("semanticSearchOperations", { operationKey: "semantic:query:leased", kind: "query", fingerprint: "x", model: OPENROUTER_EMBEDDING_MODEL, status: "leased", holder: "worker", leaseExpiresAt: 10, reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 1, reservedInputTokens: 1, createdAt: 1, updatedAt: 1 });
+    });
+    expect(await t.mutation(cleanupOperationsRef, { now: 11 })).toMatchObject({ refunded: 1, hasMore: false });
+  });
 });

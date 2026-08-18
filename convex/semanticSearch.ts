@@ -523,6 +523,7 @@ export const recordUsage = internalMutation({
     }
     await ctx.db.patch("semanticSearchOperations", operation._id, {
       status: args.outcome === "completed" ? "completed" : "refunded",
+      leaseExpiresAt: undefined,
       settledMicroUsd: actualMicroUsd,
       settledInputTokens: args.inputTokens,
       completedAt: args.outcome === "completed" ? now : undefined,
@@ -575,7 +576,7 @@ export const reserveUsage = internalMutation({
       .unique();
     if (existing !== null) {
       if (existing.status === "completed") return { accepted: false, replay: true };
-      if (existing.status === "leased" && existing.leaseExpiresAt > now) {
+      if (existing.status === "leased" && (existing.leaseExpiresAt ?? 0) > now) {
         return { accepted: false, replay: true };
       }
       // An expired lease is reconciled once before another worker can claim it.
@@ -654,7 +655,7 @@ export const reserveUsage = internalMutation({
 });
 
 async function refundExpiredOperation(ctx: MutationCtx, operation: Doc<"semanticSearchOperations">, now: number) {
-  if (operation.status !== "leased" || operation.leaseExpiresAt > now) return false;
+  if (operation.status !== "leased" || operation.leaseExpiresAt === undefined || operation.leaseExpiresAt > now) return false;
   const spend = await ctx.db.query("aiSpendBuckets")
     .withIndex("by_dayKey_and_provider_and_bucket", (q) => q.eq("dayKey", operation.reservationDayKey).eq("provider", "openrouter").eq("bucket", operation.reservationBucket)).unique();
   if (spend !== null) await ctx.db.patch("aiSpendBuckets", spend._id, {
@@ -662,7 +663,7 @@ async function refundExpiredOperation(ctx: MutationCtx, operation: Doc<"semantic
     inputTokens: Math.max(0, spend.inputTokens - operation.reservedInputTokens),
     requests: Math.max(0, spend.requests - 1), updatedAt: now,
   });
-  await ctx.db.patch("semanticSearchOperations", operation._id, { status: "refunded", settledMicroUsd: 0, settledInputTokens: 0, refundedAt: now, updatedAt: now });
+  await ctx.db.patch("semanticSearchOperations", operation._id, { status: "refunded", leaseExpiresAt: undefined, settledMicroUsd: 0, settledInputTokens: 0, refundedAt: now, updatedAt: now });
   return true;
 }
 
@@ -672,7 +673,7 @@ export const cleanupExpiredOperations = internalMutation({
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();
     const expired = await ctx.db.query("semanticSearchOperations")
-      .withIndex("by_leaseExpiresAt", (q) => q.lte("leaseExpiresAt", now)).order("asc").take(OPERATION_CLEANUP_LIMIT);
+      .withIndex("by_status_and_leaseExpiresAt", (q) => q.eq("status", "leased").lte("leaseExpiresAt", now)).order("asc").take(OPERATION_CLEANUP_LIMIT);
     let refunded = 0;
     for (const operation of expired) if (await refundExpiredOperation(ctx, operation, now)) refunded += 1;
     let deleted = 0;

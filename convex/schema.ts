@@ -1354,7 +1354,7 @@ export default defineSchema({
       v.literal("refunded"),
     ),
     holder: v.string(),
-    leaseExpiresAt: v.number(),
+    leaseExpiresAt: v.optional(v.number()),
     reservationDayKey: v.string(),
     reservationBucket: v.number(),
     reservedMicroUsd: v.number(),
@@ -1368,7 +1368,8 @@ export default defineSchema({
   })
     .index("by_operationKey", ["operationKey"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
-    .index("by_leaseExpiresAt", ["leaseExpiresAt"]),
+    .index("by_leaseExpiresAt", ["leaseExpiresAt"])
+    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),
