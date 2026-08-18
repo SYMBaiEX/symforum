@@ -25,4 +25,23 @@ describe("symbaiex login", () => {
     expect(errors.join("\n")).not.toContain(secret);
     expect(await readFile(tokenFile, "utf8")).toBe(`${secret}\n`);
   });
+
+  test("rejects arbitrary origins before a command can read credentials", async () => {
+    let tokenReads = 0;
+    const errors: string[] = [];
+    const code = await run(
+      ["status", "--origin", "https://untrusted.example"],
+      {
+        log: () => undefined,
+        error: (value: unknown) => errors.push(String(value)),
+      },
+      async () => {
+        tokenReads += 1;
+        return "access-token";
+      },
+    );
+    expect(code).toBe(1);
+    expect(tokenReads).toBe(0);
+    expect(errors.join("\n")).toMatch(/SYMBaiEX platform origin/i);
+  });
 });

@@ -551,7 +551,7 @@ export const getAgentQuota = query({
           .order("desc")
           .first()
       )?.monthKey ??
-      monthKeyForTimestamp(0);
+      monthKeyForTimestamp(Date.now());
     return await readQuotaState(ctx, identity, ownerUserId, monthKey);
   },
 });
@@ -584,7 +584,7 @@ export const getMyAgentQuota = query({
               )
               .order("desc")
               .first()
-          )?.monthKey ?? monthKeyForTimestamp(0))
+          )?.monthKey ?? monthKeyForTimestamp(Date.now()))
         : normalizeAgentQuotaMonthKey(args.monthKey);
     return await readQuotaState(ctx, identity, identity.ownerUserId, monthKey);
   },

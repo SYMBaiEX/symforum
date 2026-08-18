@@ -69,4 +69,21 @@ describe("AgentClient", () => {
       client.createResearch("bounded research", "research-001"),
     ).resolves.toEqual({ jobId: "job-1", status: "queued" });
   });
+
+  test("rejects an untrusted custom origin before reading a bearer token", () => {
+    let tokenReads = 0;
+    expect(
+      () =>
+        new AgentClient({
+          origin: "https://untrusted.example",
+          tokenStore: {
+            async getToken() {
+              tokenReads += 1;
+              return "access-token";
+            },
+          },
+        }),
+    ).toThrow(/trustedOrigins/i);
+    expect(tokenReads).toBe(0);
+  });
 });

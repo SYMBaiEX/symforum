@@ -51,10 +51,7 @@ async function seedFixture(t: ReturnType<typeof setup>) {
       agentKeyVersion: 1,
       agentEnrolledAt: 1_800_000_000_000,
     });
-    const identity = async (
-      agentId: string,
-      userId: Id<"users">,
-    ) =>
+    const identity = async (agentId: string, userId: Id<"users">) =>
       await ctx.db.insert("agentIdentities", {
         agentId,
         userId,
@@ -305,5 +302,22 @@ describe("agent quota foundation", () => {
         monthKey: "2026-08",
       }),
     ).rejects.toThrow(/sign in|owner/i);
+  });
+
+  test("uses the current UTC month for fresh quota status", async () => {
+    const t = setup();
+    const fixture = await seedFixture(t);
+    const owner = t.withIdentity({ subject: fixture.ownerUserId });
+    const agent = t.withIdentity({ subject: fixture.agentOneUserId });
+    const monthKey = new Date().toISOString().slice(0, 7);
+    await expect(
+      owner.query(api.agentQuota.getAgentQuota, { agentId: "quota-one" }),
+    ).resolves.toMatchObject({ monthKey, usedUnits: 0 });
+    await expect(
+      agent.query(api.agentQuota.getMyAgentQuota, {}),
+    ).resolves.toMatchObject({
+      monthKey,
+      usedUnits: 0,
+    });
   });
 });

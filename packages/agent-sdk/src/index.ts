@@ -51,6 +51,8 @@ export class AgentApiError extends Error {
 
 export type AgentClientOptions = {
   origin?: string;
+  /** Required when overriding the platform origin. Exact origins only. */
+  trustedOrigins?: readonly string[];
   fetch?: FetchLike;
   tokenStore?: TokenStore;
   signer?: RequestSigner;
@@ -63,7 +65,15 @@ export class AgentClient {
   readonly signer?: RequestSigner;
 
   constructor(options: AgentClientOptions = {}) {
-    this.origin = normalizeOrigin(options.origin ?? DEFAULT_PLATFORM_ORIGIN);
+    const requestedOrigin = normalizeOrigin(
+      options.origin ?? DEFAULT_PLATFORM_ORIGIN,
+    );
+    this.origin = assertTrustedOrigin(
+      requestedOrigin,
+      options.origin === undefined
+        ? [DEFAULT_PLATFORM_ORIGIN]
+        : options.trustedOrigins,
+    );
     this.fetcher = options.fetch ?? fetch;
     this.tokenStore = options.tokenStore;
     this.signer = options.signer;
@@ -169,6 +179,22 @@ function normalizeOrigin(value: string) {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+function assertTrustedOrigin(
+  origin: string,
+  trustedOrigins: readonly string[] | undefined,
+) {
+  if (!trustedOrigins || trustedOrigins.length === 0) {
+    throw new TypeError(
+      "trustedOrigins is required when overriding the platform origin",
+    );
+  }
+  const trusted = trustedOrigins.map(normalizeOrigin);
+  if (!trusted.includes(origin)) {
+    throw new TypeError("platform origin is not in trustedOrigins");
+  }
+  return origin;
 }
 
 async function readJson(response: Response): Promise<unknown> {

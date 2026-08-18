@@ -17,11 +17,13 @@ export async function run(
   const [command, ...args] = argv;
   const tokenFile = tokenFileFrom(args);
   const store = new FileTokenStore(tokenFile);
-  const client = new AgentClient({
-    origin: originFrom(args),
-    tokenStore: store,
-  });
   try {
+    const origin = originFrom(args);
+    const client = new AgentClient({
+      origin,
+      trustedOrigins: trustedOriginsForCli(origin),
+      tokenStore: store,
+    });
     if (command === "login") {
       const token = await readToken();
       await store.setToken(token);
@@ -65,6 +67,21 @@ function tokenFileFrom(args: string[]) {
   return (
     option(args, "--token-file") ??
     join(homedir(), ".config", "symbaiex", "token")
+  );
+}
+
+function trustedOriginsForCli(origin: string) {
+  const parsed = new URL(origin);
+  const normalized = parsed.origin;
+  const productionOrigins = [
+    "https://symbaiex.com",
+    "https://www.symbaiex.com",
+  ];
+  if (productionOrigins.includes(normalized)) return productionOrigins;
+  const local = ["localhost", "127.0.0.1"].includes(parsed.hostname);
+  if (local && process.env.NODE_ENV !== "production") return [normalized];
+  throw new UsageError(
+    "--origin must be a SYMBaiEX platform origin; localhost is development-only.",
   );
 }
 
