@@ -241,6 +241,211 @@ export default defineSchema({
     .index("by_agentId", ["agentId"])
     .index("by_userId", ["userId"])
     .index("by_ownerUserId", ["ownerUserId"]),
+  organizations: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    archivedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_createdByUserId_and_createdAt", [
+      "createdByUserId",
+      "createdAt",
+    ]),
+  organizationMembers: defineTable({
+    organizationId: v.id("organizations"),
+    userId: v.id("users"),
+    role: v.union(
+      v.literal("owner"),
+      v.literal("admin"),
+      v.literal("developer"),
+      v.literal("auditor"),
+    ),
+    status: v.union(v.literal("active"), v.literal("removed")),
+    joinedAt: v.number(),
+    updatedAt: v.number(),
+    removedAt: v.optional(v.number()),
+    removedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_organizationId_and_userId", ["organizationId", "userId"])
+    .index("by_userId_and_status", ["userId", "status"])
+    .index("by_organizationId_and_status_and_role", [
+      "organizationId",
+      "status",
+      "role",
+    ]),
+  organizationInvites: defineTable({
+    organizationId: v.id("organizations"),
+    inviteeUserId: v.id("users"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("developer"),
+      v.literal("auditor"),
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("revoked"),
+    ),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    acceptedAt: v.optional(v.number()),
+    acceptedByUserId: v.optional(v.id("users")),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_organizationId_and_inviteeUserId_and_status", [
+      "organizationId",
+      "inviteeUserId",
+      "status",
+    ])
+    .index("by_inviteeUserId_and_status_and_expiresAt", [
+      "inviteeUserId",
+      "status",
+      "expiresAt",
+    ])
+    .index("by_organizationId_and_status_and_createdAt", [
+      "organizationId",
+      "status",
+      "createdAt",
+    ]),
+  organizationProjects: defineTable({
+    organizationId: v.id("organizations"),
+    projectKey: v.string(),
+    name: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    allowedAgentScopes: v.array(agentScopeValidator),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    archivedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_organizationId_and_projectKey", ["organizationId", "projectKey"])
+    .index("by_organizationId_and_status_and_updatedAt", [
+      "organizationId",
+      "status",
+      "updatedAt",
+    ]),
+  organizationServiceAccounts: defineTable({
+    organizationId: v.id("organizations"),
+    projectId: v.id("organizationProjects"),
+    agentIdentityId: v.id("agentIdentities"),
+    agentUserId: v.id("users"),
+    ownerUserId: v.id("users"),
+    name: v.string(),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    allowedScopes: v.array(agentScopeValidator),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_agentUserId", ["agentUserId"])
+    .index("by_organizationId_and_projectId_and_status", [
+      "organizationId",
+      "projectId",
+      "status",
+    ])
+    .index("by_organizationId_and_ownerUserId_and_status", [
+      "organizationId",
+      "ownerUserId",
+      "status",
+    ])
+    .index("by_organizationId_and_status_and_updatedAt", [
+      "organizationId",
+      "status",
+      "updatedAt",
+    ]),
+  organizationBudgets: defineTable({
+    organizationId: v.id("organizations"),
+    monthKey: v.string(),
+    currency: v.literal("USD"),
+    limitMicros: v.number(),
+    spentMicros: v.number(),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_organizationId_and_monthKey", ["organizationId", "monthKey"]),
+  organizationUsageLedger: defineTable({
+    organizationId: v.id("organizations"),
+    projectId: v.id("organizationProjects"),
+    serviceAccountId: v.id("organizationServiceAccounts"),
+    idempotencyKey: v.string(),
+    scope: agentScopeValidator,
+    amountMicros: v.number(),
+    spentAfterMicros: v.number(),
+    currency: v.literal("USD"),
+    monthKey: v.string(),
+    chargedAt: v.number(),
+  })
+    .index("by_serviceAccountId_and_idempotencyKey", [
+      "serviceAccountId",
+      "idempotencyKey",
+    ])
+    .index("by_organizationId_and_monthKey_and_chargedAt", [
+      "organizationId",
+      "monthKey",
+      "chargedAt",
+    ])
+    .index("by_projectId_and_monthKey_and_chargedAt", [
+      "projectId",
+      "monthKey",
+      "chargedAt",
+    ]),
+  organizationAuditRecords: defineTable({
+    organizationId: v.id("organizations"),
+    eventType: v.union(
+      v.literal("organization_created"),
+      v.literal("member_invited"),
+      v.literal("invite_accepted"),
+      v.literal("invite_revoked"),
+      v.literal("member_role_changed"),
+      v.literal("owner_transferred"),
+      v.literal("member_removed"),
+      v.literal("project_created"),
+      v.literal("project_scopes_changed"),
+      v.literal("service_account_created"),
+      v.literal("service_account_revoked"),
+      v.literal("budget_changed"),
+    ),
+    actorUserId: v.id("users"),
+    actorKind: v.union(v.literal("human"), v.literal("service_account")),
+    actorServiceAccountId: v.optional(v.id("organizationServiceAccounts")),
+    targetUserId: v.optional(v.id("users")),
+    projectId: v.optional(v.id("organizationProjects")),
+    serviceAccountId: v.optional(v.id("organizationServiceAccounts")),
+    previousRole: v.optional(
+      v.union(
+        v.literal("owner"),
+        v.literal("admin"),
+        v.literal("developer"),
+        v.literal("auditor"),
+      ),
+    ),
+    nextRole: v.optional(
+      v.union(
+        v.literal("owner"),
+        v.literal("admin"),
+        v.literal("developer"),
+        v.literal("auditor"),
+      ),
+    ),
+    previousAmountMicros: v.optional(v.number()),
+    nextAmountMicros: v.optional(v.number()),
+    idempotencyKey: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_organizationId_and_createdAt", ["organizationId", "createdAt"])
+    .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
+    .index("by_targetUserId_and_createdAt", ["targetUserId", "createdAt"]),
   agentLoginChallenges: defineTable({
     agentId: v.string(),
     challengeHash: v.string(),
