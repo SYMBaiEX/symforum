@@ -3,6 +3,7 @@ import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
 import { env, httpAction } from "./_generated/server";
 import { resend } from "./resendClient";
+import { AGENT_MCP_RESOURCE_AUDIENCE } from "./agentIdentityCrypto";
 
 const http = httpRouter();
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -91,12 +92,18 @@ http.route({
     const headers = agentDataCorsHeaders(request);
     if (!isAllowedAgentAuthOrigin(request))
       return agentDataJson({ error: "Origin is not allowed." }, 403, headers);
-    if ((await ctx.auth.getUserIdentity()) === null)
+    if ((await ctx.auth.getUserIdentity()) === null) {
+      setAgentDataAuthChallenge(
+        headers,
+        401,
+        request.headers.has("authorization"),
+      );
       return agentDataJson(
         { error: "A bearer access token is required." },
         401,
         headers,
       );
+    }
     try {
       const body = await readAgentDataBody(request);
       if (
@@ -137,6 +144,7 @@ http.route({
         : /quota|rate limit/i.test(message)
           ? 429
           : 400;
+      if (status === 403) setAgentDataAuthChallenge(headers, 403);
       return agentDataJson({ error: message }, status, headers);
     }
   }),
@@ -428,12 +436,17 @@ function agentAuthAudience() {
   if (configured) {
     try {
       const origin = new URL(configured).origin;
-      if (AGENT_AUTH_ALLOWED_ORIGINS.has(origin)) return origin;
+      if (
+        AGENT_AUTH_ALLOWED_ORIGINS.has(origin) &&
+        ["localhost", "127.0.0.1"].includes(new URL(origin).hostname)
+      ) {
+        return `${origin}/api/agent/mcp`;
+      }
     } catch {
       // Fall through to the canonical public platform origin.
     }
   }
-  return "https://www.symbaiex.com";
+  return AGENT_MCP_RESOURCE_AUDIENCE;
 }
 
 function agentAuthCorsHeaders(request: Request) {
@@ -475,12 +488,36 @@ function agentDataCorsHeaders(request: Request) {
     "Access-Control-Max-Age": "86400",
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
+    "Access-Control-Expose-Headers": "www-authenticate",
     Vary: "Origin",
   });
   const origin = request.headers.get("origin");
   if (origin !== null && isAllowedAgentAuthOrigin(request))
     headers.set("Access-Control-Allow-Origin", origin);
   return headers;
+}
+
+function setAgentDataAuthChallenge(
+  headers: Headers,
+  status: 401 | 403,
+  invalidToken = false,
+) {
+  const resourceMetadata = new URL(
+    "/.well-known/oauth-protected-resource",
+    agentAuthAudience(),
+  ).toString();
+  headers.set(
+    "WWW-Authenticate",
+    [
+      "Bearer",
+      status === 403 ? 'error="insufficient_scope",' : "",
+      status === 401 && invalidToken ? 'error="invalid_token",' : "",
+      'scope="evidence",',
+      `resource_metadata="${resourceMetadata}"`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 function isAllowedAgentAuthOrigin(request: Request) {

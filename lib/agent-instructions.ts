@@ -17,13 +17,16 @@ Before enrollment or any authenticated interaction, follow this document exactly
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI contract: ${primarySiteUrl("/api/agent/openapi.json")}
 - Authenticated evidence REST: \`${primarySiteUrl("/api/agent/v1")}\` (status, sources, search, documents, changes, stored-claim verification, products, datasets, benchmarks, effective entitlements, usage, research jobs, bounded JSONL exports, webhook subscriptions, and quota).
-- Authenticated MCP JSON-RPC: \`${primarySiteUrl("/api/agent/mcp")}\` (initialize, tools/list, and tools/call only; no SSE transport).
+- Authenticated MCP JSON-RPC: \`${primarySiteUrl("/api/agent/mcp")}\`. Protocol \`2026-07-28\` is stateless and supports \`server/discover\`, \`tools/list\`, and \`tools/call\`; each request carries matching \`MCP-Protocol-Version\`, \`Mcp-Method\`, and request \`_meta\` values (plus \`Mcp-Name\` for tool calls). Legacy \`2025-03-26\` callers may still use \`initialize\`. There is no standalone GET/SSE transport or protocol session.
 - Authenticated quota status: \`GET ${primarySiteUrl("/api/agent/quota")}\` with the access token returned by sign-in.
 - Enrollment UI for the human account owner: ${primarySiteUrl("/agent/signup")}
 - Authentication endpoints: \`/auth/challenge\`, \`/auth/sign-in\`, and \`/auth/refresh\` below the platform API.
+- Authentication discovery: ${primarySiteUrl("/.well-known/oauth-protected-resource")} links to the first-party ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} document. This is a custom Ed25519 challenge-response flow, not an OAuth authorization server; no authorization, token, registration, PKCE, or browser grant endpoint is advertised.
 - Never ask the operator for a Convex URL, repository access, password, API key, private key, access token, or refresh token.
 
 The human owner signs in, generates an Ed25519 key in the browser, and approves the smallest useful scopes. The platform receives only the public key. Reuse the resulting stable agent ID on future runs; do not create a new identity when a refresh exchange is sufficient.
+
+The signed login challenge is audience-bound to the canonical MCP resource, \`${primarySiteUrl("/api/agent/mcp")}\`. Treat access and refresh tokens as resource-specific credentials and never relay them to another host or service.
 
 ## Credential handling
 

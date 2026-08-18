@@ -408,12 +408,23 @@ const OPENAPI = {
     "/mcp": {
       post: {
         operationId: "evidenceMcp",
+        summary: "Call the stateless MCP evidence server",
+        description:
+          "Protocol 2026-07-28 uses server/discover and per-request metadata. Legacy 2025-03-26 initialize remains available only for legacy callers. Authentication uses the documented custom Ed25519 flow, not OAuth authorization endpoints.",
         security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/McpProtocolVersion" },
+          { $ref: "#/components/parameters/McpMethod" },
+          { $ref: "#/components/parameters/McpName" },
+        ],
         responses: {
           "200": {
             description:
-              "JSON-RPC initialize, tools/list, or tools/call response.",
+              "JSON-RPC server/discover, tools/list, tools/call, or legacy initialize response.",
           },
+          "400": { description: "Malformed or unsupported MCP request." },
+          "401": { description: "Missing or invalid access token." },
+          "403": { description: "The evidence scope is required." },
         },
       },
     },
@@ -472,6 +483,29 @@ const OPENAPI = {
           maxLength: 160,
           pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
         },
+      },
+      McpProtocolVersion: {
+        name: "MCP-Protocol-Version",
+        in: "header",
+        required: false,
+        description:
+          "Required for protocol 2026-07-28 and matched against request _meta; omitted by legacy initialize callers.",
+        schema: { enum: ["2026-07-28", "2025-03-26"] },
+      },
+      McpMethod: {
+        name: "Mcp-Method",
+        in: "header",
+        required: false,
+        description: "Required and body-matched for protocol 2026-07-28.",
+        schema: { type: "string" },
+      },
+      McpName: {
+        name: "Mcp-Name",
+        in: "header",
+        required: false,
+        description:
+          "Required and body-matched for protocol 2026-07-28 tools/call requests.",
+        schema: { type: "string" },
       },
     },
     schemas: {

@@ -1,4 +1,9 @@
 import { primarySiteUrl } from "@/lib/site-urls";
+import {
+  AGENT_AUTHENTICATION_METADATA_URL,
+  AGENT_MCP_RESOURCE,
+  AGENT_PROTECTED_RESOURCE_METADATA_URL,
+} from "@/lib/agent-auth-metadata";
 
 export const dynamic = "force-static";
 
@@ -13,9 +18,14 @@ const MANIFEST = {
   openapi: primarySiteUrl("/api/agent/openapi.json"),
   authentication: {
     scheme: "Ed25519 challenge-response",
+    protocol: "custom",
+    oauth2: false,
     challenge: `${API_BASE_URL}/auth/challenge`,
     signIn: `${API_BASE_URL}/auth/sign-in`,
     refresh: `${API_BASE_URL}/auth/refresh`,
+    signedChallengeAudience: AGENT_MCP_RESOURCE,
+    protectedResourceMetadata: AGENT_PROTECTED_RESOURCE_METADATA_URL,
+    authenticationMetadata: AGENT_AUTHENTICATION_METADATA_URL,
     privateKeyHandling: "local-only",
   },
   capabilities: {
@@ -40,6 +50,18 @@ const MANIFEST = {
     usage: `${API_BASE_URL}/v1/usage`,
     mcp: `${API_BASE_URL}/mcp`,
     quota: `${API_BASE_URL}/quota`,
+  },
+  mcp: {
+    resource: AGENT_MCP_RESOURCE,
+    serverInfo: {
+      name: "symbaiex-evidence",
+      version: "v1",
+      responseHeaders: ["Mcp-Server-Name", "Mcp-Server-Version"],
+    },
+    supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+    modernDiscoveryMethod: "server/discover",
+    legacyInitializeCompatibility: true,
+    transport: "stateless-http-post",
   },
   quota: {
     mode: "free-beta",

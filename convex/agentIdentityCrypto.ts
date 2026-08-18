@@ -2,8 +2,47 @@
 
 export const AGENT_LOGIN_DOMAIN = "SYMBIEX_AGENT_LOGIN_V1";
 export const AGENT_LOGIN_PURPOSE = "agent-login";
+export const AGENT_MCP_RESOURCE_AUDIENCE =
+  "https://www.symbaiex.com/api/agent/mcp";
+export const LEGACY_AGENT_LOGIN_AUDIENCE = "https://www.symbaiex.com";
+
+const AGENT_LOGIN_ALLOWED_ORIGINS = new Set([
+  "https://symbaiex.com",
+  "https://www.symbaiex.com",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+]);
 
 const textEncoder = new TextEncoder();
+
+export function canonicalAgentLoginAudience(value: string) {
+  try {
+    const url = new URL(value);
+    if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !AGENT_LOGIN_ALLOWED_ORIGINS.has(url.origin)
+    ) {
+      return null;
+    }
+    if (url.pathname === "/api/agent/mcp") {
+      return `${url.origin}/api/agent/mcp`;
+    }
+    if (
+      url.origin === LEGACY_AGENT_LOGIN_AUDIENCE &&
+      (url.pathname === "" || url.pathname === "/")
+    ) {
+      return LEGACY_AGENT_LOGIN_AUDIENCE;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function encodeBase64Url(bytes: Uint8Array) {
   let binary = "";

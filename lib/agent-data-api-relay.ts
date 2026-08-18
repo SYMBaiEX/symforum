@@ -60,7 +60,9 @@ export function agentDataHeaders(
     Vary: "Origin",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, content-type, idempotency-key",
+      "authorization, content-type, idempotency-key, mcp-protocol-version, mcp-method, mcp-name",
+    "Access-Control-Expose-Headers":
+      "www-authenticate, mcp-server-name, mcp-server-version",
   });
   const origin = request.headers.get("origin");
   if (origin && isAllowedAgentOrigin(request))

@@ -8,6 +8,7 @@ import {
 import { hasSiteAdminAccess, requireAuthenticatedUser } from "./authz";
 import {
   buildAgentLoginMessage,
+  canonicalAgentLoginAudience,
   randomBase64Url,
   sha256Base64Url,
   validateEd25519PublicKey,
@@ -76,7 +77,15 @@ function normalizeAudience(audience: string) {
       message: "audience must be between 1 and 128 characters.",
     });
   }
-  return value;
+  const canonical = canonicalAgentLoginAudience(value);
+  if (canonical === null) {
+    throw new ConvexError({
+      code: "UNSUPPORTED_AGENT_AUDIENCE",
+      message:
+        "audience must identify the canonical MCP resource. The legacy public site origin remains temporarily supported.",
+    });
+  }
+  return canonical;
 }
 
 function normalizeScopes(scopes: AgentScope[]) {

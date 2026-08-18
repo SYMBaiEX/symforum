@@ -35,13 +35,56 @@ async function publicSmoke() {
       "getEvidenceEntitlements",
     "OpenAPI entitlement operation is missing.",
   );
+  const protectedResource = await request(
+    "GET",
+    `${new URL(baseUrl).origin}/.well-known/oauth-protected-resource`,
+    null,
+    null,
+    200,
+  );
+  assert(
+    protectedResource?.resource === "https://www.symbaiex.com/api/agent/mcp" &&
+      protectedResource?.["x-symbaiex-authentication"]?.oauth2 === false,
+    "Protected-resource metadata does not truthfully describe custom MCP authentication.",
+  );
+  const authenticationMetadata = await request(
+    "GET",
+    `${new URL(baseUrl).origin}/.well-known/symbaiex-agent-authentication`,
+    null,
+    null,
+    200,
+  );
+  assert(
+    authenticationMetadata?.protocol === "symbaiex_ed25519_challenge_v1" &&
+      authenticationMetadata?.oauth2?.supported === false,
+    "Custom agent authentication metadata is missing or overclaims OAuth support.",
+  );
   await request("GET", "/v1/status", null, null, 401);
-  await request(
+  const missingBearer = await requestDetailed(
     "POST",
     "/mcp",
-    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    modernMessage("tools/list", 1),
     null,
     401,
+    false,
+    modernHeaders("tools/list"),
+  );
+  assertAuthChallenge(missingBearer.response, 401);
+  const invalidBearer = await requestDetailed(
+    "POST",
+    "/mcp",
+    modernMessage("tools/list", 2),
+    "Bearer invalid-public-smoke-token",
+    401,
+    false,
+    modernHeaders("tools/list"),
+  );
+  assertAuthChallenge(invalidBearer.response, 401);
+  assert(
+    invalidBearer.response.headers
+      .get("www-authenticate")
+      ?.includes('error="invalid_token"'),
+    "MCP invalid bearer response is missing invalid_token metadata.",
   );
   console.log(
     JSON.stringify({
@@ -49,8 +92,10 @@ async function publicSmoke() {
       baseUrl,
       manifest: "ok",
       openapi: "ok",
+      protectedResourceMetadata: "custom-ed25519",
       unauthenticatedRest: 401,
       unauthenticatedMcp: 401,
+      invalidBearerMcp: 401,
       paymentAccepted: false,
       graphql: false,
     }),
@@ -99,11 +144,23 @@ async function authenticatedSmoke() {
   );
   const authorization = `Bearer ${session.accessToken}`;
   if (args["expect-scope-denied"]) {
-    const denied = await request("GET", "/v1/status", null, authorization, 403);
+    const denied = await requestDetailed(
+      "POST",
+      "/mcp",
+      modernMessage("tools/call", "scope-denied", {
+        name: "evidence.status",
+        arguments: {},
+      }),
+      authorization,
+      403,
+      false,
+      modernHeaders("tools/call", "evidence.status"),
+    );
     assert(
-      /scope|active agent identity/i.test(String(denied?.error ?? "")),
+      /scope|active agent identity/i.test(String(denied.payload?.error ?? "")),
       "The denial did not come from the expected agent scope boundary.",
     );
+    assertAuthChallenge(denied.response, 403);
     console.log(
       JSON.stringify({
         mode: "insufficient-scope",
@@ -131,12 +188,29 @@ async function authenticatedSmoke() {
     await request("GET", path, null, authorization, 200, true);
     results[name] = 200;
   }
+  const discovered = await request(
+    "POST",
+    "/mcp",
+    modernMessage("server/discover", "smoke-discover"),
+    authorization,
+    200,
+    false,
+    modernHeaders("server/discover"),
+  );
+  assert(
+    discovered?.result?.supportedVersions?.includes("2026-07-28") &&
+      discovered?.result?._meta?.["io.modelcontextprotocol/serverInfo"]
+        ?.name === "symbaiex-evidence",
+    "MCP server/discover did not negotiate the modern protocol identity.",
+  );
   const mcp = await request(
     "POST",
     "/mcp",
-    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    modernMessage("tools/list", 1),
     authorization,
     200,
+    false,
+    modernHeaders("tools/list"),
   );
   const toolNames = Array.isArray(mcp?.result?.tools)
     ? mcp.result.tools.map((tool) => tool?.name)
@@ -149,6 +223,12 @@ async function authenticatedSmoke() {
     toolNames.includes("evidence.entitlements"),
     "MCP evidence.entitlements is missing.",
   );
+  assert(
+    mcp?.result?.resultType === "complete" &&
+      mcp?.result?.ttlMs >= 0 &&
+      mcp?.result?.cacheScope === "public",
+    "MCP tools/list is missing modern deterministic cache hints.",
+  );
   console.log(
     JSON.stringify({
       mode: "authenticated",
@@ -157,6 +237,7 @@ async function authenticatedSmoke() {
       refreshed: Boolean(args.refresh),
       rest: results,
       mcp: 200,
+      mcpProtocol: "2026-07-28",
       mcpToolCount: toolNames.length,
     }),
   );
@@ -169,27 +250,98 @@ async function request(
   authorization,
   expectedStatus,
   idempotent = false,
+  requestHeaders = {},
 ) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      accept: "application/json",
-      ...(body !== null ? { "content-type": "application/json" } : {}),
-      ...(authorization !== null ? { authorization } : {}),
-      ...(idempotent
-        ? { "idempotency-key": `smoke-${Date.now()}-${randomUUID()}` }
-        : {}),
+  return (
+    await requestDetailed(
+      method,
+      path,
+      body,
+      authorization,
+      expectedStatus,
+      idempotent,
+      requestHeaders,
+    )
+  ).payload;
+}
+
+async function requestDetailed(
+  method,
+  path,
+  body,
+  authorization,
+  expectedStatus,
+  idempotent = false,
+  requestHeaders = {},
+) {
+  const response = await fetch(
+    /^https?:\/\//.test(path) ? path : `${baseUrl}${path}`,
+    {
+      method,
+      headers: {
+        accept: "application/json",
+        ...(body !== null ? { "content-type": "application/json" } : {}),
+        ...(authorization !== null ? { authorization } : {}),
+        ...(idempotent
+          ? { "idempotency-key": `smoke-${Date.now()}-${randomUUID()}` }
+          : {}),
+        ...requestHeaders,
+      },
+      body: body === null ? undefined : JSON.stringify(body),
+      redirect: "error",
+      signal: AbortSignal.timeout(12_000),
     },
-    body: body === null ? undefined : JSON.stringify(body),
-    redirect: "error",
-    signal: AbortSignal.timeout(12_000),
-  });
+  );
   const payload = await response.json().catch(() => null);
   assert(
     response.status === expectedStatus,
     `${method} ${path || "/"} returned ${response.status}; expected ${expectedStatus}.`,
   );
-  return payload;
+  return { payload, response };
+}
+
+function modernMessage(method, id, params = {}) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    method,
+    params: {
+      ...params,
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {
+          name: "symbaiex-smoke",
+          version: "1.0.0",
+        },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    },
+  };
+}
+
+function modernHeaders(method, name) {
+  return {
+    accept: "application/json, text/event-stream",
+    "mcp-protocol-version": "2026-07-28",
+    "mcp-method": method,
+    ...(name === undefined ? {} : { "mcp-name": name }),
+  };
+}
+
+function assertAuthChallenge(response, status) {
+  const challenge = response.headers.get("www-authenticate") ?? "";
+  assert(
+    challenge.includes(
+      'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
+    ) && challenge.includes('scope="evidence"'),
+    `MCP ${status} response is missing protected-resource scope metadata.`,
+  );
+  if (status === 403) {
+    assert(
+      challenge.includes('error="insufficient_scope"'),
+      "MCP 403 response is missing insufficient_scope metadata.",
+    );
+  }
 }
 
 function assertPrivateFile(path) {

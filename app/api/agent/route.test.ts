@@ -14,6 +14,9 @@ describe("agent API manifest", () => {
       baseUrl: "https://www.symbaiex.com/api/agent",
       authentication: {
         scheme: "Ed25519 challenge-response",
+        protocol: "custom",
+        oauth2: false,
+        signedChallengeAudience: "https://www.symbaiex.com/api/agent/mcp",
         privateKeyHandling: "local-only",
       },
       capabilities: {
@@ -37,6 +40,17 @@ describe("agent API manifest", () => {
     expect(manifest.endpoints.evidenceRest).toBe(
       "https://www.symbaiex.com/api/agent/v1",
     );
+    expect(manifest.mcp).toMatchObject({
+      resource: "https://www.symbaiex.com/api/agent/mcp",
+      serverInfo: {
+        name: "symbaiex-evidence",
+        version: "v1",
+        responseHeaders: ["Mcp-Server-Name", "Mcp-Server-Version"],
+      },
+      supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+      modernDiscoveryMethod: "server/discover",
+      legacyInitializeCompatibility: true,
+    });
     expect(manifest.researchJobs.enabled).toBe(true);
     expect(manifest.exports).toMatchObject({ enabled: true, format: "jsonl" });
     expect(manifest.webhooks.infrastructureEnabled).toBe(true);

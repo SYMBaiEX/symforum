@@ -6,6 +6,8 @@ import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
+  AGENT_MCP_RESOURCE_AUDIENCE,
+  LEGACY_AGENT_LOGIN_AUDIENCE,
   bytesToBase64Url,
   sha256Base64Url,
   verifyEd25519Signature,
@@ -81,7 +83,7 @@ describe("agent identity authentication", () => {
 
     const challenge = await t.mutation(
       api.agentIdentity.requestLoginChallenge,
-      { agentId: "suki", audience: "agent-script" },
+      { agentId: "suki", audience: AGENT_MCP_RESOURCE_AUDIENCE },
     );
     expect(challenge.message).toContain("SYMBIEX_AGENT_LOGIN_V1");
     const signature = await crypto.subtle.sign(
@@ -104,9 +106,46 @@ describe("agent identity authentication", () => {
     });
     expect(context).toMatchObject({
       agentId: "suki",
-      audience: "agent-script",
+      audience: AGENT_MCP_RESOURCE_AUDIENCE,
       keyVersion: 1,
     });
+  });
+
+  test("new challenges bind to an MCP resource with explicit legacy-origin compatibility", async () => {
+    const t = setup();
+    const ownerId = await seedOwner(t);
+    const pair = await keyPair();
+    const owner = t.withIdentity({ subject: ownerId });
+    const publicKey = await publicKeyBase64(pair.publicKey);
+    await owner.mutation(api.agentIdentity.enrollAgent, {
+      agentId: "canonical-agent",
+      publicKey,
+      scopes: ["evidence"],
+    });
+    await owner.mutation(api.agentIdentity.enrollAgent, {
+      agentId: "legacy-agent",
+      publicKey,
+      scopes: ["evidence"],
+    });
+
+    await expect(
+      t.mutation(api.agentIdentity.requestLoginChallenge, {
+        agentId: "canonical-agent",
+        audience: "agent-script",
+      }),
+    ).rejects.toThrow(/canonical MCP resource/i);
+    await expect(
+      t.mutation(api.agentIdentity.requestLoginChallenge, {
+        agentId: "canonical-agent",
+        audience: AGENT_MCP_RESOURCE_AUDIENCE,
+      }),
+    ).resolves.toMatchObject({ audience: AGENT_MCP_RESOURCE_AUDIENCE });
+    await expect(
+      t.mutation(api.agentIdentity.requestLoginChallenge, {
+        agentId: "legacy-agent",
+        audience: LEGACY_AGENT_LOGIN_AUDIENCE,
+      }),
+    ).resolves.toMatchObject({ audience: LEGACY_AGENT_LOGIN_AUDIENCE });
   });
 
   test("an account cannot manage another account's agent", async () => {
@@ -193,7 +232,7 @@ describe("agent identity authentication", () => {
     });
     const challenge = await t.mutation(
       api.agentIdentity.requestLoginChallenge,
-      { agentId: "belle", audience: "test" },
+      { agentId: "belle", audience: AGENT_MCP_RESOURCE_AUDIENCE },
     );
     await expect(
       verifyEd25519Signature({
@@ -206,7 +245,7 @@ describe("agent identity authentication", () => {
     const context = await t.query(internal.agentIdentity.getLoginContext, {
       agentId: "belle",
       challenge: challenge.challenge,
-      audience: "test",
+      audience: AGENT_MCP_RESOURCE_AUDIENCE,
     });
     expect(context).not.toBeNull();
     await t.mutation(internal.agentIdentity.consumeLoginChallenge, {
@@ -266,7 +305,7 @@ describe("agent identity authentication", () => {
     await expect(
       t.mutation(api.agentIdentity.requestLoginChallenge, {
         agentId: "mara",
-        audience: "test",
+        audience: AGENT_MCP_RESOURCE_AUDIENCE,
       }),
     ).rejects.toThrow(/not active/i);
   });
