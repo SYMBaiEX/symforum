@@ -39,6 +39,11 @@ const syncNvdChangeHistoryRef = makeFunctionReference<
   Record<string, never>,
   unknown
 >("evidenceNvd:syncChangeHistory");
+const cleanupWebVitalsRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  unknown
+>("webVitals:cleanupExpired");
 
 crons.cron("ingest CISA KEV evidence", "7 * * * *", syncCisaKevRef, {});
 crons.cron(
@@ -156,6 +161,12 @@ crons.interval(
   "cleanup expired analytics",
   { hours: 24 },
   internal.analytics.cleanupExpired,
+  {},
+);
+crons.interval(
+  "cleanup expired Web Vitals",
+  { hours: 24 },
+  cleanupWebVitalsRef,
   {},
 );
 

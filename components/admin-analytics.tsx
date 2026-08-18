@@ -44,6 +44,10 @@ export function AdminAnalytics() {
     ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
     limit: streamLimit,
   });
+  const webVitals = useQuery(convexRefs.admin.webVitalsSummary, {
+    days,
+    now: queryNow,
+  });
 
   const maxDaily = useMemo(
     () =>
@@ -133,6 +137,72 @@ export function AdminAnalytics() {
           ))}
         </div>
       </div>
+
+      <section className="mt-6 border-y border-row-border py-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Field Web Vitals
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Privacy-preserving sampled field data, separate from Lighthouse
+              lab receipts.
+            </p>
+          </div>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            {compactNumber(webVitals?.sampled ?? 0)} samples
+          </p>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[42rem] border-collapse text-left">
+            <thead className="font-mono text-[10px] uppercase text-muted-foreground">
+              <tr className="border-b border-row-border">
+                <th className="px-2 py-2 font-medium">Route</th>
+                <th className="px-2 py-2 font-medium">Metric</th>
+                <th className="px-2 py-2 font-medium">P50</th>
+                <th className="px-2 py-2 font-medium">P75</th>
+                <th className="px-2 py-2 font-medium">P95</th>
+                <th className="px-2 py-2 font-medium">Pass rate</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {webVitals?.routes.slice(0, 30).map((row) => (
+                <tr
+                  key={`${row.route}:${row.name}`}
+                  className="border-b border-row-border/70"
+                >
+                  <td className="px-2 py-2 font-mono text-xs">{row.route}</td>
+                  <td className="px-2 py-2 font-mono text-xs">{row.name}</td>
+                  <td className="px-2 py-2">
+                    {formatVital(row.p50, row.name)}
+                  </td>
+                  <td className="px-2 py-2">
+                    {formatVital(row.p75, row.name)}
+                  </td>
+                  <td className="px-2 py-2">
+                    {formatVital(row.p95, row.name)}
+                  </td>
+                  <td className="px-2 py-2">{formatPercent(row.passRate)}</td>
+                </tr>
+              ))}
+              {webVitals === undefined ? (
+                <tr>
+                  <td className="px-2 py-4 text-muted-foreground" colSpan={6}>
+                    Loading field samples
+                  </td>
+                </tr>
+              ) : null}
+              {webVitals?.routes.length === 0 ? (
+                <tr>
+                  <td className="px-2 py-4 text-muted-foreground" colSpan={6}>
+                    No field samples in this window
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Metric
@@ -733,6 +803,10 @@ function StatusLine({ children }: { children: ReactNode }) {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatVital(value: number, name: string) {
+  return name === "CLS" ? value.toFixed(2) : `${Math.round(value)}ms`;
 }
 
 function formatEventLocation(event: AnalyticsEventRecord) {

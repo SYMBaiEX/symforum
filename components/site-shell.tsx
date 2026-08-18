@@ -23,6 +23,7 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
+import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 
 const AnalyticsTracker = dynamic(
   () =>
@@ -148,6 +149,7 @@ export function SiteShell({
       <Suspense fallback={null}>
         <AnalyticsTracker />
       </Suspense>
+      <WebVitalsReporter />
       <AppErrorSurface />
       <SiteFooter footerRef={footerRef} agentHref="/agent" />
     </div>
@@ -181,6 +183,7 @@ function ForumSiteShell({
             : undefined
         }
       >
+        <WebVitalsReporter />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:font-mono focus:text-sm focus:uppercase focus-ring"

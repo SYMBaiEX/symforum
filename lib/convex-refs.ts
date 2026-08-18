@@ -1422,6 +1422,21 @@ export type AnalyticsSummaryRecord = {
   recent: AnalyticsEventRecord[];
 };
 
+export type WebVitalSummaryRecord = {
+  windowDays: number;
+  sampled: number;
+  routes: Array<{
+    route: string;
+    name: "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
+    samples: number;
+    p50: number;
+    p75: number;
+    p95: number;
+    passRate: number;
+    budget: number;
+  }>;
+};
+
 export type GithubPortfolioSnapshotRecord = {
   _id: string;
   _creationTime: number;
@@ -2339,6 +2354,11 @@ export const convexRefs = {
       { name?: string; source?: AnalyticsSource; limit?: number },
       AnalyticsEventRecord[]
     >("analytics:listAdmin"),
+    webVitalsSummary: makeFunctionReference<
+      "query",
+      { days?: number; now?: number },
+      WebVitalSummaryRecord
+    >("webVitals:summaryAdmin"),
   },
   contact: {
     submit: makeFunctionReference<
@@ -2373,6 +2393,20 @@ export const convexRefs = {
       },
       { recorded: boolean; deduped: boolean; id: string | null }
     >("analytics:record"),
+  },
+  webVitals: {
+    record: makeFunctionReference<
+      "mutation",
+      {
+        route: string;
+        name: "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
+        value: number;
+        rating: "good" | "needs-improvement" | "poor";
+        navigationType: "navigate" | "reload" | "back-forward" | "prerender";
+        timestamp: number;
+      },
+      { recorded: boolean; deduped: boolean }
+    >("webVitals:record"),
   },
   githubPortfolio: {
     latest: makeFunctionReference<

@@ -2132,6 +2132,41 @@ export default defineSchema({
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_sessionId_and_createdAt", ["sessionId", "createdAt"])
     .index("by_visitorId_and_createdAt", ["visitorId", "createdAt"]),
+  // Privacy-scoped field performance samples. These intentionally exclude
+  // URLs, query strings, client identifiers, user agents, and account IDs.
+  webVitalEvents: defineTable({
+    route: v.string(),
+    name: v.union(
+      v.literal("LCP"),
+      v.literal("INP"),
+      v.literal("CLS"),
+      v.literal("FCP"),
+      v.literal("TTFB"),
+    ),
+    value: v.number(),
+    rating: v.union(
+      v.literal("good"),
+      v.literal("needs-improvement"),
+      v.literal("poor"),
+    ),
+    navigationType: v.union(
+      v.literal("navigate"),
+      v.literal("reload"),
+      v.literal("back-forward"),
+      v.literal("prerender"),
+    ),
+    timestamp: v.number(),
+    dedupeKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_route_and_name_and_createdAt", ["route", "name", "createdAt"])
+    .index("by_dedupeKey", ["dedupeKey"]),
+  webVitalMinuteBuckets: defineTable({
+    minute: v.number(),
+    sampleCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_minute", ["minute"]),
   evidenceSources: defineTable({
     sourceKey: v.string(),
     name: v.string(),

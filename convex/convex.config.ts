@@ -13,6 +13,8 @@ const app = defineApp({
     OPENROUTER_API_KEY: v.optional(v.string()),
     OPENROUTER_DAILY_BUDGET_USD: v.optional(v.string()),
     FORUM_AGENT_DAILY_PUBLICATION_LIMIT: v.optional(v.string()),
+    WEB_VITALS_COLLECTION_ENABLED: v.optional(v.string()),
+    WEB_VITALS_CLEANUP_ENABLED: v.optional(v.string()),
     GITHUB_TOKEN: v.optional(v.string()),
     GH_TOKEN: v.optional(v.string()),
     // Optional NVD API key. It is sent only as the documented X-ApiKey header

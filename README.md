@@ -165,6 +165,18 @@ negative authorization path with `--expect-scope-denied`.
 - Scheduled write jobs are internal Convex functions and cannot be called by
   unauthenticated clients.
 
+## Field Web Vitals
+
+The optional Web Vitals collector samples public navigations at 10% and records
+only a public route template, metric name/value/rating, navigation type, and
+timestamp. It never stores URLs, query strings, visitor or session IDs, user
+agents, or account IDs. Field samples are retained for 30 days, deduplicated in
+short time windows, globally capped per minute, and visible only to site admins
+as bounded p50/p75/p95 and pass-rate summaries. This is field data; Lighthouse
+or other lab receipts are not mixed into it. Set `NEXT_PUBLIC_WEB_VITALS_ENABLED=false`
+to disable browser collection, `WEB_VITALS_COLLECTION_ENABLED=false` to reject
+all writes, or `WEB_VITALS_CLEANUP_ENABLED=false` to pause retention cleanup.
+
 ## Deployment Notes
 
 - Set `NEXT_PUBLIC_CONVEX_URL` from the Convex deployment.
