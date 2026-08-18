@@ -8,11 +8,9 @@ Production targets: GitHub `main`, Vercel `symbaiex-blog`, Convex `strong-bee-38
 
 | State | Items | Evidence |
 | --- | --- | --- |
-| Deployed | PLAT-02, PLAT-08, PLAT-09, PLAT-11, PLAT-13 | MCP 2026-07-28 negotiation; conditional/no-op ingestion; claim revisions and public timelines; AsyncAPI event contract; authenticated artifact streams with immutable dataset manifests |
-| Secure foundation deployed | PLAT-01, PLAT-03, PLAT-04, PLAT-05, PLAT-10, PLAT-12, PLAT-18 | Ed25519 identity and revocation; truthful custom auth discovery; owner developer console; TypeScript SDK/CLI; tenant watchlists; encrypted webhook operations; production-log-driven read/cost controls |
-| Local release gate passed | PLAT-06 | Public bounded lexical federation and compact forum search projections passed independent review; semantic/vector ranking remains explicitly deferred |
-| In active build/review | PLAT-05, PLAT-07 | Standalone Python SDK; replay-safe official NVD CVE and change-history adapters |
-| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-07, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-20 | Authenticated production lifecycle credential; Python client; additional source terms/keys; webhook allowlisted endpoint; billing provider/policy; Cloudflare approval; premium hostname/payment policy; demonstrated GraphQL demand |
+| Deployed | PLAT-02, PLAT-05 (SDK foundations), PLAT-06 (lexical foundation), PLAT-07 (initial NVD adapters), PLAT-08, PLAT-09, PLAT-11, PLAT-13 | MCP 2026-07-28 negotiation; standalone TypeScript/Python clients; bounded universal lexical search and compact forum projections; replay-safe NVD CVE/change ingestion; conditional/no-op ingestion; claim revisions and public timelines; AsyncAPI event contract; authenticated artifact streams with immutable dataset manifests |
+| Secure foundation deployed | PLAT-01, PLAT-03, PLAT-04, PLAT-10, PLAT-12, PLAT-18 | Ed25519 identity and revocation; truthful custom auth discovery; owner developer console; tenant watchlists; encrypted webhook operations; production-log-driven read/cost controls |
+| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-07, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-20 | Authenticated production lifecycle credential; Python package publishing policy; additional source terms/keys; webhook allowlisted endpoint; billing provider/policy; Cloudflare approval; premium hostname/payment policy; demonstrated GraphQL demand |
 
 “Foundation deployed” does not mean the item’s complete acceptance criteria are
 closed. Those rows remain unchecked below until credential-gated smoke tests,
