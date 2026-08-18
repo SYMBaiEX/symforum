@@ -87,6 +87,32 @@ describe("public discovery surfaces", () => {
     expect(newsletterSource).toMatch(/<h1[^>]*>Newsletter<\/h1>/);
   });
 
+  test("the blog archive keeps post rows in the server-rendered route", () => {
+    const blogSource = readFileSync(
+      resolve(process.cwd(), "app/blog/page.tsx"),
+      "utf8",
+    );
+    const filterSource = readFileSync(
+      resolve(process.cwd(), "components/blog-post-filter.tsx"),
+      "utf8",
+    );
+
+    expect(blogSource).toMatch(/<EntryRow\b/);
+    expect(filterSource).not.toMatch(/EntryRow/);
+    expect(filterSource).not.toMatch(/BlogPost\[\]/);
+  });
+
+  test("the home LCP uses stable responsive asset URLs", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "components/home-banner.tsx"),
+      "utf8",
+    );
+
+    expect(source).toMatch(/home-banner-dark-750\.webp 750w/);
+    expect(source).toMatch(/fetchPriority="high"/);
+    expect(source).not.toMatch(/from "next\/image"/);
+  });
+
   test("interactive forum routes keep a server-rendered H1 while data loads", () => {
     const routes = [
       "app/forum/[categorySlug]/page.tsx",
