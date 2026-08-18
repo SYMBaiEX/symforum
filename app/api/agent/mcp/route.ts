@@ -23,6 +23,7 @@ const TOOL_ENTRIES = [
   ["evidence.status", "status"],
   ["evidence.sources", "sources"],
   ["evidence.search", "search"],
+  ["evidence.semantic_search", "semantic_search"],
   ["evidence.universal_search", "universal_search"],
   ["evidence.document", "document"],
   ["evidence.changes", "changes"],
@@ -53,11 +54,34 @@ const TOOL_ENTRIES = [
 ] as const satisfies ReadonlyArray<readonly [string, AgentDataOperation]>;
 
 const TOOLS = new Map<string, AgentDataOperation>(TOOL_ENTRIES);
-const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) => ({
-  name,
-  description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
-  inputSchema: { type: "object", additionalProperties: true },
-}));
+const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) =>
+  name === "evidence.semantic_search"
+    ? {
+        name,
+        description:
+          "Search the public corpus with feature-gated semantic enhancement and a lexical-only fallback.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["query", "idempotencyKey"],
+          properties: {
+            query: { type: "string", minLength: 1, maxLength: 300 },
+            limit: { type: "integer", minimum: 1, maximum: 20, default: 10 },
+            idempotencyKey: {
+              type: "string",
+              minLength: 8,
+              maxLength: 96,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            },
+          },
+        },
+      }
+    : {
+        name,
+        description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+);
 
 type ProtocolEra = "legacy" | "modern";
 type JsonRpcError = {
@@ -194,12 +218,26 @@ export async function POST(request: Request) {
       message: "Unknown tool",
     });
   }
-  const input = isRecord(body.params.arguments) ? body.params.arguments : {};
+  const rawInput = isRecord(body.params.arguments) ? body.params.arguments : {};
+  let input = rawInput;
+  let idempotencyKey: string | undefined;
+  if (operation === "semantic_search") {
+    const validated = semanticSearchInput(rawInput);
+    if (validated === null) {
+      return rpc(request, protocol, id, undefined, {
+        code: -32602,
+        message: "Invalid semantic search arguments",
+      });
+    }
+    input = { query: validated.query, limit: validated.limit };
+    idempotencyKey = validated.idempotencyKey;
+  }
   const upstream = await relayAgentData(
     request,
     operation,
     input,
     authorization,
+    idempotencyKey,
   );
   if (upstream.status === 401 || upstream.status === 403) {
     return mcpAuthResponse(request, upstream, upstream.status);
@@ -307,6 +345,29 @@ function validateProtocolRequest(
     }
   }
   return "modern";
+}
+
+function semanticSearchInput(value: Record<string, unknown>) {
+  if (
+    Object.keys(value).some(
+      (key) => !["query", "limit", "idempotencyKey"].includes(key),
+    ) ||
+    typeof value.query !== "string" ||
+    value.query.trim().length === 0 ||
+    value.query.length > 300 ||
+    typeof value.idempotencyKey !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,95}$/.test(value.idempotencyKey)
+  ) {
+    return null;
+  }
+  const limit = value.limit ?? 10;
+  if (!Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 20)
+    return null;
+  return {
+    query: value.query.replace(/\s+/g, " ").trim(),
+    limit: Number(limit),
+    idempotencyKey: value.idempotencyKey,
+  };
 }
 
 async function validateLocalRequestAuthentication(

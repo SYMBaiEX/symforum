@@ -56,6 +56,59 @@ describe("agent evidence REST endpoint", () => {
     expect(invalid.status).toBe(404);
   });
 
+  test("relays semantic search only with bounded idempotency and a server secret", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    vi.stubEnv(
+      "AGENT_SEMANTIC_RELAY_SECRET",
+      "test-semantic-relay-secret-at-least-32-characters",
+    );
+    const missingKey = await GET(
+      new Request(
+        "https://www.symbaiex.com/api/agent/v1/semantic-search?q=convex&limit=10",
+        { headers: { authorization: "Bearer agent-token" } },
+      ),
+      context(["semantic-search"]),
+    );
+    expect(missingKey.status).toBe(400);
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json([{ title: "Lexical result" }]));
+    const response = await GET(
+      new Request(
+        "https://www.symbaiex.com/api/agent/v1/semantic-search?q=convex&limit=10",
+        {
+          headers: {
+            authorization: "Bearer agent-token",
+            "idempotency-key": "semantic-search-001",
+          },
+        },
+      ),
+      context(["semantic-search"]),
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://strong-bee-384.convex.site/agent/v1",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer agent-token",
+          "x-symbaiex-semantic-relay":
+            "test-semantic-relay-secret-at-least-32-characters",
+        }),
+        body: expect.stringContaining('"operation":"semantic_search"'),
+      }),
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      operation: "semantic_search",
+      input: { query: "convex", limit: 10 },
+      idempotencyKey: "semantic-search-001",
+      requestFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+  });
+
   test("streams artifacts through the authenticated first-party relay", async () => {
     vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

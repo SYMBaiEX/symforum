@@ -12,6 +12,11 @@ manifest = client.manifest()
 status = client.status()
 quota = client.quota()
 results = client.universal_search("zero trust", limit=10)
+hybrid_results = client.semantic_search(
+    "zero trust",
+    limit=10,
+    idempotency_key="semantic-2026-08-18-001",
+)
 research = client.create_research(
     "zero trust",
     idempotency_key="research-2026-08-18-001",
@@ -27,7 +32,10 @@ call `sign_in`; use `refresh` with a refresh token held by your secret manager.
 The SDK never writes either token. `AsyncAgentClient` provides the same methods
 for async applications.
 
-All write operations require an explicit bounded `idempotency_key`. The client
+All write operations and provider-capable semantic searches require an explicit
+bounded `idempotency_key`. Semantic search stays on the first-party public URL
+and returns lexical-only results whenever semantic enhancement is unavailable.
+The client
 limits ordinary JSON responses to 2 MiB, artifact responses to 10 MiB, and
 network waits to 10 seconds (30 seconds for first-party artifacts). It follows
 only the `symbaiex.com` production origins; local development requires an

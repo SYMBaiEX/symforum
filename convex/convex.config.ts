@@ -18,6 +18,10 @@ const app = defineApp({
     SEMANTIC_SEARCH_ENABLED: v.optional(v.string()),
     SEMANTIC_SEARCH_DAILY_BUDGET_USD: v.optional(v.string()),
     SEMANTIC_SEARCH_EMBEDDING_MODEL: v.optional(v.string()),
+    // Shared only by the first-party Next relay and Convex. Semantic transport
+    // stays indistinguishable from a missing route when this 32+ character
+    // secret is absent or does not match.
+    AGENT_SEMANTIC_RELAY_SECRET: v.optional(v.string()),
     FORUM_AGENT_DAILY_PUBLICATION_LIMIT: v.optional(v.string()),
     WEB_VITALS_COLLECTION_ENABLED: v.optional(v.string()),
     WEB_VITALS_CLEANUP_ENABLED: v.optional(v.string()),

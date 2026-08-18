@@ -73,6 +73,45 @@ describe("AgentClient", () => {
     );
   });
 
+  test("uses the first-party replay-safe semantic-search endpoint", async () => {
+    const calls: Array<{ url: string; idempotencyKey: string | null }> = [];
+    const client = new AgentClient({
+      fetch: async (input, init) => {
+        calls.push({
+          url: String(input),
+          idempotencyKey: new Headers(init?.headers).get("idempotency-key"),
+        });
+        return Response.json([]);
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(
+      client.semanticSearch("public evidence", {
+        limit: 5,
+        idempotencyKey: "semantic-sdk-001",
+      }),
+    ).resolves.toEqual([]);
+    expect(calls).toEqual([
+      {
+        url: `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/semantic-search?q=public+evidence&limit=5`,
+        idempotencyKey: "semantic-sdk-001",
+      },
+    ]);
+    await expect(
+      client.semanticSearch("x", {
+        limit: 21,
+        idempotencyKey: "semantic-sdk-002",
+      }),
+    ).rejects.toThrow(/between 1 and 20/i);
+    await expect(
+      client.semanticSearch("x", { idempotencyKey: "short" }),
+    ).rejects.toThrow(/8-96/i);
+  });
+
   test("sends caller-provided idempotency keys on public write endpoints", async () => {
     const client = new AgentClient({
       fetch: async (_input, init) => {

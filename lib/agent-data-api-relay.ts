@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 
 export const AGENT_DATA_MAX_BODY_BYTES = 32 * 1024;
+export const AGENT_DATA_MAX_RESPONSE_BYTES = 1024 * 1024;
 export const AGENT_DATA_OPERATIONS = [
   "status",
   "sources",
   "search",
+  "semantic_search",
   "universal_search",
   "document",
   "changes",
@@ -136,6 +138,21 @@ export function mapRestRequest(
     return {
       operation: "universal_search",
       input: { query: search.get("q"), ...limit },
+    };
+  if (
+    method === "GET" &&
+    segments.length === 1 &&
+    segments[0] === "semantic-search" &&
+    only(["q", "limit"]) &&
+    validText(search.get("q")) &&
+    (limit.limit === undefined || Number(limit.limit) <= 20)
+  )
+    return {
+      operation: "semantic_search",
+      input: {
+        query: search.get("q")!.replace(/\s+/g, " ").trim(),
+        limit: limit.limit ?? 10,
+      },
     };
   if (
     method === "GET" &&
@@ -382,6 +399,7 @@ export async function relayAgentData(
   operation: AgentDataOperation,
   input: Record<string, unknown>,
   authorization: string,
+  idempotencyKey?: string,
 ) {
   const upstream = agentDataUpstream();
   if (!upstream)
@@ -390,12 +408,31 @@ export async function relayAgentData(
       { error: "Agent API is temporarily unavailable." },
       503,
     );
-  const requestedKey =
-    request.headers.get("idempotency-key")?.trim() || randomUUID();
+  const suppliedKey =
+    idempotencyKey ?? request.headers.get("idempotency-key")?.trim();
+  if (operation === "semantic_search" && !suppliedKey)
+    return agentDataJson(
+      request,
+      { error: "idempotency-key is required for semantic search." },
+      400,
+    );
+  const requestedKey = suppliedKey || randomUUID();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(requestedKey))
     return agentDataJson(
       request,
       { error: "idempotency-key must be a bounded identifier." },
+      400,
+    );
+  if (operation === "semantic_search" && requestedKey.length < 8)
+    return agentDataJson(
+      request,
+      { error: "idempotency-key must be 8-96 safe identifier characters." },
+      400,
+    );
+  if (operation === "semantic_search" && requestedKey.length > 96)
+    return agentDataJson(
+      request,
+      { error: "idempotency-key must be 8-96 safe identifier characters." },
       400,
     );
   const encoded = JSON.stringify({
@@ -407,14 +444,31 @@ export async function relayAgentData(
       .digest("hex"),
   });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    operation === "semantic_search" ? 14_000 : 10_000,
+  );
   try {
+    const relaySecret =
+      operation === "semantic_search"
+        ? process.env.AGENT_SEMANTIC_RELAY_SECRET?.trim()
+        : undefined;
+    if (
+      operation === "semantic_search" &&
+      (!relaySecret || relaySecret.length < 32)
+    )
+      return agentDataJson(
+        request,
+        { error: "Agent semantic search is temporarily unavailable." },
+        503,
+      );
     const response = await fetch(upstream, {
       method: "POST",
       headers: {
         authorization,
         "content-type": "application/json",
         accept: "application/json",
+        ...(relaySecret ? { "x-symbaiex-semantic-relay": relaySecret } : {}),
         ...(request.headers.get("origin")
           ? { origin: request.headers.get("origin")! }
           : {}),
@@ -424,7 +478,28 @@ export async function relayAgentData(
       redirect: "error",
       signal: controller.signal,
     });
-    return new Response(await response.arrayBuffer(), {
+    const declaredLength = Number(
+      response.headers.get("content-length") ?? "0",
+    );
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > AGENT_DATA_MAX_RESPONSE_BYTES
+    ) {
+      response.body?.cancel();
+      return agentDataJson(
+        request,
+        { error: "Agent API returned an invalid response." },
+        502,
+      );
+    }
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > AGENT_DATA_MAX_RESPONSE_BYTES)
+      return agentDataJson(
+        request,
+        { error: "Agent API returned an invalid response." },
+        502,
+      );
+    return new Response(bytes, {
       status: response.status,
       headers: agentDataHeaders(
         request,

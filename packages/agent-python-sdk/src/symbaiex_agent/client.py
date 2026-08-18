@@ -22,6 +22,7 @@ ARTIFACT_TIMEOUT_SECONDS = 30.0
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 _SAFE_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
+_SAFE_SEMANTIC_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,95}$")
 _SAFE_IDENTIFIER = re.compile(r"^\S.{0,511}$")
 _SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_.:-]{0,63}$")
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
@@ -193,6 +194,14 @@ class AgentClient:
 
     def universal_search(self, query: str, *, limit: int | None = None) -> JsonValue:
         return self._search("universal-search", query, limit)
+
+    def semantic_search(self, query: str, *, idempotency_key: str, limit: int = 10) -> JsonValue:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise TypeError("limit must be an integer between 1 and 20")
+        if not isinstance(idempotency_key, str) or not _SAFE_SEMANTIC_IDEMPOTENCY_KEY.fullmatch(idempotency_key):
+            raise TypeError("idempotency_key must be 8-96 safe identifier characters")
+        params = urlencode({"q": _query(query), "limit": str(limit)})
+        return self._json("GET", f"/api/agent/v1/semantic-search?{params}", idempotency_key=idempotency_key)
 
     def document(self, document_id: str) -> JsonValue:
         return self._get(f"documents/{_path_id(document_id, 'document_id')}")
@@ -370,6 +379,7 @@ class AsyncAgentClient:
     async def sources(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("sources", limit=limit)
     async def search(self, query: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("search", query, limit=limit)
     async def universal_search(self, query: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("universal_search", query, limit=limit)
+    async def semantic_search(self, query: str, *, idempotency_key: str, limit: int = 10) -> JsonValue: return await self.__getattr_async("semantic_search", query, idempotency_key=idempotency_key, limit=limit)
     async def document(self, document_id: str) -> JsonValue: return await self.__getattr_async("document", document_id)
     async def changes(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("changes", limit=limit)
     async def verify_claim(self, claim_id: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("verify_claim", claim_id, idempotency_key=idempotency_key)

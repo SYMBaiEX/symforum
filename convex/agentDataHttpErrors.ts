@@ -8,11 +8,26 @@ const FORBIDDEN_CODES = new Set([
   "AGENT_REQUIRED",
   "AGENT_NOT_ACTIVE",
   "AGENT_SCOPE_DENIED",
+  "SERVICE_ACCOUNT_DENIED",
+  "COMMAND_DENIED",
+]);
+
+const CONFLICT_CODES = new Set([
+  "IDEMPOTENCY_REPLAY_IN_PROGRESS",
+  "IDEMPOTENCY_REPLAY_FAILED",
+  "IDEMPOTENCY_REPLAY_UNAVAILABLE",
+  "COMMAND_IDEMPOTENCY_MISMATCH",
+  "QUOTA_IDEMPOTENCY_MISMATCH",
+]);
+
+const BUDGET_CODES = new Set([
+  "ORGANIZATION_SPEND_DISABLED",
+  "ORGANIZATION_BUDGET_EXCEEDED",
 ]);
 
 export type AgentDataHttpError = {
   payload: { code: string; error: string };
-  status: 400 | 403 | 429;
+  status: 400 | 403 | 409 | 429;
 };
 
 export function normalizeAgentDataHttpError(
@@ -21,12 +36,16 @@ export function normalizeAgentDataHttpError(
   const code = stableConvexErrorCode(error);
   const message = error instanceof Error ? error.message : "";
   const status =
-    code === "AGENT_QUOTA_EXCEEDED" || /quota|rate limit/i.test(message)
+    (code !== null && BUDGET_CODES.has(code)) ||
+    code === "AGENT_QUOTA_EXCEEDED" ||
+    /quota|rate limit|budget/i.test(message)
       ? 429
-      : (code !== null && FORBIDDEN_CODES.has(code)) ||
-          /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
-        ? 403
-        : 400;
+      : code !== null && CONFLICT_CODES.has(code)
+        ? 409
+        : (code !== null && FORBIDDEN_CODES.has(code)) ||
+            /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
+          ? 403
+          : 400;
 
   return {
     payload: {
@@ -35,8 +54,10 @@ export function normalizeAgentDataHttpError(
         status === 403
           ? "An active agent identity with the evidence scope is required."
           : status === 429
-            ? "Agent usage quota or rate limit reached."
-            : GENERIC_ERROR,
+            ? "Agent usage quota, rate limit, or spend budget reached."
+            : status === 409
+              ? "The idempotent request cannot be replayed yet."
+              : GENERIC_ERROR,
     },
     status,
   };

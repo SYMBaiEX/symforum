@@ -28,6 +28,23 @@ describe("agent data API relay", () => {
       input: { query: "convex", limit: 10 },
     });
     expect(
+      mapRestRequest(
+        "GET",
+        ["semantic-search"],
+        new URLSearchParams("q=convex&limit=10"),
+      ),
+    ).toEqual({
+      operation: "semantic_search",
+      input: { query: "convex", limit: 10 },
+    });
+    expect(
+      mapRestRequest(
+        "GET",
+        ["semantic-search"],
+        new URLSearchParams("q=convex&limit=21"),
+      ),
+    ).toBeNull();
+    expect(
       mapRestRequest("GET", ["entitlements"], new URLSearchParams()),
     ).toEqual({ operation: "entitlements", input: {} });
     expect(

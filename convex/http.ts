@@ -1,4 +1,4 @@
-import { httpRouter } from "convex/server";
+import { httpRouter, makeFunctionReference } from "convex/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -44,6 +44,18 @@ const AGENT_AUTH_ALLOWED_ORIGINS = new Set([
 ]);
 const AGENT_AUTH_MAX_BODY_BYTES = 16 * 1024;
 const AGENT_DATA_MAX_BODY_BYTES = 32 * 1024;
+const AGENT_SEMANTIC_RELAY_HEADER = "x-symbaiex-semantic-relay";
+
+const agentSemanticDispatchRef = makeFunctionReference<
+  "action",
+  {
+    query: string;
+    limit: number;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  },
+  unknown
+>("agentSemanticApi:dispatch");
 
 auth.addHttpRoutes(http);
 
@@ -258,16 +270,50 @@ http.route({
           headers,
         );
       }
-      const result = await ctx.runMutation(
-        (internal as unknown as { agentDataApi: { dispatch: never } })
-          .agentDataApi.dispatch,
-        {
-          operation: body.operation,
-          input: body.input,
+      let result: unknown;
+      if (body.operation === "semantic_search") {
+        if (!isTrustedSemanticRelay(request)) {
+          return agentDataJson(
+            { code: "NOT_FOUND", error: "Agent data endpoint was not found." },
+            404,
+            headers,
+          );
+        }
+        const query = body.input.query;
+        const limit = body.input.limit ?? 10;
+        if (
+          typeof query !== "string" ||
+          typeof limit !== "number" ||
+          typeof body.idempotencyKey !== "string" ||
+          typeof body.requestFingerprint !== "string"
+        ) {
+          return agentDataJson(
+            {
+              code: "INVALID_REQUEST",
+              error: "Invalid semantic search request.",
+            },
+            400,
+            headers,
+          );
+        }
+        result = await ctx.runAction(agentSemanticDispatchRef, {
+          query,
+          limit,
           idempotencyKey: body.idempotencyKey,
           requestFingerprint: body.requestFingerprint,
-        } as never,
-      );
+        });
+      } else {
+        result = await ctx.runMutation(
+          (internal as unknown as { agentDataApi: { dispatch: never } })
+            .agentDataApi.dispatch,
+          {
+            operation: body.operation,
+            input: body.input,
+            idempotencyKey: body.idempotencyKey,
+            requestFingerprint: body.requestFingerprint,
+          } as never,
+        );
+      }
       return agentDataJson(result, 200, headers);
     } catch (error) {
       const { payload, status } = normalizeAgentDataHttpError(error);
@@ -700,6 +746,8 @@ function isAgentDataOperation(
   | "status"
   | "sources"
   | "search"
+  | "semantic_search"
+  | "universal_search"
   | "document"
   | "changes"
   | "verify"
@@ -718,12 +766,20 @@ function isAgentDataOperation(
   | "export_get"
   | "export_artifact"
   | "webhooks_list"
+  | "webhooks_availability"
   | "webhooks_create"
-  | "webhooks_status" {
+  | "webhooks_status"
+  | "webhooks_health"
+  | "webhooks_history"
+  | "webhooks_rotate"
+  | "webhooks_replay"
+  | "webhooks_test" {
   return [
     "status",
     "sources",
     "search",
+    "semantic_search",
+    "universal_search",
     "document",
     "changes",
     "verify",
@@ -742,9 +798,36 @@ function isAgentDataOperation(
     "export_get",
     "export_artifact",
     "webhooks_list",
+    "webhooks_availability",
     "webhooks_create",
     "webhooks_status",
+    "webhooks_health",
+    "webhooks_history",
+    "webhooks_rotate",
+    "webhooks_replay",
+    "webhooks_test",
   ].includes(value);
+}
+
+function isTrustedSemanticRelay(request: Request) {
+  // Generated bindings update during the authorized deployment/codegen step.
+  const configured = (
+    env as unknown as { AGENT_SEMANTIC_RELAY_SECRET?: string }
+  ).AGENT_SEMANTIC_RELAY_SECRET?.trim();
+  const supplied = request.headers.get(AGENT_SEMANTIC_RELAY_HEADER)?.trim();
+  if (
+    configured === undefined ||
+    configured.length < 32 ||
+    supplied === undefined ||
+    supplied.length !== configured.length
+  ) {
+    return false;
+  }
+  let mismatch = 0;
+  for (let index = 0; index < configured.length; index += 1) {
+    mismatch |= configured.charCodeAt(index) ^ supplied.charCodeAt(index);
+  }
+  return mismatch === 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

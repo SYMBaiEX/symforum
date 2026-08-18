@@ -30,7 +30,19 @@ describe("agent API OpenAPI contract", () => {
       "searchUniversalPublicCorpus",
     );
     expect(document.paths["/v1/universal-search"].get.description).toMatch(
-      /Semantic\/vector search is deferred/i,
+      /endpoint remains lexical-only/i,
+    );
+    expect(document.paths["/v1/semantic-search"].get.operationId).toBe(
+      "searchSemanticPublicCorpus",
+    );
+    expect(document.paths["/v1/semantic-search"].get.description).toMatch(
+      /lexical-only[\s\S]*service account[\s\S]*budget/i,
+    );
+    expect(document.components.parameters.SemanticIdempotencyKey).toMatchObject(
+      {
+        required: true,
+        schema: { minLength: 8, maxLength: 96 },
+      },
     );
     expect(document.paths["/v1/research-jobs"].post.operationId).toBe(
       "createEvidenceResearchJob",
@@ -45,8 +57,9 @@ describe("agent API OpenAPI contract", () => {
       "getEvidenceWebhookAvailability",
     );
     expect(
-      document.paths["/v1/webhooks/{subscriptionKey}/deliveries/{eventKey}/replay"].post
-        .operationId,
+      document.paths[
+        "/v1/webhooks/{subscriptionKey}/deliveries/{eventKey}/replay"
+      ].post.operationId,
     ).toBe("replayEvidenceWebhookDelivery");
     expect(document.components.parameters.SubscriptionKey.required).toBe(true);
     expect(document.paths["/v1/entitlements"].get.operationId).toBe(

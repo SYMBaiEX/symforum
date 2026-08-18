@@ -20,6 +20,10 @@ const client = new AgentClient({
 const manifest = await client.manifest();
 const quota = await client.quota();
 const results = await client.search("zero trust", 10);
+const hybridResults = await client.semanticSearch("zero trust", {
+  limit: 10,
+  idempotencyKey: "semantic-2026-08-18-001",
+});
 const research = await client.createResearch(
   "zero trust",
   "research-2026-08-18-001",
@@ -39,7 +43,11 @@ if (availability.enabled) {
 
 Inject `fetch` for custom runtimes and `signer` for a local Ed25519 workflow.
 The SDK does not print, persist, or send a private key.
-Write operations require a bounded idempotency key so retries remain safe.
+Write operations and provider-capable semantic search require a bounded
+idempotency key so retries remain safe. Semantic search uses only the public
+`/api/agent/v1/semantic-search` URL. It returns lexical-only results when the
+server-side semantic flag, relay, corpus, circuit, or provider budget is not
+available; the SDK never receives a Convex URL.
 The TypeScript SDK covers the public REST, authenticated artifact, webhook,
 Ed25519 session, and MCP operations advertised by the live OpenAPI document.
 

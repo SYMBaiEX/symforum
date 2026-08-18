@@ -41,6 +41,28 @@ class AgentClientTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "between 1 and 50"):
             client.universal_search("x", limit=51)
 
+    def test_semantic_search_uses_public_replay_safe_contract(self) -> None:
+        recorder = Recorder([])
+        client = AgentClient(token="access-token", transport=recorder)
+        self.assertEqual(
+            client.semantic_search(
+                "public evidence",
+                limit=5,
+                idempotency_key="semantic-python-001",
+            ),
+            [],
+        )
+        request = recorder.requests[0]
+        self.assertEqual(
+            request.url,
+            f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/semantic-search?q=public+evidence&limit=5",
+        )
+        self.assertEqual(request.headers["Idempotency-Key"], "semantic-python-001")
+        with self.assertRaisesRegex(TypeError, "between 1 and 20"):
+            client.semantic_search("x", limit=21, idempotency_key="semantic-python-002")
+        with self.assertRaisesRegex(TypeError, "8-96"):
+            client.semantic_search("x", idempotency_key="short")
+
     def test_writes_require_and_forward_idempotency_keys(self) -> None:
         recorder = Recorder({"jobId": "job-1", "status": "queued"})
         client = AgentClient(token="access-token", transport=recorder)

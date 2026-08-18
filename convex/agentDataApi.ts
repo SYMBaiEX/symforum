@@ -310,7 +310,14 @@ export const dispatch = internalMutation({
         version: "v1",
         paymentAccepted: false,
         graphql: "deferred",
-        operations: ["search", "verify", "research", "export", "mcp"],
+        operations: [
+          "search",
+          "semantic_search",
+          "verify",
+          "research",
+          "export",
+          "mcp",
+        ],
       };
     }
     if (args.operation === "quota") {

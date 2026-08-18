@@ -10,6 +10,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   if (originalSiteUrl === undefined) delete process.env.CONVEX_SITE_URL;
   else process.env.CONVEX_SITE_URL = originalSiteUrl;
 });
@@ -128,6 +129,7 @@ describe("evidence MCP endpoint", () => {
       "evidence.status",
       "evidence.sources",
       "evidence.search",
+      "evidence.semantic_search",
       "evidence.universal_search",
       "evidence.document",
       "evidence.changes",
@@ -156,6 +158,54 @@ describe("evidence MCP endpoint", () => {
       "evidence.replay_webhook_delivery",
       "evidence.send_webhook_test",
     ]);
+    const semantic = payload.result.tools.find(
+      (tool: { name: string }) => tool.name === "evidence.semantic_search",
+    );
+    expect(semantic.inputSchema).toMatchObject({
+      additionalProperties: false,
+      required: ["query", "idempotencyKey"],
+      properties: {
+        limit: { maximum: 20 },
+        idempotencyKey: { minLength: 8, maxLength: 96 },
+      },
+    });
+  });
+
+  test("validates and relays semantic search with MCP idempotency parity", async () => {
+    vi.stubEnv(
+      "AGENT_SEMANTIC_RELAY_SECRET",
+      "test-semantic-relay-secret-at-least-32-characters",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, [{ title: "Lexical fallback" }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const invalid = await POST(
+      modernSemanticToolCall({ query: "convex", limit: 10 }),
+    );
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).error.code).toBe(-32602);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const response = await POST(
+      modernSemanticToolCall({
+        query: "convex",
+        limit: 10,
+        idempotencyKey: "semantic-mcp-001",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("x-symbaiex-semantic-relay")).toBe(
+      "test-semantic-relay-secret-at-least-32-characters",
+    );
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      operation: "semantic_search",
+      input: { query: "convex", limit: 10 },
+      idempotencyKey: "semantic-mcp-001",
+    });
   });
 
   test("rejects modern initialize, unsupported versions, and header mismatches explicitly", async () => {
@@ -436,6 +486,26 @@ function modernToolCall(name: string, token: string) {
       id: 1,
       method: "tools/call",
       params: { name, arguments: {}, ...modernParams() },
+    }),
+  });
+}
+
+function modernSemanticToolCall(argumentsValue: Record<string, unknown>) {
+  const name = "evidence.semantic_search";
+  return new Request("https://www.symbaiex.com/api/agent/mcp", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": "tools/call",
+      "mcp-name": name,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: argumentsValue, ...modernParams() },
     }),
   });
 }

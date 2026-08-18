@@ -23,6 +23,7 @@ describe("agent API manifest", () => {
         authenticatedIdentity: true,
         authenticatedQuota: true,
         authenticatedEvidenceData: true,
+        authenticatedSemanticSearchTransport: "feature-gated",
         mcp: true,
       },
       monetization: {
@@ -40,6 +41,16 @@ describe("agent API manifest", () => {
     expect(manifest.endpoints.evidenceRest).toBe(
       "https://www.symbaiex.com/api/agent/v1",
     );
+    expect(manifest.endpoints.semanticSearch).toBe(
+      "https://www.symbaiex.com/api/agent/v1/semantic-search",
+    );
+    expect(manifest.search).toMatchObject({
+      universalLexical: true,
+      semanticVector: "feature-gated",
+      semanticFallback: "lexical-only",
+      semanticMaximumResults: 20,
+      semanticRequiresIdempotencyKey: true,
+    });
     expect(manifest.mcp).toMatchObject({
       resource: "https://www.symbaiex.com/api/agent/mcp",
       serverInfo: {

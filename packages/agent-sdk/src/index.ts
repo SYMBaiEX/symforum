@@ -21,7 +21,11 @@ export type AgentManifest = {
   version: string;
   baseUrl: string;
   scopes: string[];
-  endpoints: { quota: string; evidenceRest: string };
+  endpoints: {
+    quota: string;
+    evidenceRest: string;
+    semanticSearch?: string;
+  };
 };
 
 export type AgentQuota = {
@@ -192,6 +196,25 @@ export class AgentClient {
       params.set("limit", String(limit));
     }
     return await this.request<T>(`/api/agent/v1/universal-search?${params}`);
+  }
+
+  async semanticSearch<T = unknown>(
+    query: string,
+    options: { limit?: number; idempotencyKey?: string } = {},
+  ): Promise<T> {
+    const text = query.trim();
+    if (!text || text.length > 300)
+      throw new TypeError("semantic search query must be 1-300 characters");
+    const limit = options.limit ?? 10;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20)
+      throw new TypeError("limit must be an integer between 1 and 20");
+    const idempotencyKey = validSemanticIdempotencyKey(
+      options.idempotencyKey ?? crypto.randomUUID(),
+    );
+    const params = new URLSearchParams({ q: text, limit: String(limit) });
+    return await this.request<T>(`/api/agent/v1/semantic-search?${params}`, {
+      idempotencyKey,
+    });
   }
 
   async document<T = unknown>(documentId: string): Promise<T> {
@@ -533,6 +556,15 @@ function validIdempotencyKey(value: string) {
     throw new TypeError(
       "idempotencyKey must be 1-160 safe identifier characters",
     );
+  return value;
+}
+
+function validSemanticIdempotencyKey(value: string) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,95}$/.test(value)) {
+    throw new TypeError(
+      "idempotencyKey must be 8-96 safe identifier characters",
+    );
+  }
   return value;
 }
 

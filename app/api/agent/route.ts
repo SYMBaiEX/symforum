@@ -36,6 +36,7 @@ const MANIFEST = {
     authenticatedQuota: true,
     authenticatedEvidenceData: true,
     universalLexicalSearch: true,
+    authenticatedSemanticSearchTransport: "feature-gated",
     asynchronousResearch: true,
     boundedJsonlExports: true,
     signedWebhooks: true,
@@ -45,6 +46,7 @@ const MANIFEST = {
   endpoints: {
     evidenceRest: `${API_BASE_URL}/v1`,
     universalSearch: `${API_BASE_URL}/v1/universal-search`,
+    semanticSearch: `${API_BASE_URL}/v1/semantic-search`,
     researchJobs: `${API_BASE_URL}/v1/research-jobs`,
     exports: `${API_BASE_URL}/v1/exports`,
     webhooks: `${API_BASE_URL}/v1/webhooks`,
@@ -114,9 +116,12 @@ const MANIFEST = {
   },
   search: {
     universalLexical: true,
-    semanticVector: "deferred",
+    semanticVector: "feature-gated",
+    semanticFallback: "lexical-only",
+    semanticMaximumResults: 20,
+    semanticRequiresIdempotencyKey: true,
     description:
-      "Bounded lexical, entity, and public-citation-aware federation across public evidence and editorial records. Semantic/vector retrieval is intentionally deferred pending corpus, visibility, and cost proof.",
+      "Bounded lexical, entity, and public-citation-aware federation across public evidence and editorial records. Authenticated semantic enhancement is available only when its server-side feature flag, relay secret, corpus, and provider budget are configured; all unavailable or failed semantic retrieval falls back to currently authorized lexical results.",
   },
   exports: {
     enabled: true,
@@ -128,7 +133,17 @@ const MANIFEST = {
     infrastructureEnabled: true,
     deliveryRequiresConfiguredDestinationAllowlist: true,
     availabilityEndpoint: true,
-    ownerOperations: ["create", "history", "health", "pause", "resume", "revoke", "rotate", "test", "replay"],
+    ownerOperations: [
+      "create",
+      "history",
+      "health",
+      "pause",
+      "resume",
+      "revoke",
+      "rotate",
+      "test",
+      "replay",
+    ],
     signature: "HMAC-SHA256",
   },
   graphql: {

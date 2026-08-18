@@ -2,7 +2,7 @@
 
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
 import schema from "./schema";
@@ -17,6 +17,11 @@ function setup() {
   registerRateLimiter(t);
   return t;
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 async function fixture(t: ReturnType<typeof setup>, evidenceScope = true) {
   const ids = await t.run(async (ctx) => {
@@ -190,6 +195,35 @@ describe("agent data API dispatch", () => {
       const ledger = await ctx.db.query("apiUsageLedger").unique();
       expect(ledger?.ownerUserId).toBe(ids.ownerUserId);
       expect(ledger?.operation).toBe("evidence.search");
+    });
+  });
+
+  test("keeps the semantic action hidden behind the first-party relay secret", async () => {
+    vi.stubEnv(
+      "AGENT_SEMANTIC_RELAY_SECRET",
+      "test-semantic-relay-secret-at-least-32-characters",
+    );
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    const direct = await agent.fetch("/agent/v1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operation: "semantic_search",
+        input: { query: "Convex", limit: 10 },
+        idempotencyKey: "semantic-direct-001",
+        requestFingerprint: "0".repeat(64),
+      }),
+    });
+    expect(direct.status).toBe(404);
+    expect(await direct.json()).toEqual({
+      code: "NOT_FOUND",
+      error: "Agent data endpoint was not found.",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+      expect(await ctx.db.query("apiUsageLedger").collect()).toHaveLength(0);
     });
   });
 

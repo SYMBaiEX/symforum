@@ -104,7 +104,7 @@ const OPENAPI = {
         operationId: "searchUniversalPublicCorpus",
         summary: "Search the bounded public lexical corpus",
         description:
-          "Federates public evidence documents, claims, entities, published blog posts, sent newsletters, indexed news, and currently public forum threads. Semantic/vector search is deferred; each result is rechecked for current public visibility. Recency is captured once per request, making a response's ordering deterministic while later requests may legitimately receive fresher scores.",
+          "Federates public evidence documents, claims, entities, published blog posts, sent newsletters, indexed news, and currently public forum threads. This endpoint remains lexical-only; feature-gated semantic enhancement has a separate authenticated endpoint. Each result is rechecked for current public visibility. Recency is captured once per request, making a response's ordering deterministic while later requests may legitimately receive fresher scores.",
         security: [{ bearerAuth: [] }],
         parameters: [
           {
@@ -122,6 +122,50 @@ const OPENAPI = {
           },
           "403": { description: "The evidence scope is required." },
           "429": { description: "Quota or rate limit reached." },
+        },
+      },
+    },
+    "/v1/semantic-search": {
+      get: {
+        operationId: "searchSemanticPublicCorpus",
+        summary: "Search with feature-gated semantic enhancement",
+        description:
+          "Uses the same currently-public corpus and lexical ranking contract as universal search. When semantic retrieval is disabled, unavailable, over budget, paused, or fails validation, the response is lexical-only. The Ed25519 principal, owner, optional organization service account, project scopes, quota, immutable usage ledger, and spend budget are rechecked before provider-capable work. The request is replay-safe when the same Idempotency-Key and query are reused.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            schema: { type: "string", minLength: 1, maxLength: 300 },
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 20, default: 10 },
+          },
+          { $ref: "#/components/parameters/SemanticIdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Currently authorized hybrid results, or lexical-only results when semantic enhancement is unavailable.",
+          },
+          "400": { description: "Invalid query, limit, or idempotency key." },
+          "401": { description: "Missing or invalid Ed25519 session token." },
+          "403": {
+            description:
+              "Evidence scope, active identity, or service-account authorization denied.",
+          },
+          "409": {
+            description: "The idempotent request is still in progress.",
+          },
+          "429": { description: "Agent or organization budget reached." },
+          "503": {
+            description:
+              "The first-party semantic relay has not been configured.",
+          },
         },
       },
     },
@@ -438,7 +482,10 @@ const OPENAPI = {
         summary: "Check whether the owner can configure delivery",
         security: [{ bearerAuth: [] }],
         responses: {
-          "200": { description: "Delivery availability; destination allowlists are never returned." },
+          "200": {
+            description:
+              "Delivery availability; destination allowlists are never returned.",
+          },
         },
       },
     },
@@ -447,7 +494,9 @@ const OPENAPI = {
         operationId: "getEvidenceWebhookHealth",
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: "#/components/parameters/SubscriptionKey" }],
-        responses: { "200": { description: "Bounded owner-scoped delivery counters." } },
+        responses: {
+          "200": { description: "Bounded owner-scoped delivery counters." },
+        },
       },
     },
     "/v1/webhooks/{subscriptionKey}/deliveries": {
@@ -458,19 +507,28 @@ const OPENAPI = {
           { $ref: "#/components/parameters/SubscriptionKey" },
           { $ref: "#/components/parameters/Limit" },
         ],
-        responses: { "200": { description: "Bounded, secret-free owner-scoped delivery history." } },
+        responses: {
+          "200": {
+            description: "Bounded, secret-free owner-scoped delivery history.",
+          },
+        },
       },
     },
     "/v1/webhooks/{subscriptionKey}/rotate": {
       post: {
         operationId: "rotateEvidenceWebhookSecret",
-        description: "Returns a replacement signing secret exactly once. Store it outside chat, logs, URLs, and source control.",
+        description:
+          "Returns a replacement signing secret exactly once. Store it outside chat, logs, URLs, and source control.",
         security: [{ bearerAuth: [] }],
         parameters: [
           { $ref: "#/components/parameters/SubscriptionKey" },
           { $ref: "#/components/parameters/IdempotencyKey" },
         ],
-        responses: { "200": { description: "Replacement secret shown only in this response." } },
+        responses: {
+          "200": {
+            description: "Replacement secret shown only in this response.",
+          },
+        },
       },
     },
     "/v1/webhooks/{subscriptionKey}/deliveries/{eventKey}/replay": {
@@ -479,10 +537,20 @@ const OPENAPI = {
         security: [{ bearerAuth: [] }],
         parameters: [
           { $ref: "#/components/parameters/SubscriptionKey" },
-          { name: "eventKey", in: "path", required: true, schema: { type: "string", maxLength: 160 } },
+          {
+            name: "eventKey",
+            in: "path",
+            required: true,
+            schema: { type: "string", maxLength: 160 },
+          },
           { $ref: "#/components/parameters/IdempotencyKey" },
         ],
-        responses: { "200": { description: "Eligible failed/dead-letter delivery was queued for replay." } },
+        responses: {
+          "200": {
+            description:
+              "Eligible failed/dead-letter delivery was queued for replay.",
+          },
+        },
       },
     },
     "/v1/webhooks/{subscriptionKey}/test": {
@@ -495,9 +563,20 @@ const OPENAPI = {
         ],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object", required: ["eventType"], properties: { eventType: { type: "string" } }, additionalProperties: false } } },
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["eventType"],
+                properties: { eventType: { type: "string" } },
+                additionalProperties: false,
+              },
+            },
+          },
         },
-        responses: { "200": { description: "Synthetic, bounded delivery was queued." } },
+        responses: {
+          "200": { description: "Synthetic, bounded delivery was queued." },
+        },
       },
     },
     "/mcp": {
@@ -582,6 +661,17 @@ const OPENAPI = {
           type: "string",
           minLength: 1,
           maxLength: 160,
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        },
+      },
+      SemanticIdempotencyKey: {
+        name: "Idempotency-Key",
+        in: "header",
+        required: true,
+        schema: {
+          type: "string",
+          minLength: 8,
+          maxLength: 96,
           pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
         },
       },

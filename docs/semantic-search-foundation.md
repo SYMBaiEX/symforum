@@ -14,6 +14,7 @@ SEMANTIC_SEARCH_ENABLED=true
 SEMANTIC_SEARCH_DAILY_BUDGET_USD=0.05
 SEMANTIC_SEARCH_EMBEDDING_MODEL=openai/text-embedding-3-small
 OPENROUTER_API_KEY=<existing server-side OpenRouter key>
+AGENT_SEMANTIC_RELAY_SECRET=<same random 32+ character value as Vercel>
 ```
 
 The model is deliberately allowlisted until a reviewed price and vector
@@ -62,20 +63,19 @@ control and additionally enforces its own $0.05/day default (maximum $5/day).
 ## Operator rollout
 
 1. Deploy this schema/function release with the switch unset.
-2. Set the four environment values above, then run the internal
+2. Set the five Convex environment values above and the same relay secret in
+   Vercel, then run the internal
    `semanticSearch:backfillPublicEvidence` action once.
 3. Observe `aiOperationalStates` using the
    `semantic-search-public-evidence:<model>` key and OpenRouter spend buckets.
 4. Exercise `semanticSearch:searchPublicSemantic` with public queries and
    verify that hidden/retired sources disappear without re-indexing.
-5. Only after authenticated agent transport is refactored to an action-capable,
-   tenant-aware endpoint should it call this action. That integration must use
-   the existing Ed25519 principal, `evidence` scope, quota, idempotency key,
-   organization service-account/project authorization, and usage ledger.
+5. Exercise the authenticated first-party REST and MCP transports with an
+   enrolled evidence-scoped agent. Reuse an idempotency key and confirm the
+   result is replayed without a second usage debit or provider operation.
 
-Until step 5, public and agent universal search deliberately continue to use
-the proven lexical path. Internal action-capable callers may use
-`semanticSearch:searchHybridPublic`: it preserves lexical ordering and only
-appends freshly authorized semantic-only evidence when the switch is enabled.
-This avoids charging an agent, breaking idempotency, or weakening tenant
-authorization merely to add a semantic fallback.
+Public and agent universal search deliberately continue to use the proven
+lexical path. The separate authenticated semantic transport is the only public
+caller of `semanticSearch:searchHybridPublic`; it preserves lexical ordering
+and only appends freshly authorized semantic-only evidence when the switch is
+enabled.
