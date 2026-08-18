@@ -2430,6 +2430,7 @@ export default defineSchema({
     attempt: v.number(),
     responseCode: v.optional(v.number()),
     nextAttemptAt: v.optional(v.number()),
+    replayCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

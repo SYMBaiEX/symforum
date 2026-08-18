@@ -572,9 +572,9 @@ export const replayDelivery = mutation({
       .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey)).unique();
     if (delivery === null) throw new ConvexError({ code: "WEBHOOK_DELIVERY_NOT_FOUND", message: "Webhook delivery was not found." });
     if (subscription.status !== "active") throw new ConvexError({ code: "WEBHOOK_REPLAY_DENIED", message: "Only active subscriptions can replay deliveries." });
-    if (delivery.attempt >= MAX_REPLAY_ATTEMPTS) throw new ConvexError({ code: "WEBHOOK_REPLAY_LIMIT", message: "Webhook replay budget exhausted." });
+    if ((delivery.replayCount ?? 0) >= MAX_REPLAY_ATTEMPTS) throw new ConvexError({ code: "WEBHOOK_REPLAY_LIMIT", message: "Webhook replay budget exhausted." });
     const now = Date.now();
-    await ctx.db.patch("apiWebhookDeliveries", delivery._id, { status: "pending", attempt: 0, nextAttemptAt: now, updatedAt: now });
+    await ctx.db.patch("apiWebhookDeliveries", delivery._id, { status: "pending", attempt: 0, replayCount: (delivery.replayCount ?? 0) + 1, nextAttemptAt: now, updatedAt: now });
     await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId: delivery._id });
     return {
       eventKey: delivery.eventKey,
@@ -598,7 +598,7 @@ export const sendTestEvent = mutation({
       throw new ConvexError({ code: "WEBHOOK_TEST_EVENT_DENIED", message: "An active subscription to this event type is required." });
     }
     const now = Date.now();
-    const eventKey = `test:${subscription._id}:${now}`;
+    const eventKey = `test:${subscription._id}:${now}:${base64Url(crypto.getRandomValues(new Uint8Array(8)))}`;
     await ctx.db.insert("apiWebhookEvents", {
       provider: "evidence-delivery",
       eventKey,

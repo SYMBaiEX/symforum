@@ -125,7 +125,7 @@ describe("evidence webhooks", () => {
 
   test("owner and enrolled evidence agent share only their owner-scoped subscriptions", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
-    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
     try {
       const t = setup();
       const ids = await fixture(t);
@@ -184,7 +184,7 @@ describe("evidence webhooks", () => {
 
   test("idempotently enqueues only active matching deliveries", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
-    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
     try {
       const t = setup();
       const ids = await fixture(t);
@@ -236,7 +236,7 @@ describe("evidence webhooks", () => {
 
   test("caps subscriptions per owner", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
-    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
     try {
       const t = setup();
       const ids = await fixture(t);
