@@ -6,7 +6,7 @@ import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { getBlogPost } from "@/lib/blog-data";
 import { formatDate } from "@/lib/format";
-import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
+import { safeImageUrl } from "@/lib/safe-url";
 import {
   breadcrumbStructuredData,
   compactSeoTitle,
@@ -145,9 +145,9 @@ export default async function BlogPostPage({
                   src={imageUrl}
                   alt={post.imageAlt ?? post.title}
                   fill
-                  priority
+                  fetchPriority="high"
+                  loading="eager"
                   sizes="(max-width: 768px) calc(100vw - 2rem), 48rem"
-                  unoptimized={isLocalImageUrl(imageUrl)}
                   className="object-cover"
                 />
               </div>

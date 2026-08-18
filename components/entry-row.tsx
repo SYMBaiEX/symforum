@@ -1,6 +1,6 @@
 import { BlogPost } from "@/lib/content";
 import { formatDate } from "@/lib/format";
-import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
+import { safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import Image from "next/image";
@@ -11,13 +11,16 @@ export function EntryRow({
   divided = true,
   compact = false,
   priority = false,
+  headingLevel = "h3",
 }: {
   post: BlogPost;
   divided?: boolean;
   compact?: boolean;
   priority?: boolean;
+  headingLevel?: "h2" | "h3";
 }) {
   const imageUrl = safeImageUrl(post.imageUrl);
+  const Heading = headingLevel;
 
   return (
     <Link
@@ -47,22 +50,22 @@ export function EntryRow({
             src={imageUrl}
             alt={post.imageAlt ?? post.title}
             fill
-            priority={priority}
+            fetchPriority={priority ? "high" : undefined}
+            loading={priority ? "eager" : "lazy"}
             sizes="7.5rem"
-            unoptimized={isLocalImageUrl(imageUrl)}
             className="h-[5.5rem] w-full border border-row-border object-cover"
           />
         </div>
       ) : null}
       <div className="col-span-2 min-w-0 md:col-span-1">
-        <h3
+        <Heading
           className={cn(
             "font-semibold leading-tight",
             compact ? "text-lg md:text-xl" : "text-xl md:text-2xl",
           )}
         >
           {post.title}
-        </h3>
+        </Heading>
       </div>
       <div
         className={cn(

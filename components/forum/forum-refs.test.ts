@@ -47,7 +47,7 @@ describe("forum calendar refs", () => {
         title: "Signal log",
         body: "Thread body",
         author: "Suki",
-        authorImage: "/images/forum/suki-space-pirate.png",
+        authorImage: "/images/forum/suki-space-pirate.webp",
         authorLocation: "The Info Sea",
         authorJoinedAt: 1_754_000_000_000,
         createdAt: 1_754_000_000_000,
@@ -57,7 +57,7 @@ describe("forum calendar refs", () => {
 
     expect(rootPost).toMatchObject({
       author: "Suki",
-      authorImage: "/images/forum/suki-space-pirate.png",
+      authorImage: "/images/forum/suki-space-pirate.webp",
       authorLocation: "The Info Sea",
     });
   });

@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 
 const analyticsSource = v.union(
@@ -18,6 +18,8 @@ const USER_AGENT_LIMIT = 420;
 const METADATA_LIMIT = 2_000;
 const DEDUPE_WINDOW_MS = 1_500;
 const ADMIN_EVENT_LIMIT = 2_500;
+const ANALYTICS_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
+const ANALYTICS_CLEANUP_BATCH = 200;
 
 type AnalyticsSource = Doc<"analyticsEvents">["source"];
 type AnalyticsEvent = Doc<"analyticsEvents">;
@@ -128,11 +130,14 @@ export const listAdmin = query({
 export const summaryAdmin = query({
   args: {
     days: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
     const days = Math.max(1, Math.min(Math.floor(args.days ?? 14), 90));
-    const now = Date.now();
+    // Optional during rolling deploys so the previous web bundle remains
+    // compatible; current callers always pass a stable query timestamp.
+    const now = args.now ?? Date.now();
     const start = now - days * 24 * 60 * 60 * 1000;
     const sample = await ctx.db
       .query("analyticsEvents")
@@ -169,8 +174,32 @@ export const summaryAdmin = query({
         key: AnalyticsSource;
         count: number;
       }>,
-      daily: dailyBuckets(events, days),
+      daily: dailyBuckets(events, days, now),
       recent: events.slice(0, 20),
+    };
+  },
+});
+
+export const cleanupExpired = internalMutation({
+  args: {},
+  returns: v.object({
+    cutoff: v.number(),
+    deleted: v.number(),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - ANALYTICS_RETENTION_MS;
+    const expired = await ctx.db
+      .query("analyticsEvents")
+      .withIndex("by_createdAt", (q) => q.lt("createdAt", cutoff))
+      .take(ANALYTICS_CLEANUP_BATCH);
+    await Promise.all(
+      expired.map((event) => ctx.db.delete("analyticsEvents", event._id)),
+    );
+    return {
+      cutoff,
+      deleted: expired.length,
+      hasMore: expired.length === ANALYTICS_CLEANUP_BATCH,
     };
   },
 });
@@ -190,9 +219,9 @@ function ranked<T>(rows: T[], keyForRow: (row: T) => string, limit: number) {
     .slice(0, limit);
 }
 
-function dailyBuckets(events: AnalyticsEvent[], days: number) {
+function dailyBuckets(events: AnalyticsEvent[], days: number, now: number) {
   const counts = new Map<string, { events: number; pageViews: number }>();
-  const today = new Date();
+  const today = new Date(now);
   for (let index = days - 1; index >= 0; index -= 1) {
     const date = new Date(today);
     date.setUTCDate(today.getUTCDate() - index);

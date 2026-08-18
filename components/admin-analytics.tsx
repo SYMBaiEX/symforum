@@ -28,13 +28,17 @@ type WindowDays = (typeof windows)[number];
 type EventSourceFilter = AnalyticsSource | "all";
 
 export function AdminAnalytics() {
+  const [queryNow] = useState(() => Date.now());
   const [days, setDays] = useState<WindowDays>(14);
   const [sourceFilter, setSourceFilter] = useState<EventSourceFilter>("all");
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [searchValue, setSearchValue] = useState("");
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
-  const summary = useQuery(convexRefs.admin.analyticsSummary, { days });
+  const summary = useQuery(convexRefs.admin.analyticsSummary, {
+    days,
+    now: queryNow,
+  });
   const events = useQuery(convexRefs.admin.analyticsEvents, {
     ...(eventFilter !== "all" ? { name: eventFilter } : {}),
     ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),

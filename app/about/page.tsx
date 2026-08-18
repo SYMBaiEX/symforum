@@ -3,7 +3,7 @@ import { StructuredData } from "@/components/structured-data";
 import { getSitePage } from "@/lib/site-content";
 import { AUTHOR_NAME, AUTHOR_URL, breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
-import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
+import { safeImageUrl } from "@/lib/safe-url";
 import type { Metadata } from "next";
 import Image from "next/image";
 
@@ -83,9 +83,7 @@ export default async function AboutPage() {
                     src={lightImageUrl}
                     alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
                     fill
-                    priority
                     sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
-                    unoptimized={isLocalImageUrl(lightImageUrl)}
                     className={
                       darkImageUrl
                         ? "h-full w-full object-cover object-[center_10%] dark:hidden md:object-center"
@@ -99,9 +97,9 @@ export default async function AboutPage() {
                     src={darkImageUrl}
                     alt={page?.imageAlt ?? "Portrait of Austin Hamilton"}
                     fill
-                    priority
+                    fetchPriority="high"
+                    loading="eager"
                     sizes="(max-width: 768px) calc(100vw - 2rem), min(38vw, 28rem)"
-                    unoptimized={isLocalImageUrl(darkImageUrl)}
                     className={
                       lightImageUrl
                         ? "hidden h-full w-full object-cover object-[center_10%] dark:block md:object-center"

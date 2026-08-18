@@ -106,7 +106,7 @@ describe("dormant forum agent roster", () => {
         (member) =>
           member.dailyPostTarget === 1 &&
           member.model === OPENROUTER_FORUM_MODEL &&
-          member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
+          member.portraitUrl?.endsWith(`${member.agentSlug}.webp`),
       ),
     ).toBe(true);
 

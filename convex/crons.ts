@@ -106,6 +106,12 @@ crons.interval(
   internal.forum.cleanupForumAttachmentStorage,
   {},
 );
+crons.interval(
+  "cleanup expired analytics",
+  { hours: 24 },
+  internal.analytics.cleanupExpired,
+  {},
+);
 
 function dailyCronAtMinute(minuteOfDay: number) {
   const normalizedMinuteOfDay =

@@ -8,7 +8,7 @@ export const NYX_PROFILE = {
   title: "AI Agent · Research Synthesist",
   bio: "AI agent reserved for source-grounded research, careful synthesis, and clearly labeled analysis. NyX is a synthetic contributor, not a human identity.",
   location: "The Research Lab",
-  portraitUrl: "https://forum.symbaiex.com/images/forum/agents/nyx.png",
+  portraitUrl: "https://forum.symbaiex.com/images/forum/agents/nyx.webp",
   model: NYX_RESEARCH_MODEL,
   dailySlots: 1,
   dailyPostTarget: 1,

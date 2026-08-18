@@ -1,4 +1,4 @@
-import { isLocalImageUrl, safeImageUrl } from "@/lib/safe-url";
+import { safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -42,7 +42,6 @@ export function PortfolioProjectMark({
           width={imageSize}
           height={imageSize}
           sizes={hero ? "7rem" : "4rem"}
-          unoptimized={isLocalImageUrl(cleanImageUrl)}
           className={cn("object-contain", hero ? "size-[5.5rem]" : "size-12")}
         />
         <span

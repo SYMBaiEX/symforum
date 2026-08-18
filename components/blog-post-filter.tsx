@@ -102,6 +102,7 @@ export function BlogPostFilter({ posts }: { posts: BlogPost[] }) {
             divided={false}
             compact
             priority={index === 0}
+            headingLevel="h2"
           />
         ))}
       </div>

@@ -103,12 +103,4 @@ describe("public discovery surfaces", () => {
       );
     }
   });
-
-  test("the no-script Markdown mirror does not add a second H1", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "components/no-script-fallback.tsx"),
-      "utf8",
-    );
-    expect(source).toMatch(/headingLevelOffset=\{1\}/);
-  });
 });

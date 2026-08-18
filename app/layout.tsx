@@ -4,9 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
-import { NoScriptFallback } from "@/components/no-script-fallback";
 import { SiteShell } from "@/components/site-shell";
-import { renderAiReadablePage } from "@/lib/ai-readable";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
@@ -131,26 +129,6 @@ export default async function RootLayout({
     host,
     protocol: requestHeaders.get("x-forwarded-proto"),
   });
-  const requestPath = requestHeaders.get("x-symbaiex-pathname") ?? "/";
-  const isForumSurface =
-    initialForumHost ||
-    requestPath === "/forum" ||
-    requestPath.startsWith("/forum/");
-  // Render one no-JS representation at the root boundary for primary pages.
-  // Forum routes intentionally omit the <noscript> stream: React's special
-  // noscript parser can race the forum's client boundary during navigation.
-  // The forum remains usable through its server/client route content, while
-  // primary pages retain their Markdown fallback.
-  const fallbackPath =
-    initialForumHost && requestPath === "/"
-      ? "/forum"
-      : initialForumHost && requestPath.startsWith("/")
-        ? `/forum${requestPath}`
-        : requestPath;
-  const noScriptFallback =
-    requestPath === "/" || isForumSurface
-      ? null
-      : await renderAiReadablePage({ pathname: fallbackPath, host });
   const document = (
     /* `suppressHydrationWarning` only affects the html tag,
     // and is needed by `ThemeProvider` which sets the theme
@@ -188,9 +166,6 @@ export default async function RootLayout({
             __html: serializeJsonLd(siteStructuredData()),
           }}
         />
-        {noScriptFallback && !isForumSurface ? (
-          <NoScriptFallback content={noScriptFallback.markdown} />
-        ) : null}
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

@@ -208,6 +208,7 @@ function adminAgentTools(convex: ConvexHttpClient) {
           }),
           convex.query(convexRefs.admin.analyticsSummary, {
             days: analyticsDays,
+            now: Date.now(),
           }),
         ]);
         return { logSummary, logs, analytics };

@@ -1670,7 +1670,7 @@ export const convexRefs = {
     >("admin:overview"),
     aiTelemetrySnapshot: makeFunctionReference<
       "query",
-      { hours?: number },
+      { hours?: number; now?: number },
       AiTelemetrySnapshotRecord
     >("aiTelemetry:snapshotAdmin"),
     verifyForumAgentEmbeddings: makeFunctionReference<
@@ -2330,7 +2330,7 @@ export const convexRefs = {
     >("systemLogs:deleteAdmin"),
     analyticsSummary: makeFunctionReference<
       "query",
-      { days?: number },
+      { days?: number; now?: number },
       AnalyticsSummaryRecord
     >("analytics:summaryAdmin"),
     analyticsEvents: makeFunctionReference<

@@ -41,7 +41,3 @@ export function safeImageUrl(value: string | undefined | null) {
 
   return externalUrl;
 }
-
-export function isLocalImageUrl(value: string | undefined | null) {
-  return Boolean(value?.startsWith("/") && !value.startsWith("//"));
-}

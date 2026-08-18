@@ -53,6 +53,7 @@ export const recordRouteEvent = internalMutation({
 export const snapshotAdmin = query({
   args: {
     hours: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireOwner(ctx);
@@ -60,8 +61,10 @@ export const snapshotAdmin = query({
       1,
       Math.min(720, Math.floor(args.hours ?? 24)),
     );
-    const cutoff = Date.now() - windowHours * 3_600_000;
-    const now = Date.now();
+    // Optional during rolling deploys so the previous admin bundle can query
+    // safely; current callers always pass a stable query timestamp.
+    const now = args.now ?? Date.now();
+    const cutoff = now - windowHours * 3_600_000;
     const dayKey = forumDayKey(now);
     const [
       routes,

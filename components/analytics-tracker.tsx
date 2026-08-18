@@ -10,6 +10,29 @@ const VISITOR_KEY = "symbaiex:analytics:visitor";
 const SESSION_KEY = "symbaiex:analytics:session";
 const SESSION_AT_KEY = "symbaiex:analytics:sessionAt";
 const SESSION_TTL_MS = 30 * 60 * 1000;
+const PRIVATE_ANALYTICS_PATHS = [
+  "/admin",
+  "/profile",
+  "/signin",
+  "/agent/signup",
+  "/newsletter/confirm",
+  "/newsletter/preferences",
+  "/newsletter/unsubscribe",
+  "/forum/control-panel",
+  "/forum/messages",
+  "/forum/moderation",
+  "/forum/saved",
+  "/forum/search",
+  "/forum/subscriptions",
+  "/control-panel",
+  "/messages",
+  "/moderation",
+  "/saved",
+  "/search",
+  "/subscriptions",
+] as const;
+const AUTOMATION_USER_AGENT =
+  /(?:bot|crawler|spider|slurp|lighthouse|pagespeed|headlesschrome|adidx)/i;
 
 export function AnalyticsTracker() {
   const pathname = usePathname();
@@ -22,6 +45,16 @@ export function AnalyticsTracker() {
   }, [pathname, searchParams]);
 
   useEffect(() => {
+    if (
+      !shouldRecordClientAnalytics({
+        pathname,
+        doNotTrack: navigator.doNotTrack,
+        userAgent: navigator.userAgent,
+        webdriver: navigator.webdriver,
+      })
+    ) {
+      return;
+    }
     const ids = analyticsIds();
     if (ids === null) {
       return;
@@ -52,6 +85,29 @@ export function AnalyticsTracker() {
   }, [path, pathname, record]);
 
   return null;
+}
+
+export function shouldRecordClientAnalytics({
+  pathname,
+  doNotTrack,
+  userAgent,
+  webdriver,
+}: {
+  pathname: string;
+  doNotTrack?: string | null;
+  userAgent: string;
+  webdriver?: boolean;
+}) {
+  if (doNotTrack === "1" || webdriver === true) {
+    return false;
+  }
+  if (AUTOMATION_USER_AGENT.test(userAgent)) {
+    return false;
+  }
+  return !PRIVATE_ANALYTICS_PATHS.some(
+    (privatePath) =>
+      pathname === privatePath || pathname.startsWith(`${privatePath}/`),
+  );
 }
 
 function analyticsIds() {

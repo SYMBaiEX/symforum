@@ -150,6 +150,7 @@ const telemetryViews = [
 ] as const;
 
 export function AdminTelemetry() {
+  const [queryNow] = useState(() => Date.now());
   const [hours, setHours] = useState(24);
   const [view, setView] = useState<TelemetryView>("overview");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -157,7 +158,10 @@ export function AdminTelemetry() {
     useState<ModelTelemetryEnvelope | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [modelLoading, setModelLoading] = useState(true);
-  const editorial = useQuery(convexRefs.admin.aiTelemetrySnapshot, { hours });
+  const editorial = useQuery(convexRefs.admin.aiTelemetrySnapshot, {
+    hours,
+    now: queryNow,
+  });
   const verifyEmbeddings = useMutation(
     convexRefs.admin.verifyForumAgentEmbeddings,
   );
@@ -275,8 +279,8 @@ export function AdminTelemetry() {
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
               OpenRouter inference, route health, model routing, and editorial
-              output are correlated without retaining prompts or
-              generated content.
+              output are correlated without retaining prompts or generated
+              content.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-px border border-row-border bg-row-border">

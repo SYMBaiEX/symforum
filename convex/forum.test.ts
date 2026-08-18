@@ -1289,7 +1289,7 @@ describe("forum notification preferences", () => {
       prefixSlug: "news",
     });
     expect(stored.profile).toMatchObject({
-      avatarUrl: "https://forum.symbaiex.com/images/forum/belle-neko-news.png",
+      avatarUrl: "https://forum.symbaiex.com/images/forum/belle-neko-news.webp",
       customTitle: "Canary News Neko",
       postCount: 1,
       threadCount: 1,

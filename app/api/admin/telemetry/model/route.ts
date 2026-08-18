@@ -21,10 +21,10 @@ export async function GET(request: Request) {
     const hours = Number.isFinite(requestedHours)
       ? Math.max(1, Math.min(720, Math.floor(requestedHours)))
       : 24;
-    const snapshot = await convex.query(
-      convexRefs.admin.aiTelemetrySnapshot,
-      { hours },
-    );
+    const snapshot = await convex.query(convexRefs.admin.aiTelemetrySnapshot, {
+      hours,
+      now: Date.now(),
+    });
     const attempts = snapshot.totals.routeAttempts;
     const failures = snapshot.totals.routeFailures;
     const generatedAt = new Date(snapshot.generatedAt).toISOString();
@@ -78,7 +78,9 @@ export async function GET(request: Request) {
             latest: snapshot.operations.canary
               ? {
                   id: "openrouter-canary",
-                  at: new Date(snapshot.operations.canary.checkedAt).toISOString(),
+                  at: new Date(
+                    snapshot.operations.canary.checkedAt,
+                  ).toISOString(),
                   modelHealthy: snapshot.operations.canary.healthy,
                 }
               : null,
@@ -96,7 +98,9 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "OpenRouter telemetry unavailable";
+      error instanceof Error
+        ? error.message
+        : "OpenRouter telemetry unavailable";
     after(() =>
       recordSystemLog({
         level: "warn",

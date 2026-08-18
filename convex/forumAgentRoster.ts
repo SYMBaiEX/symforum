@@ -354,7 +354,7 @@ export function forumAgentRosterEntry(agentSlug: string) {
 }
 
 export function forumAgentPortraitUrl(agentSlug: string) {
-  return `https://forum.symbaiex.com/images/forum/agents/${agentSlug}.png`;
+  return `https://forum.symbaiex.com/images/forum/agents/${agentSlug}.webp`;
 }
 
 export function activeForumAgentBio(entry: ForumAgentRosterEntry) {

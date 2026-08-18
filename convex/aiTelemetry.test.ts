@@ -26,19 +26,27 @@ describe("AI telemetry", () => {
       detail: "Embedding search is available; 4 entries available.",
     };
 
-    await t.mutation(internal.aiRoutingControlData.recordOperationalState, input);
-    const first = await t.run(async (ctx) =>
-      await ctx.db
-        .query("aiOperationalStates")
-        .withIndex("by_key", (q) => q.eq("key", input.key))
-        .unique(),
+    await t.mutation(
+      internal.aiRoutingControlData.recordOperationalState,
+      input,
     );
-    await t.mutation(internal.aiRoutingControlData.recordOperationalState, input);
-    const second = await t.run(async (ctx) =>
-      await ctx.db
-        .query("aiOperationalStates")
-        .withIndex("by_key", (q) => q.eq("key", input.key))
-        .unique(),
+    const first = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("aiOperationalStates")
+          .withIndex("by_key", (q) => q.eq("key", input.key))
+          .unique(),
+    );
+    await t.mutation(
+      internal.aiRoutingControlData.recordOperationalState,
+      input,
+    );
+    const second = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("aiOperationalStates")
+          .withIndex("by_key", (q) => q.eq("key", input.key))
+          .unique(),
     );
 
     expect(first?.updatedAt).toBe(second?.updatedAt);
@@ -98,6 +106,7 @@ describe("AI telemetry", () => {
     const owner = t.withIdentity({ subject: ownerId, name: "Owner" });
     const result = await owner.query(api.aiTelemetry.snapshotAdmin, {
       hours: 24,
+      now,
     });
 
     expect(result.totals).toMatchObject({
@@ -143,11 +152,11 @@ describe("AI telemetry", () => {
     );
     const reader = t.withIdentity({ subject: readerId, name: "Reader" });
 
-    await expect(t.query(api.aiTelemetry.snapshotAdmin, {})).rejects.toThrow(
-      /sign in to continue/i,
-    );
     await expect(
-      reader.query(api.aiTelemetry.snapshotAdmin, {}),
+      t.query(api.aiTelemetry.snapshotAdmin, { now: Date.now() }),
+    ).rejects.toThrow(/sign in to continue/i);
+    await expect(
+      reader.query(api.aiTelemetry.snapshotAdmin, { now: Date.now() }),
     ).rejects.toThrow(/owner access/i);
   });
 });

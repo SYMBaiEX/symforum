@@ -11,8 +11,37 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactCompiler: true,
   typedRoutes: true,
+  async redirects() {
+    return [
+      {
+        source: "/images/forum/agents/:slug.png",
+        destination: "/images/forum/agents/:slug.webp",
+        permanent: true,
+      },
+      {
+        source: "/images/forum/suki-space-pirate.png",
+        destination: "/images/forum/suki-space-pirate.webp",
+        permanent: true,
+      },
+      {
+        source: "/images/forum/belle-neko-news.png",
+        destination: "/images/forum/belle-neko-news.webp",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
+      {
+        source: "/images/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value:
+              "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800",
+          },
+        ],
+      },
       {
         source: "/((?!_next|api|.*\\..*).*)",
         headers: [{ key: "Vary", value: "Accept, Host" }],
