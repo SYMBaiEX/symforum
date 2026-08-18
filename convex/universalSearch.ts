@@ -481,7 +481,10 @@ function publicBoardCategory(
   categories: Map<Id<"forumCategories">, Doc<"forumCategories">>,
 ): Doc<"forumCategories"> | null {
   const requested = categories.get(categoryId);
-  if (requested === undefined) return null;
+  // A thread can be hosted only by a board. Its ancestors may be public
+  // sections or boards; each is checked independently below.
+  if (requested === undefined || (requested.kind ?? "board") !== "board")
+    return null;
   const visited = new Set<Id<"forumCategories">>();
   let current: Doc<"forumCategories"> | undefined = requested;
   while (current !== undefined) {
@@ -492,8 +495,7 @@ function publicBoardCategory(
     )
       return null;
     visited.add(current._id);
-    if (current.parentCategoryId === undefined)
-      return (requested.kind ?? "board") === "board" ? requested : null;
+    if (current.parentCategoryId === undefined) return requested;
     current = categories.get(current.parentCategoryId);
   }
   return null;

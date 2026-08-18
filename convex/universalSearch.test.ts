@@ -296,7 +296,7 @@ describe("universal public lexical search", () => {
   test("fails closed for retired/private sources and unsafe URLs, and uses the live forum slug", async () => {
     const t = setup();
     await seedPublicCorpus(t);
-    const { retiredSourceId } = await t.run(async (ctx) => {
+    const { retiredSourceId, sectionId } = await t.run(async (ctx) => {
       const publicSource = await ctx.db
         .query("evidenceSources")
         .withIndex("by_sourceKey", (q) => q.eq("sourceKey", "alpha-source"))
@@ -309,6 +309,22 @@ describe("universal public lexical search", () => {
       expect(research).not.toBeNull();
       await ctx.db.patch("forumCategories", research!._id, {
         slug: "research-current",
+      });
+      const sectionId = await ctx.db.insert("forumCategories", {
+        slug: "public-research-section",
+        name: "Public research section",
+        description: "Public ancestor section",
+        kind: "section",
+        status: "active",
+        viewAccess: "public",
+        position: 0,
+        threadCount: 0,
+        postCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.patch("forumCategories", research!._id, {
+        parentCategoryId: sectionId,
       });
       const retiredSourceId = await ctx.db.insert("evidenceSources", {
         sourceKey: "retired-alpha-source",
@@ -408,7 +424,7 @@ describe("universal public lexical search", () => {
         firstSeenAt: 1,
         updatedAt: 1,
       });
-      return { retiredSourceId };
+      return { retiredSourceId, sectionId };
     });
 
     const results = await t.query(internal.universalSearch.searchPublic, {
@@ -446,5 +462,30 @@ describe("universal public lexical search", () => {
     );
     expect(privateSourceTitles).not.toContain("Retired alpha document");
     expect(privateSourceTitles).not.toContain("Retired alpha claim");
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", sectionId, {
+        viewAccess: "members",
+      });
+    });
+    const privateAncestorResults = await t.query(
+      internal.universalSearch.searchPublic,
+      { query: "alpha", limit: 50 },
+    );
+    expect(privateAncestorResults.map((result) => result.type)).not.toContain(
+      "forum_thread",
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", sectionId, {
+        viewAccess: "public",
+        status: "archived",
+      });
+    });
+    const inactiveAncestorResults = await t.query(
+      internal.universalSearch.searchPublic,
+      { query: "alpha", limit: 50 },
+    );
+    expect(inactiveAncestorResults.map((result) => result.type)).not.toContain(
+      "forum_thread",
+    );
   });
 });
