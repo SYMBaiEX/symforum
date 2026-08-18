@@ -304,20 +304,46 @@ describe("agent quota foundation", () => {
     ).rejects.toThrow(/sign in|owner/i);
   });
 
-  test("uses the current UTC month for fresh quota status", async () => {
+  test("uses the current UTC month instead of a prior stored budget", async () => {
     const t = setup();
     const fixture = await seedFixture(t);
     const owner = t.withIdentity({ subject: fixture.ownerUserId });
     const agent = t.withIdentity({ subject: fixture.agentOneUserId });
     const monthKey = new Date().toISOString().slice(0, 7);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("agentQuotaBudgets", {
+        ownerUserId: fixture.ownerUserId,
+        monthKey: "2000-01",
+        freeAllowanceUnits: 2,
+        hardCapUnits: 5,
+        usedUnits: 4,
+        hardCapMetadataJson: "{}",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("agentQuotaUsageCounters", {
+        ownerUserId: fixture.ownerUserId,
+        agentId: "quota-one",
+        monthKey: "2000-01",
+        usedUnits: 4,
+        updatedAt: 1,
+      });
+    });
     await expect(
       owner.query(api.agentQuota.getAgentQuota, { agentId: "quota-one" }),
-    ).resolves.toMatchObject({ monthKey, usedUnits: 0 });
+    ).resolves.toMatchObject({
+      monthKey,
+      usedUnits: 0,
+      agentUsedUnits: 0,
+      hardCapUnits: 1_000,
+    });
     await expect(
       agent.query(api.agentQuota.getMyAgentQuota, {}),
     ).resolves.toMatchObject({
       monthKey,
       usedUnits: 0,
+      agentUsedUnits: 0,
+      hardCapUnits: 1_000,
     });
   });
 });

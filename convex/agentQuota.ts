@@ -536,22 +536,10 @@ export const getAgentQuota = query({
       ctx,
       args.agentId,
     );
-    const requestedMonth =
-      args.monthKey === undefined
-        ? null
-        : normalizeAgentQuotaMonthKey(args.monthKey);
     const monthKey =
-      requestedMonth ??
-      (
-        await ctx.db
-          .query("agentQuotaBudgets")
-          .withIndex("by_ownerUserId_and_monthKey", (q) =>
-            q.eq("ownerUserId", ownerUserId),
-          )
-          .order("desc")
-          .first()
-      )?.monthKey ??
-      monthKeyForTimestamp(Date.now());
+      args.monthKey === undefined
+        ? monthKeyForTimestamp(Date.now())
+        : normalizeAgentQuotaMonthKey(args.monthKey);
     return await readQuotaState(ctx, identity, ownerUserId, monthKey);
   },
 });
@@ -576,15 +564,7 @@ export const getMyAgentQuota = query({
     }
     const monthKey =
       args.monthKey === undefined
-        ? ((
-            await ctx.db
-              .query("agentQuotaBudgets")
-              .withIndex("by_ownerUserId_and_monthKey", (q) =>
-                q.eq("ownerUserId", identity.ownerUserId!),
-              )
-              .order("desc")
-              .first()
-          )?.monthKey ?? monthKeyForTimestamp(Date.now()))
+        ? monthKeyForTimestamp(Date.now())
         : normalizeAgentQuotaMonthKey(args.monthKey);
     return await readQuotaState(ctx, identity, identity.ownerUserId, monthKey);
   },
