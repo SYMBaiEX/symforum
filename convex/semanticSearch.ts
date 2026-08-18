@@ -679,9 +679,13 @@ export const cleanupExpiredOperations = internalMutation({
     let deleted = 0;
     for (const status of ["completed", "refunded"] as const) {
       const rows = await ctx.db.query("semanticSearchOperations")
-        .withIndex("by_status_and_updatedAt", (q) => q.eq("status", status)).order("asc").take(OPERATION_CLEANUP_LIMIT - deleted);
+        .withIndex("by_kind_and_status_and_updatedAt", (q) => q
+          .eq("kind", "query")
+          .eq("status", status)
+          .lte("updatedAt", now - QUERY_OPERATION_RETENTION_MS))
+        .order("asc")
+        .take(OPERATION_CLEANUP_LIMIT - deleted);
       for (const row of rows) {
-        if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
         await ctx.db.delete("semanticSearchOperations", row._id); deleted += 1;
       }
       if (deleted >= OPERATION_CLEANUP_LIMIT) break;

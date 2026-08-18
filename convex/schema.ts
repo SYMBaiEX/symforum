@@ -1369,7 +1369,8 @@ export default defineSchema({
     .index("by_operationKey", ["operationKey"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_leaseExpiresAt", ["leaseExpiresAt"])
-    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"]),
+    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
+    .index("by_kind_and_status_and_updatedAt", ["kind", "status", "updatedAt"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),

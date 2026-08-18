@@ -107,4 +107,19 @@ describe("semantic search safety controls", () => {
     });
     expect(await t.mutation(cleanupOperationsRef, { now: 11 })).toMatchObject({ refunded: 1, hasMore: false });
   });
+
+  test("terminal query pruning bypasses durable index history", async () => {
+    const t = setup();
+    const now = 1_000_000;
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 101; index += 1) await ctx.db.insert("semanticSearchOperations", { operationKey: `semantic:index:terminal:${index}`, kind: "index", fingerprint: "done", model: OPENROUTER_EMBEDDING_MODEL, status: "completed", holder: "worker", reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 1, reservedInputTokens: 1, settledMicroUsd: 1, settledInputTokens: 1, createdAt: 1, updatedAt: 1, completedAt: 1 });
+      for (let index = 0; index < 2; index += 1) await ctx.db.insert("semanticSearchOperations", { operationKey: `semantic:query:terminal:${index}`, kind: "query", fingerprint: "done", model: OPENROUTER_EMBEDDING_MODEL, status: "completed", holder: "worker", reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 1, reservedInputTokens: 1, settledMicroUsd: 1, settledInputTokens: 1, createdAt: 1, updatedAt: 1, completedAt: 1 });
+    });
+    expect(await t.mutation(cleanupOperationsRef, { now })).toMatchObject({ deleted: 2, hasMore: false });
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("semanticSearchOperations").collect();
+      expect(rows.filter((row) => row.kind === "query")).toHaveLength(0);
+      expect(rows.filter((row) => row.kind === "index")).toHaveLength(101);
+    });
+  });
 });
