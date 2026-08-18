@@ -11319,6 +11319,7 @@ export const moveForumPosts = mutation({
         moderationMovedAt: now,
         updatedAt: now,
       });
+      await syncForumPostSearchProjection(ctx, post._id);
       await movePostRelatedRecords(ctx, {
         postId: post._id,
         targetThreadId: targetThread._id,
@@ -11337,17 +11338,17 @@ export const moveForumPosts = mutation({
       replyCount: Math.max(0, sourceThread.replyCount - sortedPosts.length),
       updatedAt: now,
     });
-    await syncForumThreadSearchProjection(ctx, sourceThread._id);
     await ctx.db.patch("forumThreads", targetThread._id, {
       replyCount: targetThread.replyCount + sortedPosts.length,
       lastAssignedPostNumber: firstTargetPostNumber + sortedPosts.length - 1,
       moderationActivityAt: now,
       updatedAt: now,
     });
-    await syncForumThreadSearchProjection(ctx, targetThread._id);
 
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, targetThread._id);
+    await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await syncForumThreadSearchProjection(ctx, targetThread._id);
 
     if (sourceCategory._id !== targetCategory._id) {
       await ctx.db.patch("forumCategories", sourceCategory._id, {
@@ -11562,6 +11563,7 @@ export const splitForumPosts = mutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, newThreadId);
+    await syncForumThreadSearchProjection(ctx, newThreadId);
 
     await ctx.db.patch("forumPosts", openerPost._id, {
       status: "deleted",
@@ -11570,6 +11572,7 @@ export const splitForumPosts = mutation({
       moderationReason,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, openerPost._id);
     await movePromotedPostAttachmentsToThread(ctx, {
       postId: openerPost._id,
       targetThreadId: newThreadId,
@@ -11593,6 +11596,7 @@ export const splitForumPosts = mutation({
         moderationMovedAt: now,
         updatedAt: now,
       });
+      await syncForumPostSearchProjection(ctx, post._id);
       await movePostRelatedRecords(ctx, {
         postId: post._id,
         targetThreadId: newThreadId,
@@ -11613,6 +11617,8 @@ export const splitForumPosts = mutation({
     });
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, newThreadId);
+    await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await syncForumThreadSearchProjection(ctx, newThreadId);
 
     if (sourceCategory._id === targetCategory._id) {
       await ctx.db.patch("forumCategories", targetCategory._id, {
@@ -11794,6 +11800,7 @@ export const mergeForumThread = mutation({
       moderationMovedAt: now,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, sourceOpenerPostId);
     await moveThreadRootRecordsToPost(ctx, {
       sourceThreadId: sourceThread._id,
       targetThreadId: targetThread._id,
@@ -11818,6 +11825,7 @@ export const mergeForumThread = mutation({
         moderationMovedAt: now,
         updatedAt: now,
       });
+      await syncForumPostSearchProjection(ctx, post._id);
       await movePostRelatedRecords(ctx, {
         postId: post._id,
         targetThreadId: targetThread._id,
@@ -11850,6 +11858,8 @@ export const mergeForumThread = mutation({
 
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, targetThread._id);
+    await syncForumThreadSearchProjection(ctx, sourceThread._id);
+    await syncForumThreadSearchProjection(ctx, targetThread._id);
 
     if (sourceCategory._id === targetCategory._id) {
       await ctx.db.patch("forumCategories", sourceCategory._id, {

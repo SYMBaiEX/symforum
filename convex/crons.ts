@@ -113,6 +113,15 @@ crons.interval(
   internal.forum.cleanupForumAttachmentStorage,
   {},
 );
+// Bounded to one thread or one 100-reply page per run. Once the persisted
+// completion marker exists this internal mutation is a no-op, so it does not
+// repeatedly rescan the forum after the one-time migration finishes.
+crons.interval(
+  "backfill compact forum search projections",
+  { minutes: 10 },
+  internal.forumSearchProjection.backfill,
+  {},
+);
 crons.interval(
   "cleanup expired analytics",
   { hours: 24 },

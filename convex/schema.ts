@@ -898,6 +898,7 @@ export default defineSchema({
     excerpt: v.string(),
   })
     .index("by_postId", ["postId"])
+    .index("by_threadId", ["threadId"])
     .index("by_authorId_and_status_and_createdAt", ["authorId", "status", "createdAt"])
     .searchIndex("search_by_searchText", {
       searchField: "searchText",

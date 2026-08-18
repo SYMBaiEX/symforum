@@ -30,6 +30,14 @@ function setup() {
   return t;
 }
 
+async function completeForumSearchProjectionBackfill(t: TestBackend) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await t.mutation(internal.forumSearchProjection.backfill, {});
+    if (result.done) return;
+  }
+  throw new Error("Forum search projection backfill did not finish");
+}
+
 type TestBackend = ReturnType<typeof setup>;
 
 async function seedForum(t: TestBackend) {
@@ -3126,8 +3134,21 @@ describe("forum privacy regressions", () => {
   test("compact search projections backfill once and recheck live board visibility", async () => {
     const t = setup();
     const seed = await seedForum(t);
-    const first = await t.mutation(internal.forumSearchProjection.backfill, {});
-    expect(first.done).toBe(true);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 401; index += 1) {
+        await ctx.db.insert("forumPosts", {
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          body: `Long migration reply ${index} lunar`,
+          postNumber: index + 10,
+          status: "active",
+          createdAt: 1_800_000_001_000 + index,
+          updatedAt: 1_800_000_001_000 + index,
+        });
+      }
+    });
+    await completeForumSearchProjectionBackfill(t);
     const second = await t.mutation(internal.forumSearchProjection.backfill, {});
     expect(second).toMatchObject({ done: true, alreadyCompleted: true, processed: 0 });
 
@@ -3137,6 +3158,13 @@ describe("forum privacy regressions", () => {
     expect(projections.length).toBeGreaterThan(0);
     expect(projections.every((row) => row.excerpt.length <= 220)).toBe(true);
     expect(projections.every((row) => row.searchText.length <= 4_096)).toBe(true);
+    const postProjectionCount = await t.run(async (ctx) =>
+      await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .collect(),
+    );
+    expect(postProjectionCount).toHaveLength(402);
 
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", seed.publicCategoryId, {
@@ -5927,6 +5955,7 @@ describe("forum privacy regressions", () => {
         warningId,
       };
     });
+    await completeForumSearchProjectionBackfill(t);
     const asOwner = t.withIdentity({
       subject: seed.ownerId,
       name: "Owner",
@@ -6030,6 +6059,27 @@ describe("forum privacy regressions", () => {
     });
     expect(snapshot.sourceCategory).toMatchObject({ postCount: 1 });
     expect(snapshot.targetCategory).toMatchObject({ postCount: 3 });
+    const projections = await t.run(async (ctx) => ({
+      post: await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_postId", (q) => q.eq("postId", seed.publicPostId))
+        .unique(),
+      source: await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .unique(),
+      target: await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.trustedThreadId))
+        .unique(),
+    }));
+    expect(projections.post).toMatchObject({
+      threadId: seed.trustedThreadId,
+      categoryId: seed.trustedCategoryId,
+      postNumber: 3,
+    });
+    expect(projections.source).toMatchObject({ replyCount: 0 });
+    expect(projections.target).toMatchObject({ replyCount: 2 });
     expect(snapshot.edit).toMatchObject({ threadId: seed.trustedThreadId });
     expect(snapshot.report).toMatchObject({
       threadId: seed.trustedThreadId,
@@ -6143,6 +6193,7 @@ describe("forum privacy regressions", () => {
       });
       return { emailDeliveryId, extraPublicPostId: postId, moderationEventId };
     });
+    await completeForumSearchProjectionBackfill(t);
     const asOwner = t.withIdentity({
       subject: seed.ownerId,
       name: "Owner",
@@ -6263,6 +6314,28 @@ describe("forum privacy regressions", () => {
       threadCount: 2,
       postCount: 4,
     });
+    const splitProjections = await t.run(async (ctx) => ({
+      opener: await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_postId", (q) => q.eq("postId", seed.publicPostId))
+        .unique(),
+      reply: await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_postId", (q) => q.eq("postId", related.extraPublicPostId))
+        .unique(),
+      newThread: await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) =>
+          q.eq("threadId", result.newThread._id as Id<"forumThreads">),
+        )
+        .unique(),
+    }));
+    expect(splitProjections.opener).toMatchObject({ status: "deleted" });
+    expect(splitProjections.reply).toMatchObject({
+      threadId: result.newThread._id,
+      postNumber: 2,
+    });
+    expect(splitProjections.newThread).toMatchObject({ replyCount: 1 });
     expect(snapshot.profile).toMatchObject({
       userId: seed.trustedUserId,
       threadCount: 1,
@@ -6374,6 +6447,8 @@ describe("forum privacy regressions", () => {
       });
       return { emailDeliveryId, moderationEventId };
     });
+
+    await completeForumSearchProjectionBackfill(t);
 
     const result = await asOwner.mutation(api.forum.mergeForumThread, {
       sourceThreadId: seed.publicThreadId,
@@ -6490,6 +6565,36 @@ describe("forum privacy regressions", () => {
       threadCount: 1,
       postCount: 4,
     });
+    const mergeProjections = await t.run(async (ctx) => ({
+      opener: await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_postId", (q) =>
+          q.eq("postId", result.sourceOpenerPostId as Id<"forumPosts">),
+        )
+        .unique(),
+      reply: await ctx.db
+        .query("forumPostSearchProjections")
+        .withIndex("by_postId", (q) => q.eq("postId", seed.publicPostId))
+        .unique(),
+      source: await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .unique(),
+      target: await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.trustedThreadId))
+        .unique(),
+    }));
+    expect(mergeProjections.opener).toMatchObject({
+      threadId: seed.trustedThreadId,
+      postNumber: 3,
+    });
+    expect(mergeProjections.reply).toMatchObject({
+      threadId: seed.trustedThreadId,
+      postNumber: 4,
+    });
+    expect(mergeProjections.source).toMatchObject({ status: "deleted" });
+    expect(mergeProjections.target).toMatchObject({ replyCount: 3 });
     expect(snapshot.profile).toMatchObject({
       userId: seed.trustedUserId,
       threadCount: 0,
