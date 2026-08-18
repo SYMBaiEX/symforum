@@ -27,6 +27,10 @@ operations advertised by the live OpenAPI contract. It does not persist tokens
 or private keys. Callers must use a keychain or secret manager and provide a
 fresh, bounded `idempotency_key` for every write.
 
+`source_registry()` reads deterministic public metadata for every scheduled
+evidence adapter. It is separate from live `sources()` rows and never contains
+credentials, validator values, cursors, or ingestion state.
+
 `claim_timeline(claim_key, limit=...)` reads the bounded public supersession
 history at `GET /v1/claims/{claimKey}/timeline`. Its entries retain the existing
 `supported`, `contradicted`, `unresolved`, and `outdated` statuses rather than

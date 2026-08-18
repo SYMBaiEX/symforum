@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import type { AgentQuotaConsumeResult } from "./agentQuota";
 import { requireAgentScope, requireAuthenticatedUser } from "./authz";
+import { listPublicEvidenceSourceRegistry } from "./evidenceSourceRegistry";
 import {
   configuredWebhookKek,
   decryptWebhookSecret,
@@ -13,6 +14,7 @@ import {
 const operationValidator = v.union(
   v.literal("status"),
   v.literal("sources"),
+  v.literal("source_registry"),
   v.literal("search"),
   v.literal("universal_search"),
   v.literal("document"),
@@ -47,6 +49,7 @@ const operationValidator = v.union(
 type Operation =
   | "status"
   | "sources"
+  | "source_registry"
   | "search"
   | "universal_search"
   | "document"
@@ -519,6 +522,8 @@ export const dispatch = internalMutation({
 
     let operationResult: unknown;
     switch (args.operation) {
+      case "source_registry":
+        return listPublicEvidenceSourceRegistry();
       case "sources": {
         const rows = await ctx.db
           .query("evidenceSources")

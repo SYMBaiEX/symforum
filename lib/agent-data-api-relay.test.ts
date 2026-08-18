@@ -8,6 +8,12 @@ import {
 describe("agent data API relay", () => {
   test("maps only documented REST paths", () => {
     expect(
+      mapRestRequest("GET", ["source-registry"], new URLSearchParams()),
+    ).toEqual({ operation: "source_registry", input: {} });
+    expect(
+      mapRestRequest("GET", ["source-registry"], new URLSearchParams("limit=1")),
+    ).toBeNull();
+    expect(
       mapRestRequest(
         "GET",
         ["search"],

@@ -189,6 +189,9 @@ class AgentClient:
     def sources(self, *, limit: int | None = None) -> JsonValue:
         return self._get("sources", limit=limit)
 
+    def source_registry(self) -> JsonValue:
+        return self._get("source-registry")
+
     def search(self, query: str, *, limit: int | None = None) -> JsonValue:
         return self._search("search", query, limit)
 
@@ -380,6 +383,7 @@ class AsyncAgentClient:
     async def quota(self) -> AgentQuota: return await self.__getattr_async("quota")
     async def status(self) -> Mapping[str, JsonValue]: return await self.__getattr_async("status")
     async def sources(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("sources", limit=limit)
+    async def source_registry(self) -> JsonValue: return await self.__getattr_async("source_registry")
     async def search(self, query: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("search", query, limit=limit)
     async def universal_search(self, query: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("universal_search", query, limit=limit)
     async def semantic_search(self, query: str, *, idempotency_key: str, limit: int = 10) -> JsonValue: return await self.__getattr_async("semantic_search", query, idempotency_key=idempotency_key, limit=limit)

@@ -202,6 +202,7 @@ describe("AgentClient", () => {
     await client.signIn("suki", "challenge", "signature");
     await client.refresh("refresh-token");
     await client.sources(5);
+    await client.sourceRegistry();
     await client.document("doc/1");
     await client.verifyClaim("claim-1", "claim-verify-001");
     await client.entities("zero trust", 2);
@@ -232,6 +233,7 @@ describe("AgentClient", () => {
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/auth/sign-in`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/auth/refresh`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/sources?limit=5`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/source-registry`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/documents/doc%2F1`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/claim-1/verify`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/release-security/timeline?limit=2`,

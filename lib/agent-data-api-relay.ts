@@ -5,6 +5,7 @@ export const AGENT_DATA_MAX_RESPONSE_BYTES = 1024 * 1024;
 export const AGENT_DATA_OPERATIONS = [
   "status",
   "sources",
+  "source_registry",
   "search",
   "semantic_search",
   "universal_search",
@@ -121,6 +122,13 @@ export function mapRestRequest(
     only(["limit"])
   )
     return { operation: "sources", input: limit };
+  if (
+    method === "GET" &&
+    segments.length === 1 &&
+    segments[0] === "source-registry" &&
+    only([])
+  )
+    return { operation: "source_registry", input: {} };
   if (
     method === "GET" &&
     segments.length === 1 &&

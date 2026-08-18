@@ -24,6 +24,7 @@ export type AgentManifest = {
   endpoints: {
     quota: string;
     evidenceRest: string;
+    sourceRegistry?: string;
     semanticSearch?: string;
   };
 };
@@ -181,6 +182,10 @@ export class AgentClient {
 
   async sources<T = unknown>(limit?: number): Promise<T> {
     return await this.get<T>("sources", limit);
+  }
+
+  async sourceRegistry<T = unknown>(): Promise<T> {
+    return await this.get<T>("source-registry");
   }
 
   async universalSearch<T = unknown>(

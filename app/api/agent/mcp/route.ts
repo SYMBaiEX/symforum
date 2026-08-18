@@ -22,6 +22,7 @@ const SERVER_INFO = { name: SERVER_NAME, version: SERVER_VERSION } as const;
 const TOOL_ENTRIES = [
   ["evidence.status", "status"],
   ["evidence.sources", "sources"],
+  ["evidence.source_registry", "source_registry"],
   ["evidence.search", "search"],
   ["evidence.semantic_search", "semantic_search"],
   ["evidence.universal_search", "universal_search"],

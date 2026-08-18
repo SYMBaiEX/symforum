@@ -26,6 +26,11 @@ challenge/sign-in/refresh exchange, artifact reads, webhook lifecycle calls,
 and stateless MCP JSON-RPC. It sends bearer tokens only to the canonical public
 origin unless an exact trusted development origin is explicitly configured.
 
+`sourceRegistry()` reads `GET /v1/source-registry`: deterministic public
+metadata for every scheduled evidence adapter. It is deliberately separate from
+`sources()`, which reflects live source rows, and never contains credentials,
+validator values, cursors, or ingestion state.
+
 `claimTimeline(claimKey, limit)` reads the same bounded public supersession
 history exposed by `GET /v1/claims/{claimKey}/timeline`. Entries use the
 existing `supported`, `contradicted`, `unresolved`, and `outdated` statuses;

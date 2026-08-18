@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
 import schema from "./schema";
+import { PUBLIC_EVIDENCE_SOURCE_REGISTRY } from "./evidenceSourceRegistry";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -102,6 +103,40 @@ async function fixture(t: ReturnType<typeof setup>, evidenceScope = true) {
 }
 
 describe("agent data API dispatch", () => {
+  test("returns only deterministic public registry metadata through the evidence-scoped path", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const result = await t
+      .withIdentity({ subject: ids.agentUserId })
+      .mutation(internal.agentDataApi.dispatch, {
+        operation: "source_registry",
+        input: {},
+        idempotencyKey: "source-registry-read",
+        requestFingerprint: "sha256-source-registry-read",
+      });
+    expect(result).toEqual(PUBLIC_EVIDENCE_SOURCE_REGISTRY);
+    for (const row of result as Array<Record<string, unknown>>) {
+      expect(row).not.toHaveProperty("cursor");
+      expect(row).not.toHaveProperty("etag");
+      expect(row).not.toHaveProperty("lastModified");
+      expect(row).not.toHaveProperty("apiKey");
+      expect(row).not.toHaveProperty("token");
+      expect(row).not.toHaveProperty("secret");
+    }
+    const denied = setup();
+    const deniedIds = await fixture(denied, false);
+    await expect(
+      denied
+        .withIdentity({ subject: deniedIds.agentUserId })
+        .mutation(internal.agentDataApi.dispatch, {
+          operation: "source_registry",
+          input: {},
+          idempotencyKey: "source-registry-denied",
+          requestFingerprint: "sha256-source-registry-denied",
+        }),
+    ).rejects.toThrow(/evidence scope/i);
+  });
+
   test("HTTP route preserves safe ConvexError codes without returning error data", async () => {
     const t = setup();
     const unauthenticated = await t.fetch("/agent/v1", {

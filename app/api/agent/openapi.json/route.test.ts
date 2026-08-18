@@ -26,6 +26,13 @@ describe("agent API OpenAPI contract", () => {
       expect.arrayContaining(["agentId", "challenge", "signature"]),
     );
     expect(document.paths["/v1/search"].get.operationId).toBe("searchEvidence");
+    expect(document.paths["/v1/source-registry"].get).toMatchObject({
+      operationId: "getPublicEvidenceSourceRegistry",
+      security: [{ bearerAuth: [] }],
+    });
+    expect(document.paths["/v1/source-registry"].get.description).toMatch(
+      /omits credentials.*cursors/i,
+    );
     expect(document.paths["/v1/claims/{claimKey}/timeline"].get).toMatchObject({
       operationId: "listEvidenceClaimTimeline",
       security: [{ bearerAuth: [] }],

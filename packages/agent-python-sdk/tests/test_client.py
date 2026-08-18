@@ -43,6 +43,15 @@ class AgentClientTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "between 1 and 50"):
             client.universal_search("x", limit=51)
 
+    def test_source_registry_uses_the_bounded_public_contract(self) -> None:
+        recorder = Recorder([])
+        client = AgentClient(token="access-token", transport=recorder)
+        self.assertEqual(client.source_registry(), [])
+        self.assertEqual(
+            recorder.requests[0].url,
+            f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/source-registry",
+        )
+
     def test_semantic_search_uses_public_replay_safe_contract(self) -> None:
         recorder = Recorder([])
         client = AgentClient(token="access-token", transport=recorder)
@@ -160,6 +169,7 @@ class AgentClientTests(unittest.TestCase):
         async def scenario() -> None:
             client = AsyncAgentClient(token="access-token", transport=Recorder([]))
             self.assertEqual(await client.universal_search("public", limit=1), [])
+            self.assertEqual(await client.source_registry(), [])
 
         asyncio.run(scenario())
 

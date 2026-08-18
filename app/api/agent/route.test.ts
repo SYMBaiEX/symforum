@@ -41,6 +41,9 @@ describe("agent API manifest", () => {
     expect(manifest.endpoints.evidenceRest).toBe(
       "https://www.symbaiex.com/api/agent/v1",
     );
+    expect(manifest.endpoints.sourceRegistry).toBe(
+      "https://www.symbaiex.com/api/agent/v1/source-registry",
+    );
     expect(manifest.endpoints.semanticSearch).toBe(
       "https://www.symbaiex.com/api/agent/v1/semantic-search",
     );

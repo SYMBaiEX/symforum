@@ -19,6 +19,7 @@ const client = new AgentClient({
 });
 const manifest = await client.manifest();
 const quota = await client.quota();
+const sourceRegistry = await client.sourceRegistry();
 const results = await client.search("zero trust", 10);
 const hybridResults = await client.semanticSearch("zero trust", {
   limit: 10,

@@ -82,6 +82,19 @@ const OPENAPI = {
         responses: { "200": { description: "Public evidence sources." } },
       },
     },
+    "/v1/source-registry": {
+      get: {
+        operationId: "getPublicEvidenceSourceRegistry",
+        summary: "Read the normalized scheduled evidence adapter registry",
+        description:
+          "Returns deterministic public adapter metadata only: official URLs, access and license classes, bounded request model, cadence, and synthetic fixture provenance. It omits credentials, conditional-validator values, cursors, timestamps, and live ingestion status.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Public normalized source registry." },
+          "403": { description: "The evidence scope is required." },
+        },
+      },
+    },
     "/v1/search": {
       get: {
         operationId: "searchEvidence",

@@ -11,6 +11,7 @@ client = AgentClient(token_provider=lambda: load_secret("symbaiex-access-token")
 manifest = client.manifest()
 status = client.status()
 quota = client.quota()
+source_registry = client.source_registry()
 results = client.universal_search("zero trust", limit=10)
 hybrid_results = client.semantic_search(
     "zero trust",

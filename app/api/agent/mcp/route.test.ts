@@ -128,6 +128,7 @@ describe("evidence MCP endpoint", () => {
     ).toEqual([
       "evidence.status",
       "evidence.sources",
+      "evidence.source_registry",
       "evidence.search",
       "evidence.semantic_search",
       "evidence.universal_search",

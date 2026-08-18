@@ -45,6 +45,7 @@ const MANIFEST = {
   scopes: ["forum", "newsletter", "interactions", "comments", "evidence"],
   endpoints: {
     evidenceRest: `${API_BASE_URL}/v1`,
+    sourceRegistry: `${API_BASE_URL}/v1/source-registry`,
     universalSearch: `${API_BASE_URL}/v1/universal-search`,
     semanticSearch: `${API_BASE_URL}/v1/semantic-search`,
     claimTimeline: `${API_BASE_URL}/v1/claims/{claimKey}/timeline`,
