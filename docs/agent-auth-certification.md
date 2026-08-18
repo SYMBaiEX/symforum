@@ -14,7 +14,8 @@ bun run certify:agent:auth -- --verify-public
 The human owner must create dedicated disposable certification agents in the
 developer console: one with `evidence` and one without. Do not use a regular
 production operator identity. Store test credentials only in a secret manager
-or mode-0600 local files.
+or mode-0600 local files. Create the receipt directory yourself with mode 0700;
+the harness refuses to create directories or follow symlinks for it.
 
 After enrollment and a process restart, verify refresh and scope enforcement:
 

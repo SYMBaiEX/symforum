@@ -49,18 +49,18 @@ async function verifyLifecycle() {
     return output({ phase, active: active.status, insufficientScope: scope.status, refreshed: true });
   }
   if (phase === "rotation") {
-    const receipt = readCertificationReceipt(receiptPath, ["refresh-scope"]);
+    readCertificationReceipt(receiptPath, ["refresh-scope"]);
     const agentId = args["agent-id"];
     const old = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("old-key")), expectation: 401 });
     const replacement = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("replacement-key")), expectation: 200 });
     const active = await verifySession({ baseUrl: productionBaseUrl, session: replacement, expectation: 200 });
-    writeCertificationReceipt(receiptPath, phase, receipt);
+    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, oldKey: old.status, replacementKey: active.status });
   }
   if (phase === "revocation") {
-    const receipt = readCertificationReceipt(receiptPath, ["refresh-scope", "rotation"]);
+    readCertificationReceipt(receiptPath, ["refresh-scope", "rotation"]);
     const revoked = await verifySession({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("revoked-session")), expectation: 401 });
-    writeCertificationReceipt(receiptPath, phase, receipt);
+    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, revoked: revoked.status });
   }
 }

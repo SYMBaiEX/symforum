@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const SECRET_FIELD = /(?:access|refresh|private|secret|signature|challenge|token|authorization)/i;
@@ -41,14 +41,33 @@ export function assertPrivateJsonFile(path) {
 }
 
 function assertSafeCredentialParents(path) {
-  let current = dirname(resolve(path));
+  return inspectSafeParentChain(dirname(resolve(path)));
+}
+
+function inspectSafeParentChain(start) {
+  const snapshots = [];
+  const unresolvedStart = resolve(start);
+  const directStart = lstatSync(unresolvedStart);
+  if (directStart.isSymbolicLink() || !directStart.isDirectory()) throw new Error("Credential parent must be a real directory.");
+  let current = realpathSync(unresolvedStart);
   while (true) {
     const entry = lstatSync(current);
     if (entry.isSymbolicLink() || !entry.isDirectory()) throw new Error("Credential parent must be a real directory.");
     if ((entry.mode & 0o022) !== 0) throw new Error("Credential parent must not be group/world writable.");
+    if (typeof process.getuid === "function" && entry.uid !== process.getuid() && entry.uid !== 0) throw new Error("Credential parent must be owned by the current user or root.");
+    snapshots.push({ path: current, dev: entry.dev, ino: entry.ino });
     const parent = dirname(current);
-    if (parent === current) return;
+    if (parent === current) return snapshots;
     current = parent;
+  }
+}
+
+function assertParentChainUnchanged(snapshots) {
+  for (const snapshot of snapshots) {
+    const entry = lstatSync(snapshot.path);
+    if (entry.isSymbolicLink() || !entry.isDirectory() || entry.dev !== snapshot.dev || entry.ino !== snapshot.ino || (entry.mode & 0o022) !== 0) {
+      throw new Error("Credential parent changed while writing the certification receipt.");
+    }
   }
 }
 
@@ -61,19 +80,85 @@ export function validateLifecycleConfig({ baseUrl, production, confirm, phase })
 }
 
 export function readCertificationReceipt(path, requiredPhases = []) {
-  const receipt = assertPrivateJsonFile(path);
-  if (receipt.version !== 1 || receipt.target !== "strong-bee-384" || !Array.isArray(receipt.phases)) throw new Error("Certification receipt is invalid.");
+  const receipt = readValidatedReceipt(path);
   for (const phase of requiredPhases) if (!receipt.phases.includes(phase)) throw new Error(`Certification receipt is missing prerequisite phase: ${phase}.`);
   return receipt;
 }
 
-export function writeCertificationReceipt(path, phase, previous = null) {
+const RECEIPT_PHASES = ["refresh-scope", "rotation", "revocation"];
+
+function readValidatedReceipt(path) {
+  const receipt = assertPrivateJsonFile(path);
+  const actualMode = statSync(path).mode & 0o777;
+  if (actualMode !== 0o600 || receipt.version !== 1 || receipt.target !== "strong-bee-384" || typeof receipt.updatedAt !== "string" || !Array.isArray(receipt.phases) || receipt.phases.some((phase) => !RECEIPT_PHASES.includes(phase))) {
+    throw new Error("Certification receipt is invalid.");
+  }
+  const unique = [...new Set(receipt.phases)];
+  const expected = RECEIPT_PHASES.slice(0, unique.length);
+  if (unique.length !== receipt.phases.length || unique.join("|") !== expected.join("|")) throw new Error("Certification receipt phase order is invalid.");
+  return receipt;
+}
+
+export function writeCertificationReceipt(path, phase) {
+  if (!RECEIPT_PHASES.includes(phase)) throw new Error("Unknown certification receipt phase.");
   const destination = resolve(path);
-  const phases = [...new Set([...(previous?.phases ?? []), phase])];
-  mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
-  const existing = (() => { try { return lstatSync(destination); } catch { return null; } })();
-  if (existing?.isSymbolicLink()) throw new Error("Certification receipt must not be a symlink.");
-  writeFileSync(destination, `${JSON.stringify({ version: 1, target: "strong-bee-384", phases, updatedAt: new Date().toISOString() })}\n`, { encoding: "utf8", mode: 0o600 });
+  const parent = dirname(destination);
+  const parentSnapshots = inspectSafeParentChain(parent);
+  const existing = tryLstat(destination);
+  if (existing === null) {
+    if (phase !== "refresh-scope") throw new Error("Certification receipt must start with refresh-scope.");
+    writeNewReceipt(destination, [phase], parentSnapshots);
+    return;
+  }
+  const receipt = readValidatedReceipt(destination);
+  const next = RECEIPT_PHASES[receipt.phases.length];
+  if (phase !== next) throw new Error(`Certification receipt requires phase: ${next ?? "complete"}.`);
+  writeReplacementReceipt(destination, [...receipt.phases, phase], parentSnapshots, receipt.phases);
+}
+
+function tryLstat(path) {
+  try { return lstatSync(path); } catch (error) { if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return null; throw error; }
+}
+
+function receiptPayload(phases) {
+  return `${JSON.stringify({ version: 1, target: "strong-bee-384", phases, updatedAt: new Date().toISOString() })}\n`;
+}
+
+function writeNewReceipt(destination, phases, parentSnapshots) {
+  assertParentChainUnchanged(parentSnapshots);
+  let descriptor;
+  try {
+    descriptor = openSync(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    writeSync(descriptor, receiptPayload(phases));
+    fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  const receipt = readValidatedReceipt(destination);
+  if (receipt.phases.join("|") !== phases.join("|")) throw new Error("Certification receipt verification failed.");
+}
+
+function writeReplacementReceipt(destination, phases, parentSnapshots, expectedPreviousPhases) {
+  const parent = dirname(destination);
+  const temporary = resolve(parent, `.${Math.random().toString(36).slice(2)}.plat-01.tmp`);
+  let descriptor;
+  try {
+    assertParentChainUnchanged(parentSnapshots);
+    descriptor = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    writeSync(descriptor, receiptPayload(phases));
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = undefined;
+    assertParentChainUnchanged(parentSnapshots);
+    const current = readValidatedReceipt(destination);
+    if (current.phases.join("|") !== expectedPreviousPhases.join("|")) throw new Error("Certification receipt changed before replacement.");
+    renameSync(temporary, destination);
+    const verified = readValidatedReceipt(destination);
+    if (verified.phases.join("|") !== phases.join("|")) throw new Error("Certification receipt verification failed.");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+    if (tryLstat(temporary) !== null) unlinkSync(temporary);
+  }
 }
 
 export function redactedError(error) {
