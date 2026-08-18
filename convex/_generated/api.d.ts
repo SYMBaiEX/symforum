@@ -55,6 +55,7 @@ import type * as forumAgentWorkflow from "../forumAgentWorkflow.js";
 import type * as forumLimits from "../forumLimits.js";
 import type * as forumNotificationEmails from "../forumNotificationEmails.js";
 import type * as forumPresenceComponent from "../forumPresenceComponent.js";
+import type * as forumSearchProjection from "../forumSearchProjection.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
@@ -137,6 +138,7 @@ declare const fullApi: ApiFromModules<{
   forumLimits: typeof forumLimits;
   forumNotificationEmails: typeof forumNotificationEmails;
   forumPresenceComponent: typeof forumPresenceComponent;
+  forumSearchProjection: typeof forumSearchProjection;
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;

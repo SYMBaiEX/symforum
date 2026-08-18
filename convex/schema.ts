@@ -854,6 +854,55 @@ export default defineSchema({
       searchField: "body",
       filterFields: ["status", "threadId", "categoryId", "authorId"],
     }),
+  // Search reads these small, purpose-built records instead of forumThreads and
+  // forumPosts.  Keeping the indexed text bounded prevents a single very long
+  // discussion from making every search result expensive to read.
+  forumThreadSearchProjections: defineTable({
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    categorySlug: v.string(),
+    prefixId: v.optional(v.id("forumThreadPrefixes")),
+    prefixSlug: v.optional(v.string()),
+    prefixLabel: v.optional(v.string()),
+    prefixColor: v.optional(v.string()),
+    slug: v.string(),
+    title: v.string(),
+    authorId: v.id("users"),
+    lastPostUserId: v.id("users"),
+    status: v.union(v.literal("pending"), v.literal("active"), v.literal("locked"), v.literal("hidden"), v.literal("deleted")),
+    pinned: v.boolean(),
+    replyCount: v.number(),
+    viewCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastPostAt: v.number(),
+    searchText: v.string(),
+    excerpt: v.string(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_authorId_and_status_and_createdAt", ["authorId", "status", "createdAt"])
+    .searchIndex("search_by_searchText", {
+      searchField: "searchText",
+      filterFields: ["status", "categorySlug", "categoryId", "authorId"],
+    }),
+  forumPostSearchProjections: defineTable({
+    postId: v.id("forumPosts"),
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    authorId: v.id("users"),
+    postNumber: v.optional(v.number()),
+    status: v.union(v.literal("pending"), v.literal("active"), v.literal("hidden"), v.literal("deleted")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    searchText: v.string(),
+    excerpt: v.string(),
+  })
+    .index("by_postId", ["postId"])
+    .index("by_authorId_and_status_and_createdAt", ["authorId", "status", "createdAt"])
+    .searchIndex("search_by_searchText", {
+      searchField: "searchText",
+      filterFields: ["status", "threadId", "categoryId", "authorId"],
+    }),
   forumAttachments: defineTable({
     threadId: v.id("forumThreads"),
     postId: v.optional(v.id("forumPosts")),

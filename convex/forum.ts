@@ -20,6 +20,10 @@ import {
 } from "./forumLimits";
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import {
+  syncForumPostSearchProjection,
+  syncForumThreadSearchProjection,
+} from "./forumSearchProjection";
 import { NYX_PROFILE } from "./nyxProfile";
 import {
   FORUM_PRESENCE_ROOM,
@@ -2167,11 +2171,22 @@ export const search = query({
     }
     const searchThreads = resultType !== "replies";
     const searchPosts = resultType !== "threads";
+    const searchProjectionState = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) => q.eq("key", "forum-search-projections-v1"))
+      .unique();
+    // A migration may be mid-flight on a new deployment.  The legacy path is
+    // retained only until the recorded completion marker makes the compact
+    // index authoritative, avoiding partial search results during rollout.
+    const useSearchProjections =
+      searchProjectionState !== null && searchProjectionState.completedAt > 0;
 
     const threadSearch = !searchThreads
       ? { items: [], limited: false }
       : searchQuery === null && authorId !== undefined
-        ? await searchVisibleThreadsByAuthor(
+        ? await (useSearchProjections
+            ? searchVisibleThreadProjectionsByAuthor
+            : searchVisibleThreadsByAuthor)(
             ctx,
             threadFetchLimit,
             category,
@@ -2179,7 +2194,9 @@ export const search = query({
             authorId,
             { days, sortKey },
           )
-        : await searchVisibleThreads(
+        : await (useSearchProjections
+            ? searchVisibleThreadProjections
+            : searchVisibleThreads)(
             ctx,
             searchQuery ?? "",
             threadFetchLimit,
@@ -2188,7 +2205,9 @@ export const search = query({
             authorId,
             { days, sortKey, target: searchQuery === null ? "all" : target },
           );
-    const threadHits = threadSearch.items;
+    const threadHits = threadSearch.items as unknown as Array<
+      ForumThreadDoc & { excerpt?: string }
+    >;
     const threadPage = pageSearchHits(threadHits, threadPageNumber, pageSize);
     const threadAuthors = await loadUserNamesById(ctx, [
       ...threadPage.items.map((thread) => thread.authorId),
@@ -2198,7 +2217,9 @@ export const search = query({
     const postSearch = !searchPosts
       ? { items: [], limited: false }
       : searchQuery === null && authorId !== undefined
-        ? await searchVisiblePostsByAuthor(
+        ? await (useSearchProjections
+            ? searchVisiblePostProjectionsByAuthor
+            : searchVisiblePostsByAuthor)(
             ctx,
             postFetchLimit,
             category,
@@ -2206,7 +2227,9 @@ export const search = query({
             authorId,
             { days, sortKey },
           )
-        : await searchVisiblePosts(
+        : await (useSearchProjections
+            ? searchVisiblePostProjections
+            : searchVisiblePosts)(
             ctx,
             searchQuery ?? "",
             postFetchLimit,
@@ -2215,17 +2238,22 @@ export const search = query({
             authorId,
             { days, sortKey, target: searchQuery === null ? "all" : target },
           );
-    const postHits = postSearch.items;
+    const postHits = postSearch.items as unknown as Array<{
+      post: ForumPostDoc & { excerpt?: string };
+      thread: ForumThreadDoc;
+    }>;
     const postPage = pageSearchHits(postHits, postPageNumber, pageSize);
     const postAuthors = await loadUserNamesById(
       ctx,
       postPage.items.map((hit) => hit.post.authorId),
     );
-    const postHitPositions = await Promise.all(
-      postPage.items.map(
-        async ({ post }) => await postNumberForPost(ctx, post),
-      ),
-    );
+    const postHitPositions = useSearchProjections
+      ? postPage.items.map(({ post }) => post.postNumber)
+      : await Promise.all(
+          postPage.items.map(
+            async ({ post }) => await postNumberForPost(ctx, post),
+          ),
+        );
     const threadResultsLimited =
       searchThreads &&
       (threadSearch.limited ||
@@ -2244,7 +2272,9 @@ export const search = query({
         prefix: publicThreadPrefixRecordFromThread(thread),
         slug: thread.slug,
         title: thread.title,
-        excerpt: excerpt(thread.body, 220),
+        excerpt: useSearchProjections
+          ? thread.excerpt ?? "Forum discussion on SYMBaiEX."
+          : excerpt(thread.body, 220),
         status: thread.status,
         pinned: thread.pinned,
         replyCount: thread.replyCount,
@@ -2267,8 +2297,12 @@ export const search = query({
           prefix: publicThreadPrefixRecordFromThread(thread),
           threadSlug: thread.slug,
           threadTitle: thread.title,
-          body: excerpt(post.body, 220),
-          excerpt: excerpt(post.body, 220),
+          body: useSearchProjections
+            ? post.excerpt ?? "No text preview available."
+            : excerpt(post.body, 220),
+          excerpt: useSearchProjections
+            ? post.excerpt ?? "No text preview available."
+            : excerpt(post.body, 220),
           createdAt: post.createdAt,
           threadLastPostAt: thread.lastPostAt,
           threadReplyCount: thread.replyCount,
@@ -3867,6 +3901,7 @@ export const createThread = mutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, threadId);
+    await syncForumThreadSearchProjection(ctx, threadId);
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -4330,6 +4365,7 @@ export const createReply = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, postId);
     await insertForumAttachments(ctx, {
       attachments,
       authorId: user._id,
@@ -4344,6 +4380,7 @@ export const createReply = mutation({
         lastAssignedPostNumber: postNumber,
         updatedAt: now,
       });
+      await syncForumThreadSearchProjection(ctx, thread._id);
       await recordModerationLog(ctx, {
         actorUserId: user._id,
         entityType: "forumPost",
@@ -4381,6 +4418,7 @@ export const createReply = mutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -4706,6 +4744,7 @@ export const recordThreadView = mutation({
       viewCount: nextViewCount,
       updatedAt: now,
     });
+    await syncForumThreadSearchProjection(ctx, thread._id);
     if (nextViewCount === 1 || nextViewCount % 25 === 0) {
       await syncForumThreadEditorialDigest(ctx, thread._id);
     }
@@ -5520,6 +5559,7 @@ export const updateThreadContent = mutation({
       lastEditReason: editReason,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     if (attachmentEditPlan !== null) {
       await applyForumAttachmentEditPlan(ctx, {
         plan: attachmentEditPlan,
@@ -5665,6 +5705,7 @@ export const updatePostContent = mutation({
       editCount: (post.editCount ?? 0) + 1,
       lastEditReason: editReason,
     });
+    await syncForumPostSearchProjection(ctx, post._id);
     if (attachmentEditPlan !== null) {
       await applyForumAttachmentEditPlan(ctx, {
         plan: attachmentEditPlan,
@@ -5751,6 +5792,7 @@ export const deleteThread = mutation({
       visibilityProfileDeltaToken,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       threadCount: Math.max(0, category.threadCount - 1),
       postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
@@ -5823,6 +5865,7 @@ export const deletePost = mutation({
       deletedBy: user._id,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, post._id);
     await ctx.db.patch("forumThreads", thread._id, {
       replyCount: Math.max(0, thread.replyCount - 1),
       updatedAt: now,
@@ -9366,6 +9409,7 @@ export const publishSukiForumReply = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, postId);
     await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
@@ -11071,6 +11115,7 @@ export const moveForumThread = mutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     await scheduleMovedThreadCategoryReferenceSync(ctx, {
       threadId: thread._id,
       targetCategoryId: targetCategory._id,
@@ -11292,12 +11337,14 @@ export const moveForumPosts = mutation({
       replyCount: Math.max(0, sourceThread.replyCount - sortedPosts.length),
       updatedAt: now,
     });
+    await syncForumThreadSearchProjection(ctx, sourceThread._id);
     await ctx.db.patch("forumThreads", targetThread._id, {
       replyCount: targetThread.replyCount + sortedPosts.length,
       lastAssignedPostNumber: firstTargetPostNumber + sortedPosts.length - 1,
       moderationActivityAt: now,
       updatedAt: now,
     });
+    await syncForumThreadSearchProjection(ctx, targetThread._id);
 
     await recomputeThreadActivity(ctx, sourceThread._id);
     await recomputeThreadActivity(ctx, targetThread._id);
@@ -11983,6 +12030,7 @@ export const updateForumThreadModeration = mutation({
         : { visibilityProfileDeltaToken }),
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
 
     if (wasVisible !== isVisible) {
       await ctx.db.patch("forumCategories", category._id, {
@@ -12130,6 +12178,7 @@ export const updateForumPostModeration = mutation({
       deletedBy:
         args.status === "deleted" ? (post.deletedBy ?? actor._id) : undefined,
     });
+    await syncForumPostSearchProjection(ctx, post._id);
 
     if (wasActive !== isActive) {
       await ctx.db.patch("forumThreads", thread._id, {
@@ -19526,6 +19575,150 @@ async function searchVisiblePostsByAuthor(
     items: applySearchPostOptions(results, null, options).slice(0, limit),
     limited: postHits.length >= postFetchLimit && results.length < limit,
   };
+}
+
+type ForumThreadSearchProjectionDoc = Doc<"forumThreadSearchProjections">;
+type ForumPostSearchProjectionDoc = Doc<"forumPostSearchProjections">;
+
+function projectedThreadSearchMatches(
+  thread: ForumThreadSearchProjectionDoc,
+  query: string | null,
+  options: SearchThreadOptions,
+) {
+  const since = searchSinceTimestamp(options.days);
+  if (since !== undefined && thread.lastPostAt < since) return false;
+  if (query === null || options.target === undefined || options.target === "all") {
+    return true;
+  }
+  const haystack = options.target === "titles" ? thread.title : thread.searchText;
+  return haystack.toLowerCase().includes(query.toLowerCase());
+}
+
+function sortProjectedThreads(
+  threads: ForumThreadSearchProjectionDoc[],
+  sortKey: ForumSearchSortKey,
+) {
+  if (sortKey === "relevance") return threads;
+  return threads.sort((left, right) => {
+    if (sortKey === "oldest") return left.lastPostAt - right.lastPostAt;
+    if (sortKey === "replies") return right.replyCount - left.replyCount || right.lastPostAt - left.lastPostAt;
+    if (sortKey === "views") return right.viewCount - left.viewCount || right.lastPostAt - left.lastPostAt;
+    return right.lastPostAt - left.lastPostAt;
+  });
+}
+
+async function visibleThreadSearchProjections(
+  ctx: QueryCtx,
+  projections: ForumThreadSearchProjectionDoc[],
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+) {
+  if (category !== null) {
+    return isBoardCategory(category) &&
+      (await visibleCategoriesForUser(ctx, [category], user)).length === 1
+      ? projections.filter((projection) => projection.categoryId === category._id)
+      : [];
+  }
+  const categoriesById = await loadCategoriesById(ctx, projections.map((projection) => projection.categoryId));
+  const visibleCategoryIds = new Set(
+    (await visibleCategoriesForUser(ctx, Array.from(categoriesById.values()).filter(isBoardCategory), user)).map((row) => row._id),
+  );
+  return projections.filter((projection) =>
+    visibleCategoryIds.has(projection.categoryId) && isVisibleThreadStatus(projection.status),
+  );
+}
+
+async function searchVisibleThreadProjections(
+  ctx: QueryCtx,
+  searchQuery: string,
+  limit: number,
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  authorId?: Id<"users">,
+  options: SearchThreadOptions = { sortKey: "relevance" },
+) {
+  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : limit;
+  const fetchStatus = async (status: "active" | "locked") =>
+    await ctx.db.query("forumThreadSearchProjections").withSearchIndex("search_by_searchText", (q) => {
+      const search = q.search("searchText", searchQuery).eq("status", status);
+      const scoped = category === null ? search : search.eq("categorySlug", category.slug);
+      return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
+    }).take(fetchLimit);
+  const [activeRaw, lockedRaw] = await Promise.all([fetchStatus("active"), fetchStatus("locked")]);
+  const visible = await visibleThreadSearchProjections(ctx, [...activeRaw, ...lockedRaw], category, user);
+  const items = sortProjectedThreads(
+    visible.filter((thread) => projectedThreadSearchMatches(thread, searchQuery, options)),
+    options.sortKey,
+  ).slice(0, limit);
+  return { items, limited: category === null && (activeRaw.length >= fetchLimit || lockedRaw.length >= fetchLimit) && items.length < limit };
+}
+
+async function searchVisibleThreadProjectionsByAuthor(
+  ctx: QueryCtx,
+  limit: number,
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  authorId: Id<"users">,
+  options: SearchThreadOptions = { sortKey: "relevance" },
+) {
+  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const [active, locked] = await Promise.all(["active", "locked"].map(async (status) =>
+    await ctx.db.query("forumThreadSearchProjections").withIndex("by_authorId_and_status_and_createdAt", (q) => q.eq("authorId", authorId).eq("status", status as "active" | "locked")).order("desc").take(fetchLimit),
+  ));
+  const visible = await visibleThreadSearchProjections(ctx, [...active, ...locked], category, user);
+  const items = sortProjectedThreads(visible.filter((thread) => projectedThreadSearchMatches(thread, null, options)), options.sortKey).slice(0, limit);
+  return { items, limited: active.length >= fetchLimit || locked.length >= fetchLimit && items.length < limit };
+}
+
+function projectedPostSearchMatches(post: ForumPostSearchProjectionDoc, query: string | null, options: SearchPostOptions) {
+  const since = searchSinceTimestamp(options.days);
+  return (since === undefined || post.createdAt >= since) && options.target !== "titles" &&
+    (query === null || options.target === "all" || options.target === undefined || post.searchText.toLowerCase().includes(query.toLowerCase()));
+}
+
+async function projectedPostResults(
+  ctx: QueryCtx,
+  posts: ForumPostSearchProjectionDoc[],
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  limit: number,
+) {
+  const threads = await Promise.all(posts.map(async (post) => await ctx.db.query("forumThreadSearchProjections").withIndex("by_threadId", (q) => q.eq("threadId", post.threadId)).unique()));
+  const visibleThreads = await visibleThreadSearchProjections(ctx, threads.filter((thread): thread is ForumThreadSearchProjectionDoc => thread !== null), category, user);
+  const visibleById = new Map(visibleThreads.map((thread) => [thread.threadId, thread]));
+  return posts.flatMap((post) => {
+    const thread = visibleById.get(post.threadId);
+    return thread === undefined || post.status !== "active" ? [] : [{ post, thread }];
+  }).slice(0, limit);
+}
+
+function sortProjectedPostHits(
+  hits: Array<{ post: ForumPostSearchProjectionDoc; thread: ForumThreadSearchProjectionDoc }>, sortKey: ForumSearchSortKey,
+) {
+  if (sortKey === "relevance") return hits;
+  return hits.sort((left, right) => sortKey === "oldest" ? left.post.createdAt - right.post.createdAt : sortKey === "replies" ? right.thread.replyCount - left.thread.replyCount || right.post.createdAt - left.post.createdAt : sortKey === "views" ? right.thread.viewCount - left.thread.viewCount || right.post.createdAt - left.post.createdAt : right.post.createdAt - left.post.createdAt);
+}
+
+async function searchVisiblePostProjections(
+  ctx: QueryCtx, searchQuery: string, limit: number, category: ForumCategoryDoc | null, user: UserDoc | null, authorId?: Id<"users">, options: SearchPostOptions = { sortKey: "relevance" },
+) {
+  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 2, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const raw = await ctx.db.query("forumPostSearchProjections").withSearchIndex("search_by_searchText", (q) => {
+    const search = q.search("searchText", searchQuery).eq("status", "active");
+    const scoped = category === null ? search : search.eq("categoryId", category._id);
+    return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
+  }).take(fetchLimit);
+  const results = await projectedPostResults(ctx, raw, category, user, limit);
+  return { items: sortProjectedPostHits(results.filter(({ post }) => projectedPostSearchMatches(post, searchQuery, options)), options.sortKey).slice(0, limit), limited: raw.length >= fetchLimit && results.length < limit };
+}
+
+async function searchVisiblePostProjectionsByAuthor(
+  ctx: QueryCtx, limit: number, category: ForumCategoryDoc | null, user: UserDoc | null, authorId: Id<"users">, options: SearchPostOptions = { sortKey: "relevance" },
+) {
+  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const raw = await ctx.db.query("forumPostSearchProjections").withIndex("by_authorId_and_status_and_createdAt", (q) => q.eq("authorId", authorId).eq("status", "active")).order("desc").take(fetchLimit);
+  const results = await projectedPostResults(ctx, raw, category, user, limit);
+  return { items: sortProjectedPostHits(results.filter(({ post }) => projectedPostSearchMatches(post, null, options)), options.sortKey).slice(0, limit), limited: raw.length >= fetchLimit && results.length < limit };
 }
 
 async function visibleSearchPostResults(

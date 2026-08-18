@@ -3123,6 +3123,31 @@ describe("forum privacy regressions", () => {
     ).toEqual(["public-square", "trusted-lab"]);
   });
 
+  test("compact search projections backfill once and recheck live board visibility", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const first = await t.mutation(internal.forumSearchProjection.backfill, {});
+    expect(first.done).toBe(true);
+    const second = await t.mutation(internal.forumSearchProjection.backfill, {});
+    expect(second).toMatchObject({ done: true, alreadyCompleted: true, processed: 0 });
+
+    const projections = await t.run(async (ctx) =>
+      await ctx.db.query("forumThreadSearchProjections").collect(),
+    );
+    expect(projections.length).toBeGreaterThan(0);
+    expect(projections.every((row) => row.excerpt.length <= 220)).toBe(true);
+    expect(projections.every((row) => row.searchText.length <= 4_096)).toBe(true);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, {
+        viewAccess: "trusted",
+      });
+    });
+    const guest = await t.query(api.forum.search, { query: "lunar", pageSize: 10 });
+    expect(guest.threads).toEqual([]);
+    expect(guest.posts).toEqual([]);
+  });
+
   test("advanced forum search filters target, date window, and sort order", async () => {
     vi.useFakeTimers();
     try {
