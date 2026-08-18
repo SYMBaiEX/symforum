@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { env, httpAction } from "./_generated/server";
 import { resend } from "./resendClient";
 import { AGENT_MCP_RESOURCE_AUDIENCE } from "./agentIdentityCrypto";
+import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
 
 const http = httpRouter();
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -91,15 +92,23 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const headers = agentDataCorsHeaders(request);
     if (!isAllowedAgentAuthOrigin(request))
-      return agentDataJson({ error: "Origin is not allowed." }, 403, headers);
+      return agentDataJson(
+        { code: "ORIGIN_DENIED", error: "Origin is not allowed." },
+        403,
+        headers,
+      );
     if ((await ctx.auth.getUserIdentity()) === null) {
+      const invalidToken = request.headers.has("authorization");
       setAgentDataAuthChallenge(
         headers,
         401,
-        request.headers.has("authorization"),
+        invalidToken,
       );
       return agentDataJson(
-        { error: "A bearer access token is required." },
+        {
+          code: invalidToken ? "INVALID_TOKEN" : "AUTH_REQUIRED",
+          error: "A bearer access token is required.",
+        },
         401,
         headers,
       );
@@ -116,6 +125,7 @@ http.route({
       ) {
         return agentDataJson(
           {
+            code: "INVALID_REQUEST",
             error:
               "operation, input, idempotencyKey, and requestFingerprint are required.",
           },
@@ -135,17 +145,9 @@ http.route({
       );
       return agentDataJson(result, 200, headers);
     } catch (error) {
-      const message =
-        error instanceof Error && error.message.length <= 240
-          ? error.message
-          : "Agent data request could not be completed.";
-      const status = /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
-        ? 403
-        : /quota|rate limit/i.test(message)
-          ? 429
-          : 400;
+      const { payload, status } = normalizeAgentDataHttpError(error);
       if (status === 403) setAgentDataAuthChallenge(headers, 403);
-      return agentDataJson({ error: message }, status, headers);
+      return agentDataJson(payload, status, headers);
     }
   }),
 });

@@ -256,6 +256,67 @@ describe("evidence MCP endpoint", () => {
     expect((await malformedClient.json()).error.code).toBe(-32600);
   });
 
+  test("rejects structured, boolean, missing, and non-finite legacy ids without echoing them", async () => {
+    const invalidBodies = [
+      '{"jsonrpc":"2.0","id":{"nested":"attacker"},"method":"tools/list"}',
+      '{"jsonrpc":"2.0","id":["attacker"],"method":"tools/list"}',
+      '{"jsonrpc":"2.0","id":true,"method":"tools/list"}',
+      '{"jsonrpc":"2.0","id":1e400,"method":"tools/list"}',
+      '{"jsonrpc":"2.0","method":"tools/list"}',
+    ];
+
+    for (const body of invalidBodies) {
+      const response = await POST(legacyRawRequest(body));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32600, message: "Invalid Request" },
+      });
+    }
+  });
+
+  test("rejects invalid modern ids with modern response metadata and a null response id", async () => {
+    const bodies = [
+      modernBodyWithRawId('{"nested":"attacker"}'),
+      modernBodyWithRawId('["attacker"]'),
+      modernBodyWithRawId("false"),
+      modernBodyWithRawId("1e400"),
+    ];
+
+    for (const body of bodies) {
+      const response = await POST(modernRawRequest("tools/list", body));
+      expect(response.status).toBe(400);
+      expect(response.headers.get("mcp-protocol-version")).toBe("2026-07-28");
+      expect(await response.json()).toEqual({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32600, message: "Invalid Request" },
+      });
+    }
+  });
+
+  test("accepts null ids for modern and legacy callers", async () => {
+    vi.stubGlobal("fetch", validAuthentication());
+
+    const legacy = await POST(
+      legacyRequest({ jsonrpc: "2.0", id: null, method: "tools/list" }),
+    );
+    expect(legacy.status).toBe(200);
+    expect((await legacy.json()).id).toBeNull();
+
+    const modern = await POST(
+      modernRequest("tools/list", {
+        jsonrpc: "2.0",
+        id: null,
+        method: "tools/list",
+        params: modernParams(),
+      }),
+    );
+    expect(modern.status).toBe(200);
+    expect((await modern.json()).id).toBeNull();
+  });
+
   test("preserves invalid-token 401 and insufficient-scope 403 for tool calls", async () => {
     const unauthorizedFetch = vi
       .fn()
@@ -336,6 +397,23 @@ function modernRequest(
   });
 }
 
+function modernRawRequest(method: string, body: string) {
+  return new Request("https://www.symbaiex.com/api/agent/mcp", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": method,
+    },
+    body,
+  });
+}
+
+function modernBodyWithRawId(id: string) {
+  return `{"jsonrpc":"2.0","id":${id},"method":"tools/list","params":${JSON.stringify(modernParams())}}`;
+}
+
 function modernToolCall(name: string, token: string) {
   return new Request("https://www.symbaiex.com/api/agent/mcp", {
     method: "POST",
@@ -363,6 +441,17 @@ function legacyRequest(body: Record<string, unknown>, authenticated = true) {
       ...(authenticated ? { authorization: "Bearer test" } : {}),
     },
     body: JSON.stringify(body),
+  });
+}
+
+function legacyRawRequest(body: string) {
+  return new Request("https://www.symbaiex.com/api/agent/mcp", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test",
+      "content-type": "application/json",
+    },
+    body,
   });
 }
 

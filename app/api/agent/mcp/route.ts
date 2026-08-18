@@ -89,7 +89,16 @@ export async function POST(request: Request) {
     return mcpJson(request, { error: "Invalid JSON-RPC request." }, 400);
   }
 
-  const id = body.id ?? null;
+  if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {
+    return rpc(
+      request,
+      protocolEraHint(request, body),
+      null,
+      undefined,
+      { code: -32600, message: "Invalid Request" },
+    );
+  }
+  const id = body.id;
   if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {
     return rpc(request, "legacy", id, undefined, {
       code: -32600,
@@ -427,4 +436,24 @@ function decodeMcpHeaderValue(value: string | null) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isJsonRpcId(value: unknown): value is string | number | null {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function protocolEraHint(
+  request: Request,
+  body: Record<string, unknown>,
+): ProtocolEra {
+  const params = isRecord(body.params) ? body.params : null;
+  const meta = params && isRecord(params._meta) ? params._meta : null;
+  return request.headers.has("mcp-protocol-version") ||
+    meta?.["io.modelcontextprotocol/protocolVersion"] !== undefined
+    ? "modern"
+    : "legacy";
 }

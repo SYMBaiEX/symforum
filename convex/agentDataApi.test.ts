@@ -97,6 +97,61 @@ async function fixture(t: ReturnType<typeof setup>, evidenceScope = true) {
 }
 
 describe("agent data API dispatch", () => {
+  test("HTTP route preserves safe ConvexError codes without returning error data", async () => {
+    const t = setup();
+    const unauthenticated = await t.fetch("/agent/v1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toEqual({
+      code: "AUTH_REQUIRED",
+      error: "A bearer access token is required.",
+    });
+
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    const invalid = await agent.fetch("/agent/v1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operation: "search",
+        input: { query: "" },
+        idempotencyKey: "invalid-http-search",
+        requestFingerprint: "sha256-invalid-http-search",
+      }),
+    });
+
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({
+      code: "INVALID_REQUEST",
+      error: "Agent data request could not be completed.",
+    });
+
+    const deniedIds = await fixture(t, false);
+    const deniedAgent = t.withIdentity({ subject: deniedIds.agentUserId });
+    const denied = await deniedAgent.fetch("/agent/v1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operation: "status",
+        input: {},
+        idempotencyKey: "denied-http-status",
+        requestFingerprint: "sha256-denied-http-status",
+      }),
+    });
+
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("www-authenticate")).toContain(
+      'error="insufficient_scope"',
+    );
+    expect(await denied.json()).toEqual({
+      code: "AGENT_SCOPE_DENIED",
+      error: "An active agent identity with the evidence scope is required.",
+    });
+  });
+
   test("uses one owner-scoped quota and commerce record across a replay", async () => {
     const t = setup();
     const ids = await fixture(t);
