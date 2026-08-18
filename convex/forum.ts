@@ -5204,6 +5204,7 @@ export const updatePollContent = mutation({
       ),
       updatedAt: now,
     });
+    await syncForumThreadSearchProjection(ctx, thread._id);
 
     const updatedPoll = await ctx.db.get("forumPolls", poll._id);
     if (updatedPoll === null) {
@@ -9419,6 +9420,7 @@ export const publishSukiForumReply = internalMutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -9894,6 +9896,7 @@ export const publishSukiForumThread = internalMutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, threadId);
+    await syncForumThreadSearchProjection(ctx, threadId);
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -10150,6 +10153,7 @@ export const publishForumAgentFollowUp = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await syncForumPostSearchProjection(ctx, postId);
     await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
@@ -10159,6 +10163,7 @@ export const publishForumAgentFollowUp = internalMutation({
       updatedAt: now,
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
     await ctx.db.patch("forumCategories", category._id, {
       postCount: category.postCount + 1,
       lastThreadId: thread._id,
@@ -14470,6 +14475,7 @@ async function syncMovedThreadCategoryReferenceBatch(
           moderationMovedAt: args.now,
           updatedAt: args.now,
         });
+        await syncForumPostSearchProjection(ctx, post._id);
       }
       isDone = page.isDone;
       continueCursor = page.continueCursor;
@@ -15015,6 +15021,7 @@ async function syncThreadsForPrefixUpdate(
       ),
       updatedAt: Date.now(),
     });
+    await syncForumThreadSearchProjection(ctx, thread._id);
   }
 
   return {
@@ -19794,6 +19801,7 @@ async function recomputeThreadActivity(
     updatedAt: Date.now(),
   });
   await syncForumThreadEditorialDigest(ctx, threadId);
+  await syncForumThreadSearchProjection(ctx, threadId);
 }
 
 function sortedForumPostsForAppend(posts: ForumPostDoc[]) {

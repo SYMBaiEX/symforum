@@ -960,7 +960,7 @@ describe("forum notification preferences", () => {
     expect(published.categorySlug).toBe("ai-prompts");
 
     const stored = await t.run(async (ctx) => {
-      const [thread, run, source, profile, poll] = await Promise.all([
+      const [thread, run, source, profile, poll, projection] = await Promise.all([
         ctx.db.get("forumThreads", published.threadId),
         ctx.db
           .query("forumAgentRuns")
@@ -980,14 +980,23 @@ describe("forum notification preferences", () => {
           .query("forumPolls")
           .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
           .unique(),
+        ctx.db
+          .query("forumThreadSearchProjections")
+          .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
+          .unique(),
       ]);
-      return { poll, profile, run, source, thread };
+      return { poll, profile, projection, run, source, thread };
     });
     expect(stored.thread).toMatchObject({
       authorId: first.agentUserId,
       categorySlug: "ai-prompts",
       prefixSlug: "guide",
       status: "active",
+    });
+    expect(stored.projection).toMatchObject({
+      threadId: published.threadId,
+      status: "active",
+      prefixSlug: "guide",
     });
     expect(stored.run).toMatchObject({
       status: "published",
@@ -1134,7 +1143,7 @@ describe("forum notification preferences", () => {
     });
 
     const stored = await t.run(async (ctx) => {
-      const [thread, category, run, profile] = await Promise.all([
+      const [thread, category, run, profile, projection] = await Promise.all([
         ctx.db.get("forumThreads", seeded.threadId),
         ctx.db.get("forumCategories", seeded.categoryId),
         ctx.db.get("forumAgentReplyRuns", claim.runId),
@@ -1144,6 +1153,10 @@ describe("forum notification preferences", () => {
             q.eq("userId", infrastructure.agentUserId),
           )
           .unique(),
+        ctx.db
+          .query("forumThreadSearchProjections")
+          .withIndex("by_threadId", (q) => q.eq("threadId", seeded.threadId))
+          .unique(),
       ]);
       const posts = await ctx.db
         .query("forumPosts")
@@ -1151,12 +1164,13 @@ describe("forum notification preferences", () => {
           q.eq("threadId", seeded.threadId).eq("status", "active"),
         )
         .collect();
-      return { category, posts, profile, run, thread };
+      return { category, posts, profile, projection, run, thread };
     });
     expect(stored.thread).toMatchObject({
       lastPostUserId: infrastructure.agentUserId,
       replyCount: 1,
     });
+    expect(stored.projection).toMatchObject({ replyCount: 1 });
     expect(stored.category?.postCount).toBe(1);
     expect(stored.posts).toEqual([
       expect.objectContaining({
@@ -4915,6 +4929,14 @@ describe("forum privacy regressions", () => {
     expect(staleSearch.threads.map((thread) => thread.slug)).not.toContain(
       "public-lunar-brief",
     );
+    const pollProjection = await t.run(async (ctx) =>
+      await ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .unique(),
+    );
+    expect(pollProjection?.searchText).toContain("Which nebula should we study?");
+    expect(pollProjection?.searchText).not.toContain("Which launch window should we use?");
 
     await asTrusted.mutation(api.forum.votePoll, {
       pollId,
