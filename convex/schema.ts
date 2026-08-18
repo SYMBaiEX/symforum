@@ -2127,7 +2127,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_datasetId_and_version", ["datasetId", "version"])
-    .index("by_datasetId_and_checksum", ["datasetId", "checksum"]),
+    .index("by_datasetId_and_checksum", ["datasetId", "checksum"])
+    .index("by_manifestStorageId", ["manifestStorageId"]),
   evidenceBenchmarks: defineTable({
     benchmarkKey: v.string(),
     name: v.string(),
@@ -2171,6 +2172,7 @@ export default defineSchema({
     query: v.string(),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    artifactPurgedAt: v.optional(v.number()),
     errorMessage: v.string(),
     expiresAt: v.number(),
     createdAt: v.number(),
@@ -2184,7 +2186,12 @@ export default defineSchema({
       "ownerUserId",
       "requestFingerprint",
     ])
-    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
+    .index("by_status_and_artifactPurgedAt_and_expiresAt", [
+      "status",
+      "artifactPurgedAt",
+      "expiresAt",
+    ]),
   evidenceExportJobs: defineTable({
     ownerUserId: v.id("users"),
     agentId: v.string(),
@@ -2205,6 +2212,7 @@ export default defineSchema({
     recordCount: v.number(),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    artifactPurgedAt: v.optional(v.number()),
     errorMessage: v.string(),
     expiresAt: v.number(),
     createdAt: v.number(),
@@ -2219,7 +2227,12 @@ export default defineSchema({
       "requestFingerprint",
     ])
     .index("by_datasetId_and_createdAt", ["datasetId", "createdAt"])
-    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
+    .index("by_status_and_artifactPurgedAt_and_expiresAt", [
+      "status",
+      "artifactPurgedAt",
+      "expiresAt",
+    ]),
   /**
    * Immutable metadata for a stored result. The storage object can be purged
    * after retention without erasing the audit record or usage ledger.

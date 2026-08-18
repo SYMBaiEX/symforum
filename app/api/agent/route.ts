@@ -91,7 +91,7 @@ const MANIFEST = {
   },
   researchJobs: {
     enabled: true,
-    output: "source-cited JSON and signed artifact URL",
+    output: "source-cited JSON and authenticated first-party artifact stream",
     fallback: "deterministic extractive digest",
   },
   exports: {

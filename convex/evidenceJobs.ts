@@ -611,6 +611,7 @@ export const completeExportJob = internalMutation({
     jobId: v.id("evidenceExportJobs"),
     resultJson: v.string(),
     resultStorageId: v.id("_storage"),
+    datasetManifestStorageId: v.id("_storage"),
     checksum: v.string(),
     recordCount: v.number(),
     artifactContentType: v.string(),
@@ -669,7 +670,7 @@ export const completeExportJob = internalMutation({
               0,
               Math.min(MAX_EXPORT_LIMIT, Math.floor(args.recordCount)),
             ),
-            manifestStorageId: args.resultStorageId,
+            manifestStorageId: args.datasetManifestStorageId,
             createdAt: Date.now(),
           },
         );
@@ -687,6 +688,10 @@ export const completeExportJob = internalMutation({
           occurredAt: Date.now(),
           createdAt: Date.now(),
         });
+      } else {
+        // The canonical snapshot already owns a manifest. This newly generated
+        // duplicate is not an export artifact and must not linger unreferenced.
+        await ctx.storage.delete(args.datasetManifestStorageId);
       }
       await ctx.runMutation(enqueueWebhookRef, {
         eventKey: `export:${job._id}:completed`,
@@ -732,6 +737,32 @@ export const failExportJob = internalMutation({
   },
 });
 
+async function isDatasetManifestStorage(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+) {
+  return (
+    (await ctx.db
+      .query("evidenceDatasetVersions")
+      .withIndex("by_manifestStorageId", (q) =>
+        q.eq("manifestStorageId", storageId),
+      )
+      .unique()) !== null
+  );
+}
+
+async function removeDownloadStorage(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+) {
+  // A dataset version's immutable manifest is not a downloadable job artifact.
+  // Never delete shared storage, including historical exports created before
+  // manifests were separated.
+  if (await isDatasetManifestStorage(ctx, storageId)) return false;
+  await ctx.storage.delete(storageId);
+  return true;
+}
+
 /** Removes only expired stored artifacts; job records remain available as audit history. */
 export const cleanupExpiredArtifacts = internalMutation({
   args: { limit: v.optional(v.number()) },
@@ -748,7 +779,7 @@ export const cleanupExpiredArtifacts = internalMutation({
     let researchCleared = 0;
     let exportCleared = 0;
     for (const artifact of artifacts) {
-      await ctx.storage.delete(artifact.storageId);
+      await removeDownloadStorage(ctx, artifact.storageId);
       await ctx.db.patch("evidenceArtifacts", artifact._id, {
         status: "purged",
         purgedAt: now,
@@ -758,6 +789,7 @@ export const cleanupExpiredArtifacts = internalMutation({
         researchCleared += 1;
         await ctx.db.patch("evidenceResearchJobs", artifact.researchJobId, {
           resultStorageId: undefined,
+          artifactPurgedAt: now,
           updatedAt: now,
         });
       }
@@ -765,9 +797,62 @@ export const cleanupExpiredArtifacts = internalMutation({
         exportCleared += 1;
         await ctx.db.patch("evidenceExportJobs", artifact.exportJobId, {
           resultStorageId: undefined,
+          artifactPurgedAt: now,
           updatedAt: now,
         });
       }
+    }
+    const remaining = limit - artifacts.length;
+    if (remaining <= 0) return { researchCleared, exportCleared };
+    const legacyResearch = await ctx.db
+      .query("evidenceResearchJobs")
+      .withIndex("by_status_and_artifactPurgedAt_and_expiresAt", (q) =>
+        q
+          .eq("status", "completed")
+          .eq("artifactPurgedAt", undefined)
+          .lte("expiresAt", now),
+      )
+      .take(remaining);
+    for (const job of legacyResearch) {
+      const artifact = await ctx.db
+        .query("evidenceArtifacts")
+        .withIndex("by_researchJobId", (q) => q.eq("researchJobId", job._id))
+        .unique();
+      if (artifact !== null) continue;
+      if (job.resultStorageId !== undefined)
+        await removeDownloadStorage(ctx, job.resultStorageId);
+      await ctx.db.patch("evidenceResearchJobs", job._id, {
+        resultStorageId: undefined,
+        artifactPurgedAt: now,
+        updatedAt: now,
+      });
+      researchCleared += 1;
+    }
+    const exportSlots = Math.max(0, remaining - legacyResearch.length);
+    if (exportSlots === 0) return { researchCleared, exportCleared };
+    const legacyExports = await ctx.db
+      .query("evidenceExportJobs")
+      .withIndex("by_status_and_artifactPurgedAt_and_expiresAt", (q) =>
+        q
+          .eq("status", "completed")
+          .eq("artifactPurgedAt", undefined)
+          .lte("expiresAt", now),
+      )
+      .take(exportSlots);
+    for (const job of legacyExports) {
+      const artifact = await ctx.db
+        .query("evidenceArtifacts")
+        .withIndex("by_exportJobId", (q) => q.eq("exportJobId", job._id))
+        .unique();
+      if (artifact !== null) continue;
+      if (job.resultStorageId !== undefined)
+        await removeDownloadStorage(ctx, job.resultStorageId);
+      await ctx.db.patch("evidenceExportJobs", job._id, {
+        resultStorageId: undefined,
+        artifactPurgedAt: now,
+        updatedAt: now,
+      });
+      exportCleared += 1;
     }
     return { researchCleared, exportCleared };
   },

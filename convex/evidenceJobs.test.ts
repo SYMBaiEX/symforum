@@ -184,10 +184,14 @@ describe("evidence jobs", () => {
     const storageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(['{"record":1}\n'])),
     );
+    const datasetManifestStorageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['{"format":"jsonl"}'])),
+    );
     await t.mutation(jobs.completeExport, {
       jobId: exportJob.jobId,
       resultJson: JSON.stringify({ recordCount: 1 }),
       resultStorageId: storageId,
+      datasetManifestStorageId,
       checksum: "checksum-one",
       recordCount: 1,
       artifactContentType: "application/x-ndjson",
@@ -200,6 +204,8 @@ describe("evidence jobs", () => {
         checksum: "checksum-one",
         recordCount: 1,
       });
+      expect(version?.manifestStorageId).toBe(datasetManifestStorageId);
+      expect(version?.manifestStorageId).not.toBe(storageId);
     });
   });
 
@@ -221,10 +227,14 @@ describe("evidence jobs", () => {
         new Blob(['{"record":1}\n'], { type: "application/x-ndjson" }),
       ),
     );
+    const datasetManifestStorageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['{"format":"jsonl"}'])),
+    );
     await t.mutation(jobs.completeExport, {
       jobId: job.jobId,
       resultJson: "{}",
       resultStorageId: storageId,
+      datasetManifestStorageId,
       checksum: "artifact-checksum-one",
       recordCount: 1,
       artifactContentType: "application/x-ndjson",
@@ -264,6 +274,35 @@ describe("evidence jobs", () => {
         body: JSON.stringify({ kind: "export", jobId: job.jobId }),
       });
     expect(crossOwner.status).toBe(404);
+    await t.run(async (ctx) => {
+      const artifact = await ctx.db
+        .query("evidenceArtifacts")
+        .withIndex("by_exportJobId", (q) => q.eq("exportJobId", job.jobId))
+        .unique();
+      await ctx.db.patch("evidenceArtifacts", artifact!._id, {
+        byteLength: 999,
+      });
+    });
+    const metadataMismatch = await t
+      .withIdentity({ subject: agent })
+      .fetch("/agent/artifact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+      });
+    expect(metadataMismatch.status).toBe(409);
+    expect(await metadataMismatch.json()).toMatchObject({
+      code: "ARTIFACT_METADATA_MISMATCH",
+    });
+    await t.run(async (ctx) => {
+      const artifact = await ctx.db
+        .query("evidenceArtifacts")
+        .withIndex("by_exportJobId", (q) => q.eq("exportJobId", job.jobId))
+        .unique();
+      await ctx.db.patch("evidenceArtifacts", artifact!._id, {
+        byteLength: 13,
+      });
+    });
     await expect(
       t.query(jobs.resolveArtifact, {
         agentUserId: other,
@@ -370,6 +409,89 @@ describe("evidence jobs", () => {
           )
           .take(1),
       ).toEqual([]);
+    });
+  });
+
+  test("purges indexed legacy job storage without deleting an immutable dataset manifest", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const now = Date.now();
+    const ids = await t.run(async (ctx) => {
+      const legacyStorageId = await ctx.storage.store(new Blob(["legacy"]));
+      const sharedManifestStorageId = await ctx.storage.store(
+        new Blob(['{"format":"jsonl","immutable":true}']),
+      );
+      const researchJobId = await ctx.db.insert("evidenceResearchJobs", {
+        ownerUserId: owner,
+        agentId: "agent",
+        requestKey: "legacy-research",
+        requestFingerprint: "legacy-research",
+        idempotencyKey: "legacy-research",
+        quotaUnits: 1,
+        status: "completed",
+        query: "legacy",
+        resultJson: "{}",
+        resultStorageId: legacyStorageId,
+        errorMessage: "",
+        expiresAt: now - 1,
+        createdAt: now - 2,
+        updatedAt: now - 2,
+      });
+      const exportJobId = await ctx.db.insert("evidenceExportJobs", {
+        ownerUserId: owner,
+        agentId: "agent",
+        datasetId: catalog.datasetId,
+        requestKey: "legacy-export",
+        requestFingerprint: "legacy-export",
+        idempotencyKey: "legacy-export",
+        quotaUnits: 1,
+        status: "completed",
+        format: "jsonl",
+        checksum: "legacy-checksum",
+        recordCount: 1,
+        resultJson: "{}",
+        resultStorageId: sharedManifestStorageId,
+        errorMessage: "",
+        expiresAt: now - 1,
+        createdAt: now - 2,
+        updatedAt: now - 2,
+      });
+      await ctx.db.insert("evidenceDatasetVersions", {
+        datasetId: catalog.datasetId,
+        version: "legacy-snapshot",
+        checksum: "legacy-checksum",
+        recordCount: 1,
+        manifestStorageId: sharedManifestStorageId,
+        createdAt: now - 2,
+      });
+      return {
+        researchJobId,
+        exportJobId,
+        legacyStorageId,
+        sharedManifestStorageId,
+      };
+    });
+    await expect(t.mutation(jobs.cleanup, { limit: 10 })).resolves.toEqual({
+      researchCleared: 1,
+      exportCleared: 1,
+    });
+    await t.run(async (ctx) => {
+      const researchJob = await ctx.db.get(
+        "evidenceResearchJobs",
+        ids.researchJobId,
+      );
+      const exportJob = await ctx.db.get("evidenceExportJobs", ids.exportJobId);
+      expect(researchJob?.resultStorageId).toBeUndefined();
+      expect(researchJob?.artifactPurgedAt).toEqual(expect.any(Number));
+      expect(exportJob?.resultStorageId).toBeUndefined();
+      expect(exportJob?.artifactPurgedAt).toEqual(expect.any(Number));
+      expect(
+        await ctx.db.system.get("_storage", ids.legacyStorageId),
+      ).toBeNull();
+      expect(
+        await ctx.db.system.get("_storage", ids.sharedManifestStorageId),
+      ).not.toBeNull();
     });
   });
 

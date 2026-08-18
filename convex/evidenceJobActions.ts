@@ -165,6 +165,7 @@ export const runExport = internalAction({
   returns: v.object({
     resultJson: v.string(),
     resultStorageId: v.id("_storage"),
+    datasetManifestStorageId: v.id("_storage"),
     checksum: v.string(),
     recordCount: v.number(),
     artifactContentType: v.string(),
@@ -189,6 +190,20 @@ export const runExport = internalAction({
     const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
     const resultStorageId = await ctx.storage.store(artifact);
     const resultChecksum = await checksum(jsonl);
+    const datasetManifestStorageId = await ctx.storage.store(
+      new Blob(
+        [
+          JSON.stringify({
+            format: "jsonl",
+            checksum: resultChecksum,
+            recordCount: records.length,
+            generatedAt: new Date().toISOString(),
+            containsRawPayload: false,
+          }),
+        ],
+        { type: "application/json" },
+      ),
+    );
     return {
       resultJson: JSON.stringify({
         format: "jsonl",
@@ -197,6 +212,7 @@ export const runExport = internalAction({
         containsRawPayload: false,
       }),
       resultStorageId,
+      datasetManifestStorageId,
       checksum: resultChecksum,
       recordCount: records.length,
       artifactContentType: artifact.type,

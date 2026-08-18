@@ -168,9 +168,21 @@ http.route({
           404,
           headers,
         );
+      if (
+        blob.size !== artifact.byteLength ||
+        blob.type !== artifact.contentType
+      )
+        return agentDataJson(
+          {
+            code: "ARTIFACT_METADATA_MISMATCH",
+            error: "Artifact metadata no longer matches stored content.",
+          },
+          409,
+          headers,
+        );
       const responseHeaders = new Headers(headers);
-      responseHeaders.set("Content-Type", artifact.contentType);
-      responseHeaders.set("Content-Length", String(artifact.byteLength));
+      responseHeaders.set("Content-Type", blob.type);
+      responseHeaders.set("Content-Length", String(blob.size));
       responseHeaders.set(
         "Content-Disposition",
         `attachment; filename="${artifact.filename}"`,
