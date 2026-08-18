@@ -141,4 +141,59 @@ describe("privacy-preserving Web Vitals", () => {
     });
     vi.useRealTimers();
   });
+
+  test("continues cleanup past one batch without deleting retained events", async () => {
+    const now = 1_800_000_000_000;
+    vi.useFakeTimers({ now });
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 251; index += 1) {
+        await ctx.db.insert("webVitalEvents", {
+          route: "/",
+          name: "LCP",
+          value: index,
+          rating: "good",
+          navigationType: "navigate",
+          timestamp: now - 31 * 24 * 60 * 60 * 1_000 - index,
+          dedupeKey: `expired-${index}`,
+          createdAt: now - 31 * 24 * 60 * 60 * 1_000 - index,
+        });
+      }
+      await ctx.db.insert("webVitalEvents", {
+        route: "/",
+        name: "LCP",
+        value: 1,
+        rating: "good",
+        navigationType: "navigate",
+        timestamp: now,
+        dedupeKey: "current",
+        createdAt: now,
+      });
+      await ctx.db.insert("webVitalEvents", {
+        route: "/",
+        name: "LCP",
+        value: 2,
+        rating: "good",
+        navigationType: "navigate",
+        timestamp: now + 1_000,
+        dedupeKey: "future",
+        createdAt: now + 1_000,
+      });
+    });
+
+    await expect(t.mutation(cleanupExpired, {})).resolves.toMatchObject({
+      deletedEvents: 250,
+      hasMore: true,
+    });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    await t.run(async (ctx) => {
+      const events = await ctx.db.query("webVitalEvents").collect();
+      expect(events).toHaveLength(2);
+      expect(events.map((event) => event.dedupeKey).sort()).toEqual([
+        "current",
+        "future",
+      ]);
+    });
+    vi.useRealTimers();
+  });
 });

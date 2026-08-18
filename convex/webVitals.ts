@@ -1,3 +1,4 @@
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
   WEB_VITAL_BUDGETS,
@@ -20,6 +21,11 @@ const WEB_VITAL_CLEANUP_BATCH = 250;
 const WEB_VITAL_ADMIN_SAMPLE_LIMIT = 5_000;
 const WEB_VITAL_MINUTE_CAP = 500;
 const WEB_VITAL_DEDUPE_WINDOW_MS = 10_000;
+const cleanupExpiredRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  unknown
+>("webVitals:cleanupExpired");
 const metricValidator = v.union(...WEB_VITAL_METRICS.map(v.literal));
 const ratingValidator = v.union(...WEB_VITAL_RATINGS.map(v.literal));
 const navigationTypeValidator = v.union(
@@ -175,12 +181,16 @@ export const cleanupExpired = internalMutation({
         ctx.db.delete("webVitalMinuteBuckets", bucket._id),
       ),
     ]);
+    const hasMore =
+      events.length === WEB_VITAL_CLEANUP_BATCH ||
+      buckets.length === WEB_VITAL_CLEANUP_BATCH;
+    if (hasMore) {
+      await ctx.scheduler.runAfter(0, cleanupExpiredRef, {});
+    }
     return {
       deletedEvents: events.length,
       deletedBuckets: buckets.length,
-      hasMore:
-        events.length === WEB_VITAL_CLEANUP_BATCH ||
-        buckets.length === WEB_VITAL_CLEANUP_BATCH,
+      hasMore,
     };
   },
 });
