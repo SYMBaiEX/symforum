@@ -18,9 +18,12 @@ missing clients/UI, or external provider work is complete.
 
 ### Latest production receipt
 
-- GitHub `main`, Convex production `strong-bee-384`, and the active Vercel
-  production aliases serve commit `4dc7f2b`; the Vercel build completed all 57
-  application routes and is Ready.
+- The current application release is `a922e7f`; its Vercel build completed all
+  57 application routes and is Ready. Convex production `strong-bee-384` last
+  deployed the organization-console functions at `1661f23`. The source-only
+  cache-key/type hardening in `a922e7f` is backward-compatible with that
+  deployed validator and awaits the next authorized backend release. This
+  roadmap receipt follows the application release on `main`.
 - The public agent smoke verifies the manifest, OpenAPI, custom Ed25519
   protected-resource metadata, REST and MCP authentication challenges,
   `paymentAccepted: false`, and `graphql: false`.
@@ -30,7 +33,9 @@ missing clients/UI, or external provider work is complete.
 - The organization foundation is deployed but intentionally absent from the
   public product manifest: tenant roles, projects, Ed25519 service accounts,
   shared budgets, usage ledger, revocation, and management audit records are
-  available only through the canonical authorized Convex layer.
+  available only through the canonical authorized Convex layer. A human-only
+  first-party console on `/developer` now manages those resources without
+  exposing a public organization API, private keys, tokens, or backend URLs.
 - The semantic-search schema, exact-bucket spend reservation/reconciliation,
   stale-vector authorization joins, pause state, bounded cleanup, and
   OpenRouter-only embedding actions are deployed. The feature remains
