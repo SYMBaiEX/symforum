@@ -6,15 +6,41 @@ Production targets: GitHub `main`, Vercel `symbaiex-blog`, Convex `strong-bee-38
 
 ## Progress snapshot — 2026-08-18
 
-| State | Items | Evidence |
-| --- | --- | --- |
-| Deployed | PLAT-02, PLAT-05 (SDK foundations), PLAT-06 (lexical foundation), PLAT-07 (initial NVD adapters), PLAT-08, PLAT-09, PLAT-11, PLAT-13 | MCP 2026-07-28 negotiation; standalone TypeScript/Python clients; bounded universal lexical search and compact forum projections; replay-safe NVD CVE/change ingestion; conditional/no-op ingestion; claim revisions and public timelines; AsyncAPI event contract; authenticated artifact streams with immutable dataset manifests |
-| Secure foundation deployed | PLAT-01, PLAT-03, PLAT-04, PLAT-10, PLAT-12, PLAT-18 | Ed25519 identity and revocation; truthful custom auth discovery; owner developer console; tenant watchlists; encrypted webhook operations; production-log-driven read/cost controls |
-| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-07, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-20 | Authenticated production lifecycle credential; Python package publishing policy; additional source terms/keys; webhook allowlisted endpoint; billing provider/policy; Cloudflare approval; premium hostname/payment policy; demonstrated GraphQL demand |
+| State                                               | Items                                                                                                                                | Evidence                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployed                                            | PLAT-02, PLAT-05 (SDK foundations), PLAT-06 (lexical foundation), PLAT-07 (initial NVD adapters), PLAT-08, PLAT-09, PLAT-11, PLAT-13 | MCP 2026-07-28 negotiation; standalone TypeScript/Python clients; bounded universal lexical search and compact forum projections; replay-safe NVD CVE/change ingestion; conditional/no-op ingestion; claim revisions and public timelines; AsyncAPI event contract; authenticated artifact streams with immutable dataset manifests |
+| Secure foundation deployed                          | PLAT-01, PLAT-03, PLAT-04, PLAT-10, PLAT-12, PLAT-15, PLAT-18                                                                        | Ed25519 identity and revocation; truthful custom auth discovery; owner developer console; tenant watchlists; encrypted webhook operations; isolated organization/project/service-account boundaries; production-log-driven read/cost controls                                                                                       |
+| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-07, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-20                                                               | Authenticated production lifecycle credential; Python package publishing policy; additional source terms/keys; webhook allowlisted endpoint; billing provider/policy; Cloudflare approval; premium hostname/payment policy; demonstrated GraphQL demand                                                                             |
 
 “Foundation deployed” does not mean the item’s complete acceptance criteria are
 closed. Those rows remain unchecked below until credential-gated smoke tests,
 missing clients/UI, or external provider work is complete.
+
+### Latest production receipt
+
+- GitHub `main` and the active Vercel production aliases serve commit
+  `ee116d0`; the Vercel build completed all 56 application routes and is Ready.
+- The public agent smoke verifies the manifest, OpenAPI, custom Ed25519
+  protected-resource metadata, REST and MCP authentication challenges,
+  `paymentAccepted: false`, and `graphql: false`.
+- The webhook operations contract now publishes create, status, availability,
+  health, delivery history, rotate, replay, and test operations. Outbound
+  delivery remains fail-closed until an exact host allowlist is configured.
+- The organization foundation is deployed but intentionally absent from the
+  public product manifest: tenant roles, projects, Ed25519 service accounts,
+  shared budgets, usage ledger, revocation, and management audit records are
+  available only through the canonical authorized Convex layer.
+- Fresh desktop Lighthouse runs on `/`, `/blog`, `/forum`, and `/research`
+  scored 100 for Performance, Accessibility, Best Practices, and SEO. The old
+  forum streaming `parentNode` exceptions and browser-extension listener noise
+  did not reproduce. Field Web Vitals and mobile regression budgets remain part
+  of PLAT-18 rather than being inferred from this lab receipt.
+- The Cloudflare Signed Agent submission was received on August 13, 2026. As
+  of August 18, it is not discoverable in the public Cloudflare Radar bot
+  directory, and the dashboard exposes a new-submission form rather than an
+  approval-status record. PLAT-16 therefore remains pending Cloudflare review;
+  the live HTTPS Ed25519 key directory is ready but is not represented as
+  Cloudflare-verified.
 
 This is the durable implementation queue for the next platform expansion. Work
 is dependency-ordered, isolated by subsystem, integrated through `main`, and
