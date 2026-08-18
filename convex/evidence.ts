@@ -1082,11 +1082,11 @@ const publicClaimTimelineEntryValidator = v.object({
 });
 
 /**
- * A bounded, public-only audit timeline. Revision visibility is intentionally
- * checked separately from the mutable claim so a later publication cannot
- * reveal a prior private conclusion or citation.
+ * A bounded, public-only audit timeline for authenticated transports. Revision
+ * visibility is checked separately from the mutable claim so a later
+ * publication cannot reveal a prior private conclusion or citation.
  */
-export const listPublicClaimTimeline = query({
+export const listPublicClaimTimeline = internalQuery({
   args: { claimKey: v.string(), limit: v.optional(v.number()) },
   returns: v.array(publicClaimTimelineEntryValidator),
   handler: async (ctx, args) => {

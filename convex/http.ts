@@ -753,6 +753,7 @@ function isAgentDataOperation(
   | "verify"
   | "entities"
   | "version_claims"
+  | "claim_timeline"
   | "products"
   | "datasets"
   | "benchmarks"
@@ -785,6 +786,7 @@ function isAgentDataOperation(
     "verify",
     "entities",
     "version_claims",
+    "claim_timeline",
     "products",
     "datasets",
     "benchmarks",

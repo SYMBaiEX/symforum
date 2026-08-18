@@ -262,6 +262,37 @@ describe("agent data API dispatch", () => {
     ).rejects.toThrow(/between 1 and 50/i);
   });
 
+  test("accepts claim timelines through the real Convex HTTP dispatch route", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    await t.mutation(internal.evidence.upsertClaim, {
+      claimKey: "http-timeline",
+      statement: "The HTTP path has a public timeline.",
+      predicate: "status",
+      objectText: "supported",
+      status: "supported",
+      confidence: 0.9,
+      visibility: "public",
+      observedAt: 10,
+    });
+    const response = await t
+      .withIdentity({ subject: ids.agentUserId })
+      .fetch("/agent/v1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          operation: "claim_timeline",
+          input: { claimKey: "http-timeline", limit: 2 },
+          idempotencyKey: "http-claim-timeline-read",
+          requestFingerprint: "sha256-http-claim-timeline-read",
+        }),
+      });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      expect.objectContaining({ status: "supported", changeKind: "created" }),
+    ]);
+  });
+
   test("keeps the semantic action hidden behind the first-party relay secret", async () => {
     vi.stubEnv(
       "AGENT_SEMANTIC_RELAY_SECRET",

@@ -638,7 +638,7 @@ export const dispatch = internalMutation({
       case "claim_timeline":
         // Reuse the evidence projection so this authenticated transport keeps
         // its per-revision public-visibility and citation joins intact.
-        return await ctx.runQuery(api.evidence.listPublicClaimTimeline, {
+        return await ctx.runQuery(internal.evidence.listPublicClaimTimeline, {
           claimKey: claimKey!,
           limit: requestedLimit,
         });
