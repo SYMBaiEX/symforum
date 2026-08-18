@@ -176,6 +176,7 @@ as bounded p50/p75/p95 and pass-rate summaries. This is field data; Lighthouse
 or other lab receipts are not mixed into it. Set `NEXT_PUBLIC_WEB_VITALS_ENABLED=false`
 to disable browser collection, `WEB_VITALS_COLLECTION_ENABLED=false` to reject
 all writes, or `WEB_VITALS_CLEANUP_ENABLED=false` to pause retention cleanup.
+All three switches are enabled by default when unset.
 
 ## Deployment Notes
 

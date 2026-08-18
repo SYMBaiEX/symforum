@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { WEB_VITAL_BUDGETS, publicRouteTemplate } from "./web-vitals";
 
@@ -30,5 +31,16 @@ describe("Web Vitals privacy boundary", () => {
       FCP: 1_800,
       TTFB: 800,
     });
+  });
+
+  test("registers one stable reporter while reading the latest route from refs", () => {
+    const source = readFileSync(
+      new URL("../components/web-vitals-reporter.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("const reportWebVital = useCallback<WebVitalsCallback>");
+    expect(source).toContain("useReportWebVitals(reportWebVital)");
+    expect(source).toContain("pathnameRef.current");
+    expect(source).toContain("recordRef.current");
   });
 });
