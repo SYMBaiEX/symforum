@@ -1101,6 +1101,15 @@ export const backfillLegacyClaimBaselines = internalMutation({
     const page = rows.slice(0, limit);
     const now = Date.now();
     for (const claim of page) {
+      const existingRevision = await ctx.db
+        .query("evidenceClaimRevisions")
+        .withIndex("by_claimId_and_observedAt", (q) =>
+          q.eq("claimId", claim._id),
+        )
+        .take(1);
+      // A legacy baseline is only meaningful for claims with no retained
+      // history. Never append it to a claim that already has real revisions.
+      if (existingRevision.length > 0) continue;
       await recordClaimRevision(ctx, {
         claim,
         changeKind: "legacy-baseline",

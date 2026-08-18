@@ -535,4 +535,55 @@ describe("durable evidence graph", () => {
       );
     });
   });
+
+  test("skips claims with created, semantic, or evidence revision history", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (const changeKind of ["created", "semantic", "evidence"] as const) {
+        const claimId = await ctx.db.insert("evidenceClaims", {
+          claimKey: `already-${changeKind}`,
+          statement: `${changeKind} claim`,
+          subjectEntityId: null,
+          predicate: "state",
+          objectText: "current",
+          status: "unresolved",
+          confidence: 0.5,
+          visibility: "public",
+          observedAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+        await ctx.db.insert("evidenceClaimRevisions", {
+          claimId,
+          revisionKey: `existing-${changeKind}`,
+          changeKind,
+          statement: `${changeKind} claim`,
+          subjectEntityId: null,
+          predicate: "state",
+          objectText: "current",
+          status: "unresolved",
+          confidence: 0.5,
+          visibility: "public",
+          observedAt: 1,
+          actorType: "system",
+          actorId: "test",
+          source: "test",
+          citationId: null,
+          createdAt: 1,
+          retentionExpiresAt: 9_999_999_999_999,
+        });
+      }
+    });
+    await t.mutation(evidence.backfillLegacy, { limit: 100 });
+    await t.mutation(evidence.backfillLegacy, { limit: 100 });
+    await t.run(async (ctx) => {
+      const revisions = await ctx.db.query("evidenceClaimRevisions").collect();
+      expect(revisions).toHaveLength(3);
+      expect(
+        revisions.every(
+          (revision) => revision.changeKind !== "legacy-baseline",
+        ),
+      ).toBe(true);
+    });
+  });
 });
