@@ -585,6 +585,29 @@ export const replayDelivery = mutation({
   },
 });
 
+/** Queues a bounded synthetic event for the owner-selected subscription only. */
+export const sendTestEvent = mutation({
+  args: { subscriptionKey: v.string(), eventType: eventTypeValidator },
+  returns: safeDeliveryValidator,
+  handler: async (ctx, args) => {
+    const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
+    if (subscription.status !== "active" || !subscription.eventTypes.includes(args.eventType)) {
+      throw new ConvexError({ code: "WEBHOOK_TEST_EVENT_DENIED", message: "An active subscription to this event type is required." });
+    }
+    const now = Date.now();
+    const eventKey = `test:${subscription._id}:${now}`;
+    await ctx.db.insert("apiWebhookEvents", {
+      provider: "evidence-delivery",
+      eventKey,
+      payloadJson: JSON.stringify({ eventType: args.eventType, payloadJson: JSON.stringify({ test: true }) }),
+      receivedAt: now,
+    });
+    const deliveryId = await ctx.db.insert("apiWebhookDeliveries", { subscriptionId: subscription._id, eventKey, status: "pending", attempt: 0, createdAt: now, updatedAt: now, nextAttemptAt: now });
+    await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId });
+    return { eventKey, status: "pending" as const, attempt: 0, nextAttemptAt: now, createdAt: now, updatedAt: now };
+  },
+});
+
 /** Store a single event and idempotently create deliveries for matching active subscriptions. */
 export const enqueueEvent = internalMutation({
   args: {
