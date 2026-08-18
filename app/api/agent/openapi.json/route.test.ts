@@ -9,6 +9,7 @@ describe("agent API OpenAPI contract", () => {
 
     expect(response.status).toBe(200);
     expect(document.openapi).toBe("3.1.0");
+    expect(document.info.description).toContain("not provisioned");
     expect(document.servers).toEqual([
       { url: "https://www.symbaiex.com/api/agent" },
     ]);

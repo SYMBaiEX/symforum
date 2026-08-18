@@ -51,6 +51,11 @@ describe("agent API manifest", () => {
       modernDiscoveryMethod: "server/discover",
       legacyInitializeCompatibility: true,
     });
+    expect(manifest.premiumBoundary).toMatchObject({
+      enabled: false,
+      hostname: null,
+      documentation: "https://www.symbaiex.com/agent/instructions",
+    });
     expect(manifest.researchJobs.enabled).toBe(true);
     expect(manifest.exports).toMatchObject({ enabled: true, format: "jsonl" });
     expect(manifest.webhooks.infrastructureEnabled).toBe(true);

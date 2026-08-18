@@ -11,7 +11,7 @@ const OPENAPI = {
     title: "SYMBaiEX Agent API",
     version: "v1",
     description:
-      "Public discovery, Ed25519 authentication, quota, provenance reads, cited research jobs, bounded exports, and signed webhooks. Payments are not accepted; GraphQL is deferred.",
+      "Public discovery, Ed25519 authentication, quota, provenance reads, cited research jobs, bounded exports, and signed webhooks. Payments are not accepted; GraphQL is deferred. A future dedicated premium host is not provisioned or advertised by this contract.",
     termsOfService: primarySiteUrl("/ai-policy"),
   },
   servers: [{ url: API_BASE_URL }],

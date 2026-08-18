@@ -92,6 +92,21 @@ const MANIFEST = {
       "durable usage ledger",
     ],
   },
+  premiumBoundary: {
+    enabled: false,
+    hostname: null,
+    documentation: primarySiteUrl("/agent/instructions"),
+    reason:
+      "A dedicated high-volume agent host is reserved but not provisioned. The public API remains the only supported machine endpoint; do not infer a premium URL, payment rail, or MCP server.",
+    intendedProducts: [
+      "high-volume search",
+      "source-cited research",
+      "bounded exports",
+      "immutable datasets",
+      "benchmark runs",
+      "MCP tools",
+    ],
+  },
   researchJobs: {
     enabled: true,
     output: "source-cited JSON and authenticated first-party artifact stream",
