@@ -16,10 +16,12 @@ returns `404` unless all of the following future requirements are met:
 3. The request URL, `Host`, and any `X-Forwarded-Host` agree on that exact host.
 4. Any browser `Origin` is exactly `https://agent-api.symbaiex.com`.
 
-Even when those host gates are satisfied, the reserved route still returns
-`404`. It has no relay to Convex, no backend URL, no payment provider, no
-checkout, and no entitlement bypass. This prevents a partial configuration from
-exposing a paid surface before the complete authorization path exists.
+Even when those host gates are satisfied, every supported method (`GET`,
+`HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS`) still returns the same
+private `404` response. It provides no CORS or `Allow` negotiation, Convex
+relay, backend URL, payment provider, checkout, or entitlement bypass. This
+prevents a partial configuration from exposing a paid surface before the
+complete authorization path exists.
 
 ## Activation prerequisites
 

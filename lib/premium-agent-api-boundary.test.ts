@@ -57,12 +57,8 @@ describe("premium agent API boundary", () => {
     expect(premiumAgentApiState(request({ origin: "https://www.symbaiex.com" }))).toBe(
       "origin-not-allowed",
     );
-    const headers = premiumAgentApiHeaders(
-      request({ origin: `https://${PREMIUM_AGENT_API_HOST}` }),
-    );
-    expect(headers.get("access-control-allow-origin")).toBe(
-      `https://${PREMIUM_AGENT_API_HOST}`,
-    );
+    const headers = premiumAgentApiHeaders(request({ origin: `https://${PREMIUM_AGENT_API_HOST}` }));
+    expect(headers.get("access-control-allow-origin")).toBeNull();
     expect(headers.get("x-frame-options")).toBe("DENY");
   });
 

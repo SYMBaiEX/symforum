@@ -1,6 +1,4 @@
 import {
-  premiumAgentApiHeaders,
-  premiumAgentApiState,
   premiumAgentApiUnavailable,
 } from "@/lib/premium-agent-api-boundary";
 
@@ -13,16 +11,14 @@ export const dynamic = "force-dynamic";
  * provider, entitlement, or usage ledger is exposed until the complete
  * authenticated implementation is enabled.
  */
-export function GET(request: Request) {
+function unavailable(request: Request) {
   return premiumAgentApiUnavailable(request);
 }
 
-export function POST(request: Request) {
-  return premiumAgentApiUnavailable(request);
-}
-
-export function OPTIONS(request: Request) {
-  return premiumAgentApiState(request) === "ready"
-    ? new Response(null, { status: 204, headers: premiumAgentApiHeaders(request) })
-    : premiumAgentApiUnavailable(request);
-}
+export const GET = unavailable;
+export const HEAD = unavailable;
+export const POST = unavailable;
+export const PUT = unavailable;
+export const PATCH = unavailable;
+export const DELETE = unavailable;
+export const OPTIONS = unavailable;

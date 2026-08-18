@@ -76,7 +76,11 @@ export function premiumAgentApiState(
 }
 
 export function premiumAgentApiHeaders(request: Request) {
-  const headers = new Headers({
+  void request;
+  // Do not add CORS negotiation while this boundary is inert. In particular,
+  // an enabled environment flag alone must not reveal that the reserved host
+  // exists through a preflight response.
+  return new Headers({
     "Cache-Control": "no-store, max-age=0",
     "Content-Type": "application/problem+json; charset=utf-8",
     "Cross-Origin-Resource-Policy": "same-origin",
@@ -85,21 +89,12 @@ export function premiumAgentApiHeaders(request: Request) {
     "X-Frame-Options": "DENY",
     Vary: "Origin, Host, X-Forwarded-Host",
   });
-  if (premiumAgentApiState(request) === "ready") {
-    const origin = request.headers.get("origin");
-    if (origin) headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    headers.set(
-      "Access-Control-Allow-Headers",
-      "authorization, content-type, idempotency-key, mcp-protocol-version, mcp-method, mcp-name",
-    );
-  }
-  return headers;
 }
 
 export function premiumAgentApiUnavailable(request: Request) {
-  // A 404 deliberately avoids advertising a paid endpoint before the hostname,
-  // entitlement checks, ledger reservation, and provider policy are live.
+  // A method-independent 404 deliberately avoids advertising a paid endpoint
+  // before the hostname, entitlement checks, ledger reservation, and provider
+  // policy are live.
   return new Response(null, { status: 404, headers: premiumAgentApiHeaders(request) });
 }
 

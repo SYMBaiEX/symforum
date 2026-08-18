@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { GET, OPTIONS, POST } from "./route";
+import { DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT } from "./route";
 
 const base = "https://agent-api.symbaiex.com/v1/universal-search?q=test";
 
@@ -16,21 +16,32 @@ describe("reserved premium agent API route", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
-  test("stays closed until both feature flag and exact host configuration are present", async () => {
+  test("keeps every supported method indistinguishable while inactive", async () => {
     vi.stubEnv("PREMIUM_AGENT_API_ENABLED", "true");
-    const missingHost = await POST(
-      new Request(base, { method: "POST", headers: { host: "agent-api.symbaiex.com" } }),
-    );
-    expect(missingHost.status).toBe(404);
     vi.stubEnv("PREMIUM_AGENT_API_HOST", "agent-api.symbaiex.com");
-    const reserved = await OPTIONS(
-      new Request(base, { method: "OPTIONS", headers: { host: "agent-api.symbaiex.com" } }),
-    );
-    expect(reserved.status).toBe(204);
-    expect(reserved.headers.get("access-control-allow-origin")).toBeNull();
-    const notImplemented = await POST(
-      new Request(base, { method: "POST", headers: { host: "agent-api.symbaiex.com" } }),
-    );
-    expect(notImplemented.status).toBe(404);
+    const handlers = [
+      [GET, "GET"],
+      [HEAD, "HEAD"],
+      [POST, "POST"],
+      [PUT, "PUT"],
+      [PATCH, "PATCH"],
+      [DELETE, "DELETE"],
+      [OPTIONS, "OPTIONS"],
+    ] as const;
+    for (const [handler, method] of handlers) {
+      const response = await handler(
+        new Request(base, {
+          method,
+          headers: {
+            host: "agent-api.symbaiex.com",
+            origin: "https://agent-api.symbaiex.com",
+          },
+        }),
+      );
+      expect(response.status, method).toBe(404);
+      expect(response.headers.get("cache-control"), method).toContain("no-store");
+      expect(response.headers.get("access-control-allow-origin"), method).toBeNull();
+      expect(response.headers.get("allow"), method).toBeNull();
+    }
   });
 });
