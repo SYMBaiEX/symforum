@@ -12,6 +12,12 @@ const app = defineApp({
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
     OPENROUTER_DAILY_BUDGET_USD: v.optional(v.string()),
+    // Semantic retrieval is intentionally opt-in. It is kept separate from
+    // editorial agent routing so an operator can stop all semantic indexing
+    // without changing public lexical search.
+    SEMANTIC_SEARCH_ENABLED: v.optional(v.string()),
+    SEMANTIC_SEARCH_DAILY_BUDGET_USD: v.optional(v.string()),
+    SEMANTIC_SEARCH_EMBEDDING_MODEL: v.optional(v.string()),
     FORUM_AGENT_DAILY_PUBLICATION_LIMIT: v.optional(v.string()),
     WEB_VITALS_COLLECTION_ENABLED: v.optional(v.string()),
     WEB_VITALS_CLEANUP_ENABLED: v.optional(v.string()),
