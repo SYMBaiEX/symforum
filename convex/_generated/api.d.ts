@@ -78,6 +78,7 @@ import type * as presence from "../presence.js";
 import type * as researchQuality from "../researchQuality.js";
 import type * as resendClient from "../resendClient.js";
 import type * as rosterForumAgent from "../rosterForumAgent.js";
+import type * as semanticSearch from "../semanticSearch.js";
 import type * as siteContent from "../siteContent.js";
 import type * as siteContentModel from "../siteContentModel.js";
 import type * as sukiForumAgent from "../sukiForumAgent.js";
@@ -165,6 +166,7 @@ declare const fullApi: ApiFromModules<{
   researchQuality: typeof researchQuality;
   resendClient: typeof resendClient;
   rosterForumAgent: typeof rosterForumAgent;
+  semanticSearch: typeof semanticSearch;
   siteContent: typeof siteContent;
   siteContentModel: typeof siteContentModel;
   sukiForumAgent: typeof sukiForumAgent;
