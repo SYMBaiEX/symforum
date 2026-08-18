@@ -9,6 +9,10 @@
     "description": "SYMBaiEX agent operating instructions",
     "url": "https://www.symbaiex.com/agent/instructions"
   },
+  "x-symbaiex-verification-provisioning": {
+    "enabled": false,
+    "description": "Webhook deliveries include an HMAC-SHA256 signature, but SYMBaiEX does not currently provision a subscriber-verifiable signing secret. The server-managed signing configuration is not retrievable by subscribers; self-service signature verification is unavailable unless an operator separately provisions matching verification material out of band."
+  },
   "channels": {
     "evidence.document.changed": {
       "address": "evidence.document.changed",
@@ -55,7 +59,7 @@
           "x-symbaiex-event-id": { "type": "string" },
           "x-symbaiex-event-type": { "type": "string", "enum": ["evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified"] },
           "x-symbaiex-timestamp": { "type": "string", "description": "Unix epoch seconds used in the HMAC input." },
-          "x-symbaiex-signature": { "type": "string", "pattern": "^v1=[a-f0-9]{64}$", "description": "HMAC-SHA256 of timestamp.body using the subscription signing key." }
+          "x-symbaiex-signature": { "type": "string", "pattern": "^v1=[a-f0-9]{64}$", "description": "HMAC-SHA256 signature of timestamp.body produced by server-managed delivery configuration. Subscriber-verifiable signing-secret provisioning is currently disabled." }
         }
       },
       "Envelope": {

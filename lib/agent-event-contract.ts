@@ -162,7 +162,10 @@ function isClaimVerifiedData(value: unknown) {
   return confidence >= 0 && confidence <= 1;
 }
 
-/** Validates an untrusted webhook body without parsing, coercing, or mutating it. */
+/**
+ * Validates an untrusted webhook body without parsing, coercing, or mutating it.
+ * This checks the public body shape only; it does not establish delivery authenticity.
+ */
 export function isAgentEventEnvelope(
   value: unknown,
 ): value is AgentEventEnvelope {
