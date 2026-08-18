@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
 import {
   assertAsyncApiContract,
+  joinWebhookBodyChunks,
   MAX_WEBHOOK_BODY_BYTES,
   verifyWebhookRequest,
   WebhookReplayGuard,
@@ -53,6 +55,18 @@ function singleHeader(value: string | string[] | undefined) {
   return typeof value === "string" ? value : undefined;
 }
 
+function forceClose(
+  server: ReturnType<typeof createServer>,
+  requests: Set<IncomingMessage>,
+  sockets: Set<Socket>,
+) {
+  for (const request of requests) request.destroy();
+  for (const socket of sockets) socket.destroy();
+  server.close();
+  // A socket or parser should never keep this disposable verifier alive indefinitely.
+  setTimeout(() => process.exit(0), 1_000).unref();
+}
+
 async function main() {
   if (option("--host") !== undefined) throw new Error("The certification receiver always binds to 127.0.0.1");
   assertAsyncApiContract();
@@ -63,7 +77,11 @@ async function main() {
   const replayGuard = new WebhookReplayGuard();
   let acceptedEvents = 0;
   let closed = false;
+  const activeRequests = new Set<IncomingMessage>();
+  const sockets = new Set<Socket>();
   const server = createServer(async (request, response) => {
+    activeRequests.add(request);
+    request.once("close", () => activeRequests.delete(request));
     if (request.method !== "POST" || request.url !== "/webhooks/symbaiex") {
       reject(response, 404, "not_found");
       return;
@@ -74,19 +92,20 @@ async function main() {
       reject(response, 413, "body_too_large");
       return;
     }
-    let body = "";
+    const chunks: Uint8Array[] = [];
     let bytes = 0;
     try {
       for await (const chunk of request) {
-        const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-        bytes += Buffer.byteLength(text);
+        const raw = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : Buffer.from(chunk);
+        bytes += raw.byteLength;
         if (bytes > MAX_WEBHOOK_BODY_BYTES) {
           request.resume();
           reject(response, 413, "body_too_large");
           return;
         }
-        body += text;
+        chunks.push(raw);
       }
+      const body = joinWebhookBodyChunks(chunks);
       const result = await verifyWebhookRequest({
         body,
         secret,
@@ -111,13 +130,17 @@ async function main() {
       response.end();
       if (acceptedEvents >= maxEvents && !closed) {
         closed = true;
-        response.once("finish", () => server.close());
+        response.once("finish", () => forceClose(server, activeRequests, sockets));
       }
     } catch {
       reject(response, 400, "invalid_request");
     }
   });
-  const timeout = setTimeout(() => server.close(), timeoutMs);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  const timeout = setTimeout(() => forceClose(server, activeRequests, sockets), timeoutMs);
   server.on("close", () => clearTimeout(timeout));
   server.listen(port, LOCALHOST, () => {
     console.log(`Webhook certification receiver listening at http://${LOCALHOST}:${port}/webhooks/symbaiex`);

@@ -28,11 +28,18 @@ secret-manager read symbaiex-webhook-test | \
   bun scripts/webhook-cert-receiver.ts --secret-stdin --port 8788
 ```
 
-The accepted route is exactly `POST /webhooks/symbaiex`. It verifies the raw
-body HMAC (`HMAC-SHA256(timestamp + "." + body)`), the `v1=` signature form,
-five-minute timestamp tolerance, exact header/body event id and type, published
-event schema keys, and one-time event ids. Replays return `409`; invalid or
+The accepted route is exactly `POST /webhooks/symbaiex`. It preserves raw bytes
+until the complete body arrives, then verifies the raw-body HMAC
+(`HMAC-SHA256(timestamp + "." + body)`), the `v1=` signature form, five-minute
+timestamp tolerance, exact header/body event id and type, and the complete
+published AsyncAPI JSON Schema surface (references, `allOf`, required fields,
+types, constants, enums, minimum/maximum values, URI format, and closed
+objects). It also rejects duplicate event ids. Replays return `409`; invalid or
 stale signatures return `401`; bodies over 16 KiB return `413`.
+
+The receiver destroys unfinished request bodies and open sockets when its
+configured deadline expires, then closes itself. This is a deliberately
+bounded certification utility, not a durable webhook service.
 
 The fixed fixture at `fixtures/webhooks/document-changed.json` is safe for local
 tests only. It contains no subscription material and is deliberately unsigned;

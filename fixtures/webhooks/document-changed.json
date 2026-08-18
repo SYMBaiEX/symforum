@@ -6,6 +6,7 @@
     "documentId": "document-cert-001",
     "documentVersionId": "version-cert-001",
     "version": 1,
-    "canonicalUrl": "https://example.invalid/evidence/certification-document"
+    "canonicalUrl": "https://example.invalid/evidence/certification-document",
+    "changedFields": ["title", "excerpt"]
   }
 }

@@ -2,6 +2,7 @@ import fixture from "../fixtures/webhooks/document-changed.json";
 import { describe, expect, test } from "vitest";
 import {
   assertAsyncApiContract,
+  joinWebhookBodyChunks,
   MAX_WEBHOOK_BODY_BYTES,
   signWebhookBody,
   verifyWebhookRequest,
@@ -25,6 +26,20 @@ async function signedRequest(overrides: Partial<Parameters<typeof verifyWebhookR
       signature,
     },
     ...overrides,
+  };
+}
+
+async function correctlySigned(bodyValue: string | Uint8Array, eventId: string, eventType: string) {
+  return {
+    body: bodyValue,
+    secret,
+    nowSeconds: Number(timestamp),
+    headers: {
+      eventId,
+      eventType,
+      timestamp,
+      signature: await signWebhookBody(secret, timestamp, bodyValue),
+    },
   };
 }
 
@@ -72,5 +87,39 @@ describe("webhook certification core", () => {
     const guard = new WebhookReplayGuard();
     expect(guard.accept(fixture.id)).toBe(true);
     expect(guard.accept(fixture.id)).toBe(false);
+  });
+
+  test("validates contract value types and constants after HMAC verification", async () => {
+    const invalidBenchmarkData = [
+      { runId: 1, runKey: "run", score: 1, model: "model" },
+      { runId: "run", runKey: [], score: 1, model: "model" },
+      { runId: "run", runKey: "run", score: "1", model: "model" },
+      { runId: "run", runKey: "run", score: 1, model: null },
+    ];
+    for (const data of invalidBenchmarkData) {
+      const benchmark = JSON.stringify({
+        id: "benchmark-cert-001",
+        type: "evidence.benchmark.completed",
+        occurredAt: Number(timestamp),
+        data,
+      });
+      await expect(
+        verifyWebhookRequest(await correctlySigned(benchmark, "benchmark-cert-001", "evidence.benchmark.completed")),
+      ).resolves.toEqual({ ok: false, code: "contract_data_mismatch" });
+    }
+  });
+
+  test("validates real changedFields payloads and signs raw bytes across split UTF-8 chunks", async () => {
+    const unicodeBody = JSON.stringify({
+      ...fixture,
+      data: { ...fixture.data, changedFields: ["títle", "excerpt"] },
+    });
+    const bytes = new TextEncoder().encode(unicodeBody);
+    const accentedByte = bytes.indexOf(0xc3);
+    expect(accentedByte).toBeGreaterThan(0);
+    const split = joinWebhookBodyChunks([bytes.slice(0, accentedByte + 1), bytes.slice(accentedByte + 1)]);
+    await expect(
+      verifyWebhookRequest(await correctlySigned(split, fixture.id, fixture.type)),
+    ).resolves.toMatchObject({ ok: true, eventId: fixture.id });
   });
 });
