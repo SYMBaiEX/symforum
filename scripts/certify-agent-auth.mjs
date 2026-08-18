@@ -10,6 +10,7 @@ import {
   verifyPublicMetadata,
   verifyScopeDenied,
   verifySession,
+  validateAgentId,
   validateLifecycleConfig,
   validatePhaseInputs,
 } from "./lib/agent-auth-certification.mjs";
@@ -46,7 +47,7 @@ async function verifyLifecycle() {
     return output({ phase, active: active.status, insufficientScope: scope.status, refreshed: true });
   }
   if (phase === "rotation") {
-    const agentId = args["agent-id"];
+    const agentId = validateAgentId(args["agent-id"]);
     const old = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("old-key")), expectation: 401 });
     const replacement = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("replacement-key")), expectation: 200 });
     const active = await verifySession({ baseUrl: productionBaseUrl, session: replacement, expectation: 200 });

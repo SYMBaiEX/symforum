@@ -1,9 +1,12 @@
-import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs";
+import { dirname, join, parse, resolve, sep } from "node:path";
 
 const SECRET_FIELD = /(?:access|refresh|private|secret|signature|challenge|token|authorization)/i;
 export const PRODUCTION_AGENT_API_BASE_URL = "https://www.symbaiex.com/api/agent";
 const DEFAULT_BASE_URL = PRODUCTION_AGENT_API_BASE_URL;
+const MAX_AGENT_ID_LENGTH = 64;
+const MAX_CREDENTIAL_BYTES = 64 * 1024;
+const MAX_OUTPUT_CHARS = 240;
 
 export function normalizeAgentApiBaseUrl(value = DEFAULT_BASE_URL) {
   let url;
@@ -20,24 +23,42 @@ export function normalizeAgentApiBaseUrl(value = DEFAULT_BASE_URL) {
 }
 
 export function assertPrivateJsonFile(path) {
-  const link = lstatSync(path);
-  if (link.isSymbolicLink() || !link.isFile()) throw new Error("Credential file must be a regular non-symlink file.");
-  if (typeof process.getuid === "function" && link.uid !== process.getuid()) throw new Error("Credential file must be owned by the current user.");
-  const mode = statSync(path).mode & 0o777;
-  if ((mode & 0o077) !== 0) {
-    throw new Error("Refusing to read a group/world-accessible credential file.");
-  }
+  if (typeof path !== "string" || path.length === 0) throw new Error("Credential file path is invalid.");
   assertSafeCredentialParents(path);
+  let descriptor;
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const initial = fstatSync(descriptor);
+    assertPrivateFileStat(initial);
+    const bytes = Buffer.alloc(MAX_CREDENTIAL_BYTES);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(descriptor, bytes, offset, bytes.length - offset, null);
+      if (count === 0) break;
+      offset += count;
+    }
+    if (offset === bytes.length) throw new Error("Credential file is too large.");
+    const final = fstatSync(descriptor);
+    if (final.dev !== initial.dev || final.ino !== initial.ino || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs) throw new Error("Credential file changed while being read.");
+    assertPrivateFileStat(final);
+    assertSafeCredentialParents(path);
+    const parsed = JSON.parse(bytes.subarray(0, offset).toString("utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("Credential file must contain a JSON object.");
     }
     return parsed;
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Refusing")) throw error;
-    throw new Error("Could not read credential file.");
+    if (error instanceof Error && /^(Credential file|Credential parent|Refusing)/.test(error.message)) throw error;
+    throw new Error("Credential file could not be read safely.");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
+}
+
+function assertPrivateFileStat(entry) {
+  if (!entry.isFile()) throw new Error("Credential file must be a regular non-symlink file.");
+  if (typeof process.getuid === "function" && entry.uid !== process.getuid()) throw new Error("Credential file must be owned by the current user.");
+  if ((entry.mode & 0o777) !== 0o600) throw new Error("Credential file must use mode 0600.");
 }
 
 function assertSafeCredentialParents(path) {
@@ -46,20 +67,20 @@ function assertSafeCredentialParents(path) {
 
 function inspectSafeParentChain(start) {
   const snapshots = [];
-  const unresolvedStart = resolve(start);
-  const directStart = lstatSync(unresolvedStart);
-  if (directStart.isSymbolicLink() || !directStart.isDirectory()) throw new Error("Credential parent must be a real directory.");
-  let current = realpathSync(unresolvedStart);
-  while (true) {
-    const entry = lstatSync(current);
+  const absolute = resolve(start);
+  const root = parse(absolute).root;
+  const components = absolute.slice(root.length).split(sep).filter(Boolean);
+  let current = root;
+  for (const component of components) {
+    current = join(current, component);
+    let entry;
+    try { entry = lstatSync(current); } catch { throw new Error("Credential parent could not be inspected safely."); }
     if (entry.isSymbolicLink() || !entry.isDirectory()) throw new Error("Credential parent must be a real directory.");
     if ((entry.mode & 0o022) !== 0) throw new Error("Credential parent must not be group/world writable.");
     if (typeof process.getuid === "function" && entry.uid !== process.getuid() && entry.uid !== 0) throw new Error("Credential parent must be owned by the current user or root.");
     snapshots.push({ path: current, dev: entry.dev, ino: entry.ino });
-    const parent = dirname(current);
-    if (parent === current) return snapshots;
-    current = parent;
   }
+  return snapshots;
 }
 
 export function validateLifecycleConfig({ baseUrl, production, confirm, phase }) {
@@ -83,6 +104,7 @@ export function validatePhaseInputs(phase, args) {
   }
   if (phase === "rotation") {
     requireValue("agent-id");
+    validateAgentId(args["agent-id"]);
     requireValue("old-key");
     requireValue("replacement-key");
     return;
@@ -91,8 +113,11 @@ export function validatePhaseInputs(phase, args) {
 }
 
 export function redactedError(error) {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  const raw = error instanceof Error ? error.message : "";
+  if (["ENOENT", "EACCES", "EPERM", "ENOTDIR", "ELOOP"].includes(code) || /^(ENOENT|EACCES|EPERM|ENOTDIR|ELOOP):/.test(raw)) return "Credential file unavailable.";
   const message = error instanceof Error ? error.message : "Certification request failed.";
-  return redactText(message).slice(0, 240);
+  return redactText(message).slice(0, MAX_OUTPUT_CHARS);
 }
 
 export function redactValue(value) {
@@ -115,10 +140,11 @@ function redactText(value) {
 }
 
 export function certificationPlan({ baseUrl, agentId, includesLifecycle }) {
+  const safeAgentId = agentId === undefined ? "[required for lifecycle]" : validateAgentId(agentId);
   return {
     mode: "dry-plan",
     baseUrl: normalizeAgentApiBaseUrl(baseUrl),
-    agentId: agentId ?? "[required for lifecycle]",
+    agentId: safeAgentId,
     networkRequests: 0,
     mutations: 0,
     lifecycleEnabled: includesLifecycle,
@@ -131,6 +157,13 @@ export function certificationPlan({ baseUrl, agentId, includesLifecycle }) {
       "Delete local certification sessions and keys from the test host after recording redacted results.",
     ],
   };
+}
+
+export function validateAgentId(value) {
+  if (typeof value !== "string" || value.length < 2 || value.length > MAX_AGENT_ID_LENGTH || !/^[a-z0-9][a-z0-9._-]*$/.test(value)) {
+    throw new Error("Agent ID must be 2-64 lowercase letters, numbers, dots, dashes, or underscores.");
+  }
+  return value;
 }
 
 export async function verifyPublicMetadata({ fetchImpl = fetch, baseUrl = DEFAULT_BASE_URL }) {
@@ -181,7 +214,8 @@ export async function refreshSession({ fetchImpl = fetch, baseUrl = DEFAULT_BASE
 }
 
 export async function verifyKeyLogin({ fetchImpl = fetch, baseUrl = DEFAULT_BASE_URL, agentId, key, expectation }) {
-  if (typeof agentId !== "string" || agentId.length < 2 || !key || key.algorithm !== "Ed25519" || typeof key.privateKeyPkcs8 !== "string") throw new Error("Agent ID and a valid Ed25519 key file are required.");
+  validateAgentId(agentId);
+  if (!key || key.algorithm !== "Ed25519" || typeof key.privateKeyPkcs8 !== "string") throw new Error("Agent ID and a valid Ed25519 key file are required.");
   const normalized = normalizeAgentApiBaseUrl(baseUrl);
   const challengeResponse = await fetchImpl(`${normalized}/auth/challenge`, {
     method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ agentId }), redirect: "error", signal: AbortSignal.timeout(10_000),

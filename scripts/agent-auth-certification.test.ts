@@ -1,9 +1,16 @@
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  assertPrivateJsonFile,
   certificationPlan,
   redactValue,
+  redactedError,
   refreshSession,
   validateLifecycleConfig,
+  validateAgentId,
   validatePhaseInputs,
   verifyKeyLogin,
   verifyPublicMetadata,
@@ -71,6 +78,29 @@ describe("agent auth certification harness", () => {
     expect(() => validatePhaseInputs("revocation", {})).toThrow(/revoked-session/i);
     expect(() => validatePhaseInputs("refresh-scope", { "allow-session-rotation": "yes", session: "/safe", "scope-denied-session": "/safe" })).not.toThrow();
     expect(() => validatePhaseInputs("rotation", { "agent-id": "cert", "old-key": "/safe", "replacement-key": "/safe" })).not.toThrow();
+    expect(() => validatePhaseInputs("rotation", { "agent-id": "BAD!", "old-key": "/safe", "replacement-key": "/safe" })).toThrow(/2-64 lowercase/i);
     expect(() => validatePhaseInputs("revocation", { "revoked-session": "/safe" })).not.toThrow();
+  });
+
+  test("rejects control and oversized agent IDs before file or network access", () => {
+    expect(() => validateAgentId("bad\nagent")).toThrow(/2-64 lowercase/i);
+    expect(() => validateAgentId("a".repeat(65))).toThrow(/2-64 lowercase/i);
+    expect(() => certificationPlan({ baseUrl: "https://www.symbaiex.com/api/agent", agentId: "a".repeat(65), includesLifecycle: false })).toThrow(/2-64 lowercase/i);
+  });
+
+  test("sanitizes missing credential filesystem failures", () => {
+    expect(redactedError(new Error("ENOENT: no such file, lstat '/secret/private-key.json'"))).toBe("Credential file unavailable.");
+  });
+
+  test("rejects intermediate lexical symlink parents", () => {
+    const directory = mkdtempSync(join(tmpdir(), "symbaiex-plat01-"));
+    chmodSync(directory, 0o700);
+    const real = join(directory, "real");
+    mkdirSync(real, { mode: 0o700 });
+    const linked = join(directory, "linked");
+    symlinkSync(real, linked);
+    const credential = join(linked, "credential.json");
+    writeFileSync(credential, JSON.stringify({ accessToken: "x" }), { mode: 0o600 });
+    expect(() => assertPrivateJsonFile(credential)).toThrow(/parent.*real directory/i);
   });
 });
