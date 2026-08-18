@@ -22,8 +22,8 @@ complete.
 - The current verified Vercel application release is `f27117b`; deployment
   `dpl_HSeQcSH3YedFnR7npYLA5G53MHgA` completed all 57 application routes and is
   Ready. Its live public smoke passes and production error logs were empty for
-  the post-release review window. The source candidate through `13f1756`
-  passes 588 Vitest tests, root and Convex TypeScript, ESLint, the TypeScript
+  the post-release review window. The source candidate through `475db0e`
+  passes 590 Vitest tests, root and Convex TypeScript, ESLint, the TypeScript
   and Python SDK suites, and an exact Bun 1.3.14 production build. This
   roadmap-only receipt follows that code commit. The candidate is not described
   as deployed until it is pushed and the backend release receives separate
