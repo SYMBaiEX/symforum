@@ -691,7 +691,9 @@ export const completeExportJob = internalMutation({
       } else {
         // The canonical snapshot already owns a manifest. This newly generated
         // duplicate is not an export artifact and must not linger unreferenced.
-        await ctx.storage.delete(args.datasetManifestStorageId);
+        // A caller may have supplied the canonical manifest ID, so first prove
+        // that no dataset version references it before deleting anything.
+        await removeDownloadStorage(ctx, args.datasetManifestStorageId);
       }
       await ctx.runMutation(enqueueWebhookRef, {
         eventKey: `export:${job._id}:completed`,
@@ -742,12 +744,14 @@ async function isDatasetManifestStorage(
   storageId: Id<"_storage">,
 ) {
   return (
-    (await ctx.db
-      .query("evidenceDatasetVersions")
-      .withIndex("by_manifestStorageId", (q) =>
-        q.eq("manifestStorageId", storageId),
-      )
-      .unique()) !== null
+    (
+      await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_manifestStorageId", (q) =>
+          q.eq("manifestStorageId", storageId),
+        )
+        .take(1)
+    ).length > 0
   );
 }
 

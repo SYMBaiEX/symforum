@@ -345,6 +345,73 @@ describe("evidence jobs", () => {
     ).resolves.toBeNull();
   });
 
+  test("keeps a caller-supplied canonical manifest when a duplicate checksum completes", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const first = await t.mutation(jobs.createExport, {
+      ownerUserId: owner,
+      agentId: "agent",
+      datasetId: catalog.datasetId,
+      format: "jsonl",
+      idempotencyKey: "canonical-manifest-first",
+      requestFingerprint: "canonical-manifest-first",
+      quotaUnits: 1,
+    });
+    const canonicalManifestStorageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['{"snapshot":"canonical"}'])),
+    );
+    const firstArtifactStorageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['{"record":1}\n'])),
+    );
+    await t.mutation(jobs.completeExport, {
+      jobId: first.jobId,
+      resultJson: "{}",
+      resultStorageId: firstArtifactStorageId,
+      datasetManifestStorageId: canonicalManifestStorageId,
+      checksum: "canonical-manifest-checksum",
+      recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 13,
+    });
+    const duplicate = await t.mutation(jobs.createExport, {
+      ownerUserId: owner,
+      agentId: "agent",
+      datasetId: catalog.datasetId,
+      format: "jsonl",
+      idempotencyKey: "canonical-manifest-duplicate",
+      requestFingerprint: "canonical-manifest-duplicate",
+      quotaUnits: 1,
+    });
+    const duplicateArtifactStorageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['{"record":1}\n'])),
+    );
+    await t.mutation(jobs.completeExport, {
+      jobId: duplicate.jobId,
+      resultJson: "{}",
+      resultStorageId: duplicateArtifactStorageId,
+      datasetManifestStorageId: canonicalManifestStorageId,
+      checksum: "canonical-manifest-checksum",
+      recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 13,
+    });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db.system.get("_storage", canonicalManifestStorageId),
+      ).not.toBeNull();
+      const version = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_checksum", (q) =>
+          q
+            .eq("datasetId", catalog.datasetId)
+            .eq("checksum", "canonical-manifest-checksum"),
+        )
+        .unique();
+      expect(version?.manifestStorageId).toBe(canonicalManifestStorageId);
+    });
+  });
+
   test("cleans all expired artifacts in indexed batches without deleting audit jobs", async () => {
     const t = setup();
     const { owner } = await fixture(t);
@@ -461,6 +528,16 @@ describe("evidence jobs", () => {
         datasetId: catalog.datasetId,
         version: "legacy-snapshot",
         checksum: "legacy-checksum",
+        recordCount: 1,
+        manifestStorageId: sharedManifestStorageId,
+        createdAt: now - 2,
+      });
+      // Historical imports could have created more than one row referencing a
+      // shared manifest. Existence, not uniqueness, protects that storage.
+      await ctx.db.insert("evidenceDatasetVersions", {
+        datasetId: catalog.datasetId,
+        version: "legacy-snapshot-duplicate-reference",
+        checksum: "legacy-checksum-duplicate-reference",
         recordCount: 1,
         manifestStorageId: sharedManifestStorageId,
         createdAt: now - 2,
