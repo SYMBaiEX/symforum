@@ -18269,18 +18269,22 @@ async function forumBoardStatistics(ctx: QueryCtx) {
     ctx.db
       .query("users")
       .withIndex("by_role", (q) => q.eq("role", "owner"))
+      .order("desc")
       .take(MEMBER_LIST_SCAN_LIMIT + 1),
     ctx.db
       .query("users")
       .withIndex("by_role", (q) => q.eq("role", "admin"))
+      .order("desc")
       .take(MEMBER_LIST_SCAN_LIMIT + 1),
     ctx.db
       .query("users")
       .withIndex("by_forumRole", (q) => q.eq("forumRole", "moderator"))
+      .order("desc")
       .take(MEMBER_LIST_SCAN_LIMIT + 1),
     ctx.db
       .query("users")
       .withIndex("by_forumRole", (q) => q.eq("forumRole", "admin"))
+      .order("desc")
       .take(MEMBER_LIST_SCAN_LIMIT + 1),
     ctx.db
       .query("forumUserProfiles")
@@ -18302,11 +18306,17 @@ async function forumBoardStatistics(ctx: QueryCtx) {
   ];
   const visibleMemberRows = [
     ...new Map(memberRows.map((user) => [user._id, user])).values(),
-  ].filter(
-    (user) =>
-      isTrustedForumUser(user) &&
-      (user.usernameNormalized !== undefined || user.username !== undefined),
-  );
+  ]
+    .filter(
+      (user) =>
+        isTrustedForumUser(user) &&
+        (user.usernameNormalized !== undefined || user.username !== undefined),
+    )
+    .sort(
+      (left, right) =>
+        right._creationTime - left._creationTime ||
+        String(right._id).localeCompare(String(left._id)),
+    );
 
   return {
     memberCount: Math.min(visibleMemberRows.length, MEMBER_LIST_SCAN_LIMIT),
@@ -18315,7 +18325,8 @@ async function forumBoardStatistics(ctx: QueryCtx) {
       ownerRows.length > MEMBER_LIST_SCAN_LIMIT ||
       adminRows.length > MEMBER_LIST_SCAN_LIMIT ||
       moderatorRows.length > MEMBER_LIST_SCAN_LIMIT ||
-      forumAdminRows.length > MEMBER_LIST_SCAN_LIMIT,
+      forumAdminRows.length > MEMBER_LIST_SCAN_LIMIT ||
+      visibleMemberRows.length > MEMBER_LIST_SCAN_LIMIT,
     newestMember: await firstForumStatisticsUser(ctx, visibleMemberRows),
     topPoster: await firstForumStatisticsMember(ctx, topPosterProfiles),
     reputationLeader: await firstForumStatisticsMember(ctx, reputationProfiles),

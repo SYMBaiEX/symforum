@@ -1572,6 +1572,68 @@ describe("forum notification preferences", () => {
     });
   });
 
+  test("overview statistics globally order trusted and staff candidates by join time", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const newestForumAdminId = await t.run(async (ctx) => {
+      await ctx.db.insert("users", {
+        name: "Earlier Forum Admin",
+        username: "earlierforumadmin",
+        usernameNormalized: "earlierforumadmin",
+        forumRole: "admin",
+      });
+      await ctx.db.insert("users", {
+        name: "Newer Forum Moderator",
+        username: "newerforummoderator",
+        usernameNormalized: "newerforummoderator",
+        forumRole: "moderator",
+      });
+      return await ctx.db.insert("users", {
+        name: "Newest Forum Admin",
+        username: "newestforumadmin",
+        usernameNormalized: "newestforumadmin",
+        forumRole: "admin",
+      });
+    });
+
+    const overview = await t.query(api.forum.overview, {});
+    expect(overview.statistics).toMatchObject({
+      newestMember: {
+        userId: newestForumAdminId,
+        username: "newestforumadmin",
+      },
+    });
+    expect(overview.statistics.memberCount).toBeGreaterThanOrEqual(6);
+  });
+
+  test("overview statistics mark a combined staff union above the member cap as limited", async () => {
+    const t = setup();
+    await seedForum(t);
+
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 121; index += 1) {
+        await ctx.db.insert("users", {
+          name: `Moderator ${index}`,
+          username: `moderator${index}`,
+          usernameNormalized: `moderator${index}`,
+          forumRole: "moderator",
+        });
+        await ctx.db.insert("users", {
+          name: `Forum Admin ${index}`,
+          username: `forumadmin${index}`,
+          usernameNormalized: `forumadmin${index}`,
+          forumRole: "admin",
+        });
+      }
+    });
+
+    const overview = await t.query(api.forum.overview, {});
+    expect(overview.statistics).toMatchObject({
+      memberCount: 240,
+      memberCountLimited: true,
+    });
+  });
+
   test("synthetic auth email is not a forum email destination", async () => {
     const t = setup();
     const seed = await seedForum(t);
