@@ -2424,6 +2424,7 @@ export default defineSchema({
       v.literal("pending"),
       v.literal("delivered"),
       v.literal("failed"),
+      v.literal("dead_letter"),
     ),
     attempt: v.number(),
     responseCode: v.optional(v.number()),

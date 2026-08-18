@@ -24,6 +24,15 @@ const webhooks = {
   rotate: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:rotateSigningSecret",
   ),
+  history: makeFunctionReference<"query", any, any>(
+    "evidenceWebhooks:listDeliveryHistory",
+  ),
+  health: makeFunctionReference<"query", any, any>(
+    "evidenceWebhooks:getSubscriptionHealth",
+  ),
+  replay: makeFunctionReference<"mutation", any, any>(
+    "evidenceWebhooks:replayDelivery",
+  ),
   enqueue: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:enqueueEvent",
   ),
@@ -207,6 +216,19 @@ describe("evidence webhooks", () => {
           await ctx.db.query("apiWebhookDeliveries").collect(),
         ).toHaveLength(1);
       });
+      const history = await agent.query(webhooks.history, {
+        subscriptionKey: "research-events",
+        limit: 1,
+      });
+      expect(history).toHaveLength(1);
+      expect(await agent.query(webhooks.health, { subscriptionKey: "research-events" })).toMatchObject({ pending: 1 });
+      await agent.mutation(webhooks.replay, {
+        subscriptionKey: "research-events",
+        eventKey: "research:one",
+      });
+      await expect(t.withIdentity({ subject: ids.other }).query(webhooks.history, {
+        subscriptionKey: "research-events",
+      })).rejects.toThrow(/not found/i);
     } finally {
       vi.unstubAllEnvs();
     }
