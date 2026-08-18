@@ -6,30 +6,35 @@ Production targets: GitHub `main`, Vercel `symbaiex-blog`, Convex `strong-bee-38
 
 ## Progress snapshot — 2026-08-18
 
-| State                                               | Items                                                                                                                                                                                 | Evidence                                                                                                                                                                                                                                                                                                                                       |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployed                                            | PLAT-02, PLAT-05 (SDK foundations), PLAT-06 (lexical plus inactive semantic foundation), PLAT-07 (initial NVD adapters), PLAT-08, PLAT-09, PLAT-11, PLAT-13, PLAT-17 (inert boundary) | MCP 2026-07-28 negotiation; standalone TypeScript/Python clients; bounded universal lexical search and compact forum projections; guarded OpenRouter semantic indexing kept disabled; replay-safe NVD ingestion; conditional/no-op ingestion; claim timelines; AsyncAPI; authenticated artifacts; indistinguishable premium-route 404 boundary |
-| Secure foundation deployed                          | PLAT-01, PLAT-03, PLAT-04, PLAT-10, PLAT-12, PLAT-15, PLAT-18, PLAT-19                                                                                                                | Ed25519 identity and revocation; truthful custom auth discovery; owner developer console; tenant watchlists; encrypted webhook operations; isolated organization/project/service-account boundaries; field Web Vitals and cost controls; fail-closed automated research quality gate and public methodology                                    |
-| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-07, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-20                                                                                                                | Authenticated production lifecycle credential; Python package publishing policy; additional source terms/keys; webhook allowlisted endpoint; billing provider/policy; Cloudflare approval; premium hostname/payment policy; demonstrated GraphQL demand                                                                                        |
+| State                                               | Items                                                                                                  | Evidence                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production verified                                 | PLAT-02, PLAT-04, PLAT-05 foundations, PLAT-08, PLAT-09 foundation, PLAT-11, PLAT-13, PLAT-15, PLAT-17 | MCP negotiation; human-only developer console; standalone TypeScript/Python clients; conditional/no-op ingestion; internal claim history; AsyncAPI; authenticated artifacts; isolated organization/project/service-account boundaries; indistinguishable premium-route 404 boundary                            |
+| Wave 2 source candidate                             | PLAT-07, PLAT-09 API parity, PLAT-10 outbox, PLAT-16 rotation, PLAT-18 SLO and retention               | Seven-source public registry; claim-timeline REST/MCP/SDK parity; tenant-scoped bounded watchlist matching/outbox; current-plus-retiring Ed25519 JWK overlap; atomic global OpenRouter budget admission; Web Vitals cleanup continuation; scheduled p75 SLO evaluation with deduplicated breach/recovery state |
+| Requires external configuration or product decision | PLAT-01, PLAT-05, PLAT-06, PLAT-10, PLAT-12, PLAT-14, PLAT-16, PLAT-17, PLAT-19, PLAT-20               | Authenticated lifecycle credential; package publishing policy; semantic secret/flag/budget/backfill; signed watchlist delivery bridge; webhook allowlisted endpoint; billing policy; Cloudflare approval; premium hostname/payment policy; benchmark-corpus governance; demonstrated GraphQL demand            |
 
-“Foundation deployed” does not mean the item’s complete acceptance criteria are
-closed. Those rows remain unchecked below until credential-gated smoke tests,
-missing clients/UI, or external provider work is complete.
+“Foundation deployed” or “source candidate” does not mean an item’s complete
+acceptance criteria are closed. Those rows remain unchecked below until
+credential-gated smoke tests, missing clients/UI, or external provider work is
+complete.
 
 ### Latest production receipt
 
-- The current verified Vercel application release is `a922e7f`; its build
-  completed all 57 application routes and is Ready. The Wave 1 release
-  candidate immediately before this roadmap receipt is `7055ef6`; it adds the
-  packaged SDK/CLI foundation, a default-off auth certification harness, a
-  fail-closed semantic transport, and a localhost-only webhook certification
-  kit. It has passed the combined local release matrix but is not described as
-  production until the exact pushed Vercel deployment is Ready.
+- The current verified Vercel application release is `f27117b`; deployment
+  `dpl_HSeQcSH3YedFnR7npYLA5G53MHgA` completed all 57 application routes and is
+  Ready. Its live public smoke passes and production error logs were empty for
+  the post-release review window. The Wave 2 source candidate at `ea880a1`
+  passes 566 Vitest tests, root and Convex TypeScript, ESLint, the TypeScript
+  and Python SDK suites, and an exact Bun 1.3.14 production build. It is not
+  described as deployed until its final roadmap commit is pushed and the
+  backend release receives separate approval.
 - Convex production `strong-bee-384` was explicitly deployed from the
   `7ed8a76` source tree after schema validation and typecheck. The public agent
-  smoke passed afterward. The newer semantic transport/accounting functions
-  remain source-only and disabled pending a separately approved Convex deploy
-  plus the relay-secret, budget, and bounded-backfill activation sequence.
+  smoke passed afterward. The newer semantic transport/accounting, source
+  registry, claim-timeline API, watchlist outbox, global OpenRouter cap, Web
+  Vitals retention continuation, and operational SLO functions remain
+  source-only pending a separately approved Convex deploy. Semantic activation
+  additionally requires the relay-secret, reviewed budget, feature flag, and
+  bounded-backfill canary.
 - The public agent smoke verifies the manifest, OpenAPI, custom Ed25519
   protected-resource metadata, REST and MCP authentication challenges,
   `paymentAccepted: false`, and `graphql: false`.
@@ -44,9 +49,9 @@ missing clients/UI, or external provider work is complete.
   exposing a public organization API, private keys, tokens, or backend URLs.
 - The semantic-search schema, exact-bucket spend reservation/reconciliation,
   stale-vector authorization joins, pause state, bounded cleanup, and
-  OpenRouter-only embedding actions are deployed. The feature remains
-  fail-closed because `SEMANTIC_SEARCH_ENABLED` is unset, no backfill has been
-  started, and no REST or MCP route exposes it.
+  OpenRouter-only embedding actions are deployed but disabled. The new
+  authenticated REST/MCP transport and atomic global OpenRouter admission cap
+  are source-only. No production secret, flag, or backfill has been enabled.
 - Privacy-preserving field Web Vitals are deployed for public route templates,
   including `/agent` and `/research/methodology`; collection uses bounded
   sampling, explicit budgets, rate/dedupe limits, and no visitor, account,
@@ -119,7 +124,7 @@ pass.
     capture each bounded redacted phase result as release evidence; that output
     is not an authorization mechanism.
 
-- [ ] **PLAT-02 — MCP 2026-07-28 protocol upgrade**
+- [x] **PLAT-02 — MCP 2026-07-28 protocol upgrade**
 
   - Add stateless negotiation, protocol-version handling, cacheable capability
     lists, and compatible error behavior.
@@ -134,7 +139,7 @@ pass.
   - Acceptance: discovery endpoints are public and cacheable; cross-resource
     tokens and redirect mismatches are rejected.
 
-- [ ] **PLAT-04 — Agent developer console**
+- [x] **PLAT-04 — Agent developer console**
 
   - Build an owner-facing console for agents, scopes, quotas, sessions, usage,
     webhooks, key rotation, and revocation.
@@ -177,15 +182,21 @@ pass.
     standards, government, and scholarly metadata feeds.
   - Acceptance: every adapter records license class, terms URL, attribution,
     cursor/checkpoint, timeout, retry state, and deterministic fixtures.
+  - Integrated source candidate: a deterministic seven-source registry covers
+    CISA KEV, GitHub Global Advisories, three allowlisted GitHub release feeds,
+    Crossref, first-party SYMBaiEX research, NVD CVEs, and NVD change history.
+    It exposes only public non-secret metadata through authenticated REST, MCP,
+    OpenAPI, and TypeScript/Python clients. Aggregate release bounds derive from
+    the adapter's shared three-repository and 30-items-per-repository constants.
 
-- [ ] **PLAT-08 — Conditional ingestion and structured change detection**
+- [x] **PLAT-08 — Conditional ingestion and structured change detection**
 
   - Persist ETag/Last-Modified validators, use conditional requests, and emit
     canonical field-level diffs only when content changes.
   - Acceptance: unchanged sources produce no new version, enrichment, webhook,
     or usage charge; changed sources preserve immutable history.
 
-- [ ] **PLAT-09 — Claim timeline and contradiction API**
+- [x] **PLAT-09 — Claim timeline and contradiction API**
 
   - Expose supporting, contradicting, superseded, and unresolved evidence over
     time with exact version citations.
@@ -198,8 +209,13 @@ pass.
     topics and receive bounded signed change notifications.
   - Acceptance: watchlists are tenant-scoped, rate-limited, revocable, and
     idempotent; alert fan-out has hard caps.
+  - Integrated source candidate: bounded public-event matching now supports
+    source, document, claim, entity, topic, and repository watchlists with live
+    source/entity/citation visibility joins, owner/agent isolation, request
+    rate limits, serialized idempotency, and capped outbox records. Delivering
+    those matches through the existing signed webhook service is still open.
 
-- [ ] **PLAT-11 — AsyncAPI event contract**
+- [x] **PLAT-11 — AsyncAPI event contract**
 
   - Publish machine-readable schemas for evidence, research, export, webhook,
     entitlement, usage, and budget events.
@@ -219,7 +235,7 @@ pass.
     disposable subscription plus a separately authorized exact HTTPS test host
     and allowlist change.
 
-- [ ] **PLAT-13 — Signed datasets and artifacts**
+- [x] **PLAT-13 — Signed datasets and artifacts**
   - Add immutable manifests, checksums, signatures, larger asynchronous export
     batches, explicit retention, and short-lived download issuance.
   - Acceptance: artifacts are content-addressed, entitlement-checked at issue
@@ -235,7 +251,7 @@ pass.
     local ledger remains authorization authority; test-mode reconciliation is
     exact before live enablement.
 
-- [ ] **PLAT-15 — Organizations and service accounts**
+- [x] **PLAT-15 — Organizations and service accounts**
 
   - Add organization owners, developers, auditors, projects, service accounts,
     shared budgets, and per-project agent scopes.
@@ -268,7 +284,11 @@ pass.
   - Foundation deployed: field LCP, INP, CLS, FCP, and TTFB are sampled only
     against allowlisted route templates with minute caps, dedupe, 30-day
     retention, explicit budgets, kill switches, and admin percentile views.
-    Remaining work is operational alert delivery and sustained field data.
+    The source candidate adds bounded cleanup continuation plus an hourly p75
+    evaluator with explicit route/metric thresholds, minimum sample counts,
+    kill switch, deduplicated breach/recovery logs, and an admin summary.
+    Remaining work is cron heartbeat effectiveness, webhook terminal-retention
+    monitoring, operational alert delivery, and sustained field data.
 
 - [ ] **PLAT-19 — Research and forum quality system**
 
