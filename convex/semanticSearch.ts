@@ -8,7 +8,7 @@ import { estimatedModelCostMicroUsd, openRouterDailyBudgetMicroUsd } from "../li
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { env, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { env, internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 
 /**
  * Opt-in semantic retrieval for the public evidence corpus.
@@ -142,6 +142,11 @@ const searchSemanticRef = makeFunctionReference<
     score: number;
   }>
 >("semanticSearch:searchPublicSemantic");
+const cleanupRef = makeFunctionReference<
+  "mutation",
+  { now?: number },
+  { refunded: number; deleted: number; hasMore: boolean }
+>("semanticSearch:cleanupExpiredOperations");
 const availabilityRef = makeFunctionReference<
   "query",
   { model: string; now: number },
@@ -648,33 +653,41 @@ export const reserveUsage = internalMutation({
   },
 });
 
-/** Deletes only terminal short-lived query records; index idempotency remains durable. */
+async function refundExpiredOperation(ctx: MutationCtx, operation: Doc<"semanticSearchOperations">, now: number) {
+  if (operation.status !== "leased" || operation.leaseExpiresAt > now) return false;
+  const spend = await ctx.db.query("aiSpendBuckets")
+    .withIndex("by_dayKey_and_provider_and_bucket", (q) => q.eq("dayKey", operation.reservationDayKey).eq("provider", "openrouter").eq("bucket", operation.reservationBucket)).unique();
+  if (spend !== null) await ctx.db.patch("aiSpendBuckets", spend._id, {
+    spentMicroUsd: Math.max(0, spend.spentMicroUsd - operation.reservedMicroUsd),
+    inputTokens: Math.max(0, spend.inputTokens - operation.reservedInputTokens),
+    requests: Math.max(0, spend.requests - 1), updatedAt: now,
+  });
+  await ctx.db.patch("semanticSearchOperations", operation._id, { status: "refunded", settledMicroUsd: 0, settledInputTokens: 0, refundedAt: now, updatedAt: now });
+  return true;
+}
+
+/** Reclaims crashed reservations, then prunes only short-lived query records. */
 export const cleanupExpiredOperations = internalMutation({
   args: { now: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();
-    const rows = await ctx.db
-      .query("semanticSearchOperations")
-      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "completed"))
-      .order("asc")
-      .take(OPERATION_CLEANUP_LIMIT);
+    const expired = await ctx.db.query("semanticSearchOperations")
+      .withIndex("by_leaseExpiresAt", (q) => q.lte("leaseExpiresAt", now)).order("asc").take(OPERATION_CLEANUP_LIMIT);
+    let refunded = 0;
+    for (const operation of expired) if (await refundExpiredOperation(ctx, operation, now)) refunded += 1;
     let deleted = 0;
-    for (const row of rows) {
-      if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
-      await ctx.db.delete("semanticSearchOperations", row._id);
-      deleted += 1;
+    for (const status of ["completed", "refunded"] as const) {
+      const rows = await ctx.db.query("semanticSearchOperations")
+        .withIndex("by_status_and_updatedAt", (q) => q.eq("status", status)).order("asc").take(OPERATION_CLEANUP_LIMIT - deleted);
+      for (const row of rows) {
+        if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
+        await ctx.db.delete("semanticSearchOperations", row._id); deleted += 1;
+      }
+      if (deleted >= OPERATION_CLEANUP_LIMIT) break;
     }
-    const refunded = await ctx.db
-      .query("semanticSearchOperations")
-      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "refunded"))
-      .order("asc")
-      .take(OPERATION_CLEANUP_LIMIT - deleted);
-    for (const row of refunded) {
-      if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
-      await ctx.db.delete("semanticSearchOperations", row._id);
-      deleted += 1;
-    }
-    return { deleted };
+    const hasMore = expired.length === OPERATION_CLEANUP_LIMIT || deleted === OPERATION_CLEANUP_LIMIT;
+    if (hasMore) await ctx.scheduler.runAfter(1_000, cleanupRef, { now });
+    return { refunded, deleted, hasMore };
   },
 });
 

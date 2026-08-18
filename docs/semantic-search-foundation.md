@@ -46,6 +46,9 @@ control and additionally enforces its own $0.05/day default (maximum $5/day).
   expired-lease recovery always adjust that exact bucket, including across
   midnight. A recorded semantic health pause stops work before reservation or
   provider access.
+- A five-minute Convex cron invokes bounded operation cleanup. It refunds
+  expired leases against their original spend bucket, terminalizes each lease
+  before pruning, and schedules a one-second continuation for a full batch.
 - Semantic metadata carries the document/source fingerprint. A candidate is
   rejected if its live fingerprint no longer matches, even if it remains
   public.

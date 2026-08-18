@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { convexTest } from "convex-test";
+import { makeFunctionReference } from "convex/server";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
+import schema from "./schema";
 import {
   dayKey,
   isCircuitAvailable,
@@ -8,6 +11,14 @@ import {
   settlementDelta,
   settlementLocation,
 } from "./semanticSearch";
+
+const modules = { ...import.meta.glob("./**/*.ts"), ...import.meta.glob("./**/*.tsx") };
+const setup = () => convexTest(schema, modules);
+const cleanupOperationsRef = makeFunctionReference<
+  "mutation",
+  { now?: number },
+  { refunded: number; deleted: number; hasMore: boolean }
+>("semanticSearch:cleanupExpiredOperations");
 
 describe("semantic search safety controls", () => {
   test("is disabled unless the explicit feature switch is true", () => {
@@ -62,5 +73,29 @@ describe("semantic search safety controls", () => {
   test("does not call the provider while the semantic circuit is paused", () => {
     expect(isCircuitAvailable(1_001, 1_000)).toBe(false);
     expect(isCircuitAvailable(1_000, 1_000)).toBe(true);
+  });
+
+  test("refunds a crashed reservation only once", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", { dayKey: "2026-08-18", provider: "openrouter", bucket: 15, spentMicroUsd: 100, requests: 1, inputTokens: 50, outputTokens: 0, updatedAt: 1 });
+      await ctx.db.insert("semanticSearchOperations", { operationKey: "semantic:query:test", kind: "query", fingerprint: "test", model: OPENROUTER_EMBEDDING_MODEL, status: "leased", holder: "worker", leaseExpiresAt: 10, reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 100, reservedInputTokens: 50, createdAt: 1, updatedAt: 1 });
+    });
+    expect((await t.mutation(cleanupOperationsRef, { now: 11 })).refunded).toBe(1);
+    expect((await t.mutation(cleanupOperationsRef, { now: 12 })).refunded).toBe(0);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.query("aiSpendBuckets").unique())?.spentMicroUsd).toBe(0);
+      expect((await ctx.db.query("semanticSearchOperations").unique())?.status).toBe("refunded");
+    });
+  });
+
+  test("reports continuation for a full expired lease batch", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 100; index += 1) {
+        await ctx.db.insert("semanticSearchOperations", { operationKey: `semantic:query:${index}`, kind: "query", fingerprint: "x", model: OPENROUTER_EMBEDDING_MODEL, status: "leased", holder: `worker-${index}`, leaseExpiresAt: 10, reservationDayKey: "2026-08-18", reservationBucket: 15, reservedMicroUsd: 1, reservedInputTokens: 1, createdAt: 1, updatedAt: 1 });
+      }
+    });
+    expect(await t.mutation(cleanupOperationsRef, { now: 11 })).toMatchObject({ refunded: 100, hasMore: true });
   });
 });
