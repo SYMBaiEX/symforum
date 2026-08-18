@@ -103,6 +103,44 @@ describe("Web Vitals operational SLO evaluator", () => {
     });
   });
 
+  test("clears prior p75 metadata when samples become unknown without logging a false recovery", async () => {
+    vi.stubEnv("WEB_VITALS_SLO_ENABLED", "true");
+    const now = 1_800_000_000_000;
+    const t = convexTest(schema, modules);
+    await insertSamples(t, now, 2_600);
+    await t.mutation(evaluate, { now });
+
+    await removeLcpSamples(t);
+    await t.mutation(evaluate, { now: now + 1_000 });
+    await t.run(async (ctx) => {
+      const state = await ctx.db
+        .query("webVitalSloStates")
+        .withIndex("by_policyVersion_and_route_and_name", (q) =>
+          q
+            .eq("policyVersion", "web-vitals-p75-v1")
+            .eq("route", "/")
+            .eq("name", "LCP"),
+        )
+        .unique();
+      expect(state).toMatchObject({
+        status: "unknown",
+        sampleCount: 0,
+        breachActive: true,
+      });
+      expect(state?.p75).toBeUndefined();
+      expect(state?.lastSampleAt).toBeUndefined();
+
+      const logs = await ctx.db.query("systemLogs").collect();
+      expect(
+        logs.filter((log) => log.eventType === "web_vitals_slo_breached"),
+      ).toHaveLength(1);
+      expect(
+        logs.filter((log) => log.eventType === "web_vitals_slo_recovered"),
+      ).toHaveLength(0);
+      expect(logs[0]?.status).toBe("open");
+    });
+  });
+
   test("is disabled by default and keeps admin summary admin-only", async () => {
     const now = 1_800_000_000_000;
     const t = convexTest(schema, modules);
@@ -159,6 +197,11 @@ async function replaceLcpSamples(
   now: number,
   value: number,
 ) {
+  await removeLcpSamples(t);
+  await insertSamples(t, now, value);
+}
+
+async function removeLcpSamples(t: ReturnType<typeof convexTest>) {
   await t.run(async (ctx) => {
     const events = (await ctx.db.query("webVitalEvents").collect()).filter(
       (event) => event.route === "/" && event.name === "LCP",
@@ -167,5 +210,4 @@ async function replaceLcpSamples(
       events.map((event) => ctx.db.delete("webVitalEvents", event._id)),
     );
   });
-  await insertSamples(t, now, value);
 }

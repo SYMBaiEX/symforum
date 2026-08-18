@@ -214,10 +214,11 @@ async function persistState(
     minimumSamples: MINIMUM_SAMPLES,
     status: result.status,
     sampleCount: result.sampleCount,
-    ...(result.p75 === null ? {} : { p75: result.p75 }),
-    ...(result.lastSampleAt === null
-      ? {}
-      : { lastSampleAt: result.lastSampleAt }),
+    // `undefined` intentionally removes optional fields in Convex patches.
+    // Omitting either key would retain a prior p75/timestamp after the state
+    // becomes unknown, which would make an insufficient sample look current.
+    p75: result.p75 ?? undefined,
+    lastSampleAt: result.lastSampleAt ?? undefined,
     lastEvaluatedAt: now,
     breachActive:
       result.status === "unknown"
