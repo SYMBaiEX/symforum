@@ -15,6 +15,9 @@ const app = defineApp({
     FORUM_AGENT_DAILY_PUBLICATION_LIMIT: v.optional(v.string()),
     GITHUB_TOKEN: v.optional(v.string()),
     GH_TOKEN: v.optional(v.string()),
+    // Optional NVD API key. It is sent only as the documented X-ApiKey header
+    // to services.nvd.nist.gov and is never persisted or included in logs.
+    NVD_API_KEY: v.optional(v.string()),
     EVIDENCE_WEBHOOK_ALLOWED_HOSTS: v.optional(v.string()),
     EVIDENCE_WEBHOOK_SIGNING_SECRET: v.optional(v.string()),
     EVIDENCE_WEBHOOK_KEK: v.optional(v.string()),

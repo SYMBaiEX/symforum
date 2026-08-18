@@ -29,6 +29,16 @@ const syncFirstPartyResearchRef = makeFunctionReference<
   Record<string, never>,
   unknown
 >("evidenceFirstParty:sync");
+const syncNvdCvesRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceNvd:syncCves");
+const syncNvdChangeHistoryRef = makeFunctionReference<
+  "action",
+  Record<string, never>,
+  unknown
+>("evidenceNvd:syncChangeHistory");
 
 crons.cron("ingest CISA KEV evidence", "7 * * * *", syncCisaKevRef, {});
 crons.cron(
@@ -55,6 +65,21 @@ crons.cron(
   syncFirstPartyResearchRef,
   {},
 );
+// NVD permits unauthenticated requests at a much lower rate than keyed
+// requests. Each job makes at most one request, and their six-minute spacing
+// keeps the default cadence comfortably below the published 5 requests/30s.
+crons.cron(
+  "ingest NVD CVE updates",
+  "3,13,23,33,43,53 * * * *",
+  syncNvdCvesRef,
+  {},
+);
+crons.cron(
+  "ingest NVD CVE change history",
+  "9,19,29,39,49,59 * * * *",
+  syncNvdChangeHistoryRef,
+  {},
+);
 crons.interval(
   "cleanup expired evidence artifacts",
   { hours: 1 },
@@ -73,7 +98,12 @@ crons.interval(
   internal.evidenceHealth.check,
   {},
 );
-crons.interval("recover pending webhook deliveries", { minutes: 5 }, internal.evidenceWebhooks.recoverPendingDeliveries, { limit: 50 });
+crons.interval(
+  "recover pending webhook deliveries",
+  { minutes: 5 },
+  internal.evidenceWebhooks.recoverPendingDeliveries,
+  { limit: 50 },
+);
 crons.cron(
   "benchmark evidence citation coverage",
   "20 8 * * *",
