@@ -1,11 +1,10 @@
 # Critical cron watchdog
 
-`CRON_WATCHDOG_ENABLED=true` routes the monitored jobs through
-`convex/cronWatchdog.ts`. Each execution writes a current heartbeat and one
-bounded run summary; the five-minute evaluator materializes healthy, failed,
-stale, or missing state and maintains deduplicated operational logs. With the
-flag unset or false, wrappers do not execute their target jobs and the
-evaluator does not report the watchdog as healthy.
+Critical jobs always run through `convex/cronWatchdog.ts` on their existing
+schedule. `CRON_WATCHDOG_ENABLED=true` enables heartbeat/run-summary writes
+and the five-minute evaluator. When the flag is unset or false, the wrapper
+still invokes its target exactly once but writes no watchdog heartbeat or run
+summary; the evaluator reports the watchdog as disabled rather than healthy.
 
 ## Monitored critical jobs
 

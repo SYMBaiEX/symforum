@@ -5,6 +5,7 @@ import {
   internalAction,
   internalMutation,
   query,
+  type ActionCtx,
 } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 
@@ -58,6 +59,8 @@ const mutationJobKeyValidator = v.union(
   v.literal("web-vitals-slo"),
 );
 type JobKey = typeof jobKeyValidator.type;
+type ActionJobKey = typeof actionJobKeyValidator.type;
+type MutationJobKey = typeof mutationJobKeyValidator.type;
 type WatchdogStatus = "healthy" | "failed" | "stale" | "missing";
 
 const startRunRef = makeFunctionReference<
@@ -193,6 +196,52 @@ function statusFor(
   return { status: "healthy", lastCompletedAt };
 }
 
+export async function executeActionTarget(
+  ctx: Pick<ActionCtx, "runAction">,
+  jobKey: ActionJobKey,
+) {
+  switch (jobKey) {
+    case "evidence-cisa-kev":
+      return await ctx.runAction(actionRefs.cisa, {});
+    case "evidence-github-advisories":
+      return await ctx.runAction(actionRefs.githubAdvisories, {});
+    case "evidence-github-releases":
+      return await ctx.runAction(actionRefs.githubReleases, {});
+    case "evidence-crossref":
+      return await ctx.runAction(actionRefs.crossref, {});
+    case "evidence-first-party":
+      return await ctx.runAction(actionRefs.firstParty, {});
+    case "evidence-nvd-cves":
+      return await ctx.runAction(actionRefs.nvdCves, {});
+    case "evidence-nvd-change-history":
+      return await ctx.runAction(actionRefs.nvdHistory, {});
+    case "forum-suki-reply-recovery":
+      return await ctx.runAction(actionRefs.sukiReplies, {});
+    case "forum-belle-reply-recovery":
+      return await ctx.runAction(actionRefs.belleReplies, {});
+  }
+}
+
+export async function executeMutationTarget(
+  ctx: Pick<ActionCtx, "runMutation">,
+  jobKey: MutationJobKey,
+) {
+  switch (jobKey) {
+    case "evidence-artifact-cleanup":
+      return await ctx.runMutation(mutationRefs.artifactCleanup, {});
+    case "evidence-claim-revision-cleanup":
+      return await ctx.runMutation(mutationRefs.claimCleanup, { limit: 100 });
+    case "evidence-health":
+      return await ctx.runMutation(mutationRefs.health, {});
+    case "evidence-citation-benchmark":
+      return await ctx.runMutation(mutationRefs.benchmark, {});
+    case "semantic-cleanup":
+      return await ctx.runMutation(mutationRefs.semanticCleanup, {});
+    case "web-vitals-slo":
+      return await ctx.runMutation(mutationRefs.webVitalsSlo, {});
+  }
+}
+
 export const startRun = internalMutation({
   args: { jobKey: jobKeyValidator, now: v.optional(v.number()) },
   returns: v.object({
@@ -290,49 +339,24 @@ export const completeRun = internalMutation({
 
 export const runActionJob = internalAction({
   args: { jobKey: actionJobKeyValidator },
-  returns: v.object({ executed: v.boolean() }),
+  returns: v.object({ executed: v.boolean(), monitored: v.boolean() }),
   handler: async (ctx, args) => {
-    if (!enabled()) return { executed: false };
+    if (!enabled()) {
+      await executeActionTarget(ctx, args.jobKey);
+      return { executed: true, monitored: false };
+    }
     const { runId, startedAt } = await ctx.runMutation(startRunRef, {
       jobKey: args.jobKey,
     });
     try {
-      switch (args.jobKey) {
-        case "evidence-cisa-kev":
-          await ctx.runAction(actionRefs.cisa, {});
-          break;
-        case "evidence-github-advisories":
-          await ctx.runAction(actionRefs.githubAdvisories, {});
-          break;
-        case "evidence-github-releases":
-          await ctx.runAction(actionRefs.githubReleases, {});
-          break;
-        case "evidence-crossref":
-          await ctx.runAction(actionRefs.crossref, {});
-          break;
-        case "evidence-first-party":
-          await ctx.runAction(actionRefs.firstParty, {});
-          break;
-        case "evidence-nvd-cves":
-          await ctx.runAction(actionRefs.nvdCves, {});
-          break;
-        case "evidence-nvd-change-history":
-          await ctx.runAction(actionRefs.nvdHistory, {});
-          break;
-        case "forum-suki-reply-recovery":
-          await ctx.runAction(actionRefs.sukiReplies, {});
-          break;
-        case "forum-belle-reply-recovery":
-          await ctx.runAction(actionRefs.belleReplies, {});
-          break;
-      }
+      await executeActionTarget(ctx, args.jobKey);
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,
         runId,
         startedAt,
         succeeded: true,
       });
-      return { executed: true };
+      return { executed: true, monitored: true };
     } catch (error) {
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,
@@ -348,40 +372,24 @@ export const runActionJob = internalAction({
 
 export const runMutationJob = internalAction({
   args: { jobKey: mutationJobKeyValidator },
-  returns: v.object({ executed: v.boolean() }),
+  returns: v.object({ executed: v.boolean(), monitored: v.boolean() }),
   handler: async (ctx, args) => {
-    if (!enabled()) return { executed: false };
+    if (!enabled()) {
+      await executeMutationTarget(ctx, args.jobKey);
+      return { executed: true, monitored: false };
+    }
     const { runId, startedAt } = await ctx.runMutation(startRunRef, {
       jobKey: args.jobKey,
     });
     try {
-      switch (args.jobKey) {
-        case "evidence-artifact-cleanup":
-          await ctx.runMutation(mutationRefs.artifactCleanup, {});
-          break;
-        case "evidence-claim-revision-cleanup":
-          await ctx.runMutation(mutationRefs.claimCleanup, { limit: 100 });
-          break;
-        case "evidence-health":
-          await ctx.runMutation(mutationRefs.health, {});
-          break;
-        case "evidence-citation-benchmark":
-          await ctx.runMutation(mutationRefs.benchmark, {});
-          break;
-        case "semantic-cleanup":
-          await ctx.runMutation(mutationRefs.semanticCleanup, {});
-          break;
-        case "web-vitals-slo":
-          await ctx.runMutation(mutationRefs.webVitalsSlo, {});
-          break;
-      }
+      await executeMutationTarget(ctx, args.jobKey);
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,
         runId,
         startedAt,
         succeeded: true,
       });
-      return { executed: true };
+      return { executed: true, monitored: true };
     } catch (error) {
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,

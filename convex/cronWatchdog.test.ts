@@ -4,6 +4,8 @@ import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { ActionCtx } from "./_generated/server";
+import { executeActionTarget, executeMutationTarget } from "./cronWatchdog";
 import schema from "./schema";
 
 const modules = {
@@ -20,6 +22,12 @@ const watchdog = {
   ),
   summary: makeFunctionReference<"query", Record<string, never>, any>(
     "cronWatchdog:summaryAdmin",
+  ),
+  actionJob: makeFunctionReference<"action", any, any>(
+    "cronWatchdog:runActionJob",
+  ),
+  mutationJob: makeFunctionReference<"action", any, any>(
+    "cronWatchdog:runMutationJob",
   ),
 } as const;
 
@@ -58,6 +66,66 @@ describe("critical cron watchdog", () => {
       unhealthy: 15,
     });
     await expect(t.query(watchdog.summary, {})).rejects.toThrow(/sign in/i);
+  });
+
+  test("runs unmonitored action and mutation targets once without heartbeat records", async () => {
+    const t = setup();
+    await expect(
+      t.action(watchdog.actionJob, { jobKey: "evidence-first-party" }),
+    ).resolves.toEqual({ executed: true, monitored: false });
+    await expect(
+      t.action(watchdog.mutationJob, { jobKey: "web-vitals-slo" }),
+    ).resolves.toEqual({ executed: true, monitored: false });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("evidenceSources")
+          .withIndex("by_sourceKey", (q) =>
+            q.eq("sourceKey", "symbaiex-first-party-research"),
+          )
+          .unique(),
+      ).not.toBeNull();
+      expect(await ctx.db.query("cronJobHeartbeats").take(1)).toEqual([]);
+      expect(await ctx.db.query("cronJobRunSummaries").take(1)).toEqual([]);
+    });
+  });
+
+  test("dispatches each target once and propagates target failures", async () => {
+    const action = vi.fn().mockResolvedValue(null);
+    await executeActionTarget(
+      { runAction: action } as unknown as Pick<ActionCtx, "runAction">,
+      "evidence-first-party",
+    );
+    expect(action).toHaveBeenCalledTimes(1);
+
+    const mutation = vi.fn().mockResolvedValue(null);
+    await executeMutationTarget(
+      { runMutation: mutation } as unknown as Pick<ActionCtx, "runMutation">,
+      "web-vitals-slo",
+    );
+    expect(mutation).toHaveBeenCalledTimes(1);
+
+    const actionFailure = vi.fn().mockRejectedValue(new Error("target failed"));
+    await expect(
+      executeActionTarget(
+        { runAction: actionFailure } as unknown as Pick<ActionCtx, "runAction">,
+        "evidence-first-party",
+      ),
+    ).rejects.toThrow("target failed");
+    expect(actionFailure).toHaveBeenCalledTimes(1);
+
+    const mutationFailure = vi
+      .fn()
+      .mockRejectedValue(new Error("target failed"));
+    await expect(
+      executeMutationTarget(
+        {
+          runMutation: mutationFailure,
+        } as unknown as Pick<ActionCtx, "runMutation">,
+        "web-vitals-slo",
+      ),
+    ).rejects.toThrow("target failed");
+    expect(mutationFailure).toHaveBeenCalledTimes(1);
   });
 
   test("records healthy, stale, failed, recovered, and deduplicated operational states", async () => {
