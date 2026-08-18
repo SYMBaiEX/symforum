@@ -20,6 +20,7 @@ const MAX_SUBSCRIPTIONS_PER_OWNER = 10;
 const MAX_DELIVERIES_PER_EVENT = 100;
 const MAX_HISTORY_LIMIT = 50;
 const MAX_DELIVERY_ATTEMPTS = 4;
+const MAX_REPLAY_ATTEMPTS = 3;
 const DELIVERY_ACTION_REF = makeFunctionReference<
   "action",
   { deliveryId: Id<"apiWebhookDeliveries"> },
@@ -115,7 +116,7 @@ export async function decryptWebhookSecret(
 
 function configuredWebhookKek() {
   const webhookEnv = env as typeof env & { readonly EVIDENCE_WEBHOOK_KEK: string | undefined };
-  if (!webhookEnv.EVIDENCE_WEBHOOK_KEK) {
+  if (!webhookEnv.EVIDENCE_WEBHOOK_KEK || !/^[A-Za-z0-9_-]{32,}$/.test(webhookEnv.EVIDENCE_WEBHOOK_KEK)) {
     throw new ConvexError({ code: "WEBHOOK_SIGNING_UNAVAILABLE", message: "Webhook signing is unavailable until EVIDENCE_WEBHOOK_KEK is configured." });
   }
   return webhookEnv.EVIDENCE_WEBHOOK_KEK;
@@ -538,7 +539,7 @@ export const listDeliveryHistory = query({
     const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 20), MAX_HISTORY_LIMIT));
     const rows = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id))
+      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id))
       .order("desc").take(limit);
     return rows.map(({ eventKey, status, attempt, responseCode, nextAttemptAt, createdAt, updatedAt }) => ({ eventKey, status, attempt, responseCode, nextAttemptAt, createdAt, updatedAt }));
   },
@@ -550,7 +551,7 @@ export const getSubscriptionHealth = query({
   handler: async (ctx, args) => {
     const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
     const rows = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id)).take(MAX_HISTORY_LIMIT);
+      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id)).take(MAX_HISTORY_LIMIT);
     return rows.reduce((health, row) => {
       if (row.status === "delivered") health.delivered += 1;
       else if (row.status === "dead_letter") health.deadLetter += 1;
@@ -570,13 +571,15 @@ export const replayDelivery = mutation({
     const delivery = await ctx.db.query("apiWebhookDeliveries")
       .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey)).unique();
     if (delivery === null) throw new ConvexError({ code: "WEBHOOK_DELIVERY_NOT_FOUND", message: "Webhook delivery was not found." });
+    if (subscription.status !== "active") throw new ConvexError({ code: "WEBHOOK_REPLAY_DENIED", message: "Only active subscriptions can replay deliveries." });
+    if (delivery.attempt >= MAX_REPLAY_ATTEMPTS) throw new ConvexError({ code: "WEBHOOK_REPLAY_LIMIT", message: "Webhook replay budget exhausted." });
     const now = Date.now();
-    await ctx.db.patch("apiWebhookDeliveries", delivery._id, { status: "pending", nextAttemptAt: now, updatedAt: now });
+    await ctx.db.patch("apiWebhookDeliveries", delivery._id, { status: "pending", attempt: 0, nextAttemptAt: now, updatedAt: now });
     await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId: delivery._id });
     return {
       eventKey: delivery.eventKey,
       status: "pending" as const,
-      attempt: delivery.attempt,
+      attempt: 0,
       responseCode: delivery.responseCode,
       nextAttemptAt: now,
       createdAt: delivery.createdAt,
@@ -747,6 +750,20 @@ export const cleanupOrphanDeliveryEvents = internalMutation({
   },
 });
 
+export const recoverPendingDeliveries = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ rescheduled: v.number(), deadLettered: v.number() }),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("apiWebhookDeliveries").withIndex("by_status_and_updatedAt", (q) => q.eq("status", "pending")).order("asc").take(Math.max(1, Math.min(args.limit ?? 50, 50)));
+    let rescheduled = 0; let deadLettered = 0; const now = Date.now();
+    for (const row of rows) {
+      if (row.attempt >= MAX_DELIVERY_ATTEMPTS) { await ctx.db.patch("apiWebhookDeliveries", row._id, { status: "dead_letter", updatedAt: now }); deadLettered += 1; }
+      else if ((row.nextAttemptAt ?? row.updatedAt) <= now) { await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId: row._id }); rescheduled += 1; }
+    }
+    return { rescheduled, deadLettered };
+  },
+});
+
 export const getDeliveryInput = internalQuery({
   args: { deliveryId: v.id("apiWebhookDeliveries") },
   returns: v.union(
@@ -826,7 +843,9 @@ export const markDelivery = internalMutation({
     const responseCode = args.responseCode;
     const errorMessage = args.errorMessage?.slice(0, 400);
     const attempt = Math.min(delivery.attempt + 1, 10);
-    const retry = !args.delivered && attempt < MAX_DELIVERY_ATTEMPTS;
+    const permanent =
+      responseCode !== undefined && responseCode >= 400 && responseCode < 500 && responseCode !== 429;
+    const retry = !args.delivered && !permanent && attempt < MAX_DELIVERY_ATTEMPTS;
     const nextAttemptAt = retry
       ? Date.now() + 1_000 * 2 ** (attempt - 1)
       : undefined;

@@ -2398,6 +2398,7 @@ export default defineSchema({
       "ownerUserId",
       "subscriptionKey",
     ])
+    .index("by_ownerUserId_and_updatedAt", ["ownerUserId", "updatedAt"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   apiWebhookTargets: defineTable({
     subscriptionId: v.id("apiWebhookSubscriptions"),
@@ -2433,6 +2434,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_subscriptionId_and_eventKey", ["subscriptionId", "eventKey"])
+    .index("by_subscriptionId_and_updatedAt", ["subscriptionId", "updatedAt"])
     .index("by_eventKey", ["eventKey"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
 });

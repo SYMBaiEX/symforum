@@ -73,6 +73,7 @@ crons.interval(
   internal.evidenceHealth.check,
   {},
 );
+crons.interval("recover pending webhook deliveries", { minutes: 5 }, internal.evidenceWebhooks.recoverPendingDeliveries, { limit: 50 });
 crons.cron(
   "benchmark evidence citation coverage",
   "20 8 * * *",
