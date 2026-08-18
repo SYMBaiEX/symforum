@@ -20,6 +20,7 @@ const operationValidator = v.union(
   v.literal("verify"),
   v.literal("entities"),
   v.literal("version_claims"),
+  v.literal("claim_timeline"),
   v.literal("products"),
   v.literal("datasets"),
   v.literal("benchmarks"),
@@ -53,6 +54,7 @@ type Operation =
   | "verify"
   | "entities"
   | "version_claims"
+  | "claim_timeline"
   | "products"
   | "datasets"
   | "benchmarks"
@@ -273,6 +275,7 @@ function productForOperation(operation: Operation) {
   if (operation === "changes") return "evidence-change";
   if (operation === "verify") return "evidence-verify";
   if (operation === "version_claims") return "evidence-verify";
+  if (operation === "claim_timeline") return "evidence-verify";
   if (operation.startsWith("research_")) return "evidence-research";
   if (operation.startsWith("export_")) return "evidence-export";
   if (operation === "benchmarks") return "evidence-benchmarks";
@@ -360,6 +363,10 @@ export const dispatch = internalMutation({
             input,
             "documentVersionId",
           )
+        : null;
+    const claimKey =
+      args.operation === "claim_timeline"
+        ? requiredText(input, "claimKey", 200)
         : null;
     const datasetId =
       args.operation === "export_create"
@@ -628,6 +635,13 @@ export const dispatch = internalMutation({
             limit: requestedLimit,
           },
         );
+      case "claim_timeline":
+        // Reuse the evidence projection so this authenticated transport keeps
+        // its per-revision public-visibility and citation joins intact.
+        return await ctx.runQuery(api.evidence.listPublicClaimTimeline, {
+          claimKey: claimKey!,
+          limit: requestedLimit,
+        });
       case "research_create": {
         const job = await ctx.runMutation(
           internal.evidenceJobs.createResearchJob,

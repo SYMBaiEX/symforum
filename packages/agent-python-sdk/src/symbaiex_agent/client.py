@@ -218,6 +218,9 @@ class AgentClient:
     def version_claims(self, document_version_id: str, *, limit: int | None = None) -> JsonValue:
         return self._get(f"document-versions/{_path_id(document_version_id, 'document_version_id')}/claims", limit=limit)
 
+    def claim_timeline(self, claim_key: str, *, limit: int | None = None) -> JsonValue:
+        return self._get(f"claims/{_path_id(_identifier(claim_key, 'claim_key', 200), 'claim_key')}/timeline", limit=limit)
+
     def products(self, *, limit: int | None = None) -> JsonValue:
         return self._get("products", limit=limit)
 
@@ -385,6 +388,7 @@ class AsyncAgentClient:
     async def verify_claim(self, claim_id: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("verify_claim", claim_id, idempotency_key=idempotency_key)
     async def entities(self, query: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("entities", query, limit=limit)
     async def version_claims(self, document_version_id: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("version_claims", document_version_id, limit=limit)
+    async def claim_timeline(self, claim_key: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("claim_timeline", claim_key, limit=limit)
     async def products(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("products", limit=limit)
     async def datasets(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("datasets", limit=limit)
     async def entitlements(self) -> JsonValue: return await self.__getattr_async("entitlements")

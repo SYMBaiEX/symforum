@@ -47,6 +47,7 @@ const MANIFEST = {
     evidenceRest: `${API_BASE_URL}/v1`,
     universalSearch: `${API_BASE_URL}/v1/universal-search`,
     semanticSearch: `${API_BASE_URL}/v1/semantic-search`,
+    claimTimeline: `${API_BASE_URL}/v1/claims/{claimKey}/timeline`,
     researchJobs: `${API_BASE_URL}/v1/research-jobs`,
     exports: `${API_BASE_URL}/v1/exports`,
     webhooks: `${API_BASE_URL}/v1/webhooks`,

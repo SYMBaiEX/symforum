@@ -136,6 +136,7 @@ describe("evidence MCP endpoint", () => {
       "evidence.verify_claim",
       "evidence.search_entities",
       "evidence.version_claims",
+      "evidence.claim_timeline",
       "evidence.products",
       "evidence.datasets",
       "evidence.benchmarks",
@@ -167,6 +168,16 @@ describe("evidence MCP endpoint", () => {
       properties: {
         limit: { maximum: 20 },
         idempotencyKey: { minLength: 8, maxLength: 96 },
+      },
+    });
+    const timeline = payload.result.tools.find(
+      (tool: { name: string }) => tool.name === "evidence.claim_timeline",
+    );
+    expect(timeline).toMatchObject({
+      inputSchema: {
+        additionalProperties: false,
+        required: ["claimKey"],
+        properties: { limit: { maximum: 50 } },
       },
     });
   });
@@ -206,6 +217,39 @@ describe("evidence MCP endpoint", () => {
       input: { query: "convex", limit: 10 },
       idempotencyKey: "semantic-mcp-001",
     });
+  });
+
+  test("relays claim timelines with the same operation and payload as REST", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, [{ status: "outdated" }]));
+    vi.stubGlobal("fetch", fetchMock);
+    const name = "evidence.claim_timeline";
+    const response = await POST(
+      modernRequest(
+        "tools/call",
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name,
+            arguments: { claimKey: "release-security", limit: 2 },
+            ...modernParams(),
+          },
+        },
+        "2026-07-28",
+        name,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      operation: "claim_timeline",
+      input: { claimKey: "release-security", limit: 2 },
+    });
+    expect((await response.json()).result.content).toEqual([
+      { type: "text", text: JSON.stringify([{ status: "outdated" }]) },
+    ]);
   });
 
   test("rejects modern initialize, unsupported versions, and header mismatches explicitly", async () => {

@@ -206,6 +206,7 @@ describe("AgentClient", () => {
     await client.verifyClaim("claim-1", "claim-verify-001");
     await client.entities("zero trust", 2);
     await client.versionClaims("version-1", 2);
+    await client.claimTimeline("release-security", 2);
     await client.products(2);
     await client.datasets(2);
     await client.benchmarks(2);
@@ -233,6 +234,7 @@ describe("AgentClient", () => {
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/sources?limit=5`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/documents/doc%2F1`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/claim-1/verify`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/release-security/timeline?limit=2`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/research-jobs/job-1/artifact`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-2/artifact`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/mcp`,

@@ -103,6 +103,23 @@ describe("agent data API relay", () => {
     expect(
       mapRestRequest(
         "GET",
+        ["claims", "release-security", "timeline"],
+        new URLSearchParams("limit=50"),
+      ),
+    ).toEqual({
+      operation: "claim_timeline",
+      input: { claimKey: "release-security", limit: 50 },
+    });
+    expect(
+      mapRestRequest(
+        "GET",
+        ["claims", "release-security", "timeline"],
+        new URLSearchParams("limit=51"),
+      ),
+    ).toBeNull();
+    expect(
+      mapRestRequest(
+        "GET",
         ["webhooks", "research", "deliveries"],
         new URLSearchParams("limit=5"),
       ),

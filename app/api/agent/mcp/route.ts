@@ -30,6 +30,7 @@ const TOOL_ENTRIES = [
   ["evidence.verify_claim", "verify"],
   ["evidence.search_entities", "entities"],
   ["evidence.version_claims", "version_claims"],
+  ["evidence.claim_timeline", "claim_timeline"],
   ["evidence.products", "products"],
   ["evidence.datasets", "datasets"],
   ["evidence.benchmarks", "benchmarks"],
@@ -76,11 +77,26 @@ const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) =>
           },
         },
       }
-    : {
-        name,
-        description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
-        inputSchema: { type: "object", additionalProperties: true },
-      },
+    : name === "evidence.claim_timeline"
+      ? {
+          name,
+          description:
+            "Read the bounded public supersession timeline for a claim key. Status changes use supported, contradicted, unresolved, or outdated; they do not create a separate timeline status.",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["claimKey"],
+            properties: {
+              claimKey: { type: "string", minLength: 1, maxLength: 200 },
+              limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+            },
+          },
+        }
+      : {
+          name,
+          description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
+          inputSchema: { type: "object", additionalProperties: true },
+        },
 );
 
 type ProtocolEra = "legacy" | "modern";

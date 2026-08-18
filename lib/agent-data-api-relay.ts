@@ -13,6 +13,7 @@ export const AGENT_DATA_OPERATIONS = [
   "verify",
   "entities",
   "version_claims",
+  "claim_timeline",
   "products",
   "datasets",
   "benchmarks",
@@ -228,6 +229,18 @@ export function mapRestRequest(
     return {
       operation: "version_claims",
       input: { documentVersionId: segments[1], ...limit },
+    };
+  if (
+    method === "GET" &&
+    segments.length === 3 &&
+    segments[0] === "claims" &&
+    segments[2] === "timeline" &&
+    only(["limit"]) &&
+    validText(segments[1])
+  )
+    return {
+      operation: "claim_timeline",
+      input: { claimKey: segments[1], ...limit },
     };
   if (
     method === "POST" &&

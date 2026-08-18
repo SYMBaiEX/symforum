@@ -26,6 +26,11 @@ challenge/sign-in/refresh exchange, artifact reads, webhook lifecycle calls,
 and stateless MCP JSON-RPC. It sends bearer tokens only to the canonical public
 origin unless an exact trusted development origin is explicitly configured.
 
+`claimTimeline(claimKey, limit)` reads the same bounded public supersession
+history exposed by `GET /v1/claims/{claimKey}/timeline`. Entries use the
+existing `supported`, `contradicted`, `unresolved`, and `outdated` statuses;
+there is no separate timeline status.
+
 ## Release checks
 
 ```sh

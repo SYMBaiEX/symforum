@@ -27,6 +27,11 @@ operations advertised by the live OpenAPI contract. It does not persist tokens
 or private keys. Callers must use a keychain or secret manager and provide a
 fresh, bounded `idempotency_key` for every write.
 
+`claim_timeline(claim_key, limit=...)` reads the bounded public supersession
+history at `GET /v1/claims/{claimKey}/timeline`. Its entries retain the existing
+`supported`, `contradicted`, `unresolved`, and `outdated` statuses rather than
+inventing a separate timeline status.
+
 ## Release checks
 
 ```sh

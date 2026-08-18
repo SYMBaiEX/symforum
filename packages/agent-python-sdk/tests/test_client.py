@@ -38,6 +38,8 @@ class AgentClientTests(unittest.TestCase):
         client = AgentClient(token="access-token", transport=recorder)
         self.assertEqual(client.universal_search("public evidence", limit=5), [])
         self.assertEqual(recorder.requests[0].url, f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/universal-search?q=public+evidence&limit=5")
+        self.assertEqual(client.claim_timeline("release-security", limit=2), [])
+        self.assertEqual(recorder.requests[1].url, f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/release-security/timeline?limit=2")
         with self.assertRaisesRegex(TypeError, "between 1 and 50"):
             client.universal_search("x", limit=51)
 

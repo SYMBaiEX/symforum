@@ -109,6 +109,26 @@ describe("agent evidence REST endpoint", () => {
     });
   });
 
+  test("relays the bounded claim timeline through the canonical REST path", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json([{ status: "outdated" }]));
+    const response = await GET(
+      new Request(
+        "https://www.symbaiex.com/api/agent/v1/claims/release-security/timeline?limit=2",
+        { headers: { authorization: "Bearer agent-token" } },
+      ),
+      context(["claims", "release-security", "timeline"]),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ status: "outdated" }]);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      operation: "claim_timeline",
+      input: { claimKey: "release-security", limit: 2 },
+    });
+  });
+
   test("streams artifacts through the authenticated first-party relay", async () => {
     vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

@@ -208,6 +208,33 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/claims/{claimKey}/timeline": {
+      get: {
+        operationId: "listEvidenceClaimTimeline",
+        summary: "Read a claim's public supersession timeline",
+        description:
+          "Returns a bounded, newest-first history of public claim revisions and their currently public citations. The supported, contradicted, unresolved, and outdated transitions express supersession history; no additional timeline status is invented. Private claims, revisions, entities, sources, documents, and document versions are omitted.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "claimKey",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 1, maxLength: 200 },
+          },
+          { $ref: "#/components/parameters/Limit" },
+        ],
+        responses: {
+          "200": {
+            description:
+              "At most 50 deterministic public revision entries, newest first.",
+          },
+          "401": { description: "Missing or invalid access token." },
+          "403": { description: "The evidence scope is required." },
+          "429": { description: "Quota or rate limit reached." },
+        },
+      },
+    },
     "/v1/entities": {
       get: {
         operationId: "searchEvidenceEntities",

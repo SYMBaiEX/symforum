@@ -198,6 +198,70 @@ describe("agent data API dispatch", () => {
     });
   });
 
+  test("returns the public claim supersession timeline through the evidence-scoped read path", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const claim = await t.mutation(internal.evidence.upsertClaim, {
+      claimKey: "release-security",
+      statement: "The release remains supported.",
+      predicate: "status",
+      objectText: "supported",
+      status: "supported",
+      confidence: 0.9,
+      visibility: "public",
+      observedAt: 10,
+    });
+    await t.mutation(internal.evidence.upsertClaim, {
+      claimKey: "release-security",
+      statement: "The release is now outdated.",
+      predicate: "status",
+      objectText: "outdated",
+      status: "outdated",
+      confidence: 0.8,
+      visibility: "public",
+      observedAt: 20,
+    });
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    await expect(
+      agent.mutation(internal.agentDataApi.dispatch, {
+        operation: "claim_timeline",
+        input: { claimKey: "release-security", limit: 50 },
+        idempotencyKey: "claim-timeline-read",
+        requestFingerprint: "sha256-claim-timeline-read",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        status: "outdated",
+        changeKind: "status",
+        citation: null,
+      }),
+      expect.objectContaining({
+        status: "supported",
+        changeKind: "created",
+        citation: null,
+      }),
+    ]);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("evidenceClaims", claim.claimId)).not.toBeNull();
+      const usage = await ctx.db.query("apiUsageLedger").collect();
+      expect(usage).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ operation: "evidence.claim_timeline" }),
+        ]),
+      );
+    });
+    await expect(
+      t
+        .withIdentity({ subject: ids.agentUserId })
+        .mutation(internal.agentDataApi.dispatch, {
+          operation: "claim_timeline",
+          input: { claimKey: "release-security", limit: 51 },
+          idempotencyKey: "claim-timeline-invalid",
+          requestFingerprint: "sha256-claim-timeline-invalid",
+        }),
+    ).rejects.toThrow(/between 1 and 50/i);
+  });
+
   test("keeps the semantic action hidden behind the first-party relay secret", async () => {
     vi.stubEnv(
       "AGENT_SEMANTIC_RELAY_SECRET",

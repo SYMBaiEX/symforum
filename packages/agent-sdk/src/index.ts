@@ -249,6 +249,16 @@ export class AgentClient {
     );
   }
 
+  async claimTimeline<T = unknown>(
+    claimKey: string,
+    limit?: number,
+  ): Promise<T> {
+    return await this.get<T>(
+      `claims/${encodePathSegment(validIdentifier(claimKey, "claimKey", 200))}/timeline`,
+      limit,
+    );
+  }
+
   async products<T = unknown>(limit?: number): Promise<T> {
     return await this.get<T>("products", limit);
   }
