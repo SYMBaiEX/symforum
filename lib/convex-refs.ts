@@ -1049,6 +1049,7 @@ export type ViewerUserRecord = {
   contactEmail?: string;
   bio?: string;
   onboardedAt?: number;
+  isAgent?: boolean;
 };
 
 export type PublicProfileCommentRecord = {
@@ -3042,6 +3043,35 @@ export const convexRefs = {
     >("comments:softDelete"),
   },
   agentIdentity: {
+    listMyAgentConsoleStatus: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      {
+        monthKey: string;
+        ownerQuota: {
+          freeAllowanceUnits: number;
+          hardCapUnits: number;
+          usedUnits: number;
+          remainingUnits: number;
+        };
+        agents: Array<{
+          agentId: string;
+          status: "active" | "revoked";
+          scopes: AgentScope[];
+          keyVersion: number;
+          publicKeyFingerprint: string;
+          createdAt: number;
+          updatedAt: number;
+          revokedAt?: number;
+          quota: {
+            monthKey: string;
+            monthlyLimitUnits: number;
+            usedUnits: number;
+            remainingUnits: number;
+          };
+        }>;
+      }
+    >("agentIdentity:listMyAgentConsoleStatus"),
     enrollAgent: makeFunctionReference<
       "mutation",
       {
@@ -3095,6 +3125,35 @@ export const convexRefs = {
         scopes: AgentScope[];
       }
     >("agentIdentity:rotateAgentKey"),
+  },
+  agentQuota: {
+    configureAgentQuota: makeFunctionReference<
+      "mutation",
+      {
+        agentId: string;
+        monthKey?: string;
+        freeAllowanceUnits?: number;
+        hardCapUnits?: number;
+        monthlyLimitUnits?: number;
+        requestLimitUnits?: number;
+        hardCapMetadataJson?: string;
+      },
+      {
+        agentId: string;
+        monthKey: string;
+        freeAllowanceUnits: number;
+        hardCapUnits: number;
+        usedUnits: number;
+        remainingUnits: number;
+        hardCapReached: boolean;
+        hardCapReachedAt?: number;
+        hardCapMetadataJson: string;
+        monthlyLimitUnits: number;
+        agentUsedUnits: number;
+        agentRemainingUnits: number;
+        requestLimitUnits: number;
+      }
+    >("agentQuota:configureAgentQuota"),
   },
   users: {
     maybeViewer: makeFunctionReference<

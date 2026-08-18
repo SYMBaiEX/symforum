@@ -13,6 +13,9 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "test:devtools": "vitest run convex/agentIdentity.test.ts packages/agent-sdk/src/index.test.ts packages/agent-cli/src/token-store.test.ts packages/agent-cli/bin/symbaiex.test.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:convex": "tsc --project convex/tsconfig.json --noEmit",
     "lint": "eslint .",
     "smoke:agent:public": "bun scripts/smoke-agent-api.mjs --public-only",
     "smoke:agent:auth": "bun scripts/smoke-agent-api.mjs"

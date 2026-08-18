@@ -1,0 +1,9 @@
+{
+  "name": "@symbaiex/agent-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "symbaiex": "./bin/symbaiex.ts"
+  }
+}

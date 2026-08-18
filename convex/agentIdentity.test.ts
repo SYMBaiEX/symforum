@@ -22,11 +22,10 @@ function setup() {
 }
 
 async function keyPair() {
-  return await crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"],
-  );
+  return await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+    "sign",
+    "verify",
+  ]);
 }
 
 async function publicKeyBase64(key: CryptoKey) {
@@ -46,10 +45,7 @@ async function seedOwner(t: ReturnType<typeof setup>) {
   });
 }
 
-async function seedReader(
-  t: ReturnType<typeof setup>,
-  username: string,
-) {
+async function seedReader(t: ReturnType<typeof setup>, username: string) {
   return await t.run(async (ctx) => {
     return await ctx.db.insert("users", {
       name: username,
@@ -142,6 +138,46 @@ describe("agent identity authentication", () => {
         agentId: enrollment.agentId,
       }),
     ).rejects.toThrow(/account owner/i);
+  });
+
+  test("the developer console projection only includes the caller's agents and never a public key", async () => {
+    const t = setup();
+    const firstUserId = await seedReader(t, "console-first");
+    const secondUserId = await seedReader(t, "console-second");
+    const first = t.withIdentity({ subject: firstUserId });
+    const second = t.withIdentity({ subject: secondUserId });
+    const firstKey = await publicKeyBase64((await keyPair()).publicKey);
+    const secondKey = await publicKeyBase64((await keyPair()).publicKey);
+    await first.mutation(api.agentIdentity.enrollAgent, {
+      agentId: "first-console-agent",
+      publicKey: firstKey,
+      scopes: ["forum"],
+    });
+    await second.mutation(api.agentIdentity.enrollAgent, {
+      agentId: "second-console-agent",
+      publicKey: secondKey,
+      scopes: ["evidence"],
+    });
+
+    const result = await first.query(
+      api.agentIdentity.listMyAgentConsoleStatus,
+      {},
+    );
+    expect(result.agents).toHaveLength(1);
+    expect(result.agents[0]).toMatchObject({
+      agentId: "first-console-agent",
+      status: "active",
+      scopes: ["forum"],
+      keyVersion: 1,
+      quota: { usedUnits: 0, monthlyLimitUnits: 250 },
+    });
+    expect(JSON.stringify(result)).not.toContain(firstKey);
+    expect(JSON.stringify(result)).not.toContain(secondKey);
+    expect(JSON.stringify(result)).not.toContain("second-console-agent");
+
+    await expect(
+      t.query(api.agentIdentity.listMyAgentConsoleStatus, {}),
+    ).rejects.toThrow(/sign in/i);
   });
 
   test("invalid, replayed, and expired challenges fail closed", async () => {
@@ -249,7 +285,9 @@ describe("agent identity authentication", () => {
     expect(() => requireAgentScope(user, "comments")).not.toThrow();
     expect(() => requireAgentScope(user, "forum")).toThrow(/forum scope/i);
     const revoked = { ...user!, agentStatus: "revoked" as const };
-    expect(() => requireAgentScope(revoked, "comments")).toThrow(/active agent/i);
+    expect(() => requireAgentScope(revoked, "comments")).toThrow(
+      /active agent/i,
+    );
     await expect(
       t.mutation(api.agentIdentity.enrollAgent, {
         agentId: "spoof",
