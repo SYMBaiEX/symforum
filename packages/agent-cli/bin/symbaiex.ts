@@ -43,10 +43,40 @@ export async function run(
                 ? await client.universalSearch(
                     requiredArgument(args, "search query"),
                   )
+                : command === "webhook-availability"
+                  ? await client.webhookAvailability()
+                  : command === "webhook-list"
+                    ? await client.listWebhooks()
+                    : command === "webhook-health"
+                      ? await client.webhookHealth(
+                          requiredArgument(args, "subscription key"),
+                        )
+                      : command === "webhook-history"
+                        ? await client.webhookHistory(
+                            requiredArgument(args, "subscription key"),
+                          )
+                        : command === "webhook-status"
+                          ? await client.setWebhookStatus(
+                              requiredArgument(args, "subscription key"),
+                              requiredArgumentAfter(args, "status", 1) as
+                                | "active"
+                                | "paused"
+                                | "revoked",
+                            )
+                          : command === "webhook-test"
+                            ? await client.sendWebhookTest(
+                                requiredArgument(args, "subscription key"),
+                                requiredArgumentAfter(args, "event type", 1) as
+                                  | "evidence.document.changed"
+                                  | "evidence.research.completed"
+                                  | "evidence.export.completed"
+                                  | "evidence.benchmark.completed"
+                                  | "evidence.claim.verified",
+                              )
                 : null;
     if (result === null)
       throw new UsageError(
-        "Usage: symbaiex <manifest|status|quota|search|universal-search|login> [options]",
+        "Usage: symbaiex <manifest|status|quota|search|universal-search|webhook-availability|webhook-list|webhook-health|webhook-history|webhook-status|webhook-test|login> [options]",
       );
     io.log(JSON.stringify(result, null, 2));
     return 0;
@@ -105,6 +135,18 @@ function requiredArgument(args: string[], label: string) {
       args[index - 1] !== "--origin" &&
       args[index - 1] !== "--token-file",
   );
+  if (!value) throw new UsageError(`${label} is required.`);
+  return value;
+}
+
+function requiredArgumentAfter(args: string[], label: string, offset: number) {
+  const positional = args.filter(
+    (argument, index) =>
+      !argument.startsWith("--") &&
+      args[index - 1] !== "--origin" &&
+      args[index - 1] !== "--token-file",
+  );
+  const value = positional[offset];
   if (!value) throw new UsageError(`${label} is required.`);
   return value;
 }

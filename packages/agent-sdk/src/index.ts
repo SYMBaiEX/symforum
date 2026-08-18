@@ -38,6 +38,34 @@ export type ResearchJob = {
   status: string;
 };
 
+export type WebhookEventType =
+  | "evidence.document.changed"
+  | "evidence.research.completed"
+  | "evidence.export.completed"
+  | "evidence.benchmark.completed"
+  | "evidence.claim.verified";
+
+export type WebhookSubscription = {
+  subscriptionKey: string;
+  url: string;
+  status: "active" | "paused" | "revoked";
+  eventTypes: WebhookEventType[];
+  createdAt: number;
+  updatedAt: number;
+  /** Present only in the response that creates or rotates a secret. */
+  signingSecret?: string;
+};
+
+export type WebhookDelivery = {
+  eventKey: string;
+  status: "pending" | "in_flight" | "delivered" | "failed" | "dead_letter";
+  attempt: number;
+  responseCode?: number;
+  nextAttemptAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export class AgentApiError extends Error {
   constructor(
     readonly status: number,
@@ -138,6 +166,92 @@ export class AgentClient {
     });
   }
 
+  async webhookAvailability(): Promise<{ enabled: boolean }> {
+    return await this.request("/api/agent/v1/webhooks/availability");
+  }
+
+  async listWebhooks(): Promise<WebhookSubscription[]> {
+    return await this.request("/api/agent/v1/webhooks");
+  }
+
+  async createWebhook(
+    subscriptionKey: string,
+    url: string,
+    eventTypes: readonly WebhookEventType[],
+    idempotencyKey = crypto.randomUUID(),
+  ): Promise<WebhookSubscription> {
+    return await this.request("/api/agent/v1/webhooks", {
+      method: "POST",
+      body: { subscriptionKey, url, eventTypes },
+      idempotencyKey: validIdempotencyKey(idempotencyKey),
+    });
+  }
+
+  async setWebhookStatus(
+    subscriptionKey: string,
+    status: "active" | "paused" | "revoked",
+    idempotencyKey = crypto.randomUUID(),
+  ): Promise<WebhookSubscription> {
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/status`,
+      { method: "POST", body: { status }, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+    );
+  }
+
+  async webhookHealth(subscriptionKey: string): Promise<{
+    delivered: number;
+    failed: number;
+    deadLetter: number;
+    pending: number;
+  }> {
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/health`,
+    );
+  }
+
+  async webhookHistory(
+    subscriptionKey: string,
+    limit?: number,
+  ): Promise<WebhookDelivery[]> {
+    const params = limit === undefined ? "" : `?limit=${validLimit(limit)}`;
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/deliveries${params}`,
+    );
+  }
+
+  /** The returned secret is shown exactly once; store it outside model context. */
+  async rotateWebhookSecret(
+    subscriptionKey: string,
+    idempotencyKey = crypto.randomUUID(),
+  ): Promise<WebhookSubscription> {
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/rotate`,
+      { method: "POST", body: {}, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+    );
+  }
+
+  async replayWebhookDelivery(
+    subscriptionKey: string,
+    eventKey: string,
+    idempotencyKey = crypto.randomUUID(),
+  ): Promise<WebhookDelivery> {
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/deliveries/${encodePathSegment(eventKey)}/replay`,
+      { method: "POST", body: {}, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+    );
+  }
+
+  async sendWebhookTest(
+    subscriptionKey: string,
+    eventType: WebhookEventType,
+    idempotencyKey = crypto.randomUUID(),
+  ): Promise<WebhookDelivery> {
+    return await this.request(
+      `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/test`,
+      { method: "POST", body: { eventType }, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+    );
+  }
+
   async signLoginMessage(message: string): Promise<string> {
     if (!this.signer)
       throw new TypeError("A signer is required for an agent login message.");
@@ -180,6 +294,25 @@ export class AgentClient {
     if (!response.ok) throw toApiError(response.status, payload);
     return payload as T;
   }
+}
+
+function encodePathSegment(value: string) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 160)
+    throw new TypeError("webhook identifier must be a bounded non-empty string");
+  return encodeURIComponent(normalized);
+}
+
+function validIdempotencyKey(value: string) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value))
+    throw new TypeError("idempotencyKey must be 1-160 safe identifier characters");
+  return value;
+}
+
+function validLimit(value: number) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 50)
+    throw new TypeError("limit must be an integer between 1 and 50");
+  return value;
 }
 
 function normalizeOrigin(value: string) {

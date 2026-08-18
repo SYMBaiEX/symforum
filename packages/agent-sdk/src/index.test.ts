@@ -94,6 +94,45 @@ describe("AgentClient", () => {
     ).resolves.toEqual({ jobId: "job-1", status: "queued" });
   });
 
+  test("uses bounded, owner-scoped webhook management paths", async () => {
+    const calls: Array<{ url: string; method: string; body: string | null }> = [];
+    const client = new AgentClient({
+      fetch: async (input, init) => {
+        calls.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          body: typeof init?.body === "string" ? init.body : null,
+        });
+        return Response.json({ enabled: true });
+      },
+      tokenStore: { async getToken() { return "access-token"; } },
+    });
+    await client.webhookAvailability();
+    await client.webhookHistory("research-events", 5);
+    await client.sendWebhookTest(
+      "research-events",
+      "evidence.research.completed",
+      "webhook-test-001",
+    );
+    expect(calls).toEqual([
+      {
+        url: `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/availability`,
+        method: "GET",
+        body: null,
+      },
+      {
+        url: `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/research-events/deliveries?limit=5`,
+        method: "GET",
+        body: null,
+      },
+      {
+        url: `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/research-events/test`,
+        method: "POST",
+        body: '{"eventType":"evidence.research.completed"}',
+      },
+    ]);
+  });
+
   test("rejects an untrusted custom origin before reading a bearer token", () => {
     let tokenReads = 0;
     expect(

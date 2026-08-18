@@ -42,8 +42,14 @@ const TOOL_ENTRIES = [
   ["evidence.get_export", "export_get"],
   ["evidence.get_export_artifact", "export_artifact"],
   ["evidence.list_webhooks", "webhooks_list"],
+  ["evidence.webhook_availability", "webhooks_availability"],
   ["evidence.create_webhook", "webhooks_create"],
   ["evidence.set_webhook_status", "webhooks_status"],
+  ["evidence.webhook_health", "webhooks_health"],
+  ["evidence.webhook_history", "webhooks_history"],
+  ["evidence.rotate_webhook_secret", "webhooks_rotate"],
+  ["evidence.replay_webhook_delivery", "webhooks_replay"],
+  ["evidence.send_webhook_test", "webhooks_test"],
 ] as const satisfies ReadonlyArray<readonly [string, AgentDataOperation]>;
 
 const TOOLS = new Map<string, AgentDataOperation>(TOOL_ENTRIES);

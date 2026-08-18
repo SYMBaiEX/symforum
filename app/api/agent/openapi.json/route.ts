@@ -432,6 +432,74 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/webhooks/availability": {
+      get: {
+        operationId: "getEvidenceWebhookAvailability",
+        summary: "Check whether the owner can configure delivery",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Delivery availability; destination allowlists are never returned." },
+        },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/health": {
+      get: {
+        operationId: "getEvidenceWebhookHealth",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/SubscriptionKey" }],
+        responses: { "200": { description: "Bounded owner-scoped delivery counters." } },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/deliveries": {
+      get: {
+        operationId: "listEvidenceWebhookDeliveries",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/SubscriptionKey" },
+          { $ref: "#/components/parameters/Limit" },
+        ],
+        responses: { "200": { description: "Bounded, secret-free owner-scoped delivery history." } },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/rotate": {
+      post: {
+        operationId: "rotateEvidenceWebhookSecret",
+        description: "Returns a replacement signing secret exactly once. Store it outside chat, logs, URLs, and source control.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/SubscriptionKey" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: { "200": { description: "Replacement secret shown only in this response." } },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/deliveries/{eventKey}/replay": {
+      post: {
+        operationId: "replayEvidenceWebhookDelivery",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/SubscriptionKey" },
+          { name: "eventKey", in: "path", required: true, schema: { type: "string", maxLength: 160 } },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: { "200": { description: "Eligible failed/dead-letter delivery was queued for replay." } },
+      },
+    },
+    "/v1/webhooks/{subscriptionKey}/test": {
+      post: {
+        operationId: "sendEvidenceWebhookTest",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/SubscriptionKey" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["eventType"], properties: { eventType: { type: "string" } }, additionalProperties: false } } },
+        },
+        responses: { "200": { description: "Synthetic, bounded delivery was queued." } },
+      },
+    },
     "/mcp": {
       post: {
         operationId: "evidenceMcp",
@@ -499,6 +567,12 @@ const OPENAPI = {
         in: "query",
         required: false,
         schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+      },
+      SubscriptionKey: {
+        name: "subscriptionKey",
+        in: "path",
+        required: true,
+        schema: { type: "string", minLength: 1, maxLength: 96 },
       },
       IdempotencyKey: {
         name: "Idempotency-Key",

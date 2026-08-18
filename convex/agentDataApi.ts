@@ -28,8 +28,14 @@ const operationValidator = v.union(
   v.literal("export_get"),
   v.literal("export_artifact"),
   v.literal("webhooks_list"),
+  v.literal("webhooks_availability"),
   v.literal("webhooks_create"),
   v.literal("webhooks_status"),
+  v.literal("webhooks_health"),
+  v.literal("webhooks_history"),
+  v.literal("webhooks_rotate"),
+  v.literal("webhooks_replay"),
+  v.literal("webhooks_test"),
 );
 
 type Operation =
@@ -55,8 +61,14 @@ type Operation =
   | "export_get"
   | "export_artifact"
   | "webhooks_list"
+  | "webhooks_availability"
   | "webhooks_create"
-  | "webhooks_status";
+  | "webhooks_status"
+  | "webhooks_health"
+  | "webhooks_history"
+  | "webhooks_rotate"
+  | "webhooks_replay"
+  | "webhooks_test";
 
 type EvidenceIdTable =
   | "evidenceDocuments"
@@ -198,6 +210,12 @@ export const dispatch = internalMutation({
         limit: limit(input.limit, 20),
       });
     }
+    if (args.operation === "webhooks_availability") {
+      return await ctx.runQuery(
+        api.evidenceWebhooks.getMyWebhookAvailability,
+        {},
+      );
+    }
 
     // Validate operation-specific values before reserving quota and usage.
     const requestedLimit = limit(input.limit, 20);
@@ -255,7 +273,12 @@ export const dispatch = internalMutation({
     }
     const webhookSubscriptionKey =
       args.operation === "webhooks_create" ||
-      args.operation === "webhooks_status"
+      args.operation === "webhooks_status" ||
+      args.operation === "webhooks_health" ||
+      args.operation === "webhooks_history" ||
+      args.operation === "webhooks_rotate" ||
+      args.operation === "webhooks_replay" ||
+      args.operation === "webhooks_test"
         ? requiredText(input, "subscriptionKey", 96).toLowerCase()
         : null;
     const webhookUrl =
@@ -294,6 +317,32 @@ export const dispatch = internalMutation({
       throw new ConvexError({
         code: "INVALID_REQUEST",
         message: "status must be active, paused, or revoked.",
+      });
+    }
+    const webhookEventKey =
+      args.operation === "webhooks_replay"
+        ? requiredText(input, "eventKey", 160).toLowerCase()
+        : null;
+    const webhookEventType =
+      args.operation === "webhooks_test" &&
+      [
+        "evidence.document.changed",
+        "evidence.research.completed",
+        "evidence.export.completed",
+        "evidence.benchmark.completed",
+        "evidence.claim.verified",
+      ].includes(String(input.eventType))
+        ? (input.eventType as
+            | "evidence.document.changed"
+            | "evidence.research.completed"
+            | "evidence.export.completed"
+            | "evidence.benchmark.completed"
+            | "evidence.claim.verified")
+        : null;
+    if (args.operation === "webhooks_test" && webhookEventType === null) {
+      throw new ConvexError({
+        code: "INVALID_REQUEST",
+        message: "eventType must be a supported webhook event type.",
       });
     }
 
@@ -552,6 +601,30 @@ export const dispatch = internalMutation({
             status: webhookStatus!,
           },
         );
+      case "webhooks_health":
+        return await ctx.runQuery(api.evidenceWebhooks.getSubscriptionHealth, {
+          subscriptionKey: webhookSubscriptionKey!,
+        });
+      case "webhooks_history":
+        return await ctx.runQuery(api.evidenceWebhooks.listDeliveryHistory, {
+          subscriptionKey: webhookSubscriptionKey!,
+          limit: requestedLimit,
+        });
+      case "webhooks_rotate":
+        return await ctx.runMutation(
+          api.evidenceWebhooks.rotateSigningSecret,
+          { subscriptionKey: webhookSubscriptionKey! },
+        );
+      case "webhooks_replay":
+        return await ctx.runMutation(api.evidenceWebhooks.replayDelivery, {
+          subscriptionKey: webhookSubscriptionKey!,
+          eventKey: webhookEventKey!,
+        });
+      case "webhooks_test":
+        return await ctx.runMutation(api.evidenceWebhooks.sendTestEvent, {
+          subscriptionKey: webhookSubscriptionKey!,
+          eventType: webhookEventType!,
+        });
     }
   },
 });

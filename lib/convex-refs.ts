@@ -3155,6 +3155,75 @@ export const convexRefs = {
       }
     >("agentQuota:configureAgentQuota"),
   },
+  evidenceWebhooks: {
+    availability: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      { enabled: boolean }
+    >("evidenceWebhooks:getMyWebhookAvailability"),
+    list: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      Array<{
+        subscriptionId: string;
+        subscriptionKey: string;
+        url: string;
+        status: "active" | "paused" | "revoked";
+        eventTypes: string[];
+        createdAt: number;
+        updatedAt: number;
+      }>
+    >("evidenceWebhooks:listMySubscriptions"),
+    health: makeFunctionReference<
+      "query",
+      { subscriptionKey: string },
+      { delivered: number; failed: number; deadLetter: number; pending: number }
+    >("evidenceWebhooks:getSubscriptionHealth"),
+    history: makeFunctionReference<
+      "query",
+      { subscriptionKey: string; limit?: number },
+      Array<{
+        eventKey: string;
+        status: "pending" | "in_flight" | "delivered" | "failed" | "dead_letter";
+        attempt: number;
+        responseCode?: number;
+        nextAttemptAt?: number;
+        createdAt: number;
+        updatedAt: number;
+      }>
+    >("evidenceWebhooks:listDeliveryHistory"),
+    create: makeFunctionReference<
+      "mutation",
+      { subscriptionKey: string; url: string; eventTypes: string[] },
+      {
+        subscriptionKey: string;
+        url: string;
+        status: "active" | "paused" | "revoked";
+        eventTypes: string[];
+        signingSecret?: string;
+      }
+    >("evidenceWebhooks:createSubscription"),
+    setStatus: makeFunctionReference<
+      "mutation",
+      { subscriptionKey: string; status: "active" | "paused" | "revoked" },
+      unknown
+    >("evidenceWebhooks:setSubscriptionStatus"),
+    rotate: makeFunctionReference<
+      "mutation",
+      { subscriptionKey: string },
+      { signingSecret?: string }
+    >("evidenceWebhooks:rotateSigningSecret"),
+    replay: makeFunctionReference<
+      "mutation",
+      { subscriptionKey: string; eventKey: string },
+      unknown
+    >("evidenceWebhooks:replayDelivery"),
+    test: makeFunctionReference<
+      "mutation",
+      { subscriptionKey: string; eventType: string },
+      unknown
+    >("evidenceWebhooks:sendTestEvent"),
+  },
   users: {
     maybeViewer: makeFunctionReference<
       "query",

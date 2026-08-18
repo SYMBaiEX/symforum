@@ -40,6 +40,14 @@ describe("agent API OpenAPI contract", () => {
     expect(document.paths["/v1/webhooks"].post.operationId).toBe(
       "createEvidenceWebhook",
     );
+    expect(document.paths["/v1/webhooks/availability"].get.operationId).toBe(
+      "getEvidenceWebhookAvailability",
+    );
+    expect(
+      document.paths["/v1/webhooks/{subscriptionKey}/deliveries/{eventKey}/replay"].post
+        .operationId,
+    ).toBe("replayEvidenceWebhookDelivery");
+    expect(document.components.parameters.SubscriptionKey.required).toBe(true);
     expect(document.paths["/v1/entitlements"].get.operationId).toBe(
       "getEvidenceEntitlements",
     );

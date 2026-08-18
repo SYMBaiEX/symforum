@@ -359,6 +359,20 @@ function configuredAllowedHosts() {
   return parseAllowedHosts(webhookEnv.EVIDENCE_WEBHOOK_ALLOWED_HOSTS);
 }
 
+/**
+ * Reports whether delivery can be configured without exposing the destination
+ * allowlist. This is intentionally owner-scoped: public discovery must not
+ * reveal an operator's webhook infrastructure.
+ */
+export const getMyWebhookAvailability = query({
+  args: {},
+  returns: v.object({ enabled: v.boolean() }),
+  handler: async (ctx) => {
+    await evidencePrincipal(ctx);
+    return { enabled: configuredAllowedHosts().size > 0 };
+  },
+});
+
 export const createSubscription = mutation({
   args: {
     subscriptionKey: v.string(),

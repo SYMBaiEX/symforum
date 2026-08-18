@@ -20,6 +20,17 @@ const research = await client.createResearch(
   "zero trust",
   "research-2026-08-18-001",
 );
+const availability = await client.webhookAvailability();
+if (availability.enabled) {
+  const webhook = await client.createWebhook(
+    "research-events",
+    "https://hooks.example.com/symbaiex",
+    ["evidence.research.completed"],
+    "webhook-create-001",
+  );
+  // webhook.signingSecret is returned only now. Put it in a secret manager
+  // immediately; never log it or add it to model context.
+}
 ```
 
 Inject `fetch` for custom runtimes and `signer` for a local Ed25519 workflow.
@@ -35,7 +46,18 @@ printf '%s' "$SYMBIEX_ACCESS_TOKEN" | bun packages/agent-cli/bin/symbaiex.ts log
 bun packages/agent-cli/bin/symbaiex.ts manifest
 bun packages/agent-cli/bin/symbaiex.ts quota
 bun packages/agent-cli/bin/symbaiex.ts search "zero trust"
+bun packages/agent-cli/bin/symbaiex.ts webhook-availability
+bun packages/agent-cli/bin/symbaiex.ts webhook-list
+bun packages/agent-cli/bin/symbaiex.ts webhook-health research-events
 ```
 
 Use `--origin http://localhost:3000` only for local development. Commands print
 responses or non-secret error messages only; tokens are never printed.
+
+Webhook subscriptions are owner-scoped through the enrolled agent identity.
+Use `webhookAvailability()` before configuration: an unavailable result means
+the deployment has no operator-approved destination hostname allowlist. The
+developer console is restricted to the enrolling human account and exposes
+secret-free health/history plus pause, resume, revoke, test, and eligible
+dead-letter replay. Create and rotation responses contain a signing secret only
+once; do not persist it in browser storage, URLs, logs, chat, or source control.

@@ -24,8 +24,14 @@ export const AGENT_DATA_OPERATIONS = [
   "export_get",
   "export_artifact",
   "webhooks_list",
+  "webhooks_availability",
   "webhooks_create",
   "webhooks_status",
+  "webhooks_health",
+  "webhooks_history",
+  "webhooks_rotate",
+  "webhooks_replay",
+  "webhooks_test",
 ] as const;
 export type AgentDataOperation = (typeof AGENT_DATA_OPERATIONS)[number];
 export type AgentArtifactKind = "research" | "export";
@@ -270,6 +276,14 @@ export function mapRestRequest(
   )
     return { operation: "webhooks_list", input: {} };
   if (
+    method === "GET" &&
+    segments.length === 2 &&
+    segments[0] === "webhooks" &&
+    segments[1] === "availability" &&
+    only([])
+  )
+    return { operation: "webhooks_availability", input: {} };
+  if (
     method === "POST" &&
     segments.length === 1 &&
     segments[0] === "webhooks" &&
@@ -293,6 +307,72 @@ export function mapRestRequest(
     return {
       operation: "webhooks_status",
       input: { subscriptionKey: segments[1], status: body.status },
+    };
+  if (
+    method === "GET" &&
+    segments.length === 3 &&
+    segments[0] === "webhooks" &&
+    segments[2] === "health" &&
+    only([]) &&
+    validText(segments[1])
+  )
+    return {
+      operation: "webhooks_health",
+      input: { subscriptionKey: segments[1] },
+    };
+  if (
+    method === "GET" &&
+    segments.length === 3 &&
+    segments[0] === "webhooks" &&
+    segments[2] === "deliveries" &&
+    only(["limit"]) &&
+    validText(segments[1])
+  )
+    return {
+      operation: "webhooks_history",
+      input: { subscriptionKey: segments[1], ...limit },
+    };
+  if (
+    method === "POST" &&
+    segments.length === 3 &&
+    segments[0] === "webhooks" &&
+    segments[2] === "rotate" &&
+    only([]) &&
+    onlyBody(body, []) &&
+    validText(segments[1])
+  )
+    return {
+      operation: "webhooks_rotate",
+      input: { subscriptionKey: segments[1] },
+    };
+  if (
+    method === "POST" &&
+    segments.length === 5 &&
+    segments[0] === "webhooks" &&
+    segments[2] === "deliveries" &&
+    segments[4] === "replay" &&
+    only([]) &&
+    onlyBody(body, []) &&
+    validText(segments[1]) &&
+    validText(segments[3])
+  )
+    return {
+      operation: "webhooks_replay",
+      input: { subscriptionKey: segments[1], eventKey: segments[3] },
+    };
+  if (
+    method === "POST" &&
+    segments.length === 3 &&
+    segments[0] === "webhooks" &&
+    segments[2] === "test" &&
+    only([]) &&
+    onlyBody(body, ["eventType"]) &&
+    validText(segments[1]) &&
+    validText(body.eventType)
+  )
+    return {
+      operation: "webhooks_test",
+      input: { subscriptionKey: segments[1], eventType: body.eventType },
     };
   return null;
 }

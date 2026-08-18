@@ -147,8 +147,14 @@ describe("evidence MCP endpoint", () => {
       "evidence.get_export",
       "evidence.get_export_artifact",
       "evidence.list_webhooks",
+      "evidence.webhook_availability",
       "evidence.create_webhook",
       "evidence.set_webhook_status",
+      "evidence.webhook_health",
+      "evidence.webhook_history",
+      "evidence.rotate_webhook_secret",
+      "evidence.replay_webhook_delivery",
+      "evidence.send_webhook_test",
     ]);
   });
 

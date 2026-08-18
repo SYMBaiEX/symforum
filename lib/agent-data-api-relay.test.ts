@@ -83,6 +83,41 @@ describe("agent data API relay", () => {
         eventTypes: ["evidence.research.completed"],
       },
     });
+    expect(
+      mapRestRequest(
+        "GET",
+        ["webhooks", "research", "deliveries"],
+        new URLSearchParams("limit=5"),
+      ),
+    ).toEqual({
+      operation: "webhooks_history",
+      input: { subscriptionKey: "research", limit: 5 },
+    });
+    expect(
+      mapRestRequest(
+        "POST",
+        ["webhooks", "research", "deliveries", "event-1", "replay"],
+        new URLSearchParams(),
+        {},
+      ),
+    ).toEqual({
+      operation: "webhooks_replay",
+      input: { subscriptionKey: "research", eventKey: "event-1" },
+    });
+    expect(
+      mapRestRequest(
+        "POST",
+        ["webhooks", "research", "test"],
+        new URLSearchParams(),
+        { eventType: "evidence.research.completed" },
+      ),
+    ).toEqual({
+      operation: "webhooks_test",
+      input: {
+        subscriptionKey: "research",
+        eventType: "evidence.research.completed",
+      },
+    });
   });
 
   test("preserves strict origin and no-store headers", () => {

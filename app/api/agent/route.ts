@@ -48,6 +48,7 @@ const MANIFEST = {
     researchJobs: `${API_BASE_URL}/v1/research-jobs`,
     exports: `${API_BASE_URL}/v1/exports`,
     webhooks: `${API_BASE_URL}/v1/webhooks`,
+    webhookAvailability: `${API_BASE_URL}/v1/webhooks/availability`,
     entitlements: `${API_BASE_URL}/v1/entitlements`,
     usage: `${API_BASE_URL}/v1/usage`,
     mcp: `${API_BASE_URL}/mcp`,
@@ -111,6 +112,8 @@ const MANIFEST = {
   webhooks: {
     infrastructureEnabled: true,
     deliveryRequiresConfiguredDestinationAllowlist: true,
+    availabilityEndpoint: true,
+    ownerOperations: ["history", "health", "pause", "resume", "revoke", "rotate", "test", "replay"],
     signature: "HMAC-SHA256",
   },
   graphql: {
