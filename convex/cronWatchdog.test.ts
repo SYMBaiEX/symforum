@@ -2,6 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 
@@ -163,5 +164,50 @@ describe("critical cron watchdog", () => {
       enabled: true,
       jobs: expect.any(Array),
     });
+  });
+
+  test("materializes stale status in the evaluator instead of reading wall-clock time in the query", async () => {
+    vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const owner = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Owner",
+        username: "watchdog-owner",
+        usernameNormalized: "watchdog-owner",
+        role: "owner",
+      }),
+    );
+    const admin = t.withIdentity({ subject: owner });
+    await succeedCisa(t, now);
+    await t.mutation(watchdog.evaluate, { now: now + 20 });
+    await expect(admin.query(watchdog.summary, {})).resolves.toMatchObject({
+      jobs: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "evidence-cisa-kev",
+          status: "healthy",
+          lastEvaluatedAt: now + 20,
+        }),
+      ]),
+    });
+    const staleAt = now + 3 * 60 * 60 * 1_000 + 20;
+    await t.mutation(watchdog.evaluate, { now: staleAt });
+    await expect(admin.query(watchdog.summary, {})).resolves.toMatchObject({
+      jobs: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "evidence-cisa-kev",
+          status: "stale",
+          lastEvaluatedAt: staleAt,
+        }),
+      ]),
+    });
+    const source = readFileSync(
+      new URL("./cronWatchdog.ts", import.meta.url),
+      "utf8",
+    );
+    const summarySource = source.slice(
+      source.indexOf("export const summaryAdmin"),
+    );
+    expect(summarySource).not.toContain("Date.now");
   });
 });

@@ -2177,6 +2177,17 @@ export default defineSchema({
     lastFailedAt: v.optional(v.number()),
     lastDurationMs: v.optional(v.number()),
     consecutiveFailures: v.number(),
+    // Materialized by the evaluator so reactive admin reads never derive a
+    // different status just because wall-clock time moved without a write.
+    evaluatedStatus: v.optional(
+      v.union(
+        v.literal("healthy"),
+        v.literal("failed"),
+        v.literal("stale"),
+        v.literal("missing"),
+      ),
+    ),
+    lastEvaluatedAt: v.optional(v.number()),
     updatedAt: v.number(),
     openLogId: v.optional(v.id("systemLogs")),
   }).index("by_jobKey", ["jobKey"]),

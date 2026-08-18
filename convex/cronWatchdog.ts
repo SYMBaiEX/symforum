@@ -58,7 +58,7 @@ const mutationJobKeyValidator = v.union(
   v.literal("web-vitals-slo"),
 );
 type JobKey = typeof jobKeyValidator.type;
-type WatchdogStatus = "running" | "healthy" | "failed" | "stale" | "missing";
+type WatchdogStatus = "healthy" | "failed" | "stale" | "missing";
 
 const startRunRef = makeFunctionReference<
   "mutation",
@@ -393,6 +393,7 @@ export const evaluate = internalMutation({
         status: statusValidator,
         lastCompletedAt: v.union(v.number(), v.null()),
         consecutiveFailures: v.number(),
+        lastEvaluatedAt: v.union(v.number(), v.null()),
       }),
     ),
   }),
@@ -408,6 +409,7 @@ export const evaluate = internalMutation({
           status: "missing" as const,
           lastCompletedAt: null,
           consecutiveFailures: 0,
+          lastEvaluatedAt: null,
         })),
       };
     const states = await Promise.all(
@@ -426,6 +428,12 @@ export const evaluate = internalMutation({
     );
     let healthy = 0;
     for (const state of states) {
+      if (state.heartbeat !== null)
+        await ctx.db.patch("cronJobHeartbeats", state.heartbeat._id, {
+          evaluatedStatus: state.status,
+          lastEvaluatedAt: now,
+          updatedAt: now,
+        });
       if (state.status === "healthy") {
         healthy += 1;
         const openLog = state.heartbeat?.openLogId
@@ -492,7 +500,10 @@ export const evaluate = internalMutation({
       enabled: true,
       healthy,
       unhealthy: states.length - healthy,
-      states: states.map(({ heartbeat: _heartbeat, ...state }) => state),
+      states: states.map(({ heartbeat: _heartbeat, ...state }) => ({
+        ...state,
+        lastEvaluatedAt: now,
+      })),
     };
   },
 });
@@ -507,12 +518,12 @@ export const summaryAdmin = query({
         status: statusValidator,
         lastCompletedAt: v.union(v.number(), v.null()),
         consecutiveFailures: v.number(),
+        lastEvaluatedAt: v.union(v.number(), v.null()),
       }),
     ),
   }),
   handler: async (ctx) => {
     await requireSiteAdmin(ctx);
-    const now = Date.now();
     const jobs = await Promise.all(
       JOB_KEYS.slice(0, SUMMARY_LIMIT).map(async (jobKey) => {
         const heartbeat = await ctx.db
@@ -521,8 +532,11 @@ export const summaryAdmin = query({
           .unique();
         return {
           jobKey,
-          ...statusFor(heartbeat, jobKey, now),
+          status: heartbeat?.evaluatedStatus ?? "missing",
+          lastCompletedAt:
+            heartbeat?.lastSucceededAt ?? heartbeat?.lastFailedAt ?? null,
           consecutiveFailures: heartbeat?.consecutiveFailures ?? 0,
+          lastEvaluatedAt: heartbeat?.lastEvaluatedAt ?? null,
         };
       }),
     );
