@@ -104,7 +104,9 @@ export const searchPublic = internalQuery({
   handler: async (ctx, args) => {
     const query = normalizeQuery(args.query);
     const limit = clampLimit(args.limit);
-    const now = Date.now();
+    // Capture the clock once so recency ranking is deterministic within a
+    // response. Scores can legitimately differ on a later request.
+    const rankingNow = Date.now();
     const candidates = (
       await Promise.all([
         evidenceCandidates(ctx, query),
@@ -118,7 +120,7 @@ export const searchPublic = internalQuery({
     ).flat();
 
     return candidates
-      .map((candidate) => rankCandidate(candidate, query, now))
+      .map((candidate) => rankCandidate(candidate, query, rankingNow))
       .filter((candidate): candidate is UniversalResult => candidate !== null)
       .sort(compareResults)
       .slice(0, limit);
@@ -158,26 +160,39 @@ async function evidenceCandidates(
       q.search("searchText", query.normalized).eq("visibility", "public"),
     )
     .take(SOURCE_CANDIDATE_LIMIT);
-  return rows.map((row) => ({
-    type: "evidence_document",
-    canonicalUrl: row.canonicalUrl,
-    title: row.title,
-    excerpt: boundedExcerpt(row.excerpt),
-    visibility: "public",
-    updatedAt: row.updatedAt,
-    publishedAt: row.publishedAt,
-    searchable: `${row.title} ${row.excerpt} ${row.tags.join(" ")} ${row.authors.join(" ")}`,
-    citationCount: 0,
-    provenance: {
-      recordId: row._id,
-      sourceId: row.sourceId,
-      documentId: row._id,
-      ...(row.currentVersionId === null
-        ? {}
-        : { documentVersionId: row.currentVersionId }),
-      citationIds: [],
-    },
-  }));
+  return (
+    await Promise.all(
+      rows.map(async (row): Promise<Candidate | null> => {
+        const source = await ctx.db.get("evidenceSources", row.sourceId);
+        const canonicalUrl = safeCanonicalUrl(row.canonicalUrl);
+        // A mutable document is public only while its source is both public
+        // and active. Do not return a stale record from a retired/private
+        // source even when the document's denormalized visibility is public.
+        if (!isCurrentPublicSource(source) || canonicalUrl === null)
+          return null;
+        return {
+          type: "evidence_document",
+          canonicalUrl,
+          title: row.title,
+          excerpt: boundedExcerpt(row.excerpt),
+          visibility: "public",
+          updatedAt: row.updatedAt,
+          publishedAt: row.publishedAt,
+          searchable: `${row.title} ${row.excerpt} ${row.tags.join(" ")} ${row.authors.join(" ")}`,
+          citationCount: 0,
+          provenance: {
+            recordId: row._id,
+            sourceId: row.sourceId,
+            documentId: row._id,
+            ...(row.currentVersionId === null
+              ? {}
+              : { documentVersionId: row.currentVersionId }),
+            citationIds: [],
+          },
+        } satisfies Candidate;
+      }),
+    )
+  ).filter((candidate): candidate is Candidate => candidate !== null);
 }
 
 async function entityCandidates(ctx: QueryCtx): Promise<Candidate[]> {
@@ -219,13 +234,15 @@ async function claimCandidates(ctx: QueryCtx): Promise<Candidate[]> {
       ),
     )
   ).flat();
-  return await Promise.all(rows.map((row) => claimCandidate(ctx, row)));
+  return (
+    await Promise.all(rows.map((row) => claimCandidate(ctx, row)))
+  ).filter((candidate): candidate is Candidate => candidate !== null);
 }
 
 async function claimCandidate(
   ctx: QueryCtx,
   row: Doc<"evidenceClaims">,
-): Promise<Candidate> {
+): Promise<Candidate | null> {
   const citations = await ctx.db
     .query("evidenceClaimCitations")
     .withIndex("by_claimId", (q) => q.eq("claimId", row._id))
@@ -244,12 +261,19 @@ async function claimCandidate(
     if (version === null) continue;
     const document = await ctx.db.get("evidenceDocuments", version.documentId);
     if (document?.visibility !== "public") continue;
+    const source = await ctx.db.get("evidenceSources", document.sourceId);
+    if (!isCurrentPublicSource(source)) continue;
+    if (safeCanonicalUrl(document.canonicalUrl) === null) continue;
     publicCitations.push({
       ...citation,
       documentId: document._id,
       documentVersionId: version._id,
     });
   }
+  // Claims are only federated when a currently public, active-source citation
+  // remains. This fail-closed rule prevents a stale claim from outliving its
+  // source's publication controls.
+  if (publicCitations.length === 0) return null;
   return {
     type: "evidence_claim",
     canonicalUrl: `${PRIMARY_ORIGIN}/research`,
@@ -402,11 +426,21 @@ async function forumCandidates(
   const categories = new Map(
     categoryRows.map((category) => [category._id, category]),
   );
-  const visibleThreads = [...active, ...locked].filter((thread) =>
-    categoryIsPublic(thread.categoryId, categories),
-  );
+  const visibleThreads = [...active, ...locked]
+    .map((thread) => ({
+      thread,
+      category: publicBoardCategory(thread.categoryId, categories),
+    }))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        thread: Doc<"forumThreads">;
+        category: Doc<"forumCategories">;
+      } => candidate.category !== null,
+    );
   return await Promise.all(
-    visibleThreads.map(async (thread) => {
+    visibleThreads.map(async ({ thread, category }) => {
       // The search index finds candidates. The compact digest supplies the
       // public display record; live thread/category checks remain authoritative
       // when a projection is stale or has not been backfilled yet.
@@ -422,10 +456,10 @@ async function forumCandidates(
           : thread;
       return {
         type: "forum_thread",
-        canonicalUrl: `${FORUM_ORIGIN}/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}`,
+        canonicalUrl: `${FORUM_ORIGIN}/${encodeURIComponent(category.slug)}/${encodeURIComponent(thread.slug)}`,
         title: summary.title,
         excerpt: boundedExcerpt(
-          `Forum thread in ${summary.categorySlug} · ${summary.replyCount} replies · ${summary.viewCount} views`,
+          `Forum thread in ${category.slug} · ${summary.replyCount} replies · ${summary.viewCount} views`,
         ),
         visibility: "public",
         updatedAt: summary.updatedAt,
@@ -442,25 +476,82 @@ async function forumCandidates(
   );
 }
 
-function categoryIsPublic(
+function publicBoardCategory(
   categoryId: Id<"forumCategories">,
   categories: Map<Id<"forumCategories">, Doc<"forumCategories">>,
-) {
+): Doc<"forumCategories"> | null {
+  const requested = categories.get(categoryId);
+  if (requested === undefined) return null;
   const visited = new Set<Id<"forumCategories">>();
-  let current = categories.get(categoryId);
+  let current: Doc<"forumCategories"> | undefined = requested;
   while (current !== undefined) {
     if (
       current.status !== "active" ||
       (current.viewAccess ?? "public") !== "public" ||
       visited.has(current._id)
     )
-      return false;
+      return null;
     visited.add(current._id);
     if (current.parentCategoryId === undefined)
-      return (current.kind ?? "board") === "board";
+      return (requested.kind ?? "board") === "board" ? requested : null;
     current = categories.get(current.parentCategoryId);
   }
-  return false;
+  return null;
+}
+
+function isCurrentPublicSource(source: Doc<"evidenceSources"> | null) {
+  return source?.status === "active" && source.visibility === "public";
+}
+
+/**
+ * Canonical result URLs are presentation data, not fetch targets. We still
+ * constrain them to HTTPS public origins so clients never receive credentials,
+ * loopback, link-local, or private-network URLs from the evidence corpus.
+ */
+function safeCanonicalUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname
+      .toLowerCase()
+      .replace(/^\[|\]$/g, "")
+      .replace(/\.$/, "");
+    if (
+      !host ||
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local")
+    )
+      return null;
+    if (isPrivateAddress(host)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isPrivateAddress(host: string) {
+  if (
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    host.startsWith("fc") ||
+    host.startsWith("fd")
+  )
+    return true;
+  if (host.startsWith("::ffff:")) return isPrivateAddress(host.slice(7));
+  const parts = host.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part)))
+    return false;
+  const values = parts.map(Number);
+  if (values.some((part) => part < 0 || part > 255)) return true;
+  return (
+    values[0] === 0 ||
+    values[0] === 10 ||
+    values[0] === 127 ||
+    (values[0] === 169 && values[1] === 254) ||
+    (values[0] === 172 && values[1] >= 16 && values[1] <= 31) ||
+    (values[0] === 192 && values[1] === 168)
+  );
 }
 
 function rankCandidate(

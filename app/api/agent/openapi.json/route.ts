@@ -104,7 +104,7 @@ const OPENAPI = {
         operationId: "searchUniversalPublicCorpus",
         summary: "Search the bounded public lexical corpus",
         description:
-          "Federates public evidence documents, claims, entities, published blog posts, sent newsletters, indexed news, and currently public forum threads. Semantic/vector search is deferred; each result is rechecked for current public visibility.",
+          "Federates public evidence documents, claims, entities, published blog posts, sent newsletters, indexed news, and currently public forum threads. Semantic/vector search is deferred; each result is rechecked for current public visibility. Recency is captured once per request, making a response's ordering deterministic while later requests may legitimately receive fresher scores.",
         security: [{ bearerAuth: [] }],
         parameters: [
           {
