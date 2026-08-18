@@ -21,9 +21,10 @@ const MAX_DELIVERIES_PER_EVENT = 100;
 const MAX_HISTORY_LIMIT = 50;
 const MAX_DELIVERY_ATTEMPTS = 4;
 const MAX_REPLAY_ATTEMPTS = 3;
+const DELIVERY_LEASE_MS = 30_000;
 const DELIVERY_ACTION_REF = makeFunctionReference<
   "action",
-  { deliveryId: Id<"apiWebhookDeliveries"> },
+  { deliveryId: Id<"apiWebhookDeliveries">; deliveryGeneration: number },
   null
 >("evidenceWebhookActions:deliver");
 
@@ -53,6 +54,7 @@ const safeSubscriptionValidator = v.object({
 });
 const deliveryStatusValidator = v.union(
   v.literal("pending"),
+  v.literal("in_flight"),
   v.literal("delivered"),
   v.literal("failed"),
   v.literal("dead_letter"),
@@ -555,12 +557,36 @@ export const getSubscriptionHealth = query({
     return rows.reduce((health, row) => {
       if (row.status === "delivered") health.delivered += 1;
       else if (row.status === "dead_letter") health.deadLetter += 1;
-      else if (row.status === "pending") health.pending += 1;
+      else if (row.status === "pending" || row.status === "in_flight") health.pending += 1;
       else health.failed += 1;
       return health;
     }, { delivered: 0, failed: 0, deadLetter: 0, pending: 0 });
   },
 });
+
+async function scheduleDeliveryClaim(
+  ctx: MutationCtx,
+  delivery: Doc<"apiWebhookDeliveries">,
+  delayMs: number,
+  now = Date.now(),
+) {
+  const boundedDelayMs = Math.max(0, Math.floor(delayMs));
+  const deliveryGeneration = (delivery.deliveryGeneration ?? 0) + 1;
+  const nextAttemptAt = now + boundedDelayMs;
+  const leaseExpiresAt = nextAttemptAt + DELIVERY_LEASE_MS;
+  await ctx.db.patch("apiWebhookDeliveries", delivery._id, {
+    status: "in_flight",
+    deliveryGeneration,
+    nextAttemptAt,
+    leaseExpiresAt,
+    updatedAt: now,
+  });
+  await ctx.scheduler.runAfter(boundedDelayMs, DELIVERY_ACTION_REF, {
+    deliveryId: delivery._id,
+    deliveryGeneration,
+  });
+  return { deliveryGeneration, leaseExpiresAt, nextAttemptAt };
+}
 
 export const replayDelivery = mutation({
   args: { subscriptionKey: v.string(), eventKey: v.string() },
@@ -572,16 +598,28 @@ export const replayDelivery = mutation({
       .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey)).unique();
     if (delivery === null) throw new ConvexError({ code: "WEBHOOK_DELIVERY_NOT_FOUND", message: "Webhook delivery was not found." });
     if (subscription.status !== "active") throw new ConvexError({ code: "WEBHOOK_REPLAY_DENIED", message: "Only active subscriptions can replay deliveries." });
+    if (delivery.status === "pending" || delivery.status === "in_flight") {
+      throw new ConvexError({ code: "WEBHOOK_REPLAY_IN_PROGRESS", message: "An active webhook delivery cannot be replayed." });
+    }
     if ((delivery.replayCount ?? 0) >= MAX_REPLAY_ATTEMPTS) throw new ConvexError({ code: "WEBHOOK_REPLAY_LIMIT", message: "Webhook replay budget exhausted." });
     const now = Date.now();
-    await ctx.db.patch("apiWebhookDeliveries", delivery._id, { status: "pending", attempt: 0, replayCount: (delivery.replayCount ?? 0) + 1, nextAttemptAt: now, updatedAt: now });
-    await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId: delivery._id });
+    const replayCount = (delivery.replayCount ?? 0) + 1;
+    const replay = { ...delivery, status: "pending" as const, attempt: 0, replayCount, updatedAt: now };
+    await ctx.db.patch("apiWebhookDeliveries", delivery._id, {
+      status: "pending",
+      attempt: 0,
+      replayCount,
+      responseCode: undefined,
+      nextAttemptAt: now,
+      leaseExpiresAt: undefined,
+      updatedAt: now,
+    });
+    const claim = await scheduleDeliveryClaim(ctx, replay, 0, now);
     return {
       eventKey: delivery.eventKey,
-      status: "pending" as const,
+      status: "in_flight" as const,
       attempt: 0,
-      responseCode: delivery.responseCode,
-      nextAttemptAt: now,
+      nextAttemptAt: claim.nextAttemptAt,
       createdAt: delivery.createdAt,
       updatedAt: now,
     };
@@ -606,8 +644,9 @@ export const sendTestEvent = mutation({
       receivedAt: now,
     });
     const deliveryId = await ctx.db.insert("apiWebhookDeliveries", { subscriptionId: subscription._id, eventKey, status: "pending", attempt: 0, createdAt: now, updatedAt: now, nextAttemptAt: now });
-    await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId });
-    return { eventKey, status: "pending" as const, attempt: 0, nextAttemptAt: now, createdAt: now, updatedAt: now };
+    const delivery = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
+    const claim = await scheduleDeliveryClaim(ctx, delivery, 0, now);
+    return { eventKey, status: "in_flight" as const, attempt: 0, nextAttemptAt: claim.nextAttemptAt, createdAt: now, updatedAt: now };
   },
 });
 
@@ -694,8 +733,10 @@ export const enqueueEvent = internalMutation({
         attempt: 0,
         createdAt: now,
         updatedAt: now,
+        nextAttemptAt: now,
       });
-      await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId });
+      const inserted = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
+      await scheduleDeliveryClaim(ctx, inserted, 0, now);
       enqueued += 1;
     }
     return { eventId, enqueued };
@@ -754,22 +795,62 @@ export const recoverPendingDeliveries = internalMutation({
   args: { limit: v.optional(v.number()) },
   returns: v.object({ rescheduled: v.number(), deadLettered: v.number() }),
   handler: async (ctx, args) => {
-    const rows = await ctx.db.query("apiWebhookDeliveries").withIndex("by_status_and_updatedAt", (q) => q.eq("status", "pending")).order("asc").take(Math.max(1, Math.min(args.limit ?? 50, 50)));
-    let rescheduled = 0; let deadLettered = 0; const now = Date.now();
-    for (const row of rows) {
-      if (row.attempt >= MAX_DELIVERY_ATTEMPTS) { await ctx.db.patch("apiWebhookDeliveries", row._id, { status: "dead_letter", updatedAt: now }); deadLettered += 1; }
-      else if ((row.nextAttemptAt ?? row.updatedAt) <= now) { await ctx.scheduler.runAfter(0, DELIVERY_ACTION_REF, { deliveryId: row._id }); rescheduled += 1; }
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 50), 50));
+    const now = Date.now();
+    const duePending = await ctx.db
+      .query("apiWebhookDeliveries")
+      .withIndex("by_status_and_nextAttemptAt", (q) =>
+        q.eq("status", "pending").lte("nextAttemptAt", now),
+      )
+      .order("asc")
+      .take(limit);
+    const expiredInFlight =
+      duePending.length >= limit
+        ? []
+        : await ctx.db
+            .query("apiWebhookDeliveries")
+            .withIndex("by_status_and_leaseExpiresAt", (q) =>
+              q.eq("status", "in_flight").lte("leaseExpiresAt", now),
+            )
+            .order("asc")
+            .take(limit - duePending.length);
+    let rescheduled = 0;
+    let deadLettered = 0;
+    for (const row of [...duePending, ...expiredInFlight]) {
+      if (row.attempt >= MAX_DELIVERY_ATTEMPTS) {
+        await ctx.db.patch("apiWebhookDeliveries", row._id, {
+          status: "dead_letter",
+          nextAttemptAt: undefined,
+          leaseExpiresAt: undefined,
+          updatedAt: now,
+        });
+        deadLettered += 1;
+        continue;
+      }
+      await scheduleDeliveryClaim(ctx, row, 0, now);
+      rescheduled += 1;
     }
     return { rescheduled, deadLettered };
   },
 });
 
 export const getDeliveryInput = internalQuery({
-  args: { deliveryId: v.id("apiWebhookDeliveries") },
+  args: {
+    deliveryId: v.id("apiWebhookDeliveries"),
+    deliveryGeneration: v.number(),
+  },
   returns: v.union(
     v.null(),
     v.object({
+      kind: v.literal("invalid"),
       deliveryId: v.id("apiWebhookDeliveries"),
+      deliveryGeneration: v.number(),
+      errorMessage: v.string(),
+    }),
+    v.object({
+      kind: v.literal("ready"),
+      deliveryId: v.id("apiWebhookDeliveries"),
+      deliveryGeneration: v.number(),
       subscriptionId: v.id("apiWebhookSubscriptions"),
       attempt: v.number(),
       eventKey: v.string(),
@@ -783,24 +864,49 @@ export const getDeliveryInput = internalQuery({
   ),
   handler: async (ctx, args) => {
     const delivery = await ctx.db.get("apiWebhookDeliveries", args.deliveryId);
-    if (delivery === null || delivery.status !== "pending") return null;
+    if (
+      delivery === null ||
+      delivery.status !== "in_flight" ||
+      delivery.deliveryGeneration !== args.deliveryGeneration
+    ) {
+      return null;
+    }
     const subscription = await ctx.db.get(
       "apiWebhookSubscriptions",
       delivery.subscriptionId,
     );
-    if (subscription === null) return null;
+    if (subscription === null) {
+      return {
+        kind: "invalid" as const,
+        deliveryId: delivery._id,
+        deliveryGeneration: args.deliveryGeneration,
+        errorMessage: "Webhook subscription is missing",
+      };
+    }
     const event = await ctx.db
       .query("apiWebhookEvents")
       .withIndex("by_provider_and_eventKey", (q) =>
         q.eq("provider", "evidence-delivery").eq("eventKey", delivery.eventKey),
       )
       .unique();
-    if (event === null) return null;
+    if (event === null) {
+      return {
+        kind: "invalid" as const,
+        deliveryId: delivery._id,
+        deliveryGeneration: args.deliveryGeneration,
+        errorMessage: "Stored webhook event is missing",
+      };
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(event.payloadJson);
     } catch {
-      return null;
+      return {
+        kind: "invalid" as const,
+        deliveryId: delivery._id,
+        deliveryGeneration: args.deliveryGeneration,
+        errorMessage: "Stored webhook event envelope is invalid",
+      };
     }
     if (
       parsed === null ||
@@ -812,10 +918,17 @@ export const getDeliveryInput = internalQuery({
       ) ||
       typeof (parsed as { payloadJson?: unknown }).payloadJson !== "string"
     ) {
-      return null;
+      return {
+        kind: "invalid" as const,
+        deliveryId: delivery._id,
+        deliveryGeneration: args.deliveryGeneration,
+        errorMessage: "Stored webhook event envelope is invalid",
+      };
     }
     return {
+      kind: "ready" as const,
       deliveryId: delivery._id,
+      deliveryGeneration: args.deliveryGeneration,
       subscriptionId: subscription._id,
       attempt: delivery.attempt,
       eventKey: delivery.eventKey,
@@ -832,37 +945,59 @@ export const getDeliveryInput = internalQuery({
 export const markDelivery = internalMutation({
   args: {
     deliveryId: v.id("apiWebhookDeliveries"),
-    delivered: v.boolean(),
+    deliveryGeneration: v.number(),
+    outcome: v.union(
+      v.literal("delivered"),
+      v.literal("transient_failure"),
+      v.literal("permanent_failure"),
+    ),
     responseCode: v.optional(v.number()),
     errorMessage: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const delivery = await ctx.db.get("apiWebhookDeliveries", args.deliveryId);
-    if (delivery === null || delivery.status !== "pending") return null;
+    if (
+      delivery === null ||
+      delivery.status !== "in_flight" ||
+      delivery.deliveryGeneration !== args.deliveryGeneration
+    ) {
+      return null;
+    }
     const responseCode = args.responseCode;
     const errorMessage = args.errorMessage?.slice(0, 400);
     const attempt = Math.min(delivery.attempt + 1, 10);
-    const permanent =
-      responseCode !== undefined && responseCode >= 400 && responseCode < 500 && responseCode !== 429;
-    const retry = !args.delivered && !permanent && attempt < MAX_DELIVERY_ATTEMPTS;
-    const nextAttemptAt = retry
-      ? Date.now() + 1_000 * 2 ** (attempt - 1)
-      : undefined;
+    const retry =
+      args.outcome === "transient_failure" &&
+      attempt < MAX_DELIVERY_ATTEMPTS;
+    const now = Date.now();
+    const terminalStatus =
+      args.outcome === "delivered" ? "delivered" : "dead_letter";
     await ctx.db.patch("apiWebhookDeliveries", delivery._id, {
-      status: args.delivered ? "delivered" : retry ? "pending" : "dead_letter",
+      status: retry ? "pending" : terminalStatus,
       attempt,
-      ...(responseCode === undefined ? {} : { responseCode }),
-      ...(nextAttemptAt === undefined ? {} : { nextAttemptAt }),
-      updatedAt: Date.now(),
+      responseCode,
+      nextAttemptAt: undefined,
+      leaseExpiresAt: undefined,
+      updatedAt: now,
     });
-    if (nextAttemptAt !== undefined) {
-      await ctx.scheduler.runAfter(nextAttemptAt - Date.now(), DELIVERY_ACTION_REF, {
-        deliveryId: delivery._id,
-      });
+    if (retry) {
+      await scheduleDeliveryClaim(
+        ctx,
+        {
+          ...delivery,
+          status: "pending",
+          attempt,
+          responseCode,
+          nextAttemptAt: undefined,
+          leaseExpiresAt: undefined,
+          updatedAt: now,
+        },
+        1_000 * 2 ** (attempt - 1),
+        now,
+      );
     }
-    if (!args.delivered && errorMessage) {
-      const now = Date.now();
+    if (args.outcome !== "delivered" && errorMessage) {
       await ctx.db.insert("systemLogs", {
         createdAt: now,
         updatedAt: now,
@@ -875,7 +1010,7 @@ export const markDelivery = internalMutation({
         eventType: "delivery_failed",
         message: errorMessage,
         fingerprint:
-          `evidence-webhook:${delivery._id}:${delivery.attempt + 1}:${errorMessage}`.slice(
+          `evidence-webhook:${delivery._id}:${args.deliveryGeneration}:${errorMessage}`.slice(
             0,
             500,
           ),

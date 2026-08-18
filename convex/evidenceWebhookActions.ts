@@ -10,9 +10,20 @@ import {
 
 const getDeliveryInputRef = makeFunctionReference<
   "query",
-  { deliveryId: Id<"apiWebhookDeliveries"> },
   {
     deliveryId: Id<"apiWebhookDeliveries">;
+    deliveryGeneration: number;
+  },
+  | {
+      kind: "invalid";
+      deliveryId: Id<"apiWebhookDeliveries">;
+      deliveryGeneration: number;
+      errorMessage: string;
+    }
+  | {
+    kind: "ready";
+    deliveryId: Id<"apiWebhookDeliveries">;
+    deliveryGeneration: number;
     subscriptionId: Id<"apiWebhookSubscriptions">;
     attempt: number;
     eventKey: string;
@@ -27,13 +38,15 @@ const getDeliveryInputRef = makeFunctionReference<
     payloadJson: string;
     signingSecretCiphertext?: string;
     signingSecretNonce?: string;
-  } | null
+  }
+  | null
 >("evidenceWebhooks:getDeliveryInput");
 const markDeliveryRef = makeFunctionReference<
   "mutation",
   {
     deliveryId: Id<"apiWebhookDeliveries">;
-    delivered: boolean;
+    deliveryGeneration: number;
+    outcome: "delivered" | "transient_failure" | "permanent_failure";
     responseCode?: number;
     errorMessage?: string;
   },
@@ -69,7 +82,10 @@ async function hmac(secret: string, body: string) {
 }
 
 export const deliver = internalAction({
-  args: { deliveryId: v.id("apiWebhookDeliveries") },
+  args: {
+    deliveryId: v.id("apiWebhookDeliveries"),
+    deliveryGeneration: v.number(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const webhookEnv = env as typeof env & {
@@ -78,12 +94,23 @@ export const deliver = internalAction({
     };
     const input = await ctx.runQuery(getDeliveryInputRef, {
       deliveryId: args.deliveryId,
+      deliveryGeneration: args.deliveryGeneration,
     });
     if (input === null) return null;
+    if (input.kind === "invalid") {
+      await ctx.runMutation(markDeliveryRef, {
+        deliveryId: input.deliveryId,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
+        errorMessage: input.errorMessage,
+      });
+      return null;
+    }
     if (input.status !== "active") {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: "Subscription is not active",
       });
       return null;
@@ -98,19 +125,22 @@ export const deliver = internalAction({
     } catch (error) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: limitedError(error),
       });
       return null;
     }
     if (
       !webhookEnv.EVIDENCE_WEBHOOK_KEK ||
+      !/^[A-Za-z0-9_-]{32,}$/.test(webhookEnv.EVIDENCE_WEBHOOK_KEK) ||
       !input.signingSecretCiphertext ||
       !input.signingSecretNonce
     ) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: "Webhook signing is unavailable",
       });
       return null;
@@ -126,7 +156,8 @@ export const deliver = internalAction({
     } catch {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: "Webhook signing material is unavailable",
       });
       return null;
@@ -137,7 +168,17 @@ export const deliver = internalAction({
     } catch {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
+        errorMessage: "Stored webhook payload is invalid",
+      });
+      return null;
+    }
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      await ctx.runMutation(markDeliveryRef, {
+        deliveryId: input.deliveryId,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: "Stored webhook payload is invalid",
       });
       return null;
@@ -152,16 +193,25 @@ export const deliver = internalAction({
     if (new TextEncoder().encode(body).byteLength > MAX_DELIVERY_BODY_BYTES) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
         errorMessage: "Webhook body exceeded bounded delivery size",
       });
       return null;
     }
 
-    const signature = await hmac(
-      signingSecret,
-      `${timestamp}.${body}`,
-    );
+    let signature: string;
+    try {
+      signature = await hmac(signingSecret, `${timestamp}.${body}`);
+    } catch (error) {
+      await ctx.runMutation(markDeliveryRef, {
+        deliveryId: input.deliveryId,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "permanent_failure",
+        errorMessage: limitedError(error),
+      });
+      return null;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
     try {
@@ -181,7 +231,12 @@ export const deliver = internalAction({
       });
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: response.ok,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: response.ok
+          ? "delivered"
+          : response.status === 429 || response.status >= 500
+            ? "transient_failure"
+            : "permanent_failure",
         responseCode: response.status,
         ...(response.ok
           ? {}
@@ -190,7 +245,8 @@ export const deliver = internalAction({
     } catch (error) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
-        delivered: false,
+        deliveryGeneration: input.deliveryGeneration,
+        outcome: "transient_failure",
         errorMessage: limitedError(error),
       });
     } finally {

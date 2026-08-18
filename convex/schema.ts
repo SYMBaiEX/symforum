@@ -2423,11 +2423,14 @@ export default defineSchema({
     eventKey: v.string(),
     status: v.union(
       v.literal("pending"),
+      v.literal("in_flight"),
       v.literal("delivered"),
       v.literal("failed"),
       v.literal("dead_letter"),
     ),
     attempt: v.number(),
+    deliveryGeneration: v.optional(v.number()),
+    leaseExpiresAt: v.optional(v.number()),
     responseCode: v.optional(v.number()),
     nextAttemptAt: v.optional(v.number()),
     replayCount: v.optional(v.number()),
@@ -2437,5 +2440,7 @@ export default defineSchema({
     .index("by_subscriptionId_and_eventKey", ["subscriptionId", "eventKey"])
     .index("by_subscriptionId_and_updatedAt", ["subscriptionId", "updatedAt"])
     .index("by_eventKey", ["eventKey"])
+    .index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"])
+    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
 });

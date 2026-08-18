@@ -36,6 +36,15 @@ const webhooks = {
   enqueue: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:enqueueEvent",
   ),
+  recover: makeFunctionReference<"mutation", any, any>(
+    "evidenceWebhooks:recoverPendingDeliveries",
+  ),
+  mark: makeFunctionReference<"mutation", any, any>(
+    "evidenceWebhooks:markDelivery",
+  ),
+  deliver: makeFunctionReference<"action", any, any>(
+    "evidenceWebhookActions:deliver",
+  ),
 } as const;
 
 function setup() {
@@ -88,6 +97,29 @@ const subscriptionArgs = {
   url: "https://hooks.example.test/v1/evidence",
   eventTypes: ["evidence.research.completed"] as const,
 };
+
+async function enqueueFixtureDelivery(
+  t: ReturnType<typeof setup>,
+  eventKey: string,
+) {
+  const ids = await fixture(t);
+  await t
+    .withIdentity({ subject: ids.agent })
+    .mutation(webhooks.create, subscriptionArgs);
+  await t.mutation(webhooks.enqueue, {
+    eventKey,
+    eventType: "evidence.research.completed",
+    payloadJson: JSON.stringify({ researchJobId: eventKey, status: "completed" }),
+  });
+  return await t.run(async (ctx) => {
+    const delivery = await ctx.db
+      .query("apiWebhookDeliveries")
+      .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
+      .unique();
+    if (delivery === null) throw new Error("Expected webhook delivery fixture");
+    return delivery;
+  });
+}
 
 describe("evidence webhooks", () => {
   test("does not persist delivery events when no subscriber can receive them", async () => {
@@ -222,6 +254,19 @@ describe("evidence webhooks", () => {
       });
       expect(history).toHaveLength(1);
       expect(await agent.query(webhooks.health, { subscriptionKey: "research-events" })).toMatchObject({ pending: 1 });
+      const queued = await t.run(async (ctx) =>
+        ctx.db
+          .query("apiWebhookDeliveries")
+          .withIndex("by_eventKey", (q) => q.eq("eventKey", "research:one"))
+          .unique(),
+      );
+      if (queued === null) throw new Error("Expected queued webhook delivery");
+      await t.mutation(webhooks.mark, {
+        deliveryId: queued._id,
+        deliveryGeneration: queued.deliveryGeneration,
+        outcome: "permanent_failure",
+        responseCode: 400,
+      });
       await agent.mutation(webhooks.replay, {
         subscriptionKey: "research-events",
         eventKey: "research:one",
@@ -230,6 +275,259 @@ describe("evidence webhooks", () => {
         subscriptionKey: "research-events",
       })).rejects.toThrow(/not found/i);
     } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("atomically claims a due delivery only once across recovery calls", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T18:00:00.000Z"));
+    try {
+      const t = setup();
+      const deliveryId = await t.run(async (ctx) => {
+        const ownerUserId = await ctx.db.insert("users", {
+          name: "Recovery owner",
+          username: "recovery-owner",
+          usernameNormalized: "recovery-owner",
+          role: "reader",
+        });
+        const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
+          ownerUserId,
+          subscriptionKey: "recovery",
+          url: subscriptionArgs.url,
+          status: "active",
+          eventTypes: ["evidence.research.completed"],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        return await ctx.db.insert("apiWebhookDeliveries", {
+          subscriptionId,
+          eventKey: "research:recover-once",
+          status: "pending",
+          attempt: 0,
+          nextAttemptAt: Date.now() - 1,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      });
+
+      const results = await Promise.all([
+        t.mutation(webhooks.recover, { limit: 10 }),
+        t.mutation(webhooks.recover, { limit: 10 }),
+      ]);
+      expect(results.reduce((sum, result) => sum + result.rescheduled, 0)).toBe(1);
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("apiWebhookDeliveries", deliveryId)).toMatchObject({
+          status: "in_flight",
+          deliveryGeneration: 1,
+        });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("recovery claims only due or lease-expired rows", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T18:10:00.000Z"));
+    try {
+      const t = setup();
+      const ids = await t.run(async (ctx) => {
+        const ownerUserId = await ctx.db.insert("users", {
+          name: "Due filter owner",
+          username: "due-filter-owner",
+          usernameNormalized: "due-filter-owner",
+          role: "reader",
+        });
+        const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
+          ownerUserId,
+          subscriptionKey: "due-filter",
+          url: subscriptionArgs.url,
+          status: "active",
+          eventTypes: ["evidence.research.completed"],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        const due = await ctx.db.insert("apiWebhookDeliveries", {
+          subscriptionId,
+          eventKey: "research:due",
+          status: "pending",
+          attempt: 0,
+          nextAttemptAt: Date.now(),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        const future = await ctx.db.insert("apiWebhookDeliveries", {
+          subscriptionId,
+          eventKey: "research:future",
+          status: "pending",
+          attempt: 0,
+          nextAttemptAt: Date.now() + 60_000,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        const expired = await ctx.db.insert("apiWebhookDeliveries", {
+          subscriptionId,
+          eventKey: "research:expired-lease",
+          status: "in_flight",
+          attempt: 1,
+          deliveryGeneration: 7,
+          nextAttemptAt: Date.now() - 60_000,
+          leaseExpiresAt: Date.now() - 1,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        return { due, expired, future };
+      });
+
+      await expect(t.mutation(webhooks.recover, { limit: 10 })).resolves.toEqual({
+        rescheduled: 2,
+        deadLettered: 0,
+      });
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("apiWebhookDeliveries", ids.due)).toMatchObject({
+          status: "in_flight",
+          deliveryGeneration: 1,
+        });
+        expect(await ctx.db.get("apiWebhookDeliveries", ids.expired)).toMatchObject({
+          status: "in_flight",
+          deliveryGeneration: 8,
+        });
+        const future = await ctx.db.get("apiWebhookDeliveries", ids.future);
+        expect(future).toMatchObject({ status: "pending" });
+        expect(future?.deliveryGeneration).toBeUndefined();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("ignores stale delivery completions after a newer generation is claimed", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T18:20:00.000Z"));
+    try {
+      const t = setup();
+      const initial = await enqueueFixtureDelivery(t, "research:stale-generation");
+      await t.mutation(webhooks.mark, {
+        deliveryId: initial._id,
+        deliveryGeneration: initial.deliveryGeneration,
+        outcome: "transient_failure",
+        responseCode: 503,
+        errorMessage: "temporary outage",
+      });
+      const claimed = await t.run(async (ctx) =>
+        ctx.db.get("apiWebhookDeliveries", initial._id),
+      );
+      expect(claimed).toMatchObject({
+        status: "in_flight",
+        attempt: 1,
+        deliveryGeneration: 2,
+      });
+
+      await t.mutation(webhooks.mark, {
+        deliveryId: initial._id,
+        deliveryGeneration: initial.deliveryGeneration,
+        outcome: "delivered",
+        responseCode: 204,
+      });
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("apiWebhookDeliveries", initial._id)).toEqual(
+          claimed,
+        );
+      });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("dead-letters local permanent failures without retrying", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    try {
+      const t = setup();
+      const delivery = await enqueueFixtureDelivery(t, "research:invalid-kek");
+      vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "invalid");
+      await t.action(webhooks.deliver, {
+        deliveryId: delivery._id,
+        deliveryGeneration: delivery.deliveryGeneration,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      await t.run(async (ctx) => {
+        const row = await ctx.db.get("apiWebhookDeliveries", delivery._id);
+        expect(row).toMatchObject({
+          status: "dead_letter",
+          attempt: 1,
+          deliveryGeneration: 1,
+        });
+        expect(row?.nextAttemptAt).toBeUndefined();
+        expect(row?.leaseExpiresAt).toBeUndefined();
+      });
+    } finally {
+      fetchMock.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("retries only transient responses with 1, 2, and 4 second backoff", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    vi.useFakeTimers();
+    const startedAt = Date.parse("2026-08-18T18:30:00.000Z");
+    vi.setSystemTime(startedAt);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("temporary", { status: 503 }));
+    try {
+      const t = setup();
+      const delivery = await enqueueFixtureDelivery(t, "research:transient-backoff");
+      vi.clearAllTimers();
+      fetchMock.mockClear();
+      const expectedBackoffs = [1_000, 2_000, 4_000];
+      let generation = delivery.deliveryGeneration!;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        await t.action(webhooks.deliver, {
+          deliveryId: delivery._id,
+          deliveryGeneration: generation,
+        });
+        const row = await t.run(async (ctx) =>
+          ctx.db.get("apiWebhookDeliveries", delivery._id),
+        );
+        expect(row).toMatchObject({
+          status: "in_flight",
+          attempt,
+          deliveryGeneration: generation + 1,
+        });
+        expect(row!.nextAttemptAt! - row!.updatedAt).toBe(
+          expectedBackoffs[attempt - 1],
+        );
+        expect(row!.leaseExpiresAt! - row!.nextAttemptAt!).toBe(30_000);
+        vi.clearAllTimers();
+        generation += 1;
+        vi.setSystemTime(row!.nextAttemptAt!);
+      }
+
+      await t.action(webhooks.deliver, {
+        deliveryId: delivery._id,
+        deliveryGeneration: generation,
+      });
+      await t.run(async (ctx) => {
+        const row = await ctx.db.get("apiWebhookDeliveries", delivery._id);
+        expect(row).toMatchObject({
+          status: "dead_letter",
+          attempt: 4,
+          deliveryGeneration: generation,
+        });
+        expect(row?.nextAttemptAt).toBeUndefined();
+        expect(row?.leaseExpiresAt).toBeUndefined();
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    } finally {
+      fetchMock.mockRestore();
+      vi.useRealTimers();
       vi.unstubAllEnvs();
     }
   });
