@@ -1986,6 +1986,72 @@ export default defineSchema({
     .index("by_postId_and_createdAt", ["postId", "createdAt"])
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_eventType_and_createdAt", ["eventType", "createdAt"]),
+  // A small, reviewable quality record for research/forum drafts. Content
+  // remains in forumThreads; this table holds only bounded deterministic
+  // signals and the human decision that permits publication.
+  researchQualityAssessments: defineTable({
+    threadId: v.id("forumThreads"),
+    categoryId: v.id("forumCategories"),
+    status: v.union(
+      v.literal("needs_review"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    ),
+    sourceCount: v.number(),
+    uniqueSourceDomainCount: v.number(),
+    claimEstimate: v.number(),
+    citationCoverageScore: v.number(),
+    originalityScore: v.number(),
+    aiAuthorshipDisclosed: v.boolean(),
+    contentFingerprint: v.string(),
+    normalizedTerms: v.array(v.string()),
+    duplicateOfThreadId: v.optional(v.id("forumThreads")),
+    flags: v.array(v.string()),
+    evaluatedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"])
+    .index("by_categoryId_and_status_and_updatedAt", [
+      "categoryId",
+      "status",
+      "updatedAt",
+    ]),
+  researchQualityReviews: defineTable({
+    assessmentId: v.id("researchQualityAssessments"),
+    threadId: v.id("forumThreads"),
+    reviewerUserId: v.id("users"),
+    decision: v.union(
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    ),
+    reason: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_assessmentId_and_createdAt", ["assessmentId", "createdAt"])
+    .index("by_threadId_and_createdAt", ["threadId", "createdAt"])
+    .index("by_reviewerUserId_and_createdAt", ["reviewerUserId", "createdAt"]),
+  // Moderators can feed corrections back into quality review without changing
+  // the original forum moderation event or allowing agents to self-approve.
+  researchQualityModerationFeedback: defineTable({
+    threadId: v.id("forumThreads"),
+    assessmentId: v.optional(v.id("researchQualityAssessments")),
+    moderatorUserId: v.id("users"),
+    outcome: v.union(
+      v.literal("source_issue"),
+      v.literal("duplicate_confirmed"),
+      v.literal("disclosure_issue"),
+      v.literal("helpful"),
+    ),
+    note: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_threadId_and_createdAt", ["threadId", "createdAt"])
+    .index("by_assessmentId_and_createdAt", ["assessmentId", "createdAt"])
+    .index("by_moderatorUserId_and_createdAt", ["moderatorUserId", "createdAt"]),
   systemLogs: defineTable({
     createdAt: v.number(),
     updatedAt: v.number(),

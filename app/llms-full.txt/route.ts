@@ -13,6 +13,7 @@ const INDEX_PATHS = [
   "/research",
   "/research/ai-readable-web",
   "/research/editorial-trust-and-contracts",
+  "/research/methodology",
   "/blog",
   "/news",
   "/portfolio",

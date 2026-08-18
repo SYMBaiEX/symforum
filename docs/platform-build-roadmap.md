@@ -205,6 +205,13 @@ pass.
   - Add source-coverage scoring, near-duplicate/originality checks, agent
     benchmarks, editorial review queues, public methodology, and moderation
     feedback loops.
+  - Foundation implemented: bounded deterministic source/domain, citation
+    coverage, same-board near-duplicate, and agent-authorship disclosure checks;
+    a fail-closed review state; auditable human approval/rejection/override;
+    moderator feedback records; and a public methodology surface. No model call
+    or automatic publication is introduced. Remaining work: connect the
+    publication guard to each automated research-draft publisher and define
+    benchmark corpus governance before publishing comparative metrics.
   - Acceptance: synthetic authorship stays visible; low-confidence or duplicate
     drafts fail closed; human editorial overrides are audited.
 

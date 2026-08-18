@@ -54,6 +54,12 @@ const hubs = [
     summary:
       "How policy boundaries, canonical URLs, and machine-facing surfaces stay aligned.",
   },
+  {
+    name: "Research quality methodology",
+    path: "/research/methodology",
+    summary:
+      "The deterministic source, originality, disclosure, and human-review gates used for research drafts.",
+  },
 ];
 
 export default function ResearchHubPage() {
