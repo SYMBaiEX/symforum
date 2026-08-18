@@ -110,6 +110,23 @@ describe("agent data API dispatch", () => {
       error: "A bearer access token is required.",
     });
 
+    const invalidToken = await t.fetch("/agent/v1", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer invalid-public-smoke-token",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(invalidToken.status).toBe(401);
+    expect(invalidToken.headers.get("www-authenticate")).toContain(
+      'error="invalid_token"',
+    );
+    expect(await invalidToken.json()).toEqual({
+      code: "INVALID_TOKEN",
+      error: "A bearer access token is required.",
+    });
+
     const ids = await fixture(t);
     const agent = t.withIdentity({ subject: ids.agentUserId });
     const invalid = await agent.fetch("/agent/v1", {

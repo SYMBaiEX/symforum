@@ -97,7 +97,21 @@ http.route({
         403,
         headers,
       );
-    if ((await ctx.auth.getUserIdentity()) === null) {
+    let userIdentity;
+    try {
+      userIdentity = await ctx.auth.getUserIdentity();
+    } catch {
+      setAgentDataAuthChallenge(headers, 401, true);
+      return agentDataJson(
+        {
+          code: "INVALID_TOKEN",
+          error: "A bearer access token is required.",
+        },
+        401,
+        headers,
+      );
+    }
+    if (userIdentity === null) {
       const invalidToken = request.headers.has("authorization");
       setAgentDataAuthChallenge(
         headers,
