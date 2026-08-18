@@ -22,11 +22,12 @@ complete.
 - The current verified Vercel application release is `f27117b`; deployment
   `dpl_HSeQcSH3YedFnR7npYLA5G53MHgA` completed all 57 application routes and is
   Ready. Its live public smoke passes and production error logs were empty for
-  the post-release review window. The Wave 2 source candidate at `ea880a1`
-  passes 566 Vitest tests, root and Convex TypeScript, ESLint, the TypeScript
-  and Python SDK suites, and an exact Bun 1.3.14 production build. It is not
-  described as deployed until its final roadmap commit is pushed and the
-  backend release receives separate approval.
+  the post-release review window. The source candidate through `13f1756`
+  passes 588 Vitest tests, root and Convex TypeScript, ESLint, the TypeScript
+  and Python SDK suites, and an exact Bun 1.3.14 production build. This
+  roadmap-only receipt follows that code commit. The candidate is not described
+  as deployed until it is pushed and the backend release receives separate
+  approval.
 - Convex production `strong-bee-384` was explicitly deployed from the
   `7ed8a76` source tree after schema validation and typecheck. The public agent
   smoke passed afterward. The newer semantic transport/accounting, source
@@ -224,6 +225,11 @@ pass.
     entitlement, usage, and budget events.
   - Acceptance: emitted payloads validate against the checked-in contract and
     sensitive fields are excluded by schema.
+  - Integrated source candidate: account-scoped usage-threshold, hard-budget,
+    and entitlement-status events use server-derived owner scope and the
+    existing encrypted signed webhook transport. Stable event keys suppress
+    quota/command replays; two-owner tests prove no cross-account fan-out, and
+    runtime validators match the checked-in AsyncAPI bounds.
 
 - [ ] **PLAT-12 — Webhook operations center**
 
@@ -287,11 +293,13 @@ pass.
   - Foundation deployed: field LCP, INP, CLS, FCP, and TTFB are sampled only
     against allowlisted route templates with minute caps, dedupe, 30-day
     retention, explicit budgets, kill switches, and admin percentile views.
-    The source candidate adds bounded cleanup continuation plus an hourly p75
-    evaluator with explicit route/metric thresholds, minimum sample counts,
-    kill switch, deduplicated breach/recovery logs, and an admin summary.
-    Remaining work is cron heartbeat effectiveness, webhook terminal-retention
-    monitoring, operational alert delivery, and sustained field data.
+    The source candidate adds bounded cleanup continuation, an hourly p75
+    evaluator, and a five-minute critical-cron watchdog. The watchdog records
+    capped run summaries, materializes healthy/stale/failed state, rejects late
+    overlapping-run completions, deduplicates breach/recovery logs, exposes a
+    site-admin summary, and documents monitored and intentionally omitted jobs.
+    Remaining work is webhook terminal-delivery retention monitoring,
+    operational alert delivery, and sustained field data.
 
 - [ ] **PLAT-19 — Research and forum quality system**
 
