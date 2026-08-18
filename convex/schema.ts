@@ -52,7 +52,13 @@ export default defineSchema({
     .index("by_usernameNormalized", ["usernameNormalized"])
     .index("by_agentSlug", ["agentSlug"])
     .index("by_role", ["role"])
-    .index("by_forumRole", ["forumRole"]),
+    .index("by_forumRole", ["forumRole"])
+    // The public forum overview only needs active trusted members. Keeping
+    // revocation first lets that path avoid scanning every site account.
+    .index("by_forumTrustRevokedAt_and_forumTrustedAt", [
+      "forumTrustRevokedAt",
+      "forumTrustedAt",
+    ]),
   posts: defineTable({
     slug: v.string(),
     title: v.string(),

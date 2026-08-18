@@ -12743,14 +12743,124 @@ async function visibleCategoriesForUser(
   categories: ForumCategoryDoc[],
   user: UserDoc | null | undefined,
 ) {
-  const visible = await Promise.all(
-    categories.map(async (category) =>
-      (await canViewCategoryWithAncestors(ctx, user, category))
-        ? category
-        : null,
-    ),
+  const categoryGraph = await loadCategoryVisibilityGraph(ctx, categories);
+  const moderatedCategoryIds = await loadModeratedCategoryIdsForVisibility(
+    ctx,
+    user,
   );
-  return visible.flatMap((category) => (category === null ? [] : [category]));
+  if (moderatedCategoryIds === null) {
+    // A user with more assignments than the bounded overview can represent is
+    // unusual. Fall back to the per-category authorization path rather than
+    // risk treating a board as invisible.
+    const visible = await Promise.all(
+      categories.map(async (category) =>
+        (await canViewCategoryWithAncestors(ctx, user, category))
+          ? category
+          : null,
+      ),
+    );
+    return visible.flatMap((category) => (category === null ? [] : [category]));
+  }
+
+  return categories.filter((category) =>
+    canViewCategoryInGraph(user, category, categoryGraph, moderatedCategoryIds),
+  );
+}
+
+async function loadCategoryVisibilityGraph(
+  ctx: QueryCtx | MutationCtx,
+  categories: ForumCategoryDoc[],
+) {
+  const categoriesById = new Map<Id<"forumCategories">, ForumCategoryDoc>(
+    categories.map((category) => [category._id, category]),
+  );
+  let parentsToLoad = categories.flatMap((category) =>
+    category.parentCategoryId === undefined ? [] : [category.parentCategoryId],
+  );
+
+  for (let depth = 0; depth < 10 && parentsToLoad.length > 0; depth += 1) {
+    const parentIds = [...new Set(parentsToLoad)].filter(
+      (categoryId) => !categoriesById.has(categoryId),
+    );
+    if (parentIds.length === 0) {
+      break;
+    }
+    const parents = await Promise.all(
+      parentIds.map(
+        async (categoryId) => await ctx.db.get("forumCategories", categoryId),
+      ),
+    );
+    parentsToLoad = [];
+    for (const parent of parents) {
+      if (parent === null) {
+        continue;
+      }
+      categoriesById.set(parent._id, parent);
+      if (parent.parentCategoryId !== undefined) {
+        parentsToLoad.push(parent.parentCategoryId);
+      }
+    }
+  }
+
+  return categoriesById;
+}
+
+async function loadModeratedCategoryIdsForVisibility(
+  ctx: QueryCtx | MutationCtx,
+  user: UserDoc | null | undefined,
+) {
+  if (user === null || user === undefined || canModerate(user)) {
+    return new Set<Id<"forumCategories">>();
+  }
+  const assignments = await ctx.db
+    .query("forumCategoryModerators")
+    .withIndex("by_userId_and_categoryId", (q) => q.eq("userId", user._id))
+    .take(CATEGORY_LIST_LIMIT + 1);
+  if (assignments.length > CATEGORY_LIST_LIMIT) {
+    return null;
+  }
+  return new Set(assignments.map((assignment) => assignment.categoryId));
+}
+
+function canViewCategoryInGraph(
+  user: UserDoc | null | undefined,
+  category: ForumCategoryDoc,
+  categoriesById: Map<Id<"forumCategories">, ForumCategoryDoc>,
+  moderatedCategoryIds: Set<Id<"forumCategories">>,
+) {
+  const targetModeratorOverride =
+    canModerate(user) || moderatedCategoryIds.has(category._id);
+  if (!canViewCategory(user, category, targetModeratorOverride)) {
+    return false;
+  }
+
+  const visited = new Set<Id<"forumCategories">>([category._id]);
+  let parentCategoryId = category.parentCategoryId;
+  for (
+    let depth = 0;
+    depth < 10 && parentCategoryId !== undefined;
+    depth += 1
+  ) {
+    if (visited.has(parentCategoryId)) {
+      return false;
+    }
+    visited.add(parentCategoryId);
+    const parent = categoriesById.get(parentCategoryId);
+    if (
+      parent === undefined ||
+      !canViewCategory(
+        user,
+        parent,
+        targetModeratorOverride ||
+          canModerate(user) ||
+          moderatedCategoryIds.has(parent._id),
+      )
+    ) {
+      return false;
+    }
+    parentCategoryId = parent.parentCategoryId;
+  }
+  return parentCategoryId === undefined;
 }
 
 function canStartThreadInCategory(
@@ -18140,25 +18250,59 @@ function publicForumMemberRecord(
 }
 
 async function forumBoardStatistics(ctx: QueryCtx) {
-  const [memberRows, topPosterProfiles, reputationProfiles] = await Promise.all(
-    [
-      ctx.db
-        .query("users")
-        .order("desc")
-        .take(MEMBER_LIST_SCAN_LIMIT + 1),
-      ctx.db
-        .query("forumUserProfiles")
-        .withIndex("by_postCount_and_updatedAt")
-        .order("desc")
-        .take(10),
-      ctx.db
-        .query("forumUserProfiles")
-        .withIndex("by_reputationScore_and_updatedAt")
-        .order("desc")
-        .take(10),
-    ],
-  );
-  const visibleMemberRows = memberRows.filter(
+  const [
+    trustedMemberRows,
+    ownerRows,
+    adminRows,
+    moderatorRows,
+    forumAdminRows,
+    topPosterProfiles,
+    reputationProfiles,
+  ] = await Promise.all([
+    ctx.db
+      .query("users")
+      .withIndex("by_forumTrustRevokedAt_and_forumTrustedAt", (q) =>
+        q.eq("forumTrustRevokedAt", undefined).gt("forumTrustedAt", 0),
+      )
+      .order("desc")
+      .take(MEMBER_LIST_SCAN_LIMIT + 1),
+    ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", "owner"))
+      .take(MEMBER_LIST_SCAN_LIMIT + 1),
+    ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", "admin"))
+      .take(MEMBER_LIST_SCAN_LIMIT + 1),
+    ctx.db
+      .query("users")
+      .withIndex("by_forumRole", (q) => q.eq("forumRole", "moderator"))
+      .take(MEMBER_LIST_SCAN_LIMIT + 1),
+    ctx.db
+      .query("users")
+      .withIndex("by_forumRole", (q) => q.eq("forumRole", "admin"))
+      .take(MEMBER_LIST_SCAN_LIMIT + 1),
+    ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_postCount_and_updatedAt")
+      .order("desc")
+      .take(10),
+    ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_reputationScore_and_updatedAt")
+      .order("desc")
+      .take(10),
+  ]);
+  const memberRows = [
+    ...trustedMemberRows,
+    ...ownerRows,
+    ...adminRows,
+    ...moderatorRows,
+    ...forumAdminRows,
+  ];
+  const visibleMemberRows = [
+    ...new Map(memberRows.map((user) => [user._id, user])).values(),
+  ].filter(
     (user) =>
       isTrustedForumUser(user) &&
       (user.usernameNormalized !== undefined || user.username !== undefined),
@@ -18166,7 +18310,12 @@ async function forumBoardStatistics(ctx: QueryCtx) {
 
   return {
     memberCount: Math.min(visibleMemberRows.length, MEMBER_LIST_SCAN_LIMIT),
-    memberCountLimited: memberRows.length > MEMBER_LIST_SCAN_LIMIT,
+    memberCountLimited:
+      trustedMemberRows.length > MEMBER_LIST_SCAN_LIMIT ||
+      ownerRows.length > MEMBER_LIST_SCAN_LIMIT ||
+      adminRows.length > MEMBER_LIST_SCAN_LIMIT ||
+      moderatorRows.length > MEMBER_LIST_SCAN_LIMIT ||
+      forumAdminRows.length > MEMBER_LIST_SCAN_LIMIT,
     newestMember: await firstForumStatisticsUser(ctx, visibleMemberRows),
     topPoster: await firstForumStatisticsMember(ctx, topPosterProfiles),
     reputationLeader: await firstForumStatisticsMember(ctx, reputationProfiles),
@@ -19318,28 +19467,13 @@ async function searchVisiblePosts(
         })
         .take(postFetchLimit);
 
-  const results: Array<{ post: ForumPostDoc; thread: ForumThreadDoc }> = [];
-  for (const post of postHits) {
-    const thread = await ctx.db.get("forumThreads", post.threadId);
-    if (thread === null || !isVisibleThreadStatus(thread.status)) {
-      continue;
-    }
-    const threadCategory =
-      category ?? (await ctx.db.get("forumCategories", thread.categoryId));
-    if (
-      threadCategory === null ||
-      !(await canViewCategoryWithAncestors(ctx, user, threadCategory))
-    ) {
-      continue;
-    }
-    if (category !== null && thread.categoryId !== category._id) {
-      continue;
-    }
-    results.push({ post, thread });
-    if (results.length >= limit) {
-      break;
-    }
-  }
+  const results = await visibleSearchPostResults(
+    ctx,
+    postHits,
+    category,
+    user,
+    limit,
+  );
   return {
     items: applySearchPostOptions(results, searchQuery, options).slice(
       0,
@@ -19369,20 +19503,47 @@ async function searchVisiblePostsByAuthor(
     .order("desc")
     .take(postFetchLimit);
 
+  const results = await visibleSearchPostResults(
+    ctx,
+    postHits,
+    category,
+    user,
+    limit,
+  );
+
+  return {
+    items: applySearchPostOptions(results, null, options).slice(0, limit),
+    limited: postHits.length >= postFetchLimit && results.length < limit,
+  };
+}
+
+async function visibleSearchPostResults(
+  ctx: QueryCtx,
+  posts: ForumPostDoc[],
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  limit: number,
+) {
+  const threadsById = await loadThreadsById(
+    ctx,
+    posts.map((post) => post.threadId),
+  );
+  const visibleThreads = await filterThreadsForPublicCategory(
+    ctx,
+    Array.from(threadsById.values()).filter((thread) =>
+      isVisibleThreadStatus(thread.status),
+    ),
+    category,
+    user,
+  );
+  const visibleThreadIds = new Set(visibleThreads.map((thread) => thread._id));
   const results: Array<{ post: ForumPostDoc; thread: ForumThreadDoc }> = [];
-  for (const post of postHits) {
-    const thread = await ctx.db.get("forumThreads", post.threadId);
-    if (thread === null || !isVisibleThreadStatus(thread.status)) {
-      continue;
-    }
-    if (category !== null && thread.categoryId !== category._id) {
-      continue;
-    }
-    const threadCategory =
-      category ?? (await ctx.db.get("forumCategories", thread.categoryId));
+  for (const post of posts) {
+    const thread = threadsById.get(post.threadId);
     if (
-      threadCategory === null ||
-      !(await canViewCategoryWithAncestors(ctx, user, threadCategory))
+      thread === undefined ||
+      !visibleThreadIds.has(thread._id) ||
+      (category !== null && thread.categoryId !== category._id)
     ) {
       continue;
     }
@@ -19391,11 +19552,7 @@ async function searchVisiblePostsByAuthor(
       break;
     }
   }
-
-  return {
-    items: applySearchPostOptions(results, null, options).slice(0, limit),
-    limited: postHits.length >= postFetchLimit && results.length < limit,
-  };
+  return results;
 }
 
 async function recomputeThreadActivity(
@@ -19930,7 +20087,7 @@ async function filterThreadsForPublicCategory(
 ) {
   if (category !== null) {
     return isBoardCategory(category) &&
-      (await canViewCategoryWithAncestors(ctx, user, category))
+      (await visibleCategoriesForUser(ctx, [category], user)).length === 1
       ? threads
       : [];
   }
@@ -19939,20 +20096,17 @@ async function filterThreadsForPublicCategory(
     ctx,
     threads.map((thread) => thread.categoryId),
   );
-  const categoryVisibility = new Map(
-    await Promise.all(
-      Array.from(categoriesById.values()).map(
-        async (threadCategory) =>
-          [
-            threadCategory._id,
-            isBoardCategory(threadCategory) &&
-              (await canViewCategoryWithAncestors(ctx, user, threadCategory)),
-          ] as const,
-      ),
-    ),
+  const visibleCategoryIds = new Set(
+    (
+      await visibleCategoriesForUser(
+        ctx,
+        Array.from(categoriesById.values()).filter(isBoardCategory),
+        user,
+      )
+    ).map((threadCategory) => threadCategory._id),
   );
   return threads.filter((thread) => {
-    return categoryVisibility.get(thread.categoryId) === true;
+    return visibleCategoryIds.has(thread.categoryId);
   });
 }
 

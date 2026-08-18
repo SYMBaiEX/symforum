@@ -1545,6 +1545,33 @@ describe("forum notification preferences", () => {
     });
   });
 
+  test("overview statistics keep staff members outside the trusted-member index", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+
+    await t.run(async (ctx) => {
+      // Site staff are forum members even if an older account predates the
+      // explicit forum-trust field. The selective statistics query must retain
+      // that legacy-compatible behavior while excluding revoked members.
+      await ctx.db.patch("users", seed.ownerId, {
+        forumTrustedAt: undefined,
+      });
+      await ctx.db.patch("users", seed.trustedUserId, {
+        forumTrustRevokedAt: 1_800_000_004_000,
+      });
+    });
+
+    const overview = await t.query(api.forum.overview, {});
+    expect(overview.statistics).toMatchObject({
+      memberCount: 2,
+      memberCountLimited: false,
+      newestMember: {
+        userId: seed.otherTrustedUserId,
+        username: "othertrusted",
+      },
+    });
+  });
+
   test("synthetic auth email is not a forum email destination", async () => {
     const t = setup();
     const seed = await seedForum(t);
