@@ -1,9 +1,18 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 export const STRUCTURED_CANARY_KEY = "forum-agent-structured-canary";
 export const EMBEDDING_HEALTH_KEY = "forum-agent-embedding";
+// The eight editorial shards and semantic retrieval's dedicated reservation
+// bucket are the entire OpenRouter accounting namespace.
+export const OPENROUTER_SPEND_BUCKETS = [...Array(8).keys(), 15] as const;
+
+export function isKnownOpenRouterSpendBucket(bucket: number) {
+  return OPENROUTER_SPEND_BUCKETS.includes(
+    bucket as (typeof OPENROUTER_SPEND_BUCKETS)[number],
+  );
+}
 
 const FREE_QUOTA_RETRY_MS = 60 * 60 * 1_000;
 const GENERAL_CIRCUIT_MS = 15 * 60 * 1_000;
@@ -86,6 +95,15 @@ export async function recordSpendBucket(
   },
 ) {
   if (args.spentMicroUsd <= 0) return;
+  if (
+    args.provider === "openrouter" &&
+    !isKnownOpenRouterSpendBucket(args.bucket)
+  ) {
+    throw new ConvexError({
+      code: "INVALID_OPENROUTER_SPEND_BUCKET",
+      message: "OpenRouter spend bucket is not registered.",
+    });
+  }
   const now = args.now ?? Date.now();
   const existing = await ctx.db
     .query("aiSpendBuckets")

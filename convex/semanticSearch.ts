@@ -7,6 +7,10 @@ import {
   openRouterDailyBudgetMicroUsd,
 } from "../lib/ai-model-costs";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
+import {
+  isKnownOpenRouterSpendBucket,
+  OPENROUTER_SPEND_BUCKETS,
+} from "./aiRoutingControlData";
 import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -41,10 +45,10 @@ const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
 const LEASE_MS = 60_000;
 const QUERY_OPERATION_RETENTION_MS = 15 * 60_000;
 const OPERATION_CLEANUP_LIMIT = 100;
-// Editorial OpenRouter usage is sharded over buckets 0 through 7. Semantic
-// embeddings use a dedicated bucket so its own cap remains independently
-// auditable. The complete bounded set is read during semantic admission.
-const OPENROUTER_SPEND_BUCKETS = [...Array(8).keys(), 15] as const;
+// The bounded range read below asks for one more row than the registered
+// namespace permits. A legacy or accidental bucket therefore rejects admission
+// instead of silently escaping the global cap.
+const MAX_OPENROUTER_SPEND_BUCKETS = OPENROUTER_SPEND_BUCKETS.length + 1;
 
 type SemanticMetadata = {
   documentId: string;
@@ -729,20 +733,26 @@ export const reserveUsage = internalMutation({
     }
     const day = dayKey(now);
     const bucket = semanticBucket();
-    const spendBuckets = await Promise.all(
-      OPENROUTER_SPEND_BUCKETS.map((currentBucket) =>
-        ctx.db
-          .query("aiSpendBuckets")
-          .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
-            q
-              .eq("dayKey", day)
-              .eq("provider", "openrouter")
-              .eq("bucket", currentBucket),
-          )
-          .unique(),
-      ),
+    const spendBuckets = await ctx.db
+      .query("aiSpendBuckets")
+      .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+        q.eq("dayKey", day).eq("provider", "openrouter"),
+      )
+      .take(MAX_OPENROUTER_SPEND_BUCKETS);
+    if (
+      spendBuckets.length === MAX_OPENROUTER_SPEND_BUCKETS ||
+      spendBuckets.some(
+        (currentSpend) =>
+          !isKnownOpenRouterSpendBucket(currentSpend.bucket),
+      )
+    ) {
+      return { accepted: false, replay: false };
+    }
+    const semanticSpends = spendBuckets.filter(
+      (currentSpend) => currentSpend.bucket === bucket,
     );
-    const spend = spendBuckets.at(-1) ?? null;
+    if (semanticSpends.length > 1) return { accepted: false, replay: false };
+    const spend = semanticSpends[0] ?? null;
     let totalOpenRouterSpendMicroUsd = 0;
     for (const currentSpend of spendBuckets) {
       if (currentSpend === null) continue;

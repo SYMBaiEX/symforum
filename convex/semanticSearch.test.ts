@@ -2,6 +2,10 @@ import { describe, expect, test } from "vitest";
 import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
+import {
+  isKnownOpenRouterSpendBucket,
+  recordSpendBucket,
+} from "./aiRoutingControlData";
 import schema from "./schema";
 import {
   dayKey,
@@ -122,6 +126,78 @@ describe("semantic search safety controls", () => {
   test("does not call the provider while the semantic circuit is paused", () => {
     expect(isCircuitAvailable(1_001, 1_000)).toBe(false);
     expect(isCircuitAvailable(1_000, 1_000)).toBe(true);
+  });
+
+  test("uses only the registered OpenRouter spend buckets", () => {
+    expect(isKnownOpenRouterSpendBucket(0)).toBe(true);
+    expect(isKnownOpenRouterSpendBucket(7)).toBe(true);
+    expect(isKnownOpenRouterSpendBucket(15)).toBe(true);
+    expect(isKnownOpenRouterSpendBucket(8)).toBe(false);
+    expect(isKnownOpenRouterSpendBucket(99)).toBe(false);
+  });
+
+  test("rejects future OpenRouter writes to an unregistered bucket", async () => {
+    const t = setup();
+    await expect(
+      t.run((ctx) =>
+        recordSpendBucket(ctx, {
+          dayKey: dayKey(),
+          provider: "openrouter",
+          bucket: 99,
+          spentMicroUsd: 1,
+          inputTokens: 1,
+          outputTokens: 0,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      data: { code: "INVALID_OPENROUTER_SPEND_BUCKET" },
+    });
+  });
+
+  test("fails closed on a legacy unknown OpenRouter bucket below the cap", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", {
+        dayKey: dayKey(),
+        provider: "openrouter",
+        bucket: 99,
+        spentMicroUsd: 1,
+        requests: 1,
+        inputTokens: 1,
+        outputTokens: 0,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.mutation(
+        reserveUsageRef,
+        reservationArgs("semantic:query:unknown-under-cap"),
+      ),
+    ).resolves.toEqual({ accepted: false, replay: false });
+  });
+
+  test("fails closed on a legacy unknown OpenRouter bucket above the cap", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", {
+        dayKey: dayKey(),
+        provider: "openrouter",
+        bucket: 99,
+        spentMicroUsd: 1_000,
+        requests: 1,
+        inputTokens: 1,
+        outputTokens: 0,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.mutation(
+        reserveUsageRef,
+        reservationArgs("semantic:query:unknown-over-cap"),
+      ),
+    ).resolves.toEqual({ accepted: false, replay: false });
   });
 
   test("rejects a semantic reservation when total OpenRouter spend leaves less than its cost", async () => {
