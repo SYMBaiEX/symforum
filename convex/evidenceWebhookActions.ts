@@ -56,6 +56,10 @@ const markDeliveryRef = makeFunctionReference<
 const MAX_DELIVERY_BODY_BYTES = 16_000;
 const DELIVERY_TIMEOUT_MS = 5_000;
 
+export function isTransientWebhookResponseStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
 function limitedError(error: unknown) {
   return (error instanceof Error ? error.message : "Webhook delivery failed")
     .replace(/\s+/g, " ")
@@ -234,7 +238,7 @@ export const deliver = internalAction({
         deliveryGeneration: input.deliveryGeneration,
         outcome: response.ok
           ? "delivered"
-          : response.status === 429 || response.status >= 500
+          : isTransientWebhookResponseStatus(response.status)
             ? "transient_failure"
             : "permanent_failure",
         responseCode: response.status,
