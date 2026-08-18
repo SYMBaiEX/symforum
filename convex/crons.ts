@@ -119,6 +119,18 @@ crons.interval(
   internal.evidenceWebhooks.recoverPendingDeliveries,
   { limit: 50 },
 );
+crons.interval(
+  "dispatch pending watchlist webhooks",
+  { minutes: 5 },
+  internal.evidenceWatchlists.dispatchWebhookOutbox,
+  { limit: 5 },
+);
+crons.interval(
+  "cleanup retained watchlist webhooks",
+  { hours: 24 },
+  internal.evidenceWatchlists.cleanupWebhookOutbox,
+  { limit: 100 },
+);
 crons.cron(
   "benchmark evidence citation coverage",
   "20 8 * * *",

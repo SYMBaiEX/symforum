@@ -23,4 +23,12 @@ describe("evidence retention cron", () => {
     expect(source).toContain('"operationalSlo:evaluate"');
     expect(source).toContain("{ hours: 1 }");
   });
+
+  test("schedules bounded watchlist webhook dispatch and retention internally", () => {
+    const source = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
+    expect(source).toContain('"dispatch pending watchlist webhooks"');
+    expect(source).toContain("internal.evidenceWatchlists.dispatchWebhookOutbox");
+    expect(source).toContain('"cleanup retained watchlist webhooks"');
+    expect(source).toContain("internal.evidenceWatchlists.cleanupWebhookOutbox");
+  });
 });

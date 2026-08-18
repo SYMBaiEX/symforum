@@ -2550,8 +2550,16 @@ export default defineSchema({
       v.literal("none"),
     ),
     eventKey: v.string(),
-    status: v.literal("pending"),
+    // A bridge claims only pending rows. Terminal rows remain for a bounded
+    // audit window so a scheduler retry cannot create a second delivery.
+    status: v.union(
+      v.literal("pending"),
+      v.literal("dispatched"),
+      v.literal("discarded"),
+    ),
     createdAt: v.number(),
+    dispatchedAt: v.optional(v.number()),
+    discardedAt: v.optional(v.number()),
   })
     .index("by_watchlistId_and_eventId", ["watchlistId", "eventId"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),

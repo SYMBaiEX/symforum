@@ -212,8 +212,11 @@ pass.
   - Integrated source candidate: bounded public-event matching now supports
     source, document, claim, entity, topic, and repository watchlists with live
     source/entity/citation visibility joins, owner/agent isolation, request
-    rate limits, serialized idempotency, and capped outbox records. Delivering
-    those matches through the existing signed webhook service is still open.
+    rate limits, serialized idempotency, and capped outbox records. The
+    source-only bridge now revalidates public targets and joins, dispatches
+    owner-scoped rows through the existing encrypted signed webhook queue, and
+    retains terminal bridge rows for 30 days. Activation still requires an
+    operator-configured exact HTTPS webhook allowlist and signing KEK.
 
 - [x] **PLAT-11 — AsyncAPI event contract**
 

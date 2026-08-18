@@ -26,6 +26,12 @@ const watchlists = {
   drain: makeFunctionReference<"mutation", any, any>(
     "evidenceWatchlists:drainMine",
   ),
+  dispatchWebhookOutbox: makeFunctionReference<"mutation", any, any>(
+    "evidenceWatchlists:dispatchWebhookOutbox",
+  ),
+  cleanupWebhookOutbox: makeFunctionReference<"mutation", any, any>(
+    "evidenceWatchlists:cleanupWebhookOutbox",
+  ),
 } as const;
 
 function setup() {
@@ -686,6 +692,214 @@ describe("watchlist outbox", () => {
           )
           .take(10),
       ).toHaveLength(0);
+    });
+  });
+});
+
+describe("watchlist webhook bridge", () => {
+  async function enqueuePublicWebhookMatch(t: ReturnType<typeof setup>) {
+    const ids = await fixture(t);
+    const owner = t.withIdentity({ subject: ids.owner });
+    await owner.mutation(watchlists.create, {
+      watchlistKey: "webhook-source",
+      targetType: "source",
+      targetKey: "public-source",
+      deliveryPreference: "webhook",
+    });
+    await t.run(async (ctx) => {
+      const source = await ctx.db
+        .query("evidenceSources")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", "public-source"))
+        .unique();
+      if (source === null) throw new Error("source fixture missing");
+      const documentId = await ctx.db.insert("evidenceDocuments", {
+        sourceId: source._id,
+        externalKey: "webhook-release",
+        canonicalUrl: "https://example.com/webhook-release",
+        canonicalUrlHash: "webhook-release",
+        kind: "release",
+        visibility: "public",
+        title: "Webhook release",
+        excerpt: "",
+        searchText: "",
+        tags: [],
+        authors: [],
+        licenseClass: "open",
+        currentVersionId: null,
+        publishedAt: null,
+        firstSeenAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("evidenceChangeEvents", {
+        eventKey: "document:webhook-release",
+        entityType: "document",
+        entityId: documentId,
+        kind: "created",
+        visibility: "public",
+        summary: "Webhook release",
+        occurredAt: 1,
+        createdAt: 1,
+      });
+    });
+    await owner.mutation(watchlists.drain, {
+      watchlistKey: "webhook-source",
+      idempotencyKey: "webhook-drain",
+      requestFingerprint: "webhook-v1",
+    });
+    return ids;
+  }
+
+  async function addTarget(
+    t: ReturnType<typeof setup>,
+    ownerUserId: string,
+    status: "active" | "paused" | "revoked" = "active",
+  ) {
+    return await t.run(async (ctx) => {
+      const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
+        ownerUserId: ownerUserId as any,
+        subscriptionKey: `watchlist-${status}-${crypto.randomUUID()}`,
+        url: "https://hooks.example.test/watchlists",
+        status,
+        eventTypes: ["evidence.document.changed"],
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("apiWebhookTargets", {
+        subscriptionId,
+        ownerUserId: ownerUserId as any,
+        eventType: "evidence.document.changed",
+        status,
+        updatedAt: 1,
+      });
+      return subscriptionId;
+    });
+  }
+
+  test("never fans a watchlist event across owners", async () => {
+    const t = setup();
+    const ids = await enqueuePublicWebhookMatch(t);
+    const ownerSubscription = await addTarget(t, ids.owner);
+    await addTarget(t, ids.otherOwner);
+
+    await expect(
+      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+    ).resolves.toMatchObject({ processed: 1, dispatched: 1, enqueued: 1 });
+    await t.run(async (ctx) => {
+      const deliveries = await ctx.db
+        .query("apiWebhookDeliveries")
+        .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+        .collect();
+      expect(deliveries).toHaveLength(1);
+      expect(deliveries[0]?.subscriptionId).toBe(ownerSubscription);
+    });
+  });
+
+  test.each(["paused", "revoked"] as const)(
+    "discards a row when its only subscription is %s",
+    async (status) => {
+      const t = setup();
+      const ids = await enqueuePublicWebhookMatch(t);
+      await addTarget(t, ids.owner, status);
+      await expect(
+        t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+      ).resolves.toMatchObject({ processed: 1, dispatched: 0, discarded: 1 });
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("apiWebhookDeliveries").take(1)).toEqual([]);
+        const outbox = await ctx.db.query("evidenceWatchlistOutbox").take(1);
+        expect(outbox[0]).toMatchObject({ status: "discarded" });
+      });
+    },
+  );
+
+  test("is replay-safe when the bridge is invoked twice", async () => {
+    const t = setup();
+    const ids = await enqueuePublicWebhookMatch(t);
+    await addTarget(t, ids.owner);
+    await t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 });
+    await expect(
+      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+    ).resolves.toEqual({ processed: 0, dispatched: 0, discarded: 0, enqueued: 0 });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("apiWebhookDeliveries")
+          .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+          .collect(),
+      ).toHaveLength(1);
+    });
+  });
+
+  test("rejects owner fanout beyond the hard subscription cap", async () => {
+    const t = setup();
+    const ids = await enqueuePublicWebhookMatch(t);
+    for (let index = 0; index < 11; index += 1) {
+      await addTarget(t, ids.owner);
+    }
+    await expect(
+      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+    ).rejects.toThrow(/fanout/i);
+    await t.run(async (ctx) => {
+      const outbox = await ctx.db.query("evidenceWatchlistOutbox").take(1);
+      expect(outbox[0]).toMatchObject({ status: "pending" });
+    });
+  });
+
+  test("retries a partially created fanout without duplicating its existing delivery", async () => {
+    const t = setup();
+    const ids = await enqueuePublicWebhookMatch(t);
+    const firstSubscription = await addTarget(t, ids.owner);
+    await addTarget(t, ids.owner);
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("apiWebhookEvents", {
+        provider: "evidence-delivery",
+        eventKey: "document:webhook-release",
+        payloadJson: JSON.stringify({
+          eventType: "evidence.document.changed",
+          payloadJson: JSON.stringify({ entityType: "document" }),
+        }),
+        receivedAt: now,
+      });
+      await ctx.db.insert("apiWebhookDeliveries", {
+        subscriptionId: firstSubscription,
+        eventKey: "document:webhook-release",
+        status: "pending",
+        attempt: 0,
+        createdAt: now,
+        updatedAt: now,
+        nextAttemptAt: now,
+      });
+    });
+    await expect(
+      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+    ).resolves.toMatchObject({ dispatched: 1, enqueued: 1 });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("apiWebhookDeliveries")
+          .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+          .collect(),
+      ).toHaveLength(2);
+    });
+  });
+
+  test("retains terminal bridge records only for the bounded audit window", async () => {
+    const t = setup();
+    const ids = await enqueuePublicWebhookMatch(t);
+    await addTarget(t, ids.owner);
+    await t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 });
+    await t.run(async (ctx) => {
+      const row = await ctx.db.query("evidenceWatchlistOutbox").unique();
+      if (row === null) throw new Error("Expected dispatched outbox row");
+      await ctx.db.patch("evidenceWatchlistOutbox", row._id, {
+        createdAt: Date.now() - 31 * 24 * 60 * 60 * 1_000,
+      });
+    });
+    await expect(
+      t.mutation(watchlists.cleanupWebhookOutbox, { limit: 100 }),
+    ).resolves.toEqual({ removed: 1 });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("evidenceWatchlistOutbox").take(1)).toEqual([]);
     });
   });
 });

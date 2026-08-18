@@ -759,6 +759,103 @@ export const enqueueEvent = internalMutation({
   },
 });
 
+/**
+ * Queues an event only for one owner's active, explicitly joined targets.
+ * Watchlist delivery uses this rather than the global fanout path so a tenant
+ * can never receive another tenant's saved alert.
+ */
+export const enqueueEventForOwner = internalMutation({
+  args: {
+    ownerUserId: v.id("users"),
+    eventKey: v.string(),
+    eventType: eventTypeValidator,
+    payloadJson: v.string(),
+  },
+  returns: v.object({
+    eventId: v.union(v.id("apiWebhookEvents"), v.null()),
+    eligible: v.number(),
+    enqueued: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const eventKey = identifier(args.eventKey, "eventKey", MAX_EVENT_KEY_LENGTH);
+    const payloadJson = parseObjectJson(args.payloadJson, MAX_PAYLOAD_LENGTH);
+    const subscriptions = await ctx.db
+      .query("apiWebhookSubscriptions")
+      .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
+        q.eq("ownerUserId", args.ownerUserId),
+      )
+      .take(MAX_SUBSCRIPTIONS_PER_OWNER + 1);
+    if (subscriptions.length > MAX_SUBSCRIPTIONS_PER_OWNER) {
+      throw new ConvexError({
+        code: "WEBHOOK_FANOUT_LIMIT",
+        message: `Webhook fanout exceeds the ${MAX_SUBSCRIPTIONS_PER_OWNER}-delivery owner safety limit.`,
+      });
+    }
+    const eligibleSubscriptions: Doc<"apiWebhookSubscriptions">[] = [];
+    for (const subscription of subscriptions) {
+      if (
+        subscription.status !== "active" ||
+        !subscription.eventTypes.includes(args.eventType)
+      ) {
+        continue;
+      }
+      const target = await ctx.db
+        .query("apiWebhookTargets")
+        .withIndex("by_subscriptionId_and_eventType", (q) =>
+          q
+            .eq("subscriptionId", subscription._id)
+            .eq("eventType", args.eventType),
+        )
+        .unique();
+      if (target?.ownerUserId !== args.ownerUserId || target.status !== "active") {
+        continue;
+      }
+      eligibleSubscriptions.push(subscription);
+    }
+    if (eligibleSubscriptions.length === 0) {
+      return { eventId: null, eligible: 0, enqueued: 0 };
+    }
+    const existing = await ctx.db
+      .query("apiWebhookEvents")
+      .withIndex("by_provider_and_eventKey", (q) =>
+        q.eq("provider", "evidence-delivery").eq("eventKey", eventKey),
+      )
+      .unique();
+    const eventId =
+      existing?._id ??
+      (await ctx.db.insert("apiWebhookEvents", {
+        provider: "evidence-delivery",
+        eventKey,
+        payloadJson: JSON.stringify({ eventType: args.eventType, payloadJson }),
+        receivedAt: Date.now(),
+      }));
+    let enqueued = 0;
+    for (const subscription of eligibleSubscriptions) {
+      const delivery = await ctx.db
+        .query("apiWebhookDeliveries")
+        .withIndex("by_subscriptionId_and_eventKey", (q) =>
+          q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey),
+        )
+        .unique();
+      if (delivery !== null) continue;
+      const now = Date.now();
+      const deliveryId = await ctx.db.insert("apiWebhookDeliveries", {
+        subscriptionId: subscription._id,
+        eventKey,
+        status: "pending",
+        attempt: 0,
+        createdAt: now,
+        updatedAt: now,
+        nextAttemptAt: now,
+      });
+      const inserted = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
+      await scheduleDeliveryClaim(ctx, inserted, 0, now);
+      enqueued += 1;
+    }
+    return { eventId, eligible: eligibleSubscriptions.length, enqueued };
+  },
+});
+
 export const backfillSubscriptionTargets = internalMutation({
   args: { cursor: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {

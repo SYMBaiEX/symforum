@@ -1,4 +1,5 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
+import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
@@ -19,6 +20,21 @@ const MAX_OUTBOX_FANOUT_PER_EVENT = 1;
 const MAX_ENTITY_LINKS_PER_DOCUMENT = 24;
 const MAX_CITATIONS_PER_CLAIM = 24;
 const MAX_DRAIN_REQUESTS_PER_WATCHLIST = 50;
+const MAX_WEBHOOK_OUTBOX_BATCH = 5;
+const MAX_WEBHOOK_OUTBOX_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+const MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH = 100;
+const enqueueEventForOwnerRef = makeFunctionReference<
+  "mutation",
+  {
+    ownerUserId: Id<"users">;
+    eventKey: string;
+    eventType:
+      | "evidence.document.changed"
+      | "evidence.claim.verified";
+    payloadJson: string;
+  },
+  { eventId: Id<"apiWebhookEvents"> | null; eligible: number; enqueued: number }
+>("evidenceWebhooks:enqueueEventForOwner");
 const watchlistDrainLimiter = new RateLimiter(components.rateLimiter, {
   evidenceWatchlistDrains: {
     kind: "token bucket",
@@ -468,6 +484,13 @@ const drainResultValidator = v.object({
   eventCursor: v.union(v.string(), v.null()),
 });
 
+const webhookOutboxResultValidator = v.object({
+  processed: v.number(),
+  dispatched: v.number(),
+  discarded: v.number(),
+  enqueued: v.number(),
+});
+
 async function drain(ctx: MutationCtx, watchlist: Doc<"evidenceWatchlists">) {
   if (watchlist.status !== "active") {
     return {
@@ -641,6 +664,122 @@ export const drainOutbox = internalMutation({
     }
     await serializeDrain(ctx, watchlist);
     return await drain(ctx, watchlist);
+  },
+});
+
+function webhookEventType(event: Doc<"evidenceChangeEvents">) {
+  if (event.entityType === "document") return "evidence.document.changed" as const;
+  if (event.entityType === "claim") return "evidence.claim.verified" as const;
+  return null;
+}
+
+function webhookPayload(event: Doc<"evidenceChangeEvents">) {
+  return JSON.stringify({
+    entityType: event.entityType,
+    entityId: event.entityId,
+    kind: event.kind,
+    summary: event.summary,
+    occurredAt: event.occurredAt,
+  });
+}
+
+/**
+ * Dispatches a small, durable page of webhook-preference outbox rows through
+ * the existing encrypted signing queue. The outbox eventKey is the webhook
+ * event identity, so repeating this mutation cannot duplicate a delivery.
+ */
+export const dispatchWebhookOutbox = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: webhookOutboxResultValidator,
+  handler: async (ctx, args) => {
+    const limit = Math.max(
+      1,
+      Math.min(Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_BATCH), MAX_WEBHOOK_OUTBOX_BATCH),
+    );
+    const rows = await ctx.db
+      .query("evidenceWatchlistOutbox")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "pending"))
+      .order("asc")
+      .take(limit);
+    let dispatched = 0;
+    let discarded = 0;
+    let enqueued = 0;
+    const now = Date.now();
+    for (const row of rows) {
+      const watchlist = await ctx.db.get("evidenceWatchlists", row.watchlistId);
+      const event = await ctx.db.get("evidenceChangeEvents", row.eventId);
+      if (
+        row.deliveryPreference !== "webhook" ||
+        watchlist === null ||
+        event === null ||
+        watchlist.status !== "active" ||
+        watchlist.deliveryPreference !== "webhook" ||
+        watchlist.ownerUserId !== row.ownerUserId ||
+        watchlist.agentId !== row.agentId ||
+        !(await eventMatchesWatchlist(ctx, watchlist, event))
+      ) {
+        await ctx.db.patch("evidenceWatchlistOutbox", row._id, {
+          status: "discarded",
+          discardedAt: now,
+        });
+        discarded += 1;
+        continue;
+      }
+      const eventType = webhookEventType(event);
+      if (eventType === null) {
+        await ctx.db.patch("evidenceWatchlistOutbox", row._id, {
+          status: "discarded",
+          discardedAt: now,
+        });
+        discarded += 1;
+        continue;
+      }
+      const result = await ctx.runMutation(enqueueEventForOwnerRef, {
+        ownerUserId: row.ownerUserId,
+        eventKey: row.eventKey,
+        eventType,
+        payloadJson: webhookPayload(event),
+      });
+      await ctx.db.patch("evidenceWatchlistOutbox", row._id, {
+        status: result.eligible === 0 ? "discarded" : "dispatched",
+        ...(result.eligible === 0 ? { discardedAt: now } : { dispatchedAt: now }),
+      });
+      if (result.eligible === 0) {
+        discarded += 1;
+      } else {
+        dispatched += 1;
+        enqueued += result.enqueued;
+      }
+    }
+    return { processed: rows.length, dispatched, discarded, enqueued };
+  },
+});
+
+/** Deletes only terminal bridge records after a bounded retention window. */
+export const cleanupWebhookOutbox = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ removed: v.number() }),
+  handler: async (ctx, args) => {
+    const limit = Math.max(
+      1,
+      Math.min(Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH), MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH),
+    );
+    const cutoff = Date.now() - MAX_WEBHOOK_OUTBOX_RETENTION_MS;
+    let removed = 0;
+    for (const status of ["dispatched", "discarded"] as const) {
+      if (removed >= limit) break;
+      const rows = await ctx.db
+        .query("evidenceWatchlistOutbox")
+        .withIndex("by_status_and_createdAt", (q) => q.eq("status", status))
+        .order("asc")
+        .take(limit - removed);
+      for (const row of rows) {
+        if (row.createdAt > cutoff) break;
+        await ctx.db.delete("evidenceWatchlistOutbox", row._id);
+        removed += 1;
+      }
+    }
+    return { removed };
   },
 });
 
