@@ -14,6 +14,9 @@ const modules = {
 const organizations = {
   listMine: makeFunctionReference<"query", any, any>("organizations:listMine"),
   get: makeFunctionReference<"query", any, any>("organizations:get"),
+  getConsole: makeFunctionReference<"query", any, any>(
+    "organizations:getConsole",
+  ),
   create: makeFunctionReference<"mutation", any, any>("organizations:create"),
   listMembers: makeFunctionReference<"query", any, any>(
     "organizations:listMembers",
@@ -26,6 +29,9 @@ const organizations = {
   ),
   inviteMember: makeFunctionReference<"mutation", any, any>(
     "organizations:inviteMember",
+  ),
+  lookupInviteeByUsername: makeFunctionReference<"query", any, any>(
+    "organizations:lookupInviteeByUsername",
   ),
   acceptInvite: makeFunctionReference<"mutation", any, any>(
     "organizations:acceptInvite",
@@ -510,6 +516,104 @@ describe("organization tenant foundation", () => {
         idempotencyKey: "scope-request-0002",
       }),
     ).rejects.toThrow();
+  });
+
+  test("organization console exposes only member-scoped human records", async () => {
+    const t = setup();
+    const users = await seedUsers(t);
+    const created = await createOrganization(t, users.ownerOne, "console-org");
+    const owner = t.withIdentity({ subject: users.ownerOne });
+    const member = t.withIdentity({ subject: users.member });
+    const invite = await owner.mutation(organizations.inviteMember, {
+      organizationId: created.organizationId,
+      inviteeUserId: users.member,
+      role: "developer",
+    });
+    await member.mutation(organizations.acceptInvite, {
+      inviteId: invite.inviteId,
+    });
+    const agent = await seedAgent(t, users.ownerOne, "console-agent", [
+      "evidence",
+    ]);
+    const project = await owner.mutation(organizations.createProject, {
+      organizationId: created.organizationId,
+      projectKey: "console-project",
+      name: "Console project",
+      allowedAgentScopes: ["evidence"],
+    });
+    await owner.mutation(organizations.createServiceAccount, {
+      projectId: project.projectId,
+      agentId: "console-agent",
+      name: "Console service",
+      allowedScopes: ["evidence"],
+    });
+    await t
+      .withIdentity({ subject: agent.userId })
+      .mutation(organizations.recordServiceAccountUsage, {
+        scope: "evidence",
+        amountMicros: 25,
+        idempotencyKey: "console-usage-0001",
+      });
+
+    await expect(
+      owner.query(organizations.lookupInviteeByUsername, {
+        organizationId: created.organizationId,
+        username: "member",
+      }),
+    ).resolves.toMatchObject({
+      userId: users.member,
+      username: "member",
+    });
+    await expect(
+      owner.query(organizations.lookupInviteeByUsername, {
+        organizationId: created.organizationId,
+        username: "Console-Agent",
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      owner.query(organizations.lookupInviteeByUsername, {
+        organizationId: created.organizationId,
+        username: "x",
+      }),
+    ).rejects.toThrow();
+
+    const consoleView = await owner.query(organizations.getConsole, {
+      organizationId: created.organizationId,
+    });
+    expect(consoleView.organization.organizationId).toBe(created.organizationId);
+    expect(consoleView.permissions.canAdmin).toBe(true);
+    expect(consoleView.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: users.ownerOne, role: "owner" }),
+        expect.objectContaining({ userId: users.member, role: "developer" }),
+      ]),
+    );
+    expect(consoleView.projects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ projectId: project.projectId }),
+      ]),
+    );
+    expect(consoleView.serviceAccounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          projectId: project.projectId,
+          agentId: "console-agent",
+        }),
+      ]),
+    );
+    expect(consoleView.usage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          projectId: project.projectId,
+          amountMicros: 25,
+        }),
+      ]),
+    );
+    expect(consoleView.audit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: "service_account_created" }),
+      ]),
+    );
   });
 
   test("removing a member also revokes every service account owned by that member", async () => {

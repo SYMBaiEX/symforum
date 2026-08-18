@@ -25,6 +25,7 @@ const MAX_USAGE_RESULTS = 200;
 const MAX_BUDGET_MICROS = 100_000_000_000;
 const MAX_CHARGE_MICROS = 1_000_000_000;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+const HUMAN_USERNAME_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/;
 
 export const organizationRoleValidator = v.union(
   v.literal("owner"),
@@ -163,6 +164,17 @@ function normalizeScopes(scopes: AgentScope[], requireOne = false) {
   return unique;
 }
 
+function normalizeUsername(value: string) {
+  const username = value.trim().toLowerCase();
+  if (!HUMAN_USERNAME_PATTERN.test(username)) {
+    organizationError(
+      "INVALID_USERNAME",
+      "username must be an existing SYM handle.",
+    );
+  }
+  return username;
+}
+
 function scopesAreSubset(scopes: AgentScope[], allowed: AgentScope[]) {
   return scopes.every((scope) => allowed.includes(scope));
 }
@@ -284,6 +296,22 @@ function safeOrganization(
   };
 }
 
+function organizationPermissions(role: OrganizationRole) {
+  const canAdmin = role === "owner" || role === "admin";
+  return {
+    canAdmin,
+    canInviteMember: canAdmin,
+    canInviteAdmin: role === "owner",
+    canManageMembers: canAdmin,
+    canTransferOwnership: role === "owner",
+    canSetBudget: role === "owner",
+    canCreateProjects: canAdmin,
+    canManageProjectScopes: canAdmin,
+    canManageServiceAccounts: canAdmin,
+    canViewPendingInvites: canAdmin,
+  };
+}
+
 /** Lists only organizations where the server-derived human principal is active. */
 export const listMine = query({
   args: {},
@@ -314,6 +342,274 @@ export const get = query({
   handler: async (ctx, args) => {
     const access = await requireOrganizationMember(ctx, args.organizationId);
     return safeOrganization(access.organization, access.membership);
+  },
+});
+
+/** Exact-username invite lookup for the first-party organization console only. */
+export const lookupInviteeByUsername = query({
+  args: {
+    organizationId: v.id("organizations"),
+    username: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireOrganizationAdmin(ctx, args.organizationId);
+    const username = normalizeUsername(args.username);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized", (q) =>
+        q.eq("usernameNormalized", username),
+      )
+      .unique();
+    if (user === null || user.isAgent === true) return null;
+    return {
+      userId: user._id,
+      username: user.username ?? username,
+      name: user.name ?? user.username ?? username,
+    };
+  },
+});
+
+/**
+ * Human-only organization console projection. This keeps owner/developer/auditor
+ * management on the first-party site without exposing a separate public API.
+ */
+export const getConsole = query({
+  args: {
+    organizationId: v.id("organizations"),
+    monthKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const access = await requireOrganizationMember(ctx, args.organizationId);
+    const permissions = organizationPermissions(access.membership.role);
+    const monthKey =
+      args.monthKey === undefined
+        ? currentUtcMonthKey(Date.now())
+        : validatedMonthKey(args.monthKey);
+    const [members, invites, projects, serviceAccounts, budget, usage, audit] =
+      await Promise.all([
+        ctx.db
+          .query("organizationMembers")
+          .withIndex("by_organizationId_and_status_and_role", (q) =>
+            q.eq("organizationId", args.organizationId).eq("status", "active"),
+          )
+          .take(MAX_MEMBERS_PER_ORGANIZATION),
+        permissions.canViewPendingInvites
+          ? ctx.db
+              .query("organizationInvites")
+              .withIndex("by_organizationId_and_status_and_createdAt", (q) =>
+                q
+                  .eq("organizationId", args.organizationId)
+                  .eq("status", "pending"),
+              )
+              .order("desc")
+              .take(MAX_PENDING_INVITES_PER_ORGANIZATION)
+          : Promise.resolve([]),
+        ctx.db
+          .query("organizationProjects")
+          .withIndex("by_organizationId_and_status_and_updatedAt", (q) =>
+            q.eq("organizationId", args.organizationId).eq("status", "active"),
+          )
+          .order("desc")
+          .take(MAX_PROJECTS_PER_ORGANIZATION),
+        ctx.db
+          .query("organizationServiceAccounts")
+          .withIndex("by_organizationId_and_status_and_updatedAt", (q) =>
+            q.eq("organizationId", args.organizationId).eq("status", "active"),
+          )
+          .order("desc")
+          .take(MAX_SERVICE_ACCOUNTS_PER_ORGANIZATION),
+        ctx.db
+          .query("organizationBudgets")
+          .withIndex("by_organizationId_and_monthKey", (q) =>
+            q.eq("organizationId", args.organizationId).eq("monthKey", monthKey),
+          )
+          .unique(),
+        ctx.db
+          .query("organizationUsageLedger")
+          .withIndex("by_organizationId_and_monthKey_and_chargedAt", (q) =>
+            q.eq("organizationId", args.organizationId).eq("monthKey", monthKey),
+          )
+          .order("desc")
+          .take(Math.min(50, MAX_USAGE_RESULTS)),
+        ctx.db
+          .query("organizationAuditRecords")
+          .withIndex("by_organizationId_and_createdAt", (q) =>
+            q.eq("organizationId", args.organizationId),
+          )
+          .order("desc")
+          .take(Math.min(100, MAX_AUDIT_RESULTS)),
+      ]);
+
+    const userIds = new Set<Id<"users">>();
+    const projectIds = new Set<Id<"organizationProjects">>();
+    const serviceAccountIds = new Set<Id<"organizationServiceAccounts">>();
+
+    for (const member of members) userIds.add(member.userId);
+    for (const invite of invites) userIds.add(invite.inviteeUserId);
+    for (const serviceAccount of serviceAccounts) {
+      userIds.add(serviceAccount.ownerUserId);
+      projectIds.add(serviceAccount.projectId);
+      serviceAccountIds.add(serviceAccount._id);
+    }
+    for (const row of audit) {
+      userIds.add(row.actorUserId);
+      if (row.targetUserId) userIds.add(row.targetUserId);
+      if (row.projectId) projectIds.add(row.projectId);
+      if (row.serviceAccountId) serviceAccountIds.add(row.serviceAccountId);
+    }
+    for (const row of usage) {
+      projectIds.add(row.projectId);
+      serviceAccountIds.add(row.serviceAccountId);
+    }
+
+    const [usersById, projectsById, serviceAccountsById, identitiesByServiceId] =
+      await Promise.all([
+        Promise.all(
+          [...userIds].map(async (userId) => [
+            userId,
+            await ctx.db.get("users", userId),
+          ] as const),
+        ).then((rows) => new Map(rows)),
+        Promise.all(
+          [...projectIds].map(async (projectId) => [
+            projectId,
+            await ctx.db.get("organizationProjects", projectId),
+          ] as const),
+        ).then((rows) => new Map(rows)),
+        Promise.all(
+          [...serviceAccountIds].map(async (serviceAccountId) => [
+            serviceAccountId,
+            await ctx.db.get("organizationServiceAccounts", serviceAccountId),
+          ] as const),
+        ).then((rows) => new Map(rows)),
+        Promise.all(
+          serviceAccounts.map(async (serviceAccount) => [
+            serviceAccount._id,
+            await ctx.db.get("agentIdentities", serviceAccount.agentIdentityId),
+          ] as const),
+        ).then((rows) => new Map(rows)),
+      ]);
+
+    return {
+      organization: safeOrganization(access.organization, access.membership),
+      permissions,
+      budget: {
+        monthKey,
+        currency: "USD" as const,
+        limitMicros: budget?.limitMicros ?? 0,
+        spentMicros: budget?.spentMicros ?? 0,
+        remainingMicros: Math.max(
+          0,
+          (budget?.limitMicros ?? 0) - (budget?.spentMicros ?? 0),
+        ),
+      },
+      members: members.map((member) => {
+        const user = usersById.get(member.userId);
+        return {
+          membershipId: member._id,
+          userId: member.userId,
+          username:
+            user?.usernameNormalized ??
+            user?.username ??
+            `user-${String(member.userId)}`,
+          name: user?.name ?? user?.username ?? "Member",
+          role: member.role,
+          joinedAt: member.joinedAt,
+          isCurrentActor: member.userId === access.actor._id,
+        };
+      }),
+      invites: invites.map((invite) => {
+        const user = usersById.get(invite.inviteeUserId);
+        return {
+          inviteId: invite._id,
+          inviteeUserId: invite.inviteeUserId,
+          inviteeUsername:
+            user?.usernameNormalized ??
+            user?.username ??
+            `user-${String(invite.inviteeUserId)}`,
+          inviteeName: user?.name ?? user?.username ?? "Member",
+          role: invite.role,
+          createdAt: invite.createdAt,
+          expiresAt: invite.expiresAt,
+        };
+      }),
+      projects: projects.map((project) => ({
+        projectId: project._id,
+        projectKey: project.projectKey,
+        name: project.name,
+        status: project.status,
+        allowedAgentScopes: project.allowedAgentScopes,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      })),
+      serviceAccounts: serviceAccounts.map((serviceAccount) => {
+        const identity = identitiesByServiceId.get(serviceAccount._id);
+        const owner = usersById.get(serviceAccount.ownerUserId);
+        return {
+          serviceAccountId: serviceAccount._id,
+          projectId: serviceAccount.projectId,
+          projectName:
+            projectsById.get(serviceAccount.projectId)?.name ??
+            "Unknown project",
+          agentId: identity?.agentId ?? "revoked",
+          name: serviceAccount.name,
+          status: serviceAccount.status,
+          ownerUserId: serviceAccount.ownerUserId,
+          ownerName: owner?.name ?? owner?.username ?? "Member",
+          allowedScopes: serviceAccount.allowedScopes,
+          createdAt: serviceAccount.createdAt,
+          updatedAt: serviceAccount.updatedAt,
+        };
+      }),
+      usage: usage.map((row) => ({
+        usageId: row._id,
+        projectId: row.projectId,
+        projectName: projectsById.get(row.projectId)?.name ?? "Unknown project",
+        serviceAccountId: row.serviceAccountId,
+        serviceAccountName:
+          serviceAccountsById.get(row.serviceAccountId)?.name ??
+          "Service account",
+        scope: row.scope,
+        amountMicros: row.amountMicros,
+        spentAfterMicros: row.spentAfterMicros,
+        currency: row.currency,
+        monthKey: row.monthKey,
+        chargedAt: row.chargedAt,
+      })),
+      audit: audit.map((row) => ({
+        auditId: row._id,
+        eventType: row.eventType,
+        actorUserId: row.actorUserId,
+        actorName:
+          usersById.get(row.actorUserId)?.name ??
+          usersById.get(row.actorUserId)?.username ??
+          "Member",
+        actorKind: row.actorKind,
+        targetUserId: row.targetUserId ?? null,
+        targetUserName:
+          row.targetUserId === undefined
+            ? null
+            : (usersById.get(row.targetUserId)?.name ??
+              usersById.get(row.targetUserId)?.username ??
+              "Member"),
+        projectId: row.projectId ?? null,
+        projectName:
+          row.projectId === undefined
+            ? null
+            : (projectsById.get(row.projectId)?.name ?? "Unknown project"),
+        serviceAccountId: row.serviceAccountId ?? null,
+        serviceAccountName:
+          row.serviceAccountId === undefined
+            ? null
+            : (serviceAccountsById.get(row.serviceAccountId)?.name ??
+              "Service account"),
+        previousRole: row.previousRole ?? null,
+        nextRole: row.nextRole ?? null,
+        previousAmountMicros: row.previousAmountMicros ?? null,
+        nextAmountMicros: row.nextAmountMicros ?? null,
+        createdAt: row.createdAt,
+      })),
+    };
   },
 });
 
