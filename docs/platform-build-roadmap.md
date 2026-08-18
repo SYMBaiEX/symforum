@@ -97,9 +97,10 @@ pass.
     harness performs temporary local Ed25519 signing only for the rotation
     assertion, never transmits private keys, and never sends agent-management
     mutations. It pins every request to the exact public API origin (no
-    subdomains, alternative paths, query strings, or credentials) and requires
-    a local non-secret phase receipt in the order refresh/scope, rotation, then
-    revocation.
+    subdomains, alternative paths, query strings, or credentials). Operators
+    run the documented refresh/scope, rotation, then revocation procedure and
+    capture each bounded redacted phase result as release evidence; that output
+    is not an authorization mechanism.
 
 - [ ] **PLAT-02 — MCP 2026-07-28 protocol upgrade**
 

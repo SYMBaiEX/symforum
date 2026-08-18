@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import {
   assertPrivateJsonFile,
   certificationPlan,
-  readCertificationReceipt,
   redactedError,
   refreshSession,
   verifyKeyLogin,
@@ -12,7 +11,7 @@ import {
   verifyScopeDenied,
   verifySession,
   validateLifecycleConfig,
-  writeCertificationReceipt,
+  validatePhaseInputs,
 } from "./lib/agent-auth-certification.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -36,31 +35,25 @@ try {
 async function verifyLifecycle() {
   // Validate target, confirmation, and phase before reading credential files.
   const productionBaseUrl = validateLifecycleConfig({ baseUrl, production: args.production, confirm: args.confirm, phase: args.phase });
-  const receiptPath = requiredPath("receipt");
   const phase = args.phase;
+  validatePhaseInputs(phase, args);
   if (phase === "refresh-scope") {
-    if (args["allow-session-rotation"] !== "yes") throw new Error("Refresh rotates credentials. Pass --allow-session-rotation yes.");
     const refreshed = await refreshSession({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("session")) });
     const [active, scope] = await Promise.all([
       verifySession({ baseUrl: productionBaseUrl, session: refreshed, expectation: 200 }),
       verifyScopeDenied({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("scope-denied-session")) }),
     ]);
-    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, active: active.status, insufficientScope: scope.status, refreshed: true });
   }
   if (phase === "rotation") {
-    readCertificationReceipt(receiptPath, ["refresh-scope"]);
     const agentId = args["agent-id"];
     const old = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("old-key")), expectation: 401 });
     const replacement = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("replacement-key")), expectation: 200 });
     const active = await verifySession({ baseUrl: productionBaseUrl, session: replacement, expectation: 200 });
-    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, oldKey: old.status, replacementKey: active.status });
   }
   if (phase === "revocation") {
-    readCertificationReceipt(receiptPath, ["refresh-scope", "rotation"]);
     const revoked = await verifySession({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("revoked-session")), expectation: 401 });
-    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, revoked: revoked.status });
   }
 }
@@ -96,7 +89,7 @@ Default: print a zero-network, zero-mutation certification plan.
   after owner-console work: refresh-scope (requires --session,
   --scope-denied-session, --allow-session-rotation yes), rotation (requires
   --agent-id, --old-key, --replacement-key), or revocation (requires
-  --revoked-session). Every lifecycle phase also requires --receipt pointing to
-  a mode-0600 non-symlink receipt; order is refresh-scope, rotation, revocation.
-  Credential values are never printed and files must be mode 0600.`);
+  --revoked-session). Run phases in the documented order: refresh-scope,
+  rotation, revocation. Each command emits bounded redacted evidence only;
+  credential values are never printed and files must be mode 0600.`);
 }

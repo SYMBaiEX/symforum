@@ -1,4 +1,4 @@
-import { closeSync, constants, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const SECRET_FIELD = /(?:access|refresh|private|secret|signature|challenge|token|authorization)/i;
@@ -62,15 +62,6 @@ function inspectSafeParentChain(start) {
   }
 }
 
-function assertParentChainUnchanged(snapshots) {
-  for (const snapshot of snapshots) {
-    const entry = lstatSync(snapshot.path);
-    if (entry.isSymbolicLink() || !entry.isDirectory() || entry.dev !== snapshot.dev || entry.ino !== snapshot.ino || (entry.mode & 0o022) !== 0) {
-      throw new Error("Credential parent changed while writing the certification receipt.");
-    }
-  }
-}
-
 export function validateLifecycleConfig({ baseUrl, production, confirm, phase }) {
   const normalized = normalizeAgentApiBaseUrl(baseUrl);
   if (production !== "strong-bee-384") throw new Error("Lifecycle verification is blocked. Pass --production strong-bee-384 for the named production target.");
@@ -79,86 +70,24 @@ export function validateLifecycleConfig({ baseUrl, production, confirm, phase })
   return normalized;
 }
 
-export function readCertificationReceipt(path, requiredPhases = []) {
-  const receipt = readValidatedReceipt(path);
-  for (const phase of requiredPhases) if (!receipt.phases.includes(phase)) throw new Error(`Certification receipt is missing prerequisite phase: ${phase}.`);
-  return receipt;
-}
-
-const RECEIPT_PHASES = ["refresh-scope", "rotation", "revocation"];
-
-function readValidatedReceipt(path) {
-  const receipt = assertPrivateJsonFile(path);
-  const actualMode = statSync(path).mode & 0o777;
-  if (actualMode !== 0o600 || receipt.version !== 1 || receipt.target !== "strong-bee-384" || typeof receipt.updatedAt !== "string" || !Array.isArray(receipt.phases) || receipt.phases.some((phase) => !RECEIPT_PHASES.includes(phase))) {
-    throw new Error("Certification receipt is invalid.");
-  }
-  const unique = [...new Set(receipt.phases)];
-  const expected = RECEIPT_PHASES.slice(0, unique.length);
-  if (unique.length !== receipt.phases.length || unique.join("|") !== expected.join("|")) throw new Error("Certification receipt phase order is invalid.");
-  return receipt;
-}
-
-export function writeCertificationReceipt(path, phase) {
-  if (!RECEIPT_PHASES.includes(phase)) throw new Error("Unknown certification receipt phase.");
-  const destination = resolve(path);
-  const parent = dirname(destination);
-  const parentSnapshots = inspectSafeParentChain(parent);
-  const existing = tryLstat(destination);
-  if (existing === null) {
-    if (phase !== "refresh-scope") throw new Error("Certification receipt must start with refresh-scope.");
-    writeNewReceipt(destination, [phase], parentSnapshots);
+/** Validates the exact credential-path contract before a phase reads a file. */
+export function validatePhaseInputs(phase, args) {
+  const requireValue = (name) => {
+    if (typeof args[name] !== "string" || args[name].length === 0) throw new Error(`--${name} is required for ${phase} verification.`);
+  };
+  if (phase === "refresh-scope") {
+    if (args["allow-session-rotation"] !== "yes") throw new Error("Refresh rotates credentials. Pass --allow-session-rotation yes.");
+    requireValue("session");
+    requireValue("scope-denied-session");
     return;
   }
-  const receipt = readValidatedReceipt(destination);
-  const next = RECEIPT_PHASES[receipt.phases.length];
-  if (phase !== next) throw new Error(`Certification receipt requires phase: ${next ?? "complete"}.`);
-  writeReplacementReceipt(destination, [...receipt.phases, phase], parentSnapshots, receipt.phases);
-}
-
-function tryLstat(path) {
-  try { return lstatSync(path); } catch (error) { if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return null; throw error; }
-}
-
-function receiptPayload(phases) {
-  return `${JSON.stringify({ version: 1, target: "strong-bee-384", phases, updatedAt: new Date().toISOString() })}\n`;
-}
-
-function writeNewReceipt(destination, phases, parentSnapshots) {
-  assertParentChainUnchanged(parentSnapshots);
-  let descriptor;
-  try {
-    descriptor = openSync(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    writeSync(descriptor, receiptPayload(phases));
-    fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
+  if (phase === "rotation") {
+    requireValue("agent-id");
+    requireValue("old-key");
+    requireValue("replacement-key");
+    return;
   }
-  const receipt = readValidatedReceipt(destination);
-  if (receipt.phases.join("|") !== phases.join("|")) throw new Error("Certification receipt verification failed.");
-}
-
-function writeReplacementReceipt(destination, phases, parentSnapshots, expectedPreviousPhases) {
-  const parent = dirname(destination);
-  const temporary = resolve(parent, `.${Math.random().toString(36).slice(2)}.plat-01.tmp`);
-  let descriptor;
-  try {
-    assertParentChainUnchanged(parentSnapshots);
-    descriptor = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    writeSync(descriptor, receiptPayload(phases));
-    fsyncSync(descriptor);
-    closeSync(descriptor);
-    descriptor = undefined;
-    assertParentChainUnchanged(parentSnapshots);
-    const current = readValidatedReceipt(destination);
-    if (current.phases.join("|") !== expectedPreviousPhases.join("|")) throw new Error("Certification receipt changed before replacement.");
-    renameSync(temporary, destination);
-    const verified = readValidatedReceipt(destination);
-    if (verified.phases.join("|") !== phases.join("|")) throw new Error("Certification receipt verification failed.");
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-    if (tryLstat(temporary) !== null) unlinkSync(temporary);
-  }
+  requireValue("revoked-session");
 }
 
 export function redactedError(error) {

@@ -1,20 +1,14 @@
-// @vitest-environment node
-import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   certificationPlan,
-  readCertificationReceipt,
   redactValue,
   refreshSession,
   validateLifecycleConfig,
+  validatePhaseInputs,
   verifyKeyLogin,
   verifyPublicMetadata,
   verifyScopeDenied,
   verifySession,
-  writeCertificationReceipt,
 } from "./lib/agent-auth-certification.mjs";
 
 describe("agent auth certification harness", () => {
@@ -71,54 +65,12 @@ describe("agent auth certification harness", () => {
     await expect(verifyKeyLogin({ agentId: "cert", key: { algorithm: "Ed25519" }, expectation: 401 })).rejects.toThrow(/valid Ed25519 key/i);
   });
 
-  test("writes only ordered, private receipt transitions", () => {
-    const directory = privateTempDirectory();
-    const receipt = join(directory, "receipt.json");
-    expect(() => writeCertificationReceipt(receipt, "rotation")).toThrow(/start with refresh/i);
-    writeCertificationReceipt(receipt, "refresh-scope");
-    expect(readCertificationReceipt(receipt).phases).toEqual(["refresh-scope"]);
-    expect(() => writeCertificationReceipt(receipt, "refresh-scope")).toThrow(/requires phase: rotation/i);
-    writeCertificationReceipt(receipt, "rotation");
-    writeCertificationReceipt(receipt, "revocation");
-    expect(readCertificationReceipt(receipt).phases).toEqual(["refresh-scope", "rotation", "revocation"]);
-    expect(() => writeCertificationReceipt(receipt, "revocation")).toThrow(/requires phase: complete/i);
-  });
-
-  test("rejects symlink and permissive receipt paths before replacement", () => {
-    const directory = privateTempDirectory();
-    const target = join(directory, "target.json");
-    writeFileSync(target, JSON.stringify({ version: 1, target: "strong-bee-384", phases: ["refresh-scope"], updatedAt: new Date().toISOString() }), { mode: 0o600 });
-    const linked = join(directory, "linked.json");
-    symlinkSync(target, linked);
-    expect(() => writeCertificationReceipt(linked, "rotation")).toThrow(/non-symlink|regular/i);
-    chmodSync(target, 0o644);
-    expect(() => writeCertificationReceipt(target, "rotation")).toThrow(/invalid|accessible/i);
-  });
-
-  test("rejects a symlinked or permissive parent before first receipt creation", () => {
-    const directory = privateTempDirectory();
-    const real = join(directory, "real");
-    mkdirSync(real, { mode: 0o700 });
-    const linked = join(directory, "linked");
-    symlinkSync(real, linked);
-    expect(() => writeCertificationReceipt(join(linked, "receipt.json"), "refresh-scope")).toThrow(/real directory/i);
-    const permissive = join(directory, "permissive");
-    mkdirSync(permissive, { mode: 0o700 });
-    chmodSync(permissive, 0o777);
-    expect(() => writeCertificationReceipt(join(permissive, "receipt.json"), "refresh-scope")).toThrow(/writable/i);
-  });
-
-  test("rejects a preexisting receipt with invalid schema", () => {
-    const directory = privateTempDirectory();
-    const receipt = join(directory, "receipt.json");
-    writeFileSync(receipt, JSON.stringify({ version: 1, target: "strong-bee-384", phases: ["rotation"], updatedAt: new Date().toISOString() }), { mode: 0o600 });
-    expect(() => writeCertificationReceipt(receipt, "revocation")).toThrow(/phase order/i);
-    expect(readFileSync(receipt, "utf8")).toMatch(/rotation/);
+  test("requires exact phase inputs before any credential read", () => {
+    expect(() => validatePhaseInputs("refresh-scope", { "allow-session-rotation": "yes", session: "/safe" })).toThrow(/scope-denied-session/i);
+    expect(() => validatePhaseInputs("rotation", { "agent-id": "cert", "old-key": "/safe" })).toThrow(/replacement-key/i);
+    expect(() => validatePhaseInputs("revocation", {})).toThrow(/revoked-session/i);
+    expect(() => validatePhaseInputs("refresh-scope", { "allow-session-rotation": "yes", session: "/safe", "scope-denied-session": "/safe" })).not.toThrow();
+    expect(() => validatePhaseInputs("rotation", { "agent-id": "cert", "old-key": "/safe", "replacement-key": "/safe" })).not.toThrow();
+    expect(() => validatePhaseInputs("revocation", { "revoked-session": "/safe" })).not.toThrow();
   });
 });
-
-function privateTempDirectory() {
-  const directory = mkdtempSync(join(tmpdir(), "symbaiex-plat01-"));
-  chmodSync(directory, 0o700);
-  return directory;
-}
