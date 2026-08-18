@@ -1976,6 +1976,44 @@ export default defineSchema({
       "status",
       "observedAt",
     ]),
+  // Claim rows are the current read model. Every material state is retained in
+  // evidenceClaimRevisions so citations and prior conclusions remain auditable.
+  evidenceClaimRevisions: defineTable({
+    claimId: v.id("evidenceClaims"),
+    revisionKey: v.string(),
+    changeKind: v.union(
+      v.literal("created"),
+      v.literal("semantic"),
+      v.literal("status"),
+      v.literal("evidence"),
+    ),
+    statement: v.string(),
+    subjectEntityId: v.union(v.id("evidenceEntities"), v.null()),
+    predicate: v.string(),
+    objectText: v.string(),
+    status: v.union(
+      v.literal("supported"),
+      v.literal("contradicted"),
+      v.literal("unresolved"),
+      v.literal("outdated"),
+    ),
+    confidence: v.number(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    observedAt: v.number(),
+    actorType: v.union(
+      v.literal("system"),
+      v.literal("agent"),
+      v.literal("human"),
+    ),
+    actorId: v.string(),
+    source: v.string(),
+    citationId: v.union(v.id("evidenceClaimCitations"), v.null()),
+    createdAt: v.number(),
+    retentionExpiresAt: v.number(),
+  })
+    .index("by_revisionKey", ["revisionKey"])
+    .index("by_claimId_and_observedAt", ["claimId", "observedAt"])
+    .index("by_retentionExpiresAt", ["retentionExpiresAt"]),
   evidenceClaimCitations: defineTable({
     claimId: v.id("evidenceClaims"),
     documentVersionId: v.id("evidenceDocumentVersions"),
@@ -2019,6 +2057,35 @@ export default defineSchema({
   })
     .index("by_eventKey", ["eventKey"])
     .index("by_visibility_and_occurredAt", ["visibility", "occurredAt"]),
+  evidenceWatchlists: defineTable({
+    ownerUserId: v.id("users"),
+    // Null denotes an owner-managed list. An agent may only read or mutate its
+    // own agentId rows, while the human owner remains the tenant authority.
+    agentId: v.union(v.string(), v.null()),
+    watchlistKey: v.string(),
+    targetType: v.union(
+      v.literal("source"),
+      v.literal("entity"),
+      v.literal("claim"),
+    ),
+    targetKey: v.string(),
+    status: v.union(v.literal("active"), v.literal("paused")),
+    deliveryPreference: v.union(
+      v.literal("in_app"),
+      v.literal("webhook"),
+      v.literal("none"),
+    ),
+    eventCursor: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerUserId_and_watchlistKey", ["ownerUserId", "watchlistKey"])
+    .index("by_ownerUserId_and_agentId_and_updatedAt", [
+      "ownerUserId",
+      "agentId",
+      "updatedAt",
+    ])
+    .index("by_ownerUserId_and_updatedAt", ["ownerUserId", "updatedAt"]),
   evidenceDatasets: defineTable({
     datasetKey: v.string(),
     name: v.string(),

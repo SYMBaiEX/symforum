@@ -37,6 +37,9 @@ const evidence = {
   getPublicDocument: makeFunctionReference<"query", any, any>(
     "evidence:getPublicDocument",
   ),
+  timeline: makeFunctionReference<"query", any, any>(
+    "evidence:listPublicClaimTimeline",
+  ),
 } as any;
 
 function setup() {
@@ -332,5 +335,111 @@ describe("durable evidence graph", () => {
         confidence: 0.9,
       }),
     ).rejects.toThrow(/public claim cannot cite a private document/i);
+  });
+
+  test("keeps an idempotent, public-only claim revision timeline with exact citations", async () => {
+    const t = setup();
+    const { sourceId } = await seedSource(t);
+    const document = await t.mutation(
+      evidence.upsertDocumentVersion,
+      versionArgs(sourceId),
+    );
+    const first = await t.mutation(evidence.upsertClaim, {
+      claimKey: "timeline-claim",
+      statement: "The release is available to the public.",
+      predicate: "availability",
+      objectText: "available",
+      status: "unresolved",
+      confidence: 0.5,
+      visibility: "public",
+      observedAt: 1_800_000_000_000,
+      actorType: "agent",
+      actorId: "evidence-bot",
+      source: "fixture",
+    });
+    await t.mutation(evidence.upsertClaim, {
+      claimKey: "timeline-claim",
+      statement: "The release is available to the public.",
+      predicate: "availability",
+      objectText: "available",
+      status: "unresolved",
+      confidence: 0.5,
+      visibility: "public",
+      observedAt: 1_800_000_000_000,
+      actorType: "agent",
+      actorId: "evidence-bot",
+      source: "fixture",
+    });
+    await t.mutation(evidence.upsertClaim, {
+      claimKey: "timeline-claim",
+      statement: "The release is available to the public.",
+      predicate: "availability",
+      objectText: "available",
+      status: "supported",
+      confidence: 0.9,
+      visibility: "public",
+      observedAt: 1_800_000_000_001,
+      actorType: "agent",
+      actorId: "evidence-bot",
+      source: "fixture",
+    });
+    await t.mutation(evidence.recordCitation, {
+      claimId: first.claimId,
+      documentVersionId: document.versionId,
+      citationKey: "timeline-claim-v1",
+      relation: "supports",
+      locator: "paragraph 2",
+      excerpt: "The release is available to the public.",
+      confidence: 0.9,
+      actorType: "agent",
+      actorId: "evidence-bot",
+      source: "fixture",
+    });
+    const timeline = await t.query(evidence.timeline, {
+      claimKey: "timeline-claim",
+      limit: 20,
+    });
+    expect(timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          changeKind: "created",
+          actorType: "agent",
+          actorId: "evidence-bot",
+          status: "unresolved",
+        }),
+        expect.objectContaining({ changeKind: "status", status: "supported" }),
+        expect.objectContaining({
+          changeKind: "evidence",
+          citation: expect.objectContaining({
+            documentVersionId: document.versionId,
+            locator: "paragraph 2",
+          }),
+        }),
+      ]),
+    );
+    await t.run(async (ctx) => {
+      const revisions = await ctx.db
+        .query("evidenceClaimRevisions")
+        .withIndex("by_claimId_and_observedAt", (q) =>
+          q.eq("claimId", first.claimId),
+        )
+        .collect();
+      expect(revisions).toHaveLength(3);
+      const evidenceRevision = revisions.find(
+        (revision) => revision.changeKind === "evidence",
+      )!;
+      await ctx.db.patch("evidenceClaimRevisions", evidenceRevision._id, {
+        visibility: "private",
+      });
+    });
+    const afterPrivateRevision = await t.query(evidence.timeline, {
+      claimKey: "timeline-claim",
+      limit: 20,
+    });
+    expect(
+      afterPrivateRevision.some(
+        (entry: { changeKind: string }) => entry.changeKind === "evidence",
+      ),
+    ).toBe(false);
   });
 });

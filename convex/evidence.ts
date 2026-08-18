@@ -1,10 +1,17 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import {
   requireAgentScope,
   requireAuthenticatedUser,
   type AgentScope,
 } from "./authz";
+import { sha256Base64Url } from "./agentIdentityCrypto";
 
 const visibilityValidator = v.union(v.literal("public"), v.literal("private"));
 const licenseClassValidator = v.union(
@@ -38,6 +45,19 @@ const changeKindValidator = v.union(
   v.literal("updated"),
   v.literal("status-changed"),
 );
+const claimRevisionChangeKindValidator = v.union(
+  v.literal("created"),
+  v.literal("semantic"),
+  v.literal("status"),
+  v.literal("evidence"),
+);
+const claimRevisionActorTypeValidator = v.union(
+  v.literal("system"),
+  v.literal("agent"),
+  v.literal("human"),
+);
+const CLAIM_REVISION_RETENTION_MS = 7 * 365 * 24 * 60 * 60 * 1_000;
+const MAX_REVISION_CLEANUP = 100;
 
 const documentResultValidator = v.object({
   documentId: v.id("evidenceDocuments"),
@@ -58,6 +78,66 @@ function bounded(value: string, name: string, maximum: number) {
     });
   }
   return normalized;
+}
+
+/** A compact, cryptographic deterministic key used to make ingestion retries append-safe. */
+async function stableRevisionKey(parts: readonly string[]) {
+  return `claim:${await sha256Base64Url(JSON.stringify(parts))}`;
+}
+
+async function recordClaimRevision(
+  ctx: MutationCtx,
+  args: {
+    claim: Doc<"evidenceClaims">;
+    changeKind: "created" | "semantic" | "status" | "evidence";
+    actorType: "system" | "agent" | "human";
+    actorId: string;
+    source: string;
+    citationId?: Doc<"evidenceClaimCitations">["_id"] | null;
+    createdAt: number;
+  },
+) {
+  const citationId = args.citationId ?? null;
+  const revisionKey = await stableRevisionKey([
+    args.claim._id,
+    args.changeKind,
+    args.claim.statement,
+    args.claim.subjectEntityId ?? "",
+    args.claim.predicate,
+    args.claim.objectText,
+    args.claim.status,
+    String(args.claim.confidence),
+    args.claim.visibility,
+    String(args.claim.observedAt),
+    args.actorType,
+    args.actorId,
+    args.source,
+    citationId ?? "",
+  ]);
+  const existing = await ctx.db
+    .query("evidenceClaimRevisions")
+    .withIndex("by_revisionKey", (q) => q.eq("revisionKey", revisionKey))
+    .unique();
+  if (existing !== null) return existing._id;
+  return await ctx.db.insert("evidenceClaimRevisions", {
+    claimId: args.claim._id,
+    revisionKey,
+    changeKind: args.changeKind,
+    statement: args.claim.statement,
+    subjectEntityId: args.claim.subjectEntityId,
+    predicate: args.claim.predicate,
+    objectText: args.claim.objectText,
+    status: args.claim.status,
+    confidence: args.claim.confidence,
+    visibility: args.claim.visibility,
+    observedAt: args.claim.observedAt,
+    actorType: args.actorType,
+    actorId: args.actorId,
+    source: args.source,
+    citationId,
+    createdAt: args.createdAt,
+    retentionExpiresAt: args.createdAt + CLAIM_REVISION_RETENTION_MS,
+  });
 }
 
 async function requireEvidenceAgent(
@@ -395,6 +475,9 @@ export const upsertClaim = internalMutation({
     confidence: v.number(),
     visibility: visibilityValidator,
     observedAt: v.number(),
+    actorType: v.optional(claimRevisionActorTypeValidator),
+    actorId: v.optional(v.string()),
+    source: v.optional(v.string()),
   },
   returns: v.object({ claimId: v.id("evidenceClaims"), created: v.boolean() }),
   handler: async (ctx, args) => {
@@ -421,8 +504,14 @@ export const upsertClaim = internalMutation({
       .query("evidenceClaims")
       .withIndex("by_claimKey", (q) => q.eq("claimKey", claimKey))
       .unique();
+    const {
+      actorType: _actorType,
+      actorId: _actorId,
+      source: _source,
+      ...claimArgs
+    } = args;
     const value = {
-      ...args,
+      ...claimArgs,
       subjectEntityId: args.subjectEntityId ?? null,
       claimKey,
       statement: bounded(args.statement, "statement", 12_000),
@@ -430,8 +519,38 @@ export const upsertClaim = internalMutation({
       objectText: bounded(args.objectText, "objectText", 4_000),
       updatedAt: now,
     };
+    const actorType = args.actorType ?? "system";
+    const actorId = bounded(
+      args.actorId ?? "evidence-ingestion",
+      "actorId",
+      160,
+    );
+    const source = bounded(
+      args.source ?? "evidence.upsertClaim",
+      "source",
+      240,
+    );
     if (existing !== null) {
+      const changed =
+        existing.statement !== value.statement ||
+        existing.subjectEntityId !== value.subjectEntityId ||
+        existing.predicate !== value.predicate ||
+        existing.objectText !== value.objectText ||
+        existing.status !== value.status ||
+        existing.confidence !== value.confidence ||
+        existing.visibility !== value.visibility ||
+        existing.observedAt !== value.observedAt;
+      if (!changed) return { claimId: existing._id, created: false };
       await ctx.db.patch("evidenceClaims", existing._id, value);
+      const updated = { ...existing, ...value };
+      await recordClaimRevision(ctx, {
+        claim: updated,
+        changeKind: existing.status === value.status ? "semantic" : "status",
+        actorType,
+        actorId,
+        source,
+        createdAt: now,
+      });
       if (existing.status !== args.status) {
         const eventKey = `claim:${existing._id}:status:${args.status}`;
         const event = await ctx.db
@@ -461,6 +580,15 @@ export const upsertClaim = internalMutation({
       ...value,
       createdAt: now,
     });
+    const claim = (await ctx.db.get("evidenceClaims", claimId))!;
+    await recordClaimRevision(ctx, {
+      claim,
+      changeKind: "created",
+      actorType,
+      actorId,
+      source,
+      createdAt: now,
+    });
     await ctx.db.insert("evidenceChangeEvents", {
       eventKey: `claim:${claimId}:created`,
       entityType: "claim",
@@ -488,6 +616,9 @@ export const recordCitation = internalMutation({
     locator: v.string(),
     excerpt: v.string(),
     confidence: v.number(),
+    actorType: v.optional(claimRevisionActorTypeValidator),
+    actorId: v.optional(v.string()),
+    source: v.optional(v.string()),
   },
   returns: v.object({
     citationId: v.id("evidenceClaimCitations"),
@@ -529,16 +660,30 @@ export const recordCitation = internalMutation({
       .withIndex("by_citationKey", (q) => q.eq("citationKey", citationKey))
       .unique();
     if (existing !== null) return { citationId: existing._id, created: false };
-    return {
-      citationId: await ctx.db.insert("evidenceClaimCitations", {
-        ...args,
-        citationKey,
-        locator: bounded(args.locator, "locator", 1_000),
-        excerpt: bounded(args.excerpt, "excerpt", 8_000),
-        createdAt: Date.now(),
-      }),
-      created: true,
-    };
+    const createdAt = Date.now();
+    const {
+      actorType: _actorType,
+      actorId: _actorId,
+      source: _source,
+      ...citationArgs
+    } = args;
+    const citationId = await ctx.db.insert("evidenceClaimCitations", {
+      ...citationArgs,
+      citationKey,
+      locator: bounded(args.locator, "locator", 1_000),
+      excerpt: bounded(args.excerpt, "excerpt", 8_000),
+      createdAt,
+    });
+    await recordClaimRevision(ctx, {
+      claim,
+      changeKind: "evidence",
+      actorType: args.actorType ?? "system",
+      actorId: bounded(args.actorId ?? "evidence-ingestion", "actorId", 160),
+      source: bounded(args.source ?? "evidence.recordCitation", "source", 240),
+      citationId,
+      createdAt,
+    });
+    return { citationId, created: true };
   },
 });
 
@@ -774,6 +919,152 @@ export const listClaimsForDocumentVersion = internalQuery({
       }
     }
     return results;
+  },
+});
+
+const publicClaimTimelineEntryValidator = v.object({
+  revisionId: v.id("evidenceClaimRevisions"),
+  changeKind: claimRevisionChangeKindValidator,
+  statement: v.string(),
+  subjectEntityId: v.union(v.id("evidenceEntities"), v.null()),
+  predicate: v.string(),
+  objectText: v.string(),
+  status: claimStatusValidator,
+  confidence: v.number(),
+  observedAt: v.number(),
+  actorType: claimRevisionActorTypeValidator,
+  actorId: v.string(),
+  source: v.string(),
+  citation: v.union(
+    v.null(),
+    v.object({
+      citationId: v.id("evidenceClaimCitations"),
+      documentId: v.id("evidenceDocuments"),
+      documentVersionId: v.id("evidenceDocumentVersions"),
+      canonicalUrl: v.string(),
+      relation: v.union(
+        v.literal("supports"),
+        v.literal("contradicts"),
+        v.literal("context"),
+      ),
+      locator: v.string(),
+      excerpt: v.string(),
+      confidence: v.number(),
+    }),
+  ),
+});
+
+/**
+ * A bounded, public-only audit timeline. Revision visibility is intentionally
+ * checked separately from the mutable claim so a later publication cannot
+ * reveal a prior private conclusion or citation.
+ */
+export const listPublicClaimTimeline = query({
+  args: { claimKey: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(publicClaimTimelineEntryValidator),
+  handler: async (ctx, args) => {
+    const claimKey = bounded(args.claimKey, "claimKey", 200).toLowerCase();
+    const limit = Math.min(50, Math.max(1, Math.floor(args.limit ?? 20)));
+    const claim = await ctx.db
+      .query("evidenceClaims")
+      .withIndex("by_claimKey", (q) => q.eq("claimKey", claimKey))
+      .unique();
+    if (claim === null || claim.visibility !== "public") return [];
+    const revisions = await ctx.db
+      .query("evidenceClaimRevisions")
+      .withIndex("by_claimId_and_observedAt", (q) => q.eq("claimId", claim._id))
+      .order("desc")
+      .take(Math.min(100, limit * 3));
+    const timeline = [];
+    for (const revision of revisions) {
+      if (revision.visibility !== "public") continue;
+      let citation: {
+        citationId: Doc<"evidenceClaimCitations">["_id"];
+        documentId: Doc<"evidenceDocuments">["_id"];
+        documentVersionId: Doc<"evidenceDocumentVersions">["_id"];
+        canonicalUrl: string;
+        relation: "supports" | "contradicts" | "context";
+        locator: string;
+        excerpt: string;
+        confidence: number;
+      } | null = null;
+      if (revision.citationId !== null) {
+        const storedCitation = await ctx.db.get(
+          "evidenceClaimCitations",
+          revision.citationId,
+        );
+        const version =
+          storedCitation === null
+            ? null
+            : await ctx.db.get(
+                "evidenceDocumentVersions",
+                storedCitation.documentVersionId,
+              );
+        const document =
+          version === null
+            ? null
+            : await ctx.db.get("evidenceDocuments", version.documentId);
+        // An evidence revision derived only from private material is omitted,
+        // including its timestamp, rather than returning a redacted pointer.
+        if (
+          storedCitation !== null &&
+          version !== null &&
+          document?.visibility === "public"
+        ) {
+          citation = {
+            citationId: storedCitation._id,
+            documentId: document._id,
+            documentVersionId: version._id,
+            canonicalUrl: document.canonicalUrl,
+            relation: storedCitation.relation,
+            locator: storedCitation.locator,
+            excerpt: storedCitation.excerpt,
+            confidence: storedCitation.confidence,
+          };
+        } else {
+          continue;
+        }
+      }
+      timeline.push({
+        revisionId: revision._id,
+        changeKind: revision.changeKind,
+        statement: revision.statement,
+        subjectEntityId: revision.subjectEntityId,
+        predicate: revision.predicate,
+        objectText: revision.objectText,
+        status: revision.status,
+        confidence: revision.confidence,
+        observedAt: revision.observedAt,
+        actorType: revision.actorType,
+        actorId: revision.actorId,
+        source: revision.source,
+        citation,
+      });
+      if (timeline.length === limit) break;
+    }
+    return timeline;
+  },
+});
+
+/** Retention is explicit and bounded; callers may schedule this internal task. */
+export const cleanupExpiredClaimRevisions = internalMutation({
+  args: { now: v.optional(v.number()), limit: v.optional(v.number()) },
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const limit = Math.min(
+      MAX_REVISION_CLEANUP,
+      Math.max(1, Math.floor(args.limit ?? MAX_REVISION_CLEANUP)),
+    );
+    const expired = await ctx.db
+      .query("evidenceClaimRevisions")
+      .withIndex("by_retentionExpiresAt", (q) =>
+        q.lte("retentionExpiresAt", now),
+      )
+      .take(limit);
+    for (const revision of expired)
+      await ctx.db.delete("evidenceClaimRevisions", revision._id);
+    return { deleted: expired.length };
   },
 });
 
