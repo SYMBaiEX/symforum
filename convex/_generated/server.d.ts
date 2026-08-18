@@ -45,6 +45,7 @@ type Env = {
   readonly NEWSLETTER_FROM_EMAIL: string | undefined;
   readonly NEWSLETTER_REPLY_TO: string | undefined;
   readonly NEWSLETTER_SITE_URL: string | undefined;
+  readonly NVD_API_KEY: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
   readonly OPENROUTER_DAILY_BUDGET_USD: string | undefined;
   readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;

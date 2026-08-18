@@ -39,6 +39,7 @@ import type * as evidenceIngestion from "../evidenceIngestion.js";
 import type * as evidenceJobActions from "../evidenceJobActions.js";
 import type * as evidenceJobWorkflows from "../evidenceJobWorkflows.js";
 import type * as evidenceJobs from "../evidenceJobs.js";
+import type * as evidenceNvd from "../evidenceNvd.js";
 import type * as evidenceWatchlists from "../evidenceWatchlists.js";
 import type * as evidenceWebhookActions from "../evidenceWebhookActions.js";
 import type * as evidenceWebhooks from "../evidenceWebhooks.js";
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   evidenceJobActions: typeof evidenceJobActions;
   evidenceJobWorkflows: typeof evidenceJobWorkflows;
   evidenceJobs: typeof evidenceJobs;
+  evidenceNvd: typeof evidenceNvd;
   evidenceWatchlists: typeof evidenceWatchlists;
   evidenceWebhookActions: typeof evidenceWebhookActions;
   evidenceWebhooks: typeof evidenceWebhooks;
