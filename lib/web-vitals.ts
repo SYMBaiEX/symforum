@@ -39,6 +39,7 @@ const PRIVATE_PATH_PREFIXES = [
 const STATIC_PUBLIC_ROUTES = new Set([
   "/",
   "/about",
+  "/agent",
   "/ai-policy",
   "/blog",
   "/contact",
@@ -58,6 +59,7 @@ const STATIC_PUBLIC_ROUTES = new Set([
   "/research",
   "/research/ai-readable-web",
   "/research/editorial-trust-and-contracts",
+  "/research/methodology",
 ]);
 
 const PUBLIC_DYNAMIC_ROUTES: Array<{ pattern: RegExp; template: string }> = [

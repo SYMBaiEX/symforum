@@ -5,6 +5,10 @@ import { WEB_VITAL_BUDGETS, publicRouteTemplate } from "./web-vitals";
 
 describe("Web Vitals privacy boundary", () => {
   test("reduces public dynamic paths to route templates", () => {
+    expect(publicRouteTemplate("/agent")).toBe("/agent");
+    expect(publicRouteTemplate("/research/methodology")).toBe(
+      "/research/methodology",
+    );
     expect(publicRouteTemplate("/blog/release-notes?ref=private")).toBe(
       "/blog/[slug]",
     );
