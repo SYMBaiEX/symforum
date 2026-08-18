@@ -71,6 +71,7 @@ import type * as newsletterModel from "../newsletterModel.js";
 import type * as newsletterPayload from "../newsletterPayload.js";
 import type * as nyxForumAgent from "../nyxForumAgent.js";
 import type * as nyxProfile from "../nyxProfile.js";
+import type * as organizations from "../organizations.js";
 import type * as postModel from "../postModel.js";
 import type * as posts from "../posts.js";
 import type * as presence from "../presence.js";
@@ -155,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   newsletterPayload: typeof newsletterPayload;
   nyxForumAgent: typeof nyxForumAgent;
   nyxProfile: typeof nyxProfile;
+  organizations: typeof organizations;
   postModel: typeof postModel;
   posts: typeof posts;
   presence: typeof presence;
