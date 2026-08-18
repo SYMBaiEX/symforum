@@ -1,6 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { ProviderOptions } from "@ai-sdk/provider-utils";
-import type { LanguageModel } from "ai";
+import type { generateText, LanguageModel } from "ai";
 import { OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 export type ModelRoute = {
@@ -8,6 +7,8 @@ export type ModelRoute = {
   modelId: string;
   persistedModel: string;
 };
+
+type ProviderOptions = Parameters<typeof generateText>[0]["providerOptions"];
 
 export type RoutedModel = ModelRoute & {
   model: LanguageModel;
