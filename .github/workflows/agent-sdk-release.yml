@@ -1,0 +1,53 @@
+name: Agent SDK release checks
+
+on:
+  pull_request:
+    paths:
+      - "packages/agent-sdk/**"
+      - "packages/agent-cli/**"
+      - "packages/agent-python-sdk/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/agent-sdk-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/agent-sdk/**"
+      - "packages/agent-cli/**"
+      - "packages/agent-python-sdk/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/agent-sdk-release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  typescript-and-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter @symbaiex/agent-sdk build
+      - run: bun run --filter @symbaiex/agent-sdk test
+      - run: bun run --filter @symbaiex/agent-sdk pack:check
+      - run: bun run --filter @symbaiex/agent-cli build
+      - run: bun run --filter @symbaiex/agent-cli test
+      - run: bun run --filter @symbaiex/agent-cli pack:check
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/agent-python-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - run: python -m pip install --disable-pip-version-check build==1.2.2.post1
+      - run: python -m build --wheel --sdist

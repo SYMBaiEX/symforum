@@ -27,7 +27,7 @@ describe("AgentClient", () => {
     ]);
   });
 
-  test("maps platform errors without exposing a token", async () => {
+  test("sanitizes platform errors without exposing a token", async () => {
     const client = new AgentClient({
       fetch: async () =>
         Response.json(
@@ -44,7 +44,7 @@ describe("AgentClient", () => {
       expect.objectContaining<Partial<AgentApiError>>({
         status: 403,
         code: "SCOPE_DENIED",
-        message: "Scope denied.",
+        message: "The platform request failed.",
       }),
     );
   });
@@ -95,7 +95,8 @@ describe("AgentClient", () => {
   });
 
   test("uses bounded, owner-scoped webhook management paths", async () => {
-    const calls: Array<{ url: string; method: string; body: string | null }> = [];
+    const calls: Array<{ url: string; method: string; body: string | null }> =
+      [];
     const client = new AgentClient({
       fetch: async (input, init) => {
         calls.push({
@@ -105,7 +106,11 @@ describe("AgentClient", () => {
         });
         return Response.json({ enabled: true });
       },
-      tokenStore: { async getToken() { return "access-token"; } },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
     });
     await client.webhookAvailability();
     await client.webhookHistory("research-events", 5);
@@ -133,6 +138,107 @@ describe("AgentClient", () => {
     ]);
   });
 
+  test("covers public auth, artifact, and MCP contracts without a live network", async () => {
+    const calls: Array<{ url: string; method: string; headers: Headers }> = [];
+    const client = new AgentClient({
+      fetch: async (input, init) => {
+        calls.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          headers: new Headers(init?.headers),
+        });
+        if (String(input).endsWith("/artifact")) {
+          return new Response(new Uint8Array([1, 2, 3]));
+        }
+        return Response.json({ ok: true });
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+
+    await client.challenge("suki");
+    await client.signIn("suki", "challenge", "signature");
+    await client.refresh("refresh-token");
+    await client.sources(5);
+    await client.document("doc/1");
+    await client.verifyClaim("claim-1", "claim-verify-001");
+    await client.entities("zero trust", 2);
+    await client.versionClaims("version-1", 2);
+    await client.products(2);
+    await client.datasets(2);
+    await client.benchmarks(2);
+    await client.entitlements();
+    await client.usage(2);
+    await client.researchJob("job-1");
+    await expect(client.researchArtifact("job-1")).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    await client.createExport("dataset-1", "export-001");
+    await client.exportJob("job-2");
+    await client.exportArtifact("job-2");
+    await client.rotateWebhookSecret("primary", "rotate-001");
+    await client.replayWebhookDelivery("primary", "event-1", "replay-001");
+    await client.mcp(
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { method: "tools/list" },
+    );
+
+    expect(calls.map((call) => call.url)).toEqual(
+      expect.arrayContaining([
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/auth/challenge`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/auth/sign-in`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/auth/refresh`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/sources?limit=5`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/documents/doc%2F1`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/claim-1/verify`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/research-jobs/job-1/artifact`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-2/artifact`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/mcp`,
+      ]),
+    );
+    const mcp = calls.at(-1);
+    expect(mcp?.headers.get("mcp-protocol-version")).toBe("2026-07-28");
+    expect(mcp?.headers.get("mcp-method")).toBe("tools/list");
+  });
+
+  test("rejects reflected bearer material and oversized JSON", async () => {
+    const bearer = "ACCESS_TOKEN_DO_NOT_REFLECT";
+    const reflected = new AgentClient({
+      fetch: async () =>
+        Response.json(
+          { code: "UPSTREAM_ACCESS_TOKEN_DO_NOT_REFLECT", error: bearer },
+          { status: 500 },
+        ),
+      tokenStore: {
+        async getToken() {
+          return bearer;
+        },
+      },
+    });
+    await expect(reflected.status()).rejects.toMatchObject({
+      code: "HTTP_500",
+      message: "The platform request failed.",
+    });
+
+    const oversized = new AgentClient({
+      fetch: async () =>
+        new Response("{}", {
+          headers: { "content-length": String(2 * 1024 * 1024 + 1) },
+        }),
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(oversized.status()).rejects.toMatchObject({
+      code: "RESPONSE_TOO_LARGE",
+    });
+  });
+
   test("rejects an untrusted custom origin before reading a bearer token", () => {
     let tokenReads = 0;
     expect(
@@ -146,7 +252,14 @@ describe("AgentClient", () => {
             },
           },
         }),
-    ).toThrow(/trustedOrigins/i);
+    ).toThrow(/HTTPS or a localhost/i);
     expect(tokenReads).toBe(0);
+    expect(
+      () =>
+        new AgentClient({
+          origin: "https://www.symbaiex.com/not-an-origin",
+          trustedOrigins: [DEFAULT_PLATFORM_ORIGIN],
+        }),
+    ).toThrow(/without a path/i);
   });
 });

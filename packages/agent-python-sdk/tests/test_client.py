@@ -111,6 +111,27 @@ class AgentClientTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "HTTPS"):
             client.create_webhook("primary", "http://hooks.example.test", ["evidence.export.completed"], idempotency_key="webhook-2")
 
+    def test_webhook_operations_use_bounded_public_paths(self) -> None:
+        recorder = Recorder({"ok": True})
+        client = AgentClient(token="access-token", transport=recorder)
+        client.webhook_availability()
+        client.webhook_health("primary")
+        client.webhook_deliveries("primary", limit=5)
+        client.rotate_webhook_secret("primary", idempotency_key="rotate-1")
+        client.replay_webhook_delivery("primary", "event-1", idempotency_key="replay-1")
+        client.send_webhook_test("primary", "evidence.claim.verified", idempotency_key="test-1")
+        self.assertEqual(
+            [request.url for request in recorder.requests],
+            [
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/availability",
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/primary/health",
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/primary/deliveries?limit=5",
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/primary/rotate",
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/primary/deliveries/event-1/replay",
+                f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/webhooks/primary/test",
+            ],
+        )
+
     def test_async_client_delegates_without_live_network(self) -> None:
         async def scenario() -> None:
             client = AsyncAgentClient(token="access-token", transport=Recorder([]))

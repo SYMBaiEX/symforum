@@ -263,6 +263,26 @@ class AgentClient:
             raise TypeError("status must be active, paused, or revoked")
         return self._json("POST", f"/api/agent/v1/webhooks/{_path_id(subscription_key, 'subscription_key')}/status", body={"status": status}, idempotency_key=idempotency_key)
 
+    def webhook_availability(self) -> JsonValue:
+        return self._get("webhooks/availability")
+
+    def webhook_health(self, subscription_key: str) -> JsonValue:
+        return self._get(f"webhooks/{_path_id(subscription_key, 'subscription_key')}/health")
+
+    def webhook_deliveries(self, subscription_key: str, *, limit: int | None = None) -> JsonValue:
+        return self._get(f"webhooks/{_path_id(subscription_key, 'subscription_key')}/deliveries", limit=limit)
+
+    def rotate_webhook_secret(self, subscription_key: str, *, idempotency_key: str) -> JsonValue:
+        return self._json("POST", f"/api/agent/v1/webhooks/{_path_id(subscription_key, 'subscription_key')}/rotate", body={}, idempotency_key=idempotency_key)
+
+    def replay_webhook_delivery(self, subscription_key: str, event_key: str, *, idempotency_key: str) -> JsonValue:
+        return self._json("POST", f"/api/agent/v1/webhooks/{_path_id(subscription_key, 'subscription_key')}/deliveries/{_path_id(event_key, 'event_key')}/replay", body={}, idempotency_key=idempotency_key)
+
+    def send_webhook_test(self, subscription_key: str, event_type: str, *, idempotency_key: str) -> JsonValue:
+        if event_type not in _WEBHOOK_EVENT_TYPES:
+            raise TypeError("event_type is unsupported")
+        return self._json("POST", f"/api/agent/v1/webhooks/{_path_id(subscription_key, 'subscription_key')}/test", body={"eventType": event_type}, idempotency_key=idempotency_key)
+
     def mcp(self, payload: Mapping[str, JsonValue], *, protocol_version: str = "2026-07-28", method: str | None = None, name: str | None = None) -> JsonValue:
         if protocol_version not in {"2026-07-28", "2025-03-26"}:
             raise TypeError("unsupported MCP protocol version")
@@ -357,7 +377,6 @@ class AsyncAgentClient:
     async def version_claims(self, document_version_id: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("version_claims", document_version_id, limit=limit)
     async def products(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("products", limit=limit)
     async def datasets(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("datasets", limit=limit)
-    async def benchmarks(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("benchmarks", limit=limit)
     async def entitlements(self) -> JsonValue: return await self.__getattr_async("entitlements")
     async def usage(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("usage", limit=limit)
     async def create_research(self, query: str, *, idempotency_key: str) -> ResearchJob: return await self.__getattr_async("create_research", query, idempotency_key=idempotency_key)
@@ -369,6 +388,12 @@ class AsyncAgentClient:
     async def webhooks(self) -> JsonValue: return await self.__getattr_async("webhooks")
     async def create_webhook(self, subscription_key: str, url: str, event_types: list[str] | tuple[str, ...], *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("create_webhook", subscription_key, url, event_types, idempotency_key=idempotency_key)
     async def set_webhook_status(self, subscription_key: str, status: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("set_webhook_status", subscription_key, status, idempotency_key=idempotency_key)
+    async def webhook_availability(self) -> JsonValue: return await self.__getattr_async("webhook_availability")
+    async def webhook_health(self, subscription_key: str) -> JsonValue: return await self.__getattr_async("webhook_health", subscription_key)
+    async def webhook_deliveries(self, subscription_key: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("webhook_deliveries", subscription_key, limit=limit)
+    async def rotate_webhook_secret(self, subscription_key: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("rotate_webhook_secret", subscription_key, idempotency_key=idempotency_key)
+    async def replay_webhook_delivery(self, subscription_key: str, event_key: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("replay_webhook_delivery", subscription_key, event_key, idempotency_key=idempotency_key)
+    async def send_webhook_test(self, subscription_key: str, event_type: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("send_webhook_test", subscription_key, event_type, idempotency_key=idempotency_key)
     async def mcp(self, payload: Mapping[str, JsonValue], *, protocol_version: str = "2026-07-28", method: str | None = None, name: str | None = None) -> JsonValue: return await self.__getattr_async("mcp", payload, protocol_version=protocol_version, method=method, name=name)
 
 

@@ -62,6 +62,7 @@ export async function run(
                                 | "active"
                                 | "paused"
                                 | "revoked",
+                              requiredOption(args, "--idempotency-key"),
                             )
                           : command === "webhook-test"
                             ? await client.sendWebhookTest(
@@ -72,11 +73,12 @@ export async function run(
                                   | "evidence.export.completed"
                                   | "evidence.benchmark.completed"
                                   | "evidence.claim.verified",
+                                requiredOption(args, "--idempotency-key"),
                               )
-                : null;
+                            : null;
     if (result === null)
       throw new UsageError(
-        "Usage: symbaiex <manifest|status|quota|search|universal-search|webhook-availability|webhook-list|webhook-health|webhook-history|webhook-status|webhook-test|login> [options]",
+        "Usage: symbaiex <manifest|status|quota|search|universal-search|webhook-availability|webhook-list|webhook-health|webhook-history|webhook-status|webhook-test|login> [options]. Write commands require --idempotency-key.",
       );
     io.log(JSON.stringify(result, null, 2));
     return 0;
@@ -128,12 +130,19 @@ function option(args: string[], name: string) {
   return value;
 }
 
+function requiredOption(args: string[], name: string) {
+  const value = option(args, name);
+  if (!value) throw new UsageError(`${name} is required.`);
+  return value;
+}
+
 function requiredArgument(args: string[], label: string) {
   const value = args.find(
     (argument, index) =>
       !argument.startsWith("--") &&
       args[index - 1] !== "--origin" &&
-      args[index - 1] !== "--token-file",
+      args[index - 1] !== "--token-file" &&
+      args[index - 1] !== "--idempotency-key",
   );
   if (!value) throw new UsageError(`${label} is required.`);
   return value;
@@ -144,7 +153,8 @@ function requiredArgumentAfter(args: string[], label: string, offset: number) {
     (argument, index) =>
       !argument.startsWith("--") &&
       args[index - 1] !== "--origin" &&
-      args[index - 1] !== "--token-file",
+      args[index - 1] !== "--token-file" &&
+      args[index - 1] !== "--idempotency-key",
   );
   const value = positional[offset];
   if (!value) throw new UsageError(`${label} is required.`);

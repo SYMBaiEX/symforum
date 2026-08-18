@@ -1,7 +1,48 @@
 {
   "name": "@symbaiex/agent-sdk",
   "version": "0.1.0",
-  "private": true,
+  "description": "Dependency-light TypeScript client for the public SYMBaiEX agent API.",
+  "license": "MIT",
+  "author": "SYMBaiEX",
+  "homepage": "https://www.symbaiex.com/agent/instructions",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SYMBaiEX/symbaiex.git",
+    "directory": "packages/agent-sdk"
+  },
+  "bugs": "https://github.com/SYMBaiEX/symbaiex/issues",
+  "keywords": [
+    "symbaiex",
+    "agent",
+    "evidence",
+    "ed25519",
+    "mcp"
+  ],
   "type": "module",
-  "exports": "./src/index.ts"
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "bun test src/index.test.ts",
+    "prepack": "bun run build",
+    "pack:check": "bun pm pack --dry-run"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
 }

@@ -38,6 +38,10 @@ export type ResearchJob = {
   status: string;
 };
 
+export type ExportJob = ResearchJob;
+export type JsonObject = Record<string, unknown>;
+export type McpPayload = JsonObject;
+
 export type WebhookEventType =
   | "evidence.document.changed"
   | "evidence.research.completed"
@@ -121,6 +125,44 @@ export class AgentClient {
     return await this.request<AgentQuota>("/api/agent/quota");
   }
 
+  async challenge(agentId: string): Promise<JsonObject> {
+    return await this.request<JsonObject>("/api/agent/auth/challenge", {
+      authenticated: false,
+      method: "POST",
+      body: { agentId: validIdentifier(agentId, "agentId", 64) },
+    });
+  }
+
+  async signIn(
+    agentId: string,
+    challenge: string,
+    signature: string,
+    audience?: string,
+  ): Promise<JsonObject> {
+    return await this.request<JsonObject>("/api/agent/auth/sign-in", {
+      authenticated: false,
+      method: "POST",
+      body: {
+        agentId: validIdentifier(agentId, "agentId", 64),
+        challenge: validIdentifier(challenge, "challenge", 8192),
+        signature: validIdentifier(signature, "signature", 8192),
+        ...(audience === undefined
+          ? {}
+          : { audience: validIdentifier(audience, "audience", 2048) }),
+      },
+    });
+  }
+
+  async refresh(refreshToken: string): Promise<JsonObject> {
+    return await this.request<JsonObject>("/api/agent/auth/refresh", {
+      authenticated: false,
+      method: "POST",
+      body: {
+        refreshToken: validIdentifier(refreshToken, "refreshToken", 8192),
+      },
+    });
+  }
+
   async search<T = unknown>(query: string, limit?: number): Promise<T> {
     const text = query.trim();
     if (!text) throw new TypeError("search query must not be empty");
@@ -131,6 +173,10 @@ export class AgentClient {
       params.set("limit", String(limit));
     }
     return await this.request<T>(`/api/agent/v1/search?${params}`);
+  }
+
+  async sources<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("sources", limit);
   }
 
   async universalSearch<T = unknown>(
@@ -148,9 +194,61 @@ export class AgentClient {
     return await this.request<T>(`/api/agent/v1/universal-search?${params}`);
   }
 
+  async document<T = unknown>(documentId: string): Promise<T> {
+    return await this.get<T>(`documents/${encodePathSegment(documentId)}`);
+  }
+
+  async changes<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("changes", limit);
+  }
+
+  async verifyClaim<T = unknown>(
+    claimId: string,
+    idempotencyKey: string,
+  ): Promise<T> {
+    return await this.request<T>(
+      `/api/agent/v1/claims/${encodePathSegment(claimId)}/verify`,
+      { method: "POST", idempotencyKey: validIdempotencyKey(idempotencyKey) },
+    );
+  }
+
+  async entities<T = unknown>(query: string, limit?: number): Promise<T> {
+    return await this.searchResource<T>("entities", query, limit);
+  }
+
+  async versionClaims<T = unknown>(
+    documentVersionId: string,
+    limit?: number,
+  ): Promise<T> {
+    return await this.get<T>(
+      `document-versions/${encodePathSegment(documentVersionId)}/claims`,
+      limit,
+    );
+  }
+
+  async products<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("products", limit);
+  }
+
+  async datasets<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("datasets", limit);
+  }
+
+  async benchmarks<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("benchmarks", limit);
+  }
+
+  async entitlements<T = unknown>(): Promise<T> {
+    return await this.get<T>("entitlements");
+  }
+
+  async usage<T = unknown>(limit?: number): Promise<T> {
+    return await this.get<T>("usage", limit);
+  }
+
   async createResearch(
     query: string,
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<ResearchJob> {
     const text = query.trim();
     if (!text) throw new TypeError("research query must not be empty");
@@ -166,6 +264,40 @@ export class AgentClient {
     });
   }
 
+  async researchJob<T = unknown>(jobId: string): Promise<T> {
+    return await this.get<T>(`research-jobs/${encodePathSegment(jobId)}`);
+  }
+
+  async researchArtifact(jobId: string): Promise<Uint8Array> {
+    return await this.requestBytes(
+      `/api/agent/v1/research-jobs/${encodePathSegment(jobId)}/artifact`,
+    );
+  }
+
+  async createExport(
+    datasetId: string,
+    idempotencyKey: string,
+  ): Promise<ExportJob> {
+    return await this.request<ExportJob>("/api/agent/v1/exports", {
+      method: "POST",
+      body: {
+        datasetId: validIdentifier(datasetId, "datasetId", 512),
+        format: "jsonl",
+      },
+      idempotencyKey: validIdempotencyKey(idempotencyKey),
+    });
+  }
+
+  async exportJob<T = unknown>(jobId: string): Promise<T> {
+    return await this.get<T>(`exports/${encodePathSegment(jobId)}`);
+  }
+
+  async exportArtifact(jobId: string): Promise<Uint8Array> {
+    return await this.requestBytes(
+      `/api/agent/v1/exports/${encodePathSegment(jobId)}/artifact`,
+    );
+  }
+
   async webhookAvailability(): Promise<{ enabled: boolean }> {
     return await this.request("/api/agent/v1/webhooks/availability");
   }
@@ -178,7 +310,7 @@ export class AgentClient {
     subscriptionKey: string,
     url: string,
     eventTypes: readonly WebhookEventType[],
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<WebhookSubscription> {
     return await this.request("/api/agent/v1/webhooks", {
       method: "POST",
@@ -190,11 +322,15 @@ export class AgentClient {
   async setWebhookStatus(
     subscriptionKey: string,
     status: "active" | "paused" | "revoked",
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<WebhookSubscription> {
     return await this.request(
       `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/status`,
-      { method: "POST", body: { status }, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+      {
+        method: "POST",
+        body: { status },
+        idempotencyKey: validIdempotencyKey(idempotencyKey),
+      },
     );
   }
 
@@ -222,33 +358,45 @@ export class AgentClient {
   /** The returned secret is shown exactly once; store it outside model context. */
   async rotateWebhookSecret(
     subscriptionKey: string,
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<WebhookSubscription> {
     return await this.request(
       `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/rotate`,
-      { method: "POST", body: {}, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+      {
+        method: "POST",
+        body: {},
+        idempotencyKey: validIdempotencyKey(idempotencyKey),
+      },
     );
   }
 
   async replayWebhookDelivery(
     subscriptionKey: string,
     eventKey: string,
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<WebhookDelivery> {
     return await this.request(
       `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/deliveries/${encodePathSegment(eventKey)}/replay`,
-      { method: "POST", body: {}, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+      {
+        method: "POST",
+        body: {},
+        idempotencyKey: validIdempotencyKey(idempotencyKey),
+      },
     );
   }
 
   async sendWebhookTest(
     subscriptionKey: string,
     eventType: WebhookEventType,
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string,
   ): Promise<WebhookDelivery> {
     return await this.request(
       `/api/agent/v1/webhooks/${encodePathSegment(subscriptionKey)}/test`,
-      { method: "POST", body: { eventType }, idempotencyKey: validIdempotencyKey(idempotencyKey) },
+      {
+        method: "POST",
+        body: { eventType },
+        idempotencyKey: validIdempotencyKey(idempotencyKey),
+      },
     );
   }
 
@@ -258,6 +406,47 @@ export class AgentClient {
     return await this.signer.sign(message);
   }
 
+  async mcp<T = unknown>(
+    payload: McpPayload,
+    options: {
+      protocolVersion?: "2026-07-28" | "2025-03-26";
+      method?: string;
+      name?: string;
+    } = {},
+  ): Promise<T> {
+    const protocolVersion = options.protocolVersion ?? "2026-07-28";
+    return await this.request<T>("/api/agent/mcp", {
+      method: "POST",
+      body: payload,
+      headers: {
+        "mcp-protocol-version": protocolVersion,
+        ...(options.method === undefined
+          ? {}
+          : { "mcp-method": validIdentifier(options.method, "method", 200) }),
+        ...(options.name === undefined
+          ? {}
+          : { "mcp-name": validIdentifier(options.name, "name", 200) }),
+      },
+    });
+  }
+
+  private async get<T>(resource: string, limit?: number): Promise<T> {
+    const query = limit === undefined ? "" : `?limit=${validLimit(limit)}`;
+    return await this.request<T>(`/api/agent/v1/${resource}${query}`);
+  }
+
+  private async searchResource<T>(
+    resource: string,
+    query: string,
+    limit?: number,
+  ): Promise<T> {
+    const text = query.trim();
+    if (!text) throw new TypeError("search query must not be empty");
+    const params = new URLSearchParams({ q: text });
+    if (limit !== undefined) params.set("limit", String(validLimit(limit)));
+    return await this.request<T>(`/api/agent/v1/${resource}?${params}`);
+  }
+
   private async request<T>(
     path: string,
     options: {
@@ -265,11 +454,16 @@ export class AgentClient {
       method?: "GET" | "POST";
       body?: unknown;
       idempotencyKey?: string;
+      headers?: Record<string, string>;
     } = {},
   ): Promise<T> {
     const headers = new Headers({ accept: "application/json" });
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers.set(name, value);
+    }
+    let token: string | null | undefined;
     if (options.authenticated !== false) {
-      const token = await this.tokenStore?.getToken();
+      token = await this.tokenStore?.getToken();
       if (!token)
         throw new AgentApiError(
           401,
@@ -291,21 +485,54 @@ export class AgentClient {
       redirect: "error",
     });
     const payload = await readJson(response);
-    if (!response.ok) throw toApiError(response.status, payload);
+    if (!response.ok)
+      throw toApiError(response.status, payload, token ?? undefined);
     return payload as T;
+  }
+
+  private async requestBytes(path: string): Promise<Uint8Array> {
+    const token = await this.tokenStore?.getToken();
+    if (!token)
+      throw new AgentApiError(
+        401,
+        "AUTH_REQUIRED",
+        "An agent access token is required.",
+      );
+    const response = await this.fetcher(new URL(path, this.origin), {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/octet-stream",
+      },
+      cache: "no-store",
+      redirect: "error",
+    });
+    if (!response.ok)
+      throw toApiError(response.status, await readJson(response), token);
+    assertResponseSize(response, 10 * 1024 * 1024);
+    const body = new Uint8Array(await response.arrayBuffer());
+    if (body.byteLength > 10 * 1024 * 1024)
+      throw new AgentApiError(
+        response.status,
+        "RESPONSE_TOO_LARGE",
+        "The platform response exceeded the client safety limit.",
+      );
+    return body;
   }
 }
 
 function encodePathSegment(value: string) {
   const normalized = value.trim();
-  if (!normalized || normalized.length > 160)
-    throw new TypeError("webhook identifier must be a bounded non-empty string");
+  if (!normalized || normalized.length > 512)
+    throw new TypeError("identifier must be a bounded non-empty string");
   return encodeURIComponent(normalized);
 }
 
 function validIdempotencyKey(value: string) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value))
-    throw new TypeError("idempotencyKey must be 1-160 safe identifier characters");
+    throw new TypeError(
+      "idempotencyKey must be 1-160 safe identifier characters",
+    );
   return value;
 }
 
@@ -315,17 +542,39 @@ function validLimit(value: number) {
   return value;
 }
 
+function validIdentifier(value: string, label: string, maximum: number) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximum || /\s/.test(normalized))
+    throw new TypeError(`${label} must be a bounded non-empty string`);
+  return normalized;
+}
+
 function normalizeOrigin(value: string) {
   const url = new URL(value);
   if (
-    url.protocol !== "https:" &&
-    !["localhost", "127.0.0.1"].includes(url.hostname)
-  ) {
-    throw new TypeError("platform origin must use HTTPS");
-  }
-  url.pathname = "/";
-  url.search = "";
-  url.hash = "";
+    url.username ||
+    url.password ||
+    !["", "/"].includes(url.pathname) ||
+    url.search ||
+    url.hash
+  )
+    throw new TypeError(
+      "platform origin must be an origin without a path, query, or credentials",
+    );
+  const production = ["symbaiex.com", "www.symbaiex.com"].includes(
+    url.hostname,
+  );
+  const local = ["localhost", "127.0.0.1"].includes(url.hostname);
+  if (
+    !(
+      (url.protocol === "https:" && production) ||
+      (url.protocol === "http:" && local)
+    )
+  )
+    throw new TypeError(
+      "platform origin must use HTTPS or a localhost development origin",
+    );
+  url.pathname = "";
   return url.toString();
 }
 
@@ -346,10 +595,17 @@ function assertTrustedOrigin(
 }
 
 async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text();
-  if (!text) return {};
+  assertResponseSize(response, 2 * 1024 * 1024);
+  const body = new Uint8Array(await response.arrayBuffer());
+  if (body.byteLength > 2 * 1024 * 1024)
+    throw new AgentApiError(
+      response.status,
+      "RESPONSE_TOO_LARGE",
+      "The platform response exceeded the client safety limit.",
+    );
+  if (!body.byteLength) return {};
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(new TextDecoder().decode(body)) as unknown;
   } catch {
     throw new AgentApiError(
       response.status,
@@ -359,15 +615,26 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function toApiError(status: number, payload: unknown) {
+function assertResponseSize(response: Response, maximum: number) {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && Number(contentLength) > maximum)
+    throw new AgentApiError(
+      response.status,
+      "RESPONSE_TOO_LARGE",
+      "The platform response exceeded the client safety limit.",
+    );
+}
+
+function toApiError(status: number, payload: unknown, token?: string) {
   const record =
     payload && typeof payload === "object"
       ? (payload as Record<string, unknown>)
       : {};
-  const message =
-    typeof record.error === "string"
-      ? record.error
-      : "The platform request failed.";
-  const code = typeof record.code === "string" ? record.code : `HTTP_${status}`;
-  return new AgentApiError(status, code, message);
+  const candidate = typeof record.code === "string" ? record.code : "";
+  const code =
+    /^[A-Z][A-Z0-9_.:-]{0,63}$/.test(candidate) &&
+    (!token || !candidate.toLowerCase().includes(token.toLowerCase()))
+      ? candidate
+      : `HTTP_${status}`;
+  return new AgentApiError(status, code, "The platform request failed.");
 }

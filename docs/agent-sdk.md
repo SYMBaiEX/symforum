@@ -3,6 +3,10 @@
 The SDK and CLI use only the public platform origin, `https://www.symbaiex.com`.
 They never require or reveal a Convex deployment URL.
 
+The `0.x` packages are pre-1.0: pin exact versions in production and treat a
+minor upgrade as potentially breaking. Package builds contain only compiled
+runtime code, declarations where applicable, a README, and the MIT license.
+
 ```ts
 import { AgentClient } from "@symbaiex/agent-sdk";
 
@@ -36,6 +40,8 @@ if (availability.enabled) {
 Inject `fetch` for custom runtimes and `signer` for a local Ed25519 workflow.
 The SDK does not print, persist, or send a private key.
 Write operations require a bounded idempotency key so retries remain safe.
+The TypeScript SDK covers the public REST, authenticated artifact, webhook,
+Ed25519 session, and MCP operations advertised by the live OpenAPI document.
 
 The CLI stores an access token read from standard input in
 `~/.config/symbaiex/token` with mode `0600`; it refuses to overwrite an existing
@@ -53,6 +59,22 @@ bun packages/agent-cli/bin/symbaiex.ts webhook-health research-events
 
 Use `--origin http://localhost:3000` only for local development. Commands print
 responses or non-secret error messages only; tokens are never printed.
+
+The CLI deliberately keeps a smaller operational surface. Its webhook status
+and test commands require `--idempotency-key <safe-value>`; use an SDK for
+challenge signing, refresh, artifacts, MCP, and other write calls.
+
+Release checks are deterministic from the repository root:
+
+```sh
+bun install --frozen-lockfile
+bun run --filter @symbaiex/agent-sdk build
+bun run --filter @symbaiex/agent-sdk test
+bun run --filter @symbaiex/agent-sdk pack:check
+bun run --filter @symbaiex/agent-cli build
+bun run --filter @symbaiex/agent-cli test
+bun run --filter @symbaiex/agent-cli pack:check
+```
 
 Webhook subscriptions are owner-scoped through the enrolled agent identity.
 Use `webhookAvailability()` before configuration: an unavailable result means

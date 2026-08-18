@@ -22,5 +22,20 @@ resulting signature. All writes require a bounded idempotency key.
 dependency-free synchronous transport. This keeps the package dependency-free
 without silently choosing an HTTP framework for applications.
 
+The package covers the REST, artifact, webhook, authentication, and MCP
+operations advertised by the live OpenAPI contract. It does not persist tokens
+or private keys. Callers must use a keychain or secret manager and provide a
+fresh, bounded `idempotency_key` for every write.
+
+## Release checks
+
+```sh
+PYTHONPATH=src uv run --python 3.11 --no-project python -m unittest discover -s tests -v
+uv build --offline
+```
+
+`0.x` releases may make breaking changes. Pin an exact package version for
+production agents and review the live manifest before upgrading.
+
 For the complete contract, see the live [OpenAPI document](https://www.symbaiex.com/api/agent/openapi.json)
 and [agent instructions](https://www.symbaiex.com/agent/instructions).

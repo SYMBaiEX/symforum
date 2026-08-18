@@ -34,8 +34,14 @@ only the `symbaiex.com` production origins; local development requires an
 explicit localhost/127.0.0.1 trusted origin. It never follows redirects, so a
 bearer cannot be forwarded to a different host.
 
+The package covers all public REST resources, artifact downloads, the Ed25519
+session exchange, webhook lifecycle, and stateless MCP calls advertised by the
+live OpenAPI document. It remains pre-1.0: pin an exact version in production
+and review the live manifest before upgrading.
+
 Run the offline test suite from the repository root:
 
 ```sh
-PYTHONPATH=packages/agent-python-sdk/src python3 -m unittest discover -s packages/agent-python-sdk/tests -v
+PYTHONPATH=packages/agent-python-sdk/src python3.11 -m unittest discover -s packages/agent-python-sdk/tests -v
+uv build --offline --out-dir /tmp/symbaiex-agent-python-sdk packages/agent-python-sdk
 ```

@@ -44,4 +44,18 @@ describe("symbaiex login", () => {
     expect(tokenReads).toBe(0);
     expect(errors.join("\n")).toMatch(/SYMBaiEX platform origin/i);
   });
+
+  test("requires an explicit idempotency key before webhook writes", async () => {
+    const errors: string[] = [];
+    const code = await run(
+      ["webhook-status", "primary", "paused"],
+      {
+        log: () => undefined,
+        error: (value: unknown) => errors.push(String(value)),
+      },
+      async () => "access-token",
+    );
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toMatch(/idempotency-key is required/i);
+  });
 });

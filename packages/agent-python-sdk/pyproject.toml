@@ -8,8 +8,9 @@ version = "0.1.0"
 description = "Dependency-free Python client for the public SYMBaiEX agent API."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "SYMBaiEX" }]
+keywords = ["symbaiex", "agent", "evidence", "ed25519", "mcp"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -23,9 +24,15 @@ classifiers = [
 [project.urls]
 Documentation = "https://www.symbaiex.com/agent/instructions"
 OpenAPI = "https://www.symbaiex.com/api/agent/openapi.json"
+Homepage = "https://www.symbaiex.com"
+Source = "https://github.com/SYMBaiEX/symbaiex/tree/main/packages/agent-python-sdk"
+Issues = "https://github.com/SYMBaiEX/symbaiex/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/symbaiex_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.envs.default.scripts]
+test = "python -m unittest discover -s tests -v"
