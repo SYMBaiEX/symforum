@@ -2172,6 +2172,7 @@ export default defineSchema({
       v.literal("healthy"),
       v.literal("failed"),
     ),
+    currentRunId: v.optional(v.id("cronJobRunSummaries")),
     lastStartedAt: v.number(),
     lastSucceededAt: v.optional(v.number()),
     lastFailedAt: v.optional(v.number()),

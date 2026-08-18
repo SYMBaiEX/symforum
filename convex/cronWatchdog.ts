@@ -223,6 +223,7 @@ export const startRun = internalMutation({
     const values = {
       jobKey: args.jobKey,
       status: "running" as const,
+      currentRunId: runId,
       lastStartedAt: now,
       consecutiveFailures: heartbeat?.consecutiveFailures ?? 0,
       updatedAt: now,
@@ -250,6 +251,14 @@ export const completeRun = internalMutation({
       .withIndex("by_jobKey", (q) => q.eq("jobKey", args.jobKey))
       .unique();
     if (heartbeat === null) throw new Error("Cron heartbeat is missing.");
+    const run = await ctx.db.get("cronJobRunSummaries", args.runId);
+    if (
+      run === null ||
+      run.jobKey !== args.jobKey ||
+      run.startedAt !== args.startedAt
+    ) {
+      throw new Error("Cron run does not match its heartbeat.");
+    }
     const durationMs = Math.max(0, now - args.startedAt);
     await ctx.db.patch("cronJobRunSummaries", args.runId, {
       completedAt: now,
@@ -259,17 +268,22 @@ export const completeRun = internalMutation({
         ? {}
         : { failureClass: safeFailureClass(args.failureClass) }),
     });
-    await ctx.db.patch("cronJobHeartbeats", heartbeat._id, {
-      status: args.succeeded ? "healthy" : "failed",
-      lastDurationMs: durationMs,
-      ...(args.succeeded
-        ? { lastSucceededAt: now, consecutiveFailures: 0 }
-        : {
-            lastFailedAt: now,
-            consecutiveFailures: heartbeat.consecutiveFailures + 1,
-          }),
-      updatedAt: now,
-    });
+    if (
+      heartbeat.currentRunId === args.runId &&
+      heartbeat.lastStartedAt === args.startedAt
+    ) {
+      await ctx.db.patch("cronJobHeartbeats", heartbeat._id, {
+        status: args.succeeded ? "healthy" : "failed",
+        lastDurationMs: durationMs,
+        ...(args.succeeded
+          ? { lastSucceededAt: now, consecutiveFailures: 0 }
+          : {
+              lastFailedAt: now,
+              consecutiveFailures: heartbeat.consecutiveFailures + 1,
+            }),
+        updatedAt: now,
+      });
+    }
     return null;
   },
 });

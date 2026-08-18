@@ -210,4 +210,122 @@ describe("critical cron watchdog", () => {
     );
     expect(summarySource).not.toContain("Date.now");
   });
+
+  test("keeps a newer failed run authoritative when an older run succeeds late", async () => {
+    vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const older = await t.mutation(watchdog.start, {
+      jobKey: "evidence-cisa-kev",
+      now,
+    });
+    const newer = await t.mutation(watchdog.start, {
+      jobKey: "evidence-cisa-kev",
+      now: now + 1,
+    });
+    await t.mutation(watchdog.complete, {
+      jobKey: "evidence-cisa-kev",
+      runId: newer.runId,
+      startedAt: newer.startedAt,
+      succeeded: false,
+      failureClass: "TimeoutError",
+      now: now + 2,
+    });
+    await t.mutation(watchdog.complete, {
+      jobKey: "evidence-cisa-kev",
+      runId: older.runId,
+      startedAt: older.startedAt,
+      succeeded: true,
+      now: now + 3,
+    });
+    await expect(
+      t.mutation(watchdog.evaluate, { now: now + 4 }),
+    ).resolves.toMatchObject({
+      states: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "evidence-cisa-kev",
+          status: "failed",
+          consecutiveFailures: 1,
+        }),
+      ]),
+    });
+    await t.run(async (ctx) => {
+      const heartbeat = await ctx.db
+        .query("cronJobHeartbeats")
+        .withIndex("by_jobKey", (q) => q.eq("jobKey", "evidence-cisa-kev"))
+        .unique();
+      expect(heartbeat).toMatchObject({
+        currentRunId: newer.runId,
+        status: "failed",
+        consecutiveFailures: 1,
+      });
+      const runs = await ctx.db
+        .query("cronJobRunSummaries")
+        .withIndex("by_jobKey_and_startedAt", (q) =>
+          q.eq("jobKey", "evidence-cisa-kev"),
+        )
+        .collect();
+      expect(runs.find((run) => run._id === older.runId)?.outcome).toBe(
+        "succeeded",
+      );
+    });
+  });
+
+  test("keeps a newer successful run authoritative when an older run fails late", async () => {
+    vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const older = await t.mutation(watchdog.start, {
+      jobKey: "evidence-cisa-kev",
+      now,
+    });
+    const newer = await t.mutation(watchdog.start, {
+      jobKey: "evidence-cisa-kev",
+      now: now + 1,
+    });
+    await t.mutation(watchdog.complete, {
+      jobKey: "evidence-cisa-kev",
+      runId: newer.runId,
+      startedAt: newer.startedAt,
+      succeeded: true,
+      now: now + 2,
+    });
+    await t.mutation(watchdog.complete, {
+      jobKey: "evidence-cisa-kev",
+      runId: older.runId,
+      startedAt: older.startedAt,
+      succeeded: false,
+      failureClass: "TimeoutError",
+      now: now + 3,
+    });
+    await expect(
+      t.mutation(watchdog.evaluate, { now: now + 4 }),
+    ).resolves.toMatchObject({
+      states: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "evidence-cisa-kev",
+          status: "healthy",
+          consecutiveFailures: 0,
+        }),
+      ]),
+    });
+    await t.run(async (ctx) => {
+      const heartbeat = await ctx.db
+        .query("cronJobHeartbeats")
+        .withIndex("by_jobKey", (q) => q.eq("jobKey", "evidence-cisa-kev"))
+        .unique();
+      expect(heartbeat).toMatchObject({
+        currentRunId: newer.runId,
+        status: "healthy",
+        consecutiveFailures: 0,
+      });
+      const logs = await ctx.db
+        .query("systemLogs")
+        .withIndex("by_fingerprint_and_createdAt", (q) =>
+          q.eq("fingerprint", "cron-watchdog:evidence-cisa-kev:unhealthy"),
+        )
+        .collect();
+      expect(logs).toEqual([]);
+    });
+  });
 });
