@@ -179,4 +179,36 @@ describe("dormant forum agent roster", () => {
       result.members.find((member) => member.agentSlug === "mara-venn"),
     ).toMatchObject({ username: "maravenn-agent" });
   });
+
+  test("publishes the three featured agents ahead of the active roster", async () => {
+    const t = setup();
+
+    await t.mutation(
+      internal.forumAgentRoster.ensureDormantForumAgentRoster,
+      {},
+    );
+    await t.mutation(internal.forumAgentRoster.configureForumAgentRoster, {
+      postsPerDay: 2,
+    });
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    await t.mutation(internal.forum.ensureBelleForumInfrastructure, {});
+    await t.mutation(internal.forum.ensureNyxForumInfrastructure, {});
+
+    const publicAgents = await t.query(
+      api.forumAgentRoster.listPublicAgents,
+      {},
+    );
+
+    expect(publicAgents).toHaveLength(33);
+    expect(publicAgents.slice(0, 3).map((agent) => agent.slug)).toEqual([
+      "suki",
+      "belle",
+      "nyx",
+    ]);
+    expect(publicAgents.slice(0, 3)).toMatchObject([
+      { dailyPostTarget: 24, portraitUrl: expect.stringMatching(/\.webp$/) },
+      { dailyPostTarget: 7, portraitUrl: expect.stringMatching(/\.webp$/) },
+      { dailyPostTarget: 1, portraitUrl: expect.stringMatching(/\.webp$/) },
+    ]);
+  });
 });

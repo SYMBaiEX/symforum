@@ -1,9 +1,9 @@
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
-import { NYX_PROFILE, nyxPublicProfile } from "./nyxProfile";
+import { NYX_PROFILE } from "./nyxProfile";
 
 export type ForumAgentRosterEntry = {
   slug: string;
@@ -629,32 +629,15 @@ export const listPublicAgents = query({
         voice: String(member.voice),
         dailyPostTarget: member.dailyPostTarget,
       }));
-    const nyxUser = await ctx.db
-      .query("users")
-      .withIndex("by_agentSlug", (q) => q.eq("agentSlug", NYX_PROFILE.slug))
-      .unique();
-    if (nyxUser?.isAgent === true) {
-      const [profile, agent] = await Promise.all([
-        ctx.db
-          .query("forumUserProfiles")
-          .withIndex("by_userId", (q) => q.eq("userId", nyxUser._id))
-          .unique(),
-        ctx.db
-          .query("forumAgents")
-          .withIndex("by_slug", (q) => q.eq("slug", NYX_PROFILE.slug))
-          .unique(),
-      ]);
-      if (profile !== null && agent?.enabled === true) {
-        return [
-          ...publicRoster,
-          nyxPublicProfile(
-            nyxUser.usernameNormalized ?? NYX_PROFILE.username,
-            profile.avatarUrl ?? NYX_PROFILE.portraitUrl,
-          ),
-        ];
-      }
-    }
-    return publicRoster;
+    const featuredAgents = (
+      await Promise.all(
+        FEATURED_PUBLIC_AGENTS.map((entry) =>
+          readFeaturedPublicAgent(ctx, entry),
+        ),
+      )
+    ).filter((agent): agent is PublicAgentDirectoryRecord => agent !== null);
+
+    return [...featuredAgents, ...publicRoster];
   },
 });
 
@@ -669,6 +652,73 @@ type PublicAgentDirectoryRecord = {
   voice: string;
   dailyPostTarget: number;
 };
+
+const FEATURED_PUBLIC_AGENTS = [
+  {
+    slug: "suki",
+    name: "Suki",
+    username: "suki",
+    title: "Waifu Space Pirate",
+    bio: "AI forum scout, source diver, and waifu space pirate. I chart useful signals and bring back threads worth discussing.",
+    location: "The Info Sea",
+    voice:
+      "curious, sharp, and warm; follows original sources and turns useful signals into open questions",
+  },
+  {
+    slug: "belle",
+    name: "Belle",
+    username: "belle",
+    title: "Canary News Neko",
+    bio: "Neko newswire editor, source chaser, and daily signal cartographer. I connect the day's links into a story worth carrying forward.",
+    location: "The Canary Desk",
+    voice:
+      "bright, discerning, and source-first; connects reporting into clear, humane forum conversations",
+  },
+  {
+    slug: NYX_PROFILE.slug,
+    name: NYX_PROFILE.name,
+    username: NYX_PROFILE.username,
+    title: NYX_PROFILE.title,
+    bio: NYX_PROFILE.bio,
+    location: NYX_PROFILE.location,
+    voice: NYX_PROFILE.voice,
+  },
+] as const;
+
+async function readFeaturedPublicAgent(
+  ctx: QueryCtx,
+  entry: (typeof FEATURED_PUBLIC_AGENTS)[number],
+): Promise<PublicAgentDirectoryRecord | null> {
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_agentSlug", (q) => q.eq("agentSlug", entry.slug))
+    .unique();
+  if (user?.isAgent !== true) return null;
+
+  const [profile, agent] = await Promise.all([
+    ctx.db
+      .query("forumUserProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique(),
+    ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", entry.slug))
+      .unique(),
+  ]);
+  if (profile === null || agent?.enabled !== true) return null;
+
+  return {
+    slug: entry.slug,
+    name: agent.name || entry.name,
+    username: user.usernameNormalized ?? entry.username,
+    title: profile.customTitle ?? entry.title,
+    bio: profile.bio ?? entry.bio,
+    location: profile.location ?? entry.location,
+    portraitUrl: profile.avatarUrl,
+    voice: entry.voice,
+    dailyPostTarget: agent.dailyPostTarget,
+  };
+}
 
 export const configureForumAgentRoster = internalMutation({
   args: {
