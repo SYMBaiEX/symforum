@@ -193,6 +193,38 @@ describe("agent data API dispatch", () => {
     });
   });
 
+  test("routes universal search through the evidence scope and shared quota path", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    await expect(
+      agent.mutation(internal.agentDataApi.dispatch, {
+        operation: "universal_search",
+        input: { query: "Convex", limit: 5 },
+        idempotencyKey: "universal-search-one",
+        requestFingerprint: "sha256-universal-search-one",
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "evidence_document",
+          visibility: "public",
+        }),
+      ]),
+    );
+    const deniedIds = await fixture(t, false);
+    await expect(
+      t
+        .withIdentity({ subject: deniedIds.agentUserId })
+        .mutation(internal.agentDataApi.dispatch, {
+          operation: "universal_search",
+          input: { query: "Convex" },
+          idempotencyKey: "universal-search-denied",
+          requestFingerprint: "sha256-universal-search-denied",
+        }),
+    ).rejects.toThrow(/evidence scope/i);
+  });
+
   test("validates inputs before usage and rejects agents without evidence scope", async () => {
     const t = setup();
     const ids = await fixture(t);

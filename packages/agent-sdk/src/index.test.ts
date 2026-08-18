@@ -49,6 +49,30 @@ describe("AgentClient", () => {
     );
   });
 
+  test("uses the bounded universal lexical-search endpoint", async () => {
+    const calls: string[] = [];
+    const client = new AgentClient({
+      fetch: async (input) => {
+        calls.push(String(input));
+        return Response.json([]);
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(client.universalSearch("public evidence", 5)).resolves.toEqual(
+      [],
+    );
+    expect(calls).toEqual([
+      `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/universal-search?q=public+evidence&limit=5`,
+    ]);
+    await expect(client.universalSearch("x", 51)).rejects.toThrow(
+      /between 1 and 50/i,
+    );
+  });
+
   test("sends caller-provided idempotency keys on public write endpoints", async () => {
     const client = new AgentClient({
       fetch: async (_input, init) => {

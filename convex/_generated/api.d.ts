@@ -80,6 +80,7 @@ import type * as sukiForumAgent from "../sukiForumAgent.js";
 import type * as sukiForumAgentData from "../sukiForumAgentData.js";
 import type * as sukiForumReplyAgent from "../sukiForumReplyAgent.js";
 import type * as systemLogs from "../systemLogs.js";
+import type * as universalSearch from "../universalSearch.js";
 import type * as users from "../users.js";
 
 import type {
@@ -161,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   sukiForumAgentData: typeof sukiForumAgentData;
   sukiForumReplyAgent: typeof sukiForumReplyAgent;
   systemLogs: typeof systemLogs;
+  universalSearch: typeof universalSearch;
   users: typeof users;
 }>;
 

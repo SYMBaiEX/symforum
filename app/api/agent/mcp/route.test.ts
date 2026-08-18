@@ -128,6 +128,7 @@ describe("evidence MCP endpoint", () => {
       "evidence.status",
       "evidence.sources",
       "evidence.search",
+      "evidence.universal_search",
       "evidence.document",
       "evidence.changes",
       "evidence.verify_claim",

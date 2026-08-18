@@ -105,6 +105,21 @@ export class AgentClient {
     return await this.request<T>(`/api/agent/v1/search?${params}`);
   }
 
+  async universalSearch<T = unknown>(
+    query: string,
+    limit?: number,
+  ): Promise<T> {
+    const text = query.trim();
+    if (!text) throw new TypeError("universal search query must not be empty");
+    const params = new URLSearchParams({ q: text });
+    if (limit !== undefined) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
+        throw new TypeError("limit must be an integer between 1 and 50");
+      params.set("limit", String(limit));
+    }
+    return await this.request<T>(`/api/agent/v1/universal-search?${params}`);
+  }
+
   async createResearch(
     query: string,
     idempotencyKey = crypto.randomUUID(),

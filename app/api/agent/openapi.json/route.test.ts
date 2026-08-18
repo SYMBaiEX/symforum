@@ -25,6 +25,12 @@ describe("agent API OpenAPI contract", () => {
       expect.arrayContaining(["agentId", "challenge", "signature"]),
     );
     expect(document.paths["/v1/search"].get.operationId).toBe("searchEvidence");
+    expect(document.paths["/v1/universal-search"].get.operationId).toBe(
+      "searchUniversalPublicCorpus",
+    );
+    expect(document.paths["/v1/universal-search"].get.description).toMatch(
+      /Semantic\/vector search is deferred/i,
+    );
     expect(document.paths["/v1/research-jobs"].post.operationId).toBe(
       "createEvidenceResearchJob",
     );

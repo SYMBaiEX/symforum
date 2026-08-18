@@ -5,6 +5,7 @@ export const AGENT_DATA_OPERATIONS = [
   "status",
   "sources",
   "search",
+  "universal_search",
   "document",
   "changes",
   "verify",
@@ -119,6 +120,17 @@ export function mapRestRequest(
     validText(search.get("q"))
   )
     return { operation: "search", input: { query: search.get("q"), ...limit } };
+  if (
+    method === "GET" &&
+    segments.length === 1 &&
+    segments[0] === "universal-search" &&
+    only(["q", "limit"]) &&
+    validText(search.get("q"))
+  )
+    return {
+      operation: "universal_search",
+      input: { query: search.get("q"), ...limit },
+    };
   if (
     method === "GET" &&
     segments.length === 2 &&

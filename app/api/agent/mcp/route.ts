@@ -23,6 +23,7 @@ const TOOL_ENTRIES = [
   ["evidence.status", "status"],
   ["evidence.sources", "sources"],
   ["evidence.search", "search"],
+  ["evidence.universal_search", "universal_search"],
   ["evidence.document", "document"],
   ["evidence.changes", "changes"],
   ["evidence.verify_claim", "verify"],
@@ -90,13 +91,10 @@ export async function POST(request: Request) {
   }
 
   if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {
-    return rpc(
-      request,
-      protocolEraHint(request, body),
-      null,
-      undefined,
-      { code: -32600, message: "Invalid Request" },
-    );
+    return rpc(request, protocolEraHint(request, body), null, undefined, {
+      code: -32600,
+      message: "Invalid Request",
+    });
   }
   const id = body.id;
   if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {

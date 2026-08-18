@@ -99,6 +99,32 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/universal-search": {
+      get: {
+        operationId: "searchUniversalPublicCorpus",
+        summary: "Search the bounded public lexical corpus",
+        description:
+          "Federates public evidence documents, claims, entities, published blog posts, sent newsletters, indexed news, and currently public forum threads. Semantic/vector search is deferred; each result is rechecked for current public visibility.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            schema: { type: "string", minLength: 1, maxLength: 300 },
+          },
+          { $ref: "#/components/parameters/Limit" },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Deterministically ordered public lexical results with canonical URLs, timestamps, provenance, and score explanations.",
+          },
+          "403": { description: "The evidence scope is required." },
+          "429": { description: "Quota or rate limit reached." },
+        },
+      },
+    },
     "/v1/documents/{documentId}": {
       get: {
         operationId: "getEvidenceDocument",

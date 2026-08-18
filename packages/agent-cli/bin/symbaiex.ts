@@ -39,10 +39,14 @@ export async function run(
             ? await client.quota()
             : command === "search"
               ? await client.search(requiredArgument(args, "search query"))
-              : null;
+              : command === "universal-search"
+                ? await client.universalSearch(
+                    requiredArgument(args, "search query"),
+                  )
+                : null;
     if (result === null)
       throw new UsageError(
-        "Usage: symbaiex <manifest|status|quota|search|login> [options]",
+        "Usage: symbaiex <manifest|status|quota|search|universal-search|login> [options]",
       );
     io.log(JSON.stringify(result, null, 2));
     return 0;

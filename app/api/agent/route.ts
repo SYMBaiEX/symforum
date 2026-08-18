@@ -35,6 +35,7 @@ const MANIFEST = {
     authenticatedIdentity: true,
     authenticatedQuota: true,
     authenticatedEvidenceData: true,
+    universalLexicalSearch: true,
     asynchronousResearch: true,
     boundedJsonlExports: true,
     signedWebhooks: true,
@@ -43,6 +44,7 @@ const MANIFEST = {
   scopes: ["forum", "newsletter", "interactions", "comments", "evidence"],
   endpoints: {
     evidenceRest: `${API_BASE_URL}/v1`,
+    universalSearch: `${API_BASE_URL}/v1/universal-search`,
     researchJobs: `${API_BASE_URL}/v1/research-jobs`,
     exports: `${API_BASE_URL}/v1/exports`,
     webhooks: `${API_BASE_URL}/v1/webhooks`,
@@ -93,6 +95,12 @@ const MANIFEST = {
     enabled: true,
     output: "source-cited JSON and authenticated first-party artifact stream",
     fallback: "deterministic extractive digest",
+  },
+  search: {
+    universalLexical: true,
+    semanticVector: "deferred",
+    description:
+      "Bounded lexical, entity, and public-citation-aware federation across public evidence and editorial records. Semantic/vector retrieval is intentionally deferred pending corpus, visibility, and cost proof.",
   },
   exports: {
     enabled: true,

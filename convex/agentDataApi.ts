@@ -9,6 +9,7 @@ const operationValidator = v.union(
   v.literal("status"),
   v.literal("sources"),
   v.literal("search"),
+  v.literal("universal_search"),
   v.literal("document"),
   v.literal("changes"),
   v.literal("verify"),
@@ -35,6 +36,7 @@ type Operation =
   | "status"
   | "sources"
   | "search"
+  | "universal_search"
   | "document"
   | "changes"
   | "verify"
@@ -235,6 +237,10 @@ export const dispatch = internalMutation({
         : null;
     const search =
       args.operation === "search" ? requiredText(input, "query", 300) : null;
+    const universalSearch =
+      args.operation === "universal_search"
+        ? requiredText(input, "query", 300)
+        : null;
     const entitySearch =
       args.operation === "entities" ? requiredText(input, "query", 200) : null;
     if (
@@ -356,6 +362,11 @@ export const dispatch = internalMutation({
       case "search":
         return await ctx.runQuery(internal.evidence.searchPublic, {
           search: search!,
+          limit: requestedLimit,
+        });
+      case "universal_search":
+        return await ctx.runQuery(internal.universalSearch.searchPublic, {
+          query: universalSearch!,
           limit: requestedLimit,
         });
       case "document":

@@ -18,6 +18,16 @@ describe("agent data API relay", () => {
       mapRestRequest("GET", ["internal"], new URLSearchParams()),
     ).toBeNull();
     expect(
+      mapRestRequest(
+        "GET",
+        ["universal-search"],
+        new URLSearchParams("q=convex&limit=10"),
+      ),
+    ).toEqual({
+      operation: "universal_search",
+      input: { query: "convex", limit: 10 },
+    });
+    expect(
       mapRestRequest("GET", ["entitlements"], new URLSearchParams()),
     ).toEqual({ operation: "entitlements", input: {} });
     expect(
