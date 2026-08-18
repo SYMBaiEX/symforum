@@ -20,7 +20,9 @@ describe("public evidence source registry", () => {
       "nvd-cve-2",
       "nvd-cve-change-history-2",
     ]);
-    expect(new Set(PUBLIC_EVIDENCE_SOURCE_REGISTRY.map((row) => row.name)).size).toBe(7);
+    expect(
+      new Set(PUBLIC_EVIDENCE_SOURCE_REGISTRY.map((row) => row.name)).size,
+    ).toBe(7);
     for (const row of PUBLIC_EVIDENCE_SOURCE_REGISTRY) {
       expect(row.officialApiUrl).toMatch(/^https:\/\//);
       expect(row.officialTermsUrl).toMatch(/^https:\/\//);
@@ -49,29 +51,30 @@ describe("public evidence source registry", () => {
     );
     expect(ingestion).toContain("GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES");
     expect(ingestion).toContain("GITHUB_RELEASES_PER_REPOSITORY");
-    expect(ingestion).toContain(
-      "per_page=${GITHUB_RELEASES_PER_REPOSITORY}",
-    );
+    expect(ingestion).toContain("per_page=${GITHUB_RELEASES_PER_REPOSITORY}");
   });
 
   test("matches the adapter schedules without exporting cursor or credential state", () => {
     const crons = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
     const scheduledAdapters = [
-      ["cisa-kev", "syncCisaKevRef"],
-      ["github-global-advisories", "syncGithubAdvisoriesRef"],
-      ["github-allowlisted-releases", "syncGithubReleasesRef"],
-      ["crossref-curated-metadata", "syncCrossrefRef"],
-      ["symbaiex-first-party-research", "syncFirstPartyResearchRef"],
-      ["nvd-cve-2", "syncNvdCvesRef"],
-      ["nvd-cve-change-history-2", "syncNvdChangeHistoryRef"],
+      ["cisa-kev", "evidence-cisa-kev"],
+      ["github-global-advisories", "evidence-github-advisories"],
+      ["github-allowlisted-releases", "evidence-github-releases"],
+      ["crossref-curated-metadata", "evidence-crossref"],
+      ["symbaiex-first-party-research", "evidence-first-party"],
+      ["nvd-cve-2", "evidence-nvd-cves"],
+      ["nvd-cve-change-history-2", "evidence-nvd-change-history"],
     ] as const;
     expect(scheduledAdapters.map(([key]) => key)).toEqual(
       PUBLIC_EVIDENCE_SOURCE_REGISTRY.map((row) => row.key),
     );
-    for (const [key, functionRef] of scheduledAdapters) {
-      const row = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find((item) => item.key === key);
+    expect(crons).toContain('"cronWatchdog:runActionJob"');
+    for (const [key, jobKey] of scheduledAdapters) {
+      const row = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find(
+        (item) => item.key === key,
+      );
       expect(row).toBeDefined();
-      expect(crons).toContain(functionRef);
+      expect(crons).toContain(`jobKey: "${jobKey}"`);
       expect(crons).toContain(`"${row!.cadence}"`);
     }
     for (const row of listPublicEvidenceSourceRegistry()) {

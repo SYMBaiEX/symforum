@@ -27,6 +27,9 @@ const app = defineApp({
     WEB_VITALS_CLEANUP_ENABLED: v.optional(v.string()),
     // The SLO evaluator is fail-closed until an operator explicitly enables it.
     WEB_VITALS_SLO_ENABLED: v.optional(v.string()),
+    // Disabled by default so operators explicitly opt in before the watchdog
+    // becomes responsible for executing critical scheduled work.
+    CRON_WATCHDOG_ENABLED: v.optional(v.string()),
     GITHUB_TOKEN: v.optional(v.string()),
     GH_TOKEN: v.optional(v.string()),
     // Optional NVD API key. It is sent only as the documented X-ApiKey header

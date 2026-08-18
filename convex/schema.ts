@@ -1079,7 +1079,13 @@ export default defineSchema({
     title: v.string(),
     authorId: v.id("users"),
     lastPostUserId: v.id("users"),
-    status: v.union(v.literal("pending"), v.literal("active"), v.literal("locked"), v.literal("hidden"), v.literal("deleted")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("locked"),
+      v.literal("hidden"),
+      v.literal("deleted"),
+    ),
     pinned: v.boolean(),
     replyCount: v.number(),
     viewCount: v.number(),
@@ -1090,7 +1096,11 @@ export default defineSchema({
     excerpt: v.string(),
   })
     .index("by_threadId", ["threadId"])
-    .index("by_authorId_and_status_and_createdAt", ["authorId", "status", "createdAt"])
+    .index("by_authorId_and_status_and_createdAt", [
+      "authorId",
+      "status",
+      "createdAt",
+    ])
     .searchIndex("search_by_searchText", {
       searchField: "searchText",
       filterFields: ["status", "categorySlug", "categoryId", "authorId"],
@@ -1101,7 +1111,12 @@ export default defineSchema({
     categoryId: v.id("forumCategories"),
     authorId: v.id("users"),
     postNumber: v.optional(v.number()),
-    status: v.union(v.literal("pending"), v.literal("active"), v.literal("hidden"), v.literal("deleted")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("hidden"),
+      v.literal("deleted"),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
     searchText: v.string(),
@@ -1109,7 +1124,11 @@ export default defineSchema({
   })
     .index("by_postId", ["postId"])
     .index("by_threadId", ["threadId"])
-    .index("by_authorId_and_status_and_createdAt", ["authorId", "status", "createdAt"])
+    .index("by_authorId_and_status_and_createdAt", [
+      "authorId",
+      "status",
+      "createdAt",
+    ])
     .searchIndex("search_by_searchText", {
       searchField: "searchText",
       filterFields: ["status", "threadId", "categoryId", "authorId"],
@@ -2094,7 +2113,10 @@ export default defineSchema({
   })
     .index("by_threadId_and_createdAt", ["threadId", "createdAt"])
     .index("by_assessmentId_and_createdAt", ["assessmentId", "createdAt"])
-    .index("by_moderatorUserId_and_createdAt", ["moderatorUserId", "createdAt"]),
+    .index("by_moderatorUserId_and_createdAt", [
+      "moderatorUserId",
+      "createdAt",
+    ]),
   systemLogs: defineTable({
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2140,6 +2162,36 @@ export default defineSchema({
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_apiKeyId_and_createdAt", ["apiKeyId", "createdAt"])
     .index("by_fingerprint_and_createdAt", ["fingerprint", "createdAt"]),
+  // One current, aggregate-only heartbeat per critical cron. Run history is
+  // separately capped per job so this operational data cannot grow without
+  // bound or retain job payloads/errors.
+  cronJobHeartbeats: defineTable({
+    jobKey: v.string(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("healthy"),
+      v.literal("failed"),
+    ),
+    lastStartedAt: v.number(),
+    lastSucceededAt: v.optional(v.number()),
+    lastFailedAt: v.optional(v.number()),
+    lastDurationMs: v.optional(v.number()),
+    consecutiveFailures: v.number(),
+    updatedAt: v.number(),
+    openLogId: v.optional(v.id("systemLogs")),
+  }).index("by_jobKey", ["jobKey"]),
+  cronJobRunSummaries: defineTable({
+    jobKey: v.string(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    outcome: v.union(
+      v.literal("running"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+    ),
+    durationMs: v.optional(v.number()),
+    failureClass: v.optional(v.string()),
+  }).index("by_jobKey_and_startedAt", ["jobKey", "startedAt"]),
   analyticsEvents: defineTable({
     name: v.string(),
     source: v.union(

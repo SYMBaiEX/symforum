@@ -4,81 +4,53 @@ import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
 
-const syncCisaKevRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceIngestion:syncCisaKev");
-const syncGithubAdvisoriesRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceIngestion:syncGithubAdvisories");
-const syncGithubReleasesRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceIngestion:syncGithubReleases");
-const syncCrossrefRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceIngestion:syncCrossref");
-const syncFirstPartyResearchRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceFirstParty:sync");
-const syncNvdCvesRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceNvd:syncCves");
-const syncNvdChangeHistoryRef = makeFunctionReference<
-  "action",
-  Record<string, never>,
-  unknown
->("evidenceNvd:syncChangeHistory");
 const cleanupWebVitalsRef = makeFunctionReference<
   "mutation",
   Record<string, never>,
   unknown
 >("webVitals:cleanupExpired");
-const cleanupSemanticSearchRef = makeFunctionReference<
+const runWatchdogActionRef = makeFunctionReference<
+  "action",
+  { jobKey: string },
+  unknown
+>("cronWatchdog:runActionJob");
+const runWatchdogMutationRef = makeFunctionReference<
+  "action",
+  { jobKey: string },
+  unknown
+>("cronWatchdog:runMutationJob");
+const evaluateWatchdogRef = makeFunctionReference<
   "mutation",
   Record<string, never>,
   unknown
->("semanticSearch:cleanupExpiredOperations");
-const evaluateWebVitalsSloRef = makeFunctionReference<
-  "mutation",
-  Record<string, never>,
-  unknown
->("operationalSlo:evaluate");
+>("cronWatchdog:evaluate");
 
-crons.cron("ingest CISA KEV evidence", "7 * * * *", syncCisaKevRef, {});
+crons.cron("ingest CISA KEV evidence", "7 * * * *", runWatchdogActionRef, {
+  jobKey: "evidence-cisa-kev",
+});
 crons.cron(
   "ingest GitHub security advisories",
   "23 */6 * * *",
-  syncGithubAdvisoriesRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-github-advisories" },
 );
 crons.cron(
   "ingest GitHub allowlisted releases",
   "37 */2 * * *",
-  syncGithubReleasesRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-github-releases" },
 );
 crons.cron(
   "ingest Crossref curated metadata",
   "51 */12 * * *",
-  syncCrossrefRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-crossref" },
 );
 crons.cron(
   "index first-party research evidence",
   "5 8 * * *",
-  syncFirstPartyResearchRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-first-party" },
 );
 // NVD permits unauthenticated requests at a much lower rate than keyed
 // requests. Each job makes at most one request, and their six-minute spacing
@@ -86,32 +58,32 @@ crons.cron(
 crons.cron(
   "ingest NVD CVE updates",
   "3,13,23,33,43,53 * * * *",
-  syncNvdCvesRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-nvd-cves" },
 );
 crons.cron(
   "ingest NVD CVE change history",
   "9,19,29,39,49,59 * * * *",
-  syncNvdChangeHistoryRef,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "evidence-nvd-change-history" },
 );
 crons.interval(
   "cleanup expired evidence artifacts",
   { hours: 1 },
-  internal.evidenceJobs.cleanupExpiredArtifacts,
-  {},
+  runWatchdogMutationRef,
+  { jobKey: "evidence-artifact-cleanup" },
 );
 crons.interval(
   "cleanup expired claim revisions",
   { hours: 24 },
-  internal.evidence.cleanupExpiredClaimRevisions,
-  { limit: 100 },
+  runWatchdogMutationRef,
+  { jobKey: "evidence-claim-revision-cleanup" },
 );
 crons.interval(
   "check evidence operational health",
   { hours: 1 },
-  internal.evidenceHealth.check,
-  {},
+  runWatchdogMutationRef,
+  { jobKey: "evidence-health" },
 );
 crons.interval(
   "recover pending webhook deliveries",
@@ -134,8 +106,8 @@ crons.interval(
 crons.cron(
   "benchmark evidence citation coverage",
   "20 8 * * *",
-  internal.evidenceBenchmarks.runDailyCitationCoverage,
-  {},
+  runWatchdogMutationRef,
+  { jobKey: "evidence-citation-benchmark" },
 );
 
 crons.cron(
@@ -194,14 +166,14 @@ crons.interval(
 crons.interval(
   "evaluate Web Vitals SLOs",
   { hours: 1 },
-  evaluateWebVitalsSloRef,
-  {},
+  runWatchdogMutationRef,
+  { jobKey: "web-vitals-slo" },
 );
 crons.interval(
   "cleanup semantic search operations",
   { minutes: 5 },
-  cleanupSemanticSearchRef,
-  {},
+  runWatchdogMutationRef,
+  { jobKey: "semantic-cleanup" },
 );
 
 function dailyCronAtMinute(minuteOfDay: number) {
@@ -257,14 +229,21 @@ FORUM_AGENT_ROSTER.forEach((agent, index) => {
 crons.interval(
   "Suki forum reply recovery sweep",
   { hours: 1 },
-  internal.sukiForumReplyAgent.runReplySweep,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "forum-suki-reply-recovery" },
 );
 
 crons.interval(
   "Belle forum reply recovery sweep",
   { hours: 1 },
-  internal.sukiForumReplyAgent.runBelleReplySweep,
+  runWatchdogActionRef,
+  { jobKey: "forum-belle-reply-recovery" },
+);
+
+crons.interval(
+  "evaluate critical cron effectiveness",
+  { minutes: 5 },
+  evaluateWatchdogRef,
   {},
 );
 
