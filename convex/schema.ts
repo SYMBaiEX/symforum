@@ -2488,6 +2488,9 @@ export default defineSchema({
       v.literal("none"),
     ),
     eventCursor: v.optional(v.string()),
+    // Every drain attempt writes this monotonic conflict anchor before checking
+    // idempotency, so concurrent requests serialize even with no event rows.
+    drainNonce: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2519,15 +2522,18 @@ export default defineSchema({
   evidenceWatchlistDrainRequests: defineTable({
     watchlistId: v.id("evidenceWatchlists"),
     idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
     scanned: v.number(),
     matched: v.number(),
     enqueued: v.number(),
     eventCursor: v.union(v.string(), v.null()),
     createdAt: v.number(),
-  }).index("by_watchlistId_and_idempotencyKey", [
-    "watchlistId",
-    "idempotencyKey",
-  ]),
+  })
+    .index("by_watchlistId_and_idempotencyKey", [
+      "watchlistId",
+      "idempotencyKey",
+    ])
+    .index("by_watchlistId_and_createdAt", ["watchlistId", "createdAt"]),
   evidenceDatasets: defineTable({
     datasetKey: v.string(),
     name: v.string(),

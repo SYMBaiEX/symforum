@@ -244,6 +244,7 @@ describe("watchlist outbox", () => {
     const first = await owner.mutation(watchlists.drain, {
       watchlistKey: "source",
       idempotencyKey: "source-drain-1",
+      requestFingerprint: "source-v1",
     });
     expect(first).toMatchObject({ scanned: 1, matched: 1, enqueued: 1 });
     expect(first.eventCursor).toEqual(expect.any(String));
@@ -251,6 +252,7 @@ describe("watchlist outbox", () => {
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "source-drain-1",
+        requestFingerprint: "source-v1",
       }),
     ).resolves.toMatchObject({ enqueued: 1 });
     await t.run(async (ctx) => {
@@ -283,6 +285,7 @@ describe("watchlist outbox", () => {
       other.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "other-drain-1",
+        requestFingerprint: "source-v1",
       }),
     ).rejects.toThrow(/not found/i);
     await t.run(async (ctx) => {
@@ -297,6 +300,7 @@ describe("watchlist outbox", () => {
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "retired-drain-1",
+        requestFingerprint: "source-v1",
       }),
     ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
     await t.run(async (ctx) => {
@@ -388,12 +392,14 @@ describe("watchlist outbox", () => {
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "capped-drain-1",
+        requestFingerprint: "source-v1",
       }),
     ).resolves.toMatchObject({ scanned: 20, matched: 20, enqueued: 20 });
     await expect(
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "capped-drain-2",
+        requestFingerprint: "source-v1",
       }),
     ).resolves.toMatchObject({ scanned: 5, matched: 5, enqueued: 5 });
   });
@@ -496,6 +502,7 @@ describe("watchlist outbox", () => {
       owner.mutation(watchlists.drain, {
         watchlistKey: "claim",
         idempotencyKey: "private-citation-document",
+        requestFingerprint: "claim-v1",
       }),
     ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
     await t.run(async (ctx) => {
@@ -518,6 +525,7 @@ describe("watchlist outbox", () => {
       owner.mutation(watchlists.drain, {
         watchlistKey: "claim",
         idempotencyKey: "paused-claim-drain",
+        requestFingerprint: "claim-v1",
       }),
     ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
     await expect(
@@ -543,21 +551,32 @@ describe("watchlist outbox", () => {
     const first = await owner.mutation(watchlists.drain, {
       watchlistKey: "source",
       idempotencyKey: "same-request",
+      requestFingerprint: "source-v1",
     });
     await expect(
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "same-request",
+        requestFingerprint: "source-v1",
       }),
     ).resolves.toEqual(first);
+    await expect(
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "same-request",
+        requestFingerprint: "different-request",
+      }),
+    ).rejects.toThrow(/different request/i);
     await owner.mutation(watchlists.drain, {
       watchlistKey: "source",
       idempotencyKey: "second-request",
+      requestFingerprint: "source-v1",
     });
     await expect(
       owner.mutation(watchlists.drain, {
         watchlistKey: "source",
         idempotencyKey: "third-request",
+        requestFingerprint: "source-v1",
       }),
     ).rejects.toThrow(/rate limited/i);
   });
@@ -575,16 +594,98 @@ describe("watchlist outbox", () => {
     await agent.mutation(watchlists.drain, {
       watchlistKey: "agent-source",
       idempotencyKey: "agent-request-1",
+      requestFingerprint: "source-v1",
     });
     await agent.mutation(watchlists.drain, {
       watchlistKey: "agent-source",
       idempotencyKey: "agent-request-2",
+      requestFingerprint: "source-v1",
     });
     await expect(
       agent.mutation(watchlists.drain, {
         watchlistKey: "agent-source",
         idempotencyKey: "agent-request-3",
+        requestFingerprint: "source-v1",
       }),
     ).rejects.toThrow(/rate limited/i);
+  });
+
+  test("serializes concurrent paused and active replays into one canonical request", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const owner = t.withIdentity({ subject: ids.owner });
+    const paused = await owner.mutation(watchlists.create, {
+      watchlistKey: "paused-source",
+      targetType: "source",
+      targetKey: "public-source",
+      deliveryPreference: "none",
+    });
+    await owner.mutation(watchlists.setStatus, {
+      watchlistKey: "paused-source",
+      status: "paused",
+    });
+    const pausedResults = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        owner.mutation(watchlists.drain, {
+          watchlistKey: "paused-source",
+          idempotencyKey: "paused-concurrent",
+          requestFingerprint: "paused-v1",
+        }),
+      ),
+    );
+    expect(pausedResults).toEqual([
+      pausedResults[0],
+      pausedResults[0],
+      pausedResults[0],
+    ]);
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("evidenceWatchlistDrainRequests")
+          .withIndex("by_watchlistId_and_createdAt", (q) =>
+            q.eq("watchlistId", paused.watchlistId),
+          )
+          .take(10),
+      ).toHaveLength(1);
+    });
+
+    const active = await owner.mutation(watchlists.create, {
+      watchlistKey: "active-source",
+      targetType: "source",
+      targetKey: "public-source",
+      deliveryPreference: "none",
+    });
+    const activeResults = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        owner.mutation(watchlists.drain, {
+          watchlistKey: "active-source",
+          idempotencyKey: "active-concurrent",
+          requestFingerprint: "active-v1",
+        }),
+      ),
+    );
+    expect(activeResults).toEqual([
+      activeResults[0],
+      activeResults[0],
+      activeResults[0],
+    ]);
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("evidenceWatchlistDrainRequests")
+          .withIndex("by_watchlistId_and_createdAt", (q) =>
+            q.eq("watchlistId", active.watchlistId),
+          )
+          .take(10),
+      ).toHaveLength(1);
+      expect(
+        await ctx.db
+          .query("evidenceWatchlistOutbox")
+          .withIndex("by_watchlistId_and_eventId", (q) =>
+            q.eq("watchlistId", active.watchlistId),
+          )
+          .take(10),
+      ).toHaveLength(0);
+    });
   });
 });

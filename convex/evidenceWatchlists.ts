@@ -18,6 +18,7 @@ const MAX_MATCHES_PER_DRAIN = 20;
 const MAX_OUTBOX_FANOUT_PER_EVENT = 1;
 const MAX_ENTITY_LINKS_PER_DOCUMENT = 24;
 const MAX_CITATIONS_PER_CLAIM = 24;
+const MAX_DRAIN_REQUESTS_PER_WATCHLIST = 50;
 const watchlistDrainLimiter = new RateLimiter(components.rateLimiter, {
   evidenceWatchlistDrains: {
     kind: "token bucket",
@@ -118,6 +119,10 @@ function cursor(value: string | undefined) {
 
 function idempotencyKey(value: string) {
   return identifier(value, "idempotencyKey", 160);
+}
+
+function requestFingerprint(value: string) {
+  return identifier(value, "requestFingerprint", 128);
 }
 
 async function evidencePrincipal(ctx: DatabaseCtx): Promise<Principal> {
@@ -537,9 +542,23 @@ async function drain(ctx: MutationCtx, watchlist: Doc<"evidenceWatchlists">) {
   return { scanned: page.page.length, matched, enqueued, eventCursor };
 }
 
+async function serializeDrain(
+  ctx: MutationCtx,
+  watchlist: Doc<"evidenceWatchlists">,
+) {
+  await ctx.db.patch("evidenceWatchlists", watchlist._id, {
+    drainNonce: (watchlist.drainNonce ?? 0) + 1,
+    updatedAt: Date.now(),
+  });
+}
+
 /** Owner/agent-gated pull for the future delivery bridge; it never delivers externally. */
 export const drainMine = mutation({
-  args: { watchlistKey: v.string(), idempotencyKey: v.string() },
+  args: {
+    watchlistKey: v.string(),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+  },
   returns: drainResultValidator,
   handler: async (ctx, args) => {
     const principal = await evidencePrincipal(ctx);
@@ -549,6 +568,11 @@ export const drainMine = mutation({
       identifier(args.watchlistKey, "watchlistKey", 96),
     );
     const requestKey = idempotencyKey(args.idempotencyKey);
+    const fingerprint = requestFingerprint(args.requestFingerprint);
+    // This write is an intentional OCC conflict anchor. It serializes all
+    // paths (including paused/private/no-event drains) before the non-unique
+    // lookup below, so a retry observes the one canonical request record.
+    await serializeDrain(ctx, watchlist);
     const prior = await ctx.db
       .query("evidenceWatchlistDrainRequests")
       .withIndex("by_watchlistId_and_idempotencyKey", (q) =>
@@ -556,6 +580,12 @@ export const drainMine = mutation({
       )
       .unique();
     if (prior !== null) {
+      if (prior.requestFingerprint !== fingerprint) {
+        throw new ConvexError({
+          code: "WATCHLIST_IDEMPOTENCY_MISMATCH",
+          message: "idempotencyKey was already used with a different request.",
+        });
+      }
       return {
         scanned: prior.scanned,
         matched: prior.matched,
@@ -576,9 +606,20 @@ export const drainMine = mutation({
       });
     }
     const result = await drain(ctx, watchlist);
+    const retained = await ctx.db
+      .query("evidenceWatchlistDrainRequests")
+      .withIndex("by_watchlistId_and_createdAt", (q) =>
+        q.eq("watchlistId", watchlist._id),
+      )
+      .order("asc")
+      .take(MAX_DRAIN_REQUESTS_PER_WATCHLIST);
+    if (retained.length === MAX_DRAIN_REQUESTS_PER_WATCHLIST) {
+      await ctx.db.delete("evidenceWatchlistDrainRequests", retained[0]._id);
+    }
     await ctx.db.insert("evidenceWatchlistDrainRequests", {
       watchlistId: watchlist._id,
       idempotencyKey: requestKey,
+      requestFingerprint: fingerprint,
       ...result,
       createdAt: Date.now(),
     });
@@ -598,6 +639,7 @@ export const drainOutbox = internalMutation({
         message: "Watchlist was not found.",
       });
     }
+    await serializeDrain(ctx, watchlist);
     return await drain(ctx, watchlist);
   },
 });
