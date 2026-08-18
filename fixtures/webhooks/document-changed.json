@@ -1,0 +1,11 @@
+{
+  "id": "certification-document-change-001",
+  "type": "evidence.document.changed",
+  "occurredAt": 1735689600,
+  "data": {
+    "documentId": "document-cert-001",
+    "documentVersionId": "version-cert-001",
+    "version": 1,
+    "canonicalUrl": "https://example.invalid/evidence/certification-document"
+  }
+}
