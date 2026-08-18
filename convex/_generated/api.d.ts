@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
 import type * as agentDataApi from "../agentDataApi.js";
+import type * as agentDataHttpErrors from "../agentDataHttpErrors.js";
 import type * as agentIdentity from "../agentIdentity.js";
 import type * as agentIdentityCrypto from "../agentIdentityCrypto.js";
 import type * as agentQuota from "../agentQuota.js";
@@ -38,6 +39,7 @@ import type * as evidenceIngestion from "../evidenceIngestion.js";
 import type * as evidenceJobActions from "../evidenceJobActions.js";
 import type * as evidenceJobWorkflows from "../evidenceJobWorkflows.js";
 import type * as evidenceJobs from "../evidenceJobs.js";
+import type * as evidenceWatchlists from "../evidenceWatchlists.js";
 import type * as evidenceWebhookActions from "../evidenceWebhookActions.js";
 import type * as evidenceWebhooks from "../evidenceWebhooks.js";
 import type * as forum from "../forum.js";
@@ -90,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminApi: typeof adminApi;
   agentDataApi: typeof agentDataApi;
+  agentDataHttpErrors: typeof agentDataHttpErrors;
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
   agentQuota: typeof agentQuota;
@@ -117,6 +120,7 @@ declare const fullApi: ApiFromModules<{
   evidenceJobActions: typeof evidenceJobActions;
   evidenceJobWorkflows: typeof evidenceJobWorkflows;
   evidenceJobs: typeof evidenceJobs;
+  evidenceWatchlists: typeof evidenceWatchlists;
   evidenceWebhookActions: typeof evidenceWebhookActions;
   evidenceWebhooks: typeof evidenceWebhooks;
   forum: typeof forum;
