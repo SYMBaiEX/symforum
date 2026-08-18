@@ -11,15 +11,13 @@ import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 
 const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
-    // OpenRouter is the primary hosted route. Three workflows keep throughput
-    // healthy without stampeding the OpenRouter provider routes.
-    maxParallelism: 3,
-    retryActionsByDefault: true,
-    defaultRetryBehavior: {
-      maxAttempts: 2,
-      initialBackoffMs: 60_000,
-      base: 3,
-    },
+    // One publication workflow at a time keeps spend checks and provider work
+    // bounded while avoiding contention on the shared editorial pipeline.
+    maxParallelism: 1,
+    // Each research action records its outcome before returning. Retrying it
+    // here repeats expensive inference after a failed run has already been
+    // accounted for, so workflows intentionally make one attempt per slot.
+    retryActionsByDefault: false,
   },
 });
 
@@ -59,7 +57,6 @@ export const publishForumSlot = workflow
     };
     const options = {
       name: `research-write-publish-${args.agentSlug}-${args.slot}`,
-      retry: { maxAttempts: 2, initialBackoffMs: 60_000, base: 3 },
     } as const;
     if (args.agentSlug === "suki") {
       return await step.runAction(
@@ -197,7 +194,10 @@ async function publicationPreflight(
   const globalRuns = await ctx.db
     .query("forumAgentRuns")
     .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
-    .take(160);
+    .take(dailyLimit);
+  if (globalRuns.length >= dailyLimit) {
+    return { ok: false as const, reason: "global-daily-attempt-limit" };
+  }
   if (
     globalRuns.filter((run) => run.status === "published").length >= dailyLimit
   ) {

@@ -6,10 +6,7 @@ import { v } from "convex/values";
 import { z } from "zod";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import {
-  OPENROUTER_DEEPSEEK_MODEL,
-  OPENROUTER_NEWSLETTER_LAST_RESORT_MODEL,
-} from "../lib/ai-models";
+import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -33,11 +30,8 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
-const NEWSLETTER_FALLBACK_MODELS = [
-  OPENROUTER_DEEPSEEK_MODEL,
-  OPENROUTER_NEWSLETTER_LAST_RESORT_MODEL,
-] as const;
-const PROMPT_VERSION = "belle-newsletter-v4-openrouter-nemotron";
+export const NEWSLETTER_MODEL_IDS = [OPENROUTER_LUNA_MODEL] as const;
+const PROMPT_VERSION = "belle-newsletter-v5-openrouter-luna";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
@@ -530,7 +524,7 @@ async function generateDraftWithFallback({
         };
       },
     },
-    NEWSLETTER_FALLBACK_MODELS,
+    NEWSLETTER_MODEL_IDS,
   );
   return generation.value;
 }

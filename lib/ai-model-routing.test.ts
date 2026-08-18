@@ -7,6 +7,7 @@ import {
   runRoutedCandidates,
   type RoutedModel,
 } from "./ai-model-routing";
+import { OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 function candidate(persistedModel: string): RoutedModel {
   return {
@@ -18,62 +19,55 @@ function candidate(persistedModel: string): RoutedModel {
 }
 
 describe("OpenRouter-only model routing", () => {
-  test("routes forum topic selection to Nano and writing to Super", () => {
+  test("routes forum topic, draft, and revision stages to Luna", () => {
     expect(openRouterModelForStage("suki:forum-topic")).toBe(
-      "nvidia/nemotron-3-nano-30b-a3b:free",
+      OPENROUTER_LUNA_MODEL,
     );
     expect(openRouterModelForStage("suki:forum-draft")).toBe(
-      "nvidia/nemotron-3-super-120b-a12b:free",
+      OPENROUTER_LUNA_MODEL,
+    );
+    expect(openRouterModelForStage("suki:forum-revision-light")).toBe(
+      OPENROUTER_LUNA_MODEL,
     );
     expect(openRouterModelsForStage("suki:forum-topic")).toEqual([
-      "nvidia/nemotron-3-nano-30b-a3b:free",
-      "nvidia/nemotron-3-nano-30b-a3b",
-      "openai/gpt-5.6-luna",
+      OPENROUTER_LUNA_MODEL,
     ]);
   });
 
-  test("only creates OpenRouter candidates and preserves paid fallbacks", async () => {
+  test("only creates the canonical OpenRouter Luna candidate", async () => {
     const candidates = await routedModelCandidates({
       openRouterApiKey: "test-openrouter-key",
     });
 
-    expect(candidates.map(({ provider }) => provider)).toEqual([
-      "openrouter",
-      "openrouter",
-      "openrouter",
-    ]);
+    expect(candidates.map(({ provider }) => provider)).toEqual(["openrouter"]);
     expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual([
-      "nvidia/nemotron-3-super-120b-a12b:free",
-      "nvidia/nemotron-3-super-120b-a12b",
-      "openai/gpt-5.6-luna",
+      OPENROUTER_LUNA_MODEL,
     ]);
   });
 
-  test("skips circuit-disabled OpenRouter models", async () => {
-    const candidates = await routedModelCandidates({
-      openRouterApiKey: "test-openrouter-key",
-      disabledModelIds: ["nvidia/nemotron-3-super-120b-a12b:free"],
-    });
-    expect(candidates).toHaveLength(2);
-    expect(candidates[0].persistedModel).toBe(
-      "nvidia/nemotron-3-super-120b-a12b",
-    );
-    expect(candidates[1].persistedModel).toBe("openai/gpt-5.6-luna");
+  test("deduplicates configured Luna candidates and fails closed when disabled", async () => {
+    await expect(
+      routedModelCandidates(
+        { openRouterApiKey: "test-openrouter-key" },
+        undefined,
+        undefined,
+        undefined,
+        [OPENROUTER_LUNA_MODEL, OPENROUTER_LUNA_MODEL],
+      ),
+    ).resolves.toHaveLength(1);
+    await expect(
+      routedModelCandidates({
+        openRouterApiKey: "test-openrouter-key",
+        disabledModelIds: [OPENROUTER_LUNA_MODEL],
+      }),
+    ).rejects.toThrow(/No enabled AI model route/);
   });
 
-  test("falls through OpenRouter models and records the successful attempt", async () => {
-    const run = vi.fn(async (route: RoutedModel) => {
-      if (route.persistedModel.endsWith(":free")) {
-        throw new Error("free route unavailable");
-      }
-      return "paid-result";
-    });
+  test("records the successful Luna attempt", async () => {
+    const run = vi.fn(async () => "luna-result");
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
-      [
-        candidate("nvidia/nemotron-3-super-120b-a12b:free"),
-        candidate("nvidia/nemotron-3-super-120b-a12b"),
-      ],
+      [candidate(OPENROUTER_LUNA_MODEL)],
       {
         stage: "test-openrouter-fallback",
         correlationId: "test:route-fallback",
@@ -84,19 +78,15 @@ describe("OpenRouter-only model routing", () => {
       },
     );
 
-    expect(result.value).toBe("paid-result");
+    expect(result.value).toBe("luna-result");
     expect(result.route).toMatchObject({
       provider: "openrouter",
-      persistedModel: "nvidia/nemotron-3-super-120b-a12b",
+      persistedModel: OPENROUTER_LUNA_MODEL,
     });
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(1);
     expect(onAttempt).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ outcome: "failed", fallback: false }),
-    );
-    expect(onAttempt).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ outcome: "completed", fallback: true }),
+      expect.objectContaining({ outcome: "completed", fallback: false }),
     );
   });
 

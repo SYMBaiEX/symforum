@@ -2,7 +2,8 @@
 
 import { describe, expect, test } from "vitest";
 
-import { scoreEditorialPackage } from "./newsletterAgent";
+import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
+import { NEWSLETTER_MODEL_IDS, scoreEditorialPackage } from "./newsletterAgent";
 
 function long(value: string, length: number) {
   return `${value} ${"specific evidence and practical consequence ".repeat(20)}`.slice(
@@ -96,6 +97,10 @@ const sources = [
 ];
 
 describe("Belle editorial scoring", () => {
+  test("uses the proven Luna route without a failing provider preflight", () => {
+    expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_LUNA_MODEL]);
+  });
+
   test("blocks a number that is absent from its story's own source", () => {
     const draft = dailyDraft();
     draft.stories[0].summary = long("40 models is the reported change.", 180);

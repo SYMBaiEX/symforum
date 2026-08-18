@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { forumDailyPublicationLimit } from "../lib/forum-agent-cadence";
+import { env, internalMutation, internalQuery } from "./_generated/server";
 
 const SUKI_AGENT_SLUG = "suki";
 const SUKI_RUN_STALE_MS = 30 * 60 * 1_000;
@@ -227,6 +228,22 @@ export const claimRun = internalMutation({
       now - existing.updatedAt < SUKI_RUN_STALE_MS
     ) {
       return { claimed: false as const, reason: "running" as const, runKey };
+    }
+    if (existing === null) {
+      const dailyLimit = forumDailyPublicationLimit(
+        env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
+      );
+      const globalRuns = await ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
+        .take(dailyLimit);
+      if (globalRuns.length >= dailyLimit) {
+        return {
+          claimed: false as const,
+          reason: "global-daily-attempt-limit" as const,
+          runKey,
+        };
+      }
     }
     const todayRuns = await ctx.db
       .query("forumAgentRuns")

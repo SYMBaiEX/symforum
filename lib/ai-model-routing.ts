@@ -1,13 +1,7 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
-import {
-  OPENROUTER_FORUM_MODEL,
-  OPENROUTER_FORUM_PAID_MODEL,
-  OPENROUTER_TOOL_FALLBACK_MODEL,
-  OPENROUTER_TOPIC_MODEL,
-  OPENROUTER_TOPIC_PAID_MODEL,
-} from "./ai-models";
+import { OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 export type ModelRoute = {
   provider: "openrouter";
@@ -95,29 +89,13 @@ function openRouterModel(
 }
 
 export function openRouterModelForStage(stage: string) {
-  return openRouterUsesNano(stage)
-    ? OPENROUTER_TOPIC_MODEL
-    : OPENROUTER_FORUM_MODEL;
+  void stage;
+  return OPENROUTER_LUNA_MODEL;
 }
 
 export function openRouterModelsForStage(stage: string) {
-  return openRouterUsesNano(stage)
-    ? [
-        OPENROUTER_TOPIC_MODEL,
-        OPENROUTER_TOPIC_PAID_MODEL,
-        OPENROUTER_TOOL_FALLBACK_MODEL,
-      ]
-    : [
-        OPENROUTER_FORUM_MODEL,
-        OPENROUTER_FORUM_PAID_MODEL,
-        OPENROUTER_TOOL_FALLBACK_MODEL,
-      ];
-}
-
-function openRouterUsesNano(stage: string) {
-  return (
-    stage.endsWith(":forum-topic") || stage.endsWith(":forum-revision-light")
-  );
+  void stage;
+  return [OPENROUTER_LUNA_MODEL];
 }
 
 export async function routedModelCandidates(
@@ -125,11 +103,7 @@ export async function routedModelCandidates(
   requestContext?: OpenRouterRequestContext,
   _unusedModelIds?: readonly string[],
   telemetry?: RouteTelemetryContext,
-  openRouterModelIds: readonly string[] = [
-    OPENROUTER_FORUM_MODEL,
-    OPENROUTER_FORUM_PAID_MODEL,
-    OPENROUTER_TOOL_FALLBACK_MODEL,
-  ],
+  openRouterModelIds: readonly string[] = [OPENROUTER_LUNA_MODEL],
 ) {
   // Keep request context in the routing contract so callers can continue to
   // attach stable attribution metadata without introducing another provider.
@@ -138,15 +112,18 @@ export async function routedModelCandidates(
   void telemetry;
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
-  for (const modelId of openRouterModelIds) {
+  for (const modelId of new Set(openRouterModelIds)) {
     if (disabled.has(modelId)) continue;
     const primary = openRouterModel(config, modelId);
     if (primary) candidates.push(primary);
   }
-  if (!candidates.length) {
+  if (!clean(config.openRouterApiKey)) {
     throw new Error(
       "No AI model route is available. Configure OPENROUTER_API_KEY.",
     );
+  }
+  if (!candidates.length) {
+    throw new Error("No enabled AI model route is available.");
   }
   return candidates;
 }

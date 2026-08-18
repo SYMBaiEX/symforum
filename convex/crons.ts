@@ -208,7 +208,7 @@ crons.cron(
 
 crons.cron(
   "verify forum agent embeddings",
-  "17 * * * *",
+  "17 */6 * * *",
   internal.forumAgentMemory.checkEmbeddingHealth,
   {},
 );

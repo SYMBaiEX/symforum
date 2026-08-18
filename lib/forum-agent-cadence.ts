@@ -1,10 +1,13 @@
 export const DEFAULT_FORUM_DAILY_PUBLICATION_LIMIT = 42;
-export const FORUM_SCHEDULED_PUBLICATION_SLOTS = 90;
+export const FORUM_SCHEDULED_PUBLICATION_SLOTS = 91;
 
 export function forumDailyPublicationLimit(value: string | undefined) {
   const parsed = Number(value?.trim());
   return Number.isFinite(parsed) && parsed > 0
-    ? Math.max(1, Math.min(90, Math.floor(parsed)))
+    ? Math.max(
+        1,
+        Math.min(FORUM_SCHEDULED_PUBLICATION_SLOTS, Math.floor(parsed)),
+      )
     : DEFAULT_FORUM_DAILY_PUBLICATION_LIMIT;
 }
 

@@ -66,7 +66,7 @@ export const backfillForumAgentEmbeddings = mutation({
     await ctx.scheduler.runAfter(
       0,
       internal.forumAgentMemory.backfillForumMemory,
-      {},
+      { restart: true },
     );
     return { queued: true };
   },

@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
@@ -104,7 +105,7 @@ describe("dormant forum agent roster", () => {
       activeRoster.members.every(
         (member) =>
           member.dailyPostTarget === 1 &&
-          member.model === "nvidia/nemotron-3-super-120b-a12b:free" &&
+          member.model === OPENROUTER_FORUM_MODEL &&
           member.portraitUrl?.endsWith(`${member.agentSlug}.png`),
       ),
     ).toBe(true);
@@ -143,7 +144,7 @@ describe("dormant forum agent roster", () => {
       matching: 29,
       updated: 0,
       wouldUpdate: 1,
-      targetModel: "nvidia/nemotron-3-super-120b-a12b:free",
+      targetModel: OPENROUTER_FORUM_MODEL,
     });
     const migrated = await t.mutation(
       internal.forumAgentRoster.migratePostingModels,
@@ -153,11 +154,9 @@ describe("dormant forum agent roster", () => {
     const models = await t.run(async (ctx) =>
       (await ctx.db.query("forumAgents").take(40)).map((agent) => agent.model),
     );
-    expect(
-      models.every(
-        (model) => model === "nvidia/nemotron-3-super-120b-a12b:free",
-      ),
-    ).toBe(true);
+    expect(models.every((model) => model === OPENROUTER_FORUM_MODEL)).toBe(
+      true,
+    );
   });
 
   test("does not take a username already owned by another member", async () => {

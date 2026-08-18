@@ -3,10 +3,7 @@
 import { generateText, tool } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
-import {
-  OPENROUTER_FORUM_PAID_MODEL,
-  OPENROUTER_TOPIC_PAID_MODEL,
-} from "../lib/ai-models";
+import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
 import {
   forumDayKey,
   openRouterDailyBudgetMicroUsd,
@@ -48,8 +45,7 @@ export async function convexModelRoutingConfig(
   });
   const disabledModelIds = new Set(control.disabledModelIds);
   if (control.paidBudgetExceeded) {
-    disabledModelIds.add(OPENROUTER_TOPIC_PAID_MODEL);
-    disabledModelIds.add(OPENROUTER_FORUM_PAID_MODEL);
+    disabledModelIds.add(OPENROUTER_LUNA_MODEL);
   }
 
   void options;

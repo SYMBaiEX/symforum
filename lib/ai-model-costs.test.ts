@@ -5,33 +5,21 @@ import {
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
-import { OPENROUTER_TOOL_FALLBACK_MODEL } from "./ai-models";
+import { OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 describe("AI model cost controls", () => {
-  test("estimates only the configured paid Nemotron routes", () => {
+  test("estimates the configured Luna route and rejects unknown models", () => {
     expect(
-      estimatedModelCostMicroUsd(
-        "nvidia/nemotron-3-super-120b-a12b",
-        1_000_000,
-        1_000_000,
-      ),
-    ).toBe(485_000);
+      estimatedModelCostMicroUsd(OPENROUTER_LUNA_MODEL, 1_000_000, 1_000_000),
+    ).toBe(700_000);
     expect(
-      estimatedModelCostMicroUsd(
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        1_000_000,
-        1_000_000,
-      ),
+      estimatedModelCostMicroUsd("nvidia/nemotron-3-super-120b-a12b", 1, 1),
     ).toBe(0);
   });
 
-  test("uses the current OpenRouter GPT-5.6 Luna fallback price", () => {
+  test("uses the current OpenRouter GPT-5.6 Luna price", () => {
     expect(
-      estimatedModelCostMicroUsd(
-        OPENROUTER_TOOL_FALLBACK_MODEL,
-        1_000_000,
-        1_000_000,
-      ),
+      estimatedModelCostMicroUsd(OPENROUTER_LUNA_MODEL, 1_000_000, 1_000_000),
     ).toBe(700_000);
   });
 

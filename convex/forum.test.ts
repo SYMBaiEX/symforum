@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test, vi } from "vitest";
 
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -888,7 +889,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 24,
       enabled: true,
-      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      model: OPENROUTER_FORUM_MODEL,
       name: "Suki",
       slug: "suki",
     });
@@ -1224,7 +1225,7 @@ describe("forum notification preferences", () => {
     expect(context.agent).toMatchObject({
       dailyPostTarget: 7,
       enabled: true,
-      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      model: OPENROUTER_FORUM_MODEL,
       name: "Belle",
       slug: "belle",
     });

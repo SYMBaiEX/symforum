@@ -173,6 +173,10 @@ export function shouldIngestSource(state: IngestionState | null) {
   );
 }
 
+export function shouldEnrichDocumentVersion(idempotent: boolean) {
+  return !idempotent;
+}
+
 export function evidenceRequestHeaders(
   endpoint: string,
   state: IngestionState | null,
@@ -880,8 +884,8 @@ async function ingest(
           licenseClass: config.licenseClass,
           metadataJson: stableJson(document.metadata).slice(0, 8_000),
         });
-        await enrichDocument(ctx, document, stored.versionId, now);
-        if (!stored.idempotent) {
+        if (shouldEnrichDocumentVersion(stored.idempotent)) {
+          await enrichDocument(ctx, document, stored.versionId, now);
           await ctx.runMutation(enqueueWebhookRef, {
             eventKey: `document:${stored.documentId}:version:${stored.version}`,
             eventType: "evidence.document.changed",

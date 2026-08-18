@@ -239,15 +239,26 @@ export const checkEmbeddingHealth = internalAction({
 });
 
 export const backfillForumMemory = internalAction({
-  args: { cursor: v.optional(v.string()) },
+  args: {
+    cursor: v.optional(v.string()),
+    restart: v.optional(v.boolean()),
+  },
   handler: async (ctx, args): Promise<{ indexed: number; done: boolean }> => {
     const state =
-      args.cursor === undefined
+      args.cursor === undefined && !args.restart
         ? await ctx.runQuery(
             internal.forumAgentEditorialData.readEmbeddingBackfillState,
             {},
           )
         : null;
+    if (
+      args.cursor === undefined &&
+      !args.restart &&
+      (state?.completedAt ?? 0) > 0 &&
+      state?.cursor === undefined
+    ) {
+      return { indexed: 0, done: true };
+    }
     const cursor = args.cursor ?? state?.cursor;
     const page: {
       threadIds: Id<"forumThreads">[];

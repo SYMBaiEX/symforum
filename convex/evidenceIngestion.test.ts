@@ -7,6 +7,7 @@ import {
   parseGithubReleases,
   parseKevPayload,
   sha256Hex,
+  shouldEnrichDocumentVersion,
   shouldIngestSource,
   stableJson,
 } from "./evidenceIngestion";
@@ -66,6 +67,11 @@ describe("evidence ingestion normalizers", () => {
     );
     expect(shouldIngestSource({ ...state, status: "paused" })).toBe(false);
     expect(shouldIngestSource(null)).toBe(true);
+  });
+
+  test("skips enrichment for idempotent document versions and enriches changed versions", () => {
+    expect(shouldEnrichDocumentVersion(true)).toBe(false);
+    expect(shouldEnrichDocumentVersion(false)).toBe(true);
   });
 
   test("never retains Crossref abstracts or full text", () => {
