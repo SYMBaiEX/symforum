@@ -62,6 +62,12 @@ crons.interval(
   {},
 );
 crons.interval(
+  "cleanup expired claim revisions",
+  { hours: 24 },
+  internal.evidence.cleanupExpiredClaimRevisions,
+  { limit: 100 },
+);
+crons.interval(
   "check evidence operational health",
   { hours: 1 },
   internal.evidenceHealth.check,

@@ -47,6 +47,7 @@ const changeKindValidator = v.union(
 );
 const claimRevisionChangeKindValidator = v.union(
   v.literal("created"),
+  v.literal("legacy-baseline"),
   v.literal("semantic"),
   v.literal("status"),
   v.literal("evidence"),
@@ -89,7 +90,12 @@ async function recordClaimRevision(
   ctx: MutationCtx,
   args: {
     claim: Doc<"evidenceClaims">;
-    changeKind: "created" | "semantic" | "status" | "evidence";
+    changeKind:
+      | "created"
+      | "legacy-baseline"
+      | "semantic"
+      | "status"
+      | "evidence";
     actorType: "system" | "agent" | "human";
     actorId: string;
     source: string;
@@ -970,6 +976,13 @@ export const listPublicClaimTimeline = query({
       .withIndex("by_claimKey", (q) => q.eq("claimKey", claimKey))
       .unique();
     if (claim === null || claim.visibility !== "public") return [];
+    if (claim.subjectEntityId !== null) {
+      const subject = await ctx.db.get(
+        "evidenceEntities",
+        claim.subjectEntityId,
+      );
+      if (subject?.visibility !== "public") return [];
+    }
     const revisions = await ctx.db
       .query("evidenceClaimRevisions")
       .withIndex("by_claimId_and_observedAt", (q) => q.eq("claimId", claim._id))
@@ -978,6 +991,13 @@ export const listPublicClaimTimeline = query({
     const timeline = [];
     for (const revision of revisions) {
       if (revision.visibility !== "public") continue;
+      if (revision.subjectEntityId !== null) {
+        const subject = await ctx.db.get(
+          "evidenceEntities",
+          revision.subjectEntityId,
+        );
+        if (subject?.visibility !== "public") continue;
+      }
       let citation: {
         citationId: Doc<"evidenceClaimCitations">["_id"];
         documentId: Doc<"evidenceDocuments">["_id"];
@@ -1004,12 +1024,17 @@ export const listPublicClaimTimeline = query({
           version === null
             ? null
             : await ctx.db.get("evidenceDocuments", version.documentId);
+        const source =
+          document === null
+            ? null
+            : await ctx.db.get("evidenceSources", document.sourceId);
         // An evidence revision derived only from private material is omitted,
         // including its timestamp, rather than returning a redacted pointer.
         if (
           storedCitation !== null &&
           version !== null &&
-          document?.visibility === "public"
+          document?.visibility === "public" &&
+          source?.visibility === "public"
         ) {
           citation = {
             citationId: storedCitation._id,
@@ -1043,6 +1068,52 @@ export const listPublicClaimTimeline = query({
       if (timeline.length === limit) break;
     }
     return timeline;
+  },
+});
+
+/**
+ * One-time migration helper for claims written before revisions existed. It
+ * records the current state as a clearly labeled baseline, never inventing a
+ * historical event. Replays and page restarts are safe.
+ */
+export const backfillLegacyClaimBaselines = internalMutation({
+  args: { cursor: v.optional(v.string()), limit: v.optional(v.number()) },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const cursor =
+      args.cursor === undefined
+        ? undefined
+        : bounded(args.cursor, "cursor", 200).toLowerCase();
+    const limit = Math.min(100, Math.max(1, Math.floor(args.limit ?? 50)));
+    const rows =
+      cursor === undefined
+        ? await ctx.db
+            .query("evidenceClaims")
+            .withIndex("by_claimKey")
+            .take(limit + 1)
+        : await ctx.db
+            .query("evidenceClaims")
+            .withIndex("by_claimKey", (q) => q.gt("claimKey", cursor))
+            .take(limit + 1);
+    const page = rows.slice(0, limit);
+    const now = Date.now();
+    for (const claim of page) {
+      await recordClaimRevision(ctx, {
+        claim,
+        changeKind: "legacy-baseline",
+        actorType: "system",
+        actorId: "legacy-backfill",
+        source: "legacy-baseline",
+        createdAt: now,
+      });
+    }
+    return {
+      processed: page.length,
+      nextCursor: rows.length > limit ? page.at(-1)!.claimKey : null,
+    };
   },
 });
 

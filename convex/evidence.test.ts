@@ -40,6 +40,9 @@ const evidence = {
   timeline: makeFunctionReference<"query", any, any>(
     "evidence:listPublicClaimTimeline",
   ),
+  backfillLegacy: makeFunctionReference<"mutation", any, any>(
+    "evidence:backfillLegacyClaimBaselines",
+  ),
 } as any;
 
 function setup() {
@@ -418,6 +421,20 @@ describe("durable evidence graph", () => {
       ]),
     );
     await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceSources", sourceId, {
+        visibility: "private",
+      });
+    });
+    const afterPrivateSource = await t.query(evidence.timeline, {
+      claimKey: "timeline-claim",
+      limit: 20,
+    });
+    expect(
+      afterPrivateSource.some(
+        (entry: { changeKind: string }) => entry.changeKind === "evidence",
+      ),
+    ).toBe(false);
+    await t.run(async (ctx) => {
       const revisions = await ctx.db
         .query("evidenceClaimRevisions")
         .withIndex("by_claimId_and_observedAt", (q) =>
@@ -441,5 +458,81 @@ describe("durable evidence graph", () => {
         (entry: { changeKind: string }) => entry.changeKind === "evidence",
       ),
     ).toBe(false);
+  });
+
+  test("does not expose a public claim whose subject entity is private", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const privateEntityId = await ctx.db.insert("evidenceEntities", {
+        entityKey: "private-subject",
+        kind: "organization",
+        name: "Private subject",
+        aliases: [],
+        visibility: "private",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("evidenceClaims", {
+        claimKey: "public-claim-private-subject",
+        statement: "This must not leak its private subject.",
+        subjectEntityId: privateEntityId,
+        predicate: "visibility",
+        objectText: "private",
+        status: "unresolved",
+        confidence: 0.5,
+        visibility: "public",
+        observedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+    });
+    await expect(
+      t.query(evidence.timeline, {
+        claimKey: "public-claim-private-subject",
+        limit: 20,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  test("backfills bounded legacy baselines by cursor without inventing history", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (const claimKey of ["legacy-a", "legacy-b"]) {
+        await ctx.db.insert("evidenceClaims", {
+          claimKey,
+          statement: `${claimKey} current state`,
+          subjectEntityId: null,
+          predicate: "state",
+          objectText: "current",
+          status: "unresolved",
+          confidence: 0.5,
+          visibility: "public",
+          observedAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      }
+    });
+    const first = await t.mutation(evidence.backfillLegacy, { limit: 1 });
+    expect(first).toMatchObject({ processed: 1, nextCursor: "legacy-a" });
+    const second = await t.mutation(evidence.backfillLegacy, {
+      cursor: first.nextCursor,
+      limit: 1,
+    });
+    expect(second).toMatchObject({ processed: 1, nextCursor: null });
+    await t.mutation(evidence.backfillLegacy, { limit: 100 });
+    await t.run(async (ctx) => {
+      const revisions = await ctx.db.query("evidenceClaimRevisions").collect();
+      expect(revisions).toHaveLength(2);
+      expect(revisions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            changeKind: "legacy-baseline",
+            actorId: "legacy-backfill",
+            source: "legacy-baseline",
+          }),
+        ]),
+      );
+    });
   });
 });

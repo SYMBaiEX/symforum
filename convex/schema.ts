@@ -1983,6 +1983,7 @@ export default defineSchema({
     revisionKey: v.string(),
     changeKind: v.union(
       v.literal("created"),
+      v.literal("legacy-baseline"),
       v.literal("semantic"),
       v.literal("status"),
       v.literal("evidence"),
