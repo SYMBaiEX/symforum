@@ -31,7 +31,16 @@ control and additionally enforces its own $0.05/day default (maximum $5/day).
   back to the primary database and its current source visibility is checked
   immediately before returning it.
 - Indexing is replay-safe per document/source version and uses a stable RAG key
-  so an update replaces the prior embedding.
+  so an update replaces the prior embedding. A durable operation lease is
+  atomically reserved before OpenRouter is called; its 60-second recovery is
+  safely longer than the 12-second provider timeout.
+- Each reservation is settled exactly once: actual provider usage replaces the
+  conservative reservation, and a network/provider failure refunds it. The
+  512 KiB response cap, `redirect: "error"`, and timeout are enforced in the
+  OpenRouter fetch wrapper.
+- Semantic metadata carries the document/source fingerprint. A candidate is
+  rejected if its live fingerprint no longer matches, even if it remains
+  public.
 - Backfill pages contain at most five documents and schedule the next page only
   after completion. It has no cron while disabled.
 - Retrieval receives at most 25 vector candidates and returns at most 20

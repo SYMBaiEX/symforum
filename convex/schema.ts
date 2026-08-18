@@ -1341,6 +1341,29 @@ export default defineSchema({
     pauseUntil: v.number(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+  // Durable, per-request reservations make semantic embedding costs
+  // replay-safe. They are operational accounting records, not public data.
+  semanticSearchOperations: defineTable({
+    operationKey: v.string(),
+    kind: v.union(v.literal("index"), v.literal("query")),
+    fingerprint: v.string(),
+    model: v.string(),
+    status: v.union(
+      v.literal("leased"),
+      v.literal("completed"),
+      v.literal("refunded"),
+    ),
+    holder: v.string(),
+    leaseExpiresAt: v.number(),
+    reservedMicroUsd: v.number(),
+    settledMicroUsd: v.optional(v.number()),
+    reservedInputTokens: v.number(),
+    settledInputTokens: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    refundedAt: v.optional(v.number()),
+  }).index("by_operationKey", ["operationKey"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),
