@@ -21,6 +21,7 @@ export type AgentEventData = {
     version: number;
     canonicalUrl: string;
     kind?: "document" | "advisory" | "release" | "paper";
+    changedFields?: string[];
   };
   "evidence.research.completed": {
     researchJobId: string;
@@ -56,6 +57,8 @@ export type AgentEventEnvelope<T extends AgentEventType = AgentEventType> = {
 };
 
 type UnknownRecord = Record<string, unknown>;
+const MAX_CHANGED_FIELDS = 32;
+const MAX_CHANGED_FIELD_LENGTH = 128;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -77,6 +80,19 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isBoundedChangedFields(value: unknown) {
+  return (
+    Array.isArray(value) &&
+    value.length <= MAX_CHANGED_FIELDS &&
+    value.every(
+      (field) =>
+        typeof field === "string" &&
+        field.length > 0 &&
+        field.length <= MAX_CHANGED_FIELD_LENGTH,
+    )
+  );
+}
+
 function isDocumentChangedData(value: unknown) {
   if (!isRecord(value)) return false;
   if (
@@ -86,6 +102,7 @@ function isDocumentChangedData(value: unknown) {
       "version",
       "canonicalUrl",
       "kind",
+      "changedFields",
     ]) ||
     !isNonEmptyString(value.documentId) ||
     !isNonEmptyString(value.documentVersionId) ||
@@ -100,6 +117,8 @@ function isDocumentChangedData(value: unknown) {
     value.kind === "advisory" ||
     value.kind === "release" ||
     value.kind === "paper"
+  ) && (
+    value.changedFields === undefined || isBoundedChangedFields(value.changedFields)
   );
 }
 

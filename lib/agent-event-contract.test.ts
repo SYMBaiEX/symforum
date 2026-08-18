@@ -89,4 +89,43 @@ describe("agent event envelope contract", () => {
       }),
     ).toBe(false);
   });
+
+  test("accepts NVD and ingestion changedFields while retaining first-party compatibility", () => {
+    const base = {
+      id: "document:doc_1:version:2",
+      type: "evidence.document.changed" as const,
+      occurredAt,
+      data: {
+        documentId: "doc_1",
+        documentVersionId: "version_2",
+        version: 2,
+        canonicalUrl: "https://example.com/releases/2",
+      },
+    };
+    expect(isAgentEventEnvelope(base)).toBe(true);
+    expect(
+      isAgentEventEnvelope({
+        ...base,
+        data: { ...base.data, changedFields: ["title", "excerpt", "sourceUpdatedAt"] },
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects invalid, oversized, and extra document-change fields", () => {
+    const base = {
+      id: "document:doc_1:version:2",
+      type: "evidence.document.changed" as const,
+      occurredAt,
+      data: {
+        documentId: "doc_1",
+        documentVersionId: "version_2",
+        version: 2,
+        canonicalUrl: "https://example.com/releases/2",
+      },
+    };
+    expect(isAgentEventEnvelope({ ...base, data: { ...base.data, changedFields: ["title", 1] } })).toBe(false);
+    expect(isAgentEventEnvelope({ ...base, data: { ...base.data, changedFields: ["x".repeat(129)] } })).toBe(false);
+    expect(isAgentEventEnvelope({ ...base, data: { ...base.data, changedFields: Array.from({ length: 33 }, () => "title") } })).toBe(false);
+    expect(isAgentEventEnvelope({ ...base, data: { ...base.data, changedFields: ["title"], extra: true } })).toBe(false);
+  });
 });

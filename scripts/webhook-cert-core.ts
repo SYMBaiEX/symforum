@@ -55,6 +55,10 @@ function bodyText(body: WebhookBody) {
     return null;
   }
 }
+function boundedOverride(value: number | undefined, fallback: number, maximum: number) {
+  if (value === undefined) return fallback;
+  return Number.isSafeInteger(value) && value >= 0 && value <= maximum ? value : null;
+}
 
 /** Preserves byte boundaries until a complete request body is available. */
 export function joinWebhookBodyChunks(chunks: readonly Uint8Array[]) {
@@ -177,12 +181,15 @@ function validateEnvelope(body: WebhookBody, headers: WebhookHeaders): Verificat
 }
 
 export async function verifyWebhookRequest(args: Readonly<{ body: WebhookBody; headers: WebhookHeaders; secret: string; nowSeconds: number; maxBodyBytes?: number; maxTimestampSkewSeconds?: number; }>): Promise<VerificationResult> {
-  if (bodyBytes(args.body).byteLength > (args.maxBodyBytes ?? MAX_WEBHOOK_BODY_BYTES)) return { ok: false, code: "body_too_large" };
+  const maxBodyBytes = boundedOverride(args.maxBodyBytes, MAX_WEBHOOK_BODY_BYTES, MAX_WEBHOOK_BODY_BYTES);
+  const maxTimestampSkewSeconds = boundedOverride(args.maxTimestampSkewSeconds, MAX_WEBHOOK_TIMESTAMP_SKEW_SECONDS, MAX_WEBHOOK_TIMESTAMP_SKEW_SECONDS);
+  if (maxBodyBytes === null || maxTimestampSkewSeconds === null) return { ok: false, code: "invalid_verifier_options" };
+  if (bodyBytes(args.body).byteLength > maxBodyBytes) return { ok: false, code: "body_too_large" };
   const { eventId, eventType, timestamp, signature } = args.headers;
   if (!eventId || !eventType || !timestamp || !signature || !isEventType(eventType)) return { ok: false, code: "missing_or_invalid_headers" };
   if (!/^v1=[a-f0-9]{64}$/.test(signature) || !/^(0|[1-9][0-9]*)$/.test(timestamp)) return { ok: false, code: "invalid_signature_or_timestamp" };
   const parsedTimestamp = Number(timestamp);
-  if (!Number.isSafeInteger(parsedTimestamp) || Math.abs(args.nowSeconds - parsedTimestamp) > (args.maxTimestampSkewSeconds ?? MAX_WEBHOOK_TIMESTAMP_SKEW_SECONDS)) return { ok: false, code: "timestamp_outside_tolerance" };
+  if (!Number.isSafeInteger(parsedTimestamp) || Math.abs(args.nowSeconds - parsedTimestamp) > maxTimestampSkewSeconds) return { ok: false, code: "timestamp_outside_tolerance" };
   const expected = await signWebhookBody(args.secret, timestamp, args.body);
   if (!constantTimeEqual(encoderBytes(expected), encoderBytes(signature))) return { ok: false, code: "signature_mismatch" };
   const contractError = validateEnvelope(args.body, args.headers);

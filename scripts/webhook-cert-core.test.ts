@@ -122,4 +122,20 @@ describe("webhook certification core", () => {
       verifyWebhookRequest(await correctlySigned(split, fixture.id, fixture.type)),
     ).resolves.toMatchObject({ ok: true, eventId: fixture.id });
   });
+
+  test.each([
+    { maxBodyBytes: Number.NaN },
+    { maxBodyBytes: Number.POSITIVE_INFINITY },
+    { maxBodyBytes: -1 },
+    { maxBodyBytes: MAX_WEBHOOK_BODY_BYTES + 1 },
+    { maxTimestampSkewSeconds: Number.NaN },
+    { maxTimestampSkewSeconds: Number.POSITIVE_INFINITY },
+    { maxTimestampSkewSeconds: -1 },
+    { maxTimestampSkewSeconds: 301 },
+  ])("fails closed for invalid verifier overrides: %o", async (overrides) => {
+    await expect(verifyWebhookRequest(await signedRequest(overrides))).resolves.toEqual({
+      ok: false,
+      code: "invalid_verifier_options",
+    });
+  });
 });
