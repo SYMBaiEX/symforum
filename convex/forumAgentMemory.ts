@@ -12,6 +12,10 @@ import { EMBEDDING_HEALTH_KEY } from "./aiRoutingControlData";
 const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
 const MEMORY_NAMESPACE = "forum-editorial-v1";
 const EMBEDDING_RETRY_DELAYS_MS = [30_000, 120_000] as const;
+const MAX_EDITORIAL_MEMORY_RESULTS = 8;
+// RAG entries are retained independently of forum moderation. Fetch more than
+// the caller needs, then fail closed against the current forum visibility.
+const EDITORIAL_MEMORY_CANDIDATE_LIMIT = 32;
 
 type MemoryFilters = {
   category: string;
@@ -25,6 +29,66 @@ type MemoryMetadata = {
   agentSlug: string;
   createdAt: number;
 };
+
+type CurrentMemoryThread = {
+  threadId: Id<"forumThreads">;
+  categorySlug: string;
+  agentSlug: string;
+  title: string;
+  body: string;
+};
+
+type MemorySearchEntry = {
+  entryId: string;
+  metadata?: { threadId?: string };
+  title?: string;
+  text?: string;
+};
+
+/**
+ * The RAG namespace is only an index, not an authorization boundary. A forum
+ * thread can become hidden or inherit a private parent after it was embedded,
+ * so every candidate is re-authorized from the primary database before any
+ * text is returned to an editorial prompt.
+ */
+export async function selectCurrentPublicMemoryEntries(
+  entries: readonly MemorySearchEntry[],
+  scores: ReadonlyMap<string, number>,
+  readThread: (threadId: Id<"forumThreads">) => Promise<CurrentMemoryThread | null>,
+  limit = MAX_EDITORIAL_MEMORY_RESULTS,
+) {
+  const seenThreadIds = new Set<string>();
+  const candidates = entries.flatMap((entry) => {
+    const threadId = entry.metadata?.threadId;
+    if (threadId === undefined || seenThreadIds.has(threadId)) return [];
+    seenThreadIds.add(threadId);
+    return [{ entry, threadId: threadId as Id<"forumThreads"> }];
+  });
+  const currentThreads = await Promise.all(
+    candidates.map(async ({ entry, threadId }) => ({
+      entry,
+      thread: await readThread(threadId),
+    })),
+  );
+  return currentThreads
+    .flatMap(({ entry, thread }) =>
+      thread === null
+        ? []
+        : [
+            {
+              threadId: thread.threadId,
+              categorySlug: thread.categorySlug,
+              agentSlug: thread.agentSlug,
+              // Return the live primary-record content rather than the stored
+              // embedding chunk: edits and moderation take effect immediately.
+              title: thread.title,
+              text: thread.body,
+              score: scores.get(entry.entryId) ?? 0,
+            },
+          ],
+    )
+    .slice(0, limit);
+}
 
 function platform(apiKey: string) {
   const openRouter = createOpenAICompatible({
@@ -71,7 +135,7 @@ export async function searchEditorialMemory(
         args.categorySlug === undefined
           ? []
           : [{ name: "category", value: args.categorySlug }],
-      limit: 8,
+      limit: EDITORIAL_MEMORY_CANDIDATE_LIMIT,
       vectorScoreThreshold: 0.58,
       searchType: "vector",
       chunkContext: { before: 1, after: 1 },
@@ -106,14 +170,14 @@ export async function searchEditorialMemory(
     inputTokens: result.usage.tokens,
     durationMs: Date.now() - startedAt,
   });
-  return result.entries.map((entry) => ({
-    threadId: entry.metadata?.threadId,
-    categorySlug: entry.metadata?.categorySlug,
-    agentSlug: entry.metadata?.agentSlug,
-    title: entry.title,
-    text: entry.text,
-    score: scores.get(entry.entryId) ?? 0,
-  }));
+  return await selectCurrentPublicMemoryEntries(
+    result.entries,
+    scores,
+    async (threadId) =>
+      await ctx.runQuery(internal.forumAgentEditorialData.readThreadForMemory, {
+        threadId,
+      }),
+  );
 }
 
 async function indexThread(

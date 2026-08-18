@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
+import { selectCurrentPublicMemoryEntries } from "./forumAgentMemory";
 import schema from "./schema";
 
 const modules = {
@@ -141,5 +142,110 @@ describe("forum agent memory backfill", () => {
     await expect(
       t.action(internal.forumAgentMemory.backfillForumMemory, {}),
     ).resolves.toEqual({ indexed: 0, done: true });
+  });
+});
+
+describe("forum agent memory retrieval", () => {
+  test("fails closed when an already-indexed thread becomes private, inactive, or inherits a private ancestor", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await t.run(async (ctx) => {
+      const authorId = await ctx.db.insert("users", {
+        name: "Author",
+        username: "retrieval-author",
+        usernameNormalized: "retrieval-author",
+      });
+      const parentCategoryId = await ctx.db.insert("forumCategories", {
+        slug: "retrieval-parent",
+        name: "Retrieval parent",
+        description: "Public before moderation",
+        kind: "board",
+        status: "active",
+        viewAccess: "public",
+        position: 1,
+        threadCount: 0,
+        postCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const categoryId = await ctx.db.insert("forumCategories", {
+        slug: "retrieval-public",
+        name: "Retrieval public",
+        description: "Public before moderation",
+        kind: "board",
+        parentCategoryId,
+        status: "active",
+        viewAccess: "public",
+        position: 2,
+        threadCount: 1,
+        postCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const threadId = await ctx.db.insert("forumThreads", {
+        categoryId,
+        categorySlug: "retrieval-public",
+        slug: "retrieval-thread",
+        title: "Indexed when public",
+        body: "This must disappear if moderation changes visibility.",
+        authorId,
+        status: "active",
+        pinned: false,
+        replyCount: 0,
+        viewCount: 0,
+        lastPostAt: 1,
+        lastPostUserId: authorId,
+        searchText: "Indexed when public",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return { parentCategoryId, categoryId, threadId };
+    });
+    const candidate = {
+      entryId: "indexed-entry",
+      title: "Stale embedding title",
+      text: "Stale embedding body",
+      metadata: { threadId: ids.threadId },
+    };
+    const resolveCurrentThread = async (threadId: typeof ids.threadId) =>
+      await t.query(internal.forumAgentEditorialData.readThreadForMemory, {
+        threadId,
+      });
+    const searchCurrent = async () =>
+      await selectCurrentPublicMemoryEntries(
+        [candidate],
+        new Map([[candidate.entryId, 0.9]]),
+        resolveCurrentThread,
+      );
+
+    await expect(searchCurrent()).resolves.toMatchObject([
+      {
+        threadId: ids.threadId,
+        title: "Indexed when public",
+        text: "This must disappear if moderation changes visibility.",
+      },
+    ]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", ids.categoryId, {
+        viewAccess: "members",
+      });
+    });
+    await expect(searchCurrent()).resolves.toEqual([]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", ids.categoryId, {
+        viewAccess: "public",
+      });
+      await ctx.db.patch("forumThreads", ids.threadId, { status: "hidden" });
+    });
+    await expect(searchCurrent()).resolves.toEqual([]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumThreads", ids.threadId, { status: "active" });
+      await ctx.db.patch("forumCategories", ids.parentCategoryId, {
+        viewAccess: "staff",
+      });
+    });
+    await expect(searchCurrent()).resolves.toEqual([]);
   });
 });
