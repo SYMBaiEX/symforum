@@ -2516,6 +2516,18 @@ export default defineSchema({
   })
     .index("by_watchlistId_and_eventId", ["watchlistId", "eventId"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),
+  evidenceWatchlistDrainRequests: defineTable({
+    watchlistId: v.id("evidenceWatchlists"),
+    idempotencyKey: v.string(),
+    scanned: v.number(),
+    matched: v.number(),
+    enqueued: v.number(),
+    eventCursor: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+  }).index("by_watchlistId_and_idempotencyKey", [
+    "watchlistId",
+    "idempotencyKey",
+  ]),
   evidenceDatasets: defineTable({
     datasetKey: v.string(),
     name: v.string(),

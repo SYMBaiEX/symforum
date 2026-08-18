@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { makeFunctionReference } from "convex/server";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
@@ -28,7 +29,9 @@ const watchlists = {
 } as const;
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  return t;
 }
 
 async function fixture(t: ReturnType<typeof setup>) {
@@ -240,12 +243,16 @@ describe("watchlist outbox", () => {
     });
     const first = await owner.mutation(watchlists.drain, {
       watchlistKey: "source",
+      idempotencyKey: "source-drain-1",
     });
     expect(first).toMatchObject({ scanned: 1, matched: 1, enqueued: 1 });
     expect(first.eventCursor).toEqual(expect.any(String));
     await expect(
-      owner.mutation(watchlists.drain, { watchlistKey: "source" }),
-    ).resolves.toMatchObject({ enqueued: 0 });
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "source-drain-1",
+      }),
+    ).resolves.toMatchObject({ enqueued: 1 });
     await t.run(async (ctx) => {
       const rows = await ctx.db
         .query("evidenceWatchlistOutbox")
@@ -273,7 +280,10 @@ describe("watchlist outbox", () => {
       deliveryPreference: "none",
     });
     await expect(
-      other.mutation(watchlists.drain, { watchlistKey: "source" }),
+      other.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "other-drain-1",
+      }),
     ).rejects.toThrow(/not found/i);
     await t.run(async (ctx) => {
       const source = await ctx.db
@@ -284,7 +294,10 @@ describe("watchlist outbox", () => {
       await ctx.db.patch("evidenceSources", source._id, { status: "retired" });
     });
     await expect(
-      owner.mutation(watchlists.drain, { watchlistKey: "source" }),
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "retired-drain-1",
+      }),
     ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
     await t.run(async (ctx) => {
       expect(
@@ -302,6 +315,24 @@ describe("watchlist outbox", () => {
         targetType: "source",
         targetKey: "public-source",
         deliveryPreference: "in_app",
+      }),
+    ).rejects.toThrow(/current public evidence targets/i);
+    await t.run(async (ctx) => {
+      const entity = await ctx.db
+        .query("evidenceEntities")
+        .withIndex("by_entityKey", (q) => q.eq("entityKey", "public-entity"))
+        .unique();
+      if (!entity) throw new Error("entity fixture missing");
+      await ctx.db.patch("evidenceEntities", entity._id, {
+        visibility: "private",
+      });
+    });
+    await expect(
+      owner.mutation(watchlists.create, {
+        watchlistKey: "private-entity",
+        targetType: "entity",
+        targetKey: "public-entity",
+        deliveryPreference: "none",
       }),
     ).rejects.toThrow(/current public evidence targets/i);
   });
@@ -354,10 +385,206 @@ describe("watchlist outbox", () => {
       }
     });
     await expect(
-      owner.mutation(watchlists.drain, { watchlistKey: "source" }),
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "capped-drain-1",
+      }),
     ).resolves.toMatchObject({ scanned: 20, matched: 20, enqueued: 20 });
     await expect(
-      owner.mutation(watchlists.drain, { watchlistKey: "source" }),
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "capped-drain-2",
+      }),
     ).resolves.toMatchObject({ scanned: 5, matched: 5, enqueued: 5 });
+  });
+
+  test("requires current public source ancestry for document and claim targets", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const owner = t.withIdentity({ subject: ids.owner });
+    const fixtureIds = await t.run(async (ctx) => {
+      const source = await ctx.db
+        .query("evidenceSources")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", "public-source"))
+        .unique();
+      if (!source) throw new Error("source fixture missing");
+      const documentId = await ctx.db.insert("evidenceDocuments", {
+        sourceId: source._id,
+        externalKey: "cited-document",
+        canonicalUrl: "https://example.com/cited-document",
+        canonicalUrlHash: "cited-document",
+        kind: "document",
+        visibility: "public",
+        title: "Cited document",
+        excerpt: "",
+        searchText: "",
+        tags: [],
+        authors: [],
+        licenseClass: "open",
+        currentVersionId: null,
+        publishedAt: null,
+        firstSeenAt: 1,
+        updatedAt: 1,
+      });
+      const versionId = await ctx.db.insert("evidenceDocumentVersions", {
+        documentId,
+        version: 1,
+        contentHash: "cited-v1",
+        title: "Cited document",
+        excerpt: "",
+        searchText: "",
+        fetchedAt: 1,
+        publishedAt: null,
+        sourceRevision: "1",
+        sourceUpdatedAt: 1,
+        rawStorageId: null,
+        retrievalUrl: "https://example.com/cited-document",
+        licenseClass: "open",
+        metadataJson: "{}",
+        createdAt: 1,
+      });
+      await ctx.db.patch("evidenceDocuments", documentId, {
+        currentVersionId: versionId,
+      });
+      const claimId = await ctx.db.insert("evidenceClaims", {
+        claimKey: "public-claim",
+        statement: "Public claim.",
+        subjectEntityId: null,
+        predicate: "states",
+        objectText: "fact",
+        status: "supported",
+        confidence: 1,
+        visibility: "public",
+        observedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return { sourceId: source._id, documentId, versionId, claimId };
+    });
+    await expect(
+      owner.mutation(watchlists.create, {
+        watchlistKey: "claim-without-citation",
+        targetType: "claim",
+        targetKey: "public-claim",
+        deliveryPreference: "none",
+      }),
+    ).rejects.toThrow(/current public evidence targets/i);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("evidenceClaimCitations", {
+        claimId: fixtureIds.claimId,
+        documentVersionId: fixtureIds.versionId,
+        citationKey: "public-claim-citation",
+        relation: "supports",
+        locator: "section-1",
+        excerpt: "Public evidence.",
+        confidence: 1,
+        createdAt: 1,
+      });
+    });
+    await owner.mutation(watchlists.create, {
+      watchlistKey: "claim",
+      targetType: "claim",
+      targetKey: "public-claim",
+      deliveryPreference: "none",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceDocuments", fixtureIds.documentId, {
+        visibility: "private",
+      });
+    });
+    await expect(
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "claim",
+        idempotencyKey: "private-citation-document",
+      }),
+    ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceDocuments", fixtureIds.documentId, {
+        visibility: "public",
+      });
+    });
+    await owner.mutation(watchlists.create, {
+      watchlistKey: "document",
+      targetType: "document",
+      targetKey: fixtureIds.documentId,
+      deliveryPreference: "none",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceSources", fixtureIds.sourceId, {
+        status: "paused",
+      });
+    });
+    await expect(
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "claim",
+        idempotencyKey: "paused-claim-drain",
+      }),
+    ).resolves.toMatchObject({ scanned: 0, enqueued: 0 });
+    await expect(
+      owner.mutation(watchlists.create, {
+        watchlistKey: "paused-document",
+        targetType: "document",
+        targetKey: fixtureIds.documentId,
+        deliveryPreference: "none",
+      }),
+    ).rejects.toThrow(/current public evidence targets/i);
+  });
+
+  test("replays the same public drain key without consuming extra capacity", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const owner = t.withIdentity({ subject: ids.owner });
+    await owner.mutation(watchlists.create, {
+      watchlistKey: "source",
+      targetType: "source",
+      targetKey: "public-source",
+      deliveryPreference: "none",
+    });
+    const first = await owner.mutation(watchlists.drain, {
+      watchlistKey: "source",
+      idempotencyKey: "same-request",
+    });
+    await expect(
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "same-request",
+      }),
+    ).resolves.toEqual(first);
+    await owner.mutation(watchlists.drain, {
+      watchlistKey: "source",
+      idempotencyKey: "second-request",
+    });
+    await expect(
+      owner.mutation(watchlists.drain, {
+        watchlistKey: "source",
+        idempotencyKey: "third-request",
+      }),
+    ).rejects.toThrow(/rate limited/i);
+  });
+
+  test("rate limits an agent independently from its owner", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentOne });
+    await agent.mutation(watchlists.create, {
+      watchlistKey: "agent-source",
+      targetType: "source",
+      targetKey: "public-source",
+      deliveryPreference: "none",
+    });
+    await agent.mutation(watchlists.drain, {
+      watchlistKey: "agent-source",
+      idempotencyKey: "agent-request-1",
+    });
+    await agent.mutation(watchlists.drain, {
+      watchlistKey: "agent-source",
+      idempotencyKey: "agent-request-2",
+    });
+    await expect(
+      agent.mutation(watchlists.drain, {
+        watchlistKey: "agent-source",
+        idempotencyKey: "agent-request-3",
+      }),
+    ).rejects.toThrow(/rate limited/i);
   });
 });
