@@ -4,16 +4,19 @@ import { resolve } from "node:path";
 import {
   assertPrivateJsonFile,
   certificationPlan,
+  readCertificationReceipt,
   redactedError,
   refreshSession,
   verifyKeyLogin,
   verifyPublicMetadata,
   verifyScopeDenied,
   verifySession,
+  validateLifecycleConfig,
+  writeCertificationReceipt,
 } from "./lib/agent-auth-certification.mjs";
 
 const args = parseArgs(process.argv.slice(2));
-const baseUrl = args["base-url"] ?? process.env.SYMBAIEX_AGENT_API_BASE_URL;
+const baseUrl = args["base-url"];
 
 try {
   if (args.help) {
@@ -31,38 +34,39 @@ try {
 }
 
 async function verifyLifecycle() {
-  if (args.production !== "strong-bee-384") {
-    throw new Error("Lifecycle verification is blocked. Pass --production strong-bee-384 for the named production target.");
-  }
-  if (args.confirm !== "PLAT-01") {
-    throw new Error("Lifecycle verification is blocked. Pass --confirm PLAT-01 after completing owner-console enrollment, rotation, and revocation.");
-  }
+  // Validate target, confirmation, and phase before reading credential files.
+  const productionBaseUrl = validateLifecycleConfig({ baseUrl, production: args.production, confirm: args.confirm, phase: args.phase });
+  const receiptPath = requiredPath("receipt");
   const phase = args.phase;
   if (phase === "refresh-scope") {
     if (args["allow-session-rotation"] !== "yes") throw new Error("Refresh rotates credentials. Pass --allow-session-rotation yes.");
-    const refreshed = await refreshSession({ baseUrl, session: assertPrivateJsonFile(requiredPath("session")) });
+    const refreshed = await refreshSession({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("session")) });
     const [active, scope] = await Promise.all([
-      verifySession({ baseUrl, session: refreshed, expectation: 200 }),
-      verifyScopeDenied({ baseUrl, session: assertPrivateJsonFile(requiredPath("scope-denied-session")) }),
+      verifySession({ baseUrl: productionBaseUrl, session: refreshed, expectation: 200 }),
+      verifyScopeDenied({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("scope-denied-session")) }),
     ]);
+    writeCertificationReceipt(receiptPath, phase);
     return output({ phase, active: active.status, insufficientScope: scope.status, refreshed: true });
   }
   if (phase === "rotation") {
+    const receipt = readCertificationReceipt(receiptPath, ["refresh-scope"]);
     const agentId = args["agent-id"];
-    const old = await verifyKeyLogin({ baseUrl, agentId, key: assertPrivateJsonFile(requiredPath("old-key")), expectation: 401 });
-    const replacement = await verifyKeyLogin({ baseUrl, agentId, key: assertPrivateJsonFile(requiredPath("replacement-key")), expectation: 200 });
-    const active = await verifySession({ baseUrl, session: replacement, expectation: 200 });
+    const old = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("old-key")), expectation: 401 });
+    const replacement = await verifyKeyLogin({ baseUrl: productionBaseUrl, agentId, key: assertPrivateJsonFile(requiredPath("replacement-key")), expectation: 200 });
+    const active = await verifySession({ baseUrl: productionBaseUrl, session: replacement, expectation: 200 });
+    writeCertificationReceipt(receiptPath, phase, receipt);
     return output({ phase, oldKey: old.status, replacementKey: active.status });
   }
   if (phase === "revocation") {
-    const revoked = await verifySession({ baseUrl, session: assertPrivateJsonFile(requiredPath("revoked-session")), expectation: 401 });
+    const receipt = readCertificationReceipt(receiptPath, ["refresh-scope", "rotation"]);
+    const revoked = await verifySession({ baseUrl: productionBaseUrl, session: assertPrivateJsonFile(requiredPath("revoked-session")), expectation: 401 });
+    writeCertificationReceipt(receiptPath, phase, receipt);
     return output({ phase, revoked: revoked.status });
   }
-  throw new Error("--phase must be refresh-scope, rotation, or revocation.");
 }
 
 function output(result) {
-  console.log(JSON.stringify({ mode: "lifecycle-verification", baseUrl: baseUrl ?? "https://www.symbaiex.com/api/agent", ...result, note: "Owner-console enrollment, rotation, and revocation are never sent by this harness." }, null, 2));
+  console.log(JSON.stringify({ mode: "lifecycle-verification", baseUrl: "https://www.symbaiex.com/api/agent", ...result, note: "Owner-console enrollment, rotation, and revocation are never sent by this harness." }, null, 2));
 }
 
 function requiredPath(name) {
@@ -92,6 +96,7 @@ Default: print a zero-network, zero-mutation certification plan.
   after owner-console work: refresh-scope (requires --session,
   --scope-denied-session, --allow-session-rotation yes), rotation (requires
   --agent-id, --old-key, --replacement-key), or revocation (requires
-  --revoked-session). Credential values are never printed and files must be
-  mode 0600.`);
+  --revoked-session). Every lifecycle phase also requires --receipt pointing to
+  a mode-0600 non-symlink receipt; order is refresh-scope, rotation, revocation.
+  Credential values are never printed and files must be mode 0600.`);
 }

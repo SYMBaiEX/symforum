@@ -3,6 +3,7 @@ import {
   certificationPlan,
   redactValue,
   refreshSession,
+  validateLifecycleConfig,
   verifyKeyLogin,
   verifyPublicMetadata,
   verifyScopeDenied,
@@ -26,6 +27,21 @@ describe("agent auth certification harness", () => {
       ? { "x-symbaiex-authentication": { oauth2: false } }
       : { protocol: "symbaiex_ed25519_challenge_v1", oauth2: { supported: false } }), { status: 200 });
     await expect(verifyPublicMetadata({ fetchImpl: fetchImpl as typeof fetch })).resolves.toMatchObject({ authentication: "ed25519" });
+  });
+
+  test("rejects arbitrary origins before any public metadata request", async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return new Response(null, { status: 500 });
+    };
+    await expect(verifyPublicMetadata({ fetchImpl: fetchImpl as typeof fetch, baseUrl: "https://evil.example/api/agent" })).rejects.toThrow(/pinned/i);
+    expect(calls).toBe(0);
+  });
+
+  test("rejects wrong production paths and subdomains before lifecycle inputs", () => {
+    expect(() => validateLifecycleConfig({ baseUrl: "https://api.symbaiex.com/api/agent", production: "strong-bee-384", confirm: "PLAT-01", phase: "refresh-scope" })).toThrow(/pinned/i);
+    expect(() => validateLifecycleConfig({ baseUrl: "https://www.symbaiex.com/api/agent/other", production: "strong-bee-384", confirm: "PLAT-01", phase: "refresh-scope" })).toThrow(/pinned/i);
   });
 
   test("records a scope denial without reading a response body", async () => {

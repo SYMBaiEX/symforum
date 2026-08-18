@@ -96,7 +96,10 @@ pass.
     Enrollment, rotation, and revocation stay owner-console operations; the
     harness performs temporary local Ed25519 signing only for the rotation
     assertion, never transmits private keys, and never sends agent-management
-    mutations.
+    mutations. It pins every request to the exact public API origin (no
+    subdomains, alternative paths, query strings, or credentials) and requires
+    a local non-secret phase receipt in the order refresh/scope, rotation, then
+    revocation.
 
 - [ ] **PLAT-02 — MCP 2026-07-28 protocol upgrade**
 

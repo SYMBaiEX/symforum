@@ -1,7 +1,9 @@
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 const SECRET_FIELD = /(?:access|refresh|private|secret|signature|challenge|token|authorization)/i;
-const DEFAULT_BASE_URL = "https://www.symbaiex.com/api/agent";
+export const PRODUCTION_AGENT_API_BASE_URL = "https://www.symbaiex.com/api/agent";
+const DEFAULT_BASE_URL = PRODUCTION_AGENT_API_BASE_URL;
 
 export function normalizeAgentApiBaseUrl(value = DEFAULT_BASE_URL) {
   let url;
@@ -10,21 +12,22 @@ export function normalizeAgentApiBaseUrl(value = DEFAULT_BASE_URL) {
   } catch {
     throw new Error("Agent API base URL must be a valid absolute URL.");
   }
-  const isLocal =
-    url.protocol === "http:" &&
-    (url.hostname === "localhost" || url.hostname === "127.0.0.1");
-  if ((url.protocol !== "https:" && !isLocal) || url.username || url.password || url.search || url.hash) {
-    throw new Error("Agent API base URL must be HTTPS (except localhost) and contain no credentials, query, or fragment.");
-  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Agent API base URL must be HTTPS and contain no credentials, query, or fragment.");
   url.pathname = url.pathname.replace(/\/+$/, "");
-  return url.toString().replace(/\/$/, "");
+  const normalized = url.toString().replace(/\/$/, "");
+  if (normalized !== PRODUCTION_AGENT_API_BASE_URL) throw new Error("PLAT-01 certification is pinned to https://www.symbaiex.com/api/agent.");
+  return normalized;
 }
 
 export function assertPrivateJsonFile(path) {
+  const link = lstatSync(path);
+  if (link.isSymbolicLink() || !link.isFile()) throw new Error("Credential file must be a regular non-symlink file.");
+  if (typeof process.getuid === "function" && link.uid !== process.getuid()) throw new Error("Credential file must be owned by the current user.");
   const mode = statSync(path).mode & 0o777;
   if ((mode & 0o077) !== 0) {
     throw new Error("Refusing to read a group/world-accessible credential file.");
   }
+  assertSafeCredentialParents(path);
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -35,6 +38,42 @@ export function assertPrivateJsonFile(path) {
     if (error instanceof Error && error.message.startsWith("Refusing")) throw error;
     throw new Error("Could not read credential file.");
   }
+}
+
+function assertSafeCredentialParents(path) {
+  let current = dirname(resolve(path));
+  while (true) {
+    const entry = lstatSync(current);
+    if (entry.isSymbolicLink() || !entry.isDirectory()) throw new Error("Credential parent must be a real directory.");
+    if ((entry.mode & 0o022) !== 0) throw new Error("Credential parent must not be group/world writable.");
+    const parent = dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+}
+
+export function validateLifecycleConfig({ baseUrl, production, confirm, phase }) {
+  const normalized = normalizeAgentApiBaseUrl(baseUrl);
+  if (production !== "strong-bee-384") throw new Error("Lifecycle verification is blocked. Pass --production strong-bee-384 for the named production target.");
+  if (confirm !== "PLAT-01") throw new Error("Lifecycle verification is blocked. Pass --confirm PLAT-01 after completing owner-console enrollment, rotation, and revocation.");
+  if (!["refresh-scope", "rotation", "revocation"].includes(phase)) throw new Error("--phase must be refresh-scope, rotation, or revocation.");
+  return normalized;
+}
+
+export function readCertificationReceipt(path, requiredPhases = []) {
+  const receipt = assertPrivateJsonFile(path);
+  if (receipt.version !== 1 || receipt.target !== "strong-bee-384" || !Array.isArray(receipt.phases)) throw new Error("Certification receipt is invalid.");
+  for (const phase of requiredPhases) if (!receipt.phases.includes(phase)) throw new Error(`Certification receipt is missing prerequisite phase: ${phase}.`);
+  return receipt;
+}
+
+export function writeCertificationReceipt(path, phase, previous = null) {
+  const destination = resolve(path);
+  const phases = [...new Set([...(previous?.phases ?? []), phase])];
+  mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
+  const existing = (() => { try { return lstatSync(destination); } catch { return null; } })();
+  if (existing?.isSymbolicLink()) throw new Error("Certification receipt must not be a symlink.");
+  writeFileSync(destination, `${JSON.stringify({ version: 1, target: "strong-bee-384", phases, updatedAt: new Date().toISOString() })}\n`, { encoding: "utf8", mode: 0o600 });
 }
 
 export function redactedError(error) {
