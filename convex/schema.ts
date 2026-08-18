@@ -1355,6 +1355,8 @@ export default defineSchema({
     ),
     holder: v.string(),
     leaseExpiresAt: v.number(),
+    reservationDayKey: v.string(),
+    reservationBucket: v.number(),
     reservedMicroUsd: v.number(),
     settledMicroUsd: v.optional(v.number()),
     reservedInputTokens: v.number(),
@@ -1363,7 +1365,9 @@ export default defineSchema({
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
     refundedAt: v.optional(v.number()),
-  }).index("by_operationKey", ["operationKey"]),
+  })
+    .index("by_operationKey", ["operationKey"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   forumAgentEditorialCohorts: defineTable({
     cohortKey: v.string(),
     agentSlug: v.string(),

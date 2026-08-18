@@ -38,6 +38,14 @@ control and additionally enforces its own $0.05/day default (maximum $5/day).
   conservative reservation, and a network/provider failure refunds it. The
   512 KiB response cap, `redirect: "error"`, and timeout are enforced in the
   OpenRouter fetch wrapper.
+- Index operations use a deterministic version key; query operations use a
+  fresh nonce so repeated identical searches are never mistaken for a prior
+  read. Terminal query accounting rows are explicitly eligible for cleanup
+  after 15 minutes, while index idempotency rows remain durable.
+- Reservations record their original UTC day and spend bucket. Settlement and
+  expired-lease recovery always adjust that exact bucket, including across
+  midnight. A recorded semantic health pause stops work before reservation or
+  provider access.
 - Semantic metadata carries the document/source fingerprint. A candidate is
   rejected if its live fingerprint no longer matches, even if it remains
   public.

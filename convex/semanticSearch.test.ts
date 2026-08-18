@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
 import {
+  dayKey,
+  isCircuitAvailable,
   isCurrentFingerprint,
   semanticSearchConfig,
   settlementDelta,
+  settlementLocation,
 } from "./semanticSearch";
 
 describe("semantic search safety controls", () => {
@@ -46,5 +49,18 @@ describe("semantic search safety controls", () => {
     expect(isCurrentFingerprint("10:20", 10, 20)).toBe(true);
     expect(isCurrentFingerprint("10:20", 11, 20)).toBe(false);
     expect(isCurrentFingerprint("10:20", 10, 21)).toBe(false);
+  });
+
+  test("settles against the original UTC spend bucket across midnight", () => {
+    expect(dayKey(Date.UTC(2026, 7, 18, 23, 59))).toBe("2026-08-18");
+    expect(dayKey(Date.UTC(2026, 7, 19, 0, 1))).toBe("2026-08-19");
+    expect(
+      settlementLocation({ reservationDayKey: "2026-08-18", reservationBucket: 15 }),
+    ).toEqual({ dayKey: "2026-08-18", bucket: 15 });
+  });
+
+  test("does not call the provider while the semantic circuit is paused", () => {
+    expect(isCircuitAvailable(1_001, 1_000)).toBe(false);
+    expect(isCircuitAvailable(1_000, 1_000)).toBe(true);
   });
 });

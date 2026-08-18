@@ -32,6 +32,8 @@ const PAUSE_AFTER_FAILURE_MS = 15 * 60_000;
 const PROVIDER_TIMEOUT_MS = 12_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
 const LEASE_MS = 60_000;
+const QUERY_OPERATION_RETENTION_MS = 15 * 60_000;
+const OPERATION_CLEANUP_LIMIT = 100;
 
 type SemanticMetadata = {
   documentId: string;
@@ -140,6 +142,11 @@ const searchSemanticRef = makeFunctionReference<
     score: number;
   }>
 >("semanticSearch:searchPublicSemantic");
+const availabilityRef = makeFunctionReference<
+  "query",
+  { model: string; now: number },
+  { available: boolean; reason?: string }
+>("semanticSearch:readAvailability");
 
 export type SemanticSearchConfig = {
   enabled: boolean;
@@ -301,7 +308,7 @@ function estimatedInputTokens(text: string) {
   return Math.max(1, text.length * 2);
 }
 
-function dayKey(timestamp = Date.now()) {
+export function dayKey(timestamp = Date.now()) {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
@@ -317,6 +324,17 @@ function operationKey(kind: "index" | "query", key: string, model: string) {
 
 function operationHolder() {
   return crypto.randomUUID();
+}
+
+function semanticBucket() {
+  return 15;
+}
+
+export function settlementLocation(operation: {
+  reservationDayKey: string;
+  reservationBucket: number;
+}) {
+  return { dayKey: operation.reservationDayKey, bucket: operation.reservationBucket };
 }
 
 export function settlementDelta(reservedMicroUsd: number, actualMicroUsd: number) {
@@ -444,6 +462,25 @@ export const readBackfillState = internalQuery({
   },
 });
 
+export function isCircuitAvailable(pauseUntil: number | undefined, now: number) {
+  return pauseUntil === undefined || pauseUntil <= now;
+}
+
+export const readAvailability = internalQuery({
+  args: { model: v.string(), now: v.number() },
+  handler: async (ctx, args) => {
+    const state = await ctx.db
+      .query("aiOperationalStates")
+      .withIndex("by_key", (q) =>
+        q.eq("key", `${SEMANTIC_HEALTH_KEY}:${args.model}`),
+      )
+      .unique();
+    return isCircuitAvailable(state?.pauseUntil, args.now)
+      ? { available: true }
+      : { available: false, reason: "Semantic OpenRouter circuit is paused." };
+  },
+});
+
 export const recordUsage = internalMutation({
   args: {
     operationKey: v.string(),
@@ -464,8 +501,7 @@ export const recordUsage = internalMutation({
     if (operation === null || operation.status !== "leased") return null;
     const actualMicroUsd = Math.max(0, args.settledMicroUsd);
     const delta = settlementDelta(operation.reservedMicroUsd, actualMicroUsd);
-    const day = dayKey(now);
-    const bucket = 15;
+    const { dayKey: day, bucket } = settlementLocation(operation);
     const spend = await ctx.db
       .query("aiSpendBuckets")
       .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
@@ -543,7 +579,7 @@ export const reserveUsage = internalMutation({
         const oldBucket = await ctx.db
           .query("aiSpendBuckets")
           .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
-            q.eq("dayKey", dayKey(existing.createdAt)).eq("provider", "openrouter").eq("bucket", 15),
+            q.eq("dayKey", existing.reservationDayKey).eq("provider", "openrouter").eq("bucket", existing.reservationBucket),
           )
           .unique();
         if (oldBucket !== null) {
@@ -558,7 +594,7 @@ export const reserveUsage = internalMutation({
       await ctx.db.delete("semanticSearchOperations", existing._id);
     }
     const day = dayKey(now);
-    const bucket = 15;
+    const bucket = semanticBucket();
     const spend = await ctx.db
       .query("aiSpendBuckets")
       .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
@@ -601,12 +637,44 @@ export const reserveUsage = internalMutation({
       status: "leased",
       holder: args.holder,
       leaseExpiresAt: now + LEASE_MS,
+      reservationDayKey: day,
+      reservationBucket: bucket,
       reservedMicroUsd: args.estimatedMicroUsd,
       reservedInputTokens: args.inputTokens,
       createdAt: now,
       updatedAt: now,
     });
     return { accepted: true, replay: false };
+  },
+});
+
+/** Deletes only terminal short-lived query records; index idempotency remains durable. */
+export const cleanupExpiredOperations = internalMutation({
+  args: { now: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const rows = await ctx.db
+      .query("semanticSearchOperations")
+      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "completed"))
+      .order("asc")
+      .take(OPERATION_CLEANUP_LIMIT);
+    let deleted = 0;
+    for (const row of rows) {
+      if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
+      await ctx.db.delete("semanticSearchOperations", row._id);
+      deleted += 1;
+    }
+    const refunded = await ctx.db
+      .query("semanticSearchOperations")
+      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "refunded"))
+      .order("asc")
+      .take(OPERATION_CLEANUP_LIMIT - deleted);
+    for (const row of refunded) {
+      if (row.kind !== "query" || row.updatedAt > now - QUERY_OPERATION_RETENTION_MS) continue;
+      await ctx.db.delete("semanticSearchOperations", row._id);
+      deleted += 1;
+    }
+    return { deleted };
   },
 });
 
@@ -651,6 +719,13 @@ export const indexPublicEvidenceDocument = internalAction({
   args: { documentId: v.id("evidenceDocuments") },
   handler: async (ctx, args) => {
     const settings = requireEnabledConfig();
+    const availability = await ctx.runQuery(availabilityRef, {
+      model: settings.model,
+      now: Date.now(),
+    });
+    if (!availability.available) {
+      return { status: "skipped" as const, reason: "circuit_paused" };
+    }
     const document = await ctx.runQuery(readDocumentRef, {
       documentId: args.documentId,
       embeddingModel: settings.model,
@@ -772,6 +847,11 @@ export const searchPublicSemantic = internalAction({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const settings = requireEnabledConfig();
+    const availability = await ctx.runQuery(availabilityRef, {
+      model: settings.model,
+      now: Date.now(),
+    });
+    if (!availability.available) return [];
     const query = normalizedText(args.query, MAX_QUERY_CHARS);
     if (!query) throw new ConvexError({ code: "INVALID_REQUEST", message: "query is required." });
     const limit = args.limit ?? 10;
@@ -780,8 +860,13 @@ export const searchPublicSemantic = internalAction({
     }
     const rag = platform(settings.apiKey, settings.model);
     const reservedTokens = estimatedInputTokens(query);
+    const queryOperationKey = operationKey(
+      "query",
+      `${query}:${operationHolder()}`,
+      settings.model,
+    );
     const reservation = await ctx.runMutation(reserveUsageRef, {
-      operationKey: operationKey("query", query, settings.model),
+      operationKey: queryOperationKey,
       kind: "query",
       fingerprint: query,
       holder: operationHolder(),
@@ -791,7 +876,6 @@ export const searchPublicSemantic = internalAction({
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
     });
     if (!reservation.accepted) return [];
-    const queryOperationKey = operationKey("query", query, settings.model);
     try {
       const result = await rag.search(ctx, {
         namespace: NAMESPACE,
