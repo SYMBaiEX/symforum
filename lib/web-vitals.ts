@@ -36,7 +36,7 @@ const PRIVATE_PATH_PREFIXES = [
   "/forum/subscriptions",
 ] as const;
 
-const STATIC_PUBLIC_ROUTES = new Set([
+const STATIC_PUBLIC_ROUTES = [
   "/",
   "/about",
   "/agent",
@@ -60,7 +60,7 @@ const STATIC_PUBLIC_ROUTES = new Set([
   "/research/ai-readable-web",
   "/research/editorial-trust-and-contracts",
   "/research/methodology",
-]);
+] as const;
 
 const PUBLIC_DYNAMIC_ROUTES: Array<{ pattern: RegExp; template: string }> = [
   { pattern: /^\/blog\/[^/]+$/, template: "/blog/[slug]" },
@@ -88,6 +88,15 @@ const PUBLIC_DYNAMIC_ROUTES: Array<{ pattern: RegExp; template: string }> = [
   { pattern: /^\/u\/[^/]+$/, template: "/u/[username]" },
 ];
 
+// This fixed, versionable route set is intentionally shared by collection and
+// operational evaluation. Neither path accepts arbitrary URLs or identifiers.
+export const WEB_VITAL_ROUTE_TEMPLATES = [
+  ...STATIC_PUBLIC_ROUTES,
+  ...PUBLIC_DYNAMIC_ROUTES.map(({ template }) => template),
+].sort();
+
+const STATIC_PUBLIC_ROUTE_SET = new Set<string>(STATIC_PUBLIC_ROUTES);
+
 export function publicRouteTemplate(pathname: string): string | null {
   const path = pathname.split("?")[0]?.split("#")[0] ?? "";
   if (!path.startsWith("/") || path.includes("//")) return null;
@@ -98,7 +107,7 @@ export function publicRouteTemplate(pathname: string): string | null {
   ) {
     return null;
   }
-  if (STATIC_PUBLIC_ROUTES.has(path)) return path;
+  if (STATIC_PUBLIC_ROUTE_SET.has(path)) return path;
   return (
     PUBLIC_DYNAMIC_ROUTES.find(({ pattern }) => pattern.test(path))?.template ??
     null

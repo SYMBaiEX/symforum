@@ -2202,6 +2202,42 @@ export default defineSchema({
     sampleCount: v.number(),
     updatedAt: v.number(),
   }).index("by_minute", ["minute"]),
+  // Durable, aggregate-only operational state. This deliberately stores no
+  // client identifiers, URLs, queries, account IDs, or raw event payloads.
+  webVitalSloStates: defineTable({
+    policyVersion: v.string(),
+    route: v.string(),
+    name: v.union(
+      v.literal("LCP"),
+      v.literal("INP"),
+      v.literal("CLS"),
+      v.literal("FCP"),
+      v.literal("TTFB"),
+    ),
+    threshold: v.number(),
+    minimumSamples: v.number(),
+    status: v.union(
+      v.literal("unknown"),
+      v.literal("healthy"),
+      v.literal("breached"),
+    ),
+    // Remains true through an unknown evaluation so a temporary lack of
+    // samples cannot create duplicate breach logs or falsely resolve one.
+    breachActive: v.boolean(),
+    sampleCount: v.number(),
+    p75: v.optional(v.number()),
+    lastSampleAt: v.optional(v.number()),
+    lastEvaluatedAt: v.number(),
+    breachedAt: v.optional(v.number()),
+    recoveredAt: v.optional(v.number()),
+    openLogId: v.optional(v.id("systemLogs")),
+  })
+    .index("by_policyVersion_and_route_and_name", [
+      "policyVersion",
+      "route",
+      "name",
+    ])
+    .index("by_policyVersion_and_status", ["policyVersion", "status"]),
   evidenceSources: defineTable({
     sourceKey: v.string(),
     name: v.string(),

@@ -1437,6 +1437,26 @@ export type WebVitalSummaryRecord = {
   }>;
 };
 
+export type WebVitalSloSummaryRecord = {
+  policyVersion: string;
+  enabled: boolean;
+  sampledStates: number;
+  counts: { breached: number; healthy: number; unknown: number };
+  states: Array<{
+    route: string;
+    name: "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
+    threshold: number;
+    minimumSamples: number;
+    status: "unknown" | "healthy" | "breached";
+    sampleCount: number;
+    p75: number | null;
+    lastSampleAt: number | null;
+    lastEvaluatedAt: number;
+    breachedAt: number | null;
+    recoveredAt: number | null;
+  }>;
+};
+
 export type GithubPortfolioSnapshotRecord = {
   _id: string;
   _creationTime: number;
@@ -2359,6 +2379,11 @@ export const convexRefs = {
       { days?: number; now?: number },
       WebVitalSummaryRecord
     >("webVitals:summaryAdmin"),
+    webVitalSloSummary: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      WebVitalSloSummaryRecord
+    >("operationalSlo:summaryAdmin"),
   },
   contact: {
     submit: makeFunctionReference<

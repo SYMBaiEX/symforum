@@ -49,6 +49,11 @@ const cleanupSemanticSearchRef = makeFunctionReference<
   Record<string, never>,
   unknown
 >("semanticSearch:cleanupExpiredOperations");
+const evaluateWebVitalsSloRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  unknown
+>("operationalSlo:evaluate");
 
 crons.cron("ingest CISA KEV evidence", "7 * * * *", syncCisaKevRef, {});
 crons.cron(
@@ -172,6 +177,12 @@ crons.interval(
   "cleanup expired Web Vitals",
   { hours: 24 },
   cleanupWebVitalsRef,
+  {},
+);
+crons.interval(
+  "evaluate Web Vitals SLOs",
+  { hours: 1 },
+  evaluateWebVitalsSloRef,
   {},
 );
 crons.interval(

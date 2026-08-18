@@ -48,6 +48,7 @@ export function AdminAnalytics() {
     days,
     now: queryNow,
   });
+  const webVitalSlo = useQuery(convexRefs.admin.webVitalSloSummary, {});
 
   const maxDaily = useMemo(
     () =>
@@ -202,6 +203,75 @@ export function AdminAnalytics() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="mt-6 border-y border-row-border py-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              Field SLO state
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Hourly p75 evaluation; insufficient or saturated samples stay
+              unknown.
+            </p>
+          </div>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            {webVitalSlo?.enabled ? webVitalSlo.policyVersion : "disabled"}
+          </p>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+          <span>{webVitalSlo?.counts.breached ?? 0} breached</span>
+          <span>{webVitalSlo?.counts.healthy ?? 0} healthy</span>
+          <span>{webVitalSlo?.counts.unknown ?? 0} unknown</span>
+        </div>
+        {webVitalSlo?.states.length ? (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[34rem] border-collapse text-left text-sm">
+              <thead className="font-mono text-[10px] uppercase text-muted-foreground">
+                <tr className="border-b border-row-border">
+                  <th className="px-2 py-2 font-medium">Route</th>
+                  <th className="px-2 py-2 font-medium">Metric</th>
+                  <th className="px-2 py-2 font-medium">State</th>
+                  <th className="px-2 py-2 font-medium">P75 / threshold</th>
+                  <th className="px-2 py-2 font-medium">Samples</th>
+                </tr>
+              </thead>
+              <tbody>
+                {webVitalSlo.states.slice(0, 20).map((state) => (
+                  <tr
+                    key={`${state.route}:${state.name}`}
+                    className="border-b border-row-border/70"
+                  >
+                    <td className="px-2 py-2 font-mono text-xs">
+                      {state.route}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-xs">
+                      {state.name}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-xs uppercase">
+                      {state.status}
+                    </td>
+                    <td className="px-2 py-2">
+                      {state.p75 === null
+                        ? "Unknown"
+                        : `${formatVital(state.p75, state.name)} / ${formatVital(state.threshold, state.name)}`}
+                    </td>
+                    <td className="px-2 py-2">
+                      {state.sampleCount} / {state.minimumSamples}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <StatusLine>
+            {webVitalSlo === undefined
+              ? "Loading SLO state"
+              : "No SLO evaluation has run"}
+          </StatusLine>
+        )}
       </section>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">

@@ -16,4 +16,11 @@ describe("evidence retention cron", () => {
     expect(source).toContain('"cleanup expired Web Vitals"');
     expect(source).toContain('"webVitals:cleanupExpired"');
   });
+
+  test("runs the fail-closed Web Vitals SLO evaluator hourly", () => {
+    const source = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
+    expect(source).toContain('"evaluate Web Vitals SLOs"');
+    expect(source).toContain('"operationalSlo:evaluate"');
+    expect(source).toContain("{ hours: 1 }");
+  });
 });

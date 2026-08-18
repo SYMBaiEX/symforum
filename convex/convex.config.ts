@@ -25,6 +25,8 @@ const app = defineApp({
     FORUM_AGENT_DAILY_PUBLICATION_LIMIT: v.optional(v.string()),
     WEB_VITALS_COLLECTION_ENABLED: v.optional(v.string()),
     WEB_VITALS_CLEANUP_ENABLED: v.optional(v.string()),
+    // The SLO evaluator is fail-closed until an operator explicitly enables it.
+    WEB_VITALS_SLO_ENABLED: v.optional(v.string()),
     GITHUB_TOKEN: v.optional(v.string()),
     GH_TOKEN: v.optional(v.string()),
     // Optional NVD API key. It is sent only as the documented X-ApiKey header
