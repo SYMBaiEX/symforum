@@ -81,6 +81,9 @@ export const runResearch = internalAction({
   returns: v.object({
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    artifactContentType: v.optional(v.string()),
+    artifactByteLength: v.optional(v.number()),
+    artifactSha256: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
     const input = await ctx.runQuery(refs.researchInput, {
@@ -145,10 +148,15 @@ export const runResearch = internalAction({
       route,
       fallback: route === null ? "deterministic-extractive" : null,
     });
-    const resultStorageId = await ctx.storage.store(
-      new Blob([resultJson], { type: "application/json" }),
-    );
-    return { resultJson, resultStorageId };
+    const artifact = new Blob([resultJson], { type: "application/json" });
+    const resultStorageId = await ctx.storage.store(artifact);
+    return {
+      resultJson,
+      resultStorageId,
+      artifactContentType: artifact.type,
+      artifactByteLength: artifact.size,
+      artifactSha256: await checksum(resultJson),
+    };
   },
 });
 
@@ -159,6 +167,8 @@ export const runExport = internalAction({
     resultStorageId: v.id("_storage"),
     checksum: v.string(),
     recordCount: v.number(),
+    artifactContentType: v.string(),
+    artifactByteLength: v.number(),
   }),
   handler: async (ctx, args) => {
     const input = await ctx.runQuery(refs.exportInput, {
@@ -176,9 +186,8 @@ export const runExport = internalAction({
     const jsonl =
       records.map((record: ExportRecord) => JSON.stringify(record)).join("\n") +
       (records.length ? "\n" : "");
-    const resultStorageId = await ctx.storage.store(
-      new Blob([jsonl], { type: "application/x-ndjson" }),
-    );
+    const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
+    const resultStorageId = await ctx.storage.store(artifact);
     const resultChecksum = await checksum(jsonl);
     return {
       resultJson: JSON.stringify({
@@ -190,6 +199,8 @@ export const runExport = internalAction({
       resultStorageId,
       checksum: resultChecksum,
       recordCount: records.length,
+      artifactContentType: artifact.type,
+      artifactByteLength: artifact.size,
     };
   },
 });

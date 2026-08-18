@@ -277,7 +277,8 @@ const OPENAPI = {
         ],
         responses: {
           "200": {
-            description: "Signed artifact URL available until job expiry.",
+            description:
+              "Authenticated first-party JSON artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
           },
         },
       },
@@ -339,7 +340,7 @@ const OPENAPI = {
         responses: {
           "200": {
             description:
-              "Signed JSONL artifact URL available until job expiry.",
+              "Authenticated first-party JSONL artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
           },
         },
       },

@@ -2220,6 +2220,30 @@ export default defineSchema({
     ])
     .index("by_datasetId_and_createdAt", ["datasetId", "createdAt"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  /**
+   * Immutable metadata for a stored result. The storage object can be purged
+   * after retention without erasing the audit record or usage ledger.
+   */
+  evidenceArtifacts: defineTable({
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    kind: v.union(v.literal("research"), v.literal("export")),
+    researchJobId: v.optional(v.id("evidenceResearchJobs")),
+    exportJobId: v.optional(v.id("evidenceExportJobs")),
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    byteLength: v.number(),
+    sha256: v.string(),
+    generatedAt: v.number(),
+    expiresAt: v.number(),
+    status: v.union(v.literal("available"), v.literal("purged")),
+    purgedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_researchJobId", ["researchJobId"])
+    .index("by_exportJobId", ["exportJobId"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"]),
   apiProducts: defineTable({
     productKey: v.string(),
     name: v.string(),

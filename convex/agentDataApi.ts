@@ -135,6 +135,7 @@ async function agentPrincipal(ctx: MutationCtx) {
     });
   }
   return {
+    agentUserId: user._id,
     agentId: identity.agentId,
     ownerUserId: identity.ownerUserId,
   };
@@ -492,22 +493,37 @@ export const dispatch = internalMutation({
         });
       case "research_artifact":
       case "export_artifact": {
-        const artifact = await ctx.runQuery(internal.evidenceJobs.getArtifact, {
-          ownerUserId: principal.ownerUserId,
-          researchJobId:
-            args.operation === "research_artifact"
-              ? (researchJobId as Id<"evidenceResearchJobs">)
-              : undefined,
-          exportJobId:
-            args.operation === "export_artifact"
-              ? (exportJobId as Id<"evidenceExportJobs">)
-              : undefined,
-        });
+        const kind =
+          args.operation === "research_artifact" ? "research" : "export";
+        const artifact = await ctx.runQuery(
+          internal.evidenceJobs.resolveArtifactDownload,
+          {
+            agentUserId: principal.agentUserId,
+            kind,
+            researchJobId:
+              args.operation === "research_artifact"
+                ? (researchJobId as Id<"evidenceResearchJobs">)
+                : undefined,
+            exportJobId:
+              args.operation === "export_artifact"
+                ? (exportJobId as Id<"evidenceExportJobs">)
+                : undefined,
+          },
+        );
         if (artifact === null) return null;
-        const downloadUrl = await ctx.storage.getUrl(artifact.storageId);
-        return downloadUrl === null
-          ? null
-          : { downloadUrl, expiresAt: artifact.expiresAt };
+        const base = "https://www.symbaiex.com/api/agent/v1";
+        const path =
+          args.operation === "research_artifact"
+            ? `/research-jobs/${researchJobId}/artifact`
+            : `/exports/${exportJobId}/artifact`;
+        return {
+          downloadUrl: `${base}${path}`,
+          contentType: artifact.contentType,
+          byteLength: artifact.byteLength,
+          sha256: artifact.sha256,
+          generatedAt: artifact.generatedAt,
+          expiresAt: artifact.expiresAt,
+        };
       }
       case "webhooks_list":
         return await ctx.runQuery(api.evidenceWebhooks.listMySubscriptions, {});

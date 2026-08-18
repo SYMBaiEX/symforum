@@ -1,5 +1,7 @@
 import { httpRouter } from "convex/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { env, httpAction } from "./_generated/server";
 import { resend } from "./resendClient";
@@ -86,6 +88,107 @@ http.route({
   ),
 });
 
+/**
+ * Internal-to-the-first-party relay for artifact bytes. Storage URLs are never
+ * returned to agents: this route revalidates the bearer-derived identity and
+ * artifact entitlement immediately before streaming the blob.
+ */
+http.route({
+  path: "/agent/artifact",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const headers = agentDataCorsHeaders(request);
+    if (!isAllowedAgentAuthOrigin(request))
+      return agentDataJson(
+        { code: "ORIGIN_DENIED", error: "Origin is not allowed." },
+        403,
+        headers,
+      );
+    let agentUserId;
+    try {
+      agentUserId = await getAuthUserId(ctx);
+    } catch {
+      agentUserId = null;
+    }
+    if (agentUserId === null) {
+      setAgentDataAuthChallenge(
+        headers,
+        401,
+        request.headers.has("authorization"),
+      );
+      return agentDataJson(
+        {
+          code: request.headers.has("authorization")
+            ? "INVALID_TOKEN"
+            : "AUTH_REQUIRED",
+          error: "A bearer access token is required.",
+        },
+        401,
+        headers,
+      );
+    }
+    try {
+      const body = await readAgentDataBody(request);
+      if (
+        !isRecord(body) ||
+        (body.kind !== "research" && body.kind !== "export") ||
+        typeof body.jobId !== "string" ||
+        body.jobId.length === 0 ||
+        body.jobId.length > 160
+      )
+        return agentDataJson(
+          { code: "INVALID_REQUEST", error: "kind and jobId are required." },
+          400,
+          headers,
+        );
+      const artifact = await ctx.runQuery(
+        internal.evidenceJobs.resolveArtifactDownload,
+        body.kind === "research"
+          ? {
+              agentUserId,
+              kind: "research",
+              researchJobId: body.jobId as Id<"evidenceResearchJobs">,
+            }
+          : {
+              agentUserId,
+              kind: "export",
+              exportJobId: body.jobId as Id<"evidenceExportJobs">,
+            },
+      );
+      if (artifact === null)
+        return agentDataJson(
+          { code: "ARTIFACT_UNAVAILABLE", error: "Artifact is unavailable." },
+          404,
+          headers,
+        );
+      const blob = await ctx.storage.get(artifact.storageId);
+      if (blob === null)
+        return agentDataJson(
+          { code: "ARTIFACT_UNAVAILABLE", error: "Artifact is unavailable." },
+          404,
+          headers,
+        );
+      const responseHeaders = new Headers(headers);
+      responseHeaders.set("Content-Type", artifact.contentType);
+      responseHeaders.set("Content-Length", String(artifact.byteLength));
+      responseHeaders.set(
+        "Content-Disposition",
+        `attachment; filename="${artifact.filename}"`,
+      );
+      responseHeaders.set("ETag", `\"${artifact.sha256}\"`);
+      responseHeaders.set("X-Artifact-SHA256", artifact.sha256);
+      return new Response(blob.stream(), {
+        status: 200,
+        headers: responseHeaders,
+      });
+    } catch (error) {
+      const { payload, status } = normalizeAgentDataHttpError(error);
+      if (status === 403) setAgentDataAuthChallenge(headers, 403);
+      return agentDataJson(payload, status, headers);
+    }
+  }),
+});
+
 http.route({
   path: "/agent/v1",
   method: "POST",
@@ -113,11 +216,7 @@ http.route({
     }
     if (userIdentity === null) {
       const invalidToken = request.headers.has("authorization");
-      setAgentDataAuthChallenge(
-        headers,
-        401,
-        invalidToken,
-      );
+      setAgentDataAuthChallenge(headers, 401, invalidToken);
       return agentDataJson(
         {
           code: invalidToken ? "INVALID_TOKEN" : "AUTH_REQUIRED",

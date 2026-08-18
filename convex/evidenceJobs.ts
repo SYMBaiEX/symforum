@@ -73,6 +73,15 @@ const EXPORTED_DOCUMENT = v.object({
   publishedAt: v.union(v.number(), v.null()),
   updatedAt: v.number(),
 });
+const ARTIFACT_DOWNLOAD = v.object({
+  storageId: v.id("_storage"),
+  contentType: v.string(),
+  byteLength: v.number(),
+  sha256: v.string(),
+  generatedAt: v.number(),
+  expiresAt: v.number(),
+  filename: v.string(),
+});
 
 function bounded(value: string, name: string, maximum: number) {
   const normalized = value.trim();
@@ -340,6 +349,118 @@ export const getArtifact = internalQuery({
   },
 });
 
+/**
+ * Resolves a download only after the request's active agent identity, owner,
+ * free-beta/explicit entitlement, completed job, manifest, and retention
+ * window have all been checked. This is deliberately internal: HTTP performs
+ * token validation before it supplies agentUserId.
+ */
+export const resolveArtifactDownload = internalQuery({
+  args: {
+    agentUserId: v.id("users"),
+    kind: v.union(v.literal("research"), v.literal("export")),
+    researchJobId: v.optional(v.id("evidenceResearchJobs")),
+    exportJobId: v.optional(v.id("evidenceExportJobs")),
+  },
+  returns: v.union(v.null(), ARTIFACT_DOWNLOAD),
+  handler: async (ctx, args) => {
+    if ((args.researchJobId === undefined) === (args.exportJobId === undefined))
+      return null;
+    if (
+      (args.kind === "research" && args.researchJobId === undefined) ||
+      (args.kind === "export" && args.exportJobId === undefined)
+    )
+      return null;
+    const agent = await ctx.db.get("users", args.agentUserId);
+    if (
+      agent?.isAgent !== true ||
+      agent.agentStatus !== "active" ||
+      !agent.agentScopes?.includes("evidence")
+    )
+      return null;
+    const identity = await ctx.db
+      .query("agentIdentities")
+      .withIndex("by_userId", (q) => q.eq("userId", args.agentUserId))
+      .unique();
+    if (
+      identity === null ||
+      identity.status !== "active" ||
+      identity.ownerUserId === undefined
+    )
+      return null;
+    const ownerUserId = identity.ownerUserId;
+    const job =
+      args.kind === "research"
+        ? await ctx.db.get("evidenceResearchJobs", args.researchJobId!)
+        : await ctx.db.get("evidenceExportJobs", args.exportJobId!);
+    if (
+      job === null ||
+      job.ownerUserId !== ownerUserId ||
+      job.agentId !== identity.agentId ||
+      job.status !== "completed" ||
+      job.expiresAt <= Date.now()
+    )
+      return null;
+    const productKey =
+      args.kind === "research" ? "evidence-research" : "evidence-export";
+    const product = await ctx.db
+      .query("apiProducts")
+      .withIndex("by_productKey", (q) => q.eq("productKey", productKey))
+      .unique();
+    if (product === null || product.status !== "active") return null;
+    const explicit = await ctx.db
+      .query("apiEntitlements")
+      .withIndex("by_ownerUserId_and_productId", (q) =>
+        q.eq("ownerUserId", ownerUserId).eq("productId", product._id),
+      )
+      .unique();
+    const now = Date.now();
+    const entitled =
+      explicit !== null
+        ? explicit.status === "active" &&
+          explicit.startsAt <= now &&
+          (explicit.expiresAt === undefined || explicit.expiresAt > now)
+        : product.unitPriceMicroUsd === undefined &&
+          product.visibility === "public";
+    if (!entitled) return null;
+    const artifact =
+      args.kind === "research"
+        ? await ctx.db
+            .query("evidenceArtifacts")
+            .withIndex("by_researchJobId", (q) =>
+              q.eq("researchJobId", args.researchJobId!),
+            )
+            .unique()
+        : await ctx.db
+            .query("evidenceArtifacts")
+            .withIndex("by_exportJobId", (q) =>
+              q.eq("exportJobId", args.exportJobId!),
+            )
+            .unique();
+    if (
+      artifact === null ||
+      artifact.ownerUserId !== ownerUserId ||
+      artifact.agentId !== identity.agentId ||
+      artifact.status !== "available" ||
+      job.resultStorageId !== artifact.storageId ||
+      artifact.expiresAt <= now
+    )
+      return null;
+    return {
+      storageId: artifact.storageId,
+      contentType: artifact.contentType,
+      byteLength: artifact.byteLength,
+      sha256: artifact.sha256,
+      generatedAt: artifact.generatedAt,
+      expiresAt: artifact.expiresAt,
+      filename:
+        args.kind === "research"
+          ? `symbaiex-research-${job._id}.json`
+          : `symbaiex-export-${job._id}.jsonl`,
+    };
+  },
+});
+
 export const readResearchInput = internalQuery({
   args: { jobId: v.id("evidenceResearchJobs") },
   returns: v.union(
@@ -431,6 +552,9 @@ export const completeResearchJob = internalMutation({
     jobId: v.id("evidenceResearchJobs"),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    artifactContentType: v.optional(v.string()),
+    artifactByteLength: v.optional(v.number()),
+    artifactSha256: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -443,6 +567,32 @@ export const completeResearchJob = internalMutation({
         errorMessage: "",
         updatedAt: Date.now(),
       });
+      if (
+        args.resultStorageId !== undefined &&
+        args.artifactContentType !== undefined &&
+        args.artifactByteLength !== undefined &&
+        args.artifactSha256 !== undefined
+      ) {
+        await ctx.db.insert("evidenceArtifacts", {
+          ownerUserId: job.ownerUserId,
+          agentId: job.agentId,
+          kind: "research",
+          researchJobId: job._id,
+          storageId: args.resultStorageId,
+          contentType: bounded(
+            args.artifactContentType,
+            "artifactContentType",
+            160,
+          ),
+          byteLength: Math.max(0, Math.floor(args.artifactByteLength)),
+          sha256: bounded(args.artifactSha256, "artifactSha256", 128),
+          generatedAt: Date.now(),
+          expiresAt: job.expiresAt,
+          status: "available",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
       await ctx.runMutation(enqueueWebhookRef, {
         eventKey: `research:${job._id}:completed`,
         eventType: "evidence.research.completed",
@@ -463,6 +613,8 @@ export const completeExportJob = internalMutation({
     resultStorageId: v.id("_storage"),
     checksum: v.string(),
     recordCount: v.number(),
+    artifactContentType: v.string(),
+    artifactByteLength: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -478,6 +630,25 @@ export const completeExportJob = internalMutation({
           Math.min(MAX_EXPORT_LIMIT, Math.floor(args.recordCount)),
         ),
         errorMessage: "",
+        updatedAt: Date.now(),
+      });
+      await ctx.db.insert("evidenceArtifacts", {
+        ownerUserId: job.ownerUserId,
+        agentId: job.agentId,
+        kind: "export",
+        exportJobId: job._id,
+        storageId: args.resultStorageId,
+        contentType: bounded(
+          args.artifactContentType,
+          "artifactContentType",
+          160,
+        ),
+        byteLength: Math.max(0, Math.floor(args.artifactByteLength)),
+        sha256: bounded(args.checksum, "checksum", 128),
+        generatedAt: Date.now(),
+        expiresAt: job.expiresAt,
+        status: "available",
+        createdAt: Date.now(),
         updatedAt: Date.now(),
       });
       const existingVersion = await ctx.db
@@ -568,31 +739,37 @@ export const cleanupExpiredArtifacts = internalMutation({
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 50)));
     const now = Date.now();
-    const research = (
-      await ctx.db.query("evidenceResearchJobs").take(limit)
-    ).filter(
-      (job) => job.expiresAt <= now && job.resultStorageId !== undefined,
-    );
-    const exports = (
-      await ctx.db.query("evidenceExportJobs").take(limit)
-    ).filter(
-      (job) => job.expiresAt <= now && job.resultStorageId !== undefined,
-    );
-    for (const job of research) {
-      await ctx.storage.delete(job.resultStorageId!);
-      await ctx.db.patch("evidenceResearchJobs", job._id, {
-        resultStorageId: undefined,
+    const artifacts = await ctx.db
+      .query("evidenceArtifacts")
+      .withIndex("by_status_and_expiresAt", (q) =>
+        q.eq("status", "available").lte("expiresAt", now),
+      )
+      .take(limit);
+    let researchCleared = 0;
+    let exportCleared = 0;
+    for (const artifact of artifacts) {
+      await ctx.storage.delete(artifact.storageId);
+      await ctx.db.patch("evidenceArtifacts", artifact._id, {
+        status: "purged",
+        purgedAt: now,
         updatedAt: now,
       });
+      if (artifact.researchJobId !== undefined) {
+        researchCleared += 1;
+        await ctx.db.patch("evidenceResearchJobs", artifact.researchJobId, {
+          resultStorageId: undefined,
+          updatedAt: now,
+        });
+      }
+      if (artifact.exportJobId !== undefined) {
+        exportCleared += 1;
+        await ctx.db.patch("evidenceExportJobs", artifact.exportJobId, {
+          resultStorageId: undefined,
+          updatedAt: now,
+        });
+      }
     }
-    for (const job of exports) {
-      await ctx.storage.delete(job.resultStorageId!);
-      await ctx.db.patch("evidenceExportJobs", job._id, {
-        resultStorageId: undefined,
-        updatedAt: now,
-      });
-    }
-    return { researchCleared: research.length, exportCleared: exports.length };
+    return { researchCleared, exportCleared };
   },
 });
 

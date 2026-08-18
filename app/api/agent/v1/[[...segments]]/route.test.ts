@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { GET, POST } from "./route";
 
 const context = (segments: string[]) => ({
@@ -6,6 +6,10 @@ const context = (segments: string[]) => ({
 });
 
 describe("agent evidence REST endpoint", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
   test("requires bearer authentication", async () => {
     const response = await GET(
       new Request("https://www.symbaiex.com/api/agent/v1/status"),
@@ -50,5 +54,40 @@ describe("agent evidence REST endpoint", () => {
       context(["research-jobs"]),
     );
     expect(invalid.status).toBe(404);
+  });
+
+  test("streams artifacts through the authenticated first-party relay", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response('{"record":1}\n', {
+        status: 200,
+        headers: {
+          "content-type": "application/x-ndjson",
+          "content-disposition": 'attachment; filename="export.jsonl"',
+          "x-artifact-sha256": "checksum",
+        },
+      }),
+    );
+    const response = await GET(
+      new Request(
+        "https://www.symbaiex.com/api/agent/v1/exports/job-id/artifact",
+        { headers: { authorization: "Bearer agent-token" } },
+      ),
+      context(["exports", "job-id", "artifact"]),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toContain("export");
+    expect(response.headers.get("x-artifact-sha256")).toBe("checksum");
+    expect(await response.text()).toBe('{"record":1}\n');
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://strong-bee-384.convex.site/agent/artifact",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer agent-token",
+        }),
+        body: JSON.stringify({ kind: "export", jobId: "job-id" }),
+      }),
+    );
   });
 });

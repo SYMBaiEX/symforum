@@ -21,6 +21,9 @@ const jobs = {
   artifact: makeFunctionReference<"query", any, any>(
     "evidenceJobs:getArtifact",
   ),
+  resolveArtifact: makeFunctionReference<"query", any, any>(
+    "evidenceJobs:resolveArtifactDownload",
+  ),
   catalog: makeFunctionReference<"mutation", any, any>(
     "evidenceJobs:ensureCatalog",
   ),
@@ -74,7 +77,7 @@ async function fixture(t: ReturnType<typeof setup>) {
       createdAt: 1,
       updatedAt: 1,
     });
-    return { owner, other };
+    return { owner, other, agent };
   });
 }
 describe("evidence jobs", () => {
@@ -187,6 +190,8 @@ describe("evidence jobs", () => {
       resultStorageId: storageId,
       checksum: "checksum-one",
       recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 13,
     });
     await t.run(async (ctx) => {
       const version = await ctx.db.query("evidenceDatasetVersions").unique();
@@ -195,6 +200,176 @@ describe("evidence jobs", () => {
         checksum: "checksum-one",
         recordCount: 1,
       });
+    });
+  });
+
+  test("rechecks agent ownership, activity, entitlement, expiry, and manifest before download", async () => {
+    const t = setup();
+    const { owner, other, agent } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const job = await t.mutation(jobs.createExport, {
+      ownerUserId: owner,
+      agentId: "agent",
+      datasetId: catalog.datasetId,
+      format: "jsonl",
+      idempotencyKey: "artifact-owner-1",
+      requestFingerprint: "artifact-owner-one",
+      quotaUnits: 1,
+    });
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(
+        new Blob(['{"record":1}\n'], { type: "application/x-ndjson" }),
+      ),
+    );
+    await t.mutation(jobs.completeExport, {
+      jobId: job.jobId,
+      resultJson: "{}",
+      resultStorageId: storageId,
+      checksum: "artifact-checksum-one",
+      recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 13,
+    });
+    await expect(
+      t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "export",
+        exportJobId: job.jobId,
+      }),
+    ).resolves.toMatchObject({
+      storageId,
+      contentType: "application/x-ndjson",
+      sha256: "artifact-checksum-one",
+    });
+    const downloaded = await t
+      .withIdentity({ subject: agent })
+      .fetch("/agent/artifact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+      });
+    expect(downloaded.status).toBe(200);
+    expect(downloaded.headers.get("content-disposition")).toContain(
+      "symbaiex-export-",
+    );
+    expect(downloaded.headers.get("x-artifact-sha256")).toBe(
+      "artifact-checksum-one",
+    );
+    expect(await downloaded.text()).toBe('{"record":1}\n');
+    const crossOwner = await t
+      .withIdentity({ subject: other })
+      .fetch("/agent/artifact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+      });
+    expect(crossOwner.status).toBe(404);
+    await expect(
+      t.query(jobs.resolveArtifact, {
+        agentUserId: other,
+        kind: "export",
+        exportJobId: job.jobId,
+      }),
+    ).resolves.toBeNull();
+    await t.run(async (ctx) => {
+      const identity = await ctx.db
+        .query("agentIdentities")
+        .withIndex("by_userId", (q) => q.eq("userId", agent))
+        .unique();
+      await ctx.db.patch("agentIdentities", identity!._id, {
+        status: "revoked",
+      });
+    });
+    await expect(
+      t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "export",
+        exportJobId: job.jobId,
+      }),
+    ).resolves.toBeNull();
+    await t.run(async (ctx) => {
+      const identity = await ctx.db
+        .query("agentIdentities")
+        .withIndex("by_userId", (q) => q.eq("userId", agent))
+        .unique();
+      await ctx.db.patch("agentIdentities", identity!._id, {
+        status: "active",
+      });
+      await ctx.db.patch("evidenceExportJobs", job.jobId, { expiresAt: 1 });
+    });
+    await expect(
+      t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "export",
+        exportJobId: job.jobId,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  test("cleans all expired artifacts in indexed batches without deleting audit jobs", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 52; index += 1) {
+        const storageId = await ctx.storage.store(new Blob([String(index)]));
+        const jobId = await ctx.db.insert("evidenceResearchJobs", {
+          ownerUserId: owner,
+          agentId: "agent",
+          requestKey: `cleanup-batch:${index}`,
+          requestFingerprint: `cleanup-batch:${index}`,
+          idempotencyKey: `cleanup-batch:${index}`,
+          quotaUnits: 1,
+          status: "completed",
+          query: "cleanup",
+          resultJson: "{}",
+          resultStorageId: storageId,
+          errorMessage: "",
+          expiresAt: now - 1,
+          createdAt: now - 2,
+          updatedAt: now - 2,
+        });
+        await ctx.db.insert("evidenceArtifacts", {
+          ownerUserId: owner,
+          agentId: "agent",
+          kind: "research",
+          researchJobId: jobId,
+          storageId,
+          contentType: "application/json",
+          byteLength: 1,
+          sha256: `cleanup-${index}`,
+          generatedAt: now - 2,
+          expiresAt: now - 1,
+          status: "available",
+          createdAt: now - 2,
+          updatedAt: now - 2,
+        });
+      }
+    });
+    await expect(t.mutation(jobs.cleanup, { limit: 50 })).resolves.toEqual({
+      researchCleared: 50,
+      exportCleared: 0,
+    });
+    await expect(t.mutation(jobs.cleanup, { limit: 50 })).resolves.toEqual({
+      researchCleared: 2,
+      exportCleared: 0,
+    });
+    await t.run(async (ctx) => {
+      const auditJobs = await ctx.db
+        .query("evidenceResearchJobs")
+        .withIndex("by_status_and_updatedAt", (q) =>
+          q.eq("status", "completed"),
+        )
+        .take(60);
+      expect(auditJobs).toHaveLength(52);
+      expect(
+        await ctx.db
+          .query("evidenceArtifacts")
+          .withIndex("by_status_and_expiresAt", (q) =>
+            q.eq("status", "available"),
+          )
+          .take(1),
+      ).toEqual([]);
     });
   });
 

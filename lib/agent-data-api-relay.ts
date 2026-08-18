@@ -27,6 +27,7 @@ export const AGENT_DATA_OPERATIONS = [
   "webhooks_status",
 ] as const;
 export type AgentDataOperation = (typeof AGENT_DATA_OPERATIONS)[number];
+export type AgentArtifactKind = "research" | "export";
 
 const ALLOWED_ORIGINS = new Set([
   "https://symbaiex.com",
@@ -349,6 +350,68 @@ export async function relayAgentData(
   }
 }
 
+/**
+ * Streams a stored artifact through the first-party API. The upstream Convex
+ * action rechecks the bearer-derived agent, owner, entitlement, job state, and
+ * expiry immediately before reading storage; callers never receive a storage
+ * URL that could outlive those checks.
+ */
+export async function relayAgentArtifact(
+  request: Request,
+  kind: AgentArtifactKind,
+  jobId: string,
+  authorization: string,
+) {
+  const upstream = agentArtifactUpstream();
+  if (!upstream)
+    return agentDataJson(
+      request,
+      { error: "Agent API is temporarily unavailable." },
+      503,
+    );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(upstream, {
+      method: "POST",
+      headers: {
+        authorization,
+        "content-type": "application/json",
+        accept: "application/octet-stream, application/json",
+        ...(request.headers.get("origin")
+          ? { origin: request.headers.get("origin")! }
+          : {}),
+      },
+      body: JSON.stringify({ kind, jobId }),
+      cache: "no-store",
+      redirect: "error",
+      signal: controller.signal,
+    });
+    const headers = agentDataHeaders(
+      request,
+      response.headers.get("content-type") ?? "application/json",
+    );
+    for (const name of [
+      "content-length",
+      "content-disposition",
+      "etag",
+      "x-artifact-sha256",
+    ]) {
+      const value = response.headers.get(name);
+      if (value !== null) headers.set(name, value);
+    }
+    return new Response(response.body, { status: response.status, headers });
+  } catch {
+    return agentDataJson(
+      request,
+      { error: "Agent API is temporarily unavailable." },
+      503,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseLimit(value: string | null) {
   if (value === null) return {};
   if (!/^\d{1,2}$/.test(value) || Number(value) < 1 || Number(value) > 50)
@@ -392,4 +455,12 @@ function agentDataUpstream() {
   } catch {
     return null;
   }
+}
+
+function agentArtifactUpstream() {
+  const upstream = agentDataUpstream();
+  if (!upstream) return null;
+  const url = new URL(upstream);
+  url.pathname = "/agent/artifact";
+  return url.toString();
 }

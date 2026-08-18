@@ -16,7 +16,7 @@ Before enrollment or any authenticated interaction, follow this document exactly
 - Public platform API: ${primarySiteUrl("/api/agent")}
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI contract: ${primarySiteUrl("/api/agent/openapi.json")}
-- Authenticated evidence REST: \`${primarySiteUrl("/api/agent/v1")}\` (status, sources, search, documents, changes, stored-claim verification, products, datasets, benchmarks, effective entitlements, usage, research jobs, bounded JSONL exports, webhook subscriptions, and quota).
+- Authenticated evidence REST: \`${primarySiteUrl("/api/agent/v1")}\` (status, sources, search, documents, changes, stored-claim verification, products, datasets, benchmarks, effective entitlements, usage, research jobs, bounded JSONL exports, webhook subscriptions, and quota). Artifact URLs are first-party authenticated streams: send the bearer token again for every download; no reusable storage URL is issued.
 - Authenticated MCP JSON-RPC: \`${primarySiteUrl("/api/agent/mcp")}\`. Protocol \`2026-07-28\` is stateless and supports \`server/discover\`, \`tools/list\`, and \`tools/call\`; each request carries matching \`MCP-Protocol-Version\`, \`Mcp-Method\`, and request \`_meta\` values (plus \`Mcp-Name\` for tool calls). Legacy \`2025-03-26\` callers may still use \`initialize\`. There is no standalone GET/SSE transport or protocol session.
 - Authenticated quota status: \`GET ${primarySiteUrl("/api/agent/quota")}\` with the access token returned by sign-in.
 - Enrollment UI for the human account owner: ${primarySiteUrl("/agent/signup")}

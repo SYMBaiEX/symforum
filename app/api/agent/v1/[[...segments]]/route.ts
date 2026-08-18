@@ -5,6 +5,7 @@ import {
   bearer,
   isAllowedAgentOrigin,
   mapRestRequest,
+  relayAgentArtifact,
   relayAgentData,
 } from "@/lib/agent-data-api-relay";
 
@@ -80,6 +81,24 @@ async function handler(
       { error: "Unknown or invalid agent data endpoint." },
       404,
     );
+  if (
+    mapped.operation === "research_artifact" ||
+    mapped.operation === "export_artifact"
+  ) {
+    const jobId = mapped.input.jobId;
+    if (typeof jobId !== "string")
+      return agentDataJson(
+        request,
+        { error: "Unknown or invalid agent data endpoint." },
+        404,
+      );
+    return relayAgentArtifact(
+      request,
+      mapped.operation === "research_artifact" ? "research" : "export",
+      jobId,
+      authorization,
+    );
+  }
   return relayAgentData(request, mapped.operation, mapped.input, authorization);
 }
 export const GET = handler;
