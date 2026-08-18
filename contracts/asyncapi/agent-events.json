@@ -1,0 +1,84 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "SYMBaiEX Evidence Events",
+    "version": "1.0.0",
+    "description": "Public event bodies delivered only to configured evidence webhook subscriptions. The subscription endpoint is configured through the authenticated REST API; this contract does not expose callback URLs."
+  },
+  "externalDocs": {
+    "description": "SYMBaiEX agent operating instructions",
+    "url": "https://www.symbaiex.com/agent/instructions"
+  },
+  "channels": {
+    "evidence.document.changed": {
+      "address": "evidence.document.changed",
+      "messages": { "documentChanged": { "$ref": "#/components/messages/DocumentChanged" } }
+    },
+    "evidence.research.completed": {
+      "address": "evidence.research.completed",
+      "messages": { "researchCompleted": { "$ref": "#/components/messages/ResearchCompleted" } }
+    },
+    "evidence.export.completed": {
+      "address": "evidence.export.completed",
+      "messages": { "exportCompleted": { "$ref": "#/components/messages/ExportCompleted" } }
+    },
+    "evidence.benchmark.completed": {
+      "address": "evidence.benchmark.completed",
+      "messages": { "benchmarkCompleted": { "$ref": "#/components/messages/BenchmarkCompleted" } }
+    },
+    "evidence.claim.verified": {
+      "address": "evidence.claim.verified",
+      "messages": { "claimVerified": { "$ref": "#/components/messages/ClaimVerified" } }
+    }
+  },
+  "operations": {
+    "receiveDocumentChanged": { "action": "receive", "channel": { "$ref": "#/channels/evidence.document.changed" }, "messages": [{ "$ref": "#/channels/evidence.document.changed/messages/documentChanged" }] },
+    "receiveResearchCompleted": { "action": "receive", "channel": { "$ref": "#/channels/evidence.research.completed" }, "messages": [{ "$ref": "#/channels/evidence.research.completed/messages/researchCompleted" }] },
+    "receiveExportCompleted": { "action": "receive", "channel": { "$ref": "#/channels/evidence.export.completed" }, "messages": [{ "$ref": "#/channels/evidence.export.completed/messages/exportCompleted" }] },
+    "receiveBenchmarkCompleted": { "action": "receive", "channel": { "$ref": "#/channels/evidence.benchmark.completed" }, "messages": [{ "$ref": "#/channels/evidence.benchmark.completed/messages/benchmarkCompleted" }] },
+    "receiveClaimVerified": { "action": "receive", "channel": { "$ref": "#/channels/evidence.claim.verified" }, "messages": [{ "$ref": "#/channels/evidence.claim.verified/messages/claimVerified" }] }
+  },
+  "components": {
+    "messages": {
+      "DocumentChanged": { "name": "evidence.document.changed", "title": "Evidence document changed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/DocumentChangedEnvelope" } },
+      "ResearchCompleted": { "name": "evidence.research.completed", "title": "Evidence research completed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/ResearchCompletedEnvelope" } },
+      "ExportCompleted": { "name": "evidence.export.completed", "title": "Evidence export completed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/ExportCompletedEnvelope" } },
+      "BenchmarkCompleted": { "name": "evidence.benchmark.completed", "title": "Evidence benchmark completed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/BenchmarkCompletedEnvelope" } },
+      "ClaimVerified": { "name": "evidence.claim.verified", "title": "Evidence claim verified", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/ClaimVerifiedEnvelope" } }
+    },
+    "schemas": {
+      "DeliveryHeaders": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["x-symbaiex-event-id", "x-symbaiex-event-type", "x-symbaiex-timestamp", "x-symbaiex-signature"],
+        "properties": {
+          "x-symbaiex-event-id": { "type": "string" },
+          "x-symbaiex-event-type": { "type": "string", "enum": ["evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified"] },
+          "x-symbaiex-timestamp": { "type": "string", "description": "Unix epoch seconds used in the HMAC input." },
+          "x-symbaiex-signature": { "type": "string", "pattern": "^v1=[a-f0-9]{64}$", "description": "HMAC-SHA256 of timestamp.body using the subscription signing key." }
+        }
+      },
+      "Envelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "occurredAt", "data"],
+        "properties": {
+          "id": { "type": "string", "description": "Stable event key; use for idempotency." },
+          "type": { "type": "string" },
+          "occurredAt": { "type": "integer", "minimum": 0, "description": "Unix epoch seconds." },
+          "data": { "type": "object" }
+        }
+      },
+      "DocumentChangedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.document.changed" }, "data": { "$ref": "#/components/schemas/DocumentChangedData" } } }] },
+      "ResearchCompletedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.research.completed" }, "data": { "$ref": "#/components/schemas/ResearchCompletedData" } } }] },
+      "ExportCompletedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.export.completed" }, "data": { "$ref": "#/components/schemas/ExportCompletedData" } } }] },
+      "BenchmarkCompletedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.benchmark.completed" }, "data": { "$ref": "#/components/schemas/BenchmarkCompletedData" } } }] },
+      "ClaimVerifiedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.claim.verified" }, "data": { "$ref": "#/components/schemas/ClaimVerifiedData" } } }] },
+      "DocumentChangedData": { "type": "object", "additionalProperties": false, "required": ["documentId", "documentVersionId", "version", "canonicalUrl"], "properties": { "documentId": { "type": "string" }, "documentVersionId": { "type": "string" }, "version": { "type": "integer", "minimum": 0 }, "canonicalUrl": { "type": "string", "format": "uri" }, "kind": { "type": "string", "enum": ["document", "advisory", "release", "paper"] } } },
+      "ResearchCompletedData": { "type": "object", "additionalProperties": false, "required": ["researchJobId", "status", "expiresAt"], "properties": { "researchJobId": { "type": "string" }, "status": { "const": "completed" }, "expiresAt": { "type": "integer", "minimum": 0 } } },
+      "ExportCompletedData": { "type": "object", "additionalProperties": false, "required": ["exportJobId", "status", "checksum", "recordCount", "expiresAt"], "properties": { "exportJobId": { "type": "string" }, "status": { "const": "completed" }, "checksum": { "type": "string" }, "recordCount": { "type": "integer", "minimum": 0 }, "expiresAt": { "type": "integer", "minimum": 0 } } },
+      "BenchmarkCompletedData": { "type": "object", "additionalProperties": false, "required": ["runId", "runKey", "score", "model"], "properties": { "runId": { "type": "string" }, "runKey": { "type": "string" }, "score": { "type": "number" }, "model": { "type": "string" } } },
+      "ClaimVerifiedData": { "type": "object", "additionalProperties": false, "required": ["claimId", "documentVersionId", "status", "confidence"], "properties": { "claimId": { "type": "string" }, "documentVersionId": { "type": "string" }, "status": { "const": "supported" }, "confidence": { "type": "number", "minimum": 0, "maximum": 1 } } }
+    }
+  }
+}
