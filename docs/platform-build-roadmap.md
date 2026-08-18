@@ -18,12 +18,18 @@ missing clients/UI, or external provider work is complete.
 
 ### Latest production receipt
 
-- The current application release is `a922e7f`; its Vercel build completed all
-  57 application routes and is Ready. Convex production `strong-bee-384` last
-  deployed the organization-console functions at `1661f23`. The source-only
-  cache-key/type hardening in `a922e7f` is backward-compatible with that
-  deployed validator and awaits the next authorized backend release. This
-  roadmap receipt follows the application release on `main`.
+- The current verified Vercel application release is `a922e7f`; its build
+  completed all 57 application routes and is Ready. The Wave 1 release
+  candidate immediately before this roadmap receipt is `7055ef6`; it adds the
+  packaged SDK/CLI foundation, a default-off auth certification harness, a
+  fail-closed semantic transport, and a localhost-only webhook certification
+  kit. It has passed the combined local release matrix but is not described as
+  production until the exact pushed Vercel deployment is Ready.
+- Convex production `strong-bee-384` was explicitly deployed from the
+  `7ed8a76` source tree after schema validation and typecheck. The public agent
+  smoke passed afterward. The newer semantic transport/accounting functions
+  remain source-only and disabled pending a separately approved Convex deploy
+  plus the relay-secret, budget, and bounded-backfill activation sequence.
 - The public agent smoke verifies the manifest, OpenAPI, custom Ed25519
   protected-resource metadata, REST and MCP authentication challenges,
   `paymentAccepted: false`, and `graphql: false`.
@@ -56,6 +62,11 @@ missing clients/UI, or external provider work is complete.
   approval-status record. PLAT-16 therefore remains pending Cloudflare review;
   the live HTTPS Ed25519 key directory is ready but is not represented as
   Cloudflare-verified.
+- Vercel CLI `59.1.4` is the current latest CLI resolved by Bun for this
+  workspace as of August 18. SDK and CLI package archives contain only the
+  intended compiled output, README, license, declarations where applicable,
+  and package metadata; no registry publication or version-policy decision has
+  been made.
 
 This is the durable implementation queue for the next platform expansion. Work
 is dependency-ordered, isolated by subsystem, integrated through `main`, and
@@ -88,6 +99,12 @@ pass.
     insufficient-scope denial, key rotation, and revocation in production.
   - Acceptance: the authenticated smoke harness passes without printing
     secrets; revoked credentials fail; the release checklist is closed.
+  - Integrated foundation: the certification CLI is zero-network by default,
+    pins the public API origin, validates private credential files through a
+    bounded no-follow file-descriptor flow, and gates refresh, rotation, and
+    revocation phases behind the exact production target and confirmation.
+    The public Ed25519 metadata probe passes; the real credential lifecycle has
+    not been executed.
   - A non-secret certification harness is available at
     `bun run certify:agent:auth`. Its default is a zero-network, zero-mutation
     plan; `--verify-public` is metadata-only. Lifecycle verification requires
@@ -129,6 +146,10 @@ pass.
     contracts using only the public API origin.
   - Acceptance: enrollment handoff, login, refresh, status, search, research,
     export, and webhook examples work without repository access.
+  - Integrated foundation: TypeScript SDK, Bun CLI, and Python SDK packaging,
+    license/readme metadata, archive-content checks, and release CI are in the
+    workspace. Offline TypeScript, CLI, and Python 3.11 contract tests pass;
+    npm/PyPI publication remains a product/version/signing decision.
 
 ### Wave 2 — evidence, research, and event products
 
@@ -142,6 +163,13 @@ pass.
     indexing and hybrid ranking are internal, OpenRouter-only, budget-reserved,
     live-visibility-checked, and disabled until a scoped authenticated action
     transport and observed-cost backfill can be certified.
+  - Integrated release candidate: the scoped transport now exists across REST,
+    MCP, OpenAPI, and TypeScript/Python clients. Entitlement precedes quota,
+    request-attempt abuse quota is explicitly non-monetary, and organization
+    plus commerce reservations reverse exactly once when semantic work is not
+    attempted or fails. The route remains fail-closed until its production
+    relay secret, backend release, feature flag, budget, and corpus canary are
+    separately approved.
 
 - [ ] **PLAT-07 — Additional licensed evidence adapters**
 
@@ -184,6 +212,12 @@ pass.
     key rotation, and test-event controls.
   - Acceptance: exact-host allowlists, signature verification, replay
     protection, bounded retries, and owner isolation are tested.
+  - Integrated certification kit: a localhost-only bounded receiver validates
+    the checked-in AsyncAPI schemas, raw-byte HMAC signatures, timestamp skew,
+    event identity, UTF-8, body size, and replay behavior. It never accepts a
+    secret in arguments or prints it. A live delivery still requires a
+    disposable subscription plus a separately authorized exact HTTPS test host
+    and allowlist change.
 
 - [ ] **PLAT-13 — Signed datasets and artifacts**
   - Add immutable manifests, checksums, signatures, larger asynchronous export
