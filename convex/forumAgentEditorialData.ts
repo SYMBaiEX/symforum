@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  type QueryCtx,
+} from "./_generated/server";
 import {
   estimatedModelCostMicroUsd,
   forumDayKey,
@@ -8,6 +13,8 @@ import {
 import { recordSpendBucket } from "./aiRoutingControlData";
 
 const AGENT_SLUG = v.string();
+const PUBLIC_FORUM_ACCESS = "public";
+const MAX_CATEGORY_ANCESTORS = 16;
 const USAGE_STAGE = v.union(
   v.literal("topic"),
   v.literal("draft"),
@@ -15,6 +22,26 @@ const USAGE_STAGE = v.union(
   v.literal("reply"),
   v.literal("embedding"),
 );
+
+async function publicCategoryForMemory(
+  ctx: QueryCtx,
+  categoryId: Id<"forumCategories">,
+) {
+  let category = await ctx.db.get("forumCategories", categoryId);
+  let publicCategory = category;
+  for (let depth = 0; depth < MAX_CATEGORY_ANCESTORS; depth += 1) {
+    if (
+      category === null ||
+      category.status !== "active" ||
+      category.viewAccess !== PUBLIC_FORUM_ACCESS
+    )
+      return null;
+    if (category.parentCategoryId === undefined) return publicCategory;
+    category = await ctx.db.get("forumCategories", category.parentCategoryId);
+  }
+  // Cyclic or excessively nested category trees fail closed.
+  return null;
+}
 
 export const attachRunInfrastructure = internalMutation({
   args: {
@@ -84,10 +111,14 @@ export const readThreadForMemory = internalQuery({
     const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null || thread.status !== "active") return null;
     const [category, author] = await Promise.all([
-      ctx.db.get("forumCategories", thread.categoryId),
+      publicCategoryForMemory(ctx, thread.categoryId),
       ctx.db.get("users", thread.authorId),
     ]);
-    if (category === null || author === null) return null;
+    // This namespace is shared with public editorial retrieval. Never send a
+    // thread to it unless its category is explicitly public; legacy/missing
+    // access values fail closed as well.
+    if (category === null || author === null || category.status !== "active")
+      return null;
     return {
       threadId: thread._id,
       categorySlug: category.slug,
@@ -114,8 +145,19 @@ export const readForumThreadsForBackfill = internalQuery({
       .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
       .order("desc")
       .paginate({ cursor: args.cursor ?? null, numItems: 40 });
+    const publicThreadIds = await Promise.all(
+      page.page.map(async (thread) => {
+        const category = await publicCategoryForMemory(ctx, thread.categoryId);
+        return category === null ? null : thread._id;
+      }),
+    );
     return {
-      threadIds: page.page.map((thread) => thread._id),
+      // Filter before scheduling indexing so private rows never reach the
+      // shared public editorial namespace, including during backfills.
+      threadIds: publicThreadIds.filter(
+        (threadId): threadId is NonNullable<typeof threadId> =>
+          threadId !== null,
+      ),
       continueCursor: page.continueCursor,
       isDone: page.isDone,
     };

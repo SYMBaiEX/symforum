@@ -206,10 +206,10 @@ describe("durable evidence graph", () => {
       evidence.upsertDocumentVersion,
       versionArgs(sourceId),
     );
-    const second = await t.mutation(
-      evidence.upsertDocumentVersion,
-      versionArgs(sourceId, "hash-v2"),
-    );
+    const second = await t.mutation(evidence.upsertDocumentVersion, {
+      ...versionArgs(sourceId, "hash-v2"),
+      title: "September release",
+    });
     expect(first).toMatchObject({ version: 1, idempotent: false });
     expect(replay).toMatchObject({
       version: 1,
@@ -232,6 +232,65 @@ describe("durable evidence graph", () => {
       expect(events.filter((event) => event.kind === "updated")).toHaveLength(
         1,
       );
+    });
+  });
+
+  test("persists deterministic allowlisted field diffs and ignores non-semantic replay changes", async () => {
+    const t = setup();
+    const { sourceId } = await seedSource(t);
+    const first = await t.mutation(
+      evidence.upsertDocumentVersion,
+      versionArgs(sourceId, "canonical-v1"),
+    );
+    expect(first.changedFields).toEqual([
+      "title",
+      "excerpt",
+      "tags",
+      "authors",
+      "publishedAt",
+      "kind",
+      "visibility",
+      "licenseClass",
+    ]);
+    const replay = await t.mutation(evidence.upsertDocumentVersion, {
+      ...versionArgs(sourceId, "metadata-only-v2"),
+      title: "  August   release ",
+      excerpt: "A  bounded public evidence excerpt.",
+      tags: ["release"],
+      authors: ["Example"],
+    });
+    expect(replay).toMatchObject({
+      idempotent: true,
+      versionId: first.versionId,
+      changedFields: [],
+    });
+    const updated = await t.mutation(evidence.upsertDocumentVersion, {
+      ...versionArgs(sourceId, "semantic-v2"),
+      title: "September release",
+      tags: ["release", "platform"],
+      authors: ["Example", "Editor"],
+      publishedAt: 1_799_100_000_000,
+      kind: "advisory",
+      visibility: "private",
+      documentLicenseClass: "restricted",
+    });
+    expect(updated).toMatchObject({
+      idempotent: false,
+      version: 2,
+      changedFields: [
+        "title",
+        "tags",
+        "authors",
+        "publishedAt",
+        "kind",
+        "visibility",
+        "licenseClass",
+      ],
+    });
+    await t.run(async (ctx) => {
+      const events = await ctx.db.query("evidenceChangeEvents").collect();
+      expect(events).toHaveLength(2);
+      expect(events[1]).toMatchObject({ changedFields: updated.changedFields });
     });
   });
 

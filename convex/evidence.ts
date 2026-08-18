@@ -81,6 +81,77 @@ function bounded(value: string, name: string, maximum: number) {
   return normalized;
 }
 
+const DOCUMENT_CHANGE_FIELDS = [
+  "title",
+  "excerpt",
+  "tags",
+  "authors",
+  "publishedAt",
+  // Publication controls are deliberately included as status-like fields.
+  "kind",
+  "visibility",
+  "licenseClass",
+] as const;
+
+type DocumentChangeField = (typeof DOCUMENT_CHANGE_FIELDS)[number];
+
+function normalizeDocumentText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function canonicalDocumentList(values: readonly string[], maximum: number) {
+  return [...new Set(values.map(normalizeDocumentText).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, maximum);
+}
+
+function sameCanonicalDocumentList(
+  left: readonly string[],
+  right: readonly string[],
+) {
+  const normalizedLeft = canonicalDocumentList(left, 80);
+  const normalizedRight = canonicalDocumentList(right, 80);
+  return (
+    normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((value, index) => value === normalizedRight[index])
+  );
+}
+
+function documentChangedFields(
+  document: Doc<"evidenceDocuments">,
+  candidate: {
+    kind: Doc<"evidenceDocuments">["kind"];
+    visibility: Doc<"evidenceDocuments">["visibility"];
+    title: string;
+    excerpt: string;
+    tags: string[];
+    authors: string[];
+    publishedAt: number | null;
+    licenseClass: Doc<"evidenceDocuments">["licenseClass"];
+  },
+): DocumentChangeField[] {
+  return DOCUMENT_CHANGE_FIELDS.filter((field) => {
+    switch (field) {
+      case "title":
+        return normalizeDocumentText(document.title) !== candidate.title;
+      case "excerpt":
+        return normalizeDocumentText(document.excerpt) !== candidate.excerpt;
+      case "tags":
+        return !sameCanonicalDocumentList(document.tags, candidate.tags);
+      case "authors":
+        return !sameCanonicalDocumentList(document.authors, candidate.authors);
+      case "publishedAt":
+        return document.publishedAt !== candidate.publishedAt;
+      case "kind":
+        return document.kind !== candidate.kind;
+      case "visibility":
+        return document.visibility !== candidate.visibility;
+      case "licenseClass":
+        return document.licenseClass !== candidate.licenseClass;
+    }
+  });
+}
+
 /** A compact, cryptographic deterministic key used to make ingestion retries append-safe. */
 async function stableRevisionKey(parts: readonly string[]) {
   return `claim:${await sha256Base64Url(JSON.stringify(parts))}`;
@@ -253,6 +324,7 @@ export const upsertDocumentVersion = internalMutation({
     versionId: v.id("evidenceDocumentVersions"),
     version: v.number(),
     idempotent: v.boolean(),
+    changedFields: v.array(v.string()),
   }),
   handler: async (ctx, args) => {
     const source = await ctx.db.get("evidenceSources", args.sourceId);
@@ -262,17 +334,24 @@ export const upsertDocumentVersion = internalMutation({
         message: "Evidence source is not active.",
       });
     const externalKey = bounded(args.externalKey, "externalKey", 320);
-    const title = bounded(args.title, "title", 1_000);
-    const excerpt = bounded(args.excerpt, "excerpt", 8_000);
+    const title = bounded(normalizeDocumentText(args.title), "title", 1_000);
+    const excerpt = bounded(
+      normalizeDocumentText(args.excerpt),
+      "excerpt",
+      8_000,
+    );
     const searchText = bounded(args.searchText, "searchText", 60_000);
     const contentHash = bounded(args.contentHash, "contentHash", 256);
     const now = Date.now();
+    const tags = canonicalDocumentList(args.tags, 40);
+    const authors = canonicalDocumentList(args.authors, 80);
     let document = await ctx.db
       .query("evidenceDocuments")
       .withIndex("by_sourceId_and_externalKey", (q) =>
         q.eq("sourceId", args.sourceId).eq("externalKey", externalKey),
       )
       .unique();
+    const isNewDocument = document === null;
     if (document !== null) {
       const existing = await ctx.db
         .query("evidenceDocumentVersions")
@@ -286,7 +365,30 @@ export const upsertDocumentVersion = internalMutation({
           versionId: existing._id,
           version: existing.version,
           idempotent: true,
+          changedFields: [],
         };
+      const changedFields = documentChangedFields(document, {
+        kind: args.kind,
+        visibility: args.visibility,
+        title,
+        excerpt,
+        tags,
+        authors,
+        publishedAt: args.publishedAt ?? null,
+        licenseClass: args.documentLicenseClass,
+      });
+      if (changedFields.length === 0 && document.currentVersionId !== null) {
+        return {
+          documentId: document._id,
+          versionId: document.currentVersionId,
+          version: (await ctx.db.get(
+            "evidenceDocumentVersions",
+            document.currentVersionId,
+          ))!.version,
+          idempotent: true,
+          changedFields,
+        };
+      }
     }
     if (document === null) {
       const documentId = await ctx.db.insert("evidenceDocuments", {
@@ -303,8 +405,8 @@ export const upsertDocumentVersion = internalMutation({
         title,
         excerpt,
         searchText,
-        tags: args.tags.slice(0, 40),
-        authors: args.authors.slice(0, 80),
+        tags,
+        authors,
         licenseClass: args.documentLicenseClass,
         publishedAt: args.publishedAt ?? null,
         currentVersionId: null,
@@ -348,13 +450,25 @@ export const upsertDocumentVersion = internalMutation({
       title,
       excerpt,
       searchText,
-      tags: args.tags.slice(0, 40),
-      authors: args.authors.slice(0, 80),
+      tags,
+      authors,
       licenseClass: args.documentLicenseClass,
       currentVersionId: versionId,
       publishedAt: args.publishedAt ?? null,
       updatedAt: now,
     });
+    const changedFields = isNewDocument
+      ? [...DOCUMENT_CHANGE_FIELDS]
+      : documentChangedFields(document, {
+          kind: args.kind,
+          visibility: args.visibility,
+          title,
+          excerpt,
+          tags,
+          authors,
+          publishedAt: args.publishedAt ?? null,
+          licenseClass: args.documentLicenseClass,
+        });
     await ctx.db.insert("evidenceChangeEvents", {
       eventKey: `document:${document._id}:${version}`,
       entityType: "document",
@@ -365,10 +479,17 @@ export const upsertDocumentVersion = internalMutation({
         0,
         1_000,
       ),
+      changedFields,
       occurredAt: args.fetchedAt,
       createdAt: now,
     });
-    return { documentId: document._id, versionId, version, idempotent: false };
+    return {
+      documentId: document._id,
+      versionId,
+      version,
+      idempotent: false,
+      changedFields,
+    };
   },
 });
 

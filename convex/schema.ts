@@ -2053,6 +2053,9 @@ export default defineSchema({
     ),
     visibility: v.union(v.literal("public"), v.literal("private")),
     summary: v.string(),
+    // Added optional for existing immutable event rows. New document events
+    // persist this bounded, deterministic allowlist of changed fields.
+    changedFields: v.optional(v.array(v.string())),
     occurredAt: v.number(),
     createdAt: v.number(),
   })

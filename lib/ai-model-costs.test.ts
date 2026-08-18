@@ -5,7 +5,7 @@ import {
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
-import { OPENROUTER_LUNA_MODEL } from "./ai-models";
+import { OPENROUTER_EMBEDDING_MODEL, OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 describe("AI model cost controls", () => {
   test("estimates the configured Luna route and rejects unknown models", () => {
@@ -21,6 +21,12 @@ describe("AI model cost controls", () => {
     expect(
       estimatedModelCostMicroUsd(OPENROUTER_LUNA_MODEL, 1_000_000, 1_000_000),
     ).toBe(700_000);
+  });
+
+  test("accounts for OpenRouter embedding input tokens in the budget", () => {
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_EMBEDDING_MODEL, 1_000_000, 999),
+    ).toBe(20_000);
   });
 
   test("uses a bounded default budget and stable spend shards", () => {

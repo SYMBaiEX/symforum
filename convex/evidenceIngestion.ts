@@ -82,6 +82,15 @@ type IngestionState = {
   status: "active" | "paused" | "retired";
 };
 
+// These bounded adapters are single-request snapshots. They do not implement
+// pagination, so a generic RFC 8288 Link header is never a safe checkpoint.
+const UNSUPPORTED_ADAPTER_CURSOR = "";
+
+/** These adapters only checkpoint HTTP validators; Link pagination is ignored. */
+export function adapterCheckpointCursor() {
+  return UNSUPPORTED_ADAPTER_CURSOR;
+}
+
 const sourceStateRef = makeFunctionReference<
   "query",
   { sourceKey: string },
@@ -100,6 +109,7 @@ const upsertDocumentVersionRef = makeFunctionReference<
     versionId: string;
     version: number;
     idempotent: boolean;
+    changedFields: string[];
   }
 >("evidence:upsertDocumentVersion");
 const upsertEntityRef = makeFunctionReference<
@@ -727,7 +737,7 @@ export const sourceState = internalQuery({
       ? {
           etag: source.etag,
           lastModified: source.lastModified,
-          cursor: source.cursor,
+          cursor: adapterCheckpointCursor(),
           lastSucceededAt: source.lastSucceededAt,
           ingestionEnabled: source.ingestionEnabled,
           status: source.status,
@@ -758,7 +768,6 @@ async function fetchJsonOnce(
         payload: null,
         etag: response.headers.get("etag") ?? "",
         lastModified: response.headers.get("last-modified") ?? "",
-        cursor: response.headers.get("link") ?? "",
       };
     if (!response.ok) {
       const error = new Error(`Upstream returned HTTP ${response.status}`);
@@ -773,7 +782,6 @@ async function fetchJsonOnce(
       payload: JSON.parse(new TextDecoder().decode(body)) as unknown,
       etag: response.headers.get("etag") ?? "",
       lastModified: response.headers.get("last-modified") ?? "",
-      cursor: response.headers.get("link") ?? "",
     };
   } finally {
     clearTimeout(timer);
@@ -848,7 +856,10 @@ async function ingest(
       termsUrl: config.termsUrl,
       etag: response.etag || state?.etag || "",
       lastModified: response.lastModified || state?.lastModified || "",
-      cursor: response.cursor || state?.cursor || "",
+      // Deliberately clear any legacy Link header: adapter checkpoints are
+      // validator-only (ETag/Last-Modified) until a source-specific cursor is
+      // implemented and tested.
+      cursor: adapterCheckpointCursor(),
       lastFetchedAt: now,
       lastSucceededAt: now,
       lastErrorAt: 0,
@@ -895,6 +906,7 @@ async function ingest(
               version: stored.version,
               kind: document.kind,
               canonicalUrl: document.canonicalUrl,
+              changedFields: stored.changedFields,
             }),
           });
         }
@@ -921,7 +933,7 @@ async function ingest(
         termsUrl: config.termsUrl,
         etag: state?.etag || "",
         lastModified: state?.lastModified || "",
-        cursor: state?.cursor || "",
+        cursor: adapterCheckpointCursor(),
         lastFetchedAt: now,
         lastSucceededAt: state?.lastSucceededAt || 0,
         lastErrorAt: Date.now(),

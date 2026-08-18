@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  adapterCheckpointCursor,
   deriveEvidence,
   evidenceRequestHeaders,
   parseGithubAdvisories,
@@ -67,6 +68,10 @@ describe("evidence ingestion normalizers", () => {
     );
     expect(shouldIngestSource({ ...state, status: "paused" })).toBe(false);
     expect(shouldIngestSource(null)).toBe(true);
+  });
+
+  test("uses validator-only checkpoints and ignores generic Link cursors", () => {
+    expect(adapterCheckpointCursor()).toBe("");
   });
 
   test("skips enrichment for idempotent document versions and enriches changed versions", () => {

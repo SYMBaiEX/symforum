@@ -1,4 +1,4 @@
-import { OPENROUTER_LUNA_MODEL } from "./ai-models";
+import { OPENROUTER_EMBEDDING_MODEL, OPENROUTER_LUNA_MODEL } from "./ai-models";
 
 type TokenPrice = {
   inputUsdPerMillion: number;
@@ -9,6 +9,14 @@ const MODEL_PRICES: Record<string, TokenPrice> = {
   [OPENROUTER_LUNA_MODEL]: {
     inputUsdPerMillion: 0.1,
     outputUsdPerMillion: 0.6,
+  },
+  // OpenRouter price snapshot, checked 2026-08-18:
+  // https://openrouter.ai/openai/text-embedding-3-small/api ($0.02 / M tokens).
+  // Embeddings are input-token only. Keep this nonzero so the existing spend
+  // bucket and daily budget kill switch account for every indexing request.
+  [OPENROUTER_EMBEDDING_MODEL]: {
+    inputUsdPerMillion: 0.02,
+    outputUsdPerMillion: 0,
   },
 };
 
