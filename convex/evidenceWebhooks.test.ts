@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import schema from "./schema";
 import { parseAllowedHosts, validateWebhookUrl } from "./evidenceWebhooks";
@@ -48,8 +48,32 @@ const webhooks = {
 } as const;
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  createdTests.add(t);
+  return t;
 }
+
+const createdTests = new Set<ReturnType<typeof setup>>();
+
+afterEach(async () => {
+  const tests = [...createdTests];
+  createdTests.clear();
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response(null, { status: 204 }));
+  vi.useFakeTimers();
+  try {
+    for (const t of tests) {
+      await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    }
+  } finally {
+    fetchMock.mockRestore();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  }
+});
 
 async function fixture(t: ReturnType<typeof setup>) {
   return await t.run(async (ctx) => {
@@ -98,6 +122,21 @@ const subscriptionArgs = {
   eventTypes: ["evidence.research.completed"] as const,
 };
 
+function webhookCallsForEvent(
+  fetchMock: any,
+  eventKey: string,
+) {
+  return fetchMock.mock.calls.filter(
+    ([url, init]: [string | URL | Request, RequestInit | undefined]) => {
+      const headers = new Headers((init as RequestInit | undefined)?.headers);
+      return (
+        url === subscriptionArgs.url &&
+        headers.get("x-symbaiex-event-id") === eventKey
+      );
+    },
+  );
+}
+
 async function enqueueFixtureDelivery(
   t: ReturnType<typeof setup>,
   eventKey: string,
@@ -117,6 +156,56 @@ async function enqueueFixtureDelivery(
       .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
       .unique();
     if (delivery === null) throw new Error("Expected webhook delivery fixture");
+    return delivery;
+  });
+}
+
+async function insertClaimedDeliveryFixture(
+  t: ReturnType<typeof setup>,
+  eventKey: string,
+) {
+  const ids = await fixture(t);
+  await t
+    .withIdentity({ subject: ids.agent })
+    .mutation(webhooks.create, subscriptionArgs);
+  return await t.run(async (ctx) => {
+    const subscription = await ctx.db
+      .query("apiWebhookSubscriptions")
+      .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
+        q.eq("ownerUserId", ids.owner).eq("subscriptionKey", "research-events"),
+      )
+      .unique();
+    if (subscription === null) {
+      throw new Error("Expected webhook subscription fixture");
+    }
+    const now = Date.now();
+    await ctx.db.insert("apiWebhookEvents", {
+      provider: "evidence-delivery",
+      eventKey,
+      payloadJson: JSON.stringify({
+        eventType: "evidence.research.completed",
+        payloadJson: JSON.stringify({
+          researchJobId: eventKey,
+          status: "completed",
+        }),
+      }),
+      receivedAt: now,
+    });
+    const deliveryId = await ctx.db.insert("apiWebhookDeliveries", {
+      subscriptionId: subscription._id,
+      eventKey,
+      status: "in_flight",
+      attempt: 0,
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now,
+      leaseExpiresAt: now + 30_000,
+      deliveryGeneration: 1,
+    });
+    const delivery = await ctx.db.get("apiWebhookDeliveries", deliveryId);
+    if (delivery === null) {
+      throw new Error("Expected claimed webhook delivery fixture");
+    }
     return delivery;
   });
 }
@@ -409,7 +498,10 @@ describe("evidence webhooks", () => {
     vi.setSystemTime(new Date("2026-08-18T18:20:00.000Z"));
     try {
       const t = setup();
-      const initial = await enqueueFixtureDelivery(t, "research:stale-generation");
+      const initial = await insertClaimedDeliveryFixture(
+        t,
+        "research:stale-generation",
+      );
       await t.mutation(webhooks.mark, {
         deliveryId: initial._id,
         deliveryGeneration: initial.deliveryGeneration,
@@ -449,13 +541,18 @@ describe("evidence webhooks", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     try {
       const t = setup();
-      const delivery = await enqueueFixtureDelivery(t, "research:invalid-kek");
+      const delivery = await insertClaimedDeliveryFixture(
+        t,
+        "research:invalid-kek",
+      );
       vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "invalid");
       await t.action(webhooks.deliver, {
         deliveryId: delivery._id,
         deliveryGeneration: delivery.deliveryGeneration,
       });
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        webhookCallsForEvent(fetchMock, "research:invalid-kek"),
+      ).toHaveLength(0);
       await t.run(async (ctx) => {
         const row = await ctx.db.get("apiWebhookDeliveries", delivery._id);
         expect(row).toMatchObject({
@@ -483,8 +580,14 @@ describe("evidence webhooks", () => {
       .mockResolvedValue(new Response("temporary", { status: 503 }));
     try {
       const t = setup();
-      const delivery = await enqueueFixtureDelivery(t, "research:transient-backoff");
-      vi.clearAllTimers();
+      const delivery = await insertClaimedDeliveryFixture(
+        t,
+        "research:transient-backoff",
+      );
+      vi.runAllTimers();
+      expect(
+        webhookCallsForEvent(fetchMock, "research:transient-backoff"),
+      ).toHaveLength(0);
       fetchMock.mockClear();
       const expectedBackoffs = [1_000, 2_000, 4_000];
       let generation = delivery.deliveryGeneration!;
@@ -524,7 +627,9 @@ describe("evidence webhooks", () => {
         expect(row?.nextAttemptAt).toBeUndefined();
         expect(row?.leaseExpiresAt).toBeUndefined();
       });
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(
+        webhookCallsForEvent(fetchMock, "research:transient-backoff"),
+      ).toHaveLength(4);
     } finally {
       fetchMock.mockRestore();
       vi.useRealTimers();
