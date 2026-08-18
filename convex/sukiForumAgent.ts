@@ -417,11 +417,12 @@ export async function runForumResearchSlot(
     const suggestedBoards = new Set(
       shortlistedCandidates.flatMap((candidate) => candidate.boardSlugs),
     );
-    const shortlistedCategories = context.categories.filter((category) =>
-      config.forcedCategorySlug !== undefined
-        ? category.slug === config.forcedCategorySlug
-        : suggestedBoards.has(category.slug) ||
-          category.parentName === undefined,
+    const shortlistedCategories = context.categories.filter(
+      (category: (typeof context.categories)[number]) =>
+        config.forcedCategorySlug !== undefined
+          ? category.slug === config.forcedCategorySlug
+          : suggestedBoards.has(category.slug) ||
+            category.parentName === undefined,
     );
     if (
       config.forcedCategorySlug !== undefined &&
@@ -511,7 +512,8 @@ export async function runForumResearchSlot(
     const selectedCategorySlug =
       config.forcedCategorySlug ?? selection.categorySlug;
     const category = context.categories.find(
-      (candidate) => candidate.slug === selectedCategorySlug,
+      (candidate: (typeof context.categories)[number]) =>
+        candidate.slug === selectedCategorySlug,
     );
     if (category === undefined) {
       throw new Error(`${config.name} selected a board that does not exist`);
@@ -538,7 +540,8 @@ export async function runForumResearchSlot(
     const semanticOverlap = semanticMemory.find((entry) => entry.score >= 0.9);
     if (semanticOverlap?.threadId !== undefined) {
       const matchingThread = context.recentThreads.find(
-        (thread) => thread.id === semanticOverlap.threadId,
+        (thread: (typeof context.recentThreads)[number]) =>
+          thread.id === semanticOverlap.threadId,
       );
       if (matchingThread !== undefined && !matchingThread.ownedByAgent) {
         await markSkippedAndMaybeRetry(ctx, {
@@ -555,10 +558,11 @@ export async function runForumResearchSlot(
         return { status: "skipped" as const, reason: "topic-covered" };
       }
     }
-    const overlappingThread = context.recentThreads.find((thread) =>
-      selectedCandidates.some(
-        (candidate) => lexicalSimilarity(candidate.title, thread.title) >= 0.45,
-      ),
+    const overlappingThread = context.recentThreads.find(
+      (thread: (typeof context.recentThreads)[number]) =>
+        selectedCandidates.some(
+          (candidate) => lexicalSimilarity(candidate.title, thread.title) >= 0.45,
+        ),
     );
     if (overlappingThread !== undefined && !overlappingThread.ownedByAgent) {
       await markSkippedAndMaybeRetry(ctx, {
@@ -816,7 +820,8 @@ export async function runForumResearchSlot(
                   categorySlug: entry.categorySlug,
                   slug:
                     context.recentThreads.find(
-                      (thread) => thread.id === entry.threadId,
+                      (thread: (typeof context.recentThreads)[number]) =>
+                        thread.id === entry.threadId,
                     )?.slug ?? "",
                   title: entry.title,
                   ownedByAgent: entry.agentSlug === config.slug,
