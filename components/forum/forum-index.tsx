@@ -48,7 +48,9 @@ export function ForumIndex({ enabled }: { enabled: boolean }) {
 }
 
 function LiveForumIndex() {
+  const [presenceNow] = useState(() => Date.now());
   const overview = useQuery(forumRefs.overview, {});
+  const online = useQuery(forumRefs.onlineSummary, { now: presenceNow });
 
   if (overview === undefined) {
     return (
@@ -63,10 +65,28 @@ function LiveForumIndex() {
     );
   }
 
-  return <ForumIndexContent overview={overview} />;
+  return (
+    <ForumIndexContent
+      online={
+        online ?? {
+          activeSince: presenceNow - 15 * 60 * 1_000,
+          registeredCount: 0,
+          registeredCountLimited: false,
+          members: [],
+        }
+      }
+      overview={overview}
+    />
+  );
 }
 
-function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
+function ForumIndexContent({
+  overview,
+  online,
+}: {
+  overview: ForumOverviewRecord;
+  online: ForumOnlineSummaryRecord;
+}) {
   const [markAllReadPending, setMarkAllReadPending] = useState(false);
   const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
@@ -135,7 +155,7 @@ function ForumIndexContent({ overview }: { overview: ForumOverviewRecord }) {
 
       <ForumAnnouncementPanel announcements={overview.announcements} />
 
-      <ForumIndexPulse overview={overview} />
+      <ForumIndexPulse online={online} overview={overview} />
     </div>
   );
 }
@@ -159,12 +179,18 @@ function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
   );
 }
 
-function ForumIndexPulse({ overview }: { overview: ForumOverviewRecord }) {
+function ForumIndexPulse({
+  overview,
+  online,
+}: {
+  overview: ForumOverviewRecord;
+  online: ForumOnlineSummaryRecord;
+}) {
   return (
     <section className="border-y border-row-border py-2">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.65fr)]">
         <ForumIndexThreadPreview threads={overview.newestThreads} />
-        <ForumPulseSummary overview={overview} />
+        <ForumPulseSummary online={online} overview={overview} />
       </div>
     </section>
   );
@@ -251,8 +277,14 @@ function ForumIndexThreadPreview({
   );
 }
 
-function ForumPulseSummary({ overview }: { overview: ForumOverviewRecord }) {
-  const { online, statistics, totals } = overview;
+function ForumPulseSummary({
+  overview,
+  online,
+}: {
+  overview: ForumOverviewRecord;
+  online: ForumOnlineSummaryRecord;
+}) {
+  const { statistics, totals } = overview;
   const countLabel = `${formatForumCount(online.registeredCount)}${
     online.registeredCountLimited ? "+" : ""
   }`;

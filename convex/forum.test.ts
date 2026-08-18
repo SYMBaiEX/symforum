@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import presenceTest from "@convex-dev/presence/test";
 import { describe, expect, test, vi } from "vitest";
 
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
@@ -24,7 +25,9 @@ const modules = {
 };
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  presenceTest.register(t);
+  return t;
 }
 
 type TestBackend = ReturnType<typeof setup>;
@@ -1207,7 +1210,6 @@ describe("forum notification preferences", () => {
         updatedAt: now - 60_000,
       });
     });
-
     const unavailable = await t.query(internal.forum.readUsedSukiSourceKeys, {
       sourceKeys: ["reserved-source", "expired-source", "free-source"],
     });
@@ -4030,14 +4032,23 @@ describe("forum privacy regressions", () => {
 
     const after = await t.run(async (ctx) => {
       return {
-        activeAttachment: await ctx.db.get("forumAttachments", ids.activeAttachmentId),
+        activeAttachment: await ctx.db.get(
+          "forumAttachments",
+          ids.activeAttachmentId,
+        ),
         activeStorage: await ctx.db.system.get("_storage", ids.activeStorageId),
-        deletedAttachment: await ctx.db.get("forumAttachments", ids.deletedAttachmentId),
+        deletedAttachment: await ctx.db.get(
+          "forumAttachments",
+          ids.deletedAttachmentId,
+        ),
         deletedStorage: await ctx.db.system.get(
           "_storage",
           ids.deletedStorageId,
         ),
-        expiredPendingUpload: await ctx.db.get("forumPendingUploads", ids.expiredPendingUploadId),
+        expiredPendingUpload: await ctx.db.get(
+          "forumPendingUploads",
+          ids.expiredPendingUploadId,
+        ),
         expiredStorage: await ctx.db.system.get(
           "_storage",
           ids.expiredStorageId,
@@ -4147,7 +4158,9 @@ describe("forum privacy regressions", () => {
     ).rejects.toThrow(/attachment upload is not available/i);
 
     await expect(
-      t.run(async (ctx) => await ctx.db.get("forumPendingUploads", pendingUploadId)),
+      t.run(
+        async (ctx) => await ctx.db.get("forumPendingUploads", pendingUploadId),
+      ),
     ).resolves.toMatchObject({
       status: "pending",
     });
@@ -4286,8 +4299,14 @@ describe("forum privacy regressions", () => {
     ).toEqual([attachmentIds.replyKeep]);
 
     const rows = await t.run(async (ctx) => ({
-      rootRemove: await ctx.db.get("forumAttachments", attachmentIds.rootRemove),
-      replyRemove: await ctx.db.get("forumAttachments", attachmentIds.replyRemove),
+      rootRemove: await ctx.db.get(
+        "forumAttachments",
+        attachmentIds.rootRemove,
+      ),
+      replyRemove: await ctx.db.get(
+        "forumAttachments",
+        attachmentIds.replyRemove,
+      ),
     }));
     expect(rows.rootRemove).toMatchObject({
       status: "deleted",
@@ -4772,7 +4791,9 @@ describe("forum privacy regressions", () => {
     const t = setup();
     const seed = await seedForum(t);
     const pollId = await t.run(async (ctx) => {
-      await ctx.db.patch("forumCategories", seed.publicCategoryId, { pollAccess: "members" });
+      await ctx.db.patch("forumCategories", seed.publicCategoryId, {
+        pollAccess: "members",
+      });
       return await insertPoll(ctx, {
         threadId: seed.publicThreadId,
         categoryId: seed.publicCategoryId,
@@ -5149,8 +5170,25 @@ describe("forum privacy regressions", () => {
         updatedAt: now - 30 * 60 * 1_000,
       });
     });
+    await t
+      .withIdentity({ subject: seed.trustedUserId })
+      .mutation(api.presence.heartbeat, {
+        roomId: "forum",
+        userId: seed.trustedUserId,
+        sessionId: "trusted-online-roster",
+        interval: 120_000,
+      });
+    await t
+      .withIdentity({ subject: seed.otherTrustedUserId })
+      .mutation(api.presence.heartbeat, {
+        roomId: "forum",
+        userId: seed.otherTrustedUserId,
+        sessionId: "other-online-roster",
+        interval: 120_000,
+      });
 
     const firstPage = await t.query(api.forum.listOnlineMembers, {
+      now,
       page: 1,
       pageSize: 1,
     });
@@ -5167,6 +5205,7 @@ describe("forum privacy regressions", () => {
     });
 
     const secondPage = await t.query(api.forum.listOnlineMembers, {
+      now,
       page: 2,
       pageSize: 1,
     });
@@ -5197,8 +5236,17 @@ describe("forum privacy regressions", () => {
         updatedAt: now - 1_000,
       });
     });
+    await t
+      .withIdentity({ subject: seed.trustedUserId })
+      .mutation(api.presence.heartbeat, {
+        roomId: "forum",
+        userId: seed.trustedUserId,
+        sessionId: "calendar-online-roster",
+        interval: 120_000,
+      });
 
     const roster = await t.query(api.forum.listOnlineMembers, {
+      now,
       page: 1,
       pageSize: 10,
     });
@@ -5232,6 +5280,14 @@ describe("forum privacy regressions", () => {
     if (presenceId === null) {
       throw new Error("Presence was not seeded");
     }
+    await t
+      .withIdentity({ subject: seed.trustedUserId })
+      .mutation(api.presence.heartbeat, {
+        roomId: "forum",
+        userId: seed.trustedUserId,
+        sessionId: "public-profile-presence",
+        interval: 120_000,
+      });
     const seededPresenceId = presenceId;
 
     const profile = await t.query(api.users.publicProfile, {
@@ -6592,7 +6648,10 @@ describe("forum privacy regressions", () => {
       const stored = await t.run(async (ctx) => {
         const [emailDelivery, moderationEvent, movedReply, movedThreadRecord] =
           await Promise.all([
-            ctx.db.get("forumNotificationEmailDeliveries", related.emailDeliveryId),
+            ctx.db.get(
+              "forumNotificationEmailDeliveries",
+              related.emailDeliveryId,
+            ),
             ctx.db.get("forumModerationEvents", related.moderationEventId),
             ctx.db.get("forumPosts", seed.publicPostId),
             ctx.db.get("forumThreads", seed.publicThreadId),

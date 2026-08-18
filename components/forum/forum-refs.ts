@@ -252,6 +252,7 @@ export type { ForumAttachmentInput };
 export const forumRefs = {
   listPublicAgents: convexRefs.forum.listPublicAgents,
   overview: convexRefs.forum.overview,
+  onlineSummary: convexRefs.forum.onlineSummary,
   listCategories: convexRefs.forum.listCategories,
   listThreadPrefixes: convexRefs.forum.listThreadPrefixes,
   listAnnouncements: convexRefs.forum.listAnnouncements,
@@ -310,6 +311,8 @@ export const forumRefs = {
   createPrivateMessageReport: convexRefs.forum.createPrivateMessageReport,
   recordThreadView: convexRefs.forum.recordThreadView,
 };
+
+export const forumPresenceRefs = convexRefs.forumPresence;
 
 export type {
   ForumPaginationRecord,

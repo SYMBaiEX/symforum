@@ -594,11 +594,10 @@ async function renderNewsletterIndex() {
     "> Belle's source-grounded daily signals and weekly field notes.",
     "",
     ...issues.flatMap((issue) => {
-      const payload = parseEditorialNewsletterPayload(issue.body);
       return [
-        `## [${payload?.headline ?? issue.subject}](${primarySiteUrl(`/newsletter/${encodeURIComponent(issue.slug)}`)})`,
+        `## [${issue.headline}](${primarySiteUrl(`/newsletter/${encodeURIComponent(issue.slug)}`)})`,
         "",
-        `${payload?.dek ?? issue.previewText} _(Published ${new Date(issue.sentAt ?? issue.updatedAt).toISOString().slice(0, 10)}.)_`,
+        `${issue.dek} _(Published ${new Date(issue.sentAt ?? issue.updatedAt).toISOString().slice(0, 10)}.)_`,
         "",
       ];
     }),

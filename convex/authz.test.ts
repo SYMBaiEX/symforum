@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import aggregateTest from "@convex-dev/aggregate/test";
+import presenceTest from "@convex-dev/presence/test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
@@ -12,7 +14,12 @@ const modules = {
 };
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  aggregateTest.register(t, "interactionScores");
+  aggregateTest.register(t, "interactionSaves");
+  aggregateTest.register(t, "commentCounts");
+  presenceTest.register(t);
+  return t;
 }
 
 async function seedAccessFixture(t: ReturnType<typeof setup>) {

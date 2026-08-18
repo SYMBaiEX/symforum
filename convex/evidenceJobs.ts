@@ -18,7 +18,7 @@ const enqueueWebhookRef = makeFunctionReference<
     eventType: "evidence.research.completed" | "evidence.export.completed";
     payloadJson: string;
   },
-  { eventId: Id<"apiWebhookEvents">; enqueued: number }
+  { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
 const JOB_STATUS = v.union(

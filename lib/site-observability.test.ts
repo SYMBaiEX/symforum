@@ -61,7 +61,10 @@ describe("site observability report", () => {
     expect(report.sitemap.staleSnapshotAgeMs).toBe(100_000);
     expect(report.sitemap.entryCap).toBe(50_000);
     expect(report.sitemap.sourceStatuses.blog.consecutiveFailures).toBe(2);
-    expect(report.crawl.forumCaps).toEqual({ listLimit: 100, pageSize: 100 });
+    expect(report.crawl.forumCaps).toEqual({
+      listLimit: 5_000,
+      pageSize: 5_000,
+    });
     expect(report.webBotAuth).toEqual({
       keyDirectoryUrl:
         "https://www.symbaiex.com/.well-known/http-message-signatures-directory",

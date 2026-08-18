@@ -5,6 +5,8 @@ import rag from "@convex-dev/rag/convex.config.js";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config.js";
 import resend from "@convex-dev/resend/convex.config.js";
 import workflow from "@convex-dev/workflow/convex.config.js";
+import presence from "@convex-dev/presence/convex.config.js";
+import aggregate from "@convex-dev/aggregate/convex.config.js";
 
 const app = defineApp({
   env: {
@@ -36,5 +38,9 @@ app.use(agent);
 app.use(rag);
 app.use(rateLimiter);
 app.use(workflow);
+app.use(presence);
+app.use(aggregate, { name: "interactionScores" });
+app.use(aggregate, { name: "interactionSaves" });
+app.use(aggregate, { name: "commentCounts" });
 
 export default app;

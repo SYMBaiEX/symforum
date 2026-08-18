@@ -16,6 +16,85 @@ function setup() {
 }
 
 describe("daily newsletter retry budget", () => {
+  test("schedule state stops terminal runs without creating duplicate send logs", async () => {
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const runDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("newsletterSettings", {
+        key: "dailyNewsletter.sendTimeLocal",
+        value: "00:00",
+        updatedAt: now,
+      });
+      await ctx.db.insert("dailyNewsletterRuns", {
+        runDate,
+        status: "sent",
+        mode: "cron",
+        sendEnabled: true,
+        startedAt: now - 60_000,
+        sentAt: now - 30_000,
+        storyCount: 8,
+        topStoryIds: [],
+        updatedAt: now - 30_000,
+      });
+    });
+    expect(
+      await t.query(internal.dailyNewsletter.readDailyScheduleState, { now }),
+    ).toEqual({
+      runDate,
+      shouldRun: false,
+      reason: "daily-newsletter-already-sent",
+    });
+    await t.mutation(internal.dailyNewsletter.startDailyRun, {
+      runDate,
+      mode: "cron",
+      sendEnabled: true,
+      startedAt: now,
+      force: false,
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("newsletterSendLogs").take(10)).toEqual([]);
+    });
+  });
+
+  test("cleanup removes only the historical already-sent duplicate logs", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 3; index += 1) {
+        await ctx.db.insert("newsletterSendLogs", {
+          runDate: "2026-08-01",
+          provider: "resend",
+          status: "skipped",
+          errorMessage: "Daily newsletter already sent",
+          createdAt: index,
+        });
+      }
+      await ctx.db.insert("newsletterSendLogs", {
+        runDate: "2026-08-01",
+        provider: "resend",
+        status: "skipped",
+        errorMessage: "Awaiting editorial review or sending disabled",
+        createdAt: 10,
+      });
+    });
+    expect(
+      await t.mutation(
+        internal.dailyNewsletter.cleanupDuplicateAlreadySentLogs,
+        {},
+      ),
+    ).toMatchObject({ removed: 3, done: true });
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("newsletterSendLogs").take(10);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.errorMessage).toMatch(/Awaiting editorial review/);
+    });
+  });
+
   test("spaces automatic retries and stops after three attempts", async () => {
     const t = setup();
     const runDate = "2026-08-04";

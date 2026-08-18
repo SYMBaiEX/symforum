@@ -199,6 +199,13 @@ export default defineSchema({
     ])
     .index("by_entityType_and_entityId", ["entityType", "entityId"])
     .index("by_updatedAt", ["updatedAt"]),
+  optimizationMigrations: defineTable({
+    key: v.string(),
+    status: v.union(v.literal("running"), v.literal("completed")),
+    processed: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
   apiKeys: defineTable({
     name: v.string(),
     tokenHash: v.string(),
@@ -375,6 +382,35 @@ export default defineSchema({
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_updatedAt", ["updatedAt"])
     .index("by_scheduledAt", ["scheduledAt"]),
+  newsletterIssueDigests: defineTable({
+    issueId: v.id("newsletterIssues"),
+    issueCreatedAt: v.number(),
+    slug: v.string(),
+    subject: v.string(),
+    previewText: v.string(),
+    headline: v.string(),
+    dek: v.string(),
+    edition: v.optional(
+      v.union(v.literal("daily-signal"), v.literal("weekly-field-note")),
+    ),
+    qualityScore: v.optional(v.number()),
+    sourceCount: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("sent"),
+      v.literal("cancelled"),
+      v.literal("failed"),
+    ),
+    forumCategorySlug: v.optional(v.string()),
+    forumThreadSlug: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_issueId", ["issueId"])
+    .index("by_slug", ["slug"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   newsletterEvents: defineTable({
     provider: v.literal("resend"),
     eventId: v.string(),
@@ -484,7 +520,12 @@ export default defineSchema({
     .index("by_runDate_and_createdAt", ["runDate", "createdAt"])
     .index("by_issueId_and_createdAt", ["issueId", "createdAt"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_status_and_createdAt", ["status", "createdAt"]),
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_status_and_errorMessage_and_createdAt", [
+      "status",
+      "errorMessage",
+      "createdAt",
+    ]),
   forumCategories: defineTable({
     slug: v.string(),
     name: v.string(),
@@ -2200,6 +2241,7 @@ export default defineSchema({
     processedAt: v.optional(v.number()),
   })
     .index("by_provider_and_eventKey", ["provider", "eventKey"])
+    .index("by_provider_and_receivedAt", ["provider", "receivedAt"])
     .index("by_receivedAt", ["receivedAt"]),
   apiCommands: defineTable({
     ownerUserId: v.id("users"),
@@ -2240,6 +2282,24 @@ export default defineSchema({
       "subscriptionKey",
     ])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+  apiWebhookTargets: defineTable({
+    subscriptionId: v.id("apiWebhookSubscriptions"),
+    ownerUserId: v.id("users"),
+    eventType: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("revoked"),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_subscriptionId_and_eventType", ["subscriptionId", "eventType"])
+    .index("by_subscriptionId", ["subscriptionId"])
+    .index("by_eventType_and_status_and_updatedAt", [
+      "eventType",
+      "status",
+      "updatedAt",
+    ]),
   apiWebhookDeliveries: defineTable({
     subscriptionId: v.id("apiWebhookSubscriptions"),
     eventKey: v.string(),
@@ -2254,5 +2314,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_subscriptionId_and_eventKey", ["subscriptionId", "eventKey"])
+    .index("by_eventKey", ["eventKey"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
 });

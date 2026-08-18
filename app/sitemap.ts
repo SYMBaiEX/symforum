@@ -8,7 +8,6 @@ import { convexRefs } from "@/lib/convex-refs";
 import { getServerConvexClient } from "@/lib/server-convex";
 import {
   buildSiteObservabilityReport,
-  FORUM_SITEMAP_PAGE_SIZE,
   FORUM_SITEMAP_QUERY_LIMIT,
   SITEMAP_ENTRY_CAP,
   SITEMAP_REVALIDATE_SECONDS,
@@ -236,77 +235,45 @@ async function getPublicForumSitemapEntries(): Promise<ForumSitemapResult> {
   if (!convex) return { status: "ok", entries: [], reason: null };
 
   try {
-    const [categories, announcements, helpDocuments, calendarEvents] =
-      await Promise.all([
-        // Keep forum sitemap discovery bounded; the XML sitemap should not mirror
-        // unbounded forum tables.
-        convex.query(convexRefs.forum.listCategories, {
-          limit: FORUM_SITEMAP_QUERY_LIMIT,
-        }),
-        convex.query(convexRefs.forum.listAnnouncements, {
-          includeBoardAnnouncements: true,
-        }),
-        convex.query(convexRefs.forum.listHelpDocuments, {
-          limit: FORUM_SITEMAP_QUERY_LIMIT,
-        }),
-        convex.query(convexRefs.forum.listCalendarEvents, {
-          month: new Date().toISOString().slice(0, 7),
-        }),
-      ]);
-    const threadResults = await Promise.all(
-      categories
-        .filter(
-          (category) => category.isPostable && category.viewAccess === "public",
-        )
-        .map((category) =>
-          convex
-            .query(convexRefs.forum.listThreads, {
-              categorySlug: category.slug,
-              limit: FORUM_SITEMAP_QUERY_LIMIT,
-              pageSize: FORUM_SITEMAP_PAGE_SIZE,
-            })
-            .catch(() => null),
-        ),
+    const records = await convex.query(
+      convexRefs.forum.listPublicSitemapRecords,
+      {
+        month: new Date().toISOString().slice(0, 7),
+        limit: FORUM_SITEMAP_QUERY_LIMIT,
+      },
     );
     const entries: MetadataRoute.Sitemap = [
-      ...categories
-        .filter((category) => category.viewAccess === "public")
-        .map((category) => ({
-          url: forumSiteUrl(`/${encodeURIComponent(category.slug)}`),
-          lastModified: validDate(
-            category.lastPostAt ?? category._creationTime,
-          ),
-          changeFrequency: "daily" as const,
-          priority: 0.6,
-        })),
-      ...threadResults.flatMap(
-        (result) =>
-          result?.threads.map((thread) => ({
-            url: forumSiteUrl(
-              `/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}`,
-            ),
-            lastModified: validDate(thread.updatedAt),
-            changeFrequency: "daily" as const,
-            priority: 0.5,
-          })) ?? [],
-      ),
-      ...announcements.map((announcement) => ({
+      ...records.categories.map((category) => ({
+        url: forumSiteUrl(`/${encodeURIComponent(category.slug)}`),
+        lastModified: validDate(category.lastModified),
+        changeFrequency: "daily" as const,
+        priority: 0.6,
+      })),
+      ...records.threads.map((thread) => ({
+        url: forumSiteUrl(
+          `/${encodeURIComponent(thread.categorySlug)}/${encodeURIComponent(thread.slug)}`,
+        ),
+        lastModified: validDate(thread.lastModified),
+        changeFrequency: "daily" as const,
+        priority: 0.5,
+      })),
+      ...records.announcements.map((announcement) => ({
         url: forumSiteUrl(
           `/announcements/${encodeURIComponent(announcement.slug)}`,
         ),
-        lastModified: validDate(announcement.updatedAt),
+        lastModified: validDate(announcement.lastModified),
         changeFrequency: "weekly" as const,
         priority: 0.4,
       })),
-      ...helpDocuments.map((document) => ({
+      ...records.helpDocuments.map((document) => ({
         url: forumSiteUrl(`/help/${encodeURIComponent(document.slug)}`),
-        lastModified: validDate(document.updatedAt),
+        lastModified: validDate(document.lastModified),
         changeFrequency: "monthly" as const,
         priority: 0.4,
       })),
-      ...calendarEvents.map((event) => ({
+      ...records.calendarEvents.map((event) => ({
         url: forumSiteUrl(`/calendar/${encodeURIComponent(event.slug)}`),
-        lastModified: validDate(event.updatedAt),
+        lastModified: validDate(event.lastModified),
         changeFrequency: "monthly" as const,
         priority: 0.3,
       })),

@@ -8,6 +8,11 @@ import {
   normalizeIssueInput,
 } from "./newsletterModel";
 import { normalizePostInput, postInputValidator } from "./postModel";
+import {
+  deleteInteractionAggregates,
+  replaceCommentAggregate,
+} from "./contentAggregates";
+import { upsertNewsletterIssueDigest } from "./newsletterDigests";
 
 const commentEntityTypeValidator = v.union(
   v.literal("post"),
@@ -86,6 +91,8 @@ async function softDeleteComment(
     deletedBy: args.actorUserId,
     moderationReason: "admin_api_delete",
   });
+  const updated = await ctx.db.get("comments", comment._id);
+  if (updated !== null) await replaceCommentAggregate(ctx, comment, updated);
   await ctx.db.insert("systemLogs", {
     createdAt: now,
     updatedAt: now,
@@ -218,7 +225,9 @@ export const listComments = mutation({
         ...comment,
         status: commentStatus(comment),
         body:
-          commentStatus(comment) === "active" ? comment.body : "Comment deleted",
+          commentStatus(comment) === "active"
+            ? comment.body
+            : "Comment deleted",
         author: await authorName(ctx, comment.userId),
       })),
     );
@@ -274,7 +283,11 @@ export const deleteInteraction = mutation({
   args: { tokenHash: v.string(), interactionId: v.id("interactions") },
   handler: async (ctx, args) => {
     await authorize(ctx, args.tokenHash);
-    await ctx.db.delete("interactions", args.interactionId);
+    const interaction = await ctx.db.get("interactions", args.interactionId);
+    if (interaction !== null) {
+      await deleteInteractionAggregates(ctx, interaction);
+      await ctx.db.delete("interactions", args.interactionId);
+    }
     return { deleted: true };
   },
 });
@@ -329,11 +342,18 @@ export const upsertNewsletterIssue = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      return await ctx.db.get("newsletterIssues", id);
+      const inserted = await ctx.db.get("newsletterIssues", id);
+      if (inserted !== null) await upsertNewsletterIssueDigest(ctx, inserted);
+      return inserted;
     }
 
-    await ctx.db.patch("newsletterIssues", existing._id, { ...issue, updatedAt: now });
-    return await ctx.db.get("newsletterIssues", existing._id);
+    await ctx.db.patch("newsletterIssues", existing._id, {
+      ...issue,
+      updatedAt: now,
+    });
+    const updated = await ctx.db.get("newsletterIssues", existing._id);
+    if (updated !== null) await upsertNewsletterIssueDigest(ctx, updated);
+    return updated;
   },
 });
 
@@ -378,9 +398,13 @@ export const scheduleNewsletterIssue = mutation({
       errorMessage: undefined,
       updatedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(Math.max(0, args.scheduledAt - Date.now()), sendIssueRef, {
-      issueId: issue._id,
-    });
+    await ctx.scheduler.runAfter(
+      Math.max(0, args.scheduledAt - Date.now()),
+      sendIssueRef,
+      {
+        issueId: issue._id,
+      },
+    );
     return { scheduled: true };
   },
 });

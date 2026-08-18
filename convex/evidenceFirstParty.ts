@@ -71,7 +71,7 @@ const recordCitationRef = makeFunctionReference<
 const enqueueWebhookRef = makeFunctionReference<
   "mutation",
   Record<string, unknown>,
-  { eventId: Id<"apiWebhookEvents">; enqueued: number }
+  { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
 async function sha256(value: string) {

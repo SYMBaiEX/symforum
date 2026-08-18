@@ -1,7 +1,6 @@
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
-import { parseEditorialNewsletterPayload } from "@/convex/newsletterPayload";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -49,9 +48,6 @@ export const revalidate = 60;
 export default async function NewsletterArchivePage() {
   const issues = await getPublicNewsletterIssues(30);
   const [featured, ...rest] = issues;
-  const featuredPayload = featured
-    ? parseEditorialNewsletterPayload(featured.body)
-    : null;
 
   return (
     <section className="page-frame page-frame-spacious">
@@ -77,19 +73,21 @@ export default async function NewsletterArchivePage() {
             <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
               {formatDate(featured.sentAt ?? featured.updatedAt)}
             </p>
-            {featuredPayload ? (
+            {featured.sourceCount > 0 ? (
               <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                Quality {featuredPayload.quality.score}/100 /{" "}
-                {featuredPayload.stories.length} source anchors
+                {featured.qualityScore !== undefined
+                  ? `Quality ${featured.qualityScore}/100 / `
+                  : ""}
+                {featured.sourceCount} source anchors
               </p>
             ) : null}
           </div>
           <div className="md:col-span-9">
             <h2 className="max-w-4xl text-3xl font-semibold leading-tight md:text-5xl">
-              {featuredPayload?.headline ?? featured.subject}
+              {featured.headline}
             </h2>
             <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-              {featuredPayload?.dek ?? featured.previewText}
+              {featured.dek}
             </p>
             <Button asChild className="mt-5" size="sm">
               <Link href={`/newsletter/${featured.slug}`}>
@@ -111,7 +109,6 @@ export default async function NewsletterArchivePage() {
           <p className="page-kicker">Previous editions</p>
           <div className="mt-3 divide-y divide-row-border border-y border-row-border">
             {rest.map((issue) => {
-              const payload = parseEditorialNewsletterPayload(issue.body);
               return (
                 <Link
                   className="grid gap-3 py-4 transition-colors hover:bg-muted/10 md:grid-cols-[8rem_minmax(0,1fr)_auto] md:items-center md:px-2"
@@ -123,14 +120,14 @@ export default async function NewsletterArchivePage() {
                   </span>
                   <span>
                     <span className="block text-base font-semibold">
-                      {payload?.headline ?? issue.subject}
+                      {issue.headline}
                     </span>
                     <span className="mt-1 block line-clamp-2 text-sm leading-6 text-muted-foreground">
-                      {payload?.dek ?? issue.previewText}
+                      {issue.dek}
                     </span>
                   </span>
                   <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                    {payload?.edition === "weekly-field-note"
+                    {issue.edition === "weekly-field-note"
                       ? "Field note"
                       : "Daily signal"}
                   </span>

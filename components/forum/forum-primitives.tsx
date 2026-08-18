@@ -8,6 +8,7 @@ import { ForumLink } from "@/components/forum/forum-link";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
+import usePresence from "@convex-dev/presence/react";
 import { Star } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -23,6 +24,7 @@ import {
   forumAnnouncementPath,
   forumHrefForPathname,
   forumRefs,
+  forumPresenceRefs,
   forumPath,
   forumPostPath,
   formatForumCount,
@@ -345,14 +347,31 @@ function ForumPresenceHeartbeat({ pathname }: { pathname: string | null }) {
 }
 
 function LiveForumPresenceHeartbeat({ pathname }: { pathname: string | null }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const navState = useQuery(forumRefs.getMyForumNavState, {});
+
+  if (!navState?.authenticated || !navState.trusted || !navState.userId) {
+    return null;
+  }
+
+  return (
+    <ConnectedForumPresenceHeartbeat
+      pathname={pathname}
+      userId={navState.userId}
+    />
+  );
+}
+
+function ConnectedForumPresenceHeartbeat({
+  pathname,
+  userId,
+}: {
+  pathname: string | null;
+  userId: string;
+}) {
   const recordPresence = useMutation(forumRefs.recordPresence);
+  usePresence(forumPresenceRefs, "forum", userId, FORUM_PRESENCE_HEARTBEAT_MS);
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated) {
-      return;
-    }
-
     let canceled = false;
     const payload = forumPresencePayload(pathname);
     const record = async () => {
@@ -366,15 +385,11 @@ function LiveForumPresenceHeartbeat({ pathname }: { pathname: string | null }) {
     };
 
     void record();
-    const interval = window.setInterval(() => {
-      void record();
-    }, FORUM_PRESENCE_HEARTBEAT_MS);
 
     return () => {
       canceled = true;
-      window.clearInterval(interval);
     };
-  }, [isAuthenticated, isLoading, pathname, recordPresence]);
+  }, [pathname, recordPresence]);
 
   return null;
 }
@@ -402,6 +417,7 @@ function LiveForumWelcomeStrip({ pathname }: { pathname: string | null }) {
 
 type ForumWelcomeNavState = {
   authenticated: boolean;
+  userId?: string | null;
   trusted: boolean;
   canModerate?: boolean;
   canManageBoards?: boolean;
@@ -1677,7 +1693,7 @@ function ForumLatestPostCell({
               {latestThread.title}
             </ForumLink>
             {latestPostHref ? (
-        <ForumJumpLink
+              <ForumJumpLink
                 ariaLabel={`Last » — Go to last post in ${latestThread.title}`}
                 className="min-h-9 shrink-0 px-2 md:min-h-7"
                 href={latestPostHref}
@@ -1923,7 +1939,7 @@ export function ForumThreadTable({
                     </div>
                     {firstUnreadHref ? (
                       <ForumJumpLink
-                      ariaLabel={`First unread » — Go to first unread post in ${thread.title}`}
+                        ariaLabel={`First unread » — Go to first unread post in ${thread.title}`}
                         className="mt-2"
                         href={firstUnreadHref}
                       >

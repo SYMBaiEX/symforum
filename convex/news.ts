@@ -9,6 +9,7 @@ import { makeFunctionReference } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { contentSummary } from "./contentAggregates";
 
 const HN_TOP_STORIES_URL =
   "https://hacker-news.firebaseio.com/v0/topstories.json";
@@ -99,27 +100,7 @@ function safeExternalUrl(value: string | undefined) {
 }
 
 async function getPlatformStats(ctx: QueryCtx, hnItemId: number) {
-  const entityId = String(hnItemId);
-  const comments = await ctx.db
-    .query("comments")
-    .withIndex("by_entityType_and_entityId_and_createdAt", (q) =>
-      q.eq("entityType", "hnStory").eq("entityId", entityId),
-    )
-    .take(1000);
-  const interactions = await ctx.db
-    .query("interactions")
-    .withIndex("by_entityType_and_entityId", (q) =>
-      q.eq("entityType", "hnStory").eq("entityId", entityId),
-    )
-    .take(1000);
-
-  return {
-    comments: comments.filter(
-      (comment) => (comment.status ?? "active") === "active",
-    ).length,
-    score: interactions.reduce((total, row) => total + row.vote, 0),
-    saves: interactions.filter((row) => row.saved).length,
-  };
+  return await contentSummary(ctx, "hnStory", String(hnItemId));
 }
 
 async function withPlatformStats(ctx: QueryCtx, story: Doc<"hnStories">) {

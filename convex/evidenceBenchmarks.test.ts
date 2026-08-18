@@ -161,7 +161,7 @@ describe("evidence citation coverage benchmark", () => {
       webhooks: (await ctx.db.query("apiWebhookEvents").collect()).length,
       runs: (await ctx.db.query("evidenceBenchmarkRuns").collect()).length,
     }));
-    expect(counts).toEqual({ changes: 1, webhooks: 1, runs: 1 });
+    expect(counts).toEqual({ changes: 1, webhooks: 0, runs: 1 });
   });
 
   test("lists only public benchmark runs", async () => {

@@ -16,6 +16,8 @@ const MAX_SUBSCRIPTION_KEY_LENGTH = 96;
 const MAX_EVENT_TYPES = 12;
 const MAX_EVENT_KEY_LENGTH = 160;
 const MAX_PAYLOAD_LENGTH = 12_000;
+const MAX_SUBSCRIPTIONS_PER_OWNER = 10;
+const MAX_DELIVERIES_PER_EVENT = 100;
 const DELIVERY_ACTION_REF = makeFunctionReference<
   "action",
   { deliveryId: Id<"apiWebhookDeliveries"> },
@@ -238,6 +240,41 @@ function safeSubscription(subscription: Doc<"apiWebhookSubscriptions">) {
   };
 }
 
+async function syncSubscriptionTargets(
+  ctx: MutationCtx,
+  subscription: Doc<"apiWebhookSubscriptions">,
+) {
+  const desired = new Set(subscription.eventTypes);
+  const existing = await ctx.db
+    .query("apiWebhookTargets")
+    .withIndex("by_subscriptionId", (q) =>
+      q.eq("subscriptionId", subscription._id),
+    )
+    .take(MAX_EVENT_TYPES + 1);
+  for (const target of existing) {
+    if (!desired.has(target.eventType)) {
+      await ctx.db.delete("apiWebhookTargets", target._id);
+      continue;
+    }
+    if (target.status !== subscription.status) {
+      await ctx.db.patch("apiWebhookTargets", target._id, {
+        status: subscription.status,
+        updatedAt: subscription.updatedAt,
+      });
+    }
+    desired.delete(target.eventType);
+  }
+  for (const eventType of desired) {
+    await ctx.db.insert("apiWebhookTargets", {
+      subscriptionId: subscription._id,
+      ownerUserId: subscription.ownerUserId,
+      eventType,
+      status: subscription.status,
+      updatedAt: subscription.updatedAt,
+    });
+  }
+}
+
 function configuredAllowedHosts() {
   // Environment access is intentionally deferred so a missing value disables rather than fails startup.
   const webhookEnv = env as typeof env & {
@@ -281,7 +318,20 @@ export const createSubscription = mutation({
             "subscriptionKey was already used with a different URL or event set.",
         });
       }
+      await syncSubscriptionTargets(ctx, existing);
       return safeSubscription(existing);
+    }
+    const ownerSubscriptions = await ctx.db
+      .query("apiWebhookSubscriptions")
+      .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
+        q.eq("ownerUserId", principal.ownerUserId),
+      )
+      .take(MAX_SUBSCRIPTIONS_PER_OWNER + 1);
+    if (ownerSubscriptions.length >= MAX_SUBSCRIPTIONS_PER_OWNER) {
+      throw new ConvexError({
+        code: "WEBHOOK_SUBSCRIPTION_LIMIT",
+        message: `Each account can configure at most ${MAX_SUBSCRIPTIONS_PER_OWNER} webhook subscriptions.`,
+      });
     }
     const now = Date.now();
     const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
@@ -293,9 +343,12 @@ export const createSubscription = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    return safeSubscription(
-      (await ctx.db.get("apiWebhookSubscriptions", subscriptionId))!,
-    );
+    const subscription = (await ctx.db.get(
+      "apiWebhookSubscriptions",
+      subscriptionId,
+    ))!;
+    await syncSubscriptionTargets(ctx, subscription);
+    return safeSubscription(subscription);
   },
 });
 
@@ -309,7 +362,7 @@ export const listMySubscriptions = query({
       .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
         q.eq("ownerUserId", principal.ownerUserId),
       )
-      .collect();
+      .take(MAX_SUBSCRIPTIONS_PER_OWNER);
     return subscriptions.map(safeSubscription);
   },
 });
@@ -352,11 +405,13 @@ export const setSubscriptionStatus = mutation({
       status: args.status,
       updatedAt: now,
     });
-    return safeSubscription({
+    const updated = {
       ...subscription,
       status: args.status,
       updatedAt: now,
-    });
+    };
+    await syncSubscriptionTargets(ctx, updated);
+    return safeSubscription(updated);
   },
 });
 
@@ -368,7 +423,7 @@ export const enqueueEvent = internalMutation({
     payloadJson: v.string(),
   },
   returns: v.object({
-    eventId: v.id("apiWebhookEvents"),
+    eventId: v.union(v.id("apiWebhookEvents"), v.null()),
     enqueued: v.number(),
   }),
   handler: async (ctx, args) => {
@@ -378,6 +433,40 @@ export const enqueueEvent = internalMutation({
       MAX_EVENT_KEY_LENGTH,
     );
     const payloadJson = parseObjectJson(args.payloadJson, MAX_PAYLOAD_LENGTH);
+    const targets = await ctx.db
+      .query("apiWebhookTargets")
+      .withIndex("by_eventType_and_status_and_updatedAt", (q) =>
+        q.eq("eventType", args.eventType).eq("status", "active"),
+      )
+      .take(MAX_DELIVERIES_PER_EVENT + 1);
+    if (targets.length === 0) {
+      return { eventId: null, enqueued: 0 };
+    }
+    if (targets.length > MAX_DELIVERIES_PER_EVENT) {
+      throw new ConvexError({
+        code: "WEBHOOK_FANOUT_LIMIT",
+        message: `Webhook fanout exceeds the ${MAX_DELIVERIES_PER_EVENT}-delivery safety limit.`,
+      });
+    }
+    const subscriptions: Doc<"apiWebhookSubscriptions">[] = [];
+    for (const target of targets) {
+      const subscription = await ctx.db.get(
+        "apiWebhookSubscriptions",
+        target.subscriptionId,
+      );
+      if (
+        subscription === null ||
+        subscription.status !== "active" ||
+        !subscription.eventTypes.includes(args.eventType)
+      ) {
+        await ctx.db.delete("apiWebhookTargets", target._id);
+      } else {
+        subscriptions.push(subscription);
+      }
+    }
+    if (subscriptions.length === 0) {
+      return { eventId: null, enqueued: 0 };
+    }
     const existing = await ctx.db
       .query("apiWebhookEvents")
       .withIndex("by_provider_and_eventKey", (q) =>
@@ -392,13 +481,8 @@ export const enqueueEvent = internalMutation({
         payloadJson: JSON.stringify({ eventType: args.eventType, payloadJson }),
         receivedAt: Date.now(),
       }));
-    const subscriptions = await ctx.db
-      .query("apiWebhookSubscriptions")
-      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "active"))
-      .collect();
     let enqueued = 0;
     for (const subscription of subscriptions) {
-      if (!subscription.eventTypes.includes(args.eventType)) continue;
       const delivery = await ctx.db
         .query("apiWebhookDeliveries")
         .withIndex("by_subscriptionId_and_eventKey", (q) =>
@@ -419,6 +503,54 @@ export const enqueueEvent = internalMutation({
       enqueued += 1;
     }
     return { eventId, enqueued };
+  },
+});
+
+export const backfillSubscriptionTargets = internalMutation({
+  args: { cursor: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 50), 100));
+    const page = await ctx.db.query("apiWebhookSubscriptions").paginate({
+      cursor: args.cursor ?? null,
+      numItems: limit,
+    });
+    for (const subscription of page.page) {
+      await syncSubscriptionTargets(ctx, subscription);
+    }
+    return {
+      processed: page.page.length,
+      cursor: page.continueCursor,
+      done: page.isDone,
+    };
+  },
+});
+
+export const cleanupOrphanDeliveryEvents = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const [subscription, delivery] = await Promise.all([
+      ctx.db.query("apiWebhookSubscriptions").first(),
+      ctx.db.query("apiWebhookDeliveries").first(),
+    ]);
+    if (subscription !== null || delivery !== null) {
+      return { removed: 0, done: true, blocked: true };
+    }
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 100), 200));
+    const events = await ctx.db
+      .query("apiWebhookEvents")
+      .withIndex("by_provider_and_receivedAt", (q) =>
+        q.eq("provider", "evidence-delivery"),
+      )
+      .order("asc")
+      .take(limit);
+    for (const event of events) {
+      await ctx.db.delete("apiWebhookEvents", event._id);
+    }
+    return {
+      removed: events.length,
+      done: events.length < limit,
+      blocked: false,
+    };
   },
 });
 

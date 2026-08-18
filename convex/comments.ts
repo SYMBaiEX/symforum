@@ -10,6 +10,10 @@ import {
 import { requirePublicEntity } from "./contentAccess";
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import {
+  insertCommentAggregate,
+  replaceCommentAggregate,
+} from "./contentAggregates";
 
 const entityType = v.union(
   v.literal("post"),
@@ -155,7 +159,7 @@ export const add = mutation({
       idempotencyKey: args.idempotencyKey,
     });
 
-    await ctx.db.insert("comments", {
+    const commentId = await ctx.db.insert("comments", {
       userId,
       entityType: args.entityType,
       entityId: args.entityId,
@@ -165,6 +169,8 @@ export const add = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const inserted = await ctx.db.get("comments", commentId);
+    if (inserted !== null) await insertCommentAggregate(ctx, inserted);
   },
 });
 
@@ -206,6 +212,10 @@ export const softDelete = mutation({
       deletedBy: userId,
       moderationReason: moderator ? "admin_delete" : "author_delete",
     });
+    const updated = await ctx.db.get("comments", comment._id);
+    if (updated !== null) {
+      await replaceCommentAggregate(ctx, comment, updated);
+    }
     await recordModerationLog(ctx, {
       actorUserId: userId,
       comment,

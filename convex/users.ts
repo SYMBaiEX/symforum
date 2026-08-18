@@ -3,6 +3,10 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { getPublicEntity } from "./contentAccess";
+import {
+  FORUM_PRESENCE_ROOM,
+  forumPresenceComponent,
+} from "./forumPresenceComponent";
 
 const USERNAME_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/;
 const FORUM_POST_PAGE_SIZE = 20;
@@ -67,8 +71,7 @@ function forumThreadPrefixRecord(thread: Doc<"forumThreads">) {
 }
 
 async function publicForumProfile(ctx: QueryCtx, user: UserDoc) {
-  const now = Date.now();
-  const [profile, presence] = await Promise.all([
+  const [profile, presence, liveRooms] = await Promise.all([
     ctx.db
       .query("forumUserProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
@@ -77,12 +80,14 @@ async function publicForumProfile(ctx: QueryCtx, user: UserDoc) {
       .query("forumPresence")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .unique(),
+    forumPresenceComponent.listUser(ctx, String(user._id), true, 5),
   ]);
   const postCount = profile?.postCount ?? 0;
   const online =
-    presence !== null &&
     isTrustedForumUser(user) &&
-    now - presence.lastSeenAt <= 15 * 60 * 1_000;
+    liveRooms.some(
+      (room) => room.roomId === FORUM_PRESENCE_ROOM && room.online,
+    );
 
   return {
     bio: profile?.bio,
@@ -102,10 +107,11 @@ async function publicForumProfile(ctx: QueryCtx, user: UserDoc) {
     websiteUrl: profile?.websiteUrl,
     joinedAt: user._creationTime,
     isOnline: online,
-    lastSeenAt: online ? presence.lastSeenAt : undefined,
-    onlineLocation: online
-      ? publicProfilePresenceLocation(presence)
-      : undefined,
+    lastSeenAt: online ? presence?.updatedAt : undefined,
+    onlineLocation:
+      online && presence !== null
+        ? publicProfilePresenceLocation(presence)
+        : undefined,
   };
 }
 
@@ -179,7 +185,8 @@ async function recentForumActivity(
   ]);
   const postThreads = await Promise.all(
     postRows.map(
-      async (post) => [post, await ctx.db.get("forumThreads", post.threadId)] as const,
+      async (post) =>
+        [post, await ctx.db.get("forumThreads", post.threadId)] as const,
     ),
   );
   const categoryIds = [
@@ -190,7 +197,8 @@ async function recentForumActivity(
   ];
   const categories = await Promise.all(
     [...new Set(categoryIds)].map(
-      async (categoryId) => [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
+      async (categoryId) =>
+        [categoryId, await ctx.db.get("forumCategories", categoryId)] as const,
     ),
   );
   const visibleCategoryIds = new Set(
@@ -307,7 +315,8 @@ export const publicProfile = query({
     }
 
     const viewerId = await getAuthUserId(ctx);
-    const viewer = viewerId === null ? null : await ctx.db.get("users", viewerId);
+    const viewer =
+      viewerId === null ? null : await ctx.db.get("users", viewerId);
     const [comments, forumActivity, forumProfile] = await Promise.all([
       recentComments(ctx, user._id),
       recentForumActivity(ctx, user._id, viewer),

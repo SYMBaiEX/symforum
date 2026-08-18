@@ -78,6 +78,19 @@ const subscriptionArgs = {
 };
 
 describe("evidence webhooks", () => {
+  test("does not persist delivery events when no subscriber can receive them", async () => {
+    const t = setup();
+    const result = await t.mutation(webhooks.enqueue, {
+      eventKey: "research:nobody",
+      eventType: "evidence.research.completed",
+      payloadJson: JSON.stringify({ status: "completed" }),
+    });
+    expect(result).toEqual({ eventId: null, enqueued: 0 });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("apiWebhookEvents").take(1)).toEqual([]);
+    });
+  });
+
   test("is disabled without an allowlist and validates exact public HTTPS destinations", async () => {
     expect(parseAllowedHosts(undefined)).toEqual(new Set());
     expect(() =>
@@ -181,6 +194,29 @@ describe("evidence webhooks", () => {
           await ctx.db.query("apiWebhookDeliveries").collect(),
         ).toHaveLength(1);
       });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("caps subscriptions per owner", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    try {
+      const t = setup();
+      const ids = await fixture(t);
+      const owner = t.withIdentity({ subject: ids.owner });
+      for (let index = 0; index < 10; index += 1) {
+        await owner.mutation(webhooks.create, {
+          ...subscriptionArgs,
+          subscriptionKey: `research-events-${index}`,
+        });
+      }
+      await expect(
+        owner.mutation(webhooks.create, {
+          ...subscriptionArgs,
+          subscriptionKey: "research-events-over-limit",
+        }),
+      ).rejects.toThrow(/at most 10/i);
     } finally {
       vi.unstubAllEnvs();
     }

@@ -21,6 +21,14 @@ import {
   portfolioProjectInputValidator,
   sitePageInputValidator,
 } from "./siteContentModel";
+import {
+  deleteInteractionAggregates,
+  replaceCommentAggregate,
+} from "./contentAggregates";
+import {
+  FORUM_PRESENCE_ROOM,
+  forumPresenceComponent,
+} from "./forumPresenceComponent";
 
 const commentEntityTypeValidator = v.union(
   v.literal("post"),
@@ -118,6 +126,8 @@ async function softDeleteComment(
     deletedBy: actorUserId,
     moderationReason: "admin_delete",
   });
+  const updated = await ctx.db.get("comments", comment._id);
+  if (updated !== null) await replaceCommentAggregate(ctx, comment, updated);
   await ctx.db.insert("systemLogs", {
     createdAt: now,
     updatedAt: now,
@@ -588,6 +598,11 @@ export const updateUserForumTrust = mutation({
       if (presence !== null) {
         await ctx.db.delete("forumPresence", presence._id);
       }
+      await forumPresenceComponent.removeRoomUser(
+        ctx,
+        FORUM_PRESENCE_ROOM,
+        String(args.userId),
+      );
     }
     await ctx.db.insert("systemLogs", {
       createdAt: now,
@@ -680,6 +695,11 @@ export const updateUserForumStatus = mutation({
       if (presence !== null) {
         await ctx.db.delete("forumPresence", presence._id);
       }
+      await forumPresenceComponent.removeRoomUser(
+        ctx,
+        FORUM_PRESENCE_ROOM,
+        String(args.userId),
+      );
     }
 
     await ctx.db.insert("systemLogs", {
@@ -977,7 +997,11 @@ export const deleteInteraction = mutation({
   args: { interactionId: v.id("interactions") },
   handler: async (ctx, args) => {
     await requireSiteAdmin(ctx);
-    await ctx.db.delete("interactions", args.interactionId);
+    const interaction = await ctx.db.get("interactions", args.interactionId);
+    if (interaction !== null) {
+      await deleteInteractionAggregates(ctx, interaction);
+      await ctx.db.delete("interactions", args.interactionId);
+    }
     return { deleted: true };
   },
 });

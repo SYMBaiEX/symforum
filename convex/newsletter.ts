@@ -14,6 +14,10 @@ import {
 import { enforceAgentScopeIfNeeded, requireSiteAdmin } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 import {
+  listPublicNewsletterIssueDigests,
+  upsertNewsletterIssueDigest,
+} from "./newsletterDigests";
+import {
   newsletterIssueInputValidator,
   normalizeEmail,
   normalizeIssueInput,
@@ -324,12 +328,7 @@ export const listPublicIssues = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 24), 60));
-    const issues = await ctx.db
-      .query("newsletterIssues")
-      .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "sent"))
-      .order("desc")
-      .take(limit);
-    return issues.map(publicIssue);
+    return await listPublicNewsletterIssueDigests(ctx, limit);
   },
 });
 
@@ -710,6 +709,18 @@ export const getSetting = internalQuery({
   },
 });
 
+export const getSettings = internalQuery({
+  args: { keys: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const keys = [...new Set(args.keys)].slice(0, 20);
+    const requested = new Set(keys);
+    const rows = await ctx.db.query("newsletterSettings").take(100);
+    return rows
+      .filter((row) => requested.has(row.key))
+      .map((row) => ({ key: row.key, value: row.value }));
+  },
+});
+
 export const setSetting = internalMutation({
   args: { key: v.string(), value: v.string() },
   handler: async (ctx, args) => {
@@ -774,6 +785,10 @@ export const markIssueBroadcast = internalMutation({
       sentAt: args.status === "sent" ? Date.now() : undefined,
       updatedAt: Date.now(),
     });
+    const updatedIssue = await ctx.db.get("newsletterIssues", args.issueId);
+    if (updatedIssue !== null) {
+      await upsertNewsletterIssueDigest(ctx, updatedIssue);
+    }
 
     const dailyRun = await ctx.db
       .query("dailyNewsletterRuns")
@@ -1031,14 +1046,18 @@ async function upsertIssue(
       createdAt: now,
       updatedAt: now,
     });
-    return await ctx.db.get("newsletterIssues", id);
+    const inserted = await ctx.db.get("newsletterIssues", id);
+    if (inserted !== null) await upsertNewsletterIssueDigest(ctx, inserted);
+    return inserted;
   }
 
   await ctx.db.patch("newsletterIssues", existing._id, {
     ...issue,
     updatedAt: now,
   });
-  return await ctx.db.get("newsletterIssues", existing._id);
+  const updated = await ctx.db.get("newsletterIssues", existing._id);
+  if (updated !== null) await upsertNewsletterIssueDigest(ctx, updated);
+  return updated;
 }
 
 function publicSubscriber(subscriber: Doc<"newsletterSubscribers">) {

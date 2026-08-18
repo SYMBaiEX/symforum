@@ -7,6 +7,7 @@ import {
   env,
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -14,6 +15,7 @@ import {
 } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 import type { EditorialNewsletterPayload } from "./newsletterPayload";
+import { upsertNewsletterIssueDigest } from "./newsletterDigests";
 
 type DailyRunStart =
   | {
@@ -56,11 +58,23 @@ const readIndexedSnapshotRef = makeFunctionReference<
   IndexedNewsSnapshot
 >("news:readIndexedSnapshot");
 
-const getSettingRef = makeFunctionReference<
+const getSettingsRef = makeFunctionReference<
   "query",
-  { key: string },
-  string | null
->("newsletter:getSetting");
+  { keys: string[] },
+  Array<{ key: string; value: string }>
+>("newsletter:getSettings");
+
+type DailyScheduleState = {
+  runDate: string;
+  shouldRun: boolean;
+  reason?: string;
+};
+
+const readDailyScheduleStateRef = makeFunctionReference<
+  "query",
+  { now: number },
+  DailyScheduleState
+>("dailyNewsletter:readDailyScheduleState");
 
 const sendIssueRef = makeFunctionReference<
   "action",
@@ -286,44 +300,111 @@ export const updateAdminSettings = mutation({
 export const checkDailyNewsletterSchedule = internalAction({
   args: {},
   handler: async (ctx): Promise<DailyRunResult> => {
-    const config = await readDailyConfig(ctx, {});
-    const sendTimeLocal = normalizeSendTime(
-      (await ctx.runQuery(getSettingRef, {
-        key: "dailyNewsletter.sendTimeLocal",
-      })) ?? DEFAULT_SEND_TIME_LOCAL,
-    );
     const now = Date.now();
-    const runDate = dateInTimeZone(now, config.timeZone);
-
-    if (!config.sendEnabled) {
+    const schedule = await ctx.runQuery(readDailyScheduleStateRef, { now });
+    if (!schedule.shouldRun) {
       return {
         ok: true,
         skipped: true,
-        runDate,
-        reason: "daily-newsletter-disabled",
-      };
-    }
-    if (config.testMode) {
-      return {
-        ok: true,
-        skipped: true,
-        runDate,
-        reason: "daily-newsletter-test-mode",
-      };
-    }
-    if (!isPastConfiguredSendTime(now, config.timeZone, sendTimeLocal)) {
-      return {
-        ok: true,
-        skipped: true,
-        runDate,
-        reason: "before-configured-send-time",
+        runDate: schedule.runDate,
+        reason: schedule.reason,
       };
     }
 
     return await ctx.runAction(runDailyNewsletterRef, {
-      runDate,
+      runDate: schedule.runDate,
       mode: "cron",
     });
+  },
+});
+
+export const readDailyScheduleState = internalQuery({
+  args: { now: v.number() },
+  handler: async (ctx, args): Promise<DailyScheduleState> => {
+    const rows = await ctx.db.query("newsletterSettings").take(100);
+    const settings = new Map(rows.map((row) => [row.key, row.value]));
+    const timeZone = normalizeTimeZone(
+      settings.get("dailyNewsletter.timeZone") ?? DEFAULT_TIME_ZONE,
+    );
+    const runDate = dateInTimeZone(args.now, timeZone);
+    const enabled = settings.get("dailyNewsletter.enabled") !== "false";
+    const testMode = settings.get("dailyNewsletter.testMode") === "true";
+    const sendTimeLocal = normalizeSendTime(
+      settings.get("dailyNewsletter.sendTimeLocal") ?? DEFAULT_SEND_TIME_LOCAL,
+    );
+    if (!enabled) {
+      return { runDate, shouldRun: false, reason: "daily-newsletter-disabled" };
+    }
+    if (testMode) {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-test-mode",
+      };
+    }
+    if (!isPastConfiguredSendTime(args.now, timeZone, sendTimeLocal)) {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "before-configured-send-time",
+      };
+    }
+
+    const existing = await ctx.db
+      .query("dailyNewsletterRuns")
+      .withIndex("by_runDate", (q) => q.eq("runDate", runDate))
+      .unique();
+    if (existing === null) return { runDate, shouldRun: true };
+    if (existing.status === "sent") {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-already-sent",
+      };
+    }
+    if (existing.status === "generated") {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-awaiting-review",
+      };
+    }
+    if (existing.status === "skipped") {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-skipped",
+      };
+    }
+    if (
+      existing.status === "running" &&
+      args.now - existing.startedAt < 30 * 60 * 1000
+    ) {
+      return { runDate, shouldRun: false, reason: "daily-newsletter-running" };
+    }
+    const attemptCount = existing.attemptCount ?? 1;
+    if (
+      existing.status === "failed" &&
+      attemptCount >= MAX_AUTOMATED_DAILY_ATTEMPTS
+    ) {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-retry-limit",
+      };
+    }
+    if (
+      existing.status === "failed" &&
+      args.now - (existing.completedAt ?? existing.updatedAt) <
+        AUTOMATED_RETRY_COOLDOWN_MS
+    ) {
+      return {
+        runDate,
+        shouldRun: false,
+        reason: "daily-newsletter-cooling-down",
+      };
+    }
+    return { runDate, shouldRun: true };
   },
 });
 
@@ -652,14 +733,6 @@ export const startDailyRun = internalMutation({
 
     if (existing && !args.force) {
       if (existing.status === "sent") {
-        await ctx.db.insert("newsletterSendLogs", {
-          runDate: args.runDate,
-          issueId: existing.issueId,
-          provider: "resend",
-          status: "skipped",
-          errorMessage: "Daily newsletter already sent",
-          createdAt: args.startedAt,
-        });
         return {
           ok: true,
           runId: existing._id,
@@ -673,6 +746,14 @@ export const startDailyRun = internalMutation({
           runId: existing._id,
           skipped: true,
           reason: "Newsletter draft is awaiting editorial review",
+        };
+      }
+      if (existing.status === "skipped") {
+        return {
+          ok: true,
+          runId: existing._id,
+          skipped: true,
+          reason: "Daily newsletter run was already skipped",
         };
       }
       if (recentRunning) {
@@ -808,6 +889,10 @@ export const upsertDailyIssue = internalMutation({
         updatedAt: now,
       });
     }
+    const digestIssue = await ctx.db.get("newsletterIssues", issueId);
+    if (digestIssue !== null) {
+      await upsertNewsletterIssueDigest(ctx, digestIssue);
+    }
 
     await ctx.db.patch("dailyNewsletterRuns", args.runId, {
       status: "generated",
@@ -874,6 +959,32 @@ export const markDailyRunFailed = internalMutation({
   },
 });
 
+export const cleanupDuplicateAlreadySentLogs = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 100), 200));
+    const rows = await ctx.db
+      .query("newsletterSendLogs")
+      .withIndex("by_status_and_errorMessage_and_createdAt", (q) =>
+        q
+          .eq("status", "skipped")
+          .eq("errorMessage", "Daily newsletter already sent"),
+      )
+      .order("asc")
+      .take(limit);
+    let removed = 0;
+    for (const row of rows) {
+      await ctx.db.delete("newsletterSendLogs", row._id);
+      removed += 1;
+    }
+    return {
+      scanned: rows.length,
+      removed,
+      done: rows.length < limit,
+    };
+  },
+});
+
 async function readDailyConfig(
   ctx: ActionCtx,
   args: {
@@ -883,34 +994,38 @@ async function readDailyConfig(
     maxNewsletterStories?: number;
   },
 ) {
+  const rows = await ctx.runQuery(getSettingsRef, {
+    keys: [
+      "newsletter.siteUrl",
+      "dailyNewsletter.enabled",
+      "dailyNewsletter.testMode",
+      "dailyNewsletter.reviewRequired",
+      "weeklyNewsletter.enabled",
+      "weeklyNewsletter.reviewRequired",
+      "dailyNewsletter.maxIndexedArticles",
+      "dailyNewsletter.maxNewsletterStories",
+      "dailyNewsletter.timeZone",
+    ],
+  });
+  const settings = new Map(rows.map((row) => [row.key, row.value]));
   const siteUrl =
-    (await ctx.runQuery(getSettingRef, { key: "newsletter.siteUrl" })) ??
+    settings.get("newsletter.siteUrl") ??
     env.NEWSLETTER_SITE_URL ??
     "https://symbaiex.com";
-  const enabledSetting = await ctx.runQuery(getSettingRef, {
-    key: "dailyNewsletter.enabled",
-  });
-  const testModeSetting = await ctx.runQuery(getSettingRef, {
-    key: "dailyNewsletter.testMode",
-  });
-  const reviewRequiredSetting = await ctx.runQuery(getSettingRef, {
-    key: "dailyNewsletter.reviewRequired",
-  });
-  const weeklyEnabledSetting = await ctx.runQuery(getSettingRef, {
-    key: "weeklyNewsletter.enabled",
-  });
-  const weeklyReviewRequiredSetting = await ctx.runQuery(getSettingRef, {
-    key: "weeklyNewsletter.reviewRequired",
-  });
-  const maxIndexedSetting = await ctx.runQuery(getSettingRef, {
-    key: "dailyNewsletter.maxIndexedArticles",
-  });
-  const maxStoriesSetting = await ctx.runQuery(getSettingRef, {
-    key: "dailyNewsletter.maxNewsletterStories",
-  });
-  const timeZone =
-    (await ctx.runQuery(getSettingRef, { key: "dailyNewsletter.timeZone" })) ??
-    DEFAULT_TIME_ZONE;
+  const enabledSetting = settings.get("dailyNewsletter.enabled") ?? null;
+  const testModeSetting = settings.get("dailyNewsletter.testMode") ?? null;
+  const reviewRequiredSetting =
+    settings.get("dailyNewsletter.reviewRequired") ?? null;
+  const weeklyEnabledSetting = settings.get("weeklyNewsletter.enabled") ?? null;
+  const weeklyReviewRequiredSetting =
+    settings.get("weeklyNewsletter.reviewRequired") ?? null;
+  const maxIndexedSetting =
+    settings.get("dailyNewsletter.maxIndexedArticles") ?? null;
+  const maxStoriesSetting =
+    settings.get("dailyNewsletter.maxNewsletterStories") ?? null;
+  const timeZone = normalizeTimeZone(
+    settings.get("dailyNewsletter.timeZone") ?? DEFAULT_TIME_ZONE,
+  );
 
   return {
     siteUrl: normalizeSiteUrl(siteUrl),
@@ -1039,7 +1154,10 @@ async function setSettingDirect(ctx: MutationCtx, key: string, value: string) {
     .unique();
   const now = Date.now();
   if (existing) {
-    await ctx.db.patch("newsletterSettings", existing._id, { value, updatedAt: now });
+    await ctx.db.patch("newsletterSettings", existing._id, {
+      value,
+      updatedAt: now,
+    });
   } else {
     await ctx.db.insert("newsletterSettings", { key, value, updatedAt: now });
   }

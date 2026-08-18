@@ -21,7 +21,7 @@ const enqueueWebhookRef = makeFunctionReference<
     eventType: "evidence.benchmark.completed";
     payloadJson: string;
   },
-  { eventId: Id<"apiWebhookEvents">; enqueued: number }
+  { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
 const runValidator = v.object({

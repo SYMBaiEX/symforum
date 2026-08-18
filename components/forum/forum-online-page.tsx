@@ -17,6 +17,7 @@ import {
 } from "@/components/forum/forum-primitives";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 const ONLINE_PAGE_SIZE = 25;
 
@@ -38,9 +39,11 @@ export function ForumOnlinePage({ enabled }: { enabled: boolean }) {
 }
 
 function LiveForumOnlinePage() {
+  const [presenceNow] = useState(() => Date.now());
   const searchParams = useSearchParams();
   const page = parseOnlinePage(searchParams.get("page"));
   const online = useQuery(forumRefs.listOnlineMembers, {
+    now: presenceNow,
     page,
     pageSize: ONLINE_PAGE_SIZE,
   });

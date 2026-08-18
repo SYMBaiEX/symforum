@@ -120,6 +120,7 @@ export type ForumPaginationRecord = {
 
 export type ForumNavStateRecord = {
   authenticated: boolean;
+  userId: string | null;
   trusted: boolean;
   canModerate: boolean;
   canAdmin: boolean;
@@ -924,7 +925,6 @@ export type ForumOverviewRecord = {
   sections: ForumCategorySectionRecord[];
   announcements: ForumAnnouncementRecord[];
   newestThreads: ForumThreadRecord[];
-  online: ForumOnlineSummaryRecord;
   statistics: ForumBoardStatisticsRecord;
   totals: {
     categories: number;
@@ -1272,6 +1272,15 @@ export type PublicNewsletterIssueRecord = Omit<
   | "resendBroadcastId"
   | "errorMessage"
 >;
+
+export type PublicNewsletterIssueSummaryRecord = Omit<
+  PublicNewsletterIssueRecord,
+  "body" | "editorialVersion"
+> & {
+  headline: string;
+  dek: string;
+  sourceCount: number;
+};
 
 export type NewsletterEditorialAnalyticsRecord = {
   issueId: string;
@@ -2410,11 +2419,31 @@ export const convexRefs = {
       Record<string, never>,
       ForumOverviewRecord
     >("forum:overview"),
+    onlineSummary: makeFunctionReference<
+      "query",
+      { now: number },
+      ForumOnlineSummaryRecord
+    >("forum:onlineSummary"),
     listCategories: makeFunctionReference<
       "query",
       { limit?: number },
       ForumCategoryRecord[]
     >("forum:listCategories"),
+    listPublicSitemapRecords: makeFunctionReference<
+      "query",
+      { month: string; limit?: number },
+      {
+        categories: Array<{ slug: string; lastModified: number }>;
+        threads: Array<{
+          categorySlug: string;
+          slug: string;
+          lastModified: number;
+        }>;
+        announcements: Array<{ slug: string; lastModified: number }>;
+        helpDocuments: Array<{ slug: string; lastModified: number }>;
+        calendarEvents: Array<{ slug: string; lastModified: number }>;
+      }
+    >("forum:listPublicSitemapRecords"),
     listThreadPrefixes: makeFunctionReference<
       "query",
       { categorySlug: string },
@@ -2718,7 +2747,7 @@ export const convexRefs = {
     >("forum:listMembers"),
     listOnlineMembers: makeFunctionReference<
       "query",
-      { limit?: number; page?: number; pageSize?: number },
+      { now: number; limit?: number; page?: number; pageSize?: number },
       ForumOnlineMembersRecord
     >("forum:listOnlineMembers"),
     getMyForumProfile: makeFunctionReference<
@@ -2949,6 +2978,33 @@ export const convexRefs = {
       { recorded: boolean; viewCount: number | null }
     >("forum:recordThreadView"),
   },
+  forumPresence: {
+    heartbeat: makeFunctionReference<
+      "mutation",
+      {
+        roomId: string;
+        userId: string;
+        sessionId: string;
+        interval: number;
+      },
+      { roomToken: string; sessionToken: string }
+    >("presence:heartbeat"),
+    list: makeFunctionReference<
+      "query",
+      { roomToken: string },
+      Array<{
+        userId: string;
+        online: boolean;
+        lastDisconnected: number;
+        data?: unknown;
+      }>
+    >("presence:list"),
+    disconnect: makeFunctionReference<
+      "mutation",
+      { sessionToken: string },
+      null
+    >("presence:disconnect"),
+  },
   comments: {
     list: makeFunctionReference<
       "query",
@@ -3056,7 +3112,7 @@ export const convexRefs = {
     listPublicIssues: makeFunctionReference<
       "query",
       { limit?: number },
-      PublicNewsletterIssueRecord[]
+      PublicNewsletterIssueSummaryRecord[]
     >("newsletter:listPublicIssues"),
     readPublicIssueBySlug: makeFunctionReference<
       "query",

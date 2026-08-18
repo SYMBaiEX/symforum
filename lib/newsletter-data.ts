@@ -1,6 +1,7 @@
 import {
   convexRefs,
   type PublicNewsletterIssueRecord,
+  type PublicNewsletterIssueSummaryRecord,
 } from "@/lib/convex-refs";
 import { readThroughServerCache } from "@/lib/server-cache";
 import { getServerConvexClient } from "@/lib/server-convex";
@@ -11,7 +12,7 @@ const NEWSLETTER_ARCHIVE_TTL_MS = 60 * 1000;
 export const getPublicNewsletterIssues = cache(
   async function getPublicNewsletterIssues(
     limit = 24,
-  ): Promise<PublicNewsletterIssueRecord[]> {
+  ): Promise<PublicNewsletterIssueSummaryRecord[]> {
     const convex = getServerConvexClient();
     if (convex === null) {
       return [];

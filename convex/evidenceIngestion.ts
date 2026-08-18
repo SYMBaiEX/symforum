@@ -134,7 +134,7 @@ const enqueueWebhookRef = makeFunctionReference<
     eventType: "evidence.document.changed" | "evidence.claim.verified";
     payloadJson: string;
   },
-  { eventId: string; enqueued: number }
+  { eventId: string | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
 export function sanitizeExcerpt(value: unknown, maximum = 700) {

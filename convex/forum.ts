@@ -21,6 +21,10 @@ import {
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 import { NYX_PROFILE } from "./nyxProfile";
+import {
+  FORUM_PRESENCE_ROOM,
+  forumPresenceComponent,
+} from "./forumPresenceComponent";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -354,7 +358,6 @@ const REPLY_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
 const NEW_THREAD_NOTIFICATION_FANOUT_BATCH_LIMIT = 100;
 const THREAD_VISIBILITY_PROFILE_DELTA_BATCH_LIMIT = 100;
 const FORUM_PRESENCE_WINDOW_MS = 15 * 60 * 1_000;
-const FORUM_PRESENCE_HEARTBEAT_MIN_MS = 60 * 1_000;
 const FORUM_PRESENCE_SCAN_LIMIT = 120;
 const FORUM_PRESENCE_DISPLAY_LIMIT = 18;
 const FORUM_PRESENCE_PATH_MAX_LENGTH = 160;
@@ -727,6 +730,10 @@ type ForumReportDoc = Doc<"forumReports">;
 type ForumReputationDoc = Doc<"forumReputations">;
 type ForumWarningDoc = Doc<"forumWarnings">;
 type ForumPresenceDoc = Doc<"forumPresence">;
+type ForumPresenceSnapshot = Pick<
+  ForumPresenceDoc,
+  "userId" | "locationType" | "path" | "label" | "lastSeenAt"
+>;
 type ForumModerationEventDoc = Doc<"forumModerationEvents">;
 type ForumThreadStatus = ForumThreadDoc["status"];
 type SukiReplySourceKind = ForumAgentReplyRunDoc["sourceKind"];
@@ -1130,6 +1137,130 @@ export const listCalendarEvents = query({
   },
 });
 
+/**
+ * Return only the public fields needed to build the forum sitemap.
+ *
+ * This deliberately reads the compact thread digest table instead of loading
+ * complete thread bodies once per category. Keep the access checks here so a
+ * future members-only board can never leak into a public discovery surface.
+ */
+export const listPublicSitemapRecords = query({
+  args: {
+    month: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = clampLimit(args.limit, 5_000, 5_000);
+    const month = normalizeForumCalendarMonth(args.month);
+    const categories = await ctx.db
+      .query("forumCategories")
+      .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+      .take(CATEGORY_LIST_LIMIT);
+    const categoriesById = new Map(
+      categories.map((category) => [category._id, category]),
+    );
+    const publicCategories = categories.filter(
+      (category) => categoryIsPublicForSitemap(category, categoriesById),
+    );
+    const publicCategoryIds = new Set(
+      publicCategories.map((category) => category._id),
+    );
+    const publicBoardIds = new Set(
+      publicCategories.filter(isBoardCategory).map((category) => category._id),
+    );
+
+    const [activeThreads, lockedThreads, announcements, helpDocuments, events] =
+      await Promise.all([
+        ctx.db
+          .query("forumThreadEditorialDigests")
+          .withIndex("by_status_and_lastPostAt", (q) =>
+            q.eq("status", "active"),
+          )
+          .order("desc")
+          .take(limit),
+        ctx.db
+          .query("forumThreadEditorialDigests")
+          .withIndex("by_status_and_lastPostAt", (q) =>
+            q.eq("status", "locked"),
+          )
+          .order("desc")
+          .take(limit),
+        ctx.db
+          .query("forumAnnouncements")
+          .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+          .take(CATEGORY_LIST_LIMIT),
+        ctx.db
+          .query("forumHelpDocuments")
+          .withIndex("by_status_and_position_and_title", (q) =>
+            q.eq("status", "active"),
+          )
+          .take(CATEGORY_LIST_LIMIT),
+        ctx.db
+          .query("forumCalendarEvents")
+          .withIndex("by_status_and_month_and_startsAt_and_title", (q) =>
+            q.eq("status", "active").eq("month", month),
+          )
+          .take(FORUM_CALENDAR_EVENT_LIST_LIMIT),
+      ]);
+
+    return {
+      categories: publicCategories.map((category) => ({
+        slug: category.slug,
+        lastModified: category.lastPostAt ?? category.updatedAt,
+      })),
+      threads: [...activeThreads, ...lockedThreads]
+        .filter((thread) => publicBoardIds.has(thread.categoryId))
+        .sort((left, right) => right.lastPostAt - left.lastPostAt)
+        .slice(0, limit)
+        .map((thread) => ({
+          categorySlug: thread.categorySlug,
+          slug: thread.slug,
+          lastModified: thread.updatedAt,
+        })),
+      announcements: announcements
+        .filter(
+          (announcement) =>
+            announcement.categoryId === undefined ||
+            publicCategoryIds.has(announcement.categoryId),
+        )
+        .map((announcement) => ({
+          slug: announcement.slug,
+          lastModified: announcement.updatedAt,
+        })),
+      helpDocuments: helpDocuments.map((document) => ({
+        slug: document.slug,
+        lastModified: document.updatedAt,
+      })),
+      calendarEvents: events.map((event) => ({
+        slug: event.slug,
+        lastModified: event.updatedAt,
+      })),
+    };
+  },
+});
+
+function categoryIsPublicForSitemap(
+  category: ForumCategoryDoc,
+  categoriesById: Map<Id<"forumCategories">, ForumCategoryDoc>,
+) {
+  const visited = new Set<Id<"forumCategories">>();
+  let current: ForumCategoryDoc | undefined = category;
+  while (current !== undefined) {
+    if (
+      current.status !== "active" ||
+      categoryViewAccess(current) !== "public" ||
+      visited.has(current._id)
+    ) {
+      return false;
+    }
+    visited.add(current._id);
+    if (current.parentCategoryId === undefined) return true;
+    current = categoriesById.get(current.parentCategoryId);
+    if (current === undefined) return false;
+  }
+  return false;
+}
+
 export const getCalendarEvent = query({
   args: {
     slug: v.string(),
@@ -1276,11 +1407,6 @@ export const overview = query({
     const categoryNamesById = new Map(
       visibleCategories.map((category) => [category._id, category.name]),
     );
-    const online = await onlineForumSummary(
-      ctx,
-      Date.now(),
-      FORUM_PRESENCE_DISPLAY_LIMIT,
-    );
     const statistics = await forumBoardStatistics(ctx);
     const announcements = await activeGlobalAnnouncements(ctx);
 
@@ -1308,7 +1434,6 @@ export const overview = query({
           0,
         ),
       },
-      online,
       statistics,
     };
   },
@@ -2525,6 +2650,7 @@ export const getMyForumNavState = query({
     if (user === null) {
       return {
         authenticated: false,
+        userId: null,
         trusted: false,
         canModerate: false,
         canAdmin: false,
@@ -2553,6 +2679,7 @@ export const getMyForumNavState = query({
 
     return {
       authenticated: true,
+      userId: user._id,
       trusted: isTrustedForumUser(user),
       canModerate: canModerateForum,
       canAdmin: canAdminForum(user),
@@ -2607,7 +2734,7 @@ export const recordPresence = mutation({
       existing !== null &&
       existing.locationType === args.locationType &&
       existing.path === forumPath &&
-      now - existing.lastSeenAt < FORUM_PRESENCE_HEARTBEAT_MIN_MS
+      existing.label === label
     ) {
       return { recorded: false, lastSeenAt: existing.lastSeenAt };
     }
@@ -3215,37 +3342,23 @@ export const listMembers = query({
 
 export const listOnlineMembers = query({
   args: {
+    now: v.number(),
     limit: v.optional(v.number()),
     page: v.optional(v.number()),
     pageSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    const now = args.now;
     const pageSize = normalizePageSize(
       args.pageSize ?? args.limit,
       MEMBER_LIST_DEFAULT_PAGE_SIZE,
       MEMBER_LIST_MAX_PAGE_SIZE,
     );
     const requestedPage = normalizePage(args.page);
-    const presences = await ctx.db
-      .query("forumPresence")
-      .withIndex("by_lastSeenAt")
-      .order("desc")
-      .take(FORUM_PRESENCE_SCAN_LIMIT);
-    const activePresences = presences.filter((presence) =>
-      isActiveForumPresence(presence, now),
-    );
-    const activePresenceUsers = await Promise.all(
-      activePresences.map(
-        async (presence) =>
-          [presence, await ctx.db.get("users", presence.userId)] as const,
-      ),
-    );
-    const visiblePresenceUsers = activePresenceUsers.flatMap(
-      ([presence, user]) =>
-        user !== null && isTrustedForumUser(user)
-          ? [[presence, user] as const]
-          : [],
+    const visiblePresenceUsers = await loadOnlineForumUsers(
+      ctx,
+      now,
+      FORUM_PRESENCE_SCAN_LIMIT,
     );
     const totalItems = visiblePresenceUsers.length;
     const pagination = paginationRecord({
@@ -3253,7 +3366,7 @@ export const listOnlineMembers = query({
       pageSize,
       totalItems,
       actualTotalItems:
-        presences.length >= FORUM_PRESENCE_SCAN_LIMIT
+        visiblePresenceUsers.length >= FORUM_PRESENCE_SCAN_LIMIT
           ? totalItems + 1
           : undefined,
     });
@@ -3270,7 +3383,8 @@ export const listOnlineMembers = query({
     return {
       activeSince: now - FORUM_PRESENCE_WINDOW_MS,
       registeredCount: totalItems,
-      registeredCountLimited: presences.length >= FORUM_PRESENCE_SCAN_LIMIT,
+      registeredCountLimited:
+        visiblePresenceUsers.length >= FORUM_PRESENCE_SCAN_LIMIT,
       members: displayPresenceUsers.map(([presence, user]) =>
         publicForumPresenceMemberRecord(
           presence,
@@ -3280,6 +3394,17 @@ export const listOnlineMembers = query({
       ),
       pagination,
     };
+  },
+});
+
+export const onlineSummary = query({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    return await onlineForumSummary(
+      ctx,
+      args.now,
+      FORUM_PRESENCE_DISPLAY_LIMIT,
+    );
   },
 });
 
@@ -17994,7 +18119,7 @@ function publicForumMemberRecord(
   user: UserDoc,
   profile: ForumUserProfileDoc | null,
   counts: { threadCount: number; postCount: number },
-  presence?: ForumPresenceDoc | null,
+  presence?: ForumPresenceSnapshot | null,
 ) {
   return {
     _id: profile?._id ?? user._id,
@@ -18216,25 +18341,10 @@ function memberMatchesServerQuery(
 }
 
 async function onlineForumSummary(ctx: QueryCtx, now: number, limit: number) {
-  const presences = await ctx.db
-    .query("forumPresence")
-    .withIndex("by_lastSeenAt")
-    .order("desc")
-    .take(FORUM_PRESENCE_SCAN_LIMIT);
-  const activePresences = presences.filter((presence) =>
-    isActiveForumPresence(presence, now),
-  );
-  const activePresenceUsers = await Promise.all(
-    activePresences.map(
-      async (presence) =>
-        [presence, await ctx.db.get("users", presence.userId)] as const,
-    ),
-  );
-  const visiblePresenceUsers = activePresenceUsers.flatMap(
-    ([presence, user]) =>
-      user !== null && isTrustedForumUser(user)
-        ? [[presence, user] as const]
-        : [],
+  const visiblePresenceUsers = await loadOnlineForumUsers(
+    ctx,
+    now,
+    FORUM_PRESENCE_SCAN_LIMIT,
   );
   const displayPresenceUsers = visiblePresenceUsers.slice(0, limit);
   const profilesByUserId = await loadForumUserProfilesByUserIds(
@@ -18245,7 +18355,8 @@ async function onlineForumSummary(ctx: QueryCtx, now: number, limit: number) {
   return {
     activeSince: now - FORUM_PRESENCE_WINDOW_MS,
     registeredCount: visiblePresenceUsers.length,
-    registeredCountLimited: presences.length >= FORUM_PRESENCE_SCAN_LIMIT,
+    registeredCountLimited:
+      visiblePresenceUsers.length >= FORUM_PRESENCE_SCAN_LIMIT,
     members: displayPresenceUsers.map(([presence, user]) =>
       publicForumPresenceMemberRecord(
         presence,
@@ -18256,40 +18367,67 @@ async function onlineForumSummary(ctx: QueryCtx, now: number, limit: number) {
   };
 }
 
+async function loadOnlineForumUsers(
+  ctx: QueryCtx | MutationCtx,
+  now: number,
+  limit: number,
+) {
+  const states = await forumPresenceComponent.listRoom(
+    ctx,
+    FORUM_PRESENCE_ROOM,
+    true,
+    limit,
+  );
+  const rows = await Promise.all(
+    states.map(async (state) => {
+      const userId = state.userId as Id<"users">;
+      const [user, location] = await Promise.all([
+        ctx.db.get("users", userId),
+        ctx.db
+          .query("forumPresence")
+          .withIndex("by_userId", (q) => q.eq("userId", userId))
+          .unique(),
+      ]);
+      const presence: ForumPresenceSnapshot = location ?? {
+        userId,
+        locationType: "index",
+        path: "/forum",
+        label: "Board index",
+        lastSeenAt: now,
+      };
+      return [presence, user] as const;
+    }),
+  );
+  return rows.flatMap(([presence, user]) =>
+    user !== null && isTrustedForumUser(user)
+      ? [[presence, user] as const]
+      : [],
+  );
+}
+
 async function loadActivePresenceByUserIds(
   ctx: QueryCtx | MutationCtx,
   userIds: Array<Id<"users">>,
   now: number,
 ) {
-  const presences = await Promise.all(
-    [...new Set(userIds)].map(async (userId) => {
-      const [presence, user] = await Promise.all([
-        ctx.db
-          .query("forumPresence")
-          .withIndex("by_userId", (q) => q.eq("userId", userId))
-          .unique(),
-        ctx.db.get("users", userId),
-      ]);
-      return [
-        userId,
-        presence !== null &&
-        user !== null &&
-        isTrustedForumUser(user) &&
-        isActiveForumPresence(presence, now)
-          ? presence
-          : null,
-      ] as const;
-    }),
+  const requested = new Set(userIds);
+  const online = await loadOnlineForumUsers(
+    ctx,
+    now,
+    FORUM_PRESENCE_SCAN_LIMIT,
+  );
+  const presences = online.map(
+    ([presence]) => [presence.userId, presence] as const,
   );
   return new Map(
     presences.flatMap(([userId, presence]) =>
-      presence === null ? [] : [[userId, presence] as const],
+      !requested.has(userId) ? [] : [[userId, presence] as const],
     ),
   );
 }
 
 function publicForumPresenceMemberRecord(
-  presence: ForumPresenceDoc,
+  presence: ForumPresenceSnapshot,
   user: UserDoc,
   profile?: ForumUserProfileDoc,
 ) {
@@ -18308,7 +18446,7 @@ function publicForumPresenceMemberRecord(
   };
 }
 
-function publicPresenceLocation(presence: ForumPresenceDoc) {
+function publicPresenceLocation(presence: ForumPresenceSnapshot) {
   if (presence.locationType === "index") {
     return {
       type: "index",
@@ -18375,10 +18513,6 @@ function publicPresenceLocation(presence: ForumPresenceDoc) {
     type: presence.locationType,
     label: "Forum tools",
   };
-}
-
-function isActiveForumPresence(presence: ForumPresenceDoc, now: number) {
-  return now - presence.lastSeenAt <= FORUM_PRESENCE_WINDOW_MS;
 }
 
 function startOfCurrentDay(timestamp: number) {

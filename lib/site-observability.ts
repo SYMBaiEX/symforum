@@ -2,8 +2,8 @@ import { primarySiteUrl, forumSiteUrl } from "@/lib/site-urls";
 
 export const SITEMAP_ENTRY_CAP = 50_000;
 export const SITEMAP_REVALIDATE_SECONDS = 3_600;
-export const FORUM_SITEMAP_QUERY_LIMIT = 100;
-export const FORUM_SITEMAP_PAGE_SIZE = 100;
+export const FORUM_SITEMAP_QUERY_LIMIT = 5_000;
+export const FORUM_SITEMAP_PAGE_SIZE = 5_000;
 export const SITE_OBSERVABILITY_KEY_DIRECTORY_URL = primarySiteUrl(
   "/.well-known/http-message-signatures-directory",
 );
