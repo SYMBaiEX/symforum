@@ -34,6 +34,9 @@ const EVENT_TYPES = [
   "evidence.export.completed",
   "evidence.benchmark.completed",
   "evidence.claim.verified",
+  "evidence.usage.threshold_reached",
+  "evidence.usage.budget_reached",
+  "evidence.entitlement.status_changed",
 ] as const;
 type EventType = (typeof EVENT_TYPES)[number];
 
@@ -130,6 +133,9 @@ export const eventTypeValidator = v.union(
   v.literal("evidence.export.completed"),
   v.literal("evidence.benchmark.completed"),
   v.literal("evidence.claim.verified"),
+  v.literal("evidence.usage.threshold_reached"),
+  v.literal("evidence.usage.budget_reached"),
+  v.literal("evidence.entitlement.status_changed"),
 );
 
 function identifier(value: string, name: string, maximum: number) {

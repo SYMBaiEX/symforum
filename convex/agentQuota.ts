@@ -2,6 +2,7 @@ import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
+import { makeFunctionReference } from "convex/server";
 import {
   internalMutation,
   mutation,
@@ -15,6 +16,13 @@ import {
   isActiveAgentUser,
   requireAuthenticatedUser,
 } from "./authz";
+import { stableEventScope, usageEvent } from "../lib/usage-budget-events";
+
+const usageWebhookRef = makeFunctionReference<
+  "mutation",
+  { eventKey: string; eventType: "evidence.usage.threshold_reached" | "evidence.usage.budget_reached"; payloadJson: string },
+  { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
+>("evidenceWebhooks:enqueueEvent");
 
 /** One unit is an app-defined bounded operation, not a payment or currency. */
 export const FREE_MONTHLY_ALLOWANCE_UNITS = 100;
@@ -737,6 +745,31 @@ export async function consumeAgentQuotaForRequest(
     usedUnits: nextAgentUsedUnits,
     updatedAt: now,
   });
+  const eventScope = stableEventScope(String(ownerUserId));
+  const eventBase = {
+    scope: "account" as const,
+    period: monthKey,
+    usedUnits: nextUsedUnits,
+    hardCapUnits: state.hardCapUnits,
+    remainingUnits: Math.max(0, state.hardCapUnits - nextUsedUnits),
+  };
+  const priorUsedUnits = budget.usedUnits;
+  if (priorUsedUnits < budget.hardCapUnits * 0.8 && nextUsedUnits >= budget.hardCapUnits * 0.8) {
+    await emitUsageEvent(ctx, usageWebhookRef, usageEvent(
+      "evidence.usage.threshold_reached",
+      `usage:${eventScope}:${monthKey}:threshold-80`,
+      Math.floor(now / 1_000),
+      { ...eventBase, thresholdPercent: 80 },
+    ));
+  }
+  if (priorUsedUnits < budget.hardCapUnits && nextUsedUnits >= budget.hardCapUnits) {
+    await emitUsageEvent(ctx, usageWebhookRef, usageEvent(
+      "evidence.usage.budget_reached",
+      `usage:${eventScope}:${monthKey}:budget-reached`,
+      Math.floor(now / 1_000),
+      { ...eventBase, remainingUnits: 0 },
+    ));
+  }
   return quotaResult(
     {
       ...state,
@@ -752,6 +785,22 @@ export async function consumeAgentQuotaForRequest(
     },
     { accepted: true, idempotent: false, units, usageId },
   );
+}
+
+async function emitUsageEvent(
+  ctx: MutationCtx,
+  reference: typeof usageWebhookRef,
+  event: ReturnType<typeof usageEvent>,
+) {
+  try {
+    await ctx.runMutation(reference, {
+      eventKey: event.id,
+      eventType: event.type,
+      payloadJson: JSON.stringify(event),
+    });
+  } catch (error) {
+    console.warn("Usage webhook event enqueue failed", error);
+  }
 }
 
 /**

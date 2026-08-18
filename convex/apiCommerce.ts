@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { makeFunctionReference } from "convex/server";
 import {
   internalMutation,
   mutation,
@@ -8,6 +9,13 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuthenticatedUser } from "./authz";
+import { entitlementStatusEvent, stableEventScope } from "../lib/usage-budget-events";
+
+const entitlementWebhookRef = makeFunctionReference<
+  "mutation",
+  { eventKey: string; eventType: "evidence.entitlement.status_changed"; payloadJson: string },
+  { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
+>("evidenceWebhooks:enqueueEvent");
 
 const MAX_IDENTIFIER_LENGTH = 120;
 const MAX_FINGERPRINT_LENGTH = 128;
@@ -553,6 +561,16 @@ export const beginOrReplayCommand = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    if (entitlement.entitlement !== null) {
+      await emitEntitlementStatusEvent(ctx, entitlementWebhookRef, {
+        productKey: product.productKey,
+        status: entitlement.entitlement.status,
+        startsAt: entitlement.entitlement.startsAt,
+        ...(entitlement.entitlement.expiresAt === undefined
+          ? {}
+          : { expiresAt: entitlement.entitlement.expiresAt }),
+      }, principal.ownerUserId, entitlement.entitlement.updatedAt, now);
+    }
     return {
       commandId,
       ledgerEntryId,
@@ -562,6 +580,35 @@ export const beginOrReplayCommand = mutation({
     };
   },
 });
+
+async function emitEntitlementStatusEvent(
+  ctx: MutationCtx,
+  reference: typeof entitlementWebhookRef,
+  data: {
+    productKey: string;
+    status: "active" | "revoked" | "expired";
+    startsAt: number;
+    expiresAt?: number;
+  },
+  ownerUserId: Id<"users">,
+  version: number,
+  occurredAt: number,
+) {
+  const event = entitlementStatusEvent(
+    `entitlement:${stableEventScope(String(ownerUserId))}:${stableEventScope(`${data.productKey}:${version}`)}`,
+    Math.floor(occurredAt / 1_000),
+    { scope: "account", ...data },
+  );
+  try {
+    await ctx.runMutation(reference, {
+      eventKey: event.id,
+      eventType: event.type,
+      payloadJson: JSON.stringify(event),
+    });
+  } catch (error) {
+    console.warn("Entitlement webhook event enqueue failed", error);
+  }
+  }
 
 /** Inserts one compensating reversal; the original debit remains immutable. */
 export const reverseCommandUsage = internalMutation({

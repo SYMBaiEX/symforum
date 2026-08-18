@@ -211,6 +211,44 @@ async function insertClaimedDeliveryFixture(
 }
 
 describe("evidence webhooks", () => {
+  test("deduplicates owner-scoped usage threshold events without sensitive fields", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    const t = setup();
+    const ids = await fixture(t);
+    await t.withIdentity({ subject: ids.agent }).mutation(webhooks.create, {
+      subscriptionKey: "usage-events",
+      url: subscriptionArgs.url,
+      eventTypes: ["evidence.usage.threshold_reached"],
+    });
+    const payloadJson = JSON.stringify({
+      scope: "account",
+      period: "2026-08",
+      usedUnits: 80,
+      hardCapUnits: 100,
+      remainingUnits: 20,
+      thresholdPercent: 80,
+    });
+    const first = await t.mutation(webhooks.enqueue, {
+      eventKey: "usage:owner-scope:2026-08:threshold-80",
+      eventType: "evidence.usage.threshold_reached",
+      payloadJson,
+    });
+    const replay = await t.mutation(webhooks.enqueue, {
+      eventKey: "usage:owner-scope:2026-08:threshold-80",
+      eventType: "evidence.usage.threshold_reached",
+      payloadJson,
+    });
+    expect(first.enqueued).toBe(1);
+    expect(replay.enqueued).toBe(0);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("apiWebhookEvents").collect()).toHaveLength(1);
+      expect(await ctx.db.query("apiWebhookDeliveries").collect()).toHaveLength(1);
+      const event = await ctx.db.query("apiWebhookEvents").unique();
+      expect(event?.payloadJson).not.toMatch(/token|secret|price|request/i);
+    });
+  });
+
   test("does not persist delivery events when no subscriber can receive them", async () => {
     const t = setup();
     const result = await t.mutation(webhooks.enqueue, {

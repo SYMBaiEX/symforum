@@ -34,7 +34,10 @@ const getDeliveryInputRef = makeFunctionReference<
       | "evidence.research.completed"
       | "evidence.export.completed"
       | "evidence.benchmark.completed"
-      | "evidence.claim.verified";
+      | "evidence.claim.verified"
+      | "evidence.usage.threshold_reached"
+      | "evidence.usage.budget_reached"
+      | "evidence.entitlement.status_changed";
     payloadJson: string;
     signingSecretCiphertext?: string;
     signingSecretNonce?: string;

@@ -33,6 +33,18 @@
     "evidence.claim.verified": {
       "address": "evidence.claim.verified",
       "messages": { "claimVerified": { "$ref": "#/components/messages/ClaimVerified" } }
+    },
+    "evidence.usage.threshold_reached": {
+      "address": "evidence.usage.threshold_reached",
+      "messages": { "usageThresholdReached": { "$ref": "#/components/messages/UsageThresholdReached" } }
+    },
+    "evidence.usage.budget_reached": {
+      "address": "evidence.usage.budget_reached",
+      "messages": { "usageBudgetReached": { "$ref": "#/components/messages/UsageBudgetReached" } }
+    },
+    "evidence.entitlement.status_changed": {
+      "address": "evidence.entitlement.status_changed",
+      "messages": { "entitlementStatusChanged": { "$ref": "#/components/messages/EntitlementStatusChanged" } }
     }
   },
   "operations": {
@@ -41,6 +53,9 @@
     "receiveExportCompleted": { "action": "receive", "channel": { "$ref": "#/channels/evidence.export.completed" }, "messages": [{ "$ref": "#/channels/evidence.export.completed/messages/exportCompleted" }] },
     "receiveBenchmarkCompleted": { "action": "receive", "channel": { "$ref": "#/channels/evidence.benchmark.completed" }, "messages": [{ "$ref": "#/channels/evidence.benchmark.completed/messages/benchmarkCompleted" }] },
     "receiveClaimVerified": { "action": "receive", "channel": { "$ref": "#/channels/evidence.claim.verified" }, "messages": [{ "$ref": "#/channels/evidence.claim.verified/messages/claimVerified" }] }
+    ,"receiveUsageThresholdReached": { "action": "receive", "channel": { "$ref": "#/channels/evidence.usage.threshold_reached" }, "messages": [{ "$ref": "#/channels/evidence.usage.threshold_reached/messages/usageThresholdReached" }] }
+    ,"receiveUsageBudgetReached": { "action": "receive", "channel": { "$ref": "#/channels/evidence.usage.budget_reached" }, "messages": [{ "$ref": "#/channels/evidence.usage.budget_reached/messages/usageBudgetReached" }] }
+    ,"receiveEntitlementStatusChanged": { "action": "receive", "channel": { "$ref": "#/channels/evidence.entitlement.status_changed" }, "messages": [{ "$ref": "#/channels/evidence.entitlement.status_changed/messages/entitlementStatusChanged" }] }
   },
   "components": {
     "messages": {
@@ -49,6 +64,9 @@
       "ExportCompleted": { "name": "evidence.export.completed", "title": "Evidence export completed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/ExportCompletedEnvelope" } },
       "BenchmarkCompleted": { "name": "evidence.benchmark.completed", "title": "Evidence benchmark completed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/BenchmarkCompletedEnvelope" } },
       "ClaimVerified": { "name": "evidence.claim.verified", "title": "Evidence claim verified", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/ClaimVerifiedEnvelope" } }
+      ,"UsageThresholdReached": { "name": "evidence.usage.threshold_reached", "title": "Account usage threshold reached", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/UsageThresholdReachedEnvelope" } }
+      ,"UsageBudgetReached": { "name": "evidence.usage.budget_reached", "title": "Account usage budget reached", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/UsageBudgetReachedEnvelope" } }
+      ,"EntitlementStatusChanged": { "name": "evidence.entitlement.status_changed", "title": "Account entitlement status changed", "headers": { "$ref": "#/components/schemas/DeliveryHeaders" }, "payload": { "$ref": "#/components/schemas/EntitlementStatusChangedEnvelope" } }
     },
     "schemas": {
       "DeliveryHeaders": {
@@ -57,7 +75,7 @@
         "required": ["x-symbaiex-event-id", "x-symbaiex-event-type", "x-symbaiex-timestamp", "x-symbaiex-signature"],
         "properties": {
           "x-symbaiex-event-id": { "type": "string" },
-          "x-symbaiex-event-type": { "type": "string", "enum": ["evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified"] },
+          "x-symbaiex-event-type": { "type": "string", "enum": ["evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified", "evidence.usage.threshold_reached", "evidence.usage.budget_reached", "evidence.entitlement.status_changed"] },
           "x-symbaiex-timestamp": { "type": "string", "description": "Unix epoch seconds used in the HMAC input." },
           "x-symbaiex-signature": { "type": "string", "pattern": "^v1=[a-f0-9]{64}$", "description": "HMAC-SHA256 signature of timestamp.body using the one-time provisioned subscription secret." }
         }
@@ -78,11 +96,17 @@
       "ExportCompletedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.export.completed" }, "data": { "$ref": "#/components/schemas/ExportCompletedData" } } }] },
       "BenchmarkCompletedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.benchmark.completed" }, "data": { "$ref": "#/components/schemas/BenchmarkCompletedData" } } }] },
       "ClaimVerifiedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.claim.verified" }, "data": { "$ref": "#/components/schemas/ClaimVerifiedData" } } }] },
+      "UsageThresholdReachedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.usage.threshold_reached" }, "data": { "$ref": "#/components/schemas/UsageThresholdReachedData" } } }] },
+      "UsageBudgetReachedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.usage.budget_reached" }, "data": { "$ref": "#/components/schemas/UsageBudgetReachedData" } } }] },
+      "EntitlementStatusChangedEnvelope": { "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "type": { "const": "evidence.entitlement.status_changed" }, "data": { "$ref": "#/components/schemas/EntitlementStatusChangedData" } } }] },
       "DocumentChangedData": { "type": "object", "additionalProperties": false, "required": ["documentId", "documentVersionId", "version", "canonicalUrl"], "properties": { "documentId": { "type": "string" }, "documentVersionId": { "type": "string" }, "version": { "type": "integer", "minimum": 0 }, "canonicalUrl": { "type": "string", "format": "uri" }, "kind": { "type": "string", "enum": ["document", "advisory", "release", "paper"] }, "changedFields": { "type": "array", "items": { "type": "string" } } } },
       "ResearchCompletedData": { "type": "object", "additionalProperties": false, "required": ["researchJobId", "status", "expiresAt"], "properties": { "researchJobId": { "type": "string" }, "status": { "const": "completed" }, "expiresAt": { "type": "integer", "minimum": 0 } } },
       "ExportCompletedData": { "type": "object", "additionalProperties": false, "required": ["exportJobId", "status", "checksum", "recordCount", "expiresAt"], "properties": { "exportJobId": { "type": "string" }, "status": { "const": "completed" }, "checksum": { "type": "string" }, "recordCount": { "type": "integer", "minimum": 0 }, "expiresAt": { "type": "integer", "minimum": 0 } } },
       "BenchmarkCompletedData": { "type": "object", "additionalProperties": false, "required": ["runId", "runKey", "score", "model"], "properties": { "runId": { "type": "string" }, "runKey": { "type": "string" }, "score": { "type": "number" }, "model": { "type": "string" } } },
       "ClaimVerifiedData": { "type": "object", "additionalProperties": false, "required": ["claimId", "documentVersionId", "status", "confidence"], "properties": { "claimId": { "type": "string" }, "documentVersionId": { "type": "string" }, "status": { "const": "supported" }, "confidence": { "type": "number", "minimum": 0, "maximum": 1 } } }
+      ,"UsageThresholdReachedData": { "type": "object", "additionalProperties": false, "required": ["scope", "period", "usedUnits", "hardCapUnits", "remainingUnits", "thresholdPercent"], "properties": { "scope": { "const": "account" }, "period": { "type": "string", "minLength": 1, "maxLength": 16 }, "usedUnits": { "type": "integer", "minimum": 0 }, "hardCapUnits": { "type": "integer", "minimum": 1 }, "remainingUnits": { "type": "integer", "minimum": 0 }, "thresholdPercent": { "const": 80 } } }
+      ,"UsageBudgetReachedData": { "type": "object", "additionalProperties": false, "required": ["scope", "period", "usedUnits", "hardCapUnits", "remainingUnits"], "properties": { "scope": { "const": "account" }, "period": { "type": "string", "minLength": 1, "maxLength": 16 }, "usedUnits": { "type": "integer", "minimum": 0 }, "hardCapUnits": { "type": "integer", "minimum": 1 }, "remainingUnits": { "const": 0 } } }
+      ,"EntitlementStatusChangedData": { "type": "object", "additionalProperties": false, "required": ["scope", "productKey", "status", "startsAt"], "properties": { "scope": { "const": "account" }, "productKey": { "type": "string", "minLength": 1, "maxLength": 120 }, "status": { "enum": ["active", "revoked", "expired"] }, "startsAt": { "type": "integer", "minimum": 0 }, "expiresAt": { "type": "integer", "minimum": 0 } } }
     }
   }
 }

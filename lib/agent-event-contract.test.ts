@@ -62,6 +62,42 @@ describe("agent event envelope contract", () => {
         confidence: 1,
       },
     },
+    {
+      id: "usage:owner-scope:2026-08:threshold-80",
+      type: "evidence.usage.threshold_reached",
+      occurredAt,
+      data: {
+        scope: "account",
+        period: "2026-08",
+        usedUnits: 80,
+        hardCapUnits: 100,
+        remainingUnits: 20,
+        thresholdPercent: 80,
+      },
+    },
+    {
+      id: "usage:owner-scope:2026-08:budget-reached",
+      type: "evidence.usage.budget_reached",
+      occurredAt,
+      data: {
+        scope: "account",
+        period: "2026-08",
+        usedUnits: 100,
+        hardCapUnits: 100,
+        remainingUnits: 0,
+      },
+    },
+    {
+      id: "entitlement:owner-scope:product-version",
+      type: "evidence.entitlement.status_changed",
+      occurredAt,
+      data: {
+        scope: "account",
+        productKey: "evidence-beta",
+        status: "active",
+        startsAt: occurredAt,
+      },
+    },
   ])("accepts current emitter shape for $type", (event) => {
     expect(isAgentEventEnvelope(event)).toBe(true);
   });
@@ -86,6 +122,22 @@ describe("agent event envelope contract", () => {
         type: "evidence.usage.updated",
         occurredAt,
         data: {},
+      }),
+    ).toBe(false);
+    expect(
+      isAgentEventEnvelope({
+        id: "usage:scope:threshold-80",
+        type: "evidence.usage.threshold_reached",
+        occurredAt,
+        data: {
+          scope: "account",
+          period: "2026-08",
+          usedUnits: 80,
+          hardCapUnits: 100,
+          remainingUnits: 20,
+          thresholdPercent: 80,
+          tokenCount: 1,
+        },
       }),
     ).toBe(false);
   });

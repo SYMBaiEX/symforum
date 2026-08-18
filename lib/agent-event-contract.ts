@@ -10,6 +10,9 @@ export const AGENT_EVENT_TYPES = [
   "evidence.export.completed",
   "evidence.benchmark.completed",
   "evidence.claim.verified",
+  "evidence.usage.threshold_reached",
+  "evidence.usage.budget_reached",
+  "evidence.entitlement.status_changed",
 ] as const;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
@@ -47,6 +50,28 @@ export type AgentEventData = {
     status: "supported";
     confidence: number;
   };
+  "evidence.usage.threshold_reached": {
+    scope: "account";
+    period: string;
+    usedUnits: number;
+    hardCapUnits: number;
+    remainingUnits: number;
+    thresholdPercent: 80;
+  };
+  "evidence.usage.budget_reached": {
+    scope: "account";
+    period: string;
+    usedUnits: number;
+    hardCapUnits: number;
+    remainingUnits: 0;
+  };
+  "evidence.entitlement.status_changed": {
+    scope: "account";
+    productKey: string;
+    status: "active" | "revoked" | "expired";
+    startsAt: number;
+    expiresAt?: number;
+  };
 };
 
 export type AgentEventEnvelope<T extends AgentEventType = AgentEventType> = {
@@ -72,7 +97,7 @@ function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.length > 0;
 }
 
-function isTimestamp(value: unknown) {
+function isTimestamp(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
@@ -181,6 +206,53 @@ function isClaimVerifiedData(value: unknown) {
   return confidence >= 0 && confidence <= 1;
 }
 
+function isUsageThresholdData(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, [
+      "scope",
+      "period",
+      "usedUnits",
+      "hardCapUnits",
+      "remainingUnits",
+      "thresholdPercent",
+    ]) &&
+    value.scope === "account" &&
+    isNonEmptyString(value.period) &&
+    isTimestamp(value.usedUnits) &&
+    isTimestamp(value.hardCapUnits) &&
+    isTimestamp(value.remainingUnits) &&
+    value.thresholdPercent === 80 &&
+    value.usedUnits >= value.hardCapUnits * 0.8 &&
+    value.remainingUnits === Math.max(0, value.hardCapUnits - value.usedUnits)
+  );
+}
+
+function isUsageBudgetData(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ["scope", "period", "usedUnits", "hardCapUnits", "remainingUnits"]) &&
+    value.scope === "account" &&
+    isNonEmptyString(value.period) &&
+    isTimestamp(value.usedUnits) &&
+    isTimestamp(value.hardCapUnits) &&
+    value.remainingUnits === 0 &&
+    value.usedUnits >= value.hardCapUnits
+  );
+}
+
+function isEntitlementStatusData(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ["scope", "productKey", "status", "startsAt", "expiresAt"]) &&
+    value.scope === "account" &&
+    isNonEmptyString(value.productKey) &&
+    (value.status === "active" || value.status === "revoked" || value.status === "expired") &&
+    isTimestamp(value.startsAt) &&
+    (value.expiresAt === undefined || isTimestamp(value.expiresAt))
+  );
+}
+
 /**
  * Validates an untrusted webhook body without parsing, coercing, or mutating it.
  * This checks the public body shape only; it does not establish delivery authenticity.
@@ -209,6 +281,12 @@ export function isAgentEventEnvelope(
       return isBenchmarkCompletedData(value.data);
     case "evidence.claim.verified":
       return isClaimVerifiedData(value.data);
+    case "evidence.usage.threshold_reached":
+      return isUsageThresholdData(value.data);
+    case "evidence.usage.budget_reached":
+      return isUsageBudgetData(value.data);
+    case "evidence.entitlement.status_changed":
+      return isEntitlementStatusData(value.data);
     default:
       return false;
   }

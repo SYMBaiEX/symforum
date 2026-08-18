@@ -428,6 +428,9 @@ export const dispatch = internalMutation({
             | "evidence.export.completed"
             | "evidence.benchmark.completed"
             | "evidence.claim.verified"
+            | "evidence.usage.threshold_reached"
+            | "evidence.usage.budget_reached"
+            | "evidence.entitlement.status_changed"
           >)
         : null;
     if (args.operation === "webhooks_create" && webhookEventTypes === null) {
@@ -462,13 +465,19 @@ export const dispatch = internalMutation({
         "evidence.export.completed",
         "evidence.benchmark.completed",
         "evidence.claim.verified",
+        "evidence.usage.threshold_reached",
+        "evidence.usage.budget_reached",
+        "evidence.entitlement.status_changed",
       ].includes(String(input.eventType))
         ? (input.eventType as
             | "evidence.document.changed"
             | "evidence.research.completed"
             | "evidence.export.completed"
             | "evidence.benchmark.completed"
-            | "evidence.claim.verified")
+            | "evidence.claim.verified"
+            | "evidence.usage.threshold_reached"
+            | "evidence.usage.budget_reached"
+            | "evidence.entitlement.status_changed")
         : null;
     if (args.operation === "webhooks_test" && webhookEventType === null) {
       throw new ConvexError({

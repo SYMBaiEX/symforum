@@ -415,7 +415,7 @@ class AsyncAgentClient:
     async def mcp(self, payload: Mapping[str, JsonValue], *, protocol_version: str = "2026-07-28", method: str | None = None, name: str | None = None) -> JsonValue: return await self.__getattr_async("mcp", payload, protocol_version=protocol_version, method=method, name=name)
 
 
-_WEBHOOK_EVENT_TYPES = frozenset({"evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified"})
+_WEBHOOK_EVENT_TYPES = frozenset({"evidence.document.changed", "evidence.research.completed", "evidence.export.completed", "evidence.benchmark.completed", "evidence.claim.verified", "evidence.usage.threshold_reached", "evidence.usage.budget_reached", "evidence.entitlement.status_changed"})
 
 
 def _trusted_origin(origin: str, trusted_origins: tuple[str, ...] | list[str] | None) -> str:

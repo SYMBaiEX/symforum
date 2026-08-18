@@ -15,6 +15,9 @@ const WEBHOOK_EVENT_TYPES = [
   "evidence.export.completed",
   "evidence.benchmark.completed",
   "evidence.claim.verified",
+  "evidence.usage.threshold_reached",
+  "evidence.usage.budget_reached",
+  "evidence.entitlement.status_changed",
 ] as const;
 
 export function DeveloperAgentConsole() {
