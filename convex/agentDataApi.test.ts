@@ -2,7 +2,7 @@
 
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
 import schema from "./schema";
@@ -191,6 +191,99 @@ describe("agent data API dispatch", () => {
       expect(ledger?.ownerUserId).toBe(ids.ownerUserId);
       expect(ledger?.operation).toBe("evidence.search");
     });
+  });
+
+  test("replays webhook side effects exactly once for an idempotency key", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    try {
+      const t = setup();
+      const ids = await fixture(t);
+      const agent = t.withIdentity({ subject: ids.agentUserId });
+      const createArgs = {
+        operation: "webhooks_create" as const,
+        input: {
+          subscriptionKey: "research-events",
+          url: "https://hooks.example.test/v1/evidence",
+          eventTypes: ["evidence.research.completed"],
+        },
+        idempotencyKey: "webhook-create-once",
+        requestFingerprint: "sha256-webhook-create-once",
+      };
+      const created = await agent.mutation(internal.agentDataApi.dispatch, createArgs);
+      const createdReplay = await agent.mutation(internal.agentDataApi.dispatch, createArgs);
+      expect(createdReplay).toEqual(created);
+      await expect(
+        agent.mutation(internal.agentDataApi.dispatch, {
+          ...createArgs,
+          requestFingerprint: "sha256-webhook-create-different",
+        }),
+      ).rejects.toThrow(/different operation|fingerprint/i);
+
+      const rotateArgs = {
+        operation: "webhooks_rotate" as const,
+        input: { subscriptionKey: "research-events" },
+        idempotencyKey: "webhook-rotate-once",
+        requestFingerprint: "sha256-webhook-rotate-once",
+      };
+      const rotated = await agent.mutation(internal.agentDataApi.dispatch, rotateArgs);
+      const rotatedReplay = await agent.mutation(internal.agentDataApi.dispatch, rotateArgs);
+      expect(rotatedReplay).toEqual(rotated);
+
+      const testArgs = {
+        operation: "webhooks_test" as const,
+        input: {
+          subscriptionKey: "research-events",
+          eventType: "evidence.research.completed",
+        },
+        idempotencyKey: "webhook-test-once",
+        requestFingerprint: "sha256-webhook-test-once",
+      };
+      const sent = await agent.mutation(internal.agentDataApi.dispatch, testArgs);
+      const sentReplay = await agent.mutation(internal.agentDataApi.dispatch, testArgs);
+      expect(sentReplay).toEqual(sent);
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("apiWebhookEvents").collect()).toHaveLength(1);
+        expect(await ctx.db.query("apiWebhookDeliveries").collect()).toHaveLength(1);
+      });
+
+      const replayDelivery = await t.run(async (ctx) => {
+        const subscription = await ctx.db.query("apiWebhookSubscriptions").first();
+        if (subscription === null) throw new Error("Expected webhook subscription");
+        await ctx.db.insert("apiWebhookEvents", {
+          provider: "evidence-delivery",
+          eventKey: "research:failed-once",
+          payloadJson: JSON.stringify({ eventType: "evidence.research.completed", payloadJson: JSON.stringify({ failed: true }) }),
+          receivedAt: Date.now(),
+        });
+        return await ctx.db.insert("apiWebhookDeliveries", {
+          subscriptionId: subscription._id,
+          eventKey: "research:failed-once",
+          status: "dead_letter",
+          attempt: 4,
+          replayCount: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      });
+      const replayArgs = {
+        operation: "webhooks_replay" as const,
+        input: { subscriptionKey: "research-events", eventKey: "research:failed-once" },
+        idempotencyKey: "webhook-replay-once",
+        requestFingerprint: "sha256-webhook-replay-once",
+      };
+      const replayed = await agent.mutation(internal.agentDataApi.dispatch, replayArgs);
+      const replayedAgain = await agent.mutation(internal.agentDataApi.dispatch, replayArgs);
+      expect(replayedAgain).toEqual(replayed);
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("apiWebhookDeliveries", replayDelivery)).toMatchObject({
+          replayCount: 1,
+          status: "in_flight",
+        });
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   test("routes universal search through the evidence scope and shared quota path", async () => {

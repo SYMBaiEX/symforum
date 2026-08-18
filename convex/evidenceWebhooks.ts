@@ -116,7 +116,7 @@ export async function decryptWebhookSecret(
   return new TextDecoder().decode(plaintext);
 }
 
-function configuredWebhookKek() {
+export function configuredWebhookKek() {
   const webhookEnv = env as typeof env & { readonly EVIDENCE_WEBHOOK_KEK: string | undefined };
   if (!webhookEnv.EVIDENCE_WEBHOOK_KEK || !/^[A-Za-z0-9_-]{32,}$/.test(webhookEnv.EVIDENCE_WEBHOOK_KEK)) {
     throw new ConvexError({ code: "WEBHOOK_SIGNING_UNAVAILABLE", message: "Webhook signing is unavailable until EVIDENCE_WEBHOOK_KEK is configured." });
@@ -567,7 +567,9 @@ export const getSubscriptionHealth = query({
   handler: async (ctx, args) => {
     const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
     const rows = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id)).take(MAX_HISTORY_LIMIT);
+      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id))
+      .order("desc")
+      .take(MAX_HISTORY_LIMIT);
     return rows.reduce((health, row) => {
       if (row.status === "delivered") health.delivered += 1;
       else if (row.status === "dead_letter") health.deadLetter += 1;

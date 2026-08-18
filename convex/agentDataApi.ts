@@ -4,6 +4,11 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import type { AgentQuotaConsumeResult } from "./agentQuota";
 import { requireAgentScope, requireAuthenticatedUser } from "./authz";
+import {
+  configuredWebhookKek,
+  decryptWebhookSecret,
+  encryptWebhookSecret,
+} from "./evidenceWebhooks";
 
 const operationValidator = v.union(
   v.literal("status"),
@@ -79,6 +84,115 @@ type EvidenceIdTable =
   | "evidenceExportJobs";
 
 const MAX_LIMIT = 50;
+const WEBHOOK_RESULT_VERSION = 1;
+const WEBHOOK_IDEMPOTENT_OPERATIONS = new Set<Operation>([
+  "webhooks_create",
+  "webhooks_status",
+  "webhooks_rotate",
+  "webhooks_replay",
+  "webhooks_test",
+]);
+
+type WebhookCommandResult = {
+  kind: "webhook-result";
+  version: 1;
+  operation: string;
+  result: Record<string, unknown>;
+  signingSecretCiphertext?: string;
+  signingSecretNonce?: string;
+};
+
+async function storeWebhookCommandResult(
+  ctx: MutationCtx,
+  commandId: Id<"apiCommands">,
+  operation: string,
+  value: unknown,
+) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ConvexError({
+      code: "IDEMPOTENCY_RESULT_INVALID",
+      message: "Webhook operation returned an invalid result.",
+    });
+  }
+  const result = { ...(value as Record<string, unknown>) };
+  const signingSecret = result.signingSecret;
+  delete result.signingSecret;
+  const stored: WebhookCommandResult = {
+    kind: "webhook-result",
+    version: WEBHOOK_RESULT_VERSION,
+    operation,
+    result,
+  };
+  if (typeof signingSecret === "string" && signingSecret.length > 0) {
+    const encrypted = await encryptWebhookSecret(
+      configuredWebhookKek(),
+      signingSecret,
+    );
+    stored.signingSecretCiphertext = encrypted.ciphertext;
+    stored.signingSecretNonce = encrypted.nonce;
+  }
+  const resultJson = JSON.stringify(stored);
+  if (resultJson.length > 100_000) {
+    throw new ConvexError({
+      code: "IDEMPOTENCY_RESULT_TOO_LARGE",
+      message: "Webhook operation result exceeded the replay bound.",
+    });
+  }
+  await ctx.db.patch("apiCommands", commandId, {
+    status: "completed",
+    resultJson,
+    updatedAt: Date.now(),
+  });
+}
+
+async function replayWebhookCommandResult(
+  ctx: MutationCtx,
+  commandId: Id<"apiCommands">,
+  operation: string,
+) {
+  const command = await ctx.db.get("apiCommands", commandId);
+  if (command === null || command.status !== "completed") {
+    throw new ConvexError({
+      code: "IDEMPOTENCY_REPLAY_IN_PROGRESS",
+      message: "The original webhook operation has not completed.",
+    });
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(command.resultJson);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    (parsed as Record<string, unknown>).kind !== "webhook-result" ||
+    (parsed as Record<string, unknown>).version !== WEBHOOK_RESULT_VERSION ||
+    (parsed as Record<string, unknown>).operation !== operation
+  ) {
+    throw new ConvexError({
+      code: "IDEMPOTENCY_REPLAY_UNAVAILABLE",
+      message: "The original webhook result is unavailable for replay.",
+    });
+  }
+  const stored = parsed as WebhookCommandResult;
+  const result = { ...stored.result };
+  if (stored.signingSecretCiphertext || stored.signingSecretNonce) {
+    if (!stored.signingSecretCiphertext || !stored.signingSecretNonce) {
+      throw new ConvexError({
+        code: "IDEMPOTENCY_REPLAY_UNAVAILABLE",
+        message: "The original webhook secret is unavailable for replay.",
+      });
+    }
+    result.signingSecret = await decryptWebhookSecret(
+      configuredWebhookKek(),
+      stored.signingSecretCiphertext,
+      stored.signingSecretNonce,
+    );
+  }
+  return result;
+}
 
 function limit(value: unknown, fallback: number) {
   if (value === undefined) return fallback;
@@ -365,7 +479,7 @@ export const dispatch = internalMutation({
         retryAfter: quota.retryAfter,
       });
     }
-    await ctx.runMutation(api.apiCommerce.beginOrReplayCommand, {
+    const commerceCommand = await ctx.runMutation(api.apiCommerce.beginOrReplayCommand, {
       agentId: principal.agentId,
       productKey: productForOperation(args.operation),
       idempotencyKey: args.idempotencyKey,
@@ -375,6 +489,21 @@ export const dispatch = internalMutation({
       metadataJson: "{}",
     });
 
+    // Webhook writes must replay the original result for retries. The quota
+    // and commerce ledgers already detect duplicate keys; do not let a retry
+    // fall through and rotate a secret or enqueue another delivery.
+    if (
+      commerceCommand.idempotent &&
+      WEBHOOK_IDEMPOTENT_OPERATIONS.has(args.operation)
+    ) {
+      return await replayWebhookCommandResult(
+        ctx,
+        commerceCommand.commandId,
+        args.operation,
+      );
+    }
+
+    let operationResult: unknown;
     switch (args.operation) {
       case "sources": {
         const rows = await ctx.db
@@ -586,45 +715,62 @@ export const dispatch = internalMutation({
         };
       }
       case "webhooks_list":
-        return await ctx.runQuery(api.evidenceWebhooks.listMySubscriptions, {});
+        operationResult = await ctx.runQuery(api.evidenceWebhooks.listMySubscriptions, {});
+        break;
       case "webhooks_create":
-        return await ctx.runMutation(api.evidenceWebhooks.createSubscription, {
+        operationResult = await ctx.runMutation(api.evidenceWebhooks.createSubscription, {
           subscriptionKey: webhookSubscriptionKey!,
           url: webhookUrl!,
           eventTypes: webhookEventTypes!,
         });
+        break;
       case "webhooks_status":
-        return await ctx.runMutation(
+        operationResult = await ctx.runMutation(
           api.evidenceWebhooks.setSubscriptionStatus,
           {
             subscriptionKey: webhookSubscriptionKey!,
             status: webhookStatus!,
           },
         );
+        break;
       case "webhooks_health":
-        return await ctx.runQuery(api.evidenceWebhooks.getSubscriptionHealth, {
+        operationResult = await ctx.runQuery(api.evidenceWebhooks.getSubscriptionHealth, {
           subscriptionKey: webhookSubscriptionKey!,
         });
+        break;
       case "webhooks_history":
-        return await ctx.runQuery(api.evidenceWebhooks.listDeliveryHistory, {
+        operationResult = await ctx.runQuery(api.evidenceWebhooks.listDeliveryHistory, {
           subscriptionKey: webhookSubscriptionKey!,
           limit: requestedLimit,
         });
+        break;
       case "webhooks_rotate":
-        return await ctx.runMutation(
+        operationResult = await ctx.runMutation(
           api.evidenceWebhooks.rotateSigningSecret,
           { subscriptionKey: webhookSubscriptionKey! },
         );
+        break;
       case "webhooks_replay":
-        return await ctx.runMutation(api.evidenceWebhooks.replayDelivery, {
+        operationResult = await ctx.runMutation(api.evidenceWebhooks.replayDelivery, {
           subscriptionKey: webhookSubscriptionKey!,
           eventKey: webhookEventKey!,
         });
+        break;
       case "webhooks_test":
-        return await ctx.runMutation(api.evidenceWebhooks.sendTestEvent, {
+        operationResult = await ctx.runMutation(api.evidenceWebhooks.sendTestEvent, {
           subscriptionKey: webhookSubscriptionKey!,
           eventType: webhookEventType!,
         });
+        break;
     }
+    if (WEBHOOK_IDEMPOTENT_OPERATIONS.has(args.operation)) {
+      await storeWebhookCommandResult(
+        ctx,
+        commerceCommand.commandId,
+        args.operation,
+        operationResult,
+      );
+    }
+    return operationResult;
   },
 });

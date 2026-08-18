@@ -113,7 +113,7 @@ const MANIFEST = {
     infrastructureEnabled: true,
     deliveryRequiresConfiguredDestinationAllowlist: true,
     availabilityEndpoint: true,
-    ownerOperations: ["history", "health", "pause", "resume", "revoke", "rotate", "test", "replay"],
+    ownerOperations: ["create", "history", "health", "pause", "resume", "revoke", "rotate", "test", "replay"],
     signature: "HMAC-SHA256",
   },
   graphql: {
