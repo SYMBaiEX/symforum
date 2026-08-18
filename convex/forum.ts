@@ -323,6 +323,17 @@ const FORUM_HELP_DOCUMENT_LIST_LIMIT = 80;
 const FORUM_CALENDAR_EVENT_LIST_LIMIT = 120;
 const FORUM_BOARD_RULES_LIST_LIMIT = 80;
 const THREAD_LIST_LIMIT = 40;
+// This is deliberately a fixed taxonomy rather than a category tree walk. The
+// public research landing page must not turn a visitor into a subscriber of
+// every forum board or accidentally include a newly private child board.
+const RESEARCH_FEED_CATEGORY_SLUGS = [
+  "research",
+  "research-papers",
+  "research-experiments",
+  "research-data",
+  "research-reading-list",
+] as const;
+const RESEARCH_FEED_THREAD_LIMIT = 6;
 const THREAD_PAGE_SIZE = 25;
 const THREAD_PAGE_MAX_SIZE = 50;
 const THREAD_PAGE_SCAN_LIMIT = 5_000;
@@ -1664,6 +1675,73 @@ export const listThreads = query({
               : undefined,
       }),
     };
+  },
+});
+
+/**
+ * Compact, public-only feed for the research landing page.
+ *
+ * This intentionally uses no viewer identity: the landing page is public and
+ * must never become a side channel for member, trusted, or moderator-visible
+ * research threads. Each allowlisted board is read through its bounded status
+ * and activity index, then its current category and ancestor visibility is
+ * checked again before the merged result is returned.
+ */
+export const listResearchFeedThreads = query({
+  args: {},
+  handler: async (ctx) => {
+    const requestedCategories = await Promise.all(
+      RESEARCH_FEED_CATEGORY_SLUGS.map(async (slug) =>
+        await ctx.db
+          .query("forumCategories")
+          .withIndex("by_slug", (q) => q.eq("slug", slug))
+          .unique(),
+      ),
+    );
+    const visibleCategories = await visibleCategoriesForUser(
+      ctx,
+      requestedCategories.filter(isBoardCategory),
+      null,
+    );
+    const activeByCategory = await Promise.all(
+      visibleCategories.map(async (category) =>
+        await ctx.db
+          .query("forumThreads")
+          .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
+            q.eq("categoryId", category._id).eq("status", "active"),
+          )
+          .order("desc")
+          .take(RESEARCH_FEED_THREAD_LIMIT),
+      ),
+    );
+    const byThreadId = new Map<Id<"forumThreads">, ForumThreadDoc>();
+    for (const thread of activeByCategory.flat()) {
+      // The index predicate is the primary constraint; keep this exact status
+      // check next to the public visibility boundary for future refactors.
+      if (thread.status === "active") {
+        byThreadId.set(thread._id, thread);
+      }
+    }
+    const threads = Array.from(byThreadId.values())
+      .sort(
+        (left, right) =>
+          right.lastPostAt - left.lastPostAt ||
+          String(left._id).localeCompare(String(right._id)),
+      )
+      .slice(0, RESEARCH_FEED_THREAD_LIMIT);
+    const authorsById = await loadUserNamesById(
+      ctx,
+      threads.map((thread) => thread.authorId),
+    );
+
+    return threads.map((thread) => ({
+      _id: thread._id,
+      categorySlug: thread.categorySlug,
+      slug: thread.slug,
+      title: thread.title,
+      author: authorsById.get(thread.authorId) ?? UNKNOWN_AUTHOR,
+      lastPostAt: thread.lastPostAt,
+    }));
   },
 });
 

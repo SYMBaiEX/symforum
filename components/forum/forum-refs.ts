@@ -262,6 +262,7 @@ export const forumRefs = {
   listCalendarEvents: convexRefs.forum.listCalendarEvents,
   getCalendarEvent: convexRefs.forum.getCalendarEvent,
   listThreads: convexRefs.forum.listThreads,
+  listResearchFeedThreads: convexRefs.forum.listResearchFeedThreads,
   listRecentThreads: convexRefs.forum.listRecentThreads,
   getThread: convexRefs.forum.getThread,
   search: convexRefs.forum.search,

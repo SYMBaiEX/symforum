@@ -2951,6 +2951,106 @@ describe("forum privacy regressions", () => {
     });
   });
 
+  test("research feed merges only public active allowlisted boards in stable activity order", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const ids = await t.run(async (ctx) => {
+      const now = 1_800_000_030_000;
+      const researchId = await insertCategory(ctx, {
+        slug: "research",
+        name: "Research",
+        viewAccess: "public",
+        position: 1,
+        now,
+      });
+      const papersId = await insertCategory(ctx, {
+        slug: "research-papers",
+        name: "Research Papers",
+        viewAccess: "public",
+        position: 2,
+        now,
+      });
+      const experimentsId = await insertCategory(ctx, {
+        slug: "research-experiments",
+        name: "Research Experiments",
+        viewAccess: "public",
+        position: 3,
+        now,
+      });
+      const dataId = await insertCategory(ctx, {
+        slug: "research-data",
+        name: "Research Data",
+        viewAccess: "trusted",
+        position: 4,
+        now,
+      });
+      const readingListId = await insertCategory(ctx, {
+        slug: "research-reading-list",
+        name: "Research Reading List",
+        viewAccess: "public",
+        position: 5,
+        now,
+      });
+      await Promise.all([
+        ctx.db.patch("forumCategories", papersId, { parentCategoryId: researchId }),
+        ctx.db.patch("forumCategories", experimentsId, { parentCategoryId: researchId }),
+        ctx.db.patch("forumCategories", readingListId, { parentCategoryId: researchId }),
+      ]);
+      const create = async (
+        categoryId: Id<"forumCategories">,
+        categorySlug: string,
+        slug: string,
+        lastPostAt: number,
+      ) =>
+        await insertThread(ctx, {
+          categoryId,
+          categorySlug,
+          slug,
+          title: slug,
+          body: `${slug} body`,
+          authorId: seed.trustedUserId,
+          now: lastPostAt,
+        });
+      const hiddenId = await create(researchId, "research", "hidden-note", now + 130);
+      const lockedId = await create(researchId, "research", "locked-note", now + 125);
+      await Promise.all([
+        ctx.db.patch("forumThreads", hiddenId, { status: "hidden" }),
+        ctx.db.patch("forumThreads", lockedId, { status: "locked" }),
+        create(experimentsId, "research-experiments", "experiment-newest", now + 110),
+        create(researchId, "research", "research-current", now + 100),
+        create(papersId, "research-papers", "paper-current", now + 90),
+        create(readingListId, "research-reading-list", "reading-current", now + 80),
+        create(researchId, "research", "research-older-one", now + 70),
+        create(researchId, "research", "research-older-two", now + 60),
+        create(dataId, "research-data", "private-data-newest", now + 120),
+      ]);
+      return { researchId };
+    });
+
+    const feed = await t.query(api.forum.listResearchFeedThreads, {});
+    expect(feed.map((thread) => thread.slug)).toEqual([
+      "experiment-newest",
+      "research-current",
+      "paper-current",
+      "reading-current",
+      "research-older-one",
+      "research-older-two",
+    ]);
+    expect(new Set(feed.map((thread) => thread._id)).size).toBe(feed.length);
+    expect(feed.map((thread) => thread.categorySlug)).not.toContain("research-data");
+    expect(feed.map((thread) => thread.slug)).not.toContain("hidden-note");
+    expect(feed.map((thread) => thread.slug)).not.toContain("locked-note");
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", ids.researchId, {
+        viewAccess: "trusted",
+      });
+    });
+    await expect(
+      t.query(api.forum.listResearchFeedThreads, {}),
+    ).resolves.toEqual([]);
+  });
+
   test("board display controls sort and date-prune threads", async () => {
     vi.useFakeTimers();
     try {

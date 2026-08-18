@@ -2529,6 +2529,18 @@ export const convexRefs = {
         pagination: ForumPaginationRecord;
       }
     >("forum:listThreads"),
+    listResearchFeedThreads: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      Array<{
+        _id: string;
+        categorySlug: string;
+        slug: string;
+        title: string;
+        author: string;
+        lastPostAt: number;
+      }>
+    >("forum:listResearchFeedThreads"),
     listRecentThreads: makeFunctionReference<
       "query",
       {
