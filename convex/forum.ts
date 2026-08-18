@@ -26,6 +26,11 @@ import {
 } from "./forumSearchProjection";
 import { NYX_PROFILE } from "./nyxProfile";
 import {
+  invalidateResearchQualityForThread,
+  recordAutomatedResearchPublication,
+  requireAutomatedResearchPublication,
+} from "./researchQuality";
+import {
   FORUM_PRESENCE_ROOM,
   forumPresenceComponent,
 } from "./forumPresenceComponent";
@@ -5637,6 +5642,7 @@ export const updateThreadContent = mutation({
       editCount: (thread.editCount ?? 0) + 1,
       lastEditReason: editReason,
     });
+    await invalidateResearchQualityForThread(ctx, thread._id);
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
     if (attachmentEditPlan !== null) {
@@ -9885,7 +9891,9 @@ export const publishSukiForumThread = internalMutation({
     }
 
     const title = normalizeTitle(args.title);
-    const body = normalizeThreadBody(args.body);
+    const body = normalizeThreadBody(
+      `${args.body.trim()}\n\n[i]AI-assisted research draft authored by ${agentName}; source links and editorial review signals are recorded with this publication.[/i]`,
+    );
     const poll = normalizePollInput(args.poll);
     const sources = args.sources.slice(0, 12);
     if (sources.length === 0) {
@@ -9941,6 +9949,26 @@ export const publishSukiForumThread = internalMutation({
             )
             .unique();
     const usablePrefix = prefix?.status === "active" ? prefix : null;
+    const qualityCandidate = {
+      categoryId: category._id,
+      authorUserId: user._id,
+      runKey: args.runKey,
+      title,
+      body,
+      sourceUrls: sources.map((source) => source.sourceUrl),
+    };
+    const qualityGate = await requireAutomatedResearchPublication(
+      ctx,
+      qualityCandidate,
+    );
+    if (!qualityGate.allowed) {
+      return {
+        held: true as const,
+        categorySlug: category.slug,
+        title,
+        assessmentId: qualityGate.assessmentId,
+      };
+    }
     const now = Date.now();
     const slug = await generateUniqueThreadSlug(ctx, category.slug, title);
     const threadId = await ctx.db.insert("forumThreads", {
@@ -9975,6 +10003,12 @@ export const publishSukiForumThread = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
+    await recordAutomatedResearchPublication(
+      ctx,
+      qualityCandidate,
+      qualityGate.score,
+      threadId,
+    );
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {

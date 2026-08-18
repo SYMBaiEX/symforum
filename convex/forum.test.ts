@@ -957,10 +957,11 @@ describe("forum notification preferences", () => {
       ],
       title: "A practical checklist for evaluating a new prompt technique",
     });
+    if ("held" in published) throw new Error("Expected quality-passing publication");
     expect(published.categorySlug).toBe("ai-prompts");
 
     const stored = await t.run(async (ctx) => {
-      const [thread, run, source, profile, poll, projection] = await Promise.all([
+      const [thread, run, source, profile, poll, projection, quality] = await Promise.all([
         ctx.db.get("forumThreads", published.threadId),
         ctx.db
           .query("forumAgentRuns")
@@ -984,8 +985,12 @@ describe("forum notification preferences", () => {
           .query("forumThreadSearchProjections")
           .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
           .unique(),
+        ctx.db
+          .query("researchQualityAssessments")
+          .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
+          .unique(),
       ]);
-      return { poll, profile, projection, run, source, thread };
+      return { poll, profile, projection, quality, run, source, thread };
     });
     expect(stored.thread).toMatchObject({
       authorId: first.agentUserId,
@@ -1012,6 +1017,33 @@ describe("forum notification preferences", () => {
       optionCount: 3,
       status: "open",
     });
+    expect(stored.quality).toMatchObject({
+      status: "passed",
+      threadId: published.threadId,
+      aiAuthorshipDisclosed: true,
+      flags: [],
+    });
+
+    const blockedClaim = await t.mutation(internal.sukiForumAgentData.claimRun, {
+      attempt: 0,
+      runDate: "2026-07-28",
+      slot: 1,
+    });
+    const held = await t.mutation(internal.forum.publishSukiForumThread, {
+      body: "[chart=Tiny]Signal|1[/chart]",
+      candidateCount: 1,
+      categorySlug: "ai-prompts",
+      runKey: blockedClaim.runKey,
+      sources: [{ sourceKey: "example-blocked", sourceUrl: "not-a-url" }],
+      title: "Tiny",
+    });
+    expect(held).toMatchObject({ held: true });
+    const blockedAssessment = await t.run((ctx) => ctx.db
+      .query("researchQualityAssessments")
+      .withIndex("by_runKey", (q) => q.eq("runKey", blockedClaim.runKey))
+      .unique());
+    expect(blockedAssessment).toMatchObject({ status: "needs_review" });
+    expect(blockedAssessment?.threadId).toBeUndefined();
 
     const duplicateClaim = await t.mutation(
       internal.sukiForumAgentData.claimRun,
@@ -1292,6 +1324,7 @@ describe("forum notification preferences", () => {
       ],
       title: "Jul 28, 2026 — The infrastructure story hiding in plain sight",
     });
+    if ("held" in published) throw new Error("Expected quality-passing publication");
 
     const stored = await t.run(async (ctx) => {
       const [thread, profile] = await Promise.all([

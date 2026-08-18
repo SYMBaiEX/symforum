@@ -37,9 +37,9 @@ export default function ResearchMethodologyPage() {
         <p className="page-kicker">Editorial methodology</p>
         <h1 className="page-title mt-3">How research drafts are checked</h1>
         <p className="page-lede mt-5">
-          Research is not automatically treated as publication-ready. Deterministic
-          checks create a bounded review record, then a human editor makes the
-          publication decision.
+          Automated research drafts are checked before a public forum thread is
+          created. A deterministic pass may publish with a recorded quality
+          decision; any finding is held privately for human review.
         </p>
 
         <section className="mt-10 space-y-4">
@@ -56,10 +56,10 @@ export default function ResearchMethodologyPage() {
           <h2 className="text-xl font-semibold">Fail-closed review</h2>
           <p>
             Missing sources, low source coverage, likely duplication, or missing
-            agent disclosure cannot receive ordinary approval. They remain out of
-            the publishable state unless a human site administrator records a
-            reasoned override. Every approval, rejection, and override is retained
-            in an auditable review history.
+            agent disclosure stops automated publication before an active thread
+            exists. Those bounded candidate records enter the private review queue.
+            A human site administrator may reject the draft or record a reasoned
+            override; every approval, rejection, and override is retained.
           </p>
           <p>
             Forum moderators can attach source, duplication, and disclosure feedback
@@ -73,8 +73,9 @@ export default function ResearchMethodologyPage() {
           <p>
             These are deterministic screening signals, not a truth oracle. Scores
             are intentionally bounded, apply only to the saved draft, and do not use
-            hidden model judgments. Editors can reject weak work even when it passes,
-            and an override records accountability rather than concealing uncertainty.
+            hidden model judgments. Editors can reject weak work even when it passed
+            deterministic screening. Any later edit invalidates an automated pass and
+            requires reassessment before another automated promotion.
           </p>
         </section>
       </div>

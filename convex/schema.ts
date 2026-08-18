@@ -1990,9 +1990,16 @@ export default defineSchema({
   // remains in forumThreads; this table holds only bounded deterministic
   // signals and the human decision that permits publication.
   researchQualityAssessments: defineTable({
-    threadId: v.id("forumThreads"),
+    // A rejected automated candidate has no public thread. It stays in the
+    // private review queue with only a bounded excerpt and its run key.
+    threadId: v.optional(v.id("forumThreads")),
     categoryId: v.id("forumCategories"),
+    authorUserId: v.id("users"),
+    runKey: v.optional(v.string()),
+    candidateTitle: v.string(),
+    candidateExcerpt: v.string(),
     status: v.union(
+      v.literal("passed"),
       v.literal("needs_review"),
       v.literal("approved"),
       v.literal("rejected"),
@@ -2013,6 +2020,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_threadId", ["threadId"])
+    .index("by_runKey", ["runKey"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_categoryId_and_status_and_updatedAt", [
       "categoryId",
@@ -2021,7 +2029,7 @@ export default defineSchema({
     ]),
   researchQualityReviews: defineTable({
     assessmentId: v.id("researchQualityAssessments"),
-    threadId: v.id("forumThreads"),
+    threadId: v.optional(v.id("forumThreads")),
     reviewerUserId: v.id("users"),
     decision: v.union(
       v.literal("approved"),

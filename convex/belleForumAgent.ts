@@ -311,6 +311,13 @@ export const runDailyHackerNewsDigest = internalAction({
           outputTokens: result.usage.outputTokens,
         },
       );
+      if ("held" in published && published.held) {
+        await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+          runKey: claim.runKey,
+          reason: "Automated draft held for human research-quality review.",
+        });
+        return { status: "skipped" as const, reason: "quality-review" };
+      }
       return {
         status: "published",
         categorySlug: published.categorySlug,

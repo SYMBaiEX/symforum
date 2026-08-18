@@ -13,8 +13,10 @@ const MIN_CITATION_COVERAGE = 50;
 const AI_DISCLOSURE = /\b(ai[- ](?:assisted|generated)|written by (?:an )?ai|agent[- ]generated|automated (?:research|analysis))\b/i;
 const HTTP_URL = /https?:\/\/[^\s\]>)"']+/gi;
 const WORD = /[a-z0-9][a-z0-9-]{2,}/gi;
+const QUALITY_GATE_PREFIX = "RESEARCH_QUALITY_BLOCKED:";
 
 const assessmentStatusValidator = v.union(
+  v.literal("passed"),
   v.literal("needs_review"),
   v.literal("approved"),
   v.literal("rejected"),
@@ -71,11 +73,12 @@ function contentFingerprint(value: string) {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function sourceDomains(body: string) {
+function sourceDomains(body: string, suppliedUrls: string[] = []) {
   const domains = new Set<string>();
-  for (const match of body.matchAll(HTTP_URL)) {
+  const urls = [...body.matchAll(HTTP_URL)].map((match) => match[0]).concat(suppliedUrls);
+  for (const value of urls) {
     try {
-      domains.add(new URL(match[0]).hostname.toLowerCase());
+      domains.add(new URL(value).hostname.toLowerCase());
     } catch {
       // The regular expression is deliberately permissive; invalid URLs are
       // simply not evidence and cannot improve a score.
@@ -132,8 +135,11 @@ async function requireHumanModerator(ctx: Ctx) {
   return actor;
 }
 
-async function publishedCandidates(ctx: MutationCtx, categoryId: Id<"forumCategories">, threadId: Id<"forumThreads">) {
-  const [approved, overridden] = await Promise.all([
+async function publishedCandidates(ctx: MutationCtx, categoryId: Id<"forumCategories">, threadId?: Id<"forumThreads">) {
+  const [passed, approved, overridden] = await Promise.all([
+    ctx.db.query("researchQualityAssessments")
+      .withIndex("by_categoryId_and_status_and_updatedAt", (q) => q.eq("categoryId", categoryId).eq("status", "passed"))
+      .order("desc").take(MAX_COMPARISON_CANDIDATES),
     ctx.db.query("researchQualityAssessments")
       .withIndex("by_categoryId_and_status_and_updatedAt", (q) => q.eq("categoryId", categoryId).eq("status", "approved"))
       .order("desc").take(MAX_COMPARISON_CANDIDATES),
@@ -141,7 +147,145 @@ async function publishedCandidates(ctx: MutationCtx, categoryId: Id<"forumCatego
       .withIndex("by_categoryId_and_status_and_updatedAt", (q) => q.eq("categoryId", categoryId).eq("status", "overridden"))
       .order("desc").take(MAX_COMPARISON_CANDIDATES),
   ]);
-  return [...approved, ...overridden].filter((candidate) => candidate.threadId !== threadId);
+  return [...passed, ...approved, ...overridden].filter((candidate) => candidate.threadId !== threadId);
+}
+
+export type AutomatedResearchCandidate = {
+  categoryId: Id<"forumCategories">;
+  authorUserId: Id<"users">;
+  runKey: string;
+  title: string;
+  body: string;
+  sourceUrls: string[];
+};
+
+export class ResearchQualityGateError extends Error {
+  constructor(flags: string[]) {
+    super(`${QUALITY_GATE_PREFIX}${flags.join(",")}`);
+    this.name = "ResearchQualityGateError";
+  }
+}
+
+export function isResearchQualityGateError(error: unknown) {
+  return error instanceof ResearchQualityGateError ||
+    (error instanceof Error && error.message.includes(QUALITY_GATE_PREFIX));
+}
+
+export type AutomatedResearchScore = {
+  sourceCount: number;
+  uniqueSourceDomainCount: number;
+  claimEstimate: number;
+  citationCoverageScore: number;
+  originalityScore: number;
+  aiAuthorshipDisclosed: boolean;
+  contentFingerprint: string;
+  normalizedTerms: string[];
+  duplicateOfThreadId?: Id<"forumThreads">;
+  flags: string[];
+};
+
+async function scoreDraft(ctx: MutationCtx, candidate: AutomatedResearchCandidate): Promise<AutomatedResearchScore> {
+  const author = await ctx.db.get("users", candidate.authorUserId);
+  const terms = normalizedTerms(candidate.title, candidate.body);
+  const domains = sourceDomains(candidate.body, candidate.sourceUrls);
+  const claims = claimEstimate(candidate.body);
+  // One independently-hosted source is enough for a compact factual brief;
+  // longer drafts need more source coverage. This is deliberately bounded and
+  // deterministic, never a model judgement.
+  const expectedSources = Math.max(1, Math.ceil(claims / 4));
+  const coverage = Math.min(100, Math.round((domains.size / expectedSources) * 100));
+  const candidates = await publishedCandidates(ctx, candidate.categoryId);
+  const originality = scoreOriginality(terms, candidates);
+  const disclosed = author?.isAgent !== true || AI_DISCLOSURE.test(`${candidate.title}\n${candidate.body}`);
+  const flags: string[] = [];
+  if (domains.size === 0) flags.push("missing_sources");
+  if (coverage < MIN_CITATION_COVERAGE) flags.push("insufficient_citation_coverage");
+  if (originality.duplicateOfThreadId !== undefined) flags.push("near_duplicate");
+  if (!disclosed) flags.push("missing_ai_authorship_disclosure");
+  if (terms.length < 8) flags.push("insufficient_substance");
+  return {
+    sourceCount: domains.size,
+    uniqueSourceDomainCount: domains.size,
+    claimEstimate: claims,
+    citationCoverageScore: coverage,
+    originalityScore: originality.originalityScore,
+    aiAuthorshipDisclosed: disclosed,
+    contentFingerprint: contentFingerprint(`${candidate.title}\n${candidate.body}`),
+    normalizedTerms: terms,
+    duplicateOfThreadId: originality.duplicateOfThreadId,
+    flags: flags.slice(0, MAX_FLAGS),
+  };
+}
+
+async function upsertAssessment(
+  ctx: MutationCtx,
+  candidate: AutomatedResearchCandidate,
+  score: AutomatedResearchScore,
+  status: Assessment["status"],
+  threadId?: Id<"forumThreads">,
+) {
+  const now = Date.now();
+  const current = threadId === undefined
+    ? await ctx.db.query("researchQualityAssessments").withIndex("by_runKey", (q) => q.eq("runKey", candidate.runKey)).unique()
+    : await ctx.db.query("researchQualityAssessments").withIndex("by_threadId", (q) => q.eq("threadId", threadId)).unique();
+  const values = {
+    threadId,
+    categoryId: candidate.categoryId,
+    authorUserId: candidate.authorUserId,
+    runKey: candidate.runKey,
+    candidateTitle: candidate.title.slice(0, 240),
+    candidateExcerpt: candidate.body.replace(/\s+/g, " ").trim().slice(0, 1_200),
+    status,
+    ...score,
+    evaluatedAt: now,
+    updatedAt: now,
+  };
+  return current === null
+    ? await ctx.db.insert("researchQualityAssessments", { ...values, createdAt: now })
+    : (await ctx.db.patch("researchQualityAssessments", current._id, values), current._id);
+}
+
+/**
+ * The only automatic-publication gate. It persists a bounded, private review
+ * record before throwing, so a blocked AI draft never receives a public
+ * forumThread id and still reaches the human review queue.
+ */
+export async function requireAutomatedResearchPublication(
+  ctx: MutationCtx,
+  candidate: AutomatedResearchCandidate,
+) {
+  const score = await scoreDraft(ctx, candidate);
+  if (score.flags.length > 0) {
+    const assessmentId = await upsertAssessment(ctx, candidate, score, "needs_review");
+    return { allowed: false as const, assessmentId, flags: score.flags };
+  }
+  return { allowed: true as const, score };
+}
+
+/** Persist the deterministic pass only after the new public thread exists. */
+export async function recordAutomatedResearchPublication(
+  ctx: MutationCtx,
+  candidate: AutomatedResearchCandidate,
+  score: AutomatedResearchScore,
+  threadId: Id<"forumThreads">,
+) {
+  return await upsertAssessment(ctx, candidate, score, "passed", threadId);
+}
+
+/** Any edit makes an earlier automated pass stale until a new assessment. */
+export async function invalidateResearchQualityForThread(
+  ctx: MutationCtx,
+  threadId: Id<"forumThreads">,
+) {
+  const assessment = await ctx.db.query("researchQualityAssessments")
+    .withIndex("by_threadId", (q) => q.eq("threadId", threadId)).unique();
+  if (assessment === null || assessment.status === "rejected") return;
+  const flags = [...new Set([...assessment.flags, "content_changed_requires_reassessment"])].slice(0, MAX_FLAGS);
+  await ctx.db.patch("researchQualityAssessments", assessment._id, {
+    status: "needs_review",
+    flags,
+    updatedAt: Date.now(),
+  });
 }
 
 export const evaluateThread = mutation({
@@ -150,43 +294,26 @@ export const evaluateThread = mutation({
     await requireHumanSiteAdmin(ctx);
     const thread = await ctx.db.get("forumThreads", args.threadId);
     if (thread === null) qualityError("THREAD_NOT_FOUND", "Thread was not found.");
-    const author = await ctx.db.get("users", thread.authorId);
-    const terms = normalizedTerms(thread.title, thread.body);
-    const domains = sourceDomains(thread.body);
-    const claims = claimEstimate(thread.body);
-    const coverage = Math.min(100, Math.round((domains.size / Math.max(claims, 1)) * 100));
-    const candidates = await publishedCandidates(ctx, thread.categoryId, thread._id);
-    const originality = scoreOriginality(terms, candidates);
-    const flags: string[] = [];
-    if (domains.size === 0) flags.push("missing_sources");
-    if (coverage < MIN_CITATION_COVERAGE) flags.push("insufficient_citation_coverage");
-    if (originality.duplicateOfThreadId !== undefined) flags.push("near_duplicate");
-    const disclosed = author?.isAgent !== true || AI_DISCLOSURE.test(`${thread.title}\n${thread.body}`);
-    if (!disclosed) flags.push("missing_ai_authorship_disclosure");
-    if (terms.length < 8) flags.push("insufficient_substance");
-    const now = Date.now();
+    const score = await scoreDraft(ctx, {
+      categoryId: thread.categoryId,
+      authorUserId: thread.authorId,
+      runKey: `manual:${thread._id}`,
+      title: thread.title,
+      body: thread.body,
+      sourceUrls: [],
+    });
     const current = await ctx.db.query("researchQualityAssessments")
       .withIndex("by_threadId", (q) => q.eq("threadId", thread._id)).unique();
-    const patch = {
+    if (current !== null) await ctx.db.delete("researchQualityAssessments", current._id);
+    const assessmentId = await upsertAssessment(ctx, {
       categoryId: thread.categoryId,
-      status: "needs_review" as const,
-      sourceCount: domains.size,
-      uniqueSourceDomainCount: domains.size,
-      claimEstimate: claims,
-      citationCoverageScore: coverage,
-      originalityScore: originality.originalityScore,
-      aiAuthorshipDisclosed: disclosed,
-      contentFingerprint: contentFingerprint(`${thread.title}\n${thread.body}`),
-      normalizedTerms: terms,
-      duplicateOfThreadId: originality.duplicateOfThreadId,
-      flags: flags.slice(0, MAX_FLAGS),
-      evaluatedAt: now,
-      updatedAt: now,
-    };
-    const assessmentId = current === null
-      ? await ctx.db.insert("researchQualityAssessments", { threadId: thread._id, ...patch, createdAt: now })
-      : (await ctx.db.patch("researchQualityAssessments", current._id, patch), current._id);
-    return { assessmentId, status: "needs_review" as const, blocking: flags.length > 0, flags: patch.flags };
+      authorUserId: thread.authorId,
+      runKey: `manual:${thread._id}`,
+      title: thread.title,
+      body: thread.body,
+      sourceUrls: [],
+    }, score, "needs_review", thread._id);
+    return { assessmentId, status: "needs_review" as const, blocking: score.flags.length > 0, flags: score.flags };
   },
 });
 
@@ -225,7 +352,7 @@ export const publicationStatus = query({
     const assessment = await ctx.db.query("researchQualityAssessments")
       .withIndex("by_threadId", (q) => q.eq("threadId", args.threadId)).unique();
     return {
-      canPublish: assessment?.status === "approved" || assessment?.status === "overridden",
+      canPublish: assessment?.status === "passed" || assessment?.status === "approved" || assessment?.status === "overridden",
       status: assessment?.status ?? null,
       blocking: assessment === null || assessment.flags.length > 0,
     };
@@ -244,7 +371,7 @@ export const listReviewQueue = query({
       .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "needs_review"))
       .order("desc").take(limit);
     return await Promise.all(assessments.map(async (assessment) => {
-      const thread = await ctx.db.get("forumThreads", assessment.threadId);
+      const thread = assessment.threadId === undefined ? null : await ctx.db.get("forumThreads", assessment.threadId);
       return { assessment, thread: thread === null ? null : { _id: thread._id, title: thread.title, slug: thread.slug, categorySlug: thread.categorySlug, status: thread.status } };
     }));
   },
@@ -256,7 +383,7 @@ export const benchmarkSummary = query({
   args: {},
   handler: async (ctx) => {
     await requireHumanSiteAdmin(ctx);
-    const statuses: Assessment["status"][] = ["needs_review", "approved", "rejected", "overridden"];
+    const statuses: Assessment["status"][] = ["passed", "needs_review", "approved", "rejected", "overridden"];
     const samples = await Promise.all(statuses.map((status) => ctx.db
       .query("researchQualityAssessments")
       .withIndex("by_status_and_updatedAt", (q) => q.eq("status", status))

@@ -36,6 +36,7 @@ import {
 } from "./forumLimits";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
+import { isResearchQualityGateError } from "./researchQuality";
 
 const FORUM_AGENT_MODEL = OPENROUTER_FORUM_MODEL;
 const FORUM_TIME_ZONE = "America/Chicago";
@@ -879,8 +880,19 @@ export async function runForumResearchSlot(
           })
         : await ctx.runMutation(internal.forum.publishForumAgentFollowUp, {
             ...publicationArgs,
-            threadId: followUpThreadId,
-          });
+          threadId: followUpThreadId,
+        });
+    if ("held" in published && published.held) {
+      const reason = "Automated draft held for human research-quality review.";
+      await ctx.runMutation(internal.sukiForumAgentData.releaseResearchReservations, {
+        runKey: claim.runKey,
+      });
+      await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+        runKey: claim.runKey,
+        reason,
+      });
+      return { status: "skipped" as const, reason: "quality-review" };
+    }
     return {
       status: "published" as const,
       categorySlug: published.categorySlug,
@@ -892,6 +904,14 @@ export async function runForumResearchSlot(
       internal.sukiForumAgentData.releaseResearchReservations,
       { runKey: claim.runKey },
     );
+    if (isResearchQualityGateError(error)) {
+      const reason = "Automated draft held for human research-quality review.";
+      await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+        runKey: claim.runKey,
+        reason,
+      });
+      return { status: "skipped" as const, reason: "quality-review" };
+    }
     const message = publicErrorMessage(error, config.name);
     await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
       runKey: claim.runKey,
@@ -2592,7 +2612,10 @@ function publicErrorMessage(error: unknown, agentName = "Suki") {
     : `${agentName}'s forum run failed.`;
 }
 
-function isRetryableError(error: unknown) {
+export function isRetryableError(error: unknown) {
+  if (isResearchQualityGateError(error)) {
+    return false;
+  }
   if (error instanceof ForumAgentConfigurationError) {
     return false;
   }

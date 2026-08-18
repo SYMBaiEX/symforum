@@ -8,12 +8,19 @@ import {
   evaluateForumDraft,
   finalizeForumBody,
   imageRelevanceScore,
+  isRetryableError,
   parseFeedXml,
   rankResearchCandidatesForTopic,
   repairForumDraftForReview,
 } from "./sukiForumAgent";
+import { ResearchQualityGateError } from "./researchQuality";
 
 describe("Suki forum research helpers", () => {
+  test("does not retry a deterministic research-quality hold", () => {
+    expect(isRetryableError(new ResearchQualityGateError(["near_duplicate"]))).toBe(false);
+    expect(isRetryableError(new Error("temporary network timeout"))).toBe(true);
+  });
+
   test("parses RSS candidates, canonicalizes URLs, and keeps source imagery", () => {
     const candidates = parseFeedXml(
       `<?xml version="1.0" encoding="UTF-8" ?>
