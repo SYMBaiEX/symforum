@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
@@ -10,10 +11,17 @@ import { requireAgentScope, requireAuthenticatedUser } from "./authz";
 
 const MAX_WATCHLISTS_PER_PRINCIPAL = 50;
 const MAX_LIST_RESULTS = 100;
+const MAX_EVENTS_PER_DRAIN = 20;
+const MAX_MATCHES_PER_DRAIN = 20;
+const MAX_OUTBOX_FANOUT_PER_EVENT = 1;
+const MAX_ENTITY_LINKS_PER_DOCUMENT = 24;
 const targetTypeValidator = v.union(
   v.literal("source"),
   v.literal("entity"),
   v.literal("claim"),
+  v.literal("document"),
+  v.literal("topic"),
+  v.literal("repository"),
 );
 const statusValidator = v.union(v.literal("active"), v.literal("paused"));
 const deliveryPreferenceValidator = v.union(
@@ -38,6 +46,52 @@ function identifier(value: string, name: string, maximum: number) {
     });
   }
   return normalized;
+}
+
+function targetIdentifier(
+  targetType:
+    | "source"
+    | "entity"
+    | "claim"
+    | "document"
+    | "topic"
+    | "repository",
+  value: string,
+) {
+  if (targetType === "document") {
+    const documentId = value.trim();
+    if (!/^[A-Za-z0-9]+$/.test(documentId) || documentId.length > 128) {
+      throw new ConvexError({
+        code: "INVALID_WATCHLIST_VALUE",
+        message: "document targetKey must be a bounded document identifier.",
+      });
+    }
+    return documentId;
+  }
+  const targetKey = value.trim().toLowerCase();
+  if (
+    targetKey.length === 0 ||
+    targetKey.length > 200 ||
+    !/^[a-z0-9][a-z0-9._:/-]*$/.test(targetKey)
+  ) {
+    throw new ConvexError({
+      code: "INVALID_WATCHLIST_VALUE",
+      message: "targetKey must be a bounded identifier.",
+    });
+  }
+  if (targetType === "topic" && !targetKey.startsWith("topic:")) {
+    throw new ConvexError({
+      code: "INVALID_WATCHLIST_VALUE",
+      message: "topic targets must use the topic: key namespace.",
+    });
+  }
+  if (targetType === "repository" && !targetKey.startsWith("repository:")) {
+    throw new ConvexError({
+      code: "INVALID_WATCHLIST_VALUE",
+      message: "repository targets must use the repository: key namespace.",
+    });
+  }
+  return targetKey;
 }
 
 function cursor(value: string | undefined) {
@@ -75,7 +129,13 @@ async function evidencePrincipal(ctx: DatabaseCtx): Promise<Principal> {
 
 async function requirePublicTarget(
   ctx: DatabaseCtx,
-  targetType: "source" | "entity" | "claim",
+  targetType:
+    | "source"
+    | "entity"
+    | "claim"
+    | "document"
+    | "topic"
+    | "repository",
   targetKey: string,
 ) {
   if (targetType === "source") {
@@ -83,19 +143,35 @@ async function requirePublicTarget(
       .query("evidenceSources")
       .withIndex("by_sourceKey", (q) => q.eq("sourceKey", targetKey))
       .unique();
-    if (source?.visibility === "public") return;
-  } else if (targetType === "entity") {
+    if (source?.visibility === "public" && source.status !== "retired") return;
+  } else if (
+    targetType === "entity" ||
+    targetType === "topic" ||
+    targetType === "repository"
+  ) {
     const entity = await ctx.db
       .query("evidenceEntities")
       .withIndex("by_entityKey", (q) => q.eq("entityKey", targetKey))
       .unique();
-    if (entity?.visibility === "public") return;
-  } else {
+    if (
+      entity?.visibility === "public" &&
+      (targetType === "entity" ||
+        (targetType === "topic" && entity.kind === "concept") ||
+        (targetType === "repository" && entity.kind === "project"))
+    )
+      return;
+  } else if (targetType === "claim") {
     const claim = await ctx.db
       .query("evidenceClaims")
       .withIndex("by_claimKey", (q) => q.eq("claimKey", targetKey))
       .unique();
     if (claim?.visibility === "public") return;
+  } else {
+    const document = await ctx.db.get(
+      "evidenceDocuments",
+      targetKey as Id<"evidenceDocuments">,
+    );
+    if (document?.visibility === "public") return;
   }
   throw new ConvexError({
     code: "WATCHLIST_TARGET_UNAVAILABLE",
@@ -169,7 +245,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const principal = await evidencePrincipal(ctx);
     const watchlistKey = identifier(args.watchlistKey, "watchlistKey", 96);
-    const targetKey = identifier(args.targetKey, "targetKey", 200);
+    const targetKey = targetIdentifier(args.targetType, args.targetKey);
     const eventCursor = cursor(args.eventCursor);
     await requirePublicTarget(ctx, args.targetType, targetKey);
     const existing = await ctx.db
@@ -231,6 +307,199 @@ export const create = mutation({
     return safeWatchlist(
       (await ctx.db.get("evidenceWatchlists", watchlistId))!,
     );
+  },
+});
+
+async function eventMatchesWatchlist(
+  ctx: MutationCtx,
+  watchlist: Doc<"evidenceWatchlists">,
+  event: Doc<"evidenceChangeEvents">,
+) {
+  if (event.visibility !== "public") return false;
+  if (watchlist.targetType === "claim") {
+    if (event.entityType !== "claim") return false;
+    const claim = await ctx.db.get(
+      "evidenceClaims",
+      event.entityId as Id<"evidenceClaims">,
+    );
+    return (
+      claim?.visibility === "public" && claim.claimKey === watchlist.targetKey
+    );
+  }
+  if (watchlist.targetType === "document") {
+    if (
+      event.entityType !== "document" ||
+      event.entityId !== watchlist.targetKey
+    )
+      return false;
+    const document = await ctx.db.get(
+      "evidenceDocuments",
+      event.entityId as Id<"evidenceDocuments">,
+    );
+    return document?.visibility === "public";
+  }
+  if (event.entityType === "claim") {
+    const claim = await ctx.db.get(
+      "evidenceClaims",
+      event.entityId as Id<"evidenceClaims">,
+    );
+    if (claim?.visibility !== "public") return false;
+    if (
+      watchlist.targetType === "entity" ||
+      watchlist.targetType === "topic" ||
+      watchlist.targetType === "repository"
+    ) {
+      const entity =
+        claim.subjectEntityId === null
+          ? null
+          : await ctx.db.get("evidenceEntities", claim.subjectEntityId);
+      return (
+        entity?.visibility === "public" &&
+        entity.entityKey === watchlist.targetKey
+      );
+    }
+    return false;
+  }
+  if (event.entityType !== "document") return false;
+  const document = await ctx.db.get(
+    "evidenceDocuments",
+    event.entityId as Id<"evidenceDocuments">,
+  );
+  if (document?.visibility !== "public") return false;
+  if (watchlist.targetType === "source") {
+    const source = await ctx.db.get("evidenceSources", document.sourceId);
+    return (
+      source?.visibility === "public" &&
+      source.status !== "retired" &&
+      source.sourceKey === watchlist.targetKey
+    );
+  }
+  if (
+    watchlist.targetType === "entity" ||
+    watchlist.targetType === "topic" ||
+    watchlist.targetType === "repository"
+  ) {
+    if (document.currentVersionId === null) return false;
+    const links = await ctx.db
+      .query("evidenceDocumentEntities")
+      .withIndex("by_documentVersionId", (q) =>
+        q.eq("documentVersionId", document.currentVersionId!),
+      )
+      .take(MAX_ENTITY_LINKS_PER_DOCUMENT);
+    for (const link of links) {
+      const entity = await ctx.db.get("evidenceEntities", link.entityId);
+      if (
+        entity?.visibility === "public" &&
+        entity.entityKey === watchlist.targetKey
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
+const drainResultValidator = v.object({
+  scanned: v.number(),
+  matched: v.number(),
+  enqueued: v.number(),
+  eventCursor: v.union(v.string(), v.null()),
+});
+
+async function drain(ctx: MutationCtx, watchlist: Doc<"evidenceWatchlists">) {
+  if (watchlist.status !== "active") {
+    return {
+      scanned: 0,
+      matched: 0,
+      enqueued: 0,
+      eventCursor: watchlist.eventCursor ?? null,
+    };
+  }
+  // Re-check the target at dispatch time. A retired/private target never
+  // produces an outbox record, even when an older event was public.
+  try {
+    await requirePublicTarget(ctx, watchlist.targetType, watchlist.targetKey);
+  } catch {
+    return {
+      scanned: 0,
+      matched: 0,
+      enqueued: 0,
+      eventCursor: watchlist.eventCursor ?? null,
+    };
+  }
+  const page = await ctx.db
+    .query("evidenceChangeEvents")
+    .withIndex("by_visibility_and_occurredAt", (q) =>
+      q.eq("visibility", "public"),
+    )
+    .order("asc")
+    .paginate({
+      cursor: watchlist.eventCursor ?? null,
+      numItems: MAX_EVENTS_PER_DRAIN,
+    });
+  let matched = 0;
+  let enqueued = 0;
+  for (const event of page.page) {
+    if (matched >= MAX_MATCHES_PER_DRAIN) break;
+    if (!(await eventMatchesWatchlist(ctx, watchlist, event))) continue;
+    matched += 1;
+    const existing = await ctx.db
+      .query("evidenceWatchlistOutbox")
+      .withIndex("by_watchlistId_and_eventId", (q) =>
+        q.eq("watchlistId", watchlist._id).eq("eventId", event._id),
+      )
+      .unique();
+    if (existing === null) {
+      await ctx.db.insert("evidenceWatchlistOutbox", {
+        watchlistId: watchlist._id,
+        eventId: event._id,
+        ownerUserId: watchlist.ownerUserId,
+        agentId: watchlist.agentId,
+        deliveryPreference: watchlist.deliveryPreference,
+        eventKey: event.eventKey,
+        status: "pending",
+        createdAt: Date.now(),
+      });
+      enqueued += MAX_OUTBOX_FANOUT_PER_EVENT;
+    }
+  }
+  const eventCursor = page.continueCursor;
+  await ctx.db.patch("evidenceWatchlists", watchlist._id, {
+    eventCursor,
+    updatedAt: Date.now(),
+  });
+  return { scanned: page.page.length, matched, enqueued, eventCursor };
+}
+
+/** Owner/agent-gated pull for the future delivery bridge; it never delivers externally. */
+export const drainMine = mutation({
+  args: { watchlistKey: v.string() },
+  returns: drainResultValidator,
+  handler: async (ctx, args) => {
+    const principal = await evidencePrincipal(ctx);
+    return await drain(
+      ctx,
+      await findWatchlist(
+        ctx,
+        principal,
+        identifier(args.watchlistKey, "watchlistKey", 96),
+      ),
+    );
+  },
+});
+
+/** Trusted bridge entrypoint: one watchlist transaction, one bounded event page. */
+export const drainOutbox = internalMutation({
+  args: { watchlistId: v.id("evidenceWatchlists") },
+  returns: drainResultValidator,
+  handler: async (ctx, args) => {
+    const watchlist = await ctx.db.get("evidenceWatchlists", args.watchlistId);
+    if (watchlist === null) {
+      throw new ConvexError({
+        code: "WATCHLIST_NOT_FOUND",
+        message: "Watchlist was not found.",
+      });
+    }
+    return await drain(ctx, watchlist);
   },
 });
 

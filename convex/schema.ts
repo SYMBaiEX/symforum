@@ -2476,6 +2476,9 @@ export default defineSchema({
       v.literal("source"),
       v.literal("entity"),
       v.literal("claim"),
+      v.literal("document"),
+      v.literal("topic"),
+      v.literal("repository"),
     ),
     targetKey: v.string(),
     status: v.union(v.literal("active"), v.literal("paused")),
@@ -2495,6 +2498,24 @@ export default defineSchema({
       "updatedAt",
     ])
     .index("by_ownerUserId_and_updatedAt", ["ownerUserId", "updatedAt"]),
+  // This is deliberately an outbox only. A later delivery bridge may claim
+  // rows, but watchlist matching never performs network delivery itself.
+  evidenceWatchlistOutbox: defineTable({
+    watchlistId: v.id("evidenceWatchlists"),
+    eventId: v.id("evidenceChangeEvents"),
+    ownerUserId: v.id("users"),
+    agentId: v.union(v.string(), v.null()),
+    deliveryPreference: v.union(
+      v.literal("in_app"),
+      v.literal("webhook"),
+      v.literal("none"),
+    ),
+    eventKey: v.string(),
+    status: v.literal("pending"),
+    createdAt: v.number(),
+  })
+    .index("by_watchlistId_and_eventId", ["watchlistId", "eventId"])
+    .index("by_status_and_createdAt", ["status", "createdAt"]),
   evidenceDatasets: defineTable({
     datasetKey: v.string(),
     name: v.string(),
