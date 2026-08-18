@@ -19,6 +19,55 @@ const cleanupOperationsRef = makeFunctionReference<
   { now?: number },
   { refunded: number; deleted: number; hasMore: boolean }
 >("semanticSearch:cleanupExpiredOperations");
+const reserveUsageRef = makeFunctionReference<
+  "mutation",
+  {
+    operationKey: string;
+    kind: "index" | "query";
+    fingerprint: string;
+    holder: string;
+    estimatedMicroUsd: number;
+    inputTokens: number;
+    model: string;
+    dailyBudgetMicroUsd: number;
+    globalDailyBudgetMicroUsd: number;
+  },
+  { accepted: boolean; replay: boolean }
+>("semanticSearch:reserveUsage");
+const recordUsageRef = makeFunctionReference<
+  "mutation",
+  {
+    operationKey: string;
+    inputTokens: number;
+    settledMicroUsd: number;
+    model: string;
+    outcome: "completed" | "failed";
+    detail: string;
+  },
+  null
+>("semanticSearch:recordUsage");
+
+function reservationArgs(
+  operationKey: string,
+  overrides: Partial<{
+    estimatedMicroUsd: number;
+    dailyBudgetMicroUsd: number;
+    globalDailyBudgetMicroUsd: number;
+  }> = {},
+) {
+  return {
+    operationKey,
+    kind: "query" as const,
+    fingerprint: operationKey,
+    holder: `${operationKey}:holder`,
+    estimatedMicroUsd: 10,
+    inputTokens: 10,
+    model: OPENROUTER_EMBEDDING_MODEL,
+    dailyBudgetMicroUsd: 1_000,
+    globalDailyBudgetMicroUsd: 1_000,
+    ...overrides,
+  };
+}
 
 describe("semantic search safety controls", () => {
   test("is disabled unless the explicit feature switch is true", () => {
@@ -73,6 +122,125 @@ describe("semantic search safety controls", () => {
   test("does not call the provider while the semantic circuit is paused", () => {
     expect(isCircuitAvailable(1_001, 1_000)).toBe(false);
     expect(isCircuitAvailable(1_000, 1_000)).toBe(true);
+  });
+
+  test("rejects a semantic reservation when total OpenRouter spend leaves less than its cost", async () => {
+    const t = setup();
+    const today = dayKey();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", {
+        dayKey: today,
+        provider: "openrouter",
+        bucket: 3,
+        spentMicroUsd: 999,
+        requests: 1,
+        inputTokens: 1,
+        outputTokens: 0,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.mutation(
+        reserveUsageRef,
+        reservationArgs("semantic:query:global-cap-rejected", {
+          estimatedMicroUsd: 2,
+          globalDailyBudgetMicroUsd: 1_000,
+        }),
+      ),
+    ).resolves.toEqual({ accepted: false, replay: false });
+  });
+
+  test("accepts a semantic reservation that exactly reaches the global remaining budget", async () => {
+    const t = setup();
+    const today = dayKey();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", {
+        dayKey: today,
+        provider: "openrouter",
+        bucket: 4,
+        spentMicroUsd: 990,
+        requests: 1,
+        inputTokens: 1,
+        outputTokens: 0,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.mutation(
+        reserveUsageRef,
+        reservationArgs("semantic:query:global-cap-exact"),
+      ),
+    ).resolves.toEqual({ accepted: true, replay: false });
+    await t.run(async (ctx) => {
+      const semanticSpend = await ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+          q.eq("dayKey", today).eq("provider", "openrouter").eq("bucket", 15),
+        )
+        .unique();
+      expect(semanticSpend?.spentMicroUsd).toBe(10);
+    });
+  });
+
+  test("honors the lower semantic cap even when global OpenRouter budget has room", async () => {
+    const t = setup();
+    const today = dayKey();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiSpendBuckets", {
+        dayKey: today,
+        provider: "openrouter",
+        bucket: 15,
+        spentMicroUsd: 45,
+        requests: 1,
+        inputTokens: 45,
+        outputTokens: 0,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.mutation(
+        reserveUsageRef,
+        reservationArgs("semantic:query:semantic-cap-rejected", {
+          estimatedMicroUsd: 6,
+          dailyBudgetMicroUsd: 50,
+          globalDailyBudgetMicroUsd: 1_000,
+        }),
+      ),
+    ).resolves.toEqual({ accepted: false, replay: false });
+  });
+
+  test("concurrent semantic reservations cannot exceed the effective global cap", async () => {
+    const t = setup();
+    const reservations = await Promise.all([
+      t.mutation(reserveUsageRef, reservationArgs("semantic:query:concurrent-a", { estimatedMicroUsd: 60, globalDailyBudgetMicroUsd: 100 })),
+      t.mutation(reserveUsageRef, reservationArgs("semantic:query:concurrent-b", { estimatedMicroUsd: 60, globalDailyBudgetMicroUsd: 100 })),
+    ]);
+    expect(reservations.filter((reservation) => reservation.accepted)).toHaveLength(1);
+  });
+
+  test("settlement and failure refund reconcile the original semantic bucket once", async () => {
+    const t = setup();
+    const completedOperation = "semantic:query:settlement";
+    const failedOperation = "semantic:query:refund";
+    await t.mutation(reserveUsageRef, reservationArgs(completedOperation));
+    await t.mutation(reserveUsageRef, reservationArgs(failedOperation));
+
+    await t.mutation(recordUsageRef, { operationKey: completedOperation, inputTokens: 4, settledMicroUsd: 4, model: OPENROUTER_EMBEDDING_MODEL, outcome: "completed", detail: "completed" });
+    await t.mutation(recordUsageRef, { operationKey: failedOperation, inputTokens: 0, settledMicroUsd: 0, model: OPENROUTER_EMBEDDING_MODEL, outcome: "failed", detail: "failed" });
+    await t.mutation(recordUsageRef, { operationKey: failedOperation, inputTokens: 0, settledMicroUsd: 0, model: OPENROUTER_EMBEDDING_MODEL, outcome: "failed", detail: "replayed" });
+
+    await t.run(async (ctx) => {
+      const spend = await ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+          q.eq("dayKey", dayKey()).eq("provider", "openrouter").eq("bucket", 15),
+        )
+        .unique();
+      expect(spend).toMatchObject({ spentMicroUsd: 4, inputTokens: 4, requests: 2 });
+    });
   });
 
   test("refunds a crashed reservation only once", async () => {

@@ -41,6 +41,10 @@ const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
 const LEASE_MS = 60_000;
 const QUERY_OPERATION_RETENTION_MS = 15 * 60_000;
 const OPERATION_CLEANUP_LIMIT = 100;
+// Editorial OpenRouter usage is sharded over buckets 0 through 7. Semantic
+// embeddings use a dedicated bucket so its own cap remains independently
+// auditable. The complete bounded set is read during semantic admission.
+const OPENROUTER_SPEND_BUCKETS = [...Array(8).keys(), 15] as const;
 
 type SemanticMetadata = {
   documentId: string;
@@ -149,6 +153,7 @@ const reserveUsageRef = makeFunctionReference<
     inputTokens: number;
     model: string;
     dailyBudgetMicroUsd: number;
+    globalDailyBudgetMicroUsd: number;
   },
   { accepted: boolean; replay: boolean }
 >("semanticSearch:reserveUsage");
@@ -425,6 +430,19 @@ export function settlementDelta(
   return Math.max(0, actualMicroUsd) - Math.max(0, reservedMicroUsd);
 }
 
+function isSafeNonNegativeInteger(value: number) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasValidSpendCounters(spend: Doc<"aiSpendBuckets">) {
+  return (
+    isSafeNonNegativeInteger(spend.spentMicroUsd) &&
+    isSafeNonNegativeInteger(spend.requests) &&
+    isSafeNonNegativeInteger(spend.inputTokens) &&
+    isSafeNonNegativeInteger(spend.outputTokens)
+  );
+}
+
 export const readPublicDocumentForIndex = internalQuery({
   args: {
     documentId: v.id("evidenceDocuments"),
@@ -647,9 +665,9 @@ export const recordUsage = internalMutation({
 
 /**
  * Reserve the conservative embedding cost before making an external request.
- * Bucket 15 is intentionally outside the eight shared editorial buckets, so
- * the feature cap is transactionally isolated while the normal global
- * OpenRouter circuit remains an additional guard.
+ * Bucket 15 is intentionally outside the eight shared editorial buckets. The
+ * reservation nevertheless reads each bounded OpenRouter spend bucket and
+ * admits only when both the feature and global caps have room.
  */
 export const reserveUsage = internalMutation({
   args: {
@@ -661,6 +679,7 @@ export const reserveUsage = internalMutation({
     inputTokens: v.number(),
     model: v.string(),
     dailyBudgetMicroUsd: v.number(),
+    globalDailyBudgetMicroUsd: v.number(),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -710,19 +729,59 @@ export const reserveUsage = internalMutation({
     }
     const day = dayKey(now);
     const bucket = semanticBucket();
-    const spend = await ctx.db
-      .query("aiSpendBuckets")
-      .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
-        q.eq("dayKey", day).eq("provider", "openrouter").eq("bucket", bucket),
-      )
-      .unique();
+    const spendBuckets = await Promise.all(
+      OPENROUTER_SPEND_BUCKETS.map((currentBucket) =>
+        ctx.db
+          .query("aiSpendBuckets")
+          .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+            q
+              .eq("dayKey", day)
+              .eq("provider", "openrouter")
+              .eq("bucket", currentBucket),
+          )
+          .unique(),
+      ),
+    );
+    const spend = spendBuckets.at(-1) ?? null;
+    let totalOpenRouterSpendMicroUsd = 0;
+    for (const currentSpend of spendBuckets) {
+      if (currentSpend === null) continue;
+      if (!hasValidSpendCounters(currentSpend))
+        return { accepted: false, replay: false };
+      const nextTotal =
+        totalOpenRouterSpendMicroUsd + currentSpend.spentMicroUsd;
+      if (!Number.isSafeInteger(nextTotal))
+        return { accepted: false, replay: false };
+      totalOpenRouterSpendMicroUsd = nextTotal;
+    }
+    const effectiveDailyBudgetMicroUsd = Math.min(
+      args.dailyBudgetMicroUsd,
+      args.globalDailyBudgetMicroUsd,
+    );
+    const nextSemanticSpendMicroUsd =
+      (spend?.spentMicroUsd ?? 0) + args.estimatedMicroUsd;
+    const nextSemanticInputTokens =
+      (spend?.inputTokens ?? 0) + args.inputTokens;
+    const nextSemanticRequests = (spend?.requests ?? 0) + 1;
+    const nextOpenRouterSpendMicroUsd =
+      totalOpenRouterSpendMicroUsd + args.estimatedMicroUsd;
     if (
+      !Number.isSafeInteger(args.estimatedMicroUsd) ||
       args.estimatedMicroUsd <= 0 ||
+      !Number.isSafeInteger(args.inputTokens) ||
       args.inputTokens <= 0 ||
       !Number.isSafeInteger(args.dailyBudgetMicroUsd) ||
       args.dailyBudgetMicroUsd <= 0 ||
-      (spend?.spentMicroUsd ?? 0) + args.estimatedMicroUsd >
-        args.dailyBudgetMicroUsd
+      !Number.isSafeInteger(args.globalDailyBudgetMicroUsd) ||
+      args.globalDailyBudgetMicroUsd <= 0 ||
+      !Number.isSafeInteger(effectiveDailyBudgetMicroUsd) ||
+      effectiveDailyBudgetMicroUsd <= 0 ||
+      !Number.isSafeInteger(nextSemanticSpendMicroUsd) ||
+      !Number.isSafeInteger(nextSemanticInputTokens) ||
+      !Number.isSafeInteger(nextSemanticRequests) ||
+      !Number.isSafeInteger(nextOpenRouterSpendMicroUsd) ||
+      nextSemanticSpendMicroUsd > args.dailyBudgetMicroUsd ||
+      nextOpenRouterSpendMicroUsd > effectiveDailyBudgetMicroUsd
     ) {
       return { accepted: false, replay: false };
     }
@@ -739,9 +798,9 @@ export const reserveUsage = internalMutation({
       });
     } else {
       await ctx.db.patch("aiSpendBuckets", spend._id, {
-        spentMicroUsd: spend.spentMicroUsd + args.estimatedMicroUsd,
-        requests: spend.requests + 1,
-        inputTokens: spend.inputTokens + args.inputTokens,
+        spentMicroUsd: nextSemanticSpendMicroUsd,
+        requests: nextSemanticRequests,
+        inputTokens: nextSemanticInputTokens,
         updatedAt: now,
       });
     }
@@ -969,6 +1028,9 @@ export const indexPublicEvidenceDocument = internalAction({
       inputTokens: reservedTokens,
       model: settings.model,
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
+      globalDailyBudgetMicroUsd: openRouterDailyBudgetMicroUsd(
+        env.OPENROUTER_DAILY_BUDGET_USD,
+      ),
     });
     if (!reservation.accepted)
       return {
@@ -1130,6 +1192,9 @@ export const searchPublicSemantic = internalAction({
       inputTokens: reservedTokens,
       model: settings.model,
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
+      globalDailyBudgetMicroUsd: openRouterDailyBudgetMicroUsd(
+        env.OPENROUTER_DAILY_BUDGET_USD,
+      ),
     });
     if (!reservation.accepted)
       return {
