@@ -26,6 +26,14 @@ export type PublicEvidenceSourceRegistryRow = {
 
 const MEBIBYTE = 1024 * 1024;
 
+/** The public-release adapter's code-owned, bounded repository allowlist. */
+export const GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES = [
+  "openai/openai-node",
+  "vercel/next.js",
+  "get-convex/convex-backend",
+] as const;
+export const GITHUB_RELEASES_PER_REPOSITORY = 30;
+
 export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
   {
     key: "cisa-kev",
@@ -79,13 +87,16 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
       "https://docs.github.com/en/rest/releases/releases",
     licenseClass: "attributed",
     accessClass: "public-optional-token",
-    capability: "bounded release metadata for the code allowlist",
+    capability:
+      "bounded release metadata for the code allowlist; one page per repository",
     checkpointModel: "per-repository HTTP validators only; no page cursor",
     conditionalRequestModel: "ETag and Last-Modified request validators",
     timeoutMs: 12_000,
     maxResponseBytes: 2 * MEBIBYTE,
-    maxItemsPerRun: 100,
-    maxPagesPerRun: 1,
+    maxItemsPerRun:
+      GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES.length *
+      GITHUB_RELEASES_PER_REPOSITORY,
+    maxPagesPerRun: GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES.length,
     cadence: "37 */2 * * *",
     fixtureProvenance:
       "Synthetic minimal GitHub release-shaped payloads in convex/evidenceIngestion.test.ts; no copied release notes.",

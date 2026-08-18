@@ -6,16 +6,15 @@ import {
   internalQuery,
   type ActionCtx,
 } from "./_generated/server";
+import {
+  GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES as RELEASE_REPOSITORIES,
+  GITHUB_RELEASES_PER_REPOSITORY,
+} from "./evidenceSourceRegistry";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_ITEMS_PER_RUN = 100;
 const USER_AGENT = "SYMBaiEX-Evidence-Ingestion/1.0 (+https://symbaiex.com)";
-const RELEASE_REPOSITORIES = [
-  "openai/openai-node",
-  "vercel/next.js",
-  "get-convex/convex-backend",
-] as const;
 
 type EvidenceKind = "document" | "advisory" | "release" | "paper";
 type LicenseClass =
@@ -337,7 +336,7 @@ export function parseGithubAdvisories(
 export function parseGithubReleases(
   payload: unknown,
   repository: string,
-  limit = 30,
+  limit = GITHUB_RELEASES_PER_REPOSITORY,
 ): NormalizedDocument[] {
   if (
     !RELEASE_REPOSITORIES.includes(
@@ -346,7 +345,7 @@ export function parseGithubReleases(
   )
     return [];
   return asArray(payload)
-    .slice(0, Math.max(0, Math.min(limit, 30)))
+    .slice(0, Math.max(0, Math.min(limit, GITHUB_RELEASES_PER_REPOSITORY)))
     .flatMap((item) => {
       const row = asRecord(item);
       const tag = sanitizeExcerpt(row?.tag_name, 160);
@@ -1022,7 +1021,7 @@ export const syncGithubReleases = internalAction({
           provenanceClass: "official",
           licenseClass: "attributed",
         },
-        `https://api.github.com/repos/${repository}/releases?per_page=30`,
+        `https://api.github.com/repos/${repository}/releases?per_page=${GITHUB_RELEASES_PER_REPOSITORY}`,
         (payload) => parseGithubReleases(payload, repository),
       );
       ingested += result.ingested;

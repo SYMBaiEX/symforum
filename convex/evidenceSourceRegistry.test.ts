@@ -3,6 +3,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
+  GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES,
+  GITHUB_RELEASES_PER_REPOSITORY,
   PUBLIC_EVIDENCE_SOURCE_REGISTRY,
   listPublicEvidenceSourceRegistry,
 } from "./evidenceSourceRegistry";
@@ -26,9 +28,30 @@ describe("public evidence source registry", () => {
       expect(row.timeoutMs).toBeGreaterThanOrEqual(0);
       expect(row.maxResponseBytes).toBeGreaterThanOrEqual(0);
       expect(row.maxItemsPerRun).toBeGreaterThan(0);
-      expect(row.maxPagesPerRun).toBe(1);
+      expect(row.maxPagesPerRun).toBeGreaterThan(0);
       expect(row.fixtureProvenance).toContain("convex/");
     }
+  });
+
+  test("derives aggregate GitHub release bounds from the adapter allowlist and page size", () => {
+    const releases = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find(
+      (row) => row.key === "github-allowlisted-releases",
+    );
+    expect(releases).toMatchObject({
+      maxPagesPerRun: GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES.length,
+      maxItemsPerRun:
+        GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES.length *
+        GITHUB_RELEASES_PER_REPOSITORY,
+    });
+    const ingestion = readFileSync(
+      new URL("./evidenceIngestion.ts", import.meta.url),
+      "utf8",
+    );
+    expect(ingestion).toContain("GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES");
+    expect(ingestion).toContain("GITHUB_RELEASES_PER_REPOSITORY");
+    expect(ingestion).toContain(
+      "per_page=${GITHUB_RELEASES_PER_REPOSITORY}",
+    );
   });
 
   test("matches the adapter schedules without exporting cursor or credential state", () => {
