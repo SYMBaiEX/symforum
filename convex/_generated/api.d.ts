@@ -75,6 +75,7 @@ import type * as organizations from "../organizations.js";
 import type * as postModel from "../postModel.js";
 import type * as posts from "../posts.js";
 import type * as presence from "../presence.js";
+import type * as researchQuality from "../researchQuality.js";
 import type * as resendClient from "../resendClient.js";
 import type * as rosterForumAgent from "../rosterForumAgent.js";
 import type * as siteContent from "../siteContent.js";
@@ -85,6 +86,7 @@ import type * as sukiForumReplyAgent from "../sukiForumReplyAgent.js";
 import type * as systemLogs from "../systemLogs.js";
 import type * as universalSearch from "../universalSearch.js";
 import type * as users from "../users.js";
+import type * as webVitals from "../webVitals.js";
 
 import type {
   ApiFromModules,
@@ -160,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   postModel: typeof postModel;
   posts: typeof posts;
   presence: typeof presence;
+  researchQuality: typeof researchQuality;
   resendClient: typeof resendClient;
   rosterForumAgent: typeof rosterForumAgent;
   siteContent: typeof siteContent;
@@ -170,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   systemLogs: typeof systemLogs;
   universalSearch: typeof universalSearch;
   users: typeof users;
+  webVitals: typeof webVitals;
 }>;
 
 /**

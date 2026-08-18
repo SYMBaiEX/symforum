@@ -52,6 +52,8 @@ type Env = {
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
   readonly SITE_URL: string | undefined;
+  readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
+  readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
 };
 
 /**
