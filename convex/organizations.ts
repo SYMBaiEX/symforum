@@ -376,15 +376,12 @@ export const lookupInviteeByUsername = query({
 export const getConsole = query({
   args: {
     organizationId: v.id("organizations"),
-    monthKey: v.optional(v.string()),
+    monthKey: v.string(),
   },
   handler: async (ctx, args) => {
     const access = await requireOrganizationMember(ctx, args.organizationId);
     const permissions = organizationPermissions(access.membership.role);
-    const monthKey =
-      args.monthKey === undefined
-        ? currentUtcMonthKey(Date.now())
-        : validatedMonthKey(args.monthKey);
+    const monthKey = validatedMonthKey(args.monthKey);
     const [members, invites, projects, serviceAccounts, budget, usage, audit] =
       await Promise.all([
         ctx.db
@@ -421,13 +418,17 @@ export const getConsole = query({
         ctx.db
           .query("organizationBudgets")
           .withIndex("by_organizationId_and_monthKey", (q) =>
-            q.eq("organizationId", args.organizationId).eq("monthKey", monthKey),
+            q
+              .eq("organizationId", args.organizationId)
+              .eq("monthKey", monthKey),
           )
           .unique(),
         ctx.db
           .query("organizationUsageLedger")
           .withIndex("by_organizationId_and_monthKey_and_chargedAt", (q) =>
-            q.eq("organizationId", args.organizationId).eq("monthKey", monthKey),
+            q
+              .eq("organizationId", args.organizationId)
+              .eq("monthKey", monthKey),
           )
           .order("desc")
           .take(Math.min(50, MAX_USAGE_RESULTS)),
@@ -462,33 +463,49 @@ export const getConsole = query({
       serviceAccountIds.add(row.serviceAccountId);
     }
 
-    const [usersById, projectsById, serviceAccountsById, identitiesByServiceId] =
-      await Promise.all([
-        Promise.all(
-          [...userIds].map(async (userId) => [
-            userId,
-            await ctx.db.get("users", userId),
-          ] as const),
-        ).then((rows) => new Map(rows)),
-        Promise.all(
-          [...projectIds].map(async (projectId) => [
-            projectId,
-            await ctx.db.get("organizationProjects", projectId),
-          ] as const),
-        ).then((rows) => new Map(rows)),
-        Promise.all(
-          [...serviceAccountIds].map(async (serviceAccountId) => [
-            serviceAccountId,
-            await ctx.db.get("organizationServiceAccounts", serviceAccountId),
-          ] as const),
-        ).then((rows) => new Map(rows)),
-        Promise.all(
-          serviceAccounts.map(async (serviceAccount) => [
-            serviceAccount._id,
-            await ctx.db.get("agentIdentities", serviceAccount.agentIdentityId),
-          ] as const),
-        ).then((rows) => new Map(rows)),
-      ]);
+    const [
+      usersById,
+      projectsById,
+      serviceAccountsById,
+      identitiesByServiceId,
+    ] = await Promise.all([
+      Promise.all(
+        [...userIds].map(
+          async (userId) =>
+            [userId, await ctx.db.get("users", userId)] as const,
+        ),
+      ).then((rows) => new Map(rows)),
+      Promise.all(
+        [...projectIds].map(
+          async (projectId) =>
+            [
+              projectId,
+              await ctx.db.get("organizationProjects", projectId),
+            ] as const,
+        ),
+      ).then((rows) => new Map(rows)),
+      Promise.all(
+        [...serviceAccountIds].map(
+          async (serviceAccountId) =>
+            [
+              serviceAccountId,
+              await ctx.db.get("organizationServiceAccounts", serviceAccountId),
+            ] as const,
+        ),
+      ).then((rows) => new Map(rows)),
+      Promise.all(
+        serviceAccounts.map(
+          async (serviceAccount) =>
+            [
+              serviceAccount._id,
+              await ctx.db.get(
+                "agentIdentities",
+                serviceAccount.agentIdentityId,
+              ),
+            ] as const,
+        ),
+      ).then((rows) => new Map(rows)),
+    ]);
 
     return {
       organization: safeOrganization(access.organization, access.membership),

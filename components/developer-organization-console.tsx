@@ -48,7 +48,8 @@ const AGENT_SCOPE_OPTIONS: Array<{
 const USERNAME_LOOKUP_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/i;
 
 export function DeveloperOrganizationConsole() {
-  const organizationsApi = (api as any).organizations;
+  const organizationsApi = api.organizations;
+  const currentMonthKey = utcMonthKey(new Date());
   const viewer = useQuery(convexRefs.users.maybeViewer, {});
   const organizations = useQuery(
     organizationsApi.listMine,
@@ -82,44 +83,41 @@ export function DeveloperOrganizationConsole() {
   );
   const setBudget = useMutation(organizationsApi.setBudget);
 
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState<
-    Id<"organizations"> | null
-  >(null);
+  const [selectedOrganizationId, setSelectedOrganizationId] =
+    useState<Id<"organizations"> | null>(null);
   const activeOrganizationId =
     selectedOrganizationId ?? organizations?.[0]?.organizationId ?? null;
   const [organizationSlug, setOrganizationSlug] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [organizationBudgetUsd, setOrganizationBudgetUsd] = useState("0");
   const [inviteUsernameValue, setInviteUsernameValue] = useState("");
-  const [inviteRole, setInviteRole] = useState<
-    (typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"]
-  >("developer");
+  const [inviteRole, setInviteRole] =
+    useState<(typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"]>("developer");
   const [projectKey, setProjectKey] = useState("");
   const [projectName, setProjectName] = useState("");
-  const [projectScopes, setProjectScopes] = useState<AgentScope[]>(["evidence"]);
-  const [selectedProjectId, setSelectedProjectId] = useState<
-    Id<"organizationProjects"> | null
-  >(null);
-  const [editingProjectId, setEditingProjectId] = useState<
-    Id<"organizationProjects"> | null
-  >(null);
-  const [editingProjectScopes, setEditingProjectScopes] = useState<AgentScope[]>(
-    [],
-  );
-  const [serviceAccountProjectId, setServiceAccountProjectId] = useState<
-    Id<"organizationProjects"> | null
-  >(null);
+  const [projectScopes, setProjectScopes] = useState<AgentScope[]>([
+    "evidence",
+  ]);
+  const [selectedProjectId, setSelectedProjectId] =
+    useState<Id<"organizationProjects"> | null>(null);
+  const [editingProjectId, setEditingProjectId] =
+    useState<Id<"organizationProjects"> | null>(null);
+  const [editingProjectScopes, setEditingProjectScopes] = useState<
+    AgentScope[]
+  >([]);
+  const [serviceAccountProjectId, setServiceAccountProjectId] =
+    useState<Id<"organizationProjects"> | null>(null);
   const [serviceAccountAgentId, setServiceAccountAgentId] = useState("");
   const [serviceAccountName, setServiceAccountName] = useState("");
-  const [serviceAccountScopes, setServiceAccountScopes] = useState<AgentScope[]>(
-    [],
-  );
+  const [serviceAccountScopes, setServiceAccountScopes] = useState<
+    AgentScope[]
+  >([]);
   const [budgetUsdValue, setBudgetUsdValue] = useState("0");
   const [pending, setPending] = useState<string | null>(null);
   const organizationConsole = useQuery(
     organizationsApi.getConsole,
     viewer && !viewer.isAgent && activeOrganizationId
-      ? { organizationId: activeOrganizationId }
+      ? { organizationId: activeOrganizationId, monthKey: currentMonthKey }
       : "skip",
   );
 
@@ -146,7 +144,7 @@ export function DeveloperOrganizationConsole() {
     if (
       selectedOrganizationId === null ||
       !organizations.some(
-        (organization: any) =>
+        (organization) =>
           organization.organizationId === selectedOrganizationId,
       )
     ) {
@@ -161,7 +159,7 @@ export function DeveloperOrganizationConsole() {
       organizationConsole.projects.length > 0 &&
       (selectedProjectId === null ||
         !organizationConsole.projects.some(
-          (project: any) => project.projectId === selectedProjectId,
+          (project) => project.projectId === selectedProjectId,
         ))
     ) {
       setSelectedProjectId(organizationConsole.projects[0].projectId);
@@ -170,7 +168,7 @@ export function DeveloperOrganizationConsole() {
       organizationConsole.projects.length > 0 &&
       (serviceAccountProjectId === null ||
         !organizationConsole.projects.some(
-          (project: any) => project.projectId === serviceAccountProjectId,
+          (project) => project.projectId === serviceAccountProjectId,
         ))
     ) {
       setServiceAccountProjectId(organizationConsole.projects[0].projectId);
@@ -178,7 +176,7 @@ export function DeveloperOrganizationConsole() {
     if (
       editingProjectId !== null &&
       !organizationConsole.projects.some(
-        (project: any) => project.projectId === editingProjectId,
+        (project) => project.projectId === editingProjectId,
       )
     ) {
       setEditingProjectId(null);
@@ -193,20 +191,23 @@ export function DeveloperOrganizationConsole() {
 
   const serviceAccountProject =
     organizationConsole?.projects.find(
-      (project: any) => project.projectId === serviceAccountProjectId,
+      (project) => project.projectId === serviceAccountProjectId,
     ) ?? null;
 
   const activeOwnedAgents = useMemo(
-    () => (agentStatus?.agents ?? []).filter((agent) => agent.status === "active"),
+    () =>
+      (agentStatus?.agents ?? []).filter((agent) => agent.status === "active"),
     [agentStatus],
   );
 
   const selectedOwnedAgent =
-    activeOwnedAgents.find((agent) => agent.agentId === serviceAccountAgentId) ??
-    null;
+    activeOwnedAgents.find(
+      (agent) => agent.agentId === serviceAccountAgentId,
+    ) ?? null;
 
   const recommendedServiceScopes = useMemo(() => {
-    if (serviceAccountProject === null || selectedOwnedAgent === null) return [];
+    if (serviceAccountProject === null || selectedOwnedAgent === null)
+      return [];
     return selectedOwnedAgent.scopes.filter((scope) =>
       serviceAccountProject.allowedAgentScopes.includes(scope),
     );
@@ -228,12 +229,16 @@ export function DeveloperOrganizationConsole() {
   }, [recommendedServiceScopes]);
 
   if (viewer === undefined) {
-    return <div className="h-72 animate-pulse border border-row-border bg-card" />;
+    return (
+      <div className="h-72 animate-pulse border border-row-border bg-card" />
+    );
   }
   if (viewer === null) {
     return (
       <section className="max-w-xl space-y-4 border border-row-border bg-card p-5">
-        <h2 className="text-xl font-semibold">Sign in to manage organizations</h2>
+        <h2 className="text-xl font-semibold">
+          Sign in to manage organizations
+        </h2>
         <p className="text-sm leading-7 text-muted-foreground">
           This console is limited to your first-party human account.
         </p>
@@ -348,7 +353,11 @@ export function DeveloperOrganizationConsole() {
     if (activeOrganizationId === null) return;
     setPending(`member:role:${String(userId)}`);
     try {
-      await setMemberRole({ organizationId: activeOrganizationId, userId, role });
+      await setMemberRole({
+        organizationId: activeOrganizationId,
+        userId,
+        role,
+      });
       toast.success("Member role updated.");
     } catch (error) {
       toast.error(errorMessage(error, "The member role could not be updated."));
@@ -493,7 +502,10 @@ export function DeveloperOrganizationConsole() {
     }
     setPending("budget:update");
     try {
-      await setBudget({ organizationId: activeOrganizationId, monthlyLimitMicros });
+      await setBudget({
+        organizationId: activeOrganizationId,
+        monthlyLimitMicros,
+      });
       toast.success("Budget updated.");
     } catch (error) {
       toast.error(errorMessage(error, "The budget could not be updated."));
@@ -542,7 +554,9 @@ export function DeveloperOrganizationConsole() {
               Monthly USD budget
               <Input
                 value={organizationBudgetUsd}
-                onChange={(event) => setOrganizationBudgetUsd(event.target.value)}
+                onChange={(event) =>
+                  setOrganizationBudgetUsd(event.target.value)
+                }
                 inputMode="decimal"
                 placeholder="25.00"
               />
@@ -552,7 +566,9 @@ export function DeveloperOrganizationConsole() {
               onClick={() => void submitCreateOrganization()}
               type="button"
             >
-              {pending === "organization:create" ? "Creating..." : "Create organization"}
+              {pending === "organization:create"
+                ? "Creating..."
+                : "Create organization"}
             </Button>
           </div>
 
@@ -566,7 +582,7 @@ export function DeveloperOrganizationConsole() {
               </p>
             ) : (
               <div className="space-y-2">
-                {pendingInvites.map((invite: any) => (
+                {pendingInvites.map((invite) => (
                   <div
                     className="flex items-center justify-between gap-3 border border-row-border p-3"
                     key={invite.inviteId}
@@ -579,7 +595,9 @@ export function DeveloperOrganizationConsole() {
                       </p>
                     </div>
                     <Button
-                      disabled={pending === `invite:accept:${String(invite.inviteId)}`}
+                      disabled={
+                        pending === `invite:accept:${String(invite.inviteId)}`
+                      }
                       onClick={() => void submitAcceptInvite(invite.inviteId)}
                       size="sm"
                       type="button"
@@ -615,7 +633,7 @@ export function DeveloperOrganizationConsole() {
               }
               value={activeOrganizationId ?? ""}
             >
-              {organizations.map((organization: any) => (
+              {organizations.map((organization) => (
                 <option
                   key={organization.organizationId}
                   value={organization.organizationId}
@@ -667,7 +685,7 @@ export function DeveloperOrganizationConsole() {
                     {organizationConsole.organization.name}
                   </p>
                 </div>
-                {organizationConsole.members.map((member: any) => (
+                {organizationConsole.members.map((member) => (
                   <div
                     className="space-y-3 border border-row-border p-3"
                     key={member.membershipId}
@@ -694,8 +712,8 @@ export function DeveloperOrganizationConsole() {
                           className="h-9 min-w-36 border border-row-border bg-background px-3 text-sm"
                           defaultValue={member.role}
                           onChange={(event) => {
-                            const role = event.target.value as
-                              (typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"];
+                            const role = event.target
+                              .value as (typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"];
                             void submitSetRole(member.userId, role);
                           }}
                         >
@@ -707,7 +725,10 @@ export function DeveloperOrganizationConsole() {
                         </select>
                         <Button
                           onClick={() =>
-                            void submitTransferOwnership(member.userId, member.name)
+                            void submitTransferOwnership(
+                              member.userId,
+                              member.name,
+                            )
                           }
                           size="sm"
                           type="button"
@@ -720,8 +741,12 @@ export function DeveloperOrganizationConsole() {
                     {organizationConsole.permissions.canManageMembers &&
                     member.role !== "owner" ? (
                       <Button
-                        disabled={pending === `member:remove:${String(member.userId)}`}
-                        onClick={() => void submitRemoveMember(member.userId, member.name)}
+                        disabled={
+                          pending === `member:remove:${String(member.userId)}`
+                        }
+                        onClick={() =>
+                          void submitRemoveMember(member.userId, member.name)
+                        }
                         size="sm"
                         type="button"
                         variant="outline"
@@ -759,7 +784,8 @@ export function DeveloperOrganizationConsole() {
                         className="h-10 border border-row-border bg-background px-3 text-sm"
                         onChange={(event) =>
                           setInviteRole(
-                            event.target.value as (typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"],
+                            event.target
+                              .value as (typeof ORGANIZATION_ROLE_OPTIONS)[number]["value"],
                           )
                         }
                         value={inviteRole}
@@ -798,13 +824,15 @@ export function DeveloperOrganizationConsole() {
                       Monthly USD limit
                       <Input
                         value={budgetUsdValue}
-                        onChange={(event) => setBudgetUsdValue(event.target.value)}
+                        onChange={(event) =>
+                          setBudgetUsdValue(event.target.value)
+                        }
                         inputMode="decimal"
                       />
                     </label>
                     <p className="text-xs text-muted-foreground">
-                      Spent {formatUsd(organizationConsole.budget.spentMicros)} of{" "}
-                      {formatUsd(organizationConsole.budget.limitMicros)}.
+                      Spent {formatUsd(organizationConsole.budget.spentMicros)}{" "}
+                      of {formatUsd(organizationConsole.budget.limitMicros)}.
                     </p>
                     <Button
                       disabled={pending === "budget:update"}
@@ -817,7 +845,7 @@ export function DeveloperOrganizationConsole() {
                 ) : null}
                 {organizationConsole.invites.length > 0 ? (
                   <div className="space-y-2">
-                    {organizationConsole.invites.map((invite: any) => (
+                    {organizationConsole.invites.map((invite) => (
                       <div
                         className="flex items-center justify-between gap-3 border border-row-border p-3"
                         key={invite.inviteId}
@@ -830,9 +858,12 @@ export function DeveloperOrganizationConsole() {
                         </div>
                         <Button
                           disabled={
-                            pending === `invite:revoke:${String(invite.inviteId)}`
+                            pending ===
+                            `invite:revoke:${String(invite.inviteId)}`
                           }
-                          onClick={() => void submitRevokeInvite(invite.inviteId)}
+                          onClick={() =>
+                            void submitRevokeInvite(invite.inviteId)
+                          }
                           size="sm"
                           type="button"
                           variant="outline"
@@ -866,7 +897,9 @@ export function DeveloperOrganizationConsole() {
                         Project key
                         <Input
                           value={projectKey}
-                          onChange={(event) => setProjectKey(event.target.value)}
+                          onChange={(event) =>
+                            setProjectKey(event.target.value)
+                          }
                           placeholder="research"
                         />
                       </label>
@@ -874,7 +907,9 @@ export function DeveloperOrganizationConsole() {
                         Name
                         <Input
                           value={projectName}
-                          onChange={(event) => setProjectName(event.target.value)}
+                          onChange={(event) =>
+                            setProjectName(event.target.value)
+                          }
                           placeholder="Research"
                         />
                       </label>
@@ -899,7 +934,7 @@ export function DeveloperOrganizationConsole() {
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {organizationConsole.projects.map((project: any) => (
+                    {organizationConsole.projects.map((project) => (
                       <div
                         className="space-y-3 border border-row-border p-3"
                         key={project.projectId}
@@ -915,7 +950,9 @@ export function DeveloperOrganizationConsole() {
                             onClick={() => {
                               setSelectedProjectId(project.projectId);
                               setEditingProjectId(project.projectId);
-                              setEditingProjectScopes([...project.allowedAgentScopes]);
+                              setEditingProjectScopes([
+                                ...project.allowedAgentScopes,
+                              ]);
                             }}
                             size="sm"
                             type="button"
@@ -927,10 +964,12 @@ export function DeveloperOrganizationConsole() {
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Scopes: {project.allowedAgentScopes.join(", ") || "none"}
+                          Scopes:{" "}
+                          {project.allowedAgentScopes.join(", ") || "none"}
                         </p>
                         {editingProjectId === project.projectId &&
-                        organizationConsole.permissions.canManageProjectScopes ? (
+                        organizationConsole.permissions
+                          .canManageProjectScopes ? (
                           <div className="space-y-3 border border-row-border bg-card p-3">
                             <ScopeChooser
                               onChange={setEditingProjectScopes}
@@ -940,7 +979,8 @@ export function DeveloperOrganizationConsole() {
                             <div className="flex gap-2">
                               <Button
                                 disabled={
-                                  pending === `project:scopes:${String(project.projectId)}`
+                                  pending ===
+                                  `project:scopes:${String(project.projectId)}`
                                 }
                                 onClick={() => void submitProjectScopeUpdate()}
                                 size="sm"
@@ -977,7 +1017,9 @@ export function DeveloperOrganizationConsole() {
                 </div>
                 {organizationConsole.permissions.canManageServiceAccounts ? (
                   <div className="space-y-3 border border-row-border p-3">
-                    <p className="text-sm font-medium">Create service account</p>
+                    <p className="text-sm font-medium">
+                      Create service account
+                    </p>
                     <label className="flex flex-col gap-2 text-sm">
                       Project
                       <select
@@ -989,8 +1031,11 @@ export function DeveloperOrganizationConsole() {
                         }
                         value={serviceAccountProjectId ?? ""}
                       >
-                        {organizationConsole.projects.map((project: any) => (
-                          <option key={project.projectId} value={project.projectId}>
+                        {organizationConsole.projects.map((project) => (
+                          <option
+                            key={project.projectId}
+                            value={project.projectId}
+                          >
                             {project.name}
                           </option>
                         ))}
@@ -1017,7 +1062,9 @@ export function DeveloperOrganizationConsole() {
                       Service-account name
                       <Input
                         value={serviceAccountName}
-                        onChange={(event) => setServiceAccountName(event.target.value)}
+                        onChange={(event) =>
+                          setServiceAccountName(event.target.value)
+                        }
                         placeholder="Research crawler"
                       />
                     </label>
@@ -1048,46 +1095,52 @@ export function DeveloperOrganizationConsole() {
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {organizationConsole.serviceAccounts.map((serviceAccount: any) => (
-                      <div
-                        className="space-y-2 border border-row-border p-3"
-                        key={serviceAccount.serviceAccountId}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium">{serviceAccount.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {serviceAccount.projectName} · {serviceAccount.agentId}
-                            </p>
+                    {organizationConsole.serviceAccounts.map(
+                      (serviceAccount) => (
+                        <div
+                          className="space-y-2 border border-row-border p-3"
+                          key={serviceAccount.serviceAccountId}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium">
+                                {serviceAccount.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {serviceAccount.projectName} ·{" "}
+                                {serviceAccount.agentId}
+                              </p>
+                            </div>
+                            {organizationConsole.permissions
+                              .canManageServiceAccounts ? (
+                              <Button
+                                disabled={
+                                  pending ===
+                                  `service:revoke:${String(
+                                    serviceAccount.serviceAccountId,
+                                  )}`
+                                }
+                                onClick={() =>
+                                  void submitRevokeServiceAccount(
+                                    serviceAccount.serviceAccountId,
+                                    serviceAccount.name,
+                                  )
+                                }
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                Revoke
+                              </Button>
+                            ) : null}
                           </div>
-                          {organizationConsole.permissions.canManageServiceAccounts ? (
-                            <Button
-                              disabled={
-                                pending ===
-                                `service:revoke:${String(
-                                  serviceAccount.serviceAccountId,
-                                )}`
-                              }
-                              onClick={() =>
-                                void submitRevokeServiceAccount(
-                                  serviceAccount.serviceAccountId,
-                                  serviceAccount.name,
-                                )
-                              }
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              Revoke
-                            </Button>
-                          ) : null}
+                          <p className="text-xs text-muted-foreground">
+                            Owner {serviceAccount.ownerName} · scopes{" "}
+                            {serviceAccount.allowedScopes.join(", ") || "none"}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Owner {serviceAccount.ownerName} · scopes{" "}
-                          {serviceAccount.allowedScopes.join(", ") || "none"}
-                        </p>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </div>
                 )}
               </section>
@@ -1107,7 +1160,7 @@ export function DeveloperOrganizationConsole() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {organizationConsole.usage.map((row: any) => (
+                    {organizationConsole.usage.map((row) => (
                       <div
                         className="flex items-center justify-between gap-3 border border-row-border p-3"
                         key={row.usageId}
@@ -1143,7 +1196,7 @@ export function DeveloperOrganizationConsole() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {organizationConsole.audit.map((row: any) => (
+                    {organizationConsole.audit.map((row) => (
                       <div
                         className="space-y-1 border border-row-border p-3"
                         key={row.auditId}
@@ -1156,7 +1209,9 @@ export function DeveloperOrganizationConsole() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {row.actorName}
-                          {row.targetUserName ? ` -> ${row.targetUserName}` : ""}
+                          {row.targetUserName
+                            ? ` -> ${row.targetUserName}`
+                            : ""}
                           {row.projectName ? ` · ${row.projectName}` : ""}
                           {row.serviceAccountName
                             ? ` · ${row.serviceAccountName}`
@@ -1191,7 +1246,9 @@ function ScopeChooser({
   const options =
     whitelist === undefined
       ? AGENT_SCOPE_OPTIONS
-      : AGENT_SCOPE_OPTIONS.filter((option) => whitelist.includes(option.value));
+      : AGENT_SCOPE_OPTIONS.filter((option) =>
+          whitelist.includes(option.value),
+        );
 
   function toggle(scope: AgentScope) {
     onChange(
@@ -1264,6 +1321,10 @@ function microsToUsdInput(value: number) {
 
 function formatUsd(value: number) {
   return `$${(value / 1_000_000).toFixed(2)}`;
+}
+
+function utcMonthKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function inviteLookupCandidate(value: string) {

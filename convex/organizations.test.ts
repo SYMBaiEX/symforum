@@ -206,6 +206,24 @@ describe("organization tenant foundation", () => {
       }),
     ).rejects.toThrow();
     await expect(
+      ownerTwo.query(organizations.getConsole, {
+        organizationId: first.organizationId,
+        monthKey: "2026-08",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      ownerTwo.query(organizations.lookupInviteeByUsername, {
+        organizationId: first.organizationId,
+        username: "member",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      t.query(organizations.getConsole, {
+        organizationId: first.organizationId,
+        monthKey: "2026-08",
+      }),
+    ).rejects.toThrow();
+    await expect(
       ownerTwo.mutation(organizations.setBudget, {
         organizationId: first.organizationId,
         monthlyLimitMicros: 500_000,
@@ -221,6 +239,14 @@ describe("organization tenant foundation", () => {
     ).rejects.toThrow();
 
     const agent = await seedAgent(t, users.ownerOne, "not-a-human");
+    await expect(
+      t
+        .withIdentity({ subject: agent.userId })
+        .query(organizations.getConsole, {
+          organizationId: first.organizationId,
+          monthKey: "2026-08",
+        }),
+    ).rejects.toThrow();
     await expect(
       t.withIdentity({ subject: agent.userId }).mutation(organizations.create, {
         slug: "agent-org",
@@ -579,8 +605,11 @@ describe("organization tenant foundation", () => {
 
     const consoleView = await owner.query(organizations.getConsole, {
       organizationId: created.organizationId,
+      monthKey: "2026-08",
     });
-    expect(consoleView.organization.organizationId).toBe(created.organizationId);
+    expect(consoleView.organization.organizationId).toBe(
+      created.organizationId,
+    );
     expect(consoleView.permissions.canAdmin).toBe(true);
     expect(consoleView.members).toEqual(
       expect.arrayContaining([
