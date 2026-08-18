@@ -24,6 +24,18 @@ const dispatch = makeFunctionReference<
   },
   Array<{ title: string; canonicalUrl: string }>
 >("agentSemanticApi:dispatch");
+const prepare = makeFunctionReference<"mutation", any, any>(
+  "agentSemanticApi:prepare",
+);
+const complete = makeFunctionReference<"mutation", any, any>(
+  "agentSemanticApi:complete",
+);
+const fail = makeFunctionReference<"mutation", any, any>(
+  "agentSemanticApi:fail",
+);
+const lexicalSearch = makeFunctionReference<"query", any, any>(
+  "universalSearch:searchPublic",
+);
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -227,7 +239,11 @@ describe("authenticated semantic search transport", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await t.run(async (ctx) => {
       expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
-      expect(await ctx.db.query("apiUsageLedger").collect()).toHaveLength(1);
+      const commerce = await ctx.db.query("apiUsageLedger").collect();
+      expect(commerce.map((row) => row.entryType).sort()).toEqual([
+        "debit",
+        "reversal",
+      ]);
       const command = await ctx.db.query("apiCommands").unique();
       expect(command?.ownerUserId).toBe(ids.ownerUserId);
       expect(command?.status).toBe("completed");
@@ -273,7 +289,7 @@ describe("authenticated semantic search transport", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("reserves organization service-account budget once before lexical fallback", async () => {
+  test("reverses organization and commerce reservations once for lexical fallback", async () => {
     vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const t = setup();
@@ -286,10 +302,14 @@ describe("authenticated semantic search transport", () => {
       agent.action(dispatch, args("semantic-org-001")),
     ).resolves.toHaveLength(1);
     await t.run(async (ctx) => {
-      const usage = await ctx.db.query("organizationUsageLedger").unique();
-      expect(usage?.amountMicros).toBe(12);
+      const usage = await ctx.db.query("organizationUsageLedger").collect();
+      expect(usage.map((row) => row.entryType).sort()).toEqual([
+        "debit",
+        "reversal",
+      ]);
+      expect(usage.reduce((sum, row) => sum + row.amountMicros, 0)).toBe(0);
       const budget = await ctx.db.query("organizationBudgets").unique();
-      expect(budget?.spentMicros).toBe(12);
+      expect(budget?.spentMicros).toBe(0);
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -305,7 +325,165 @@ describe("authenticated semantic search transport", () => {
     ).rejects.toThrow(/idempotency|fingerprint|different/i);
     await t.run(async (ctx) => {
       expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
-      expect(await ctx.db.query("apiUsageLedger").collect()).toHaveLength(1);
+      const commerce = await ctx.db.query("apiUsageLedger").collect();
+      expect(commerce.map((row) => row.entryType).sort()).toEqual([
+        "debit",
+        "reversal",
+      ]);
+    });
+  });
+
+  test("does not consume quota or money when commerce entitlement is unavailable", async () => {
+    vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
+    const t = setup();
+    const ids = await fixture(t);
+    await t.run(async (ctx) => {
+      const product = await ctx.db.query("apiProducts").unique();
+      if (product !== null)
+        await ctx.db.patch("apiProducts", product._id, { status: "archived" });
+    });
+    await expect(
+      t
+        .withIdentity({ subject: ids.agentUserId })
+        .action(dispatch, args("semantic-entitlement-001")),
+    ).rejects.toThrow(/product|entitlement|unavailable/i);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+      expect(await ctx.db.query("apiUsageLedger").collect()).toHaveLength(0);
+      expect(
+        await ctx.db.query("organizationUsageLedger").collect(),
+      ).toHaveLength(0);
+    });
+  });
+
+  test("compensates commerce when request-attempt quota rejects", async () => {
+    vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
+    const t = setup();
+    const ids = await fixture(t, { serviceAccount: "active" });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("agentQuotaLimits", {
+        ownerUserId: ids.ownerUserId,
+        agentId: ids.agentId,
+        monthlyLimitUnits: 1,
+        requestLimitUnits: 1,
+        updatedAt: Date.now(),
+      });
+    });
+    await expect(
+      t
+        .withIdentity({ subject: ids.agentUserId })
+        .action(dispatch, args("semantic-quota-reject-001")),
+    ).rejects.toThrow(/quota/i);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+      expect(
+        (await ctx.db.query("apiUsageLedger").collect())
+          .map((row) => row.entryType)
+          .sort(),
+      ).toEqual(["debit", "reversal"]);
+      expect(
+        await ctx.db.query("organizationUsageLedger").collect(),
+      ).toHaveLength(0);
+    });
+  });
+
+  test("lexical-limit, provider failure, and paused-circuit paths reverse monetary reservations", async () => {
+    vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const t = setup();
+    const ids = await fixture(t, { serviceAccount: "active" });
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+
+    await expect(
+      agent.action(
+        dispatch,
+        args("semantic-lexical-full-001", "semantic transport", 1),
+      ),
+    ).resolves.toHaveLength(1);
+    await expect(
+      agent.action(
+        dispatch,
+        args("semantic-provider-fail-001", "not in lexical corpus", 10),
+      ),
+    ).resolves.toHaveLength(1);
+    await expect(
+      agent.action(
+        dispatch,
+        args("semantic-circuit-paused-001", "another unmatched phrase", 10),
+      ),
+    ).resolves.toBeInstanceOf(Array);
+
+    await t.run(async (ctx) => {
+      const org = await ctx.db.query("organizationUsageLedger").collect();
+      expect(org).toHaveLength(6);
+      expect(org.reduce((sum, row) => sum + row.amountMicros, 0)).toBe(0);
+      expect(
+        (await ctx.db.query("organizationBudgets").unique())?.spentMicros,
+      ).toBe(0);
+      const commerce = await ctx.db.query("apiUsageLedger").collect();
+      expect(commerce.filter((row) => row.entryType === "debit")).toHaveLength(
+        3,
+      );
+      expect(
+        commerce.filter((row) => row.entryType === "reversal"),
+      ).toHaveLength(3);
+    });
+  });
+
+  test("success charges once while concurrent failure compensation is exactly once", async () => {
+    vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
+    const t = setup();
+    const ids = await fixture(t, { serviceAccount: "active" });
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    const successArgs = args("semantic-success-settle-001");
+    const success = await agent.mutation(prepare, successArgs);
+    const result = await t.query(lexicalSearch, {
+      query: successArgs.query,
+      limit: successArgs.limit,
+    });
+    await Promise.all([
+      agent.mutation(complete, {
+        commandId: success.commandId,
+        result,
+        chargeMonetary: true,
+        semanticAttempted: true,
+        semanticUsed: true,
+        outcome: "completed",
+      }),
+      agent.mutation(complete, {
+        commandId: success.commandId,
+        result,
+        chargeMonetary: true,
+        semanticAttempted: true,
+        semanticUsed: true,
+        outcome: "completed",
+      }),
+    ]);
+
+    const failed = await agent.mutation(
+      prepare,
+      args("semantic-failure-reverse-001"),
+    );
+    await Promise.all([
+      agent.mutation(fail, { commandId: failed.commandId }),
+      agent.mutation(fail, { commandId: failed.commandId }),
+    ]);
+
+    await t.run(async (ctx) => {
+      const org = await ctx.db.query("organizationUsageLedger").collect();
+      expect(org.filter((row) => row.entryType === "debit")).toHaveLength(2);
+      expect(org.filter((row) => row.entryType === "reversal")).toHaveLength(1);
+      expect(
+        (await ctx.db.query("organizationBudgets").unique())?.spentMicros,
+      ).toBe(12);
+      const commerce = await ctx.db.query("apiUsageLedger").collect();
+      expect(commerce.filter((row) => row.entryType === "debit")).toHaveLength(
+        2,
+      );
+      expect(
+        commerce.filter((row) => row.entryType === "reversal"),
+      ).toHaveLength(1);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(2);
     });
   });
 });

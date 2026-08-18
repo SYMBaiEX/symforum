@@ -52,7 +52,7 @@ describe("agent data HTTP error normalization", () => {
       status: 429,
       payload: {
         code: "AGENT_QUOTA_EXCEEDED",
-        error: "Agent usage quota or rate limit reached.",
+        error: "Agent usage quota, rate limit, or spend budget reached.",
       },
     });
   });

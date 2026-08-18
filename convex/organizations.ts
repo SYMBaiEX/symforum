@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
@@ -1677,6 +1678,8 @@ export const recordServiceAccountUsage = mutation({
     scope: agentScopeValidator,
     amountMicros: v.number(),
     idempotencyKey: v.string(),
+    commandId: v.optional(v.id("apiCommands")),
+    requestFingerprint: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const actor = await requireAuthenticatedUser(ctx);
@@ -1694,6 +1697,16 @@ export const recordServiceAccountUsage = mutation({
       MAX_CHARGE_MICROS,
     );
     const requestKey = idempotencyKey(args.idempotencyKey);
+    const requestFingerprint = args.requestFingerprint?.trim().toLowerCase();
+    if (
+      requestFingerprint !== undefined &&
+      !/^[a-f0-9]{64}$/.test(requestFingerprint)
+    ) {
+      organizationError(
+        "INVALID_REQUEST_FINGERPRINT",
+        "requestFingerprint must be a SHA-256 hex digest.",
+      );
+    }
     const serviceAccount = await ctx.db
       .query("organizationServiceAccounts")
       .withIndex("by_agentUserId", (q) => q.eq("agentUserId", actor._id))
@@ -1727,6 +1740,22 @@ export const recordServiceAccountUsage = mutation({
         "The service-account binding or requested scope is not active.",
       );
     }
+    if (args.commandId !== undefined) {
+      const command = await ctx.db.get("apiCommands", args.commandId);
+      if (
+        command === null ||
+        command.ownerUserId !== serviceAccount.ownerUserId ||
+        command.kind !== "evidence.semantic_search" ||
+        command.status !== "accepted" ||
+        requestFingerprint === undefined ||
+        command.requestFingerprint !== requestFingerprint
+      ) {
+        organizationError(
+          "COMMAND_DENIED",
+          "The usage reservation is not bound to this service account.",
+        );
+      }
+    }
     const existing = await ctx.db
       .query("organizationUsageLedger")
       .withIndex("by_serviceAccountId_and_idempotencyKey", (q) =>
@@ -1740,7 +1769,9 @@ export const recordServiceAccountUsage = mutation({
         existing.amountMicros !== amountMicros ||
         existing.scope !== args.scope ||
         existing.organizationId !== serviceAccount.organizationId ||
-        existing.projectId !== serviceAccount.projectId
+        existing.projectId !== serviceAccount.projectId ||
+        existing.commandId !== args.commandId ||
+        existing.requestFingerprint !== requestFingerprint
       ) {
         organizationError(
           "USAGE_IDEMPOTENCY_MISMATCH",
@@ -1795,6 +1826,9 @@ export const recordServiceAccountUsage = mutation({
       idempotencyKey: requestKey,
       scope: args.scope,
       amountMicros,
+      entryType: "debit",
+      commandId: args.commandId,
+      requestFingerprint,
       spentAfterMicros,
       currency: "USD",
       monthKey,
@@ -1810,6 +1844,114 @@ export const recordServiceAccountUsage = mutation({
       spentAfterMicros,
       idempotent: false,
     };
+  },
+});
+
+/**
+ * Reverses one organization reservation with an immutable compensating row.
+ * This is internal so cleanup still succeeds if the service account is revoked
+ * while provider work is in flight. The original command binding remains the
+ * authorization and idempotency boundary.
+ */
+export const reverseServiceAccountUsage = internalMutation({
+  args: {
+    usageId: v.id("organizationUsageLedger"),
+    commandId: v.id("apiCommands"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const reason = args.reason.trim();
+    if (reason.length < 1 || reason.length > 80) {
+      organizationError("INVALID_REASON", "reason must be 1-80 characters.");
+    }
+    const debit = await ctx.db.get("organizationUsageLedger", args.usageId);
+    const command = await ctx.db.get("apiCommands", args.commandId);
+    const serviceAccount =
+      debit === null
+        ? null
+        : await ctx.db.get(
+            "organizationServiceAccounts",
+            debit.serviceAccountId,
+          );
+    if (
+      debit === null ||
+      (debit.entryType !== undefined && debit.entryType !== "debit") ||
+      debit.commandId !== args.commandId ||
+      command === null ||
+      command.kind !== "evidence.semantic_search" ||
+      serviceAccount === null ||
+      command.ownerUserId !== serviceAccount.ownerUserId ||
+      debit.organizationId !== serviceAccount.organizationId ||
+      debit.projectId !== serviceAccount.projectId ||
+      command.requestFingerprint !== debit.requestFingerprint
+    ) {
+      organizationError(
+        "USAGE_DEBIT_NOT_FOUND",
+        "Organization usage debit not found for this command.",
+      );
+    }
+    const reversalKey = `reversal:${debit._id}`;
+    const existing = await ctx.db
+      .query("organizationUsageLedger")
+      .withIndex("by_serviceAccountId_and_idempotencyKey", (q) =>
+        q
+          .eq("serviceAccountId", debit.serviceAccountId)
+          .eq("idempotencyKey", reversalKey),
+      )
+      .unique();
+    if (existing !== null) {
+      if (
+        existing.entryType !== "reversal" ||
+        existing.reversesUsageId !== debit._id ||
+        existing.commandId !== args.commandId
+      ) {
+        organizationError(
+          "USAGE_IDEMPOTENCY_MISMATCH",
+          "Organization reversal key is already bound elsewhere.",
+        );
+      }
+      return { usageId: existing._id, idempotent: true };
+    }
+    const budget = await ctx.db
+      .query("organizationBudgets")
+      .withIndex("by_organizationId_and_monthKey", (q) =>
+        q
+          .eq("organizationId", debit.organizationId)
+          .eq("monthKey", debit.monthKey),
+      )
+      .unique();
+    if (budget === null) {
+      organizationError(
+        "ORGANIZATION_BUDGET_MISSING",
+        "Organization budget not found.",
+      );
+    }
+    const now = Date.now();
+    const spentAfterMicros = Math.max(
+      0,
+      budget.spentMicros - debit.amountMicros,
+    );
+    await ctx.db.patch("organizationBudgets", budget._id, {
+      spentMicros: spentAfterMicros,
+      updatedAt: now,
+    });
+    const usageId = await ctx.db.insert("organizationUsageLedger", {
+      organizationId: debit.organizationId,
+      projectId: debit.projectId,
+      serviceAccountId: debit.serviceAccountId,
+      idempotencyKey: reversalKey,
+      scope: debit.scope,
+      amountMicros: -debit.amountMicros,
+      entryType: "reversal",
+      commandId: args.commandId,
+      requestFingerprint: debit.requestFingerprint,
+      reversesUsageId: debit._id,
+      spentAfterMicros,
+      currency: "USD",
+      monthKey: debit.monthKey,
+      chargedAt: now,
+    });
+    return { usageId, idempotent: false };
   },
 });
 
@@ -1835,6 +1977,9 @@ export const listUsage = query({
       serviceAccountId: row.serviceAccountId,
       scope: row.scope,
       amountMicros: row.amountMicros,
+      entryType: row.entryType ?? "debit",
+      commandId: row.commandId,
+      reversesUsageId: row.reversesUsageId,
       spentAfterMicros: row.spentAfterMicros,
       currency: row.currency,
       monthKey: row.monthKey,

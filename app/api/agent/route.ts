@@ -120,6 +120,8 @@ const MANIFEST = {
     semanticFallback: "lexical-only",
     semanticMaximumResults: 20,
     semanticRequiresIdempotencyKey: true,
+    semanticLexicalFallbackMonetaryCharge: false,
+    agentQuotaAccounting: "non-refundable request-attempt abuse budget",
     description:
       "Bounded lexical, entity, and public-citation-aware federation across public evidence and editorial records. Authenticated semantic enhancement is available only when its server-side feature flag, relay secret, corpus, and provider budget are configured; all unavailable or failed semantic retrieval falls back to currently authorized lexical results.",
   },

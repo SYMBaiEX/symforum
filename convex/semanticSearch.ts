@@ -178,15 +178,24 @@ const backfillRef = makeFunctionReference<
 const searchSemanticRef = makeFunctionReference<
   "action",
   { query: string; limit?: number },
-  Array<{
-    documentId: Id<"evidenceDocuments">;
-    title: string;
-    excerpt: string;
-    canonicalUrl: string;
-    updatedAt: number;
-    publishedAt: number | null;
-    score: number;
-  }>
+  {
+    results: Array<{
+      documentId: Id<"evidenceDocuments">;
+      title: string;
+      excerpt: string;
+      canonicalUrl: string;
+      updatedAt: number;
+      publishedAt: number | null;
+      score: number;
+    }>;
+    semanticAttempted: boolean;
+    semanticUsed: boolean;
+    outcome:
+      | "completed"
+      | "circuit_paused"
+      | "budget_rejected"
+      | "provider_failed";
+  }
 >("semanticSearch:searchPublicSemantic");
 const lexicalSearchRef = makeFunctionReference<
   "query",
@@ -1081,7 +1090,13 @@ export const searchPublicSemantic = internalAction({
       model: settings.model,
       now: Date.now(),
     });
-    if (!availability.available) return [];
+    if (!availability.available)
+      return {
+        results: [],
+        semanticAttempted: false,
+        semanticUsed: false,
+        outcome: "circuit_paused" as const,
+      };
     const query = normalizedText(args.query, MAX_QUERY_CHARS);
     if (!query)
       throw new ConvexError({
@@ -1116,7 +1131,13 @@ export const searchPublicSemantic = internalAction({
       model: settings.model,
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
     });
-    if (!reservation.accepted) return [];
+    if (!reservation.accepted)
+      return {
+        results: [],
+        semanticAttempted: false,
+        semanticUsed: false,
+        outcome: "budget_rejected" as const,
+      };
     try {
       const result = await rag.search(ctx, {
         namespace: NAMESPACE,
@@ -1159,7 +1180,12 @@ export const searchPublicSemantic = internalAction({
           ];
         })
         .slice(0, MAX_SEMANTIC_CANDIDATES);
-      return await ctx.runQuery(readCandidatesRef, { candidates });
+      return {
+        results: await ctx.runQuery(readCandidatesRef, { candidates }),
+        semanticAttempted: true,
+        semanticUsed: true,
+        outcome: "completed" as const,
+      };
     } catch (error) {
       await ctx.runMutation(recordUsageRef, {
         operationKey: queryOperationKey,
@@ -1171,7 +1197,12 @@ export const searchPublicSemantic = internalAction({
       });
       // Explicitly fail closed. Callers retain lexical results rather than
       // receiving unverified/stale vector content.
-      return [];
+      return {
+        results: [],
+        semanticAttempted: true,
+        semanticUsed: false,
+        outcome: "provider_failed" as const,
+      };
     }
   },
 });
@@ -1183,13 +1214,40 @@ export const searchPublicSemantic = internalAction({
  */
 export const searchHybridPublic = internalAction({
   args: { query: v.string(), limit: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<UniversalResult[]> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    results: UniversalResult[];
+    semanticAttempted: boolean;
+    semanticUsed: boolean;
+    outcome:
+      | "completed"
+      | "feature_disabled"
+      | "lexical_satisfied"
+      | "circuit_paused"
+      | "budget_rejected"
+      | "provider_failed";
+  }> => {
     const limit = args.limit ?? 20;
     const lexical = await ctx.runQuery(lexicalSearchRef, {
       query: args.query,
       limit,
     });
-    if (!config().enabled || lexical.length >= limit) return lexical;
+    if (!config().enabled)
+      return {
+        results: lexical,
+        semanticAttempted: false,
+        semanticUsed: false,
+        outcome: "feature_disabled",
+      };
+    if (lexical.length >= limit)
+      return {
+        results: lexical,
+        semanticAttempted: false,
+        semanticUsed: false,
+        outcome: "lexical_satisfied",
+      };
     let semantic: Awaited<
       ReturnType<typeof ctx.runAction<typeof searchSemanticRef>>
     >;
@@ -1201,10 +1259,15 @@ export const searchHybridPublic = internalAction({
     } catch {
       // Semantic is an enhancement only. Preserve the lexical response if an
       // operator disables the feature between the first check and this call.
-      return lexical;
+      return {
+        results: lexical,
+        semanticAttempted: false,
+        semanticUsed: false,
+        outcome: "provider_failed",
+      };
     }
     const knownUrls = new Set(lexical.map((result) => result.canonicalUrl));
-    const semanticOnly = semantic
+    const semanticOnly = semantic.results
       .filter((result) => !knownUrls.has(result.canonicalUrl))
       .sort(
         (left, right) =>
@@ -1239,6 +1302,11 @@ export const searchHybridPublic = internalAction({
           citationIds: [],
         },
       }));
-    return [...lexical, ...semanticOnly].slice(0, limit);
+    return {
+      results: [...lexical, ...semanticOnly].slice(0, limit),
+      semanticAttempted: semantic.semanticAttempted,
+      semanticUsed: semantic.semanticUsed,
+      outcome: semantic.outcome,
+    };
   },
 });

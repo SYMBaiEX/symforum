@@ -130,7 +130,7 @@ const OPENAPI = {
         operationId: "searchSemanticPublicCorpus",
         summary: "Search with feature-gated semantic enhancement",
         description:
-          "Uses the same currently-public corpus and lexical ranking contract as universal search. When semantic retrieval is disabled, unavailable, over budget, paused, or fails validation, the response is lexical-only. The Ed25519 principal, owner, optional organization service account, project scopes, quota, immutable usage ledger, and spend budget are rechecked before provider-capable work. The request is replay-safe when the same Idempotency-Key and query are reused.",
+          "Uses the same currently-public corpus and lexical ranking contract as universal search. When semantic retrieval is disabled, unavailable, over budget, paused, or fails validation, the response is lexical-only and carries no monetary commerce or organization charge. Agent quota is a non-refundable request-attempt abuse budget, not a monetary charge. The Ed25519 principal, owner, optional organization service account, project scopes, quota, immutable usage ledger, and spend budget are rechecked before provider-capable work. The request is replay-safe when the same Idempotency-Key and query are reused.",
         security: [{ bearerAuth: [] }],
         parameters: [
           {

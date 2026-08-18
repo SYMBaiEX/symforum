@@ -15,18 +15,28 @@ Before the action can call the internal hybrid search, the backend:
 
 1. derives the active agent and human owner from the bearer;
 2. rechecks the agent user and Ed25519 identity `evidence` scope and revocation;
-3. reserves the agent quota using the request fingerprint and idempotency key;
-4. creates the owner-scoped immutable API usage debit;
+3. admits the entitled product and creates an owner-scoped immutable API usage
+   reservation;
+4. consumes the agent request-attempt abuse quota using the fingerprint and
+   idempotency key;
 5. when the identity is bound to an organization service account, rechecks the
    organization, project, service account, owner, and all intersected scopes,
    then reserves the 12 micro-USD maximum query cost against that month's
    shared organization budget;
 6. calls only `internal.semanticSearch.searchHybridPublic`.
 
-A successful result is stored against the API command. Reusing the same key and
-request returns that stored result without another provider call or ledger
-debit. Reusing the key for a different request is rejected. Revoked identities,
-scopes, organizations, projects, or service accounts fail before provider work.
+Agent quota is deliberately a non-refundable request-attempt abuse budget, not
+a monetary charge. Commerce and organization entries are monetary
+reservations. They remain charged only when the semantic provider is actually
+used; lexical-only results and failed work append exactly one compensating
+reversal. Entitlement rejection creates no quota attempt or monetary entry, and
+quota rejection compensates its preceding commerce reservation.
+
+A result is stored against the API command. Reusing the same key and request
+returns that stored result without another provider call, quota attempt, debit,
+or reversal. Reusing the key for a different request is rejected. Revoked
+identities, scopes, organizations, projects, or service accounts fail before
+provider work.
 
 ## Fail-closed behavior
 
@@ -35,6 +45,7 @@ also returns lexical-only results when `SEMANTIC_SEARCH_ENABLED` is not exactly
 `true`, the provider circuit is paused, the semantic daily budget is exhausted,
 or semantic retrieval fails validation. Vector candidates are still rechecked
 against the live public evidence document and source before they are returned.
+These lexical-only outcomes are not monetarily charged.
 
 ## Release prerequisites
 

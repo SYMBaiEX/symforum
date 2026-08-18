@@ -105,12 +105,20 @@ const prepareRef = makeFunctionReference<
   {
     commandId: Id<"apiCommands">;
     replayResult?: UniversalResult[];
+    denialCode?: "AGENT_QUOTA_EXCEEDED";
   }
 >("agentSemanticApi:prepare");
 
 const completeRef = makeFunctionReference<
   "mutation",
-  { commandId: Id<"apiCommands">; result: UniversalResult[] },
+  {
+    commandId: Id<"apiCommands">;
+    result: UniversalResult[];
+    chargeMonetary: boolean;
+    semanticAttempted: boolean;
+    semanticUsed: boolean;
+    outcome: string;
+  },
   null
 >("agentSemanticApi:complete");
 
@@ -123,7 +131,12 @@ const failRef = makeFunctionReference<
 const hybridSearchRef = makeFunctionReference<
   "action",
   { query: string; limit?: number },
-  UniversalResult[]
+  {
+    results: UniversalResult[];
+    semanticAttempted: boolean;
+    semanticUsed: boolean;
+    outcome: string;
+  }
 >("semanticSearch:searchHybridPublic");
 
 function semanticError(code: string, message: string): never {
@@ -255,6 +268,63 @@ function parseStoredResult(command: Doc<"apiCommands">): UniversalResult[] {
   return (parsed as { result: UniversalResult[] }).result;
 }
 
+function parseReservation(command: Doc<"apiCommands">) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(command.resultJson);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    (parsed as Record<string, unknown>).kind !==
+      "semantic-search-reservation" ||
+    (parsed as Record<string, unknown>).version !== 1
+  ) {
+    semanticError(
+      "COMMAND_STATE_INVALID",
+      "Semantic search accounting reservation is unavailable.",
+    );
+  }
+  const organizationUsageId = (parsed as Record<string, unknown>)
+    .organizationUsageId;
+  if (
+    organizationUsageId !== undefined &&
+    typeof organizationUsageId !== "string"
+  ) {
+    semanticError(
+      "COMMAND_STATE_INVALID",
+      "Semantic search accounting reservation is invalid.",
+    );
+  }
+  return {
+    organizationUsageId: organizationUsageId as
+      | Id<"organizationUsageLedger">
+      | undefined,
+  };
+}
+
+async function reverseMonetaryReservations(
+  ctx: MutationCtx,
+  command: Doc<"apiCommands">,
+  reason: string,
+) {
+  const reservation = parseReservation(command);
+  await ctx.runMutation(internal.apiCommerce.reverseCommandUsage, {
+    commandId: command._id,
+    reason,
+  });
+  if (reservation.organizationUsageId !== undefined) {
+    await ctx.runMutation(internal.organizations.reverseServiceAccountUsage, {
+      usageId: reservation.organizationUsageId,
+      commandId: command._id,
+      reason,
+    });
+  }
+}
+
 /**
  * Authenticates and reserves every caller-controlled budget before the action
  * can reach OpenRouter. No owner, organization, project, or agent identifier
@@ -270,6 +340,7 @@ export const prepare = internalMutation({
   returns: v.object({
     commandId: v.id("apiCommands"),
     replayResult: v.optional(v.array(universalResultValidator)),
+    denialCode: v.optional(v.literal("AGENT_QUOTA_EXCEEDED")),
   }),
   handler: async (ctx, args) => {
     const query = normalizedQuery(args.query);
@@ -278,23 +349,9 @@ export const prepare = internalMutation({
     const requestFingerprint = normalizedFingerprint(args.requestFingerprint);
     const principal = await semanticPrincipal(ctx);
 
-    const quota: AgentQuotaConsumeResult = await ctx.runMutation(
-      internal.agentQuota.consumeAgentQuota,
-      {
-        agentId: principal.agentId,
-        units: SEMANTIC_QUERY_UNITS,
-        operation: "evidence.semantic_search",
-        idempotencyKey,
-        requestFingerprint,
-      },
-    );
-    if (!quota.accepted) {
-      semanticError(
-        "AGENT_QUOTA_EXCEEDED",
-        "Agent usage quota reached for this period.",
-      );
-    }
-
+    // Commerce admission precedes the request-attempt abuse quota. If the
+    // latter rejects, the monetary debit is compensated before returning the
+    // denial. Agent quota is deliberately not refundable after acceptance.
     const command = await ctx.runMutation(
       api.apiCommerce.beginOrReplayCommand,
       {
@@ -326,19 +383,65 @@ export const prepare = internalMutation({
       };
     }
 
+    const quota: AgentQuotaConsumeResult = await ctx.runMutation(
+      internal.agentQuota.consumeAgentQuota,
+      {
+        agentId: principal.agentId,
+        units: SEMANTIC_QUERY_UNITS,
+        operation: "evidence.semantic_search",
+        idempotencyKey,
+        requestFingerprint,
+      },
+    );
+    if (!quota.accepted) {
+      await ctx.db.patch("apiCommands", command.commandId, {
+        status: "failed",
+        resultJson: JSON.stringify({
+          kind: "semantic-search-reservation",
+          version: 1,
+        }),
+        updatedAt: Date.now(),
+      });
+      const denied = await ctx.db.get("apiCommands", command.commandId);
+      if (denied === null) {
+        semanticError("COMMAND_STATE_INVALID", "Semantic command disappeared.");
+      }
+      await reverseMonetaryReservations(ctx, denied, "agent_quota_rejected");
+      return {
+        commandId: command.commandId,
+        denialCode: "AGENT_QUOTA_EXCEEDED" as const,
+      };
+    }
+
     const serviceAccount = await ctx.db
       .query("organizationServiceAccounts")
       .withIndex("by_agentUserId", (q) =>
         q.eq("agentUserId", principal.agentUserId),
       )
       .unique();
+    let organizationUsageId: Id<"organizationUsageLedger"> | undefined;
     if (serviceAccount !== null) {
-      await ctx.runMutation(api.organizations.recordServiceAccountUsage, {
-        scope: "evidence",
-        amountMicros: SEMANTIC_QUERY_MAX_MICRO_USD,
-        idempotencyKey: `semantic:${idempotencyKey}`,
-      });
+      const usage = await ctx.runMutation(
+        api.organizations.recordServiceAccountUsage,
+        {
+          scope: "evidence",
+          amountMicros: SEMANTIC_QUERY_MAX_MICRO_USD,
+          idempotencyKey: `semantic:${idempotencyKey}`,
+          commandId: command.commandId,
+          requestFingerprint,
+        },
+      );
+      organizationUsageId = usage.usageId;
     }
+
+    await ctx.db.patch("apiCommands", command.commandId, {
+      resultJson: JSON.stringify({
+        kind: "semantic-search-reservation",
+        version: 1,
+        organizationUsageId,
+      }),
+      updatedAt: Date.now(),
+    });
 
     return { commandId: command.commandId };
   },
@@ -348,26 +451,39 @@ export const complete = internalMutation({
   args: {
     commandId: v.id("apiCommands"),
     result: v.array(universalResultValidator),
+    chargeMonetary: v.boolean(),
+    semanticAttempted: v.boolean(),
+    semanticUsed: v.boolean(),
+    outcome: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const principal = await semanticPrincipal(ctx);
     const command = await ctx.db.get("apiCommands", args.commandId);
-    if (
-      command === null ||
-      command.ownerUserId !== principal.ownerUserId ||
-      command.kind !== "evidence.semantic_search"
-    ) {
+    if (command === null || command.kind !== "evidence.semantic_search") {
       semanticError("COMMAND_DENIED", "Semantic search command not found.");
     }
     if (command.status === "completed") return null;
     if (command.status !== "accepted") {
       semanticError("COMMAND_STATE_INVALID", "Semantic search command failed.");
     }
+    if (!args.chargeMonetary) {
+      await reverseMonetaryReservations(
+        ctx,
+        command,
+        `semantic_${args.outcome}`.slice(0, 80),
+      );
+    }
     const resultJson = JSON.stringify({
       kind: "semantic-search-result",
       version: 1,
       result: args.result,
+      settlement: {
+        agentQuota: "non_refundable_request_attempt",
+        monetaryCharged: args.chargeMonetary,
+        semanticAttempted: args.semanticAttempted,
+        semanticUsed: args.semanticUsed,
+        outcome: args.outcome,
+      },
     });
     if (resultJson.length > 100_000) {
       semanticError(
@@ -388,11 +504,9 @@ export const fail = internalMutation({
   args: { commandId: v.id("apiCommands") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const principal = await semanticPrincipal(ctx);
     const command = await ctx.db.get("apiCommands", args.commandId);
     if (
       command === null ||
-      command.ownerUserId !== principal.ownerUserId ||
       command.kind !== "evidence.semantic_search" ||
       command.status !== "accepted"
     ) {
@@ -407,10 +521,7 @@ export const fail = internalMutation({
       }),
       updatedAt: Date.now(),
     });
-    await ctx.runMutation(internal.apiCommerce.reverseCommandUsage, {
-      commandId: command._id,
-      reason: "semantic_search_failed",
-    });
+    await reverseMonetaryReservations(ctx, command, "semantic_search_failed");
     return null;
   },
 });
@@ -442,21 +553,31 @@ export const dispatch = internalAction({
       limit,
       requestFingerprint: expectedFingerprint,
     });
+    if (prepared.denialCode === "AGENT_QUOTA_EXCEEDED") {
+      semanticError(
+        "AGENT_QUOTA_EXCEEDED",
+        "Agent usage quota reached for this period.",
+      );
+    }
     if (prepared.replayResult !== undefined) return prepared.replayResult;
     try {
       // searchHybridPublic is the only provider-capable function called here.
       // It preserves lexical ranking and returns lexical-only results whenever
       // the feature flag is off, the circuit is paused, or semantic retrieval
       // fails closed.
-      const result = await ctx.runAction(hybridSearchRef, {
+      const search = await ctx.runAction(hybridSearchRef, {
         query,
         limit,
       });
       await ctx.runMutation(completeRef, {
         commandId: prepared.commandId,
-        result,
+        result: search.results,
+        chargeMonetary: search.semanticUsed,
+        semanticAttempted: search.semanticAttempted,
+        semanticUsed: search.semanticUsed,
+        outcome: search.outcome,
       });
-      return result;
+      return search.results;
     } catch (error) {
       await ctx.runMutation(failRef, { commandId: prepared.commandId });
       throw error;

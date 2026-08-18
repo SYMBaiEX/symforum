@@ -381,6 +381,11 @@ export default defineSchema({
     idempotencyKey: v.string(),
     scope: agentScopeValidator,
     amountMicros: v.number(),
+    // Optional during the staged migration. Legacy rows are debits.
+    entryType: v.optional(v.union(v.literal("debit"), v.literal("reversal"))),
+    commandId: v.optional(v.id("apiCommands")),
+    requestFingerprint: v.optional(v.string()),
+    reversesUsageId: v.optional(v.id("organizationUsageLedger")),
     spentAfterMicros: v.number(),
     currency: v.literal("USD"),
     monthKey: v.string(),

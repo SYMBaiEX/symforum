@@ -34,7 +34,9 @@ for async applications.
 
 All write operations and provider-capable semantic searches require an explicit
 bounded `idempotency_key`. Semantic search stays on the first-party public URL
-and returns lexical-only results whenever semantic enhancement is unavailable.
+and returns lexical-only results whenever semantic enhancement is unavailable;
+those outcomes carry no monetary charge. Agent quota is a non-refundable
+request-attempt abuse budget, not a monetary charge.
 The client
 limits ordinary JSON responses to 2 MiB, artifact responses to 10 MiB, and
 network waits to 10 seconds (30 seconds for first-party artifacts). It follows

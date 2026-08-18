@@ -47,7 +47,9 @@ Write operations and provider-capable semantic search require a bounded
 idempotency key so retries remain safe. Semantic search uses only the public
 `/api/agent/v1/semantic-search` URL. It returns lexical-only results when the
 server-side semantic flag, relay, corpus, circuit, or provider budget is not
-available; the SDK never receives a Convex URL.
+available; these lexical-only outcomes carry no monetary charge. Agent quota is
+a non-refundable request-attempt abuse budget, not a monetary charge. The SDK
+never receives a Convex URL.
 The TypeScript SDK covers the public REST, authenticated artifact, webhook,
 Ed25519 session, and MCP operations advertised by the live OpenAPI document.
 
