@@ -88,6 +88,15 @@ pass.
     insufficient-scope denial, key rotation, and revocation in production.
   - Acceptance: the authenticated smoke harness passes without printing
     secrets; revoked credentials fail; the release checklist is closed.
+  - A non-secret certification harness is available at
+    `bun run certify:agent:auth`. Its default is a zero-network, zero-mutation
+    plan; `--verify-public` is metadata-only. Lifecycle verification requires
+    explicit `--run-lifecycle --production strong-bee-384 --confirm PLAT-01`
+    and an explicit lifecycle phase: refresh/scope, key rotation, or revocation.
+    Enrollment, rotation, and revocation stay owner-console operations; the
+    harness performs temporary local Ed25519 signing only for the rotation
+    assertion, never transmits private keys, and never sends agent-management
+    mutations.
 
 - [ ] **PLAT-02 — MCP 2026-07-28 protocol upgrade**
 

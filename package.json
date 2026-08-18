@@ -22,7 +22,8 @@
     "typecheck:convex": "tsc --project convex/tsconfig.json --noEmit",
     "lint": "eslint .",
     "smoke:agent:public": "bun scripts/smoke-agent-api.mjs --public-only",
-    "smoke:agent:auth": "bun scripts/smoke-agent-api.mjs"
+    "smoke:agent:auth": "bun scripts/smoke-agent-api.mjs",
+    "certify:agent:auth": "bun scripts/certify-agent-auth.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.29",
