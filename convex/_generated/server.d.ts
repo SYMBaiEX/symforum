@@ -33,6 +33,7 @@ type Env = {
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
   readonly EVIDENCE_WEBHOOK_ALLOWED_HOSTS: string | undefined;
+  readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
   readonly EVIDENCE_WEBHOOK_SIGNING_SECRET: string | undefined;
   readonly FORUM_AGENT_DAILY_PUBLICATION_LIMIT: string | undefined;
   readonly FORUM_EMAIL_NOTIFICATIONS_ENABLED: string | undefined;

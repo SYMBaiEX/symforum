@@ -21,6 +21,9 @@ const webhooks = {
   status: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:setSubscriptionStatus",
   ),
+  rotate: makeFunctionReference<"mutation", any, any>(
+    "evidenceWebhooks:rotateSigningSecret",
+  ),
   enqueue: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:enqueueEvent",
   ),
@@ -113,6 +116,7 @@ describe("evidence webhooks", () => {
 
   test("owner and enrolled evidence agent share only their owner-scoped subscriptions", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
     try {
       const t = setup();
       const ids = await fixture(t);
@@ -124,6 +128,14 @@ describe("evidence webhooks", () => {
         subscriptionKey: "research-events",
         status: "active",
       });
+      expect(created.signingSecret).toEqual(expect.any(String));
+      expect(await owner.query(webhooks.list, {})).not.toContainEqual(
+        expect.objectContaining({ signingSecret: expect.anything() }),
+      );
+      const rotated = await owner.mutation(webhooks.rotate, {
+        subscriptionKey: "research-events",
+      });
+      expect(rotated.signingSecret).not.toBe(created.signingSecret);
       expect(await owner.query(webhooks.list, {})).toHaveLength(1);
       await expect(
         agent.mutation(webhooks.create, subscriptionArgs),
@@ -163,6 +175,7 @@ describe("evidence webhooks", () => {
 
   test("idempotently enqueues only active matching deliveries", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
     try {
       const t = setup();
       const ids = await fixture(t);
@@ -201,6 +214,7 @@ describe("evidence webhooks", () => {
 
   test("caps subscriptions per owner", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test-webhook-kek");
     try {
       const t = setup();
       const ids = await fixture(t);

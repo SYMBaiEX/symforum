@@ -2388,6 +2388,9 @@ export default defineSchema({
       v.literal("revoked"),
     ),
     eventTypes: v.array(v.string()),
+    signingSecretCiphertext: v.optional(v.string()),
+    signingSecretNonce: v.optional(v.string()),
+    signingSecretVersion: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2424,6 +2427,7 @@ export default defineSchema({
     ),
     attempt: v.number(),
     responseCode: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

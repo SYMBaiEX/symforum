@@ -17,6 +17,7 @@ const app = defineApp({
     GH_TOKEN: v.optional(v.string()),
     EVIDENCE_WEBHOOK_ALLOWED_HOSTS: v.optional(v.string()),
     EVIDENCE_WEBHOOK_SIGNING_SECRET: v.optional(v.string()),
+    EVIDENCE_WEBHOOK_KEK: v.optional(v.string()),
     RESEND_API_KEY: v.optional(v.string()),
     RESEND_WEBHOOK_SECRET: v.optional(v.string()),
     NEWSLETTER_FROM_EMAIL: v.optional(v.string()),

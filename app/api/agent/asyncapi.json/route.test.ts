@@ -26,8 +26,8 @@ describe("agent AsyncAPI event contract", () => {
     expect(response.status).toBe(200);
     expect(document.asyncapi).toBe("3.0.0");
     expect(document["x-symbaiex-verification-provisioning"]).toEqual({
-      enabled: false,
-      description: expect.stringContaining("self-service signature verification"),
+      enabled: true,
+      description: expect.stringContaining("shown exactly once"),
     });
     expect(Object.keys(document.channels)).toEqual(eventTypes);
     expect(Object.values(document.operations)).toHaveLength(eventTypes.length);
@@ -43,7 +43,7 @@ describe("agent AsyncAPI event contract", () => {
       document.components.schemas.DeliveryHeaders.properties[
         "x-symbaiex-signature"
       ].description,
-    ).toContain("provisioning is currently disabled");
+    ).toContain("one-time provisioned subscription secret");
     expect(Object.values(document.operations)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ action: "receive" }),

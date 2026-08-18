@@ -46,7 +46,63 @@ const safeSubscriptionValidator = v.object({
   eventTypes: v.array(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
+  signingSecret: v.optional(v.string()),
 });
+
+function base64Url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function fromBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+async function encryptionKey(kek: string) {
+  const material = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(kek),
+  );
+  return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export async function encryptWebhookSecret(kek: string, secret: string) {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce },
+    await encryptionKey(kek),
+    new TextEncoder().encode(secret),
+  );
+  return { ciphertext: base64Url(new Uint8Array(ciphertext)), nonce: base64Url(nonce) };
+}
+
+export async function decryptWebhookSecret(
+  kek: string,
+  ciphertext: string,
+  nonce: string,
+) {
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromBase64Url(nonce) },
+    await encryptionKey(kek),
+    fromBase64Url(ciphertext),
+  );
+  return new TextDecoder().decode(plaintext);
+}
+
+function configuredWebhookKek() {
+  const webhookEnv = env as typeof env & { readonly EVIDENCE_WEBHOOK_KEK: string | undefined };
+  if (!webhookEnv.EVIDENCE_WEBHOOK_KEK) {
+    throw new ConvexError({ code: "WEBHOOK_SIGNING_UNAVAILABLE", message: "Webhook signing is unavailable until EVIDENCE_WEBHOOK_KEK is configured." });
+  }
+  return webhookEnv.EVIDENCE_WEBHOOK_KEK;
+}
 
 export const eventTypeValidator = v.union(
   v.literal("evidence.document.changed"),
@@ -292,6 +348,7 @@ export const createSubscription = mutation({
   returns: safeSubscriptionValidator,
   handler: async (ctx, args) => {
     const principal = await evidencePrincipal(ctx);
+    const kek = configuredWebhookKek();
     const subscriptionKey = identifier(
       args.subscriptionKey,
       "subscriptionKey",
@@ -333,6 +390,8 @@ export const createSubscription = mutation({
         message: `Each account can configure at most ${MAX_SUBSCRIPTIONS_PER_OWNER} webhook subscriptions.`,
       });
     }
+    const secret = base64Url(crypto.getRandomValues(new Uint8Array(32)));
+    const encrypted = await encryptWebhookSecret(kek, secret);
     const now = Date.now();
     const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
       ownerUserId: principal.ownerUserId,
@@ -340,6 +399,9 @@ export const createSubscription = mutation({
       url,
       status: "active",
       eventTypes,
+      signingSecretCiphertext: encrypted.ciphertext,
+      signingSecretNonce: encrypted.nonce,
+      signingSecretVersion: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -348,7 +410,7 @@ export const createSubscription = mutation({
       subscriptionId,
     ))!;
     await syncSubscriptionTargets(ctx, subscription);
-    return safeSubscription(subscription);
+    return { ...safeSubscription(subscription), signingSecret: secret };
   },
 });
 
@@ -412,6 +474,31 @@ export const setSubscriptionStatus = mutation({
     };
     await syncSubscriptionTargets(ctx, updated);
     return safeSubscription(updated);
+  },
+});
+
+/** Returns a replacement secret exactly once to the authenticated owner. */
+export const rotateSigningSecret = mutation({
+  args: { subscriptionKey: v.string() },
+  returns: safeSubscriptionValidator,
+  handler: async (ctx, args) => {
+    const principal = await evidencePrincipal(ctx);
+    const subscriptionKey = identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH);
+    const subscription = await ctx.db
+      .query("apiWebhookSubscriptions")
+      .withIndex("by_ownerUserId_and_subscriptionKey", (q) => q.eq("ownerUserId", principal.ownerUserId).eq("subscriptionKey", subscriptionKey))
+      .unique();
+    if (subscription === null) throw new ConvexError({ code: "WEBHOOK_SUBSCRIPTION_NOT_FOUND", message: "Webhook subscription was not found." });
+    const secret = base64Url(crypto.getRandomValues(new Uint8Array(32)));
+    const encrypted = await encryptWebhookSecret(configuredWebhookKek(), secret);
+    const now = Date.now();
+    await ctx.db.patch("apiWebhookSubscriptions", subscription._id, {
+      signingSecretCiphertext: encrypted.ciphertext,
+      signingSecretNonce: encrypted.nonce,
+      signingSecretVersion: (subscription.signingSecretVersion ?? 0) + 1,
+      updatedAt: now,
+    });
+    return { ...safeSubscription({ ...subscription, updatedAt: now }), signingSecret: secret };
   },
 });
 
@@ -567,6 +654,8 @@ export const getDeliveryInput = internalQuery({
       status: subscriptionStatusValidator,
       eventType: eventTypeValidator,
       payloadJson: v.string(),
+      signingSecretCiphertext: v.optional(v.string()),
+      signingSecretNonce: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -611,6 +700,8 @@ export const getDeliveryInput = internalQuery({
       status: subscription.status,
       eventType: (parsed as { eventType: EventType }).eventType,
       payloadJson: (parsed as { payloadJson: string }).payloadJson,
+      signingSecretCiphertext: subscription.signingSecretCiphertext,
+      signingSecretNonce: subscription.signingSecretNonce,
     };
   },
 });

@@ -2,7 +2,11 @@ import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
-import { parseAllowedHosts, validateWebhookUrl } from "./evidenceWebhooks";
+import {
+  decryptWebhookSecret,
+  parseAllowedHosts,
+  validateWebhookUrl,
+} from "./evidenceWebhooks";
 
 const getDeliveryInputRef = makeFunctionReference<
   "query",
@@ -21,6 +25,8 @@ const getDeliveryInputRef = makeFunctionReference<
       | "evidence.benchmark.completed"
       | "evidence.claim.verified";
     payloadJson: string;
+    signingSecretCiphertext?: string;
+    signingSecretNonce?: string;
   } | null
 >("evidenceWebhooks:getDeliveryInput");
 const markDeliveryRef = makeFunctionReference<
@@ -68,7 +74,7 @@ export const deliver = internalAction({
   handler: async (ctx, args) => {
     const webhookEnv = env as typeof env & {
       readonly EVIDENCE_WEBHOOK_ALLOWED_HOSTS: string | undefined;
-      readonly EVIDENCE_WEBHOOK_SIGNING_SECRET: string | undefined;
+      readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
     };
     const input = await ctx.runQuery(getDeliveryInputRef, {
       deliveryId: args.deliveryId,
@@ -97,16 +103,34 @@ export const deliver = internalAction({
       });
       return null;
     }
-    const signingSecret = webhookEnv.EVIDENCE_WEBHOOK_SIGNING_SECRET;
-    if (!signingSecret) {
+    if (
+      !webhookEnv.EVIDENCE_WEBHOOK_KEK ||
+      !input.signingSecretCiphertext ||
+      !input.signingSecretNonce
+    ) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
         delivered: false,
-        errorMessage: "Webhook signing is not configured",
+        errorMessage: "Webhook signing is unavailable",
       });
       return null;
     }
 
+    let signingSecret: string;
+    try {
+      signingSecret = await decryptWebhookSecret(
+        webhookEnv.EVIDENCE_WEBHOOK_KEK,
+        input.signingSecretCiphertext,
+        input.signingSecretNonce,
+      );
+    } catch {
+      await ctx.runMutation(markDeliveryRef, {
+        deliveryId: input.deliveryId,
+        delivered: false,
+        errorMessage: "Webhook signing material is unavailable",
+      });
+      return null;
+    }
     let payload: unknown;
     try {
       payload = JSON.parse(input.payloadJson);
@@ -135,7 +159,7 @@ export const deliver = internalAction({
     }
 
     const signature = await hmac(
-      `${signingSecret}:${input.subscriptionId}`,
+      signingSecret,
       `${timestamp}.${body}`,
     );
     const controller = new AbortController();
