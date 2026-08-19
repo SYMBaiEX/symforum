@@ -10,6 +10,8 @@ const modules = {
   ...import.meta.glob("./**/*.tsx"),
 };
 
+type SitemapCategory = { slug: string };
+
 describe("forum sitemap records", () => {
   test("returns compact public records and excludes private boards", async () => {
     const t = convexTest(schema, modules);
@@ -101,7 +103,7 @@ describe("forum sitemap records", () => {
       month: "2026-08",
       limit: 100,
     });
-    expect(result.categories.map((row) => row.slug)).toEqual(["public-board"]);
+    expect(result.categories.map((row: SitemapCategory) => row.slug)).toEqual(["public-board"]);
     expect(result.threads).toEqual([
       {
         categorySlug: "public-board",

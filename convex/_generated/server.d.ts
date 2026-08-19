@@ -30,8 +30,10 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
+  readonly AGENT_SEMANTIC_RELAY_SECRET: string | undefined;
   readonly CONTACT_FROM_EMAIL: string | undefined;
   readonly CONTACT_NOTIFICATION_TO: string | undefined;
+  readonly CRON_WATCHDOG_ENABLED: string | undefined;
   readonly EVIDENCE_WEBHOOK_ALLOWED_HOSTS: string | undefined;
   readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
   readonly EVIDENCE_WEBHOOK_SIGNING_SECRET: string | undefined;
@@ -57,6 +59,7 @@ type Env = {
   readonly SITE_URL: string | undefined;
   readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
   readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
+  readonly WEB_VITALS_SLO_ENABLED: string | undefined;
 };
 
 /**

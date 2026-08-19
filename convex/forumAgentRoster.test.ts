@@ -12,6 +12,10 @@ const modules = {
   ...import.meta.glob("./**/*.tsx"),
 };
 
+type RosterMember = { agentSlug: string; dailyPostTarget?: number; model?: string; portraitUrl?: string; username?: string };
+type PublicAgent = { slug?: string; enabled?: boolean; model?: string; dailyPostTarget?: number; persona: string };
+type PublicAgentDirectory = { slug: string };
+
 function setup() {
   return convexTest(schema, modules);
 }
@@ -53,17 +57,17 @@ describe("dormant forum agent roster", () => {
       ),
     ).toBe(true);
     expect(stored.agents).toHaveLength(30);
-    expect(stored.agents.every((agent) => agent.enabled === false)).toBe(true);
-    expect(stored.agents.every((agent) => agent.model === "unassigned")).toBe(
+    expect(stored.agents.every((agent: PublicAgent) => agent.enabled === false)).toBe(true);
+    expect(stored.agents.every((agent: PublicAgent) => agent.model === "unassigned")).toBe(
       true,
     );
-    expect(stored.agents.every((agent) => agent.dailyPostTarget === 0)).toBe(
+    expect(stored.agents.every((agent: PublicAgent) => agent.dailyPostTarget === 0)).toBe(
       true,
     );
-    expect(new Set(stored.agents.map((agent) => agent.persona)).size).toBe(30);
+    expect(new Set(stored.agents.map((agent: PublicAgent) => agent.persona)).size).toBe(30);
     expect(
       stored.agents.every(
-        (agent) =>
+        (agent: PublicAgent) =>
           agent.persona.includes("Personality:") &&
           agent.persona.includes("Signature structure:") &&
           agent.persona.includes("Conversation habit:"),
@@ -103,7 +107,7 @@ describe("dormant forum agent roster", () => {
     expect(activeRoster.enabled).toBe(30);
     expect(
       activeRoster.members.every(
-        (member) =>
+        (member: RosterMember) =>
           member.dailyPostTarget === 1 &&
           member.model === OPENROUTER_FORUM_MODEL &&
           member.portraitUrl?.endsWith(`${member.agentSlug}.webp`),
@@ -152,7 +156,7 @@ describe("dormant forum agent roster", () => {
     );
     expect(migrated).toMatchObject({ updated: 1, wouldUpdate: 1 });
     const models = await t.run(async (ctx) =>
-      (await ctx.db.query("forumAgents").take(40)).map((agent) => agent.model),
+      (await ctx.db.query("forumAgents").take(40)).map((agent: PublicAgent) => agent.model),
     );
     expect(models.every((model) => model === OPENROUTER_FORUM_MODEL)).toBe(
       true,
@@ -176,7 +180,7 @@ describe("dormant forum agent roster", () => {
       {},
     );
     expect(
-      result.members.find((member) => member.agentSlug === "mara-venn"),
+      result.members.find((member: RosterMember) => member.agentSlug === "mara-venn"),
     ).toMatchObject({ username: "maravenn-agent" });
   });
 
@@ -200,7 +204,7 @@ describe("dormant forum agent roster", () => {
     );
 
     expect(publicAgents).toHaveLength(33);
-    expect(publicAgents.slice(0, 3).map((agent) => agent.slug)).toEqual([
+    expect(publicAgents.slice(0, 3).map((agent: PublicAgentDirectory) => agent.slug)).toEqual([
       "suki",
       "belle",
       "nyx",

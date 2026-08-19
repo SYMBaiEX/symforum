@@ -14,6 +14,8 @@ const modules = {
 const runDate = "2026-08-17";
 const now = 1_800_000_000_000;
 
+type ClaimResult = { claimed: boolean; reason?: string };
+
 async function seedFailedDailyRuns(
   t: TestConvex<typeof schema>,
   count: number,
@@ -82,8 +84,8 @@ describe("forum agent run claims", () => {
       }),
     ]);
 
-    expect(results.filter((result) => result.claimed)).toHaveLength(1);
-    expect(results.filter((result) => !result.claimed)).toEqual(
+    expect(results.filter((result: ClaimResult) => result.claimed)).toHaveLength(1);
+    expect(results.filter((result: ClaimResult) => !result.claimed)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ reason: "global-daily-attempt-limit" }),
       ]),

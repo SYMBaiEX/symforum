@@ -4,6 +4,7 @@ import { APICallError, tool, ToolLoopAgent } from "ai";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import {
@@ -113,6 +114,11 @@ type BelleDigestResult =
   | { status: "skipped"; reason: string }
   | { status: "failed"; error: string };
 
+type IndexedHackerNewsSnapshot = {
+  snapshot: Pick<Doc<"newsSnapshots">, "snapshotDate" | "status"> | null;
+  stories: Doc<"hnStories">[];
+};
+
 export const runDailySlot = internalAction({
   args: {
     slot: v.number(),
@@ -133,10 +139,13 @@ export const runDailyHackerNewsDigest = internalAction({
   handler: async (ctx, args): Promise<BelleDigestResult> => {
     const attempt = args.attempt ?? 0;
     await ctx.runMutation(internal.forum.ensureBelleForumInfrastructure, {});
-    const indexed = await ctx.runQuery(internal.news.readIndexedSnapshot, {
-      snapshotDate: args.snapshotDate,
-      limit: BELLE_DIGEST_STORY_LIMIT,
-    });
+    const indexed: IndexedHackerNewsSnapshot = await ctx.runQuery(
+      internal.news.readIndexedSnapshot,
+      {
+        snapshotDate: args.snapshotDate,
+        limit: BELLE_DIGEST_STORY_LIMIT,
+      },
+    );
     if (
       indexed.snapshot === null ||
       indexed.snapshot.status !== "complete" ||
@@ -195,8 +204,15 @@ export const runDailyHackerNewsDigest = internalAction({
         throw new Error(`Belle must use ${BELLE_MODEL}.`);
       }
 
-      const candidates = indexed.stories.map(hackerNewsCandidate);
-      const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
+      const candidates: ResearchCandidate[] = indexed.stories.map(
+        (story: Doc<"hnStories">, index: number) =>
+          hackerNewsCandidate(story, index),
+      );
+      const snapshots: ArticleSnapshot[] = await Promise.all(
+        candidates.map((candidate: ResearchCandidate) =>
+          fetchArticleSnapshot(candidate),
+        ),
+      );
       const requestContext = {
         user: "belle",
         tags: [
@@ -261,9 +277,11 @@ export const runDailyHackerNewsDigest = internalAction({
         stories: indexed.stories,
       });
       const imageSnapshot = snapshots
-        .filter((snapshot) => imageRelevanceScore(snapshot) >= 55)
+        .filter(
+          (snapshot: ArticleSnapshot) => imageRelevanceScore(snapshot) >= 55,
+        )
         .sort(
-          (left, right) =>
+          (left: ArticleSnapshot, right: ArticleSnapshot) =>
             imageRelevanceScore(right) - imageRelevanceScore(left),
         )[0];
       const cachedImage =
@@ -283,7 +301,7 @@ export const runDailyHackerNewsDigest = internalAction({
           prefixSlug: "news",
           title,
           body,
-          sources: indexed.stories.map((story) => ({
+          sources: indexed.stories.map((story: Doc<"hnStories">) => ({
             sourceKey: `belle-hn-${story.hnItemId}-${runDate}`,
             sourceUrl:
               story.url ??

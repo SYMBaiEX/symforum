@@ -40,6 +40,19 @@ async function completeForumSearchProjectionBackfill(t: TestBackend) {
 
 type TestBackend = ReturnType<typeof setup>;
 
+type ForumThreadResult = { _id?: Id<"forumThreads">; threadId?: Id<"forumThreads">; categoryId?: Id<"forumCategories">; authorId?: Id<"users">; categorySlug?: string; slug?: string; title?: string; body?: string; replyCount?: number; attachments?: Array<{ _id?: Id<"forumAttachments"> }>; prefix?: { slug?: string; label?: string; color?: string } | null };
+type ForumReportResult = { _id?: string; reportId?: string };
+type ForumCategoryResult = { _id?: Id<"forumCategories">; slug?: string; name?: string; position?: number; viewAccess?: string; children?: unknown[] };
+type ForumSectionResult = { boards: Array<{ slug?: string; threads?: unknown[] }> };
+type ForumPostResult = { _id?: string; postId?: string; threadId?: string; categoryId?: string; categorySlug?: string; authorId?: string; body?: string; postNumber?: number; attachments?: unknown[] };
+type ForumAnnouncementResult = { categoryId?: string; position?: number; slug?: string; status?: string; title?: string };
+type ForumDocumentResult = { body?: string; position?: number; slug?: string; status?: string; title?: string };
+type ForumEventResult = { actorUserId?: string; body?: string; eventType?: string; metadataJson?: string; slug?: string; startsAt?: number; status?: string; title?: string };
+type ForumAttachmentResult = { _id?: string; authorId?: string; body?: string; categoryId?: string; filename?: string; postId?: string; threadId?: string; txt?: string };
+type ForumOptionResult = { label?: string };
+type ForumRecordResult = { username?: string };
+type ForumMessageResult = { _id?: string };
+
 async function seedForum(t: TestBackend) {
   return await t.run(async (ctx) => {
     const now = 1_800_000_000_000;
@@ -384,8 +397,8 @@ describe("forum notification preferences", () => {
     const threads = await asBoardModerator.query(api.forum.listForumThreads, {
       limit: 10,
     });
-    expect(threads.map((thread) => thread._id)).toContain(seed.publicThreadId);
-    expect(threads.map((thread) => thread._id)).not.toContain(
+    expect(threads.map((thread: ForumThreadResult) => thread._id)).toContain(seed.publicThreadId);
+    expect(threads.map((thread: ForumThreadResult) => thread._id)).not.toContain(
       seed.trustedThreadId,
     );
 
@@ -393,10 +406,10 @@ describe("forum notification preferences", () => {
       status: "open",
       limit: 10,
     });
-    expect(reports.map((report) => report._id)).toContain(
+    expect(reports.map((report: ForumReportResult) => report._id)).toContain(
       publicReport.reportId,
     );
-    expect(reports.map((report) => report._id)).not.toContain(
+    expect(reports.map((report: ForumReportResult) => report._id)).not.toContain(
       trustedReport.reportId,
     );
 
@@ -419,7 +432,7 @@ describe("forum notification preferences", () => {
     ).rejects.toThrow(/moderator access for this board/i);
 
     const overview = await asBoardModerator.query(api.forum.adminOverview, {});
-    expect(overview.categories.map((category) => category._id)).toEqual([
+    expect(overview.categories.map((category: ForumCategoryResult) => category._id)).toEqual([
       seed.publicCategoryId,
     ]);
 
@@ -560,20 +573,20 @@ describe("forum notification preferences", () => {
           .take(10),
       ]);
       return {
-        postEvents: postEvents.map((event) => ({
+        postEvents: postEvents.map((event: ForumEventResult) => ({
           ...event,
-          metadata: JSON.parse(event.metadataJson),
+          metadata: JSON.parse(event.metadataJson!),
         })),
         publicCategory,
         publicThread,
-        reportEvents: reportEvents.map((event) => ({
+        reportEvents: reportEvents.map((event: ForumEventResult) => ({
           ...event,
-          metadata: JSON.parse(event.metadataJson),
+          metadata: JSON.parse(event.metadataJson!),
         })),
         storedReport,
-        threadEvents: threadEvents.map((event) => ({
+        threadEvents: threadEvents.map((event: ForumEventResult) => ({
           ...event,
-          metadata: JSON.parse(event.metadataJson),
+          metadata: JSON.parse(event.metadataJson!),
         })),
         trustedCategory,
         trustedPost,
@@ -622,7 +635,7 @@ describe("forum notification preferences", () => {
         moderationReason: "Remove duplicate lab reply",
       },
     });
-    expect(snapshot.reportEvents.map((event) => event.eventType)).toEqual([
+    expect(snapshot.reportEvents.map((event: ForumEventResult) => event.eventType)).toEqual([
       "forum_report_created",
       "forum_report_updated",
     ]);
@@ -2770,7 +2783,7 @@ describe("forum privacy regressions", () => {
       now,
       pageSize: 10,
     });
-    const slugs = recent.threads.map((thread) => thread.slug);
+    const slugs = recent.threads.map((thread: ForumThreadResult) => thread.slug);
     expect(slugs).toEqual(["trusted-lunar-brief"]);
   });
 
@@ -2810,7 +2823,7 @@ describe("forum privacy regressions", () => {
         now: fakeNow,
         pageSize: 10,
       });
-      const visibleSlugs = recent.threads.map((thread) => thread.slug);
+      const visibleSlugs = recent.threads.map((thread: ForumThreadResult) => thread.slug);
       expect(visibleSlugs).toContain("public-today-thread");
       expect(visibleSlugs).not.toContain("trusted-today-thread");
     } finally {
@@ -2870,10 +2883,10 @@ describe("forum privacy regressions", () => {
       categorySlug: "public-square",
       pageSize: 1,
     });
-    expect(unfiltered.threads.map((thread) => thread.slug)).toEqual([
+    expect(unfiltered.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "newer-unprefixed-note",
     ]);
-    expect(unfiltered.activityThreads.map((thread) => thread.slug)).toEqual([
+    expect(unfiltered.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "newer-unprefixed-note",
       "older-prefixed-dispatch",
       "public-lunar-brief",
@@ -2884,7 +2897,7 @@ describe("forum privacy regressions", () => {
       page: 2,
       pageSize: 1,
     });
-    expect(secondPage.threads.map((thread) => thread.slug)).toEqual([
+    expect(secondPage.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "older-prefixed-dispatch",
     ]);
     expect(secondPage.activityThreads[0]?.slug).toBe("newer-unprefixed-note");
@@ -2894,10 +2907,10 @@ describe("forum privacy regressions", () => {
       prefixId,
       pageSize: 1,
     });
-    expect(prefixed.threads.map((thread) => thread.slug)).toEqual([
+    expect(prefixed.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "older-prefixed-dispatch",
     ]);
-    expect(prefixed.activityThreads.map((thread) => thread.slug)).toEqual([
+    expect(prefixed.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "older-prefixed-dispatch",
     ]);
     expect(prefixed.pagination.totalItems).toBe(1);
@@ -2907,10 +2920,10 @@ describe("forum privacy regressions", () => {
       prefixId: null,
       pageSize: 10,
     });
-    expect(noPrefix.threads.map((thread) => thread.slug)).toContain(
+    expect(noPrefix.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
       "newer-unprefixed-note",
     );
-    expect(noPrefix.threads.map((thread) => thread.slug)).not.toContain(
+    expect(noPrefix.threads.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
       "older-prefixed-dispatch",
     );
   });
@@ -2967,7 +2980,7 @@ describe("forum privacy regressions", () => {
       categorySlug: "public-square",
     });
     expect(
-      trustedBoard.category.children?.map((category) => category.slug),
+      trustedBoard.category.children?.map((category: ForumCategoryResult) => category.slug),
     ).toEqual(["public-guides", "trusted-downloads"]);
     expect(trustedBoard.category).toMatchObject({
       threadCount: 3,
@@ -2976,8 +2989,8 @@ describe("forum privacy regressions", () => {
 
     const guestOverview = await t.query(api.forum.overview, {});
     const publicBoard = guestOverview.sections
-      .flatMap((section) => section.boards)
-      .find((board) => board.slug === "public-square");
+      .flatMap((section: ForumSectionResult) => section.boards)
+      .find((board: { slug?: string }) => board.slug === "public-square");
     expect(publicBoard).toMatchObject({
       threadCount: 2,
       postCount: 4,
@@ -3061,7 +3074,7 @@ describe("forum privacy regressions", () => {
     });
 
     const feed = await t.query(api.forum.listResearchFeedThreads, {});
-    expect(feed.map((thread) => thread.slug)).toEqual([
+    expect(feed.map((thread: ForumThreadResult) => thread.slug)).toEqual([
       "experiment-newest",
       "research-current",
       "paper-current",
@@ -3069,10 +3082,10 @@ describe("forum privacy regressions", () => {
       "research-older-one",
       "research-older-two",
     ]);
-    expect(new Set(feed.map((thread) => thread._id)).size).toBe(feed.length);
-    expect(feed.map((thread) => thread.categorySlug)).not.toContain("research-data");
-    expect(feed.map((thread) => thread.slug)).not.toContain("hidden-note");
-    expect(feed.map((thread) => thread.slug)).not.toContain("locked-note");
+    expect(new Set(feed.map((thread: ForumThreadResult) => thread._id)).size).toBe(feed.length);
+    expect(feed.map((thread: ForumThreadResult) => thread.categorySlug)).not.toContain("research-data");
+    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain("hidden-note");
+    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain("locked-note");
 
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", ids.researchId, {
@@ -3149,11 +3162,11 @@ describe("forum privacy regressions", () => {
         days: 30,
         pageSize: 10,
       });
-      expect(result.threads.map((thread) => thread.slug)).toEqual([
+      expect(result.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
         "fresh-popular-thread",
         "fresh-quiet-thread",
       ]);
-      expect(result.activityThreads.map((thread) => thread.slug)).toEqual([
+      expect(result.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
         "fresh-popular-thread",
         "fresh-quiet-thread",
       ]);
@@ -3224,7 +3237,7 @@ describe("forum privacy regressions", () => {
       t.query(api.forum.overview, {}),
     ]);
     expect(
-      categories.find((category) => category.slug === "public-square")
+      categories.find((category: ForumCategoryResult) => category.slug === "public-square")
         ?.lastThread,
     ).toMatchObject({
       author: "trustedauthor",
@@ -3233,7 +3246,7 @@ describe("forum privacy regressions", () => {
     });
     expect(
       overview.newestThreads.find(
-        (thread) => thread.slug === "public-lunar-brief",
+        (thread: ForumThreadResult) => thread.slug === "public-lunar-brief",
       ),
     ).toMatchObject({ categoryName: "Public Square" });
   });
@@ -3246,10 +3259,10 @@ describe("forum privacy regressions", () => {
       query: "lunar",
       pageSize: 10,
     });
-    expect(guestKeyword.threads.map((thread) => thread.categorySlug)).toEqual([
+    expect(guestKeyword.threads.map((thread: ForumThreadResult) => thread.categorySlug)).toEqual([
       "public-square",
     ]);
-    expect(guestKeyword.posts.map((post) => post.categorySlug)).toEqual([
+    expect(guestKeyword.posts.map((post: ForumPostResult) => post.categorySlug)).toEqual([
       "public-square",
     ]);
 
@@ -3258,7 +3271,7 @@ describe("forum privacy regressions", () => {
       resultType: "threads",
       pageSize: 10,
     });
-    expect(guestAuthor.threads.map((thread) => thread.categorySlug)).toEqual([
+    expect(guestAuthor.threads.map((thread: ForumThreadResult) => thread.categorySlug)).toEqual([
       "public-square",
     ]);
 
@@ -3271,10 +3284,10 @@ describe("forum privacy regressions", () => {
       pageSize: 10,
     });
     expect(
-      trustedKeyword.threads.map((thread) => thread.categorySlug).sort(),
+      trustedKeyword.threads.map((thread: ForumThreadResult) => thread.categorySlug).sort(),
     ).toEqual(["public-square", "trusted-lab"]);
     expect(
-      trustedKeyword.posts.map((post) => post.categorySlug).sort(),
+      trustedKeyword.posts.map((post: ForumPostResult) => post.categorySlug).sort(),
     ).toEqual(["public-square", "trusted-lab"]);
   });
 
@@ -3397,7 +3410,7 @@ describe("forum privacy regressions", () => {
         days: 30,
         pageSize: 10,
       });
-      expect(titleOnly.threads.map((thread) => thread.slug)).toEqual([
+      expect(titleOnly.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
         "needle-title-thread",
       ]);
       expect(titleOnly.posts).toEqual([]);
@@ -3414,15 +3427,15 @@ describe("forum privacy regressions", () => {
         resultType: "threads",
         pageSize: 10,
       });
-      expect(bodiesByReplies.threads.map((thread) => thread.slug)).toEqual([
+      expect(bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
         "needle-body-high-thread",
         "needle-body-low-thread",
       ]);
       expect(
-        bodiesByReplies.threads.map((thread) => thread.replyCount),
+        bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.replyCount),
       ).toEqual([30, 2]);
       expect(
-        bodiesByReplies.threads.map((thread) => thread.slug),
+        bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.slug),
       ).not.toContain("needle-stale-thread");
     } finally {
       vi.useRealTimers();
@@ -3491,7 +3504,7 @@ describe("forum privacy regressions", () => {
       includeBoardAnnouncements: true,
     });
     expect(
-      guestAnnouncements.map((announcement) => announcement.title),
+      guestAnnouncements.map((announcement: ForumAnnouncementResult) => announcement.title),
     ).toEqual(["Active global", "Active public"]);
     await expect(
       t.query(api.forum.getAnnouncement, { slug: "active-global" }),
@@ -3515,7 +3528,7 @@ describe("forum privacy regressions", () => {
       { includeBoardAnnouncements: true },
     );
     expect(
-      trustedAnnouncements.map((announcement) => announcement.title),
+      trustedAnnouncements.map((announcement: ForumAnnouncementResult) => announcement.title),
     ).toEqual(["Active global", "Active public", "Active trusted"]);
   });
 
@@ -3569,7 +3582,7 @@ describe("forum privacy regressions", () => {
     });
 
     const documents = await t.query(api.forum.listHelpDocuments, {});
-    expect(documents.map((document) => document.title)).toEqual([
+    expect(documents.map((document: ForumDocumentResult) => document.title)).toEqual([
       "Alpha help",
       "Beta help",
       "Zed help",
@@ -3672,11 +3685,11 @@ describe("forum privacy regressions", () => {
         )
         .take(10);
     });
-    expect(events.map((event) => event.eventType)).toEqual([
+    expect(events.map((event: ForumEventResult) => event.eventType)).toEqual([
       "forum_help_document_created",
       "forum_help_document_updated",
     ]);
-    expect(events.map((event) => event.actorUserId)).toEqual([
+    expect(events.map((event: ForumEventResult) => event.actorUserId)).toEqual([
       seed.ownerId,
       seed.ownerId,
     ]);
@@ -3748,7 +3761,7 @@ describe("forum privacy regressions", () => {
     const events = await t.query(api.forum.listCalendarEvents, {
       month: "2026-05",
     });
-    expect(events.map((event) => event.title)).toEqual([
+    expect(events.map((event: ForumEventResult) => event.title)).toEqual([
       "Alpha May event",
       "Beta May event",
       "Later May event",
@@ -3974,11 +3987,11 @@ describe("forum privacy regressions", () => {
         )
         .take(10);
     });
-    expect(events.map((event) => event.eventType)).toEqual([
+    expect(events.map((event: ForumEventResult) => event.eventType)).toEqual([
       "forum_calendar_event_created",
       "forum_calendar_event_updated",
     ]);
-    expect(events.map((event) => event.actorUserId)).toEqual([
+    expect(events.map((event: ForumEventResult) => event.actorUserId)).toEqual([
       seed.ownerId,
       seed.ownerId,
     ]);
@@ -4545,7 +4558,7 @@ describe("forum privacy regressions", () => {
     });
     expect(threadEdit.updated).toBe(true);
     expect(
-      threadEdit.thread.attachments.map((attachment) => attachment._id),
+      threadEdit.thread.attachments.map((attachment: ForumAttachmentResult) => attachment._id),
     ).toEqual([attachmentIds.rootKeep]);
 
     const replyEdit = await asTrusted.mutation(api.forum.updatePostContent, {
@@ -4557,7 +4570,7 @@ describe("forum privacy regressions", () => {
     });
     expect(replyEdit.updated).toBe(true);
     expect(
-      replyEdit.post.attachments?.map((attachment) => attachment._id),
+      replyEdit.post.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
     ).toEqual([attachmentIds.replyKeep]);
 
     const noOpReplyEdit = await asTrusted.mutation(
@@ -4571,7 +4584,7 @@ describe("forum privacy regressions", () => {
     );
     expect(noOpReplyEdit.updated).toBe(false);
     expect(
-      noOpReplyEdit.post.attachments?.map((attachment) => attachment._id),
+      noOpReplyEdit.post.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
     ).toEqual([attachmentIds.replyKeep]);
 
     const detail = await asTrusted.query(api.forum.getThread, {
@@ -4579,12 +4592,12 @@ describe("forum privacy regressions", () => {
       threadSlug: "public-lunar-brief",
     });
     expect(
-      detail.thread?.attachments.map((attachment) => attachment._id),
+      detail.thread?.attachments.map((attachment: ForumAttachmentResult) => attachment._id),
     ).toEqual([attachmentIds.rootKeep]);
     expect(
       detail.replies.page
-        .find((post) => post._id === seed.publicPostId)
-        ?.attachments?.map((attachment) => attachment._id),
+        .find((post: ForumPostResult) => post._id === seed.publicPostId)
+        ?.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
     ).toEqual([attachmentIds.replyKeep]);
 
     const rows = await t.run(async (ctx) => ({
@@ -5011,7 +5024,7 @@ describe("forum privacy regressions", () => {
       resultType: "threads",
       pageSize: 10,
     });
-    expect(initialSearch.threads.map((thread) => thread.slug)).toContain(
+    expect(initialSearch.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
       "public-lunar-brief",
     );
 
@@ -5040,7 +5053,7 @@ describe("forum privacy regressions", () => {
       question: "Which nebula should we study?",
       viewerCanEdit: true,
     });
-    expect(detail.poll?.options.map((option) => option.label)).toEqual([
+    expect(detail.poll?.options.map((option: ForumOptionResult) => option.label)).toEqual([
       "Orion",
       "Crab",
     ]);
@@ -5050,7 +5063,7 @@ describe("forum privacy regressions", () => {
       resultType: "threads",
       pageSize: 10,
     });
-    expect(search.threads.map((thread) => thread.slug)).toContain(
+    expect(search.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
       "public-lunar-brief",
     );
 
@@ -5059,7 +5072,7 @@ describe("forum privacy regressions", () => {
       resultType: "threads",
       pageSize: 10,
     });
-    expect(staleSearch.threads.map((thread) => thread.slug)).not.toContain(
+    expect(staleSearch.threads.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
       "public-lunar-brief",
     );
     const pollProjection = await t.run(async (ctx) =>
@@ -5253,10 +5266,10 @@ describe("forum privacy regressions", () => {
       api.forum.listMyForumRelationships,
       { limit: 10 },
     );
-    expect(relationships.buddies.map((record) => record.username)).toEqual([
+    expect(relationships.buddies.map((record: ForumRecordResult) => record.username)).toEqual([
       "othertrusted",
     ]);
-    expect(relationships.ignored.map((record) => record.username)).toEqual([
+    expect(relationships.ignored.map((record: ForumRecordResult) => record.username)).toEqual([
       "othertrusted",
     ]);
 
@@ -5376,7 +5389,7 @@ describe("forum privacy regressions", () => {
         }>;
       },
       slug: string,
-    ) => overview.categories.find((category) => category.slug === slug);
+    ) => overview.categories.find((category: ForumCategoryResult) => category.slug === slug);
     const readAt = 1_800_000_010_000;
 
     const initial = await asTrusted.query(api.forum.overview, {});
@@ -5672,7 +5685,7 @@ describe("forum privacy regressions", () => {
       box: "inbox",
       pageSize: 10,
     });
-    expect(ownerInbox.messages.map((message) => message._id)).not.toContain(
+    expect(ownerInbox.messages.map((message: ForumMessageResult) => message._id)).not.toContain(
       messageId,
     );
 
@@ -5768,7 +5781,7 @@ describe("forum privacy regressions", () => {
       { status: "open", limit: 10 },
     );
     const moderatorReport = moderatorReports.find(
-      (report) => report._id === reportResult.reportId,
+      (report: ForumReportResult) => report._id === reportResult.reportId,
     );
     expect(moderatorReport).toMatchObject({
       _id: reportResult.reportId,
@@ -5783,7 +5796,7 @@ describe("forum privacy regressions", () => {
       limit: 10,
     });
     const adminReport = adminReports.find(
-      (report) => report._id === reportResult.reportId,
+      (report: ForumReportResult) => report._id === reportResult.reportId,
     );
     expect(adminReport).toMatchObject({
       _id: reportResult.reportId,
@@ -5834,9 +5847,9 @@ describe("forum privacy regressions", () => {
           q.eq("eventType", "forum_report_updated"),
         )
         .take(5);
-      return events.map((event) => ({
+      return events.map((event: ForumEventResult) => ({
         ...event,
-        metadata: JSON.parse(event.metadataJson),
+        metadata: JSON.parse(event.metadataJson ?? "{}"),
       }));
     });
     expect(audit).toHaveLength(1);
@@ -6284,11 +6297,11 @@ describe("forum privacy regressions", () => {
       threadSlug: "trusted-lunar-brief",
       pageSize: 5,
     });
-    expect(detail.replies.page.map((post) => post._id)).toEqual([
+    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
       seed.trustedPostId,
       seed.publicPostId,
     ]);
-    expect(detail.replies.page.map((post) => post.postNumber)).toEqual([2, 3]);
+    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([2, 3]);
   });
 
   test("moderators can split selected replies into a new thread", async () => {
@@ -6517,10 +6530,10 @@ describe("forum privacy regressions", () => {
       pageSize: 5,
     });
     expect(detail.thread.body).toBe("Public reply about lunar launch logs.");
-    expect(detail.replies.page.map((post) => post._id)).toEqual([
+    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
       related.extraPublicPostId,
     ]);
-    expect(detail.replies.page.map((post) => post.postNumber)).toEqual([2]);
+    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([2]);
   });
 
   test("splitting replies requires admin access and a valid single-source selection", async () => {
@@ -6775,12 +6788,12 @@ describe("forum privacy regressions", () => {
       threadSlug: "trusted-lunar-brief",
       pageSize: 5,
     });
-    expect(detail.replies.page.map((post) => post._id)).toEqual([
+    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
       seed.trustedPostId,
       result.sourceOpenerPostId,
       seed.publicPostId,
     ]);
-    expect(detail.replies.page.map((post) => post.postNumber)).toEqual([
+    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([
       2, 3, 4,
     ]);
   });
@@ -6843,7 +6856,7 @@ describe("forum privacy regressions", () => {
         pageSize: 10,
       });
       const movedThread = board.threads.find(
-        (thread) => thread._id === seed.trustedThreadId,
+        (thread: ForumThreadResult) => thread._id === seed.trustedThreadId,
       );
       expect(movedThread).toMatchObject({
         viewerUnread: true,
@@ -6978,7 +6991,7 @@ describe("forum privacy regressions", () => {
         pageSize: 10,
       });
       const movedThread = board.threads.find(
-        (thread) => thread._id === seed.publicThreadId,
+        (thread: ForumThreadResult) => thread._id === seed.publicThreadId,
       );
       expect(movedThread).toMatchObject({
         viewerUnread: true,
@@ -7117,7 +7130,7 @@ describe("forum privacy regressions", () => {
         pageSize: 10,
       });
       const newThread = board.threads.find(
-        (thread) => thread._id === result.newThread._id,
+        (thread: ForumThreadResult) => thread._id === result.newThread._id,
       );
       expect(newThread).toMatchObject({
         viewerUnread: true,
@@ -7229,8 +7242,8 @@ describe("forum privacy regressions", () => {
       });
 
       const movedPostNumbers = detail.replies.page
-        .filter((post) => post.threadId === seed.trustedThreadId)
-        .map((post) => post.postNumber);
+        .filter((post: ForumPostResult) => post.threadId === seed.trustedThreadId)
+        .map((post: ForumPostResult) => post.postNumber);
       expect(movedPostNumbers).toEqual([2, 3, 4]);
     } finally {
       vi.useRealTimers();

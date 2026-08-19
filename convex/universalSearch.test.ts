@@ -15,6 +15,8 @@ function setup() {
   return convexTest(schema, modules);
 }
 
+type SearchResult = { provenance: { recordId: string }; title: string; type: string };
+
 async function seedPublicCorpus(t: ReturnType<typeof setup>) {
   await t.run(async (ctx) => {
     const author = await ctx.db.insert("users", {
@@ -248,10 +250,10 @@ describe("universal public lexical search", () => {
       limit: 50,
     });
 
-    expect(first.map((result) => result.provenance.recordId)).toEqual(
-      second.map((result) => result.provenance.recordId),
+    expect(first.map((result: SearchResult) => result.provenance.recordId)).toEqual(
+      second.map((result: SearchResult) => result.provenance.recordId),
     );
-    expect(first.map((result) => result.type)).toEqual(
+    expect(first.map((result: SearchResult) => result.type)).toEqual(
       expect.arrayContaining([
         "evidence_document",
         "evidence_claim",
@@ -431,7 +433,7 @@ describe("universal public lexical search", () => {
       query: "alpha",
       limit: 50,
     });
-    const titles = results.map((result) => result.title);
+    const titles = results.map((result: SearchResult) => result.title);
     expect(titles).not.toContain("Retired alpha document");
     expect(titles).not.toContain("Retired alpha claim");
     expect(titles).not.toContain("Unsafe alpha document");
@@ -458,7 +460,7 @@ describe("universal public lexical search", () => {
       },
     );
     const privateSourceTitles = privateSourceResults.map(
-      (result) => result.title,
+      (result: SearchResult) => result.title,
     );
     expect(privateSourceTitles).not.toContain("Retired alpha document");
     expect(privateSourceTitles).not.toContain("Retired alpha claim");
@@ -471,7 +473,7 @@ describe("universal public lexical search", () => {
       internal.universalSearch.searchPublic,
       { query: "alpha", limit: 50 },
     );
-    expect(privateAncestorResults.map((result) => result.type)).not.toContain(
+    expect(privateAncestorResults.map((result: SearchResult) => result.type)).not.toContain(
       "forum_thread",
     );
     await t.run(async (ctx) => {
@@ -484,7 +486,7 @@ describe("universal public lexical search", () => {
       internal.universalSearch.searchPublic,
       { query: "alpha", limit: 50 },
     );
-    expect(inactiveAncestorResults.map((result) => result.type)).not.toContain(
+    expect(inactiveAncestorResults.map((result: SearchResult) => result.type)).not.toContain(
       "forum_thread",
     );
   });

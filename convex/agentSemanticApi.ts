@@ -94,6 +94,20 @@ type UniversalResult = {
   };
 };
 
+type SemanticPrepareResult = {
+  commandId: Id<"apiCommands">;
+  replayResult?: UniversalResult[];
+  denialCode?: "AGENT_QUOTA_EXCEEDED";
+};
+
+type BeginOrReplayCommandResult = {
+  commandId: Id<"apiCommands">;
+  ledgerEntryId?: Id<"apiUsageLedger">;
+  status: "accepted" | "completed" | "failed";
+  idempotent: boolean;
+  billingEnabled: boolean;
+};
+
 const prepareRef = makeFunctionReference<
   "mutation",
   {
@@ -102,11 +116,7 @@ const prepareRef = makeFunctionReference<
     idempotencyKey: string;
     requestFingerprint: string;
   },
-  {
-    commandId: Id<"apiCommands">;
-    replayResult?: UniversalResult[];
-    denialCode?: "AGENT_QUOTA_EXCEEDED";
-  }
+  SemanticPrepareResult
 >("agentSemanticApi:prepare");
 
 const completeRef = makeFunctionReference<
@@ -342,7 +352,7 @@ export const prepare = internalMutation({
     replayResult: v.optional(v.array(universalResultValidator)),
     denialCode: v.optional(v.literal("AGENT_QUOTA_EXCEEDED")),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<SemanticPrepareResult> => {
     const query = normalizedQuery(args.query);
     const limit = normalizedLimit(args.limit);
     const idempotencyKey = normalizedIdempotencyKey(args.idempotencyKey);
@@ -352,7 +362,7 @@ export const prepare = internalMutation({
     // Commerce admission precedes the request-attempt abuse quota. If the
     // latter rejects, the monetary debit is compensated before returning the
     // denial. Agent quota is deliberately not refundable after acceptance.
-    const command = await ctx.runMutation(
+    const command: BeginOrReplayCommandResult = await ctx.runMutation(
       api.apiCommerce.beginOrReplayCommand,
       {
         agentId: principal.agentId,
@@ -366,7 +376,10 @@ export const prepare = internalMutation({
     );
 
     if (command.idempotent) {
-      const stored = await ctx.db.get("apiCommands", command.commandId);
+      const stored: Doc<"apiCommands"> | null = await ctx.db.get(
+        "apiCommands",
+        command.commandId,
+      );
       if (
         stored === null ||
         stored.ownerUserId !== principal.ownerUserId ||
