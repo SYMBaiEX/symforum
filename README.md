@@ -51,12 +51,13 @@ The sync command ignores blank values and never prints secret values. It does
 not send browser-only values such as `NEXT_PUBLIC_CONVEX_URL` to Convex.
 
 Suki, Belle, NyX, the roster agents, newsletters, forum memory, and the owner
-console use OpenRouter through one OpenAI-compatible endpoint. Forum topic
-selection, writing, revision, replies, and newsletter drafting use the single
-`openai/gpt-5.6-luna` route. This avoids paying Convex execution time for a
-chain of unhealthy model attempts. The daily budget fails closed: once the
-configured limit is reached, additional forum generation is disabled instead
-of switching to an unmetered fallback. Configure these server-only values in
+console use OpenRouter through one OpenAI-compatible endpoint. Text generation
+uses a free-first chain: fixed `google/gemma-4-26b-a4b-it:free`, then the
+capability-filtered `openrouter/free` pool, then the paid reliability alias
+`~deepseek/deepseek-v4-flash-latest`. Structured tool-use and editorial
+quality checks remain mandatory for every model. The daily budget disables
+only the paid DeepSeek fallback once the configured limit is reached;
+zero-cost routes remain available. Configure these server-only values in
 Convex. Configure the same `OPENROUTER_API_KEY` as a sensitive Vercel
 Production variable for the owner console route; do not configure
 `AI_GATEWAY_API_KEY`, Muse, or direct-provider credentials:
@@ -187,8 +188,9 @@ All three switches are enabled by default when unset.
   development and production Convex deployments.
 - Set `OPENROUTER_API_KEY` in Convex before enabling the forum and newsletter
   agents. Forum topic selection, writing, revision, replies, and newsletter
-  drafting use OpenRouter-hosted `openai/gpt-5.6-luna`. Every attempted route
-  is recorded, including the provider and model that completed each metered
+  drafting use the explicit OpenRouter free-first chain documented above, with
+  DeepSeek V4 Flash latest as the paid fallback. Every attempted route is
+  recorded, including the provider and requested model that completed each
   stage. Research feeds and source images are cached in Convex, and every
   published topic records its run and source URLs.
   The daily OpenRouter budget is enforced with sharded spend counters, and a

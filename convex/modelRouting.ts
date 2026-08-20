@@ -3,7 +3,7 @@
 import { generateText, tool } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
-import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
+import { OPENROUTER_DEEPSEEK_FALLBACK_MODEL } from "../lib/ai-models";
 import {
   forumDayKey,
   openRouterDailyBudgetMicroUsd,
@@ -45,7 +45,8 @@ export async function convexModelRoutingConfig(
   });
   const disabledModelIds = new Set(control.disabledModelIds);
   if (control.paidBudgetExceeded) {
-    disabledModelIds.add(OPENROUTER_LUNA_MODEL);
+    // Free routes remain available after the paid budget is exhausted.
+    disabledModelIds.add(OPENROUTER_DEEPSEEK_FALLBACK_MODEL);
   }
 
   void options;

@@ -135,7 +135,7 @@ describe("dormant forum agent roster", () => {
       const legacy = await ctx.db.query("forumAgents").first();
       if (!legacy) throw new Error("missing test agent");
       await ctx.db.patch("forumAgents", legacy._id, {
-        model: "deepseek/deepseek-v4-flash-0731",
+        model: "openai/gpt-5.6-luna",
       });
     });
     const dryRun = await t.mutation(

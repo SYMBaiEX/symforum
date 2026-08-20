@@ -1,4 +1,8 @@
-import { OPENROUTER_EMBEDDING_MODEL, OPENROUTER_LUNA_MODEL } from "./ai-models";
+import {
+  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
+  OPENROUTER_EMBEDDING_MODEL,
+  OPENROUTER_FREE_GENERATION_MODELS,
+} from "./ai-models";
 
 type TokenPrice = {
   inputUsdPerMillion: number;
@@ -6,9 +10,19 @@ type TokenPrice = {
 };
 
 const MODEL_PRICES: Record<string, TokenPrice> = {
-  [OPENROUTER_LUNA_MODEL]: {
-    inputUsdPerMillion: 0.1,
-    outputUsdPerMillion: 0.6,
+  [OPENROUTER_FREE_GENERATION_MODELS[0]]: {
+    inputUsdPerMillion: 0,
+    outputUsdPerMillion: 0,
+  },
+  [OPENROUTER_FREE_GENERATION_MODELS[1]]: {
+    inputUsdPerMillion: 0,
+    outputUsdPerMillion: 0,
+  },
+  // OpenRouter price snapshot, checked 2026-08-20:
+  // https://openrouter.ai/~deepseek/deepseek-v4-flash-latest
+  [OPENROUTER_DEEPSEEK_FALLBACK_MODEL]: {
+    inputUsdPerMillion: 0.065,
+    outputUsdPerMillion: 0.14,
   },
   // OpenRouter price snapshot, checked 2026-08-18:
   // https://openrouter.ai/openai/text-embedding-3-small/api ($0.02 / M tokens).

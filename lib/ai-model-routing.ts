@@ -1,6 +1,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { generateText, LanguageModel } from "ai";
-import { OPENROUTER_LUNA_MODEL } from "./ai-models";
+import {
+  OPENROUTER_GENERATION_MODELS,
+  OPENROUTER_TOPIC_MODEL,
+} from "./ai-models";
 
 export type ModelRoute = {
   provider: "openrouter";
@@ -91,12 +94,12 @@ function openRouterModel(
 
 export function openRouterModelForStage(stage: string) {
   void stage;
-  return OPENROUTER_LUNA_MODEL;
+  return OPENROUTER_TOPIC_MODEL;
 }
 
 export function openRouterModelsForStage(stage: string) {
   void stage;
-  return [OPENROUTER_LUNA_MODEL];
+  return [...OPENROUTER_GENERATION_MODELS];
 }
 
 export async function routedModelCandidates(
@@ -104,7 +107,7 @@ export async function routedModelCandidates(
   requestContext?: OpenRouterRequestContext,
   _unusedModelIds?: readonly string[],
   telemetry?: RouteTelemetryContext,
-  openRouterModelIds: readonly string[] = [OPENROUTER_LUNA_MODEL],
+  openRouterModelIds: readonly string[] = OPENROUTER_GENERATION_MODELS,
 ) {
   // Keep request context in the routing contract so callers can continue to
   // attach stable attribution metadata without introducing another provider.
@@ -271,7 +274,7 @@ export async function selectStreamingModel(
   requestContext?: OpenRouterRequestContext,
   telemetry?: RouteTelemetryContext,
 ) {
-  const [candidate] = await routedModelCandidates(
+  const [candidate, ...fallbacks] = await routedModelCandidates(
     config,
     requestContext,
     undefined,
@@ -281,5 +284,15 @@ export async function selectStreamingModel(
     provider: candidate.provider,
     model: candidate.persistedModel,
   });
-  return candidate;
+  return {
+    ...candidate,
+    // Streaming responses cannot be restarted after bytes reach the client.
+    // Let OpenRouter fail over before the stream begins using the same audited
+    // order as the non-streaming Convex generation paths.
+    providerOptions: {
+      openrouter: {
+        models: fallbacks.map((fallback) => fallback.modelId),
+      },
+    } satisfies ProviderOptions,
+  };
 }

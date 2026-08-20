@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { z } from "zod";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
+import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -30,8 +30,8 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
-export const NEWSLETTER_MODEL_IDS = [OPENROUTER_LUNA_MODEL] as const;
-const PROMPT_VERSION = "belle-newsletter-v5-openrouter-luna";
+export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
+const PROMPT_VERSION = "belle-newsletter-v6-openrouter-free-deepseek";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { OPENROUTER_LUNA_MODEL } from "../lib/ai-models";
+import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 import { NEWSLETTER_MODEL_IDS, scoreEditorialPackage } from "./newsletterAgent";
 
 function long(value: string, length: number) {
@@ -97,8 +97,8 @@ const sources = [
 ];
 
 describe("Belle editorial scoring", () => {
-  test("uses the proven Luna route without a failing provider preflight", () => {
-    expect(NEWSLETTER_MODEL_IDS).toEqual([OPENROUTER_LUNA_MODEL]);
+  test("uses the proven free-first route with a DeepSeek fallback", () => {
+    expect(NEWSLETTER_MODEL_IDS).toEqual(OPENROUTER_GENERATION_MODELS);
   });
 
   test("blocks a number that is absent from its story's own source", () => {

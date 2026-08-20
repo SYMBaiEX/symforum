@@ -5,22 +5,34 @@ import {
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
-import { OPENROUTER_EMBEDDING_MODEL, OPENROUTER_LUNA_MODEL } from "./ai-models";
+import {
+  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
+  OPENROUTER_EMBEDDING_MODEL,
+  OPENROUTER_FREE_GENERATION_MODELS,
+} from "./ai-models";
 
 describe("AI model cost controls", () => {
-  test("estimates the configured Luna route and rejects unknown models", () => {
+  test("prices free generation at zero and rejects unknown models", () => {
     expect(
-      estimatedModelCostMicroUsd(OPENROUTER_LUNA_MODEL, 1_000_000, 1_000_000),
-    ).toBe(700_000);
+      estimatedModelCostMicroUsd(
+        OPENROUTER_FREE_GENERATION_MODELS[0],
+        1_000_000,
+        1_000_000,
+      ),
+    ).toBe(0);
     expect(
-      estimatedModelCostMicroUsd("nvidia/nemotron-3-super-120b-a12b", 1, 1),
+      estimatedModelCostMicroUsd("unknown/model", 1_000_000, 1_000_000),
     ).toBe(0);
   });
 
-  test("uses the current OpenRouter GPT-5.6 Luna price", () => {
+  test("uses the current OpenRouter DeepSeek V4 Flash latest price", () => {
     expect(
-      estimatedModelCostMicroUsd(OPENROUTER_LUNA_MODEL, 1_000_000, 1_000_000),
-    ).toBe(700_000);
+      estimatedModelCostMicroUsd(
+        OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
+        1_000_000,
+        1_000_000,
+      ),
+    ).toBe(205_000);
   });
 
   test("accounts for OpenRouter embedding input tokens in the budget", () => {
