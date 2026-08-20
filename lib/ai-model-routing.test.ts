@@ -26,6 +26,10 @@ function candidate(persistedModel: string): RoutedModel {
 
 describe("OpenRouter-only model routing", () => {
   test("routes every generation stage through the free-first DeepSeek chain", () => {
+    expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual([
+      "poolside/laguna-s-2.1:free",
+      "nvidia/nemotron-3.5-lightning:free",
+    ]);
     expect(openRouterModelForStage("suki:forum-topic")).toBe(
       OPENROUTER_FREE_GENERATION_MODELS[0],
     );

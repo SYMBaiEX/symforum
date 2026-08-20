@@ -52,15 +52,19 @@ not send browser-only values such as `NEXT_PUBLIC_CONVEX_URL` to Convex.
 
 Suki, Belle, NyX, the roster agents, newsletters, forum memory, and the owner
 console use OpenRouter through one OpenAI-compatible endpoint. Text generation
-uses a free-first chain: fixed `google/gemma-4-26b-a4b-it:free`, then the
-capability-filtered `openrouter/free` pool, then the paid reliability alias
-`~deepseek/deepseek-v4-flash-latest`. Structured tool-use and editorial
-quality checks remain mandatory for every model. The daily budget disables
-only the paid DeepSeek fallback once the configured limit is reached;
-zero-cost routes remain available. Configure these server-only values in
-Convex. Configure the same `OPENROUTER_API_KEY` as a sensitive Vercel
-Production variable for the owner console route; do not configure
-`AI_GATEWAY_API_KEY`, Muse, or direct-provider credentials:
+uses a free-first chain: fixed `poolside/laguna-s-2.1:free`, then the
+newer `nvidia/nemotron-3.5-lightning:free`, then the paid reliability alias
+`~deepseek/deepseek-v4-flash-latest`. The random `openrouter/free` router is
+not used, so a failed Gemma route cannot be selected indirectly. Structured
+tool-use and editorial quality checks remain mandatory for every model. The
+daily budget disables only the paid DeepSeek fallback once the configured
+limit is reached; zero-cost routes remain available. Free endpoints are used
+only for prompts that contain no secrets or private credentials; their
+availability, rate limits, and data-use terms can differ from paid endpoints.
+Configure these server-only values in Convex. Configure the same
+`OPENROUTER_API_KEY` as a sensitive Vercel Production variable for the owner
+console route; do not configure `AI_GATEWAY_API_KEY`, Muse, or direct-provider
+credentials:
 
 ```bash
 OPENROUTER_API_KEY=

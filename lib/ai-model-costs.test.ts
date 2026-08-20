@@ -13,13 +13,9 @@ import {
 
 describe("AI model cost controls", () => {
   test("prices free generation at zero and rejects unknown models", () => {
-    expect(
-      estimatedModelCostMicroUsd(
-        OPENROUTER_FREE_GENERATION_MODELS[0],
-        1_000_000,
-        1_000_000,
-      ),
-    ).toBe(0);
+    for (const model of OPENROUTER_FREE_GENERATION_MODELS) {
+      expect(estimatedModelCostMicroUsd(model, 1_000_000, 1_000_000)).toBe(0);
+    }
     expect(
       estimatedModelCostMicroUsd("unknown/model", 1_000_000, 1_000_000),
     ).toBe(0);

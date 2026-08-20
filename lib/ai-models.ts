@@ -1,11 +1,12 @@
 /**
  * Zero-cost OpenRouter routes that passed the production structured tool-use
- * canary on 2026-08-20. The fixed Gemma route is tried first for predictable
- * behavior; OpenRouter's capability-filtered free pool broadens availability.
+ * canary on 2026-08-20. Laguna is the predictable primary and the newer
+ * Nemotron route provides provider diversity without randomly selecting Gemma.
+ * https://openrouter.ai/poolside/laguna-s-2.1:free
  */
 export const OPENROUTER_FREE_GENERATION_MODELS = [
-  "google/gemma-4-26b-a4b-it:free",
-  "openrouter/free",
+  "poolside/laguna-s-2.1:free",
+  "nvidia/nemotron-3.5-lightning:free",
 ] as const;
 
 /** Stable paid reliability fallback; the `~` alias follows V4 Flash updates. */

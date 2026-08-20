@@ -16,7 +16,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_TIME_ZONE = "America/Chicago";
-const PROMPT_VERSION = "forum-replies-v6-openrouter-free-deepseek";
+const PROMPT_VERSION = "forum-replies-v7-openrouter-laguna-free-deepseek";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 
 type SukiReplyDecision =

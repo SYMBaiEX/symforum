@@ -31,7 +31,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
-const PROMPT_VERSION = "belle-newsletter-v6-openrouter-free-deepseek";
+const PROMPT_VERSION = "belle-newsletter-v7-openrouter-laguna-free-deepseek";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
