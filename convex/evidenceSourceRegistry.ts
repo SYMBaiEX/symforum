@@ -67,7 +67,8 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     licenseClass: "attributed",
     accessClass: "public-optional-token",
     capability: "bounded reviewed global advisory metadata",
-    checkpointModel: "HTTP validators only; Link pagination intentionally ignored",
+    checkpointModel:
+      "HTTP validators only; Link pagination intentionally ignored",
     conditionalRequestModel: "ETag and Last-Modified request validators",
     timeoutMs: 12_000,
     maxResponseBytes: 2 * MEBIBYTE,
@@ -83,8 +84,7 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     officialApiUrl: "https://api.github.com/repos/{owner}/{repo}/releases",
     officialTermsUrl:
       "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
-    officialAttributionUrl:
-      "https://docs.github.com/en/rest/releases/releases",
+    officialAttributionUrl: "https://docs.github.com/en/rest/releases/releases",
     licenseClass: "attributed",
     accessClass: "public-optional-token",
     capability:
@@ -110,7 +110,8 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
       "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
     licenseClass: "attributed",
     accessClass: "public",
-    capability: "bounded bibliographic metadata only; no abstracts or full text",
+    capability:
+      "bounded bibliographic metadata only; no abstracts or full text",
     checkpointModel: "HTTP validators only; no pagination cursor",
     conditionalRequestModel: "ETag and Last-Modified request validators",
     timeoutMs: 12_000,
@@ -129,7 +130,8 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     officialAttributionUrl: "https://www.symbaiex.com/research",
     licenseClass: "attributed",
     accessClass: "first-party",
-    capability: "explicit curated first-party research registry; no HTML scraping",
+    capability:
+      "explicit curated first-party research registry; no HTML scraping",
     checkpointModel: "deterministic code registry; no external cursor",
     conditionalRequestModel: "not applicable; no network fetch",
     timeoutMs: 0,
@@ -149,13 +151,15 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     licenseClass: "public-domain",
     accessClass: "public-optional-token",
     capability: "incremental bounded CVE update page",
-    checkpointModel: "persisted bounded time window and start index with retry marker",
-    conditionalRequestModel: "time-window query checkpoint; no HTTP validator reuse",
-    timeoutMs: 15_000,
+    checkpointModel:
+      "persisted bounded time window, start index, adaptive page size, and exponential retry marker",
+    conditionalRequestModel:
+      "time-window query checkpoint; no HTTP validator reuse",
+    timeoutMs: 20_000,
     maxResponseBytes: 2 * MEBIBYTE,
-    maxItemsPerRun: 100,
+    maxItemsPerRun: 25,
     maxPagesPerRun: 1,
-    cadence: "3,13,23,33,43,53 * * * *",
+    cadence: "3,33 * * * *",
     fixtureProvenance:
       "Synthetic minimal NVD CVE 2.0 payloads in convex/evidenceNvd.test.ts; no copied NVD records.",
   },
@@ -168,13 +172,15 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     licenseClass: "public-domain",
     accessClass: "public-optional-token",
     capability: "incremental bounded immutable CVE change-event page",
-    checkpointModel: "persisted bounded time window and start index with retry marker",
-    conditionalRequestModel: "time-window query checkpoint; no HTTP validator reuse",
-    timeoutMs: 15_000,
+    checkpointModel:
+      "persisted bounded time window, start index, adaptive page size, and exponential retry marker",
+    conditionalRequestModel:
+      "time-window query checkpoint; no HTTP validator reuse",
+    timeoutMs: 20_000,
     maxResponseBytes: 2 * MEBIBYTE,
-    maxItemsPerRun: 100,
+    maxItemsPerRun: 25,
     maxPagesPerRun: 1,
-    cadence: "9,19,29,39,49,59 * * * *",
+    cadence: "18,48 * * * *",
     fixtureProvenance:
       "Synthetic minimal NVD history 2.0 payloads in convex/evidenceNvd.test.ts; no copied NVD records.",
   },

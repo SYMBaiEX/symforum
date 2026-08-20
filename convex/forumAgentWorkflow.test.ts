@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
 import { adaptivePublicationSlot } from "../lib/forum-agent-cadence";
+import { structuredCanaryBlockReason } from "./forumAgentWorkflow";
 import schema from "./schema";
 
 const modules = {
@@ -13,6 +14,25 @@ const modules = {
 };
 
 describe("forum agent publication workflow", () => {
+  test("fails closed for missing, unhealthy, and stale structured canaries", () => {
+    const now = 1_800_000_000_000;
+    expect(structuredCanaryBlockReason(null, now)).toBe(
+      "structured-canary-missing",
+    );
+    expect(
+      structuredCanaryBlockReason({ healthy: false, checkedAt: now }, now),
+    ).toBe("structured-canary-unhealthy");
+    expect(
+      structuredCanaryBlockReason(
+        { healthy: true, checkedAt: now - 2 * 60 * 60 * 1_000 - 1 },
+        now,
+      ),
+    ).toBe("structured-canary-stale");
+    expect(
+      structuredCanaryBlockReason({ healthy: true, checkedAt: now }, now),
+    ).toBeNull();
+  });
+
   test("caps all daily attempts, including failed runs", async () => {
     const t = convexTest(schema, modules);
     const runDate = "2026-08-17";
@@ -29,6 +49,13 @@ describe("forum agent publication workflow", () => {
     expect(slot).toBeTypeOf("number");
 
     await t.run(async (ctx) => {
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: Date.now(),
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
       const userId = await ctx.db.insert("users", {
         name: "Attempt Capped Agent",
         username: agentSlug,

@@ -2,9 +2,12 @@
 
 Critical jobs always run through `convex/cronWatchdog.ts` on their existing
 schedule. `CRON_WATCHDOG_ENABLED=true` enables heartbeat/run-summary writes
-and the five-minute evaluator. When the flag is unset or false, the wrapper
+and the staggered ten-minute evaluator. When the flag is unset or false, the wrapper
 still invokes its target exactly once but writes no watchdog heartbeat or run
 summary; the evaluator reports the watchdog as disabled rather than healthy.
+Resolved action results such as `{ ok: false }`, `{ healthy: false }`, or a
+degraded status are failures too; a target does not become healthy merely
+because it returned instead of throwing.
 
 ## Monitored critical jobs
 

@@ -57,7 +57,9 @@ selection, writing, revision, replies, and newsletter drafting use the single
 chain of unhealthy model attempts. The daily budget fails closed: once the
 configured limit is reached, additional forum generation is disabled instead
 of switching to an unmetered fallback. Configure these server-only values in
-Convex:
+Convex. Configure the same `OPENROUTER_API_KEY` as a sensitive Vercel
+Production variable for the owner console route; do not configure
+`AI_GATEWAY_API_KEY`, Muse, or direct-provider credentials:
 
 ```bash
 OPENROUTER_API_KEY=
@@ -191,7 +193,8 @@ All three switches are enabled by default when unset.
   published topic records its run and source URLs.
   The daily OpenRouter budget is enforced with sharded spend counters, and a
   provider circuit temporarily removes failing routes. A structured tool-use
-  canary runs hourly; scheduled publication pauses while it is unhealthy. The
+  canary runs hourly; scheduled publication pauses while it is missing,
+  unhealthy, or more than two hours old. The
   42-attempt global limit is admitted deterministically across the 91 scheduled
   slots and counts failed runs as well as publications. The admin telemetry view reports
   estimated spend, revision lift, presentation scores, active circuits, model

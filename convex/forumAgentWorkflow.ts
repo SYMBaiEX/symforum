@@ -29,6 +29,23 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
     capacity: 4,
   },
 });
+const STRUCTURED_CANARY_MAX_AGE_MS = 2 * HOUR;
+
+type StructuredCanaryState = {
+  healthy: boolean;
+  checkedAt: number;
+};
+
+export function structuredCanaryBlockReason(
+  canary: StructuredCanaryState | null,
+  now: number,
+) {
+  if (canary === null) return "structured-canary-missing";
+  if (!canary.healthy) return "structured-canary-unhealthy";
+  if (now - canary.checkedAt > STRUCTURED_CANARY_MAX_AGE_MS)
+    return "structured-canary-stale";
+  return null;
+}
 
 type PublicationResult =
   | {
@@ -141,9 +158,9 @@ async function publicationPreflight(
     .query("aiOperationalStates")
     .withIndex("by_key", (q) => q.eq("key", STRUCTURED_CANARY_KEY))
     .unique();
-  if (canary !== null && !canary.healthy && (canary.pauseUntil ?? 0) > now) {
-    return { ok: false as const, reason: "structured-canary-unhealthy" };
-  }
+  const canaryBlockReason = structuredCanaryBlockReason(canary, now);
+  if (canaryBlockReason !== null)
+    return { ok: false as const, reason: canaryBlockReason };
   if (
     !adaptivePublicationSlot({
       agentSlug: args.agentSlug,

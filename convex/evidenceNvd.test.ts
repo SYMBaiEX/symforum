@@ -12,6 +12,8 @@ import {
   parseNvdChangeHistory,
   parseNvdCves,
   nvdPostVersionWork,
+  nvdRetryCursor,
+  readBoundedNvdResponse,
   retryAfterMs,
   totalResults,
 } from "./evidenceNvd";
@@ -46,6 +48,7 @@ describe("NVD evidence adapters", () => {
       2.25 * 60 * 60 * 1_000,
     );
     expect(initial.startIndex).toBe(0);
+    expect(initial.pageSize).toBe(25);
     const resumed = nextNvdCursor(
       {
         cursor: JSON.stringify({
@@ -63,6 +66,8 @@ describe("NVD evidence adapters", () => {
       windowStart: 1,
       windowEnd: 2,
       startIndex: 100,
+      pageSize: 25,
+      failureCount: 0,
     });
     expect(
       parseCursor(
@@ -84,7 +89,7 @@ describe("NVD evidence adapters", () => {
       }),
     );
     expect(url.hostname).toBe("services.nvd.nist.gov");
-    expect(url.searchParams.get("resultsPerPage")).toBe("100");
+    expect(url.searchParams.get("resultsPerPage")).toBe("25");
     expect(url.searchParams.get("startIndex")).toBe("100");
     expect(url.searchParams.get("lastModStartDate")).toBe(
       new Date(0).toISOString(),
@@ -177,7 +182,13 @@ describe("NVD evidence adapters", () => {
   });
 
   test("replays a current page after a crash or partial document mutation", () => {
-    const cursor = { windowStart: 10, windowEnd: 20, startIndex: 100 };
+    const cursor = {
+      windowStart: 10,
+      windowEnd: 20,
+      startIndex: 100,
+      pageSize: 25,
+      failureCount: 0,
+    };
     const inProgress = nvdInProgressCheckpoint(cursor, 9, 30);
     expect(parseCursor(inProgress.cursor)).toEqual(cursor);
     expect(inProgress.lastSucceededAt).toBe(9);
@@ -199,28 +210,35 @@ describe("NVD evidence adapters", () => {
   });
 
   test("validates page metadata before allowing a cursor to advance", () => {
-    const cursor = { windowStart: 0, windowEnd: 1_000, startIndex: 0 };
-    const next = parseNvdPage("cves", cursor, cvePage(101, 100, 0, 100));
-    expect(next.documents).toHaveLength(100);
+    const cursor = {
+      windowStart: 0,
+      windowEnd: 1_000,
+      startIndex: 0,
+      pageSize: 25,
+    };
+    const next = parseNvdPage("cves", cursor, cvePage(26, 25, 0, 25));
+    expect(next.documents).toHaveLength(25);
     expect(parseCursor(next.nextCursor ?? "")).toMatchObject({
-      startIndex: 100,
+      startIndex: 25,
+      pageSize: 25,
+      failureCount: 0,
     });
 
-    expect(() => parseNvdPage("cves", cursor, cvePage(101, 99, 0, 100))).toThrow(
+    expect(() => parseNvdPage("cves", cursor, cvePage(26, 24, 0, 25))).toThrow(
       "malformed pagination metadata",
     );
     expect(() =>
       parseNvdPage("cves", cursor, {
         totalResults: 1,
         startIndex: 0,
-        resultsPerPage: 100,
+        resultsPerPage: 25,
         vulnerabilities: [],
       }),
     ).toThrow("malformed pagination metadata");
     expect(() =>
       parseNvdPage("cves", cursor, {
         ...cvePage(1),
-        resultsPerPage: 99,
+        resultsPerPage: 26,
       }),
     ).toThrow("malformed pagination metadata");
     expect(() =>
@@ -232,7 +250,12 @@ describe("NVD evidence adapters", () => {
   });
 
   test("accepts only the official empty-window shape and bounded final pages", () => {
-    const cursor = { windowStart: 0, windowEnd: 1_000, startIndex: 0 };
+    const cursor = {
+      windowStart: 0,
+      windowEnd: 1_000,
+      startIndex: 0,
+      pageSize: 25,
+    };
     expect(
       parseNvdPage("cves", cursor, {
         totalResults: 0,
@@ -244,8 +267,8 @@ describe("NVD evidence adapters", () => {
 
     const finalPage = parseNvdPage(
       "cves",
-      { ...cursor, startIndex: 100 },
-      cvePage(117, 17, 100, 17),
+      { ...cursor, startIndex: 25 },
+      cvePage(42, 17, 25, 17),
     );
     expect(finalPage.documents).toHaveLength(17);
     expect(finalPage.nextCursor).toBeNull();
@@ -259,17 +282,26 @@ describe("NVD evidence adapters", () => {
       }),
     ).toThrow("incomplete pagination page");
     expect(() =>
-      parseNvdPage("cves", { ...cursor, startIndex: 1 }, {
-        totalResults: 0,
-        startIndex: 1,
-        resultsPerPage: 0,
-        vulnerabilities: [],
-      }),
+      parseNvdPage(
+        "cves",
+        { ...cursor, startIndex: 1 },
+        {
+          totalResults: 0,
+          startIndex: 1,
+          resultsPerPage: 0,
+          vulnerabilities: [],
+        },
+      ),
     ).toThrow("malformed pagination metadata");
   });
 
   test("does not discard malformed records while completing a page", () => {
-    const cursor = { windowStart: 0, windowEnd: 1_000, startIndex: 0 };
+    const cursor = {
+      windowStart: 0,
+      windowEnd: 1_000,
+      startIndex: 0,
+      pageSize: 25,
+    };
     expect(() =>
       parseNvdPage("cves", cursor, {
         totalResults: 1,
@@ -302,5 +334,65 @@ describe("NVD evidence adapters", () => {
       retryAfterMs(new Date(9_999_999_999).toUTCString(), 0),
     ).toBeLessThanOrEqual(60 * 60 * 1_000);
     expect(NVD_TERMS_URL).toBe("https://nvd.nist.gov/general/terms-of-use");
+  });
+
+  test("shrinks expensive pages and exponentially backs off repeated failures", () => {
+    const cursor = {
+      windowStart: 0,
+      windowEnd: 1_000,
+      startIndex: 0,
+      pageSize: 25,
+      failureCount: 0,
+    };
+    const first = nvdRetryCursor(
+      cursor,
+      { name: "NvdResponseTooLargeError" },
+      1_000,
+    );
+    expect(first).toMatchObject({
+      pageSize: 12,
+      failureCount: 1,
+      retryNotBefore: 1_000 + 10 * 60 * 1_000,
+    });
+    const second = nvdRetryCursor(
+      first,
+      { name: "NvdRequestTimeoutError" },
+      first.retryNotBefore!,
+    );
+    expect(second.pageSize).toBe(6);
+    expect(second.failureCount).toBe(2);
+    expect(second.retryNotBefore! - first.retryNotBefore!).toBe(
+      20 * 60 * 1_000,
+    );
+    const serviceFailure = nvdRetryCursor(
+      cursor,
+      { name: "Error", retryAfter: 30 * 60 * 1_000 },
+      1_000,
+    );
+    expect(serviceFailure.pageSize).toBe(25);
+    expect(serviceFailure.retryNotBefore).toBe(1_000 + 30 * 60 * 1_000);
+  });
+
+  test("rejects oversized NVD bodies before buffering beyond the limit", async () => {
+    const oversized = new Response("x", {
+      headers: { "content-length": String(2 * 1024 * 1024 + 1) },
+    });
+    await expect(readBoundedNvdResponse(oversized)).rejects.toMatchObject({
+      name: "NvdResponseTooLargeError",
+    });
+
+    const chunk = new Uint8Array(1024 * 1024 + 1);
+    const streamed = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(chunk);
+          controller.enqueue(chunk);
+          controller.close();
+        },
+      }),
+    );
+    await expect(readBoundedNvdResponse(streamed)).rejects.toMatchObject({
+      name: "NvdResponseTooLargeError",
+    });
   });
 });

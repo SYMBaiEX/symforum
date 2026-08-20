@@ -173,6 +173,28 @@ function safeFailureClass(value: string | undefined) {
     ? value
     : "CronJobFailure";
 }
+function resultRecord(value: unknown) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+export class CronTargetReportedFailure extends Error {
+  override name = "CronTargetReportedFailure";
+}
+export function assertCronTargetSucceeded(value: unknown) {
+  const result = resultRecord(value);
+  if (
+    result?.ok === false ||
+    result?.healthy === false ||
+    result?.success === false ||
+    result?.status === "degraded" ||
+    result?.status === "failed"
+  ) {
+    throw new CronTargetReportedFailure(
+      "Critical cron target reported an unsuccessful result.",
+    );
+  }
+}
 function statusFor(
   heartbeat: {
     status: "running" | "healthy" | "failed";
@@ -342,14 +364,16 @@ export const runActionJob = internalAction({
   returns: v.object({ executed: v.boolean(), monitored: v.boolean() }),
   handler: async (ctx, args) => {
     if (!enabled()) {
-      await executeActionTarget(ctx, args.jobKey);
+      const result = await executeActionTarget(ctx, args.jobKey);
+      assertCronTargetSucceeded(result);
       return { executed: true, monitored: false };
     }
     const { runId, startedAt } = await ctx.runMutation(startRunRef, {
       jobKey: args.jobKey,
     });
     try {
-      await executeActionTarget(ctx, args.jobKey);
+      const result = await executeActionTarget(ctx, args.jobKey);
+      assertCronTargetSucceeded(result);
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,
         runId,
@@ -365,6 +389,8 @@ export const runActionJob = internalAction({
         succeeded: false,
         failureClass: failureClass(error),
       });
+      if (error instanceof CronTargetReportedFailure)
+        return { executed: true, monitored: true };
       throw error;
     }
   },
@@ -375,14 +401,16 @@ export const runMutationJob = internalAction({
   returns: v.object({ executed: v.boolean(), monitored: v.boolean() }),
   handler: async (ctx, args) => {
     if (!enabled()) {
-      await executeMutationTarget(ctx, args.jobKey);
+      const result = await executeMutationTarget(ctx, args.jobKey);
+      assertCronTargetSucceeded(result);
       return { executed: true, monitored: false };
     }
     const { runId, startedAt } = await ctx.runMutation(startRunRef, {
       jobKey: args.jobKey,
     });
     try {
-      await executeMutationTarget(ctx, args.jobKey);
+      const result = await executeMutationTarget(ctx, args.jobKey);
+      assertCronTargetSucceeded(result);
       await ctx.runMutation(completeRunRef, {
         jobKey: args.jobKey,
         runId,
@@ -398,6 +426,8 @@ export const runMutationJob = internalAction({
         succeeded: false,
         failureClass: failureClass(error),
       });
+      if (error instanceof CronTargetReportedFailure)
+        return { executed: true, monitored: true };
       throw error;
     }
   },

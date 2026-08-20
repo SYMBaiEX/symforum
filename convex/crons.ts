@@ -52,18 +52,15 @@ crons.cron(
   runWatchdogActionRef,
   { jobKey: "evidence-first-party" },
 );
-// NVD permits unauthenticated requests at a much lower rate than keyed
-// requests. Each job makes at most one request, and their six-minute spacing
-// keeps the default cadence comfortably below the published 5 requests/30s.
-crons.cron(
-  "ingest NVD CVE updates",
-  "3,13,23,33,43,53 * * * *",
-  runWatchdogActionRef,
-  { jobKey: "evidence-nvd-cves" },
-);
+// Each NVD job makes one adaptively sized request. The staggered 30-minute
+// cadence plus persisted exponential backoff bounds upstream and Convex usage
+// when the service is slow or a response exceeds our safety limit.
+crons.cron("ingest NVD CVE updates", "3,33 * * * *", runWatchdogActionRef, {
+  jobKey: "evidence-nvd-cves",
+});
 crons.cron(
   "ingest NVD CVE change history",
-  "9,19,29,39,49,59 * * * *",
+  "18,48 * * * *",
   runWatchdogActionRef,
   { jobKey: "evidence-nvd-change-history" },
 );
@@ -240,9 +237,9 @@ crons.interval(
   { jobKey: "forum-belle-reply-recovery" },
 );
 
-crons.interval(
+crons.cron(
   "evaluate critical cron effectiveness",
-  { minutes: 5 },
+  "1,11,21,31,41,51 * * * *",
   evaluateWatchdogRef,
   {},
 );

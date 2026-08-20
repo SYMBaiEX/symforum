@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import type { LanguageModel } from "ai";
 import {
   openRouterModelForStage,
@@ -94,5 +95,19 @@ describe("OpenRouter-only model routing", () => {
     await expect(routedModelCandidates({})).rejects.toThrow(
       /OPENROUTER_API_KEY/,
     );
+  });
+
+  test("keeps every active AI client on the direct OpenRouter boundary", () => {
+    const files = [
+      new URL("./ai-model-routing.ts", import.meta.url),
+      new URL("../convex/semanticSearch.ts", import.meta.url),
+      new URL("../convex/forumAgentMemory.ts", import.meta.url),
+      new URL("../convex/forumAgentMaintenance.ts", import.meta.url),
+      new URL("../app/api/admin/ai/route.ts", import.meta.url),
+    ];
+    const source = files.map((file) => readFileSync(file, "utf8")).join("\n");
+    expect(source).toContain("https://openrouter.ai/api/v1");
+    expect(source).not.toMatch(/deepseek\/|AI_GATEWAY_API_KEY|gateway\.ai/i);
+    expect(source).not.toMatch(/createAnthropic|createGoogleGenerativeAI/);
   });
 });

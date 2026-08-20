@@ -5,8 +5,8 @@ import { WorkflowManager, type WorkflowId } from "@convex-dev/workflow";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
 import { v } from "convex/values";
 import {
-  OPENROUTER_DEEPSEEK_MODEL,
   OPENROUTER_EMBEDDING_MODEL,
+  OPENROUTER_LUNA_MODEL,
 } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -41,7 +41,10 @@ function legacyAgent() {
   });
   return new Agent(components.agent, {
     name: "Legacy Forum Editorial Cleanup",
-    languageModel: openRouter(OPENROUTER_DEEPSEEK_MODEL),
+    // Thread deletion does not generate editorial content, but the Agent
+    // component still requires a language model. Keep this maintenance path
+    // on the same reviewed OpenRouter/Luna boundary as the rest of the app.
+    languageModel: openRouter(OPENROUTER_LUNA_MODEL),
     embeddingModel: openRouter.embeddingModel(EMBEDDING_MODEL),
   });
 }

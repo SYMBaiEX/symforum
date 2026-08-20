@@ -7,17 +7,25 @@ import {
   contentFormatGuidance,
   evaluateForumDraft,
   finalizeForumBody,
+  ForumEditorialQualityError,
   imageRelevanceScore,
   isRetryableError,
   parseFeedXml,
   rankResearchCandidatesForTopic,
   repairForumDraftForReview,
+  structuredBlockContract,
 } from "./sukiForumAgent";
 import { ResearchQualityGateError } from "./researchQuality";
+import { validateForumAgentMarkup } from "../lib/editorial-quality";
 
 describe("Suki forum research helpers", () => {
   test("does not retry a deterministic research-quality hold", () => {
-    expect(isRetryableError(new ResearchQualityGateError(["near_duplicate"]))).toBe(false);
+    expect(
+      isRetryableError(new ResearchQualityGateError(["near_duplicate"])),
+    ).toBe(false);
+    expect(
+      isRetryableError(new ForumEditorialQualityError("quality hold")),
+    ).toBe(false);
     expect(isRetryableError(new Error("temporary network timeout"))).toBe(true);
   });
 
@@ -252,6 +260,9 @@ Where would your team pilot this first?`,
     expect(result.feedback.join(" ")).toContain(
       "source-a but that source does not contain: 9.9",
     );
+    expect(result.blockingIssues).not.toContain(
+      "The post must end with exactly one focused question",
+    );
   });
 
   test("holds malformed evidence blocks below the publishing threshold", () => {
@@ -332,7 +343,7 @@ ${discussionQuestion}`;
     );
   });
 
-  test("repairs Muse table cells, closing question, and supported claim ledger gaps", () => {
+  test("repairs lower-capability model table cells, closing question, and supported claim ledger gaps", () => {
     const snapshots = [
       {
         articleDescription:
@@ -407,12 +418,86 @@ Choose a bounded recovery decision under ambiguous saved state.
     ]);
   });
 
+  test("removes extra questions and replaces an incomplete evidence block deterministically", () => {
+    const snapshots = [
+      {
+        articleDescription:
+          "Checkpoint recovery helps synchronization jobs resume after interruptions.",
+        articleText:
+          "Checkpoint recovery helps synchronization jobs resume after interruptions. Teams verify the saved checkpoint before resuming work.",
+        articleTitle: "Checkpoint recovery",
+        boardSlugs: ["ai-frameworks"],
+        id: "source-a",
+        imageCredit: "Example",
+        sourceFeedUrl: "https://example.com/feed.xml",
+        sourceKey: "source-a",
+        sourceName: "Example",
+        summary: "Checkpoint recovery",
+        title: "Checkpoint recovery",
+        url: "https://example.com/a",
+      },
+    ];
+    const repaired = repairForumDraftForReview(
+      {
+        title: "A safer checkpoint recovery workflow",
+        body: `[h2]Recovery[/h2]
+Checkpoint recovery helps synchronization jobs resume after interruptions.
+
+Should every team enable it immediately?
+
+Teams verify the saved checkpoint before resuming work.
+
+[decision=Adoption]
+Pilot|Adopt
+[/decision]
+
+What would you verify first?`,
+        poll: null,
+        imageCandidateId: null,
+        claims: [
+          {
+            claim:
+              "Checkpoint recovery helps synchronization jobs resume after interruptions.",
+            sourceCandidateId: "source-a",
+            confidence: "high",
+            kind: "fact",
+          },
+          {
+            claim: "Teams verify the saved checkpoint before resuming work.",
+            sourceCandidateId: "source-a",
+            confidence: "medium",
+            kind: "analysis",
+          },
+        ],
+        originalValue: [
+          "Checkpoint recovery helps synchronization jobs resume after interruptions.",
+          "Teams verify the saved checkpoint before resuming work.",
+        ],
+        discussionQuestion: "What would you verify first",
+      },
+      snapshots,
+    );
+
+    expect(repaired.body).not.toContain("Should every team enable it");
+    expect(repaired.body).not.toContain("[decision=Adoption]");
+    expect(repaired.body).toContain("[table]");
+    expect(repaired.body).toContain("[tr][th]Evidence[/th]");
+    expect(repaired.body).toMatch(/What would you verify first\?$/);
+    expect(repaired.body.match(/\?/g)).toHaveLength(1);
+    expect(validateForumAgentMarkup(repaired.body).valid).toBe(true);
+  });
+
   test("gives each editorial format a concrete argument architecture", () => {
     expect(contentFormatGuidance("comparison")).toContain(
       "Declare decision criteria first",
     );
     expect(contentFormatGuidance("guide")).toContain("verification step");
     expect(contentFormatGuidance("deep-dive")).toContain("counterpoint");
+    expect(structuredBlockContract("guide")).toContain("[steps=Action plan]");
+    expect(structuredBlockContract("comparison")).toContain(
+      "[decision=Decision frame]",
+    );
+    expect(structuredBlockContract("brief")).toContain("[table]");
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {

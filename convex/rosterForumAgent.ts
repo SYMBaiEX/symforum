@@ -19,7 +19,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v7-openrouter-editorial-seeded-style-entropy";
+  "roster-forum-v8-openrouter-structured-repair-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;

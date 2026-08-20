@@ -48,7 +48,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v8-openrouter-editorial";
+const PROMPT_VERSION = "suki-forum-v9-openrouter-structured-repair";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -561,7 +561,8 @@ export async function runForumResearchSlot(
     const overlappingThread = context.recentThreads.find(
       (thread: (typeof context.recentThreads)[number]) =>
         selectedCandidates.some(
-          (candidate) => lexicalSimilarity(candidate.title, thread.title) >= 0.45,
+          (candidate) =>
+            lexicalSimilarity(candidate.title, thread.title) >= 0.45,
         ),
     );
     if (overlappingThread !== undefined && !overlappingThread.ownedByAgent) {
@@ -647,10 +648,7 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs:
-          stage === "revision"
-            ? 210_000
-            : 270_000,
+        totalTimeoutMs: stage === "revision" ? 210_000 : 270_000,
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
@@ -783,7 +781,7 @@ export async function runForumResearchSlot(
       });
     }
     if (!forumDraftPassesGate(quality, config.qualityThreshold)) {
-      throw new Error(
+      throw new ForumEditorialQualityError(
         `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${[
           ...quality.blockingIssues,
           ...quality.feedback,
@@ -885,13 +883,16 @@ export async function runForumResearchSlot(
           })
         : await ctx.runMutation(internal.forum.publishForumAgentFollowUp, {
             ...publicationArgs,
-          threadId: followUpThreadId,
-        });
+            threadId: followUpThreadId,
+          });
     if ("held" in published && published.held) {
       const reason = "Automated draft held for human research-quality review.";
-      await ctx.runMutation(internal.sukiForumAgentData.releaseResearchReservations, {
-        runKey: claim.runKey,
-      });
+      await ctx.runMutation(
+        internal.sukiForumAgentData.releaseResearchReservations,
+        {
+          runKey: claim.runKey,
+        },
+      );
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
         reason,
@@ -916,6 +917,14 @@ export async function runForumResearchSlot(
         reason,
       });
       return { status: "skipped" as const, reason: "quality-review" };
+    }
+    if (error instanceof ForumEditorialQualityError) {
+      const reason = publicErrorMessage(error, config.name);
+      await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+        runKey: claim.runKey,
+        reason,
+      });
+      return { status: "skipped" as const, reason: "editorial-quality" };
     }
     const message = publicErrorMessage(error, config.name);
     await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
@@ -1488,6 +1497,7 @@ function forumDraftPrompt(args: {
     JSON.stringify(args.selection),
     `Editorial desk: ${args.config.deskDescription}`,
     `Target length and shape: ${contentFormatGuidance(args.selection.contentFormat)}`,
+    `Structured block contract for this run: ${structuredBlockContract(args.selection.contentFormat)}`,
     "Editorial discipline: make one source-specific argument. Do not repeat the thesis in the opening, section headings, structured block, and conclusion. Prefer concrete nouns and verbs from the evidence over reusable frames such as operational ownership, a new era, shifting landscape, or the real story.",
     "Presentation discipline: open with a concise reason to care; use 2-4 descriptive [h2]/[h3] sections for longer formats; include one [note] or [warning] only when it adds decision value; use [steps], [decision], [table], [timeline], or [riskmap] to make the evidence scannable; close with the single discussion question. Keep paragraphs short enough for a phone screen.",
     "Measurement discipline: distinguish totals from changes, gross from net, estimates from observations, and editorial scores from measured results. Every number or version in a factual claim must appear in that claim's cited source.",
@@ -1670,11 +1680,10 @@ export function repairForumDraftForReview(
   const discussionQuestion = normalizeDiscussionQuestion(
     draft.discussionQuestion,
   );
-  let body = repairForumAgentMarkup(draft.body).trim();
-  const bodyQuestions = forumBodyQuestions(body);
-  if (bodyQuestions.length === 0) {
-    body = `${body}\n\n${discussionQuestion}`;
-  }
+  let body = normalizeForumDiscussionQuestion(
+    repairForumAgentMarkup(draft.body),
+    discussionQuestion,
+  );
 
   const claims = [...draft.claims];
   const statements = forumBodyFactualStatements(body);
@@ -1726,8 +1735,53 @@ export function repairForumDraftForReview(
     draft.originalValue,
     body,
   );
+  body = ensureCompleteStructuredBlock(body, originalValue);
 
   return { ...draft, body, claims, discussionQuestion, originalValue };
+}
+
+function normalizeForumDiscussionQuestion(body: string, question: string) {
+  const withoutQuestions = body
+    .split(/\n\s*\n/)
+    .filter(
+      (block) =>
+        /\[code(?:=[^\]]*)?\]/i.test(block) ||
+        forumBodyQuestions(block).length === 0,
+    )
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return `${withoutQuestions}\n\n${question}`.trim();
+}
+
+function ensureCompleteStructuredBlock(body: string, originalValue: string[]) {
+  if (validateForumAgentMarkup(body).valid) return body;
+  const withoutStructuredBlocks = body
+    .replace(
+      /\[(chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\][\s\S]*?\[\/\1\]/gi,
+      "",
+    )
+    .replace(/\[table(?:=[^\]]*)?\][\s\S]*?\[\/table\]/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const rows = originalValue
+    .map((value) =>
+      plainForumDraftText(value).replace(/\|/g, "/").slice(0, 240),
+    )
+    .filter(Boolean)
+    .slice(0, 2);
+  if (rows.length < 2) return withoutStructuredBlocks;
+  const table = `[table]
+[tr][th]Evidence[/th][th]Reader takeaway[/th][/tr]
+${rows
+  .map((row, index) => `[tr][td]Signal ${index + 1}[/td][td]${row}[/td][/tr]`)
+  .join("\n")}
+[/table]`;
+  const question = forumBodyQuestions(withoutStructuredBlocks).at(-1);
+  if (question === undefined) return `${withoutStructuredBlocks}\n\n${table}`;
+  const questionIndex = withoutStructuredBlocks.lastIndexOf(question);
+  if (questionIndex < 0) return `${withoutStructuredBlocks}\n\n${table}`;
+  return `${withoutStructuredBlocks.slice(0, questionIndex).trim()}\n\n${table}\n\n${withoutStructuredBlocks.slice(questionIndex).trim()}`;
 }
 
 function anchorOriginalValueStatements(values: string[], body: string) {
@@ -1766,6 +1820,10 @@ function anchorOriginalValueStatements(values: string[], body: string) {
 function normalizeDiscussionQuestion(question: string) {
   const trimmed = question.trim();
   return trimmed.endsWith("?") ? trimmed : `${trimmed.replace(/[.!]+$/, "")}?`;
+}
+
+export class ForumEditorialQualityError extends Error {
+  override name = "ForumEditorialQualityError";
 }
 
 type EvaluatedForumDraft = {
@@ -1960,12 +2018,14 @@ export function evaluateForumDraft(args: {
       plainForumDraftText(matchingQuestion),
     );
   if (questions.length !== 1) {
-    feedback.push(
-      `Use exactly one question in the body, the final discussion question (draft: ${questions.length})`,
-    );
+    const issue = `Use exactly one question in the body, the final discussion question (draft: ${questions.length})`;
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
   if (!matchingQuestion || !questionAtEnd) {
-    feedback.push("End the body with the submitted discussion question");
+    const issue = "End the body with the submitted discussion question";
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
 
   const originalValueCoverage =
@@ -1975,9 +2035,10 @@ export function evaluateForumDraft(args: {
         0.65,
     ).length / args.draft.originalValue.length;
   if (originalValueCoverage < 0.6) {
-    feedback.push(
-      "Make the submitted original-value statements concrete and visible in the body",
-    );
+    const issue =
+      "Make the submitted original-value statements concrete and visible in the body";
+    feedback.push(issue);
+    blockingIssues.push(issue);
   }
   const markupValidation = validateForumAgentMarkup(args.draft.body);
   feedback.push(...markupValidation.feedback);
@@ -2025,7 +2086,6 @@ export function evaluateForumDraft(args: {
     !questionAtEnd
   ) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
-    blockingIssues.push("The post must end with exactly one focused question");
   }
   return {
     qualityScore,
@@ -2149,6 +2209,18 @@ export function contentFormatGuidance(
       "Advance one thesis through a traceable evidence chain, test a serious counterpoint, and finish with practical implications rather than a recap.",
   }[format];
   return `${format}; ${minimum}-${maximum} words. ${architecture} Use only the sections and structured blocks the subject earns.`;
+}
+
+export function structuredBlockContract(
+  format: z.infer<typeof topicSelectionSchema>["contentFormat"],
+) {
+  if (format === "guide")
+    return "Use exactly one [steps=Action plan] block with two or more rows formatted Step|Action|Source-backed detail, then close [/steps].";
+  if (format === "comparison" || format === "debate")
+    return "Use exactly one [decision=Decision frame] block with two or more rows formatted Option|Verdict|Source-backed reason, then close [/decision].";
+  if (format === "deep-dive" || format === "field-note")
+    return "Use exactly one [timeline=Evidence chain] block with two or more rows formatted When|Observed event|Why it matters, then close [/timeline].";
+  return "Use exactly one [table] with one [tr][th] header row and at least one complete [tr][td] evidence row, then close [/table].";
 }
 
 function plainWordCount(value: string) {
@@ -2622,6 +2694,9 @@ export function isRetryableError(error: unknown) {
     return false;
   }
   if (error instanceof ForumAgentConfigurationError) {
+    return false;
+  }
+  if (error instanceof ForumEditorialQualityError) {
     return false;
   }
   if (APICallError.isInstance(error)) {

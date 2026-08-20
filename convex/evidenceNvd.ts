@@ -17,10 +17,15 @@ const NVD_ATTRIBUTION =
   "National Vulnerability Database (NVD), National Institute of Standards and Technology";
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_RESULTS_PER_PAGE = 100;
+const DEFAULT_RESULTS_PER_PAGE = 25;
+const MIN_RESULTS_PER_PAGE = 1;
+const MAX_FAILURE_COUNT = 12;
+const BASE_RETRY_MS = 10 * 60 * 1_000;
+const MAX_RETRY_MS = 6 * 60 * 60 * 1_000;
 const WINDOW_MS = 2 * 60 * 60 * 1_000;
 const OVERLAP_MS = 15 * 60 * 1_000;
 const MAX_WINDOW_MS = 120 * 24 * 60 * 60 * 1_000;
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 20_000;
 
 type NvdKind = "cves" | "history";
 type SourceState = {
@@ -33,6 +38,8 @@ type Cursor = {
   windowStart: number;
   windowEnd: number;
   startIndex: number;
+  pageSize?: number;
+  failureCount?: number;
   retryNotBefore?: number;
 };
 type Normalized = {
@@ -184,6 +191,16 @@ export function parseCursor(value: string): Cursor | null {
       !Number.isFinite(parsed.windowStart) ||
       !Number.isFinite(parsed.windowEnd) ||
       !Number.isInteger(parsed.startIndex) ||
+      (parsed.pageSize !== undefined &&
+        (typeof parsed.pageSize !== "number" ||
+          !Number.isInteger(parsed.pageSize) ||
+          parsed.pageSize < MIN_RESULTS_PER_PAGE ||
+          parsed.pageSize > MAX_RESULTS_PER_PAGE)) ||
+      (parsed.failureCount !== undefined &&
+        (typeof parsed.failureCount !== "number" ||
+          !Number.isInteger(parsed.failureCount) ||
+          parsed.failureCount < 0 ||
+          parsed.failureCount > MAX_FAILURE_COUNT)) ||
       (parsed.retryNotBefore !== undefined &&
         !Number.isFinite(parsed.retryNotBefore))
     )
@@ -193,7 +210,11 @@ export function parseCursor(value: string): Cursor | null {
       cursor.windowEnd >= cursor.windowStart &&
       cursor.windowEnd - cursor.windowStart <= MAX_WINDOW_MS &&
       cursor.startIndex >= 0
-      ? cursor
+      ? {
+          ...cursor,
+          pageSize: cursor.pageSize ?? DEFAULT_RESULTS_PER_PAGE,
+          failureCount: cursor.failureCount ?? 0,
+        }
       : null;
   } catch {
     return null;
@@ -211,6 +232,8 @@ export function nextNvdCursor(state: SourceState | null, now: number): Cursor {
     windowStart: start,
     windowEnd: Math.min(now, start + WINDOW_MS + OVERLAP_MS),
     startIndex: 0,
+    pageSize: DEFAULT_RESULTS_PER_PAGE,
+    failureCount: 0,
   };
 }
 export function buildNvdUrl(kind: NvdKind, cursor: Cursor) {
@@ -224,7 +247,10 @@ export function buildNvdUrl(kind: NvdKind, cursor: Cursor) {
     new Date(cursor.windowEnd).toISOString(),
   );
   endpoint.searchParams.set("startIndex", String(cursor.startIndex));
-  endpoint.searchParams.set("resultsPerPage", String(MAX_RESULTS_PER_PAGE));
+  endpoint.searchParams.set(
+    "resultsPerPage",
+    String(cursor.pageSize ?? DEFAULT_RESULTS_PER_PAGE),
+  );
   return endpoint.toString();
 }
 
@@ -343,6 +369,7 @@ export function parseNvdPage(
   const resultsPerPage = root?.resultsPerPage;
   const pageSize =
     typeof resultsPerPage === "number" ? resultsPerPage : Number.NaN;
+  const requestedPageSize = cursor.pageSize ?? DEFAULT_RESULTS_PER_PAGE;
   const rawItems = array(
     kind === "cves" ? root?.vulnerabilities : root?.cveChanges,
   );
@@ -351,7 +378,7 @@ export function parseNvdPage(
     total === null ||
     !Number.isSafeInteger(pageSize) ||
     pageSize < 0 ||
-    pageSize > MAX_RESULTS_PER_PAGE ||
+    pageSize > requestedPageSize ||
     responseStartIndex !== cursor.startIndex ||
     cursor.startIndex > total ||
     rawItems.length !== pageSize ||
@@ -381,12 +408,20 @@ export function parseNvdPage(
     throw new Error("NVD returned an invalid document in a pagination page");
 
   const consumed = cursor.startIndex + rawItems.length;
-  const { retryNotBefore: _retryNotBefore, ...pageCursor } = cursor;
+  const {
+    retryNotBefore: _retryNotBefore,
+    failureCount: _failureCount,
+    ...pageCursor
+  } = cursor;
   return {
     documents,
     nextCursor:
       consumed < total
-        ? JSON.stringify({ ...pageCursor, startIndex: consumed })
+        ? JSON.stringify({
+            ...pageCursor,
+            startIndex: consumed,
+            failureCount: 0,
+          })
         : null,
   };
 }
@@ -467,6 +502,84 @@ export function retryAfterMs(value: string | null, now: number) {
     : 60_000;
 }
 
+export function nvdRetryCursor(
+  cursor: Cursor,
+  error: { name?: string; retryAfter?: number },
+  now: number,
+): Cursor {
+  const failureCount = Math.min(
+    MAX_FAILURE_COUNT,
+    (cursor.failureCount ?? 0) + 1,
+  );
+  const shouldShrink =
+    error.name === "NvdResponseTooLargeError" ||
+    error.name === "NvdRequestTimeoutError" ||
+    error.name === "AbortError";
+  const currentPageSize = cursor.pageSize ?? DEFAULT_RESULTS_PER_PAGE;
+  const pageSize = shouldShrink
+    ? Math.max(MIN_RESULTS_PER_PAGE, Math.floor(currentPageSize / 2))
+    : currentPageSize;
+  const exponentialDelay = Math.min(
+    MAX_RETRY_MS,
+    BASE_RETRY_MS * 2 ** Math.min(failureCount - 1, 8),
+  );
+  return {
+    ...cursor,
+    pageSize,
+    failureCount,
+    retryNotBefore:
+      now + Math.max(exponentialDelay, error.retryAfter ?? BASE_RETRY_MS),
+  };
+}
+
+export async function readBoundedNvdResponse(
+  response: Pick<Response, "arrayBuffer" | "body" | "headers">,
+) {
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+    const error = new Error("NVD response exceeded 2 MiB limit") as Error & {
+      name: string;
+    };
+    error.name = "NvdResponseTooLargeError";
+    throw error;
+  }
+  if (response.body === null) {
+    const fallback = new Uint8Array(await response.arrayBuffer());
+    if (fallback.byteLength > MAX_RESPONSE_BYTES) {
+      const error = new Error("NVD response exceeded 2 MiB limit") as Error & {
+        name: string;
+      };
+      error.name = "NvdResponseTooLargeError";
+      throw error;
+    }
+    return fallback;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    total += result.value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      const error = new Error("NVD response exceeded 2 MiB limit") as Error & {
+        name: string;
+      };
+      error.name = "NvdResponseTooLargeError";
+      throw error;
+    }
+    chunks.push(result.value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
 async function fetchNvd(endpoint: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -490,10 +603,17 @@ async function fetchNvd(endpoint: string) {
       );
       throw error;
     }
-    const body = await response.arrayBuffer();
-    if (body.byteLength > MAX_RESPONSE_BYTES)
-      throw new Error("NVD response exceeded 2 MiB limit");
+    const body = await readBoundedNvdResponse(response);
     return JSON.parse(new TextDecoder().decode(body)) as unknown;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeout = new Error("NVD request timed out") as Error & {
+        name: string;
+      };
+      timeout.name = "NvdRequestTimeoutError";
+      throw timeout;
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -666,7 +786,14 @@ async function sync(kind: NvdKind, ctx: ActionCtx) {
     return { ok: true, skipped: true, deferred: false, ingested: 0, failed: 0 };
   const cursor = nextNvdCursor(state, now);
   if (cursor.retryNotBefore && cursor.retryNotBefore > now)
-    return { ok: true, skipped: true, deferred: true, ingested: 0, failed: 0 };
+    return {
+      ok: false,
+      skipped: true,
+      deferred: true,
+      ingested: 0,
+      failed: 1,
+      error: "NVD retry backoff is active",
+    };
   try {
     const payload = await fetchNvd(buildNvdUrl(kind, cursor));
     // Validate the entire pagination contract before recording a successful
@@ -686,26 +813,26 @@ async function sync(kind: NvdKind, ctx: ActionCtx) {
     let ingested = 0;
     for (const document of page.documents) {
       const stored = await ctx.runMutation(upsertVersionRef, {
-          sourceId: source.sourceId,
-          externalKey: document.externalKey,
-          canonicalUrl: document.canonicalUrl,
-          canonicalUrlHash: await hash(document.canonicalUrl),
-          contentHash: await hash(document),
-          kind: "advisory",
-          visibility: "public",
-          title: document.title,
-          excerpt: document.excerpt,
-          searchText: document.searchText,
-          tags: document.tags,
-          authors: document.authors,
-          documentLicenseClass: "public-domain",
-          fetchedAt: now,
-          publishedAt: document.publishedAt,
-          sourceRevision: document.sourceRevision,
-          sourceUpdatedAt: document.sourceUpdatedAt || now,
-          retrievalUrl: document.canonicalUrl,
-          licenseClass: "public-domain",
-          metadataJson: stableJson(document.metadata).slice(0, 4_000),
+        sourceId: source.sourceId,
+        externalKey: document.externalKey,
+        canonicalUrl: document.canonicalUrl,
+        canonicalUrlHash: await hash(document.canonicalUrl),
+        contentHash: await hash(document),
+        kind: "advisory",
+        visibility: "public",
+        title: document.title,
+        excerpt: document.excerpt,
+        searchText: document.searchText,
+        tags: document.tags,
+        authors: document.authors,
+        documentLicenseClass: "public-domain",
+        fetchedAt: now,
+        publishedAt: document.publishedAt,
+        sourceRevision: document.sourceRevision,
+        sourceUpdatedAt: document.sourceUpdatedAt || now,
+        retrievalUrl: document.canonicalUrl,
+        licenseClass: "public-domain",
+        metadataJson: stableJson(document.metadata).slice(0, 4_000),
       });
       const postVersionWork = nvdPostVersionWork(kind, stored.idempotent);
       if (postVersionWork.writeCveClaim)
@@ -741,33 +868,19 @@ async function sync(kind: NvdKind, ctx: ActionCtx) {
     };
   } catch (error) {
     const typed = error as Error & { status?: number; retryAfter?: number };
-    const retryable =
-      typed.status === 429 ||
-      (typed.status !== undefined && typed.status >= 500) ||
-      typed.status === undefined;
-    const retryNotBefore = retryable
-      ? now + Math.max(1_000, typed.retryAfter ?? 60_000)
-      : undefined;
+    const retryCursor = nvdRetryCursor(cursor, typed, now);
     const message =
       text(typed.message || "NVD ingestion failed", 500) ||
       "NVD ingestion failed";
-    await saveSource(
-      ctx,
-      kind,
-      state,
-      {
-        ...nvdFailureCheckpoint(
-          cursor,
-          state?.lastSucceededAt ?? 0,
-          now,
-          message,
-        ),
-        cursor: JSON.stringify({
-          ...cursor,
-          ...(retryNotBefore ? { retryNotBefore } : {}),
-        }),
-      },
-    );
+    await saveSource(ctx, kind, state, {
+      ...nvdFailureCheckpoint(
+        cursor,
+        state?.lastSucceededAt ?? 0,
+        now,
+        message,
+      ),
+      cursor: JSON.stringify(retryCursor),
+    });
     await ctx.runMutation(logRef, {
       level: "error",
       source: "convex",

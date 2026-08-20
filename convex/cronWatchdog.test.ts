@@ -5,7 +5,11 @@ import { makeFunctionReference } from "convex/server";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ActionCtx } from "./_generated/server";
-import { executeActionTarget, executeMutationTarget } from "./cronWatchdog";
+import {
+  assertCronTargetSucceeded,
+  executeActionTarget,
+  executeMutationTarget,
+} from "./cronWatchdog";
 import schema from "./schema";
 
 const modules = {
@@ -126,6 +130,22 @@ describe("critical cron watchdog", () => {
       ),
     ).rejects.toThrow("target failed");
     expect(mutationFailure).toHaveBeenCalledTimes(1);
+  });
+
+  test("fails resolved targets that report an unhealthy domain result", () => {
+    expect(() => assertCronTargetSucceeded({ ok: false })).toThrowError(
+      expect.objectContaining({ name: "CronTargetReportedFailure" }),
+    );
+    expect(() => assertCronTargetSucceeded({ healthy: false })).toThrowError(
+      expect.objectContaining({ name: "CronTargetReportedFailure" }),
+    );
+    expect(() =>
+      assertCronTargetSucceeded({ status: "degraded" }),
+    ).toThrowError(
+      expect.objectContaining({ name: "CronTargetReportedFailure" }),
+    );
+    expect(() => assertCronTargetSucceeded({ enabled: false })).not.toThrow();
+    expect(() => assertCronTargetSucceeded({ ok: true })).not.toThrow();
   });
 
   test("records healthy, stale, failed, recovered, and deduplicated operational states", async () => {

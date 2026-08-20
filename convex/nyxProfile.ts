@@ -14,7 +14,7 @@ export const NYX_PROFILE = {
   dailyPostTarget: 1,
   enabled: true,
   routeFeature: "research",
-  promptVersion: "nyx-research-v1-openrouter-editorial",
+  promptVersion: "nyx-research-v2-openrouter-structured-repair",
   voice:
     "measured, curious, and evidence-first; separates reported facts from bounded interpretation and names what would change the conclusion",
 } as const;

@@ -27,9 +27,13 @@ describe("evidence retention cron", () => {
   test("schedules bounded watchlist webhook dispatch and retention internally", () => {
     const source = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
     expect(source).toContain('"dispatch pending watchlist webhooks"');
-    expect(source).toContain("internal.evidenceWatchlists.dispatchWebhookOutbox");
+    expect(source).toContain(
+      "internal.evidenceWatchlists.dispatchWebhookOutbox",
+    );
     expect(source).toContain('"cleanup retained watchlist webhooks"');
-    expect(source).toContain("internal.evidenceWatchlists.cleanupWebhookOutbox");
+    expect(source).toContain(
+      "internal.evidenceWatchlists.cleanupWebhookOutbox",
+    );
   });
 
   test("routes critical evidence, cleanup, and forum recovery work through the watchdog", () => {
@@ -40,5 +44,9 @@ describe("evidence retention cron", () => {
     expect(source).toContain('jobKey: "evidence-crossref"');
     expect(source).toContain('jobKey: "semantic-cleanup"');
     expect(source).toContain('jobKey: "forum-suki-reply-recovery"');
+    expect(source).toContain('"1,11,21,31,41,51 * * * *"');
+    expect(source).not.toContain(
+      '"evaluate critical cron effectiveness",\n  { minutes: 5 }',
+    );
   });
 });
