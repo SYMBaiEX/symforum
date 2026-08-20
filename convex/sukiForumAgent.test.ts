@@ -8,6 +8,7 @@ import {
   evaluateForumDraft,
   finalizeForumBody,
   ForumEditorialQualityError,
+  forumWriterMaxOutputTokens,
   imageRelevanceScore,
   isRetryableError,
   parseFeedXml,
@@ -498,6 +499,9 @@ What would you verify first?`,
       "[decision=Decision frame]",
     );
     expect(structuredBlockContract("brief")).toContain("[table]");
+    expect(forumWriterMaxOutputTokens("draft", false)).toBe(4_800);
+    expect(forumWriterMaxOutputTokens("revision", false)).toBe(5_500);
+    expect(forumWriterMaxOutputTokens("revision", true)).toBe(2_800);
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {

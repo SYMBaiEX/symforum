@@ -666,15 +666,10 @@ export async function runForumResearchSlot(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
             ),
-            maxOutputTokens: options?.lightRevision
-              ? config.slug === "nyx"
-                ? 5_500
-                : 2_800
-              : config.slug === "nyx"
-                ? 2_800
-                : stage === "revision"
-                  ? 5_500
-                  : 4_800,
+            maxOutputTokens: forumWriterMaxOutputTokens(
+              stage,
+              options?.lightRevision ?? false,
+            ),
             instructions: modelInstructions(
               candidate.provider,
               stage === "revision" ? "forum-revision" : "forum-draft",
@@ -2221,6 +2216,14 @@ export function structuredBlockContract(
   if (format === "deep-dive" || format === "field-note")
     return "Use exactly one [timeline=Evidence chain] block with two or more rows formatted When|Observed event|Why it matters, then close [/timeline].";
   return "Use exactly one [table] with one [tr][th] header row and at least one complete [tr][td] evidence row, then close [/table].";
+}
+
+export function forumWriterMaxOutputTokens(
+  stage: "draft" | "revision",
+  lightRevision: boolean,
+) {
+  if (lightRevision) return 2_800;
+  return stage === "revision" ? 5_500 : 4_800;
 }
 
 function plainWordCount(value: string) {

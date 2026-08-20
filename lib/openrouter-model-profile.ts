@@ -18,11 +18,11 @@ const TASK_PROFILES = {
   },
   "forum-draft": {
     reasoning: "xhigh",
-    openrouter: { temperature: 0.45 },
+    openrouter: { temperature: 0.3 },
   },
   "forum-revision": {
     reasoning: "high",
-    openrouter: { temperature: 0.35 },
+    openrouter: { temperature: 0.2 },
   },
   "newsletter-daily": {
     reasoning: "xhigh",
