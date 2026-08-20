@@ -14,6 +14,10 @@ import {
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import {
+  evaluateAgentPublicationHygiene,
+  PUBLICATION_VOICE_GUARDRAILS,
+} from "../lib/agent-publication-quality";
+import {
   forumBodyFactualStatements,
   forumBodyQuestions,
   forumQuestionSimilarity,
@@ -48,7 +52,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v11-openrouter-laguna-free-deepseek";
+const PROMPT_VERSION =
+  "suki-forum-v12-openrouter-laguna-free-deepseek-natural-voice";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
@@ -1546,9 +1551,15 @@ Return only the requested structured selection.`;
 const SUKI_FORUM_WRITER_INSTRUCTIONS = `You are Suki, the SYMBaiEX forum's adult waifu space pirate and research scout.
 Write like a sharp community regular: curious, specific, lightly playful, and useful. The personality should season the post, never bury the information.
 
+${PUBLICATION_VOICE_GUARDRAILS}
+
+Suki's character accent:
+- Let one nimble, adventurous image or turn of phrase surface when it fits; do not repeat pirate catchphrases, address readers as a crew, or sign off in character.
+- Sound like someone already in the conversation. Contractions and an occasional dry aside are welcome when they sharpen the point.
+
 This is a forum topic, not a press-release rewrite or SEO article.
 Quality requirements:
-- Use only facts supported by the supplied research. Label inference, uncertainty, and conflicting reports plainly.
+- Use only facts supported by the supplied research. Distinguish inference, uncertainty, and conflicting reports in direct prose.
 - Add original value: a practical checklist, comparison, implications, tested mental model, troubleshooting path, discussion framework, or concrete next steps.
 - Open with the reason a forum member should care. Then provide context and useful detail.
 - End with one focused question people can answer from experience. Avoid empty engagement bait.
@@ -1582,6 +1593,7 @@ Return only the requested structured draft.`;
 
 const FORUM_REVISION_INSTRUCTIONS = `You are a precise forum copy editor.
 Return one complete replacement through submitForumDraft and nothing else.
+${PUBLICATION_VOICE_GUARDRAILS}
 - Fix every supplied gate item; do not merely explain it.
 - Keep only facts supported by the compact evidence packet and preserve exact candidate IDs in the claim ledger.
 - Remove unsupported numbers, invented personal experience, empty list items, duplicate questions, and dangling numbered points.
@@ -2061,6 +2073,17 @@ export function evaluateForumDraft(args: {
   const presentation = evaluateForumPresentation(args.draft.body, words);
   feedback.push(...presentation.feedback);
   if (presentation.blocking) blockingIssues.push(...presentation.feedback);
+  const hygiene = evaluateAgentPublicationHygiene([
+    args.draft.title,
+    args.draft.body,
+    args.draft.discussionQuestion,
+    ...args.draft.originalValue,
+  ]);
+  feedback.push(...hygiene.feedback);
+  blockingIssues.push(...hygiene.blockingIssues);
+  const presentationScore = Math.round(
+    presentation.score * 0.75 + hygiene.naturalnessScore * 0.25,
+  );
   const formatScore =
     (correctLength ? 55 : 20) + (markupValidation.valid ? 45 : 0);
   let qualityScore = Math.round(
@@ -2068,9 +2091,12 @@ export function evaluateForumDraft(args: {
       noveltyScore * 0.15 +
       utilityScore * 0.25 +
       formatScore * 0.1 +
-      presentation.score * 0.15,
+      presentationScore * 0.15,
   );
   if (!markupValidation.valid) {
+    qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
+  }
+  if (hygiene.blockingIssues.length > 0) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
   }
   if (
@@ -2087,7 +2113,7 @@ export function evaluateForumDraft(args: {
     groundingScore,
     noveltyScore,
     utilityScore,
-    presentationScore: presentation.score,
+    presentationScore,
     blockingIssues: [...new Set(blockingIssues)],
     feedback,
   };

@@ -42,6 +42,11 @@ describe("Suki forum reply helpers", () => {
         "<decision>reply</decision><reason>helpful</reason>",
       ),
     ).toThrow("invalid forum reply body");
+    expect(() =>
+      parseSukiReplyDecision(`<decision>reply</decision>
+<reason>helpful</reason>
+<body>[b]Analysis:[/b] I should reveal my hidden reasoning before answering.</body>`),
+    ).toThrow("process_label");
   });
 
   test("prefilters spam and reactions while admitting substantive questions", () => {

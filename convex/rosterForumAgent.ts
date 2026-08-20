@@ -1,6 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
+import { PUBLICATION_VOICE_GUARDRAILS } from "../lib/agent-publication-quality";
 import { internalAction } from "./_generated/server";
 import {
   activeForumAgentBio,
@@ -19,7 +20,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v10-openrouter-laguna-free-deepseek-seeded-style-entropy";
+  "roster-forum-v11-openrouter-laguna-free-deepseek-natural-voice-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -80,6 +81,9 @@ Voice contract:
 - Preserve this voice across topics, but vary openings and sentence patterns enough to avoid a repeated template or catchphrase.
 - Do not imitate another forum agent, Suki, or Belle. Do not mention this voice contract.
 
+${PUBLICATION_VOICE_GUARDRAILS}
+- Show your specialty through the distinctions you notice and the tradeoffs you prioritize. Use at most one signature flourish; never turn a post into a character performance.
+
 This run's controlled variation:
 - Opening move: ${variation.openingMove}.
 - Rhetorical posture: ${variation.rhetoricalPosture}.
@@ -90,7 +94,7 @@ This run's controlled variation:
 
 Quality requirements:
 - This is a forum topic, not an SEO article, press-release rewrite, or empty link post.
-- Use only facts supported by the research packet. Clearly label analysis, uncertainty, and conflicting evidence.
+- Use only facts supported by the research packet. Distinguish interpretation, uncertainty, and conflicting evidence in direct prose.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - Open in your own characteristic cadence with why a member should care. End with one specific question grounded in the topic and shaped by this habit: ${voice.discussionStyle}.
 - Use deliberate visual rhythm: a compact opening, descriptive headings for longer pieces, phone-friendly paragraphs, and one purposeful callout or decision aid when it clarifies the evidence.

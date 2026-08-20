@@ -46,6 +46,7 @@ describe("Belle Hacker News digest", () => {
     expect(body).toContain(
       "[url=https://www.symbaiex.com/news]Open the complete SYMBaiEX News desk[/url]",
     );
+    expect(body).not.toContain("\nAnalysis:");
     expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
   });
 

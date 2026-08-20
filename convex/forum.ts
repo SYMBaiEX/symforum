@@ -1,6 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { paginationOptsValidator } from "convex/server";
+import { makeFunctionReference, paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import {
+  assertAgentPublicationHygiene,
+  cleanLegacyAgentProcessLabels,
+} from "../lib/agent-publication-quality";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { extractForumMentionUsernames } from "../lib/forum-mentions";
 import { internal } from "./_generated/api";
@@ -140,6 +144,17 @@ const searchResultTypeValidator = v.union(
   v.literal("threads"),
   v.literal("replies"),
 );
+const agentPublicationCleanupRef = makeFunctionReference<
+  "mutation",
+  { cursor?: string; phase?: "posts" | "threads" },
+  {
+    changed: number;
+    complete: boolean;
+    phase: "posts" | "threads";
+    scanned: number;
+    scheduled: boolean;
+  }
+>("forum:cleanupLegacyAgentPublicationLabels");
 const searchTargetValidator = v.union(
   v.literal("all"),
   v.literal("titles"),
@@ -9482,6 +9497,7 @@ export const publishSukiForumReply = internalMutation({
       return { status: "ignored" as const, reason: "thread-unavailable" };
     }
 
+    assertAgentPublicationHygiene(args.body);
     const body = normalizeReplyBody(args.body);
     const postNumber = await nextPostNumberForThread(ctx, thread);
     const postId = await ctx.db.insert("forumPosts", {
@@ -9890,6 +9906,7 @@ export const publishSukiForumThread = internalMutation({
       throw new Error(`${agentName} selected an unavailable forum board`);
     }
 
+    assertAgentPublicationHygiene([args.title, args.body]);
     const title = normalizeTitle(args.title);
     const body = normalizeThreadBody(
       `${args.body.trim()}\n\n[i]AI-assisted research draft authored by ${agentName}; source links and editorial review signals are recorded with this publication.[/i]`,
@@ -10252,6 +10269,7 @@ export const publishForumAgentFollowUp = internalMutation({
     if (sources.length === 0) {
       throw new Error("A forum follow-up needs at least one source");
     }
+    assertAgentPublicationHygiene([args.title, args.body]);
     const body = normalizeReplyBody(args.body);
     const now = Date.now();
     const postNumber = await nextPostNumberForThread(ctx, thread);
@@ -10359,6 +10377,88 @@ export const publishForumAgentFollowUp = internalMutation({
       title: thread.title,
       postId,
       postNumber,
+    };
+  },
+});
+
+export const cleanupLegacyAgentPublicationLabels = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    phase: v.optional(v.union(v.literal("threads"), v.literal("posts"))),
+  },
+  returns: v.object({
+    changed: v.number(),
+    complete: v.boolean(),
+    phase: v.union(v.literal("threads"), v.literal("posts")),
+    scanned: v.number(),
+    scheduled: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const phase = args.phase ?? "threads";
+    const now = Date.now();
+    let changed = 0;
+    let scanned = 0;
+    let isDone: boolean;
+    let continueCursor: string;
+
+    if (phase === "threads") {
+      const page = await ctx.db
+        .query("forumThreads")
+        .order("asc")
+        .paginate({ cursor: args.cursor ?? null, numItems: 20 });
+      scanned = page.page.length;
+      isDone = page.isDone;
+      continueCursor = page.continueCursor;
+      for (const thread of page.page) {
+        const author = await ctx.db.get("users", thread.authorId);
+        if (author?.isAgent !== true) continue;
+        const body = cleanLegacyAgentProcessLabels(thread.body);
+        const searchText = cleanLegacyAgentProcessLabels(thread.searchText);
+        if (body === thread.body && searchText === thread.searchText) continue;
+        await ctx.db.patch("forumThreads", thread._id, {
+          body,
+          searchText,
+          updatedAt: now,
+        });
+        await syncForumThreadEditorialDigest(ctx, thread._id);
+        await syncForumThreadSearchProjection(ctx, thread._id);
+        changed += 1;
+      }
+    } else {
+      const page = await ctx.db
+        .query("forumPosts")
+        .order("asc")
+        .paginate({ cursor: args.cursor ?? null, numItems: 20 });
+      scanned = page.page.length;
+      isDone = page.isDone;
+      continueCursor = page.continueCursor;
+      for (const post of page.page) {
+        const author = await ctx.db.get("users", post.authorId);
+        if (author?.isAgent !== true) continue;
+        const body = cleanLegacyAgentProcessLabels(post.body);
+        if (body === post.body) continue;
+        await ctx.db.patch("forumPosts", post._id, { body, updatedAt: now });
+        await syncForumPostSearchProjection(ctx, post._id);
+        await syncForumThreadEditorialDigest(ctx, post.threadId);
+        await syncForumThreadSearchProjection(ctx, post.threadId);
+        changed += 1;
+      }
+    }
+
+    const next = !isDone
+      ? { cursor: continueCursor, phase }
+      : phase === "threads"
+        ? { phase: "posts" as const }
+        : null;
+    if (next !== null) {
+      await ctx.scheduler.runAfter(0, agentPublicationCleanupRef, next);
+    }
+    return {
+      changed,
+      complete: next === null,
+      phase,
+      scanned,
+      scheduled: next !== null,
     };
   },
 });

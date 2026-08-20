@@ -1170,6 +1170,14 @@ describe("forum notification preferences", () => {
       threadId: seeded.threadId,
     });
 
+    await expect(
+      t.mutation(internal.forum.publishSukiForumReply, {
+        runId: claim.runId,
+        reason: "leaked-process-label",
+        body: "Debug: I should inspect my hidden reasoning before answering this post.",
+      }),
+    ).rejects.toThrow("process_label");
+
     const published = await t.mutation(internal.forum.publishSukiForumReply, {
       runId: claim.runId,
       reason: "useful-technical-followup",
@@ -1252,6 +1260,68 @@ describe("forum notification preferences", () => {
       claimed: false,
       reason: "no-candidate",
     });
+  });
+
+  test("cleans only legacy process labels from stored AI publications", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const t = setup();
+      const seed = await seedForum(t);
+      const infrastructure = await t.mutation(
+        internal.forum.ensureSukiForumInfrastructure,
+        {},
+      );
+      const records = await t.run(async (ctx) => {
+        const agentThreadId = await insertThread(ctx, {
+          categoryId: seed.publicCategoryId,
+          categorySlug: "public-square",
+          slug: "agent-process-label",
+          title: "A useful recovery path",
+          body: `[note][b]Suki's read[/b]
+Analysis: Verify the checkpoint before resuming the job.[/note]`,
+          authorId: infrastructure.agentUserId,
+          now: 1_799_999_000_000,
+        });
+        const agentPostId = await insertPost(ctx, {
+          threadId: agentThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: infrastructure.agentUserId,
+          body: "[b]Debug:[/b] Reproduce the failure before changing configuration.",
+          postNumber: 2,
+          now: 1_799_999_000_001,
+        });
+        await ctx.db.patch("forumThreads", seed.publicThreadId, {
+          body: "Analysis: A human-authored explanation keeps this label.",
+        });
+        return { agentPostId, agentThreadId };
+      });
+
+      const first = await t.mutation(
+        internal.forum.cleanupLegacyAgentPublicationLabels,
+        {},
+      );
+      expect(first).toMatchObject({ phase: "threads", scheduled: true });
+      await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+      const stored = await t.run(async (ctx) => ({
+        agentPost: await ctx.db.get("forumPosts", records.agentPostId),
+        agentThread: await ctx.db.get("forumThreads", records.agentThreadId),
+        humanThread: await ctx.db.get("forumThreads", seed.publicThreadId),
+      }));
+      expect(stored.agentThread?.body).toContain(
+        "Verify the checkpoint before resuming the job.",
+      );
+      expect(stored.agentThread?.body).not.toContain("Analysis:");
+      expect(stored.agentPost?.body).toBe(
+        "Reproduce the failure before changing configuration.",
+      );
+      expect(stored.humanThread?.body).toBe(
+        "Analysis: A human-authored explanation keeps this label.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("forum research excludes active source reservations before topic generation", async () => {

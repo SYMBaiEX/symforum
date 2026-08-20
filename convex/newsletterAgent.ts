@@ -12,6 +12,10 @@ import {
   type OpenRouterRequestContext,
 } from "../lib/ai-model-routing";
 import {
+  evaluateAgentPublicationHygiene,
+  PUBLICATION_VOICE_GUARDRAILS,
+} from "../lib/agent-publication-quality";
+import {
   extractVerifiableTokens,
   lexicalSimilarity,
   unsupportedVerifiableTokens,
@@ -31,7 +35,8 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
-const PROMPT_VERSION = "belle-newsletter-v7-openrouter-laguna-free-deepseek";
+const PROMPT_VERSION =
+  "belle-newsletter-v8-openrouter-laguna-free-deepseek-natural-voice";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
@@ -123,6 +128,9 @@ const weeklyDraftSchema = z.object({
 
 const EDITORIAL_INSTRUCTIONS = `You are Belle, the adult neko research editor for the SYMBaiEX newsletter.
 Your job is to turn a bounded, source-grounded research packet into a publication people deliberately open.
+
+${PUBLICATION_VOICE_GUARDRAILS}
+- Belle's character should appear through alert observation, humane curiosity, and one subtle feline-light turn at most. Never use meow/purr catchphrases or sign off in character.
 
 Editorial rules:
 - Build one clear thesis. Do not write a ranked link dump or summarize every popular story.
@@ -645,6 +653,32 @@ function validateEditorialDraft(
   }
 }
 
+function editorialDraftPublicationText(
+  draft: z.infer<typeof dailyDraftSchema> | z.infer<typeof weeklyDraftSchema>,
+) {
+  return [
+    draft.subject,
+    draft.headline,
+    draft.dek,
+    draft.thesis,
+    draft.lead,
+    draft.chart.title,
+    draft.chart.subtitle,
+    ...draft.chart.items.flatMap((item) => [item.label, item.note]),
+    ...draft.stories.flatMap((story) => [
+      story.summary,
+      story.whyItMatters,
+      ...story.takeaways,
+    ]),
+    ...draft.practicalMoves,
+    ...draft.whatToWatch,
+    draft.discussionQuestion,
+    ...("sections" in draft
+      ? draft.sections.flatMap((section) => [section.heading, section.body])
+      : []),
+  ];
+}
+
 export function scoreEditorialPackage({
   draft,
   edition,
@@ -666,6 +700,11 @@ export function scoreEditorialPackage({
 }) {
   const notes: string[] = [];
   const blockingIssues: string[] = [];
+  const hygiene = evaluateAgentPublicationHygiene(
+    editorialDraftPublicationText(draft),
+  );
+  notes.push(...hygiene.feedback);
+  blockingIssues.push(...hygiene.blockingIssues);
   const sourceById = new Map(
     sources.map((source) => [source.hnItemId, source]),
   );
@@ -760,14 +799,17 @@ export function scoreEditorialPackage({
   const recentFramePenalty = Math.round(
     Math.max(0, recentFrameSimilarity - 0.35) * 150,
   );
-  const originality = Math.max(
-    0,
-    100 -
-      overlap * 18 -
-      clichéHits * 20 -
-      recentFramePenalty -
-      repeatedStoryFrames * 12 -
-      (thesisLeadSimilarity >= 0.72 ? 12 : 0),
+  const originality = Math.min(
+    hygiene.naturalnessScore,
+    Math.max(
+      0,
+      100 -
+        overlap * 18 -
+        clichéHits * 20 -
+        recentFramePenalty -
+        repeatedStoryFrames * 12 -
+        (thesisLeadSimilarity >= 0.72 ? 12 : 0),
+    ),
   );
   const utility = Math.min(
     100,

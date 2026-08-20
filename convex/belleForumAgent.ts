@@ -12,6 +12,11 @@ import {
   type OpenRouterRequestContext,
 } from "../lib/ai-model-routing";
 import {
+  AgentPublicationQualityError,
+  assertAgentPublicationHygiene,
+  PUBLICATION_VOICE_GUARDRAILS,
+} from "../lib/agent-publication-quality";
+import {
   modelGenerationSettings,
   modelInstructions,
 } from "../lib/openrouter-model-profile";
@@ -32,7 +37,8 @@ import { routeTelemetry } from "./aiTelemetryHelpers";
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v9-openrouter-laguna-free-deepseek";
+const BELLE_PROMPT_VERSION =
+  "belle-forum-v10-openrouter-laguna-free-deepseek-natural-voice";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -54,9 +60,12 @@ Return only the requested structured selection.`;
 const BELLE_FORUM_WRITER_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Write like a sharp, warm community regular with a journalist's eye. A tiny touch of neko playfulness is welcome; clarity and credibility come first.
 
+${PUBLICATION_VOICE_GUARDRAILS}
+- Belle's personality should appear as alert observation, humane curiosity, and one subtle feline-light turn at most. Never use meow/purr catchphrases or sign off in character.
+
 This is a forum topic, not a press-release rewrite, SEO article, or empty link post.
 Quality requirements:
-- Use only facts supported by the research packet. Clearly label analysis, uncertainty, and conflicting evidence.
+- Use only facts supported by the research packet. Distinguish interpretation, uncertainty, and conflicting evidence in direct prose.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - Open with why a member should care and end with one specific question grounded in experience.
 - Use a clean visual rhythm: a concise opening, descriptive headings for longer pieces, short paragraphs, and one purposeful callout or decision aid when it improves comprehension.
@@ -292,6 +301,7 @@ export const runDailyHackerNewsDigest = internalAction({
         draft.headline,
         125,
       )}`;
+      assertAgentPublicationHygiene([title, body]);
       const published = await ctx.runMutation(
         internal.forum.publishSukiForumThread,
         {
@@ -509,9 +519,12 @@ export function buildDigestBody(args: {
 const BELLE_DIGEST_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and daily Hacker News editor.
 Write a compact but substantial journalistic edition that connects the day's stories into one arc. Be lively, discerning, and humane. A little warmth is welcome; avoid roleplay clutter.
 
+${PUBLICATION_VOICE_GUARDRAILS}
+- Let Belle's character surface through alert observation and humane curiosity, with one subtle feline-light turn at most. Never use meow/purr catchphrases or a signature.
+
 Reporting rules:
 - Use only facts present in the supplied Hacker News metadata and article extracts.
-- Summarize each story in plain language, then offer a clearly identifiable analysis of its implications.
+- Summarize each story in plain language, then weave the implications into direct prose without labeling a paragraph Analysis or Reasoning.
 - Distinguish reporting from your interpretation. Be willing to have an opinion, but explain the evidence behind it.
 - Look for the connective tissue across engineering, culture, labor, security, research, and power.
 - Do not invent quotes, details, motivations, benchmarks, or outcomes.
@@ -560,6 +573,9 @@ function safeBbcodeUrl(value: string) {
 }
 
 function belleErrorMessage(error: unknown) {
+  if (error instanceof AgentPublicationQualityError) {
+    return "Belle's draft did not meet public-copy quality rules.";
+  }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {
       return "OpenRouter authentication failed.";
@@ -578,6 +594,7 @@ function belleErrorMessage(error: unknown) {
 }
 
 function isRetryableBelleError(error: unknown) {
+  if (error instanceof AgentPublicationQualityError) return false;
   if (!APICallError.isInstance(error)) {
     return true;
   }

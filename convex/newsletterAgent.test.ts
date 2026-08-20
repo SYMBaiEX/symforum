@@ -133,4 +133,22 @@ describe("Belle editorial scoring", () => {
     );
     expect(quality.originality).toBeLessThan(100);
   });
+
+  test("blocks process scaffolding and canned model prose", () => {
+    const draft = dailyDraft();
+    draft.subject = "Debug: Checkpoint recovery changes deployment decisions";
+    draft.lead = long(
+      "In today's fast-paced world, this game-changer deserves attention.",
+      240,
+    );
+    const quality = scoreEditorialPackage({
+      draft,
+      edition: "daily-signal",
+      recent: { headlines: [], theses: [], storyIds: [] },
+      sources,
+    });
+
+    expect(quality.blockingIssues.join(" ")).toContain("Remove process labels");
+    expect(quality.blockingIssues.join(" ")).toContain("canned AI-editorial");
+  });
 });
