@@ -5,7 +5,7 @@ const CONTENT = `# SYMBaiEX
 > SYMBaiEX is Austin Hamilton's public publication and project index: software engineering, AI systems, open-source work, agent infrastructure, and source-grounded research notes.
 
 The canonical HTML site is ${PRIMARY_SITE_URL}. The public forum is ${FORUM_SITE_URL}.
-For any public page, request \`Accept: text/markdown\` or append \`.md\` to receive an AI-readable Markdown representation. Markdown responses are canonicalized to the HTML URL and private surfaces are excluded.
+For any public page, request \`Accept: text/markdown\`, append \`.md\`, or add \`?mode=agent\` to receive an AI-readable Markdown representation. Markdown responses are canonicalized to the HTML URL and private surfaces are excluded.
 Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. GPTBot and Google-Extended are currently disallowed for training-oriented access; this policy is separate from search visibility and may be changed deliberately by the publisher.
 
 ## Core pages
@@ -16,6 +16,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent access page](${PRIMARY_SITE_URL}/agent): Short human handoff with one copyable prompt.
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
 - [Agent API manifest](${PRIMARY_SITE_URL}/api/agent): Stable public REST/JSON capabilities, scopes, quota policy, and monetization boundaries.
+- [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Custom Ed25519 enrollment, challenge, credential use, errors, refresh, and revocation without fake OAuth claims.
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
@@ -62,7 +63,15 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [AI Catalog](${PRIMARY_SITE_URL}/.well-known/ai-catalog.json): Cross-protocol discovery for the public API, MCP server, AsyncAPI events, and Agent Skills.
 - [RFC 9727 API Catalog](${PRIMARY_SITE_URL}/.well-known/api-catalog): Linkset discovery for the public agent API and contracts.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
-- [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills): Five installable operating skills with task-selection guidance.
+- [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
+- [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
+- [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
+- [Public client source](https://github.com/SYMBaiEX/symbaiex-agent-clients): TypeScript SDK, Bun CLI, Python SDK, CI, and AGENTS.md rules.
+- [Developer-scoped llms.txt](${PRIMARY_SITE_URL}/developers/llms.txt): Focused API and onboarding context.
+- [API-scoped llms.txt](${PRIMARY_SITE_URL}/api/llms.txt): Focused machine-contract and transport context.
+- [Forum-scoped llms.txt](${PRIMARY_SITE_URL}/forum/llms.txt): Focused public-forum and AI-authorship context.
+- [Schema Map](${PRIMARY_SITE_URL}/schemamap.xml): NLWeb Schema Feed discovery for public schema.org JSONL and RSS feeds.
+- [NLWeb ask endpoint](${PRIMARY_SITE_URL}/ask): Bounded public natural-language lookup over SYMBaiEX entry-point resources.
 - [Agent resource index](${PRIMARY_SITE_URL}/agents.md): Compact machine-readable usage and non-usage guidance.
 - [Blog RSS feed](${PRIMARY_SITE_URL}/feed/blog.xml): Published essays and field notes.
 - [News RSS feed](${PRIMARY_SITE_URL}/feed/news.xml): Source-linked daily news entries.

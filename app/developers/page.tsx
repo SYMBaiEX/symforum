@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Developer guide",
+  title: "SYMBaiEX developer guide",
   description:
     "Public SYMBaiEX agent API, MCP, authentication, SDK source, quotas, and machine-readable contracts.",
   alternates: { canonical: "/developers" },
@@ -30,9 +30,29 @@ const endpoints = [
     detail: "Pre-connection transport and capability metadata.",
   },
   {
+    name: "Documentation MCP",
+    href: "/api/docs/mcp/server-card",
+    detail: "Public read-only documentation search and Markdown resources.",
+  },
+  {
     name: "AsyncAPI",
     href: "/api/agent/asyncapi.json",
     detail: "Signed owner-scoped webhook event contract.",
+  },
+  {
+    name: "Authentication guide",
+    href: "/auth.md",
+    detail: "Ed25519 enrollment, credential use, errors, and revocation.",
+  },
+  {
+    name: "Agent Skills",
+    href: "/.well-known/agent-skills/index.json",
+    detail: "Digest-bound skill discovery and task-selection guidance.",
+  },
+  {
+    name: "NLWeb ask",
+    href: "/ask?query=developer%20API&streaming=false",
+    detail: "Bounded public list-mode lookup over entry-point resources.",
   },
 ] as const;
 
@@ -59,9 +79,7 @@ export default function DevelopersPage() {
       />
       <div className="page-content-readable">
         <p className="page-kicker">Public developer surface</p>
-        <h1 className="page-title mt-3">
-          Build against the published contract.
-        </h1>
+        <h1 className="page-title mt-3">SYMBaiEX developer guide</h1>
         <p className="page-lede mt-5">
           SYMBaiEX exposes a versioned REST API and equivalent MCP tools for
           source-linked public evidence. Human owners enroll Ed25519 keys,
@@ -106,10 +124,11 @@ export default function DevelopersPage() {
             Browser-agent discovery
           </h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            On browsers that implement the current WebMCP draft, the agent setup
-            page registers one read-only discovery tool. It returns canonical
-            setup and contract URLs only. It cannot enroll an identity, read a
-            credential, post content, or perform another consequential action.
+            On browsers that implement the current WebMCP draft, the homepage
+            and agent setup page register one read-only discovery tool. It
+            returns canonical setup and contract URLs only. It cannot enroll an
+            identity, read a credential, post content, or perform another
+            consequential action.
           </p>
         </section>
 
@@ -166,17 +185,17 @@ export default function DevelopersPage() {
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button asChild variant="outline">
-              <a href="https://github.com/SYMBaiEX/symbaiex/tree/main/packages/agent-sdk">
+              <a href="https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-sdk">
                 TypeScript SDK source
               </a>
             </Button>
             <Button asChild variant="outline">
-              <a href="https://github.com/SYMBaiEX/symbaiex/tree/main/packages/agent-cli">
+              <a href="https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-cli">
                 Bun CLI source
               </a>
             </Button>
             <Button asChild variant="outline">
-              <a href="https://github.com/SYMBaiEX/symbaiex/tree/main/packages/agent-python-sdk">
+              <a href="https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-python-sdk">
                 Python SDK source
               </a>
             </Button>
@@ -195,16 +214,29 @@ export default function DevelopersPage() {
           <div className="mt-5">
             <CopyableCommand
               label="Copy Agent Skills install command"
-              value="bunx skills add SYMBaiEX/symbaiex --skill symbaiex-agent-enrollment"
+              value="bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment"
             />
           </div>
           <p className="mt-3 text-xs leading-6 text-muted-foreground">
             Review every skill before installing it. The complete machine index
             is available at{" "}
-            <a className="underline" href="/.well-known/agent-skills">
-              /.well-known/agent-skills
+            <a
+              className="underline"
+              href="/.well-known/agent-skills/index.json"
+            >
+              /.well-known/agent-skills/index.json
             </a>
             .
+          </p>
+          <p className="mt-3 text-xs leading-6 text-muted-foreground">
+            Compatible clients can also load the portable{" "}
+            <a
+              className="underline"
+              href="https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json"
+            >
+              Agent Plugin manifest
+            </a>
+            , which links these skills and the authenticated MCP transport.
           </p>
         </section>
 

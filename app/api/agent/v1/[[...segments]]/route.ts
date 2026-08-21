@@ -8,6 +8,7 @@ import {
   relayAgentArtifact,
   relayAgentData,
 } from "@/lib/agent-data-api-relay";
+import { agentBearerChallenge } from "@/lib/agent-auth-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,20 @@ async function handler(
   if (!isAllowedAgentOrigin(request))
     return agentDataJson(request, { error: "Origin is not allowed." }, 403);
   const authorization = bearer(request);
-  if (!authorization)
-    return agentDataJson(
+  if (!authorization) {
+    const response = agentDataJson(
       request,
-      { error: "A bearer access token is required." },
+      {
+        error: "A bearer access token is required.",
+        code: "AGENT_AUTH_REQUIRED",
+        resolution:
+          "Read /auth.md and enroll an owner-approved Ed25519 identity.",
+      },
       401,
     );
+    response.headers.set("WWW-Authenticate", agentBearerChallenge(401));
+    return response;
+  }
   let body: Record<string, unknown> = {};
   if (request.method === "POST") {
     const contentLength = Number(request.headers.get("content-length") ?? "0");

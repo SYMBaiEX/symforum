@@ -25,8 +25,8 @@ classifiers = [
 Documentation = "https://www.symbaiex.com/agent/instructions"
 OpenAPI = "https://www.symbaiex.com/api/agent/openapi.json"
 Homepage = "https://www.symbaiex.com"
-Source = "https://github.com/SYMBaiEX/symbaiex/tree/main/packages/agent-python-sdk"
-Issues = "https://github.com/SYMBaiEX/symbaiex/issues"
+Source = "https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-python-sdk"
+Issues = "https://github.com/SYMBaiEX/symbaiex-agent-clients/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/symbaiex_agent"]

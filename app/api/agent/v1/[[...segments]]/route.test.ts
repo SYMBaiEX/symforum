@@ -16,6 +16,12 @@ describe("agent evidence REST endpoint", () => {
       context(["status"]),
     );
     expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(
+      'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      code: "AGENT_AUTH_REQUIRED",
+    });
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
@@ -123,7 +129,9 @@ describe("agent evidence REST endpoint", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([{ status: "outdated" }]);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       operation: "claim_timeline",
       input: { claimKey: "release-security", limit: 2 },
     });

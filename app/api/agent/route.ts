@@ -21,7 +21,12 @@ const MANIFEST = {
     aiCatalog: primarySiteUrl("/.well-known/ai-catalog.json"),
     apiCatalog: primarySiteUrl("/.well-known/api-catalog"),
     mcpServerCard: primarySiteUrl("/.well-known/mcp/server-card.json"),
-    agentSkills: primarySiteUrl("/.well-known/agent-skills"),
+    documentationMcpServerCard: primarySiteUrl("/api/docs/mcp/server-card"),
+    agentSkills: primarySiteUrl("/.well-known/agent-skills/index.json"),
+    agentPlugin:
+      "https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json",
+    publicClients: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
+    authenticationGuide: primarySiteUrl("/auth.md"),
     agentsMarkdown: primarySiteUrl("/agents.md"),
   },
   enrollment: {
@@ -82,6 +87,19 @@ const MANIFEST = {
     },
     supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
     modernDiscoveryMethod: "server/discover",
+    publicDiscoveryMethods: [
+      "initialize",
+      "server/discover",
+      "tools/list",
+      "resources/list",
+      "resources/read",
+    ],
+    mcpApps: {
+      enabled: true,
+      resource: "ui://symbaiex/evidence-explorer.html",
+      mimeType: "text/html;profile=mcp-app",
+      mode: "read-only",
+    },
     legacyInitializeCompatibility: true,
     transport: "stateless-http-post",
   },

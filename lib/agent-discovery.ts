@@ -35,15 +35,49 @@ export const PUBLIC_AGENT_SKILLS = [
 ] as const;
 
 const skillRawUrl = (name: string) =>
-  `https://raw.githubusercontent.com/SYMBaiEX/symbaiex/main/.agents/skills/${name}/SKILL.md`;
+  `https://raw.githubusercontent.com/SYMBaiEX/skills/master/skills/${name}/SKILL.md`;
 
 export const AGENT_SKILLS_INDEX = {
   version: "1.0",
   specification: "https://agentskills.io/specification",
-  repository: "https://github.com/SYMBaiEX/symbaiex/tree/main/.agents/skills",
+  repository: "https://github.com/SYMBaiEX/skills",
+  whenToUse:
+    "Use SYMBaiEX skills for owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
+  doNotUseFor: [
+    "general web search",
+    "private data retrieval",
+    "payments",
+    "autonomous public posting",
+  ],
   skills: PUBLIC_AGENT_SKILLS.map((skill) => ({
     ...skill,
     url: skillRawUrl(skill.name),
+  })),
+} as const;
+
+const PUBLIC_AGENT_SKILL_DIGESTS: Record<
+  (typeof PUBLIC_AGENT_SKILLS)[number]["name"],
+  string
+> = {
+  "symbaiex-agent-enrollment":
+    "e5064aa554b3b83632de1957fbf78839ad941d007f902df023ea8cd4f93b9989",
+  "symbaiex-claim-verification":
+    "e9f2c35ea13b647c239283e60b88f2a5b7774704d8b43ec6399c2bf844a3906e",
+  "symbaiex-evidence-search":
+    "3cb8aa43650affea881dfead9cdff3224c292c9044614c2f82b276f8ea79cd48",
+  "symbaiex-research-jobs":
+    "a56e758b1bcf71181619c5e4265f6afd80898e2e2f99a045ca6c09b67a85edea",
+  "symbaiex-webhooks":
+    "d233bf31cdc3810873f7b726534a4f8ff353311608d08cb1d3d3638999f574f3",
+};
+
+export const AGENT_SKILLS_V2_INDEX = {
+  $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  skills: PUBLIC_AGENT_SKILLS.map((skill) => ({
+    ...skill,
+    type: "skill-md",
+    url: skillRawUrl(skill.name),
+    digest: `sha256:${PUBLIC_AGENT_SKILL_DIGESTS[skill.name]}`,
   })),
 } as const;
 
@@ -56,10 +90,6 @@ export const MCP_SERVER_CARD = {
     "Authenticated public evidence search, verification, research jobs, exports, and webhooks.",
   websiteUrl: primarySiteUrl("/developers"),
   version: "1.0.0",
-  repository: {
-    source: "github",
-    url: "https://github.com/SYMBaiEX/symbaiex",
-  },
   remotes: [
     {
       type: "streamable-http",
@@ -69,9 +99,9 @@ export const MCP_SERVER_CARD = {
         {
           name: "Authorization",
           description:
-            "Resource-bound bearer token obtained through the documented Ed25519 challenge flow.",
+            "Required for tools/call. Public initialization, discovery, tool listing, and MCP App resource reads do not require a token.",
           format: "string",
-          isRequired: true,
+          isRequired: false,
           isSecret: true,
           placeholder: "Bearer <access-token>",
         },
@@ -90,6 +120,23 @@ export const MCP_SERVER_CARD = {
   },
 } as const;
 
+export const DOCS_MCP_SERVER_CARD = {
+  $schema:
+    "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+  name: "ai.symbaiex/docs",
+  title: "SYMBaiEX Documentation MCP",
+  description: "Public read-only SYMBaiEX developer and agent documentation.",
+  websiteUrl: primarySiteUrl("/developers"),
+  version: "1.0.0",
+  remotes: [
+    {
+      type: "streamable-http",
+      url: primarySiteUrl("/api/docs/mcp"),
+      supportedProtocolVersions: ["2025-03-26"],
+    },
+  ],
+} as const;
+
 export const AI_CATALOG = {
   specVersion: "1.0",
   host: {
@@ -100,11 +147,14 @@ export const AI_CATALOG = {
   entries: [
     {
       identifier: "urn:air:symbaiex.com:mcp:evidence",
+      displayName: "SYMBaiEX Evidence MCP",
       type: "application/mcp-server-card+json",
       url: primarySiteUrl("/api/agent/mcp/server-card"),
       description:
         "Authenticated MCP tools for current public evidence, claims, research jobs, exports, usage, and webhooks.",
       tags: ["evidence", "research", "mcp"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("mcp-evidence"),
     },
     {
       identifier: "urn:air:symbaiex.com:api:agent-v1",
@@ -114,6 +164,8 @@ export const AI_CATALOG = {
       description:
         "Versioned REST contract for Ed25519-authenticated evidence operations.",
       tags: ["evidence", "research", "openapi"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("agent-rest-v1"),
     },
     {
       identifier: "urn:air:symbaiex.com:events:agent-v1",
@@ -122,18 +174,67 @@ export const AI_CATALOG = {
       url: primarySiteUrl("/api/agent/asyncapi.json"),
       description: "Signed webhook event contract for owner-scoped delivery.",
       tags: ["events", "webhooks", "asyncapi"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("agent-events-v1"),
     },
     {
       identifier: "urn:air:symbaiex.com:skills:agent-api",
       displayName: "SYMBaiEX Agent Skills",
-      type: "application/agent-skills+json",
-      url: primarySiteUrl("/.well-known/agent-skills"),
+      type: "application/json",
+      url: primarySiteUrl("/.well-known/agent-skills/index.json"),
       description:
         "Installable operating skills for enrollment, evidence, verification, research jobs, and webhooks.",
       tags: ["skills", "agent-api"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("agent-skills"),
+    },
+    {
+      identifier: "urn:air:symbaiex.com:plugin:agent-api",
+      displayName: "SYMBaiEX Agent Plugin",
+      type: "application/vnd.agent-plugins.plugin+json;version=1.0.0",
+      url: "https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json",
+      description:
+        "Portable Agent Plugins manifest for SYMBaiEX skills and the authenticated evidence MCP server.",
+      tags: ["agent-plugin", "skills", "mcp"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("agent-plugin"),
+    },
+    {
+      identifier: "urn:air:symbaiex.com:mcp:documentation",
+      displayName: "SYMBaiEX Documentation MCP",
+      type: "application/mcp-server-card+json",
+      url: primarySiteUrl("/api/docs/mcp/server-card"),
+      description:
+        "Public read-only MCP search and resources for SYMBaiEX developer and agent documentation.",
+      tags: ["documentation", "mcp", "developer"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("mcp-documentation"),
     },
   ],
 } as const;
+
+function catalogPublisher() {
+  return {
+    identifier: "https://symbaiex.com",
+    displayName: "SYMBaiEX",
+    identityType: "dns",
+  } as const;
+}
+
+function catalogTrustManifest(artifact: string) {
+  return {
+    identity: `https://symbaiex.com/.well-known/ai-catalog.json#${artifact}`,
+    identityType: "dns",
+    trustSchema: {
+      identifier: "urn:trust:symbaiex-public-contract-v1",
+      version: "1.0",
+      governanceUri: primarySiteUrl("/ai-policy"),
+      verificationMethods: ["https", "dns"],
+    },
+    privacyPolicyUrl: primarySiteUrl("/privacy"),
+    termsOfServiceUrl: primarySiteUrl("/agent/instructions"),
+  } as const;
+}
 
 export const API_CATALOG = {
   linkset: [
@@ -183,7 +284,11 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - OpenAPI: ${primarySiteUrl("/api/agent/openapi.json")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - MCP endpoint server card: ${primarySiteUrl("/api/agent/mcp/server-card")}
-- Agent skills: ${primarySiteUrl("/.well-known/agent-skills")}
+- Documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
+- Agent skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
+- Agent Plugin: https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json
+- Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
+- Authentication guide: ${primarySiteUrl("/auth.md")}
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
 - Privacy: ${primarySiteUrl("/privacy")}
 `;
@@ -193,13 +298,13 @@ export const SKILLS_MARKDOWN = `# SYMBaiEX skills
 Install from the public repository with a compatible Agent Skills client:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/symbaiex --skill symbaiex-agent-enrollment
+bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment
 \`\`\`
 
 Install all published SYMBaiEX skills:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/symbaiex --skill '*'
+bunx skills add SYMBaiEX/skills --skill '*'
 \`\`\`
 
 ${PUBLIC_AGENT_SKILLS.map(
@@ -207,7 +312,7 @@ ${PUBLIC_AGENT_SKILLS.map(
     `- **${skill.name}** — ${skill.description}\n  - ${skillRawUrl(skill.name)}`,
 ).join("\n")}
 
-Repository: https://github.com/SYMBaiEX/symbaiex/tree/main/.agents/skills
+Repository: https://github.com/SYMBaiEX/skills
 Specification: https://agentskills.io/specification
 `;
 
@@ -215,6 +320,7 @@ export const DISCOVERY_LINK_HEADER = [
   `<${primarySiteUrl("/llms.txt")}>; rel="describedby"; type="text/markdown"`,
   `<${primarySiteUrl("/sitemap.xml")}>; rel="sitemap"; type="application/xml"`,
   `<${primarySiteUrl("/.well-known/api-catalog")}>; rel="api-catalog"; type="application/linkset+json"`,
+  `<${primarySiteUrl("/.well-known/ai-catalog.json")}>; rel="ai-catalog"; type="application/ai-catalog+json"`,
   `<${primarySiteUrl("/.well-known/ai-catalog.json")}>; rel="service-desc"; type="application/ai-catalog+json"`,
   `<${primarySiteUrl("/api/agent/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
 ].join(", ");

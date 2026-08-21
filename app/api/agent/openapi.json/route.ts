@@ -624,8 +624,8 @@ const OPENAPI = {
         operationId: "evidenceMcp",
         summary: "Call the stateless MCP evidence server",
         description:
-          "Protocol 2026-07-28 uses server/discover and per-request metadata. Legacy 2025-03-26 initialize remains available only for legacy callers. Authentication uses the documented custom Ed25519 flow, not OAuth authorization endpoints.",
-        security: [{ bearerAuth: [] }],
+          "Protocol 2026-07-28 uses server/discover and per-request metadata. Legacy 2025-03-26 initialize remains available only for legacy callers. Initialize, discovery, tool listing, and the read-only MCP App resource are public; tools/call requires the documented custom Ed25519 bearer flow, not OAuth authorization endpoints.",
+        security: [{}, { bearerAuth: [] }],
         parameters: [
           { $ref: "#/components/parameters/McpProtocolVersion" },
           { $ref: "#/components/parameters/McpMethod" },
@@ -634,7 +634,7 @@ const OPENAPI = {
         responses: {
           "200": {
             description:
-              "JSON-RPC server/discover, tools/list, tools/call, or legacy initialize response.",
+              "JSON-RPC server/discover, tools/list, resources/list, resources/read, tools/call, or legacy initialize response.",
           },
           "400": { description: "Malformed or unsupported MCP request." },
           "401": { description: "Missing or invalid access token." },

@@ -47,6 +47,8 @@ describe("agent API manifest", () => {
       apiCatalog: "https://www.symbaiex.com/.well-known/api-catalog",
       mcpServerCard:
         "https://www.symbaiex.com/.well-known/mcp/server-card.json",
+      documentationMcpServerCard:
+        "https://www.symbaiex.com/api/docs/mcp/server-card",
     });
     expect(manifest.scopes).toContain("evidence");
     expect(manifest.endpoints.evidenceRest).toBe(

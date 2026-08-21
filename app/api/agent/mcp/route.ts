@@ -15,6 +15,7 @@ const MODERN_PROTOCOL_VERSION = "2026-07-28";
 const LEGACY_PROTOCOL_VERSION = "2025-03-26";
 const SERVER_NAME = "symbaiex-evidence";
 const SERVER_VERSION = "v1";
+const UI_RESOURCE_URI = "ui://symbaiex/evidence-explorer.html";
 const TOOL_LIST_TTL_MS = 5 * 60 * 1_000;
 const DISCOVERY_TTL_MS = 60 * 60 * 1_000;
 const SERVER_INFO = { name: SERVER_NAME, version: SERVER_VERSION } as const;
@@ -56,49 +57,100 @@ const TOOL_ENTRIES = [
 ] as const satisfies ReadonlyArray<readonly [string, AgentDataOperation]>;
 
 const TOOLS = new Map<string, AgentDataOperation>(TOOL_ENTRIES);
-const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) =>
-  name === "evidence.semantic_search"
-    ? {
-        name,
-        description:
-          "Search the public corpus with feature-gated semantic enhancement and a lexical-only fallback.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["query", "idempotencyKey"],
-          properties: {
-            query: { type: "string", minLength: 1, maxLength: 300 },
-            limit: { type: "integer", minimum: 1, maximum: 20, default: 10 },
-            idempotencyKey: {
-              type: "string",
-              minLength: 8,
-              maxLength: 96,
-              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            },
-          },
-        },
-      }
-    : name === "evidence.claim_timeline"
+const MCP_APP_TOOLS = new Set([
+  "evidence.status",
+  "evidence.sources",
+  "evidence.search",
+  "evidence.semantic_search",
+  "evidence.universal_search",
+  "evidence.verify_claim",
+  "evidence.claim_timeline",
+  "evidence.products",
+  "evidence.datasets",
+  "evidence.benchmarks",
+]);
+const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) => {
+  const definition =
+    name === "evidence.semantic_search"
       ? {
           name,
           description:
-            "Read the bounded public supersession timeline for a claim key. Status changes use supported, contradicted, unresolved, or outdated; they do not create a separate timeline status.",
+            "Search the public corpus with feature-gated semantic enhancement and a lexical-only fallback.",
           inputSchema: {
             type: "object",
             additionalProperties: false,
-            required: ["claimKey"],
+            required: ["query", "idempotencyKey"],
             properties: {
-              claimKey: { type: "string", minLength: 1, maxLength: 200 },
-              limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+              query: { type: "string", minLength: 1, maxLength: 300 },
+              limit: { type: "integer", minimum: 1, maximum: 20, default: 10 },
+              idempotencyKey: {
+                type: "string",
+                minLength: 8,
+                maxLength: 96,
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              },
             },
           },
         }
-      : {
-          name,
-          description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
-          inputSchema: { type: "object", additionalProperties: true },
-        },
-);
+      : name === "evidence.claim_timeline"
+        ? {
+            name,
+            description:
+              "Read the bounded public supersession timeline for a claim key. Status changes use supported, contradicted, unresolved, or outdated; they do not create a separate timeline status.",
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["claimKey"],
+              properties: {
+                claimKey: { type: "string", minLength: 1, maxLength: 200 },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 50,
+                  default: 20,
+                },
+              },
+            },
+          }
+        : {
+            name,
+            description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
+            inputSchema: { type: "object", additionalProperties: true },
+          };
+  return {
+    ...definition,
+    ...(MCP_APP_TOOLS.has(name)
+      ? { _meta: { ui: { resourceUri: UI_RESOURCE_URI } } }
+      : {}),
+  };
+});
+
+const MCP_APP_RESOURCE = {
+  uri: UI_RESOURCE_URI,
+  name: "symbaiex-evidence-explorer",
+  title: "SYMBaiEX Evidence Explorer",
+  description:
+    "Read-only in-agent presentation for public evidence tool results.",
+  mimeType: "text/html;profile=mcp-app",
+  _meta: {
+    ui: {
+      prefersBorder: true,
+      csp: { connectDomains: [], resourceDomains: [] },
+    },
+  },
+} as const;
+
+const MCP_APP_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SYMBaiEX Evidence Explorer</title><style>
+:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:16px;background:var(--color-background-primary,Canvas);color:var(--color-text-primary,CanvasText)}
+h1{font-size:1rem;margin:0 0 8px}p{font-size:.82rem;line-height:1.45;color:var(--color-text-secondary,GrayText)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;border:1px solid var(--color-border-primary,#7776);border-radius:8px;padding:12px;max-height:420px;overflow:auto}
+</style></head><body><h1>SYMBaiEX Evidence Explorer</h1><p id="status">Waiting for an evidence tool result…</p><pre id="output" hidden></pre><script>
+const status=document.getElementById("status"),output=document.getElementById("output");
+function show(value){status.textContent="Public, scope-authorized evidence result";output.hidden=false;let text=typeof value==="string"?value:JSON.stringify(value,null,2);try{text=JSON.stringify(JSON.parse(text),null,2)}catch{}output.textContent=text.slice(0,200000)}
+window.addEventListener("message",event=>{if(event.source!==window.parent)return;const message=event.data;if(message?.id===1&&message.result){window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized",params:{}},"*");return}if(message?.method==="ui/notifications/tool-result"){const item=message.params?.content?.find?.(entry=>entry?.type==="text");show(message.params?.structuredContent??item?.text??message.params)}});
+window.parent.postMessage({jsonrpc:"2.0",id:1,method:"ui/initialize",params:{protocolVersion:"2026-01-26",clientInfo:{name:"symbaiex-evidence-explorer",version:"1.0.0"},capabilities:{}}},"*");
+</script></body></html>`;
 
 type ProtocolEra = "legacy" | "modern";
 type JsonRpcError = {
@@ -112,13 +164,6 @@ export async function POST(request: Request) {
     return mcpJson(request, { error: "Origin is not allowed." }, 403);
   }
   const authorization = bearer(request);
-  if (!authorization) {
-    return mcpAuthJson(
-      request,
-      { error: "A bearer access token is required." },
-      401,
-    );
-  }
   const length = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(length) && length > AGENT_DATA_MAX_BODY_BYTES) {
     return mcpJson(request, { error: "Request body is too large." }, 413);
@@ -154,22 +199,6 @@ export async function POST(request: Request) {
   const protocol = validateProtocolRequest(request, body, id);
   if (protocol instanceof Response) return protocol;
 
-  if (
-    body.method === "initialize" ||
-    body.method === "server/discover" ||
-    body.method === "tools/list" ||
-    body.method !== "tools/call" ||
-    !isRecord(body.params) ||
-    typeof body.params.name !== "string" ||
-    !TOOLS.has(body.params.name)
-  ) {
-    const authentication = await validateLocalRequestAuthentication(
-      request,
-      authorization,
-    );
-    if (authentication !== null) return authentication;
-  }
-
   if (body.method === "initialize") {
     if (protocol === "modern") {
       return rpc(
@@ -183,7 +212,7 @@ export async function POST(request: Request) {
     }
     return rpc(request, protocol, id, {
       protocolVersion: LEGACY_PROTOCOL_VERSION,
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
     });
   }
@@ -198,7 +227,7 @@ export async function POST(request: Request) {
     return rpc(request, protocol, id, {
       resultType: "complete",
       supportedVersions: [MODERN_PROTOCOL_VERSION],
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, resources: {} },
       instructions:
         "Authenticated evidence tools require the evidence scope. SYMBaiEX uses a custom Ed25519 challenge flow, not OAuth authorization endpoints.",
       ttlMs: DISCOVERY_TTL_MS,
@@ -213,6 +242,37 @@ export async function POST(request: Request) {
       ...(protocol === "modern"
         ? { ttlMs: TOOL_LIST_TTL_MS, cacheScope: "public" }
         : {}),
+    });
+  }
+
+  if (body.method === "resources/list") {
+    return rpc(request, protocol, id, {
+      ...(protocol === "modern" ? { resultType: "complete" } : {}),
+      resources: [MCP_APP_RESOURCE],
+      ...(protocol === "modern"
+        ? { ttlMs: TOOL_LIST_TTL_MS, cacheScope: "public" }
+        : {}),
+    });
+  }
+
+  if (body.method === "resources/read") {
+    const params = isRecord(body.params) ? body.params : null;
+    if (params?.uri !== UI_RESOURCE_URI) {
+      return rpc(request, protocol, id, undefined, {
+        code: -32602,
+        message: "Unknown resource",
+      });
+    }
+    return rpc(request, protocol, id, {
+      ...(protocol === "modern" ? { resultType: "complete" } : {}),
+      contents: [
+        {
+          uri: UI_RESOURCE_URI,
+          mimeType: MCP_APP_RESOURCE.mimeType,
+          text: MCP_APP_HTML,
+          _meta: MCP_APP_RESOURCE._meta,
+        },
+      ],
     });
   }
 
@@ -234,6 +294,13 @@ export async function POST(request: Request) {
       code: -32602,
       message: "Unknown tool",
     });
+  }
+  if (!authorization) {
+    return mcpAuthJson(
+      request,
+      { error: "A bearer access token is required." },
+      401,
+    );
   }
   const rawInput = isRecord(body.params.arguments) ? body.params.arguments : {};
   let input = rawInput;
@@ -385,19 +452,6 @@ function semanticSearchInput(value: Record<string, unknown>) {
     limit: Number(limit),
     idempotencyKey: value.idempotencyKey,
   };
-}
-
-async function validateLocalRequestAuthentication(
-  request: Request,
-  authorization: string,
-) {
-  const response = await relayAgentData(request, "status", {}, authorization);
-  if (response.ok) return null;
-  if (response.status === 401 || response.status === 403) {
-    return mcpAuthResponse(request, response, response.status);
-  }
-  setMcpHeaders(response.headers);
-  return response;
 }
 
 function unsupportedProtocol(request: Request, id: unknown, requested: string) {

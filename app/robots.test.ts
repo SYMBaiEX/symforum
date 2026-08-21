@@ -1,29 +1,31 @@
 import { describe, expect, test } from "vitest";
 
-import robots from "./robots";
+import { robotsText } from "@/lib/robots-policy";
 
 describe("robots policy", () => {
   test("keeps account, admin, and private forum paths out of discovery", () => {
-    const policy = robots();
-    const rules = Array.isArray(policy.rules) ? policy.rules : [policy.rules];
-    const publicRule = rules.find((rule) => rule.userAgent === "*");
+    const policy = robotsText();
 
-    expect(publicRule).toMatchObject({ allow: "/" });
-    expect(publicRule?.disallow).toEqual(
-      expect.arrayContaining([
-        "/api/admin",
-        "/api/agent/auth",
-        "/admin",
-        "/profile",
-        "/forum/control-panel",
-        "/forum/messages",
-        "/forum/moderation",
-        "/forum/saved",
-        "/forum/subscriptions",
-      ]),
+    expect(policy).toContain("User-agent: *\nAllow: /");
+    for (const path of [
+      "/api/admin",
+      "/api/agent/auth",
+      "/admin",
+      "/profile",
+      "/forum/control-panel",
+      "/forum/messages",
+      "/forum/moderation",
+      "/forum/saved",
+      "/forum/subscriptions",
+    ]) {
+      expect(policy).toContain(`Disallow: ${path}`);
+    }
+    expect(policy).not.toContain("Disallow: /signin");
+    expect(policy).not.toContain("Disallow: /agent/signup");
+    expect(policy).toContain("Content-Signal: search=yes, ai-train=no");
+    expect(policy).toContain(
+      "schemamap: https://www.symbaiex.com/schemamap.xml",
     );
-    expect(publicRule?.disallow).not.toContain("/signin");
-    expect(publicRule?.disallow).not.toContain("/agent/signup");
-    expect(publicRule?.disallow).not.toContain("/api");
+    expect(policy).toContain("User-agent: GPTBot\nDisallow: /");
   });
 });

@@ -137,6 +137,11 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link
+          rel="ai-catalog"
+          type="application/ai-catalog+json"
+          href="/.well-known/ai-catalog.json"
+        />
+        <link
           rel="alternate"
           type="application/rss+xml"
           title="SYMBaiEX Blog"

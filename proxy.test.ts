@@ -117,6 +117,53 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("leaves canonical root Markdown resources on their own routes", async () => {
+    const proxy = await loadProxy();
+
+    for (const pathname of ["/agents.md", "/auth.md"]) {
+      const response = await proxy(
+        requestFor(`http://localhost:3000${pathname}`),
+      );
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    }
+  });
+
+  test("serves agent mode and recognized agent user agents as Markdown", async () => {
+    const proxy = await loadProxy();
+
+    const modeResponse = await proxy(
+      requestFor("http://localhost:3000/about?mode=agent"),
+    );
+    expect(modeResponse.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3000/markdown/about?mode=agent",
+    );
+
+    const botResponse = await proxy(
+      requestFor("http://localhost:3000/about", {
+        "user-agent": "ora-agent/1.0",
+      }),
+    );
+    expect(botResponse.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3000/markdown/about",
+    );
+    expect(botResponse.headers.get("vary")).toContain("User-Agent");
+  });
+
+  test("advertises a working page-specific Markdown alternate", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(requestFor("http://localhost:3000/about"));
+
+    expect(response.headers.get("link")).toContain(
+      '<http://localhost:3000/about.md>; rel="alternate"; type="text/markdown"',
+    );
+
+    const homeResponse = await proxy(requestFor("http://localhost:3000/"));
+    expect(homeResponse.headers.get("link")).toContain(
+      '<http://localhost:3000/index.md>; rel="alternate"; type="text/markdown"',
+    );
+  });
+
   test("records safe negotiation context without logging credentials", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const proxy = await loadProxy();

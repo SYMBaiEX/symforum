@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { GET as getAgentSkills } from "@/app/.well-known/agent-skills/route";
+import { GET as getAgentSkillsV2 } from "@/app/.well-known/agent-skills/index.json/route";
 import { GET as getAiCatalog } from "@/app/.well-known/ai-catalog.json/route";
 import { GET as getApiCatalog } from "@/app/.well-known/api-catalog/route";
 import { GET as getMcpCard } from "@/app/.well-known/mcp/server-card.json/route";
@@ -27,8 +31,25 @@ describe("agent discovery surfaces", () => {
         expect.objectContaining({
           url: "https://www.symbaiex.com/api/agent/mcp/server-card",
         }),
+        expect.objectContaining({
+          url: "https://www.symbaiex.com/api/docs/mcp/server-card",
+        }),
       ]),
     );
+    expect(
+      catalog.entries.every(
+        (entry: { displayName?: string }) => entry.displayName,
+      ),
+    ).toBe(true);
+    expect(
+      catalog.entries.every(
+        (entry: {
+          trustManifest?: { identity?: string; trustSchema?: unknown };
+        }) =>
+          entry.trustManifest?.identity?.startsWith("https://symbaiex.com/") &&
+          entry.trustManifest.trustSchema,
+      ),
+    ).toBe(true);
   });
 
   test("publishes an RFC 9727 linkset with the public API contracts", async () => {
@@ -69,7 +90,7 @@ describe("agent discovery surfaces", () => {
       headers: [
         expect.objectContaining({
           name: "Authorization",
-          isRequired: true,
+          isRequired: false,
           isSecret: true,
         }),
       ],
@@ -85,20 +106,45 @@ describe("agent discovery surfaces", () => {
 
     expect(index.skills).toHaveLength(PUBLIC_AGENT_SKILLS.length);
     expect(index.skills).toHaveLength(5);
+    expect(index.whenToUse).toContain("Use SYMBaiEX skills");
     for (const skill of index.skills) {
       expect(skill.description).toMatch(/Use (for|when)/);
       expect(skill.url).toMatch(
-        /^https:\/\/raw\.githubusercontent\.com\/SYMBaiEX\/symbaiex\/main\/\.agents\/skills\//,
+        /^https:\/\/raw\.githubusercontent\.com\/SYMBaiEX\/skills\/master\/skills\//,
       );
     }
 
     const installGuide = await getSkillsMarkdown().text();
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/symbaiex --skill symbaiex-agent-enrollment",
+      "bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment",
     );
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/symbaiex --skill '*'",
+      "bunx skills add SYMBaiEX/skills --skill '*'",
     );
+  });
+
+  test("publishes the digest-bound Agent Skills discovery index", async () => {
+    const response = getAgentSkillsV2();
+    const index = await response.json();
+
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(index.$schema).toBe(
+      "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    );
+    expect(index.skills).toHaveLength(PUBLIC_AGENT_SKILLS.length);
+    for (const skill of index.skills) {
+      expect(skill.type).toBe("skill-md");
+      expect(skill.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+      expect(skill.url).toMatch(
+        /^https:\/\/raw\.githubusercontent\.com\/SYMBaiEX\/skills\/master\/skills\//,
+      );
+      const local = readFileSync(
+        join(process.cwd(), ".agents", "skills", skill.name, "SKILL.md"),
+      );
+      expect(`sha256:${createHash("sha256").update(local).digest("hex")}`).toBe(
+        skill.digest,
+      );
+    }
   });
 
   test("publishes usage boundaries and a stable security contact", async () => {

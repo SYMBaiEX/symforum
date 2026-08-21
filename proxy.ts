@@ -35,11 +35,13 @@ const proxy = convexConfigured
           return applySecurityHeaders(
             nextjsMiddlewareRedirect(request, redirectTo),
             policy,
+            request,
           );
         }
         return applySecurityHeaders(
           nextOrForumRewrite(request, policy),
           policy,
+          request,
         );
       },
       {
@@ -49,7 +51,11 @@ const proxy = convexConfigured
     )
   : function proxy(request: NextRequest) {
       const policy = contentSecurityPolicy();
-      return applySecurityHeaders(nextOrForumRewrite(request, policy), policy);
+      return applySecurityHeaders(
+        nextOrForumRewrite(request, policy),
+        policy,
+        request,
+      );
     };
 
 export default proxy;
@@ -85,7 +91,7 @@ function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
       ),
     },
   });
-  response.headers.set("Vary", "Accept, Host");
+  response.headers.set("Vary", "Accept, Host, User-Agent");
   return response;
 }
 
@@ -105,6 +111,7 @@ function nextOrForumRewrite(request: NextRequest, policy: SecurityPolicy) {
         ? absoluteRedirect(forumRoute.url)
         : NextResponse.redirect(forumRoute.url, 308),
       policy,
+      request,
     );
   }
 
@@ -133,6 +140,7 @@ function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       }),
       policy,
+      request,
     );
   }
 
@@ -152,6 +160,7 @@ function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
     return applySecurityHeaders(
       NextResponse.redirect(destination, 308),
       policy,
+      request,
     );
   }
 
@@ -165,10 +174,11 @@ function markdownRewrite(request: NextRequest, policy: SecurityPolicy) {
     sourcePath,
   );
   headers.set("x-symbaiex-markdown-source", sourcePath);
-  logAiReadableRequest(request, sourcePath, markdownRequest.explicitAlias);
+  logAiReadableRequest(request, sourcePath, markdownRequest.format);
   return applySecurityHeaders(
     NextResponse.rewrite(url, { request: { headers } }),
     policy,
+    request,
   );
 }
 
@@ -181,24 +191,45 @@ function getMarkdownRequest(request: NextRequest) {
   if (
     pathname === "/llms.txt" ||
     pathname === "/llms-full.txt" ||
-    pathname === "/agents.md"
+    pathname === "/agents.md" ||
+    pathname === "/auth.md"
   ) {
     return null;
   }
 
   const explicitAlias = /\.md$/i.test(pathname);
+  const supportedPage = hasAiReadableRepresentation(pathname);
+  const agentMode =
+    supportedPage && request.nextUrl.searchParams.get("mode") === "agent";
+  const agentUserAgent =
+    supportedPage && isAgentUserAgent(request.headers.get("user-agent"));
   const acceptsMarkdown = acceptsMediaType(
     request.headers.get("accept"),
     "text/markdown",
   );
-  if (!explicitAlias && !acceptsMarkdown) {
+  if (!explicitAlias && !acceptsMarkdown && !agentMode && !agentUserAgent) {
     return null;
   }
 
   const sourcePath = explicitAlias
     ? pathname.replace(/\.md$/i, "") || "/"
     : pathname;
-  return { sourcePath, explicitAlias };
+  return {
+    sourcePath,
+    format: explicitAlias
+      ? "markdown-alias"
+      : agentMode
+        ? "agent-mode"
+        : agentUserAgent
+          ? "agent-user-agent"
+          : "content-negotiated-markdown",
+  } as const;
+}
+
+function isAgentUserAgent(value: string | null) {
+  return /(?:GPTBot|ClaudeBot|ChatGPT-User|PerplexityBot|Google-Extended|Applebot-Extended|ora-agent|DeepSeekBot)/i.test(
+    value ?? "",
+  );
 }
 
 function acceptsMediaType(value: string | null, mediaType: string) {
@@ -218,7 +249,11 @@ function acceptsMediaType(value: string | null, mediaType: string) {
 function logAiReadableRequest(
   request: NextRequest,
   pathname: string,
-  explicitAlias: boolean,
+  format:
+    | "markdown-alias"
+    | "agent-mode"
+    | "agent-user-agent"
+    | "content-negotiated-markdown",
 ) {
   const userAgent = request.headers
     .get("user-agent")
@@ -236,7 +271,7 @@ function logAiReadableRequest(
     host: request.headers.get("host"),
     method: request.method,
     pathname,
-    format: explicitAlias ? "markdown-alias" : "content-negotiated-markdown",
+    format,
     accept: accept || undefined,
     referer: referer || undefined,
     userAgent: userAgent || undefined,
@@ -350,7 +385,11 @@ function contentSecurityPolicy(): SecurityPolicy {
   return { nonce, value: policy };
 }
 
-function applySecurityHeaders(response: NextResponse, policy: SecurityPolicy) {
+function applySecurityHeaders(
+  response: NextResponse,
+  policy: SecurityPolicy,
+  request?: NextRequest,
+) {
   response.headers.set("Content-Security-Policy", policy.value);
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-Content-Type-Options", "nosniff");
@@ -361,13 +400,83 @@ function applySecurityHeaders(response: NextResponse, policy: SecurityPolicy) {
   );
   response.headers.set(
     "Vary",
-    mergeVary(response.headers.get("Vary"), "Accept, Host"),
+    mergeVary(response.headers.get("Vary"), "Accept, Host, User-Agent"),
   );
   response.headers.set(
     "Link",
     mergeLink(response.headers.get("Link"), DISCOVERY_LINK_HEADER),
   );
+  const alternate = request ? markdownAlternateLink(request) : null;
+  if (alternate) {
+    response.headers.set(
+      "Link",
+      mergeLink(response.headers.get("Link"), alternate),
+    );
+  }
   return response;
+}
+
+function markdownAlternateLink(request: NextRequest) {
+  if (
+    (request.method !== "GET" && request.method !== "HEAD") ||
+    getMarkdownRequest(request) !== null ||
+    !hasAiReadableRepresentation(request.nextUrl.pathname)
+  ) {
+    return null;
+  }
+  const url = request.nextUrl.clone();
+  const pathname = normalizePathname(url.pathname);
+  url.pathname = pathname === "/" ? "/index.md" : `${pathname}.md`;
+  url.search = "";
+  return `<${url.toString()}>; rel="alternate"; type="text/markdown"`;
+}
+
+function hasAiReadableRepresentation(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  if (isPrivateAiReadablePath(normalized)) return false;
+  if (
+    new Set([
+      "/",
+      "/index",
+      "/about",
+      "/contact",
+      "/developers",
+      "/privacy",
+      "/ai-policy",
+      "/agent/instructions",
+      "/research",
+      "/research/ai-readable-web",
+      "/research/editorial-trust-and-contracts",
+      "/research/methodology",
+      "/blog",
+      "/news",
+      "/portfolio",
+      "/newsletter",
+      "/forum",
+      "/forum/agents",
+      "/forum/announcements",
+      "/forum/help",
+      "/forum/calendar",
+      "/forum/members",
+      "/forum/online",
+      "/forum/new-posts",
+      "/forum/todays-posts",
+    ]).has(normalized)
+  ) {
+    return true;
+  }
+  return [
+    "/blog/",
+    "/news/",
+    "/portfolio/",
+    "/newsletter/",
+    "/forum/announcements/",
+    "/forum/help/",
+    "/forum/calendar/",
+    "/forum/members/",
+    "/forum/",
+    "/u/",
+  ].some((prefix) => normalized.startsWith(prefix));
 }
 
 function mergeVary(current: string | null, additional: string) {

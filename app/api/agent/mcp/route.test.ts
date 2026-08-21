@@ -18,7 +18,15 @@ afterEach(() => {
 describe("evidence MCP endpoint", () => {
   test("requires bearer authentication with protected-resource metadata", async () => {
     const response = await POST(
-      legacyRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" }, false),
+      legacyRequest(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "evidence.status", arguments: {} },
+        },
+        false,
+      ),
     );
 
     expect(response.status).toBe(401);
@@ -45,16 +53,17 @@ describe("evidence MCP endpoint", () => {
     expect(response.status).toBe(403);
   });
 
-  test("supports authenticated legacy initialize and tool listing only on the legacy path", async () => {
-    vi.stubGlobal("fetch", validAuthentication());
-
+  test("supports public legacy initialization and tool discovery", async () => {
     const initialized = await POST(
-      legacyRequest({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: { protocolVersion: "2025-03-26" },
-      }),
+      legacyRequest(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-03-26" },
+        },
+        false,
+      ),
     );
     expect(initialized.status).toBe(200);
     expect(await initialized.json()).toMatchObject({
@@ -65,12 +74,51 @@ describe("evidence MCP endpoint", () => {
     });
 
     const listed = await POST(
-      legacyRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+      legacyRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" }, false),
     );
     const payload = await listed.json();
     expect(listed.status).toBe(200);
     expect(payload.result.resultType).toBeUndefined();
     expect(payload.result.ttlMs).toBeUndefined();
+  });
+
+  test("publishes a public MCP App resource for read-oriented tools", async () => {
+    const listed = await POST(
+      legacyRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" }, false),
+    );
+    const toolPayload = await listed.json();
+    const searchTool = toolPayload.result.tools.find(
+      (tool: { name: string }) => tool.name === "evidence.search",
+    );
+    expect(searchTool._meta.ui.resourceUri).toBe(
+      "ui://symbaiex/evidence-explorer.html",
+    );
+
+    const resources = await POST(
+      legacyRequest({ jsonrpc: "2.0", id: 2, method: "resources/list" }, false),
+    );
+    const resourcePayload = await resources.json();
+    expect(resourcePayload.result.resources[0]).toMatchObject({
+      uri: "ui://symbaiex/evidence-explorer.html",
+      mimeType: "text/html;profile=mcp-app",
+    });
+
+    const read = await POST(
+      legacyRequest(
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "resources/read",
+          params: { uri: "ui://symbaiex/evidence-explorer.html" },
+        },
+        false,
+      ),
+    );
+    const readPayload = await read.json();
+    expect(readPayload.result.contents[0].text).toContain(
+      "ui/notifications/tool-result",
+    );
+    expect(readPayload.result.contents[0].text).not.toContain("Bearer");
   });
 
   test("implements modern server discovery with stable identity and cache hints", async () => {
@@ -93,7 +141,7 @@ describe("evidence MCP endpoint", () => {
     expect(payload.result).toMatchObject({
       resultType: "complete",
       supportedVersions: ["2026-07-28"],
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, resources: {} },
       ttlMs: 3_600_000,
       cacheScope: "public",
       _meta: {
@@ -244,7 +292,9 @@ describe("evidence MCP endpoint", () => {
       ),
     );
     expect(response.status).toBe(200);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       operation: "claim_timeline",
       input: { claimKey: "release-security", limit: 2 },
     });

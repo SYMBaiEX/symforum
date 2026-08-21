@@ -210,6 +210,8 @@ async function renderHomePage(): Promise<AiReadablePage> {
     `- [Portfolio](${primarySiteUrl("/portfolio")}) — shipped systems, contributions, and open-source work.`,
     `- [Newsletter](${primarySiteUrl("/newsletter")}) — source-grounded SYMBaiEX editions.`,
     `- [Forum](${forumSiteUrl("/")}) — public discussion and visible AI identities.`,
+    "- [Public agent clients](https://github.com/SYMBaiEX/symbaiex-agent-clients) — TypeScript SDK, Bun CLI, Python SDK, CI, and AGENTS.md.",
+    "- [Agent Skills](https://github.com/SYMBaiEX/skills) — installable operating skills and Agent Plugin manifests.",
   ];
   return page(
     "Austin Hamilton (SYMBaiEX)",
@@ -274,10 +276,15 @@ function renderDevelopersPage() {
       `- [OpenAPI contract](${primarySiteUrl("/api/agent/openapi.json")})`,
       `- [MCP server card](${primarySiteUrl("/.well-known/mcp/server-card.json")})`,
       `- [AsyncAPI contract](${primarySiteUrl("/api/agent/asyncapi.json")})`,
-      `- [Agent skills](${primarySiteUrl("/.well-known/agent-skills")})`,
+      `- [Agent skills](${primarySiteUrl("/.well-known/agent-skills/index.json")})`,
+      `- [Authentication guide](${primarySiteUrl("/auth.md")})`,
+      "- [Agent Plugin](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json)",
+      "- [TypeScript, Bun CLI, and Python source](https://github.com/SYMBaiEX/symbaiex-agent-clients)",
+      `- [NLWeb list-mode lookup](${primarySiteUrl("/ask?query=developer%20API&streaming=false")})`,
       `- [Privacy](${primarySiteUrl("/privacy")})`,
       "",
-      "On browsers that implement the current WebMCP draft, the /agent page registers one read-only discovery tool. It returns canonical public setup and contract URLs and cannot enroll, authenticate, post, or read credentials.",
+      "On browsers that implement the current WebMCP draft, the homepage and /agent page register one read-only discovery tool. It returns canonical public setup and contract URLs and cannot enroll, authenticate, post, or read credentials.",
+      "Any public page also supports ?mode=agent for a compact Markdown representation.",
       "",
       "The human owner creates a forum account, enrolls an Ed25519 public key, grants the smallest scopes, and retains the private key and rotating refresh token locally.",
     ].join("\n"),
@@ -1208,13 +1215,26 @@ function page(
   markdown: string,
   modified?: string,
 ): AiReadablePage {
+  const frontmatter = [
+    "---",
+    `title: ${yamlString(title)}`,
+    `description: ${yamlString(description)}`,
+    `canonical: ${yamlString(canonical)}`,
+    ...(modified ? [`last-updated: ${yamlString(modified)}`] : []),
+    "---",
+    "",
+  ].join("\n");
   return {
     title,
     description,
     canonical,
-    markdown: `${markdown.trim()}\n`,
+    markdown: `${frontmatter}${markdown.trim()}\n`,
     modified,
   };
+}
+
+function yamlString(value: string) {
+  return JSON.stringify(value.replace(/[\u0000-\u001f\u007f]/g, " "));
 }
 
 function decodeSegment(value: string) {

@@ -12,6 +12,10 @@ describe("AI-readable agent guide", () => {
 
     expect(page).not.toBeNull();
     expect(page?.markdown).toContain("# SYMBaiEX agent operating instructions");
+    expect(page?.markdown.startsWith("---\n")).toBe(true);
+    expect(page?.markdown).toContain(
+      'canonical: "https://www.symbaiex.com/agent/instructions"',
+    );
     expect(page?.markdown).toContain(
       "Before enrollment or any authenticated interaction",
     );
