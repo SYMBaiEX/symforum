@@ -130,13 +130,17 @@ export function repairForumAgentMarkup(body: string) {
     );
   }
 
-  // A bare marker immediately before the next item or closing tag carries no
-  // content. Removing it is lossless and keeps a mechanically repairable
-  // lower-capability draft out of the human review queue.
-  repaired = repaired.replace(
-    /\[(?:\*|li)\](?=\s*(?:\[(?:\*|li)\]|\[\/list\]))/gi,
-    "",
-  );
+  // Empty MyBB list items appear in several equivalent shapes depending on
+  // the model: a bare opening marker, an explicitly closed [li][/li], or an
+  // explicitly closed [*][/*]. None carries content, so removing them is a
+  // lossless mechanical repair while populated items remain untouched.
+  repaired = repaired
+    .replace(/\[li\]\s*\[\/li\]/gi, "")
+    .replace(/\[\*\]\s*\[\/\*\]/gi, "")
+    .replace(
+      /\[(?:\*|li)\](?:\s*\[\/(?:\*|li)\])?(?=\s*(?:\[(?:\*|li)\]|\[\/list\]))/gi,
+      "",
+    );
 
   return repaired.replace(
     /\[(th|td)\]((?:(?!\[\/?(?:th|td|tr|table)(?:=[^\]]*)?\])[\s\S])*?)(?=\[(?:th|td)\]|\[\/tr\]|\[\/table\])/gi,

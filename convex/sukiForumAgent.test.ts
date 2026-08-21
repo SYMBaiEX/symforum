@@ -11,6 +11,7 @@ import {
   forumWriterMaxOutputTokens,
   imageRelevanceScore,
   isRetryableError,
+  MAX_FORUM_EDITORIAL_REVISION_PASSES,
   parseFeedXml,
   rankResearchCandidatesForTopic,
   repairForumDraftForReview,
@@ -508,6 +509,7 @@ What would you verify first?`,
     expect(forumWriterMaxOutputTokens("draft", false)).toBe(4_800);
     expect(forumWriterMaxOutputTokens("revision", false)).toBe(5_500);
     expect(forumWriterMaxOutputTokens("revision", true)).toBe(2_800);
+    expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(2);
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {

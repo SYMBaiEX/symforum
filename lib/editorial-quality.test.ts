@@ -124,6 +124,8 @@ The first is modal focus.
     const repaired = repairForumAgentMarkup(`[list]
 [*]Inspect the checkpoint
 [*]
+[li][/li]
+[*][/*]
 [*]Resume from verified state
 [/list]
 
@@ -131,6 +133,8 @@ The first is modal focus.
 
     expect(repaired).toContain("[*]Inspect the checkpoint");
     expect(repaired).toContain("[*]Resume from verified state");
+    expect(repaired).not.toContain("[li][/li]");
+    expect(repaired).not.toContain("[*][/*]");
     expect(validateForumAgentMarkup(repaired)).toMatchObject({ valid: true });
   });
 

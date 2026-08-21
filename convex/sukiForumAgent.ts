@@ -53,8 +53,9 @@ const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION =
-  "suki-forum-v14-openrouter-ox-alpha-free-router-deepseek-low-reasoning-length-buffer-natural-voice";
+  "suki-forum-v15-openrouter-ox-alpha-free-router-deepseek-low-reasoning-two-pass-quality-natural-voice";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
+export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 
@@ -645,10 +646,14 @@ export async function runForumResearchSlot(
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-      options?: { lightRevision?: boolean },
+      options?: { lightRevision?: boolean; revisionPass?: number },
     ) => {
+      const revisionPassSuffix =
+        stage === "revision" && (options?.revisionPass ?? 1) > 1
+          ? `-pass-${options?.revisionPass}`
+          : "";
       const routeArgs = {
-        stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}`,
+        stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}${revisionPassSuffix}`,
         correlationId: claim.runKey,
         feature: routeFeature,
         agent: config.slug,
@@ -735,7 +740,12 @@ export async function runForumResearchSlot(
       qualityAfter: quality.qualityScore,
       durationMs: Date.now() - draftStartedAt,
     });
-    if (forumDraftNeedsRevision(quality, config.qualityThreshold)) {
+    for (
+      let revisionPass = 1;
+      revisionPass <= MAX_FORUM_EDITORIAL_REVISION_PASSES &&
+      forumDraftNeedsRevision(quality, config.qualityThreshold);
+      revisionPass += 1
+    ) {
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
       const revisionTier = forumRevisionTier(quality);
@@ -752,6 +762,7 @@ export async function runForumResearchSlot(
         }),
         {
           lightRevision: revisionTier === "nano",
+          revisionPass,
         },
       );
       const revision = revisionGeneration.value.result;
@@ -759,8 +770,14 @@ export async function runForumResearchSlot(
         revisionGeneration.value.draft,
         snapshots,
       );
-      revisionInputTokens = revision.usage.inputTokens;
-      revisionOutputTokens = revision.usage.outputTokens;
+      revisionInputTokens = addOptionalNumbers(
+        revisionInputTokens,
+        revision.usage.inputTokens,
+      );
+      revisionOutputTokens = addOptionalNumbers(
+        revisionOutputTokens,
+        revision.usage.outputTokens,
+      );
       quality = evaluateForumDraft({
         draft,
         selection: effectiveSelection,
@@ -1596,6 +1613,7 @@ const FORUM_REVISION_INSTRUCTIONS = `You are a precise forum copy editor.
 Return one complete replacement through submitForumDraft and nothing else.
 ${PUBLICATION_VOICE_GUARDRAILS}
 - Fix every supplied gate item; do not merely explain it.
+- Treat the supplied gate feedback as authoritative. If a previous sentence, number, version, heading, list item, or ledger claim conflicts with it, rewrite or delete that material instead of preserving it.
 - Recount approximate plain words before submitting. Stay inside the requested hard range and aim above its minimum so BBCode cleanup cannot make the post too short.
 - Keep only facts supported by the compact evidence packet and preserve exact candidate IDs in the claim ledger.
 - Remove unsupported numbers, invented personal experience, empty list items, duplicate questions, and dangling numbered points.
