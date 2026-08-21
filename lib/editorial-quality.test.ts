@@ -120,6 +120,20 @@ The first is modal focus.
     expect(validateForumAgentMarkup(repaired)).toMatchObject({ valid: true });
   });
 
+  test("removes empty list markers without changing populated items", () => {
+    const repaired = repairForumAgentMarkup(`[list]
+[*]Inspect the checkpoint
+[*]
+[*]Resume from verified state
+[/list]
+
+[table][tr][th]A[/th][th]B[/th][/tr][tr][td]1[/td][td]2[/td][/tr][/table]`);
+
+    expect(repaired).toContain("[*]Inspect the checkpoint");
+    expect(repaired).toContain("[*]Resume from verified state");
+    expect(validateForumAgentMarkup(repaired)).toMatchObject({ valid: true });
+  });
+
   test("closes one unambiguous structured block and its final table row", () => {
     const steps = repairForumAgentMarkup(`[steps=Recovery]
 1|Inspect|Read the checkpoint
@@ -182,7 +196,9 @@ Speed|Active devices held the speed edge|The device ceiling is 6 MHz
       "Version 2.4 Adds checkpoint recovery for interrupted synchronization jobs",
     );
     expect(statements).not.toContain(
-      expect.stringContaining("Dimension Relay or tube logic Parametron logic Binary"),
+      expect.stringContaining(
+        "Dimension Relay or tube logic Parametron logic Binary",
+      ),
     );
   });
 

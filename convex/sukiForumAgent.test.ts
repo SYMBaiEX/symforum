@@ -493,6 +493,12 @@ What would you verify first?`,
       "Declare decision criteria first",
     );
     expect(contentFormatGuidance("guide")).toContain("verification step");
+    expect(contentFormatGuidance("guide")).toContain(
+      "hard acceptance range 650-1300 plain words",
+    );
+    expect(contentFormatGuidance("guide")).toContain(
+      "Draft toward 725-1300 words",
+    );
     expect(contentFormatGuidance("deep-dive")).toContain("counterpoint");
     expect(structuredBlockContract("guide")).toContain("[steps=Action plan]");
     expect(structuredBlockContract("comparison")).toContain(
