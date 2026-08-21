@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /webhooks/
+Disallow: /health
+
+Sitemap: https://socials.symbaiex.com/sitemap.xml
