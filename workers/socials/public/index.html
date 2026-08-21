@@ -71,8 +71,19 @@
 
       .shell {
         width: min(100% - 2rem, 56rem);
+        min-height: 100vh;
+        min-height: 100svh;
         margin: 0 auto;
-        padding: 0 0 2rem;
+        padding: 0 0 clamp(0.75rem, 2vw, 1.5rem);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .content {
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+        justify-content: center;
       }
 
       .masthead {
@@ -257,91 +268,93 @@
   <body>
     <a class="skip-link" href="#links">Skip to social links</a>
     <div class="shell">
-      <header class="masthead">
-        <h1>SYMBiEX's Socials</h1>
-      </header>
+      <div class="content">
+        <header class="masthead">
+          <h1>SYMBiEX's Socials</h1>
+        </header>
 
-      <main>
-        <section id="links" aria-label="Social profiles">
-          <ol class="link-list">
-            <li>
-              <a
-                class="signal-link"
-                data-accent="cyan"
-                href="https://x.com/SYMBiEX"
-                rel="me noopener noreferrer"
-              >
-                <span class="network"
-                  >X <span class="handle">@SYMBiEX</span></span
+        <main>
+          <section id="links" aria-label="Social profiles">
+            <ol class="link-list">
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="cyan"
+                  href="https://x.com/SYMBiEX"
+                  rel="me noopener noreferrer"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-            <li>
-              <a
-                class="signal-link"
-                data-accent="pink"
-                href="https://github.com/SYMBaiEX"
-                rel="me noopener noreferrer"
-              >
-                <span class="network"
-                  >GitHub <span class="handle">@SYMBaiEX</span></span
+                  <span class="network"
+                    >X <span class="handle">@SYMBiEX</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="pink"
+                  href="https://github.com/SYMBaiEX"
+                  rel="me noopener noreferrer"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-            <li>
-              <a
-                class="signal-link"
-                data-accent="yellow"
-                href="https://www.linkedin.com/in/austinhamiltonal"
-                rel="me noopener noreferrer"
-              >
-                <span class="network"
-                  >LinkedIn <span class="handle">Austin Hamilton</span></span
+                  <span class="network"
+                    >GitHub <span class="handle">@SYMBaiEX</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="yellow"
+                  href="https://www.linkedin.com/in/austinhamiltonal"
+                  rel="me noopener noreferrer"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-            <li>
-              <a
-                class="signal-link"
-                data-accent="orange"
-                href="https://forum.symbaiex.com/"
-              >
-                <span class="network"
-                  >Forum <span class="handle">forum.symbaiex.com</span></span
+                  <span class="network"
+                    >LinkedIn <span class="handle">Austin Hamilton</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="orange"
+                  href="https://forum.symbaiex.com/"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-            <li>
-              <a
-                class="signal-link"
-                data-accent="blue"
-                href="https://www.symbaiex.com/"
-              >
-                <span class="network"
-                  >Website <span class="handle">symbaiex.com</span></span
+                  <span class="network"
+                    >Forum <span class="handle">forum.symbaiex.com</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="blue"
+                  href="https://www.symbaiex.com/"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-            <li>
-              <a
-                class="signal-link"
-                data-accent="violet"
-                href="mailto:austin@symbaiex.com?subject=SYMBiEX%20social%20contact"
-              >
-                <span class="network"
-                  >Email <span class="handle">austin@symbaiex.com</span></span
+                  <span class="network"
+                    >Website <span class="handle">symbaiex.com</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  class="signal-link"
+                  data-accent="violet"
+                  href="mailto:austin@symbaiex.com?subject=SYMBiEX%20social%20contact"
                 >
-                <span class="arrow" aria-hidden="true">↗</span>
-              </a>
-            </li>
-          </ol>
-        </section>
-      </main>
+                  <span class="network"
+                    >Email <span class="handle">austin@symbaiex.com</span></span
+                  >
+                  <span class="arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+            </ol>
+          </section>
+        </main>
+      </div>
 
       <footer>
         <span>© 2026 SYMBiEX</span>

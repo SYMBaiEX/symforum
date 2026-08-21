@@ -117,6 +117,11 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).not.toContain("text-shadow:");
     expect(LANDING_PAGE).not.toContain("box-shadow:");
     expect(LANDING_PAGE).toContain("justify-content: flex-end");
+    expect(LANDING_PAGE).toContain("min-height: 100svh");
+    expect(LANDING_PAGE).toContain('class="content"');
+    expect(LANDING_PAGE).toMatch(
+      /\.content\s*\{[\s\S]*?justify-content: center/,
+    );
     expect(LANDING_PAGE).not.toContain('id="links-title"');
     expect(LANDING_PAGE).not.toContain(".links-heading");
     expect(LANDING_PAGE).toContain('aria-label="Social profiles"');
