@@ -112,6 +112,8 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).not.toContain(".portrait");
     expect(LANDING_PAGE).toContain("mailto:austin@symbaiex.com");
     expect(LANDING_PAGE).toContain("white-space: nowrap");
+    expect(LANDING_PAGE).toContain("text-align: center");
+    expect(LANDING_PAGE).toContain("<h1>SYMBiEX's Socials</h1>");
     expect(LANDING_PAGE).not.toContain("text-shadow:");
     expect(LANDING_PAGE).not.toContain("box-shadow:");
     expect(LANDING_PAGE).toContain("justify-content: flex-end");
