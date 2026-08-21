@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SYMBiEX — Social Signal</title>
+    <title>SYMBiEX's Socials</title>
     <meta
       name="description"
-      content="The official social links for Austin Hamilton and SYMBiEX: AI systems, open-source work, experiments, and community."
+      content="Official links for Austin Hamilton and SYMBiEX."
     />
     <meta name="theme-color" content="#10100f" />
     <meta property="og:type" content="profile" />
-    <meta property="og:title" content="SYMBiEX — Social Signal" />
+    <meta property="og:title" content="SYMBiEX's Socials" />
     <meta
       property="og:description"
-      content="Find Austin Hamilton and SYMBiEX across the web."
+      content="Official links for Austin Hamilton and SYMBiEX."
     />
     <meta property="og:url" content="https://socials.symbaiex.com/" />
     <meta name="twitter:card" content="summary" />
@@ -26,9 +26,6 @@
         --paper: #10100f;
         --muted: #a9a69d;
         --line: rgba(244, 241, 232, 0.24);
-        --cyan: #54e0ca;
-        --magenta: #ff4aa9;
-        --yellow: #f4de52;
       }
 
       * {
@@ -43,19 +40,7 @@
         min-height: 100vh;
         margin: 0;
         color: var(--ink);
-        background: linear-gradient(var(--line) 1px, transparent 1px),
-          linear-gradient(90deg, var(--line) 1px, transparent 1px),
-          radial-gradient(
-            circle at 88% 8%,
-            rgba(84, 224, 202, 0.16),
-            transparent 28rem
-          ),
-          var(--paper);
-        background-size:
-          3.5rem 3.5rem,
-          3.5rem 3.5rem,
-          auto,
-          auto;
+        background: var(--paper);
         font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       }
 
@@ -70,7 +55,7 @@
         z-index: 10;
         padding: 0.75rem 1rem;
         color: var(--paper);
-        background: var(--yellow);
+        background: var(--ink);
         transform: translateY(-200%);
       }
 
@@ -79,139 +64,27 @@
       }
 
       .shell {
-        width: min(100% - 2rem, 76rem);
+        width: min(100% - 2rem, 64rem);
         margin: 0 auto;
-        padding: 1rem 0 4rem;
+        padding: 0 0 4rem;
       }
 
       .masthead {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.75rem 0 1rem;
-        border-bottom: 1px solid var(--ink);
-        font-size: 0.72rem;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-      }
-
-      .status {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .status::before {
-        width: 0.55rem;
-        height: 0.55rem;
-        border-radius: 50%;
-        background: var(--cyan);
-        box-shadow: 0 0 1.25rem var(--cyan);
-        content: "";
-      }
-
-      .hero {
-        position: relative;
-        display: grid;
-        grid-template-columns: minmax(0, 1.45fr) minmax(14rem, 0.55fr);
-        min-height: 34rem;
+        padding: clamp(4rem, 11vw, 8rem) 0 clamp(2rem, 5vw, 4rem);
         border-bottom: 1px solid var(--ink);
       }
 
-      .hero-copy {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding: clamp(2rem, 7vw, 6.5rem) 1rem 2rem 0;
-      }
-
-      .eyebrow {
+      .masthead h1 {
         margin: 0;
-        color: var(--cyan);
-        font-size: 0.76rem;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-      }
-
-      h1 {
-        max-width: 12ch;
-        margin: 1.25rem 0 2rem;
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(4rem, 10vw, 9.5rem);
+        font-size: clamp(3rem, 8vw, 6.5rem);
         font-weight: 400;
-        letter-spacing: -0.075em;
-        line-height: 0.78;
-      }
-
-      h1 span {
-        display: block;
-        padding-left: 0.4em;
-        color: transparent;
-        -webkit-text-stroke: 1px var(--ink);
-      }
-
-      .intro {
-        max-width: 40rem;
-        margin: 0;
-        color: var(--muted);
-        font-size: clamp(0.9rem, 1.3vw, 1.05rem);
-        line-height: 1.7;
-      }
-
-      .monogram {
-        position: relative;
-        display: grid;
-        place-items: center;
-        overflow: hidden;
-        min-height: 24rem;
-        border-left: 1px solid var(--ink);
-      }
-
-      .monogram::before,
-      .monogram::after {
-        position: absolute;
-        width: 21rem;
-        height: 21rem;
-        border: 1px solid var(--magenta);
-        border-radius: 50%;
-        content: "";
-        animation: orbit 18s linear infinite;
-      }
-
-      .monogram::after {
-        width: 12rem;
-        height: 26rem;
-        border-color: var(--yellow);
-        animation-direction: reverse;
-        animation-duration: 13s;
-      }
-
-      .monogram-mark {
-        position: relative;
-        z-index: 1;
-        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(4.5rem, 9vw, 7rem);
-        letter-spacing: -0.1em;
-      }
-
-      .monogram small {
-        position: absolute;
-        right: 1rem;
-        bottom: 1rem;
-        color: var(--muted);
-        font-size: 0.62rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        writing-mode: vertical-rl;
+        letter-spacing: -0.055em;
+        line-height: 0.95;
       }
 
       .links-heading {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: end;
-        gap: 1rem;
-        padding: 3rem 0 1rem;
+        padding: clamp(2.5rem, 6vw, 4.5rem) 0 1rem;
       }
 
       h2 {
@@ -220,14 +93,6 @@
         font-size: clamp(2rem, 5vw, 4rem);
         font-weight: 400;
         letter-spacing: -0.045em;
-      }
-
-      .links-heading p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.66rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
       }
 
       .link-list {
@@ -259,21 +124,6 @@
         color: var(--paper);
         background: var(--ink);
         outline: none;
-      }
-
-      .signal-link[data-accent="cyan"]:hover,
-      .signal-link[data-accent="cyan"]:focus-visible {
-        background: var(--cyan);
-      }
-
-      .signal-link[data-accent="magenta"]:hover,
-      .signal-link[data-accent="magenta"]:focus-visible {
-        background: var(--magenta);
-      }
-
-      .signal-link[data-accent="yellow"]:hover,
-      .signal-link[data-accent="yellow"]:focus-visible {
-        background: var(--yellow);
       }
 
       .index {
@@ -329,33 +179,11 @@
         text-transform: uppercase;
       }
 
-      @keyframes orbit {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
       @media (max-width: 720px) {
         .shell {
-          width: min(100% - 1.25rem, 76rem);
+          width: min(100% - 1.25rem, 64rem);
         }
 
-        .hero {
-          grid-template-columns: 1fr;
-        }
-
-        .hero-copy {
-          min-height: 31rem;
-          padding-right: 0;
-        }
-
-        .monogram {
-          min-height: 16rem;
-          border-top: 1px solid var(--ink);
-          border-left: 0;
-        }
-
-        .links-heading,
         footer {
           grid-template-columns: 1fr;
         }
@@ -382,49 +210,25 @@
     <a class="skip-link" href="#links">Skip to social links</a>
     <div class="shell">
       <header class="masthead">
-        <span>SYMBiEX / Social Signal</span>
-        <span class="status">Online</span>
+        <h1>SYMBiEX's Socials</h1>
       </header>
 
       <main>
-        <section class="hero" aria-labelledby="page-title">
-          <div class="hero-copy">
-            <div>
-              <p class="eyebrow">Austin Hamilton · Dallas, Texas</p>
-              <h1 id="page-title">Find the <span>signal.</span></h1>
-            </div>
-            <p class="intro">
-              AI systems, open-source engineering, independent experiments, and
-              the communities forming around them. These are the official paths
-              into the SYMBiEX network.
-            </p>
-          </div>
-          <div class="monogram" aria-hidden="true">
-            <span class="monogram-mark">S/AI</span>
-            <small>Symbiosis · AI · Experiment</small>
-          </div>
-        </section>
-
         <section id="links" aria-labelledby="links-title">
           <div class="links-heading">
-            <h2 id="links-title">Open channels</h2>
-            <p>Verified destinations · No middlemen</p>
+            <h2 id="links-title">Links</h2>
           </div>
 
           <ol class="link-list">
             <li>
               <a
                 class="signal-link"
-                data-accent="cyan"
                 href="https://x.com/SYMBiEX"
                 rel="me noopener noreferrer"
               >
                 <span class="index">01</span>
                 <span class="network"
-                  >X
-                  <span class="handle"
-                    >@SYMBiEX · Field notes and live builds</span
-                  ></span
+                  >X <span class="handle">@SYMBiEX</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -432,16 +236,12 @@
             <li>
               <a
                 class="signal-link"
-                data-accent="magenta"
                 href="https://github.com/SYMBaiEX"
                 rel="me noopener noreferrer"
               >
                 <span class="index">02</span>
                 <span class="network"
-                  >GitHub
-                  <span class="handle"
-                    >@SYMBaiEX · Source, systems, contributions</span
-                  ></span
+                  >GitHub <span class="handle">@SYMBaiEX</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -449,16 +249,12 @@
             <li>
               <a
                 class="signal-link"
-                data-accent="yellow"
                 href="https://www.linkedin.com/in/austinhamiltonal"
                 rel="me noopener noreferrer"
               >
                 <span class="index">03</span>
                 <span class="network"
-                  >LinkedIn
-                  <span class="handle"
-                    >Austin Hamilton · Professional dispatches</span
-                  ></span
+                  >LinkedIn <span class="handle">Austin Hamilton</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -467,10 +263,7 @@
               <a class="signal-link" href="https://forum.symbaiex.com/">
                 <span class="index">04</span>
                 <span class="network"
-                  >Forum
-                  <span class="handle"
-                    >Humans and agents in public conversation</span
-                  ></span
+                  >Forum <span class="handle">forum.symbaiex.com</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -479,10 +272,7 @@
               <a class="signal-link" href="https://www.symbaiex.com/">
                 <span class="index">05</span>
                 <span class="network"
-                  >SYMBiEX.com
-                  <span class="handle"
-                    >Writing, portfolio, news, and agents</span
-                  ></span
+                  >Website <span class="handle">symbaiex.com</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -494,10 +284,7 @@
               >
                 <span class="index">06</span>
                 <span class="network"
-                  >Email
-                  <span class="handle"
-                    >Direct line · Collaborations and questions</span
-                  ></span
+                  >Email <span class="handle">solsymbaiex@gmail.com</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>
@@ -507,8 +294,7 @@
       </main>
 
       <footer>
-        <span>© 2026 SYMBiEX · Austin Hamilton</span>
-        <span>Built on the open web</span>
+        <span>© 2026 SYMBiEX</span>
       </footer>
     </div>
   </body>
