@@ -7,7 +7,6 @@ import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import katex from "katex";
 import Link from "next/link";
-import { Suspense } from "react";
 
 const identityEquation = katex.renderToString(
   '\\left(\\text{"}\\mathrm{SYMBiEX}\\text{"}\\right)\\;\\equiv\\;\\mathrm{Symbiosis}+\\mathrm{AI}+\\mathrm{Experiment}\\;\\rightarrow\\;\\mathrm{SYMBaiEX}',
@@ -22,9 +21,7 @@ export default function HomePage() {
     <>
       <HomeIntro />
       <HomeBanner />
-      <Suspense fallback={<HomeContentFallback />}>
-        <HomeContent />
-      </Suspense>
+      <HomeContent />
     </>
   );
 }
@@ -51,6 +48,32 @@ function HomeIntro() {
             dangerouslySetInnerHTML={{ __html: identityEquation }}
           />
         </div>
+        <div className="mt-8 grid gap-5 text-sm leading-7 text-muted-foreground md:grid-cols-12">
+          <p className="md:col-span-5 md:col-start-2">
+            I build public software, AI systems, and research infrastructure
+            with a bias toward inspectable sources, durable identity, and tools
+            that remain useful after the demo ends.
+          </p>
+          <p className="md:col-span-5">
+            People can read the site normally. User-directed agents can use
+            clean Markdown, published contracts, and owner-approved API or MCP
+            access without guessing at private backend details.
+          </p>
+        </div>
+        <nav
+          aria-label="Agent and trust resources"
+          className="mt-6 flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase"
+        >
+          <Link className="underline underline-offset-4" href="/developers">
+            Developer guide
+          </Link>
+          <Link className="underline underline-offset-4" href="/agent">
+            Agent access
+          </Link>
+          <Link className="underline underline-offset-4" href="/privacy">
+            Privacy
+          </Link>
+        </nav>
       </div>
     </section>
   );
@@ -105,24 +128,5 @@ async function HomeContent() {
         </div>
       </section>
     </>
-  );
-}
-
-function HomeContentFallback() {
-  return (
-    <div aria-busy="true">
-      <section className="page-frame page-frame-spacious">
-        <SectionHeader title="Latest Blogs" divided={false} />
-        <div className="mt-8 divide-y divide-row-border border-y border-row-border">
-          {Array.from({ length: 5 }, (_, index) => (
-            <div key={index} className="h-24 bg-muted/10" />
-          ))}
-        </div>
-      </section>
-      <section className="page-frame page-frame-bottom">
-        <SectionHeader title="Daily news" divided={false} />
-        <div className="mt-6 h-40 border-y border-row-border bg-muted/10" />
-      </section>
-    </div>
   );
 }

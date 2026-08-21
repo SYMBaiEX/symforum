@@ -41,6 +41,15 @@ describe("serializeJsonLd", () => {
     const website = graph.find((entry) => entry["@type"] === "WebSite");
     expect(website?.["@id"]).toBe("https://www.symbaiex.com#website");
     expect(website).not.toHaveProperty("potentialAction");
+    const organization = graph.find(
+      (entry) => entry["@type"] === "Organization",
+    );
+    expect(organization).toMatchObject({
+      contactPoint: { email: "austin@symbaiex.com" },
+      address: { addressLocality: "Birmingham", addressRegion: "AL" },
+    });
+    expect(graph.some((entry) => entry["@type"] === "Service")).toBe(true);
+    expect(graph.some((entry) => entry["@type"] === "DataCatalog")).toBe(true);
   });
 
   test("builds forum collection metadata with canonical breadcrumbs", () => {

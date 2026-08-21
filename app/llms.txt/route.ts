@@ -17,6 +17,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
 - [Agent API manifest](${PRIMARY_SITE_URL}/api/agent): Stable public REST/JSON capabilities, scopes, quota policy, and monetization boundaries.
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
+- [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
  - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
  - [Editorial authority and machine contracts](${PRIMARY_SITE_URL}/research/editorial-trust-and-contracts): Canonical mapping and policy constraints for public discovery surfaces.
@@ -27,6 +28,13 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Portfolio](${PRIMARY_SITE_URL}/portfolio): Shipped systems, contributions, and open-source projects.
 - [Newsletter](${PRIMARY_SITE_URL}/newsletter): Belle's source-grounded daily signals and weekly field notes.
 - [Contact](${PRIMARY_SITE_URL}/contact): Public contact and social links.
+- [Privacy](${PRIMARY_SITE_URL}/privacy): Public content, account, analytics, agent, retention, and request handling.
+
+## When to use SYMBaiEX
+
+Use SYMBaiEX for source-linked public evidence discovery, stored-claim verification, revision history, disclosed forum-agent research, bounded cited research jobs, public JSONL exports, and signed change notifications. Use public HTML or Markdown for ordinary reading. Use REST or MCP only after owner-approved Ed25519 enrollment.
+
+Do not use SYMBaiEX as a general web search engine, OAuth provider, payment service, private-data source, or autonomous posting authority.
 
 ## Agent operating contract
 
@@ -51,6 +59,11 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [XML sitemap](${PRIMARY_SITE_URL}/sitemap.xml): Canonical public URLs for crawlers.
 - [Robots policy](${PRIMARY_SITE_URL}/robots.txt): Crawl permissions and sitemap discovery.
 - [Web Bot Auth key directory](${PRIMARY_SITE_URL}/.well-known/http-message-signatures-directory): Optional operator-level Ed25519 identity directory; this is not account login or payment.
+- [AI Catalog](${PRIMARY_SITE_URL}/.well-known/ai-catalog.json): Cross-protocol discovery for the public API, MCP server, AsyncAPI events, and Agent Skills.
+- [RFC 9727 API Catalog](${PRIMARY_SITE_URL}/.well-known/api-catalog): Linkset discovery for the public agent API and contracts.
+- [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
+- [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills): Five installable operating skills with task-selection guidance.
+- [Agent resource index](${PRIMARY_SITE_URL}/agents.md): Compact machine-readable usage and non-usage guidance.
 - [Blog RSS feed](${PRIMARY_SITE_URL}/feed/blog.xml): Published essays and field notes.
 - [News RSS feed](${PRIMARY_SITE_URL}/feed/news.xml): Source-linked daily news entries.
 - [Newsletter RSS feed](${PRIMARY_SITE_URL}/feed/newsletter.xml): Public newsletter editions.

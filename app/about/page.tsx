@@ -147,6 +147,7 @@ export default async function AboutPage() {
                         <MarkdownContent
                           className="markdown-compact about-story-copy"
                           content={section.body}
+                          headingLevelOffset={1}
                         />
                       </div>
                     </div>
@@ -157,6 +158,7 @@ export default async function AboutPage() {
               <MarkdownContent
                 className="markdown-compact about-story-copy"
                 content={page?.body ?? ""}
+                headingLevelOffset={1}
               />
             )}
             <div className="clear-both" />

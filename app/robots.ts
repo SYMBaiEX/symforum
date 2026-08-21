@@ -8,8 +8,6 @@ const PRIVATE_PATHS = [
   "/api/site-observability",
   "/admin",
   "/profile",
-  "/signin",
-  "/agent/signup",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

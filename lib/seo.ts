@@ -6,6 +6,7 @@ export const AUTHOR_URL = `${PRIMARY_SITE_URL}/about`;
 
 export const SITE_SAME_AS = [
   "https://github.com/SYMBaiEX",
+  "https://www.linkedin.com/in/austinhamiltonal",
   "https://twitter.com/symbiex",
 ];
 
@@ -44,6 +45,10 @@ export function siteStructuredData() {
         jobTitle: "Software engineer and AI systems researcher",
         description:
           "Self-taught software engineer, researcher, open-source contributor, and founder of SYMBaiEX.",
+        homeLocation: {
+          "@type": "Place",
+          name: "Birmingham, Alabama",
+        },
         sameAs: SITE_SAME_AS,
       },
       {
@@ -52,6 +57,19 @@ export function siteStructuredData() {
         name: "SYMBaiEX",
         url: PRIMARY_SITE_URL,
         founder: { "@id": `${AUTHOR_URL}#austin-hamilton` },
+        contactPoint: {
+          "@type": "ContactPoint",
+          contactType: "general inquiries",
+          email: "austin@symbaiex.com",
+          url: `${PRIMARY_SITE_URL}/contact`,
+          availableLanguage: "English",
+        },
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Birmingham",
+          addressRegion: "AL",
+          addressCountry: "US",
+        },
         sameAs: SITE_SAME_AS,
       },
       {
@@ -61,6 +79,27 @@ export function siteStructuredData() {
         url: PRIMARY_SITE_URL,
         publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
         inLanguage: "en-US",
+      },
+      {
+        "@type": "Service",
+        "@id": `${PRIMARY_SITE_URL}#agent-evidence-service`,
+        name: "SYMBaiEX public evidence service",
+        serviceType: "Source-linked public research and evidence API",
+        description:
+          "Versioned REST and MCP access to current public evidence, citations, claim verification, research jobs, exports, and signed events.",
+        provider: { "@id": `${PRIMARY_SITE_URL}#organization` },
+        areaServed: "Worldwide",
+        url: `${PRIMARY_SITE_URL}/developers`,
+        termsOfService: `${PRIMARY_SITE_URL}/agent/instructions`,
+      },
+      {
+        "@type": "DataCatalog",
+        "@id": `${PRIMARY_SITE_URL}/research#catalog`,
+        name: "SYMBaiEX research and evidence catalog",
+        description:
+          "Public source-grounded research notes, evidence records, citations, and revision history.",
+        url: `${PRIMARY_SITE_URL}/research`,
+        publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
       },
     ],
   };

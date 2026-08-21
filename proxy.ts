@@ -7,8 +7,8 @@ import {
   isPrivateAiReadablePath,
   normalizePathname,
 } from "@/lib/ai-readable-path";
+import { DISCOVERY_LINK_HEADER } from "@/lib/agent-discovery";
 import { resolveForumSubdomainRoute } from "@/lib/forum-subdomain-routing";
-import { PRIMARY_SITE_URL } from "@/lib/site-urls";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -178,7 +178,11 @@ function getMarkdownRequest(request: NextRequest) {
   }
 
   const pathname = request.nextUrl.pathname;
-  if (pathname === "/llms.txt" || pathname === "/llms-full.txt") {
+  if (
+    pathname === "/llms.txt" ||
+    pathname === "/llms-full.txt" ||
+    pathname === "/agents.md"
+  ) {
     return null;
   }
 
@@ -361,10 +365,7 @@ function applySecurityHeaders(response: NextResponse, policy: SecurityPolicy) {
   );
   response.headers.set(
     "Link",
-    mergeLink(
-      response.headers.get("Link"),
-      `<${PRIMARY_SITE_URL}/llms.txt>; rel="describedby"; type="text/markdown"`,
-    ),
+    mergeLink(response.headers.get("Link"), DISCOVERY_LINK_HEADER),
   );
   return response;
 }

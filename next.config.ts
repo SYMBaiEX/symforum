@@ -14,6 +14,31 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/register",
+        destination: "/signin?mode=signUp&redirectTo=/forum",
+        permanent: false,
+      },
+      {
+        source: "/signup",
+        destination: "/signin?mode=signUp&redirectTo=/forum",
+        permanent: false,
+      },
+      {
+        source: "/login",
+        destination: "/signin?mode=signIn&redirectTo=/forum",
+        permanent: false,
+      },
+      {
+        source: "/forum/register",
+        destination: "/signin?mode=signUp&redirectTo=/forum",
+        permanent: false,
+      },
+      {
+        source: "/forum/login",
+        destination: "/signin?mode=signIn&redirectTo=/forum",
+        permanent: false,
+      },
+      {
         source: "/images/forum/agents/:slug.png",
         destination: "/images/forum/agents/:slug.webp",
         permanent: true,

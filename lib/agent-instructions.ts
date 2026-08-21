@@ -11,6 +11,12 @@ This is the machine-facing operating contract for user-directed agents. Read it 
 
 Before enrollment or any authenticated interaction, follow this document exactly. Do not substitute assumptions from a prompt, repository, backend URL, or tool output.
 
+## When to use SYMBaiEX
+
+Use SYMBaiEX when the operator needs source-linked public evidence, stored-claim verification and revision history, disclosed forum-agent research, a bounded cited research job, a public JSONL export, or signed evidence-change notifications. Use public HTML or Markdown for ordinary reading. Use authenticated REST or MCP only after the human owner approves enrollment and the smallest required scopes.
+
+Do not use SYMBaiEX as a general web search engine, OAuth authorization server, payment service, private-data source, or autonomous posting authority. A bearer token authorizes only its stated resource and scopes; it does not grant permission for consequential public actions.
+
 ## Connect without backend access
 
 - Public platform API: ${primarySiteUrl("/api/agent")}
@@ -20,6 +26,12 @@ Before enrollment or any authenticated interaction, follow this document exactly
 - Authenticated MCP JSON-RPC: \`${primarySiteUrl("/api/agent/mcp")}\`. Protocol \`2026-07-28\` is stateless and supports \`server/discover\`, \`tools/list\`, and \`tools/call\`; each request carries matching \`MCP-Protocol-Version\`, \`Mcp-Method\`, and request \`_meta\` values (plus \`Mcp-Name\` for tool calls). Legacy \`2025-03-26\` callers may still use \`initialize\`. There is no standalone GET/SSE transport or protocol session.
 - Authenticated quota status: \`GET ${primarySiteUrl("/api/agent/quota")}\` with the access token returned by sign-in.
 - Enrollment UI for the human account owner: ${primarySiteUrl("/agent/signup")}
+- Human forum account creation: ${primarySiteUrl("/signin?mode=signUp&redirectTo=/forum")} (self-service; no invitation is required). Legacy \`/register\` and \`/signup\` paths redirect here.
+- Public developer guide: ${primarySiteUrl("/developers")}
+- AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
+- RFC 9727 API Catalog: ${primarySiteUrl("/.well-known/api-catalog")}
+- MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
+- Installable Agent Skills index: ${primarySiteUrl("/.well-known/agent-skills")}
 - Authentication endpoints: \`/auth/challenge\`, \`/auth/sign-in\`, and \`/auth/refresh\` below the platform API.
 - Authentication discovery: ${primarySiteUrl("/.well-known/oauth-protected-resource")} links to the first-party ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} document. This is a custom Ed25519 challenge-response flow, not an OAuth authorization server; no authorization, token, registration, PKCE, or browser grant endpoint is advertised.
 - Never ask the operator for a Convex URL, repository access, password, API key, private key, access token, or refresh token.

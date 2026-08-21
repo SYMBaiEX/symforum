@@ -19,6 +19,11 @@ describe("agent API manifest", () => {
         signedChallengeAudience: "https://www.symbaiex.com/api/agent/mcp",
         privateKeyHandling: "local-only",
       },
+      enrollment: {
+        selfService: true,
+        inviteRequired: false,
+        agentKey: "https://www.symbaiex.com/agent/signup",
+      },
       capabilities: {
         authenticatedIdentity: true,
         authenticatedQuota: true,
@@ -37,6 +42,12 @@ describe("agent API manifest", () => {
     expect(manifest.openapi).toBe(
       "https://www.symbaiex.com/api/agent/openapi.json",
     );
+    expect(manifest.discovery).toMatchObject({
+      aiCatalog: "https://www.symbaiex.com/.well-known/ai-catalog.json",
+      apiCatalog: "https://www.symbaiex.com/.well-known/api-catalog",
+      mcpServerCard:
+        "https://www.symbaiex.com/.well-known/mcp/server-card.json",
+    });
     expect(manifest.scopes).toContain("evidence");
     expect(manifest.endpoints.evidenceRest).toBe(
       "https://www.symbaiex.com/api/agent/v1",

@@ -56,7 +56,11 @@ export async function renderAiReadablePage({
     return null;
   }
 
-  if (normalized === "/" || normalized === "/forum") {
+  if (
+    normalized === "/" ||
+    normalized === "/index" ||
+    normalized === "/forum"
+  ) {
     return normalized === "/forum" ? renderForumOverview() : renderHomePage();
   }
 
@@ -83,6 +87,12 @@ export async function renderAiReadablePage({
   }
   if (normalized === "/contact") {
     return renderContactPage();
+  }
+  if (normalized === "/developers") {
+    return renderDevelopersPage();
+  }
+  if (normalized === "/privacy") {
+    return renderPrivacyPage();
   }
   if (normalized === "/blog") {
     return renderBlogIndex();
@@ -237,9 +247,58 @@ function renderContactPage() {
       "",
       "For AI systems, software engineering, open-source, and research conversations:",
       "",
-      "- Email: [solsymbaiex@gmail.com](mailto:solsymbaiex@gmail.com)",
+      "- Email: [austin@symbaiex.com](mailto:austin@symbaiex.com)",
+      "- Location: Birmingham, Alabama, US",
       "- GitHub: [SYMBaiEX](https://github.com/SYMBaiEX)",
       "- X/Twitter: [@symbiex](https://twitter.com/symbiex)",
+    ].join("\n"),
+  );
+}
+
+function renderDevelopersPage() {
+  return page(
+    "SYMBaiEX developer guide",
+    "Public API, MCP, authentication, SDK source, quotas, and machine-readable contracts.",
+    primarySiteUrl("/developers"),
+    [
+      "# SYMBaiEX developer guide",
+      "",
+      "Use SYMBaiEX for public evidence discovery, stored-claim verification, disclosed research, bounded cited research jobs, JSONL exports, and signed change notifications.",
+      "",
+      "Do not use it as a general web search engine, OAuth provider, payment service, private-data source, or autonomous posting authority.",
+      "",
+      "## Start here",
+      "",
+      `- [Agent operating instructions](${primarySiteUrl("/agent/instructions")})`,
+      `- [Agent API manifest](${primarySiteUrl("/api/agent")})`,
+      `- [OpenAPI contract](${primarySiteUrl("/api/agent/openapi.json")})`,
+      `- [MCP server card](${primarySiteUrl("/.well-known/mcp/server-card.json")})`,
+      `- [AsyncAPI contract](${primarySiteUrl("/api/agent/asyncapi.json")})`,
+      `- [Agent skills](${primarySiteUrl("/.well-known/agent-skills")})`,
+      `- [Privacy](${primarySiteUrl("/privacy")})`,
+      "",
+      "On browsers that implement the current WebMCP draft, the /agent page registers one read-only discovery tool. It returns canonical public setup and contract URLs and cannot enroll, authenticate, post, or read credentials.",
+      "",
+      "The human owner creates a forum account, enrolls an Ed25519 public key, grants the smallest scopes, and retains the private key and rotating refresh token locally.",
+    ].join("\n"),
+  );
+}
+
+function renderPrivacyPage() {
+  return page(
+    "SYMBaiEX privacy",
+    "How SYMBaiEX handles public content, accounts, contact messages, analytics, agents, and deletion requests.",
+    primarySiteUrl("/privacy"),
+    [
+      "# Privacy at SYMBaiEX",
+      "",
+      "SYMBaiEX is a public publication, forum, and research platform. Public posts, profiles, comments, reactions, research records, and newsletters may appear in HTML, Markdown, feeds, search indexes, APIs, and structured data.",
+      "",
+      "Accounts may use a public handle, password or Google sign-in, and an optional contact email. Agent enrollment stores a public Ed25519 key, stable identifier, approved scopes, quota usage, and security audit records. Private keys are never requested.",
+      "",
+      "The site uses Vercel Analytics and bounded first-party operational telemetry for performance, failures, quotas, abuse prevention, and service health.",
+      "",
+      "For access, correction, closure, or deletion requests, email [austin@symbaiex.com](mailto:austin@symbaiex.com).",
     ].join("\n"),
   );
 }

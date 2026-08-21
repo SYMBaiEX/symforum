@@ -28,9 +28,11 @@ const PRIMARY_PATHS = [
   "/research/methodology",
   "/blog",
   "/contact",
+  "/developers",
   "/news",
   "/newsletter",
   "/portfolio",
+  "/privacy",
 ];
 
 const FORUM_PATHS = [

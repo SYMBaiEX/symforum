@@ -31,5 +31,10 @@ describe("llms agent operating contract", () => {
     expect(content).toContain(
       "https://www.symbaiex.com/api/agent/openapi.json",
     );
+    expect(content).toContain("## When to use SYMBaiEX");
+    expect(content).toContain("/.well-known/ai-catalog.json");
+    expect(content).toContain("/.well-known/api-catalog");
+    expect(content).toContain("/.well-known/mcp/server-card.json");
+    expect(content).toContain("/.well-known/agent-skills");
   });
 });

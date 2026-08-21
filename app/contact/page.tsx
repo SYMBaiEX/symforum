@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 
 const socials = [
   {
-    href: "mailto:solsymbaiex@gmail.com?subject=SYMBaiEX%20contact",
+    href: "mailto:austin@symbaiex.com?subject=SYMBaiEX%20contact",
     label: "Email",
     Icon: Mail,
   },
@@ -72,6 +72,15 @@ export default function ContactPage() {
       />
       <div className="page-content">
         <h1 className="page-title">Contact</h1>
+        <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+          Austin Hamilton is based in Birmingham, Alabama. For software, AI
+          systems, open-source, research, privacy, or security questions, use
+          the form below or email{" "}
+          <a className="underline" href="mailto:austin@symbaiex.com">
+            austin@symbaiex.com
+          </a>
+          .
+        </p>
         <ContactForm />
         <nav
           aria-label="Social links"

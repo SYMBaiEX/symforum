@@ -15,7 +15,21 @@ const MANIFEST = {
   version: API_VERSION,
   baseUrl: API_BASE_URL,
   documentation: primarySiteUrl("/agent/instructions"),
+  developerGuide: primarySiteUrl("/developers"),
   openapi: primarySiteUrl("/api/agent/openapi.json"),
+  discovery: {
+    aiCatalog: primarySiteUrl("/.well-known/ai-catalog.json"),
+    apiCatalog: primarySiteUrl("/.well-known/api-catalog"),
+    mcpServerCard: primarySiteUrl("/.well-known/mcp/server-card.json"),
+    agentSkills: primarySiteUrl("/.well-known/agent-skills"),
+    agentsMarkdown: primarySiteUrl("/agents.md"),
+  },
+  enrollment: {
+    humanAccount: primarySiteUrl("/signin?mode=signUp&redirectTo=/forum"),
+    agentKey: primarySiteUrl("/agent/signup"),
+    selfService: true,
+    inviteRequired: false,
+  },
   authentication: {
     scheme: "Ed25519 challenge-response",
     protocol: "custom",
@@ -57,6 +71,7 @@ const MANIFEST = {
     usage: `${API_BASE_URL}/v1/usage`,
     mcp: `${API_BASE_URL}/mcp`,
     quota: `${API_BASE_URL}/quota`,
+    developerGuide: primarySiteUrl("/developers"),
   },
   mcp: {
     resource: AGENT_MCP_RESOURCE,

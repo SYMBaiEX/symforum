@@ -59,7 +59,22 @@ describe("AI-readable agent guide", () => {
     expect(page).not.toBeNull();
     expect(page?.title).toBe("Contact Austin Hamilton");
     expect(page?.markdown).toContain("# Contact Austin Hamilton");
-    expect(page?.markdown).toContain("mailto:solsymbaiex@gmail.com");
+    expect(page?.markdown).toContain("mailto:austin@symbaiex.com");
+    expect(page?.markdown).toContain("Birmingham, Alabama");
     expect(page?.markdown).toContain("X/Twitter");
+  });
+
+  test("keeps the homepage, developer guide, and privacy notice readable", async () => {
+    const homepage = await renderAiReadablePage({ pathname: "/index" });
+    const developers = await renderAiReadablePage({ pathname: "/developers" });
+    const privacy = await renderAiReadablePage({ pathname: "/privacy" });
+
+    expect(homepage?.canonical).toBe("https://www.symbaiex.com/");
+    expect(developers?.markdown).toContain("# SYMBaiEX developer guide");
+    expect(developers?.markdown).toContain(
+      "Do not use it as a general web search engine",
+    );
+    expect(privacy?.markdown).toContain("# Privacy at SYMBaiEX");
+    expect(privacy?.markdown).toContain("Vercel Analytics");
   });
 });

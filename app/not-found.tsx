@@ -15,7 +15,19 @@ export default function NotFound() {
         <Link href="/news" className="underline underline-offset-4">
           news
         </Link>{" "}
-        index instead.
+        index instead. Automated clients can recover through the public{" "}
+        <Link href="/developers" className="underline underline-offset-4">
+          developer guide
+        </Link>
+        ,{" "}
+        <a href="/llms.txt" className="underline underline-offset-4">
+          agent index
+        </a>
+        , or{" "}
+        <a href="/sitemap.xml" className="underline underline-offset-4">
+          XML sitemap
+        </a>
+        .
       </p>
       <Button asChild className="mt-5">
         <Link href="/">Back home</Link>

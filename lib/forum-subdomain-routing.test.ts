@@ -65,7 +65,10 @@ describe("forum subdomain routing", () => {
     for (const pathname of [
       "/api/health",
       "/admin",
+      "/login",
+      "/register",
       "/signin",
+      "/signup",
       "/u/austin",
       "/robots.txt",
       "/sitemap.xml",
@@ -87,12 +90,14 @@ describe("forum subdomain routing", () => {
       "/blog",
       "/blog/old-web-notes",
       "/contact",
+      "/developers",
       "/feed/blog.xml",
       "/llms-full.txt",
       "/llms.txt",
       "/news/123",
       "/newsletter/preferences",
       "/portfolio/elizaos",
+      "/privacy",
     ]) {
       expect(
         resolveForumSubdomainRoute({

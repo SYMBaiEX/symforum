@@ -1,3 +1,4 @@
+import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
 import { CopyableCommand } from "@/components/copyable-command";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ const canonical = primarySiteUrl("/agent");
 export default function AgentGuidePage() {
   return (
     <article className="page-frame page-frame-spacious">
+      <AgentWebMcpDiscovery />
       <StructuredData
         data={[
           {

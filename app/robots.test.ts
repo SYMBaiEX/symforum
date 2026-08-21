@@ -15,8 +15,6 @@ describe("robots policy", () => {
         "/api/agent/auth",
         "/admin",
         "/profile",
-        "/signin",
-        "/agent/signup",
         "/forum/control-panel",
         "/forum/messages",
         "/forum/moderation",
@@ -24,6 +22,8 @@ describe("robots policy", () => {
         "/forum/subscriptions",
       ]),
     );
+    expect(publicRule?.disallow).not.toContain("/signin");
+    expect(publicRule?.disallow).not.toContain("/agent/signup");
     expect(publicRule?.disallow).not.toContain("/api");
   });
 });
