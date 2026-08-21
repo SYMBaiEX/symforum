@@ -3,7 +3,7 @@ import { EntryRow } from "@/components/entry-row";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
-import { getLatestPost } from "@/lib/blog-data";
+import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import katex from "katex";
 import Link from "next/link";
@@ -57,18 +57,25 @@ function HomeIntro() {
 }
 
 async function HomeContent() {
-  const [latestPost, dailyNews] = await Promise.all([
-    getLatestPost(),
+  const [latestPosts, dailyNews] = await Promise.all([
+    getLatestPosts(5),
     getDailyNews(5),
   ]);
 
   return (
     <>
       <section className="page-frame page-frame-spacious">
-        <SectionHeader title="Latest blog" divided={false} />
+        <SectionHeader title="Latest Blogs" divided={false} />
         <div className="mt-8">
-          {latestPost ? (
-            <EntryRow post={latestPost} divided={false} compact />
+          {latestPosts.length > 0 ? (
+            latestPosts.map((post, index) => (
+              <EntryRow
+                key={post.slug}
+                post={post}
+                divided={index > 0}
+                compact
+              />
+            ))
           ) : (
             <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
               No published posts yet.
@@ -105,8 +112,12 @@ function HomeContentFallback() {
   return (
     <div aria-busy="true">
       <section className="page-frame page-frame-spacious">
-        <SectionHeader title="Latest blog" divided={false} />
-        <div className="mt-8 h-24 border-y border-row-border bg-muted/10" />
+        <SectionHeader title="Latest Blogs" divided={false} />
+        <div className="mt-8 divide-y divide-row-border border-y border-row-border">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index} className="h-24 bg-muted/10" />
+          ))}
+        </div>
       </section>
       <section className="page-frame page-frame-bottom">
         <SectionHeader title="Daily news" divided={false} />
