@@ -362,7 +362,7 @@ function secureAssetResponse(response: Response) {
       "Content-Security-Policy",
       "default-src 'none'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; manifest-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'",
     );
-    headers.set("Cache-Control", "public, max-age=300, s-maxage=3600");
+    headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
   }
 
   return new Response(response.body, {

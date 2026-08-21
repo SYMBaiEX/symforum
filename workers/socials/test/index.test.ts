@@ -149,6 +149,9 @@ describe("socials worker", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "script-src 'none'",
     );
+    expect(response.headers.get("cache-control")).toBe(
+      "no-cache, no-store, must-revalidate",
+    );
   });
 
   it("reports ready only when both D1 and the webhook secret are available", async () => {
