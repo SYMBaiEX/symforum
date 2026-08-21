@@ -7,7 +7,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import {
+  OPENROUTER_FORUM_MODEL,
+  OPENROUTER_GENERATION_MODELS,
+} from "../lib/ai-models";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -53,7 +56,7 @@ const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION =
-  "suki-forum-v15-openrouter-ox-alpha-free-router-deepseek-low-reasoning-two-pass-quality-natural-voice";
+  "suki-forum-v16-openrouter-ox-alpha-free-router-deepseek-low-reasoning-quality-escalation-natural-voice";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const USER_AGENT =
@@ -646,7 +649,12 @@ export async function runForumResearchSlot(
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
-      options?: { lightRevision?: boolean; revisionPass?: number },
+      options?: {
+        lightRevision?: boolean;
+        modelIds?: readonly string[];
+        revisionPass?: number;
+        validateDraft?: (draft: z.infer<typeof forumDraftSchema>) => void;
+      },
     ) => {
       const revisionPassSuffix =
         stage === "revision" && (options?.revisionPass ?? 1) > 1
@@ -696,6 +704,7 @@ export async function runForumResearchSlot(
           if (call?.toolName !== "submitForumDraft") {
             throw missingStructuredToolCallError(`forum ${stage}`, result);
           }
+          options?.validateDraft?.(call.input);
           return { result, draft: call.input };
         },
       };
@@ -703,6 +712,7 @@ export async function runForumResearchSlot(
         effectiveRoutingConfig,
         writerRequestContext,
         routeArgs,
+        options?.modelIds,
       );
     };
     const draftStartedAt = Date.now();
@@ -749,6 +759,7 @@ export async function runForumResearchSlot(
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
       const revisionTier = forumRevisionTier(quality);
+      const qualityRescue = revisionPass > 1;
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -762,7 +773,37 @@ export async function runForumResearchSlot(
         }),
         {
           lightRevision: revisionTier === "nano",
+          modelIds: qualityRescue ? forumEditorialRescueModels() : undefined,
           revisionPass,
+          validateDraft: qualityRescue
+            ? (candidateDraft) => {
+                const candidate = repairForumDraftForReview(
+                  candidateDraft,
+                  snapshots,
+                );
+                const candidateQuality = evaluateForumDraft({
+                  draft: candidate,
+                  selection: effectiveSelection,
+                  snapshots,
+                  recentThreadTitles: context.recentThreadTitles,
+                });
+                if (
+                  forumDraftNeedsRevision(
+                    candidateQuality,
+                    config.qualityThreshold,
+                  )
+                ) {
+                  throw new ForumEditorialQualityError(
+                    `Editorial rescue candidate scored ${candidateQuality.qualityScore}/100: ${[
+                      ...new Set([
+                        ...candidateQuality.blockingIssues,
+                        ...candidateQuality.feedback,
+                      ]),
+                    ].join("; ")}`,
+                  );
+                }
+              }
+            : undefined,
         },
       );
       const revision = revisionGeneration.value.result;
@@ -800,8 +841,7 @@ export async function runForumResearchSlot(
     if (!forumDraftPassesGate(quality, config.qualityThreshold)) {
       throw new ForumEditorialQualityError(
         `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${[
-          ...quality.blockingIssues,
-          ...quality.feedback,
+          ...new Set([...quality.blockingIssues, ...quality.feedback]),
         ].join("; ")}`,
       );
     }
@@ -1877,6 +1917,10 @@ export function forumDraftPassesGate(
   return (
     quality.qualityScore >= threshold && quality.blockingIssues.length === 0
   );
+}
+
+export function forumEditorialRescueModels() {
+  return OPENROUTER_GENERATION_MODELS.slice(1);
 }
 
 export function forumRevisionTier(quality: EvaluatedForumDraft) {
