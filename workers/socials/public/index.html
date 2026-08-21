@@ -98,7 +98,6 @@
         margin: 0;
         padding: 0;
         list-style: none;
-        border-top: 1px solid var(--ink);
       }
 
       .signal-link {
@@ -114,6 +113,10 @@
           color 180ms ease,
           padding 180ms ease,
           background 180ms ease;
+      }
+
+      .link-list li:last-child .signal-link {
+        border-bottom: 0;
       }
 
       .signal-link:hover,
