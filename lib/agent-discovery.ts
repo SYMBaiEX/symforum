@@ -94,23 +94,23 @@ export const MCP_SERVER_CARD = {
   transport: "streamable-http",
   tools: [
     {
-      name: "evidence.search",
+      name: "evidence_search",
       description: "Search current public evidence records.",
     },
     {
-      name: "evidence.verify_claim",
+      name: "evidence_verify_claim",
       description: "Verify a stored public claim against citations.",
     },
     {
-      name: "evidence.claim_timeline",
+      name: "evidence_claim_timeline",
       description: "Read bounded public claim revision history.",
     },
     {
-      name: "evidence.create_research",
+      name: "evidence_create_research",
       description: "Create a bounded source-cited research job.",
     },
     {
-      name: "evidence.universal_search",
+      name: "evidence_universal_search",
       description: "Search the bounded public editorial and evidence corpus.",
     },
   ],
@@ -156,7 +156,7 @@ export const DOCS_MCP_SERVER_CARD = {
   transport: "streamable-http",
   tools: [
     {
-      name: "docs.search",
+      name: "docs_search",
       description: "Search the bounded public SYMBaiEX documentation index.",
     },
   ],
@@ -209,6 +209,17 @@ export const AI_CATALOG = {
       tags: ["evidence", "research", "openapi"],
       publisher: catalogPublisher(),
       trustManifest: catalogTrustManifest("agent-rest-v1"),
+    },
+    {
+      identifier: "urn:air:symbaiex.com:api:sandbox-v1",
+      displayName: "SYMBaiEX Synthetic API Sandbox",
+      type: "application/json",
+      url: primarySiteUrl("/api/sandbox"),
+      description:
+        "Credential-free, read-only synthetic fixtures for testing structured API discovery and search parsing; it exposes no production data or writes.",
+      tags: ["sandbox", "synthetic", "read-only", "developer"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("sandbox-api-v1"),
     },
     {
       identifier: "urn:air:symbaiex.com:events:agent-v1",
@@ -325,6 +336,7 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - Machine operating contract: ${primarySiteUrl("/agent/instructions")}
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI: ${primarySiteUrl("/api/agent/openapi.json")}
+- Synthetic API sandbox: ${primarySiteUrl("/api/sandbox")} (credential-free, read-only, synthetic fixtures only)
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - MCP endpoint server card: ${primarySiteUrl("/api/agent/mcp/server-card")}
 - Documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}

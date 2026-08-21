@@ -7,6 +7,10 @@ import { GET as getAgentSkills } from "@/app/.well-known/agent-skills/route";
 import { GET as getAgentSkillsV2 } from "@/app/.well-known/agent-skills/index.json/route";
 import { GET as getAiCatalog } from "@/app/.well-known/ai-catalog.json/route";
 import { GET as getApiCatalog } from "@/app/.well-known/api-catalog/route";
+import {
+  GET as getWellKnownMcp,
+  POST as postWellKnownMcp,
+} from "@/app/.well-known/mcp.json/route";
 import { GET as getMcpCard } from "@/app/.well-known/mcp/server-card.json/route";
 import { GET as getSecurityTxt } from "@/app/.well-known/security.txt/route";
 import { GET as getAgentsMarkdown } from "@/app/agents.md/route";
@@ -23,6 +27,7 @@ describe("agent discovery surfaces", () => {
     );
     expect(catalog.specVersion).toBe("1.0");
     expect(catalog.host.identifier).toBe("symbaiex.com");
+    expect(catalog.entries).toHaveLength(8);
     expect(catalog.entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -36,6 +41,12 @@ describe("agent discovery surfaces", () => {
         }),
         expect.objectContaining({
           url: "https://www.symbaiex.com/.well-known/agent-card.json",
+        }),
+        expect.objectContaining({
+          identifier: "urn:air:symbaiex.com:api:sandbox-v1",
+          url: "https://www.symbaiex.com/api/sandbox",
+          description: expect.stringContaining("Credential-free, read-only"),
+          tags: expect.arrayContaining(["synthetic", "read-only"]),
         }),
       ]),
     );
@@ -102,12 +113,37 @@ describe("agent discovery surfaces", () => {
     expect(card.transport).toBe("streamable-http");
     expect(card.tools).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "evidence.search" }),
-        expect.objectContaining({ name: "evidence.verify_claim" }),
+        expect.objectContaining({ name: "evidence_search" }),
+        expect.objectContaining({ name: "evidence_verify_claim" }),
       ]),
     );
     expect(JSON.stringify(card)).not.toContain("oauth2");
     expect(card).not.toHaveProperty("capabilities");
+  });
+
+  test("keeps the well-known GET card while accepting a public MCP handshake", async () => {
+    const card = getWellKnownMcp();
+    expect(card.status).toBe(200);
+    expect(card.headers.get("content-type")).toContain(
+      "application/mcp-server-card+json",
+    );
+
+    const handshake = await postWellKnownMcp(
+      new Request("https://www.symbaiex.com/.well-known/mcp.json", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "scanner",
+          method: "initialize",
+          params: { protocolVersion: "2025-03-26" },
+        }),
+      }),
+    );
+    expect(handshake.status).toBe(200);
+    await expect(handshake.json()).resolves.toMatchObject({
+      result: { serverInfo: { name: "symbaiex-evidence" } },
+    });
   });
 
   test("publishes installable skills with task-selection guidance", async () => {

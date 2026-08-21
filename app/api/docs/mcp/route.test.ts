@@ -33,7 +33,7 @@ describe("public documentation MCP", () => {
         id: "search",
         method: "tools/call",
         params: {
-          name: "docs.search",
+          name: "docs_search",
           arguments: { query: "Ed25519 authentication", limit: 2 },
         },
       }),
@@ -47,6 +47,25 @@ describe("public documentation MCP", () => {
     expect(body.result.structuredContent.results.length).toBeLessThanOrEqual(2);
   });
 
+  test("accepts the legacy dotted tool name as a compatibility alias", async () => {
+    const response = await POST(
+      request({
+        jsonrpc: "2.0",
+        id: "legacy-search",
+        method: "tools/call",
+        params: {
+          name: "docs.search",
+          arguments: { query: "authentication", limit: 1 },
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      result: { structuredContent: { results: expect.any(Array) } },
+    });
+  });
+
   test("advertises an explicit read-only tool contract", async () => {
     const response = await POST(
       request({ jsonrpc: "2.0", id: "tools", method: "tools/list" }),
@@ -55,7 +74,7 @@ describe("public documentation MCP", () => {
 
     expect(body.result.tools).toHaveLength(1);
     expect(body.result.tools[0]).toMatchObject({
-      name: "docs.search",
+      name: "docs_search",
       inputSchema: { additionalProperties: false },
       outputSchema: {
         additionalProperties: false,
@@ -101,8 +120,8 @@ describe("public documentation MCP", () => {
   test("rejects unknown tools and unbounded inputs with JSON-RPC errors", async () => {
     for (const params of [
       { name: "docs.write", arguments: { query: "docs" } },
-      { name: "docs.search", arguments: { query: "x".repeat(201) } },
-      { name: "docs.search", arguments: { query: "docs", extra: true } },
+      { name: "docs_search", arguments: { query: "x".repeat(201) } },
+      { name: "docs_search", arguments: { query: "docs", extra: true } },
     ]) {
       const response = await POST(
         request({ jsonrpc: "2.0", id: 4, method: "tools/call", params }),

@@ -1,7 +1,6 @@
 import { MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { primarySiteUrl } from "@/lib/site-urls";
-
-export const dynamic = "force-static";
+export { OPTIONS, POST } from "@/app/api/agent/mcp/route";
 
 export function GET() {
   return Response.json(MCP_SERVER_CARD, {

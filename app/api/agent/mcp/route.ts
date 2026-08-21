@@ -21,66 +21,101 @@ const DISCOVERY_TTL_MS = 60 * 60 * 1_000;
 const SERVER_INFO = { name: SERVER_NAME, version: SERVER_VERSION } as const;
 
 const TOOL_ENTRIES = [
-  ["evidence.status", "status"],
-  ["evidence.sources", "sources"],
-  ["evidence.source_registry", "source_registry"],
-  ["evidence.search", "search"],
-  ["evidence.semantic_search", "semantic_search"],
-  ["evidence.universal_search", "universal_search"],
-  ["evidence.document", "document"],
-  ["evidence.changes", "changes"],
-  ["evidence.verify_claim", "verify"],
-  ["evidence.search_entities", "entities"],
-  ["evidence.version_claims", "version_claims"],
-  ["evidence.claim_timeline", "claim_timeline"],
-  ["evidence.products", "products"],
-  ["evidence.datasets", "datasets"],
-  ["evidence.benchmarks", "benchmarks"],
-  ["evidence.quota", "quota"],
-  ["evidence.entitlements", "entitlements"],
-  ["evidence.usage", "usage"],
-  ["evidence.create_research", "research_create"],
-  ["evidence.get_research", "research_get"],
-  ["evidence.get_research_artifact", "research_artifact"],
-  ["evidence.create_export", "export_create"],
-  ["evidence.get_export", "export_get"],
-  ["evidence.get_export_artifact", "export_artifact"],
-  ["evidence.list_webhooks", "webhooks_list"],
-  ["evidence.webhook_availability", "webhooks_availability"],
-  ["evidence.create_webhook", "webhooks_create"],
-  ["evidence.set_webhook_status", "webhooks_status"],
-  ["evidence.webhook_health", "webhooks_health"],
-  ["evidence.webhook_history", "webhooks_history"],
-  ["evidence.rotate_webhook_secret", "webhooks_rotate"],
-  ["evidence.replay_webhook_delivery", "webhooks_replay"],
-  ["evidence.send_webhook_test", "webhooks_test"],
-] as const satisfies ReadonlyArray<readonly [string, AgentDataOperation]>;
+  ["evidence_status", "evidence.status", "status"],
+  ["evidence_sources", "evidence.sources", "sources"],
+  ["evidence_source_registry", "evidence.source_registry", "source_registry"],
+  ["evidence_search", "evidence.search", "search"],
+  ["evidence_semantic_search", "evidence.semantic_search", "semantic_search"],
+  [
+    "evidence_universal_search",
+    "evidence.universal_search",
+    "universal_search",
+  ],
+  ["evidence_document", "evidence.document", "document"],
+  ["evidence_changes", "evidence.changes", "changes"],
+  ["evidence_verify_claim", "evidence.verify_claim", "verify"],
+  ["evidence_search_entities", "evidence.search_entities", "entities"],
+  ["evidence_version_claims", "evidence.version_claims", "version_claims"],
+  ["evidence_claim_timeline", "evidence.claim_timeline", "claim_timeline"],
+  ["evidence_products", "evidence.products", "products"],
+  ["evidence_datasets", "evidence.datasets", "datasets"],
+  ["evidence_benchmarks", "evidence.benchmarks", "benchmarks"],
+  ["evidence_quota", "evidence.quota", "quota"],
+  ["evidence_entitlements", "evidence.entitlements", "entitlements"],
+  ["evidence_usage", "evidence.usage", "usage"],
+  ["evidence_create_research", "evidence.create_research", "research_create"],
+  ["evidence_get_research", "evidence.get_research", "research_get"],
+  [
+    "evidence_get_research_artifact",
+    "evidence.get_research_artifact",
+    "research_artifact",
+  ],
+  ["evidence_create_export", "evidence.create_export", "export_create"],
+  ["evidence_get_export", "evidence.get_export", "export_get"],
+  [
+    "evidence_get_export_artifact",
+    "evidence.get_export_artifact",
+    "export_artifact",
+  ],
+  ["evidence_list_webhooks", "evidence.list_webhooks", "webhooks_list"],
+  [
+    "evidence_webhook_availability",
+    "evidence.webhook_availability",
+    "webhooks_availability",
+  ],
+  ["evidence_create_webhook", "evidence.create_webhook", "webhooks_create"],
+  [
+    "evidence_set_webhook_status",
+    "evidence.set_webhook_status",
+    "webhooks_status",
+  ],
+  ["evidence_webhook_health", "evidence.webhook_health", "webhooks_health"],
+  ["evidence_webhook_history", "evidence.webhook_history", "webhooks_history"],
+  [
+    "evidence_rotate_webhook_secret",
+    "evidence.rotate_webhook_secret",
+    "webhooks_rotate",
+  ],
+  [
+    "evidence_replay_webhook_delivery",
+    "evidence.replay_webhook_delivery",
+    "webhooks_replay",
+  ],
+  ["evidence_send_webhook_test", "evidence.send_webhook_test", "webhooks_test"],
+] as const satisfies ReadonlyArray<
+  readonly [string, string, AgentDataOperation]
+>;
 
-const TOOLS = new Map<string, AgentDataOperation>(TOOL_ENTRIES);
+const TOOLS = new Map<string, AgentDataOperation>(
+  TOOL_ENTRIES.flatMap(([name, legacyName, operation]) => [
+    [name, operation],
+    [legacyName, operation],
+  ]),
+);
 const MCP_APP_TOOLS = new Set([
-  "evidence.status",
-  "evidence.sources",
-  "evidence.search",
-  "evidence.semantic_search",
-  "evidence.universal_search",
-  "evidence.verify_claim",
-  "evidence.claim_timeline",
-  "evidence.products",
-  "evidence.datasets",
-  "evidence.benchmarks",
+  "evidence_status",
+  "evidence_sources",
+  "evidence_search",
+  "evidence_semantic_search",
+  "evidence_universal_search",
+  "evidence_verify_claim",
+  "evidence_claim_timeline",
+  "evidence_products",
+  "evidence_datasets",
+  "evidence_benchmarks",
 ]);
 const WRITE_TOOLS = new Set([
-  "evidence.create_research",
-  "evidence.create_export",
-  "evidence.create_webhook",
-  "evidence.set_webhook_status",
-  "evidence.rotate_webhook_secret",
-  "evidence.replay_webhook_delivery",
-  "evidence.send_webhook_test",
+  "evidence_create_research",
+  "evidence_create_export",
+  "evidence_create_webhook",
+  "evidence_set_webhook_status",
+  "evidence_rotate_webhook_secret",
+  "evidence_replay_webhook_delivery",
+  "evidence_send_webhook_test",
 ]);
 const OPEN_WORLD_TOOLS = new Set([
-  "evidence.replay_webhook_delivery",
-  "evidence.send_webhook_test",
+  "evidence_replay_webhook_delivery",
+  "evidence_send_webhook_test",
 ]);
 const WEBHOOK_EVENT_TYPES = [
   "evidence.document.changed",
@@ -92,11 +127,11 @@ const WEBHOOK_EVENT_TYPES = [
   "evidence.usage.budget_reached",
   "evidence.entitlement.status_changed",
 ] as const;
-const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) => {
+const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name, legacyName]) => {
   const definition = {
     name,
-    description: toolDescription(name),
-    inputSchema: toolInputSchema(name),
+    description: toolDescription(legacyName),
+    inputSchema: toolInputSchema(legacyName),
     annotations: {
       readOnlyHint: !WRITE_TOOLS.has(name),
       destructiveHint: false,
@@ -441,7 +476,7 @@ function validateProtocolRequest(
   return "modern";
 }
 
-function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][0]) {
+function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
   const empty = { type: "object", additionalProperties: false, properties: {} };
   const limit = {
     type: "integer",
@@ -597,8 +632,8 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][0]) {
   }
 }
 
-function toolDescription(name: (typeof TOOL_ENTRIES)[number][0]) {
-  const descriptions: Record<(typeof TOOL_ENTRIES)[number][0], string> = {
+function toolDescription(name: (typeof TOOL_ENTRIES)[number][1]) {
+  const descriptions: Record<(typeof TOOL_ENTRIES)[number][1], string> = {
     "evidence.status": "Read product API availability and capability status.",
     "evidence.sources": "List current active public evidence sources.",
     "evidence.source_registry":

@@ -1,3 +1,1 @@
-export const dynamic = "force-static";
-
-export { GET, HEAD } from "@/app/.well-known/mcp/route";
+export { GET, HEAD, OPTIONS, POST } from "@/app/.well-known/mcp/route";

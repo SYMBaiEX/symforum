@@ -39,7 +39,7 @@ const DOCUMENTS = [
 ] as const;
 
 const TOOL = {
-  name: "docs.search",
+  name: "docs_search",
   description:
     "Search the bounded public SYMBaiEX developer and agent documentation index.",
   inputSchema: {
@@ -157,10 +157,10 @@ export async function POST(request: Request) {
   if (body.method === "tools/call") {
     const params = isRecord(body.params) ? body.params : null;
     const input = isRecord(params?.arguments) ? params.arguments : null;
-    if (params?.name !== TOOL.name || !validSearch(input)) {
+    if (!isDocsSearchTool(params?.name) || !validSearch(input)) {
       return rpc(id, undefined, {
         code: -32602,
-        message: "Invalid docs.search arguments",
+        message: "Invalid docs_search arguments",
       });
     }
     const results = search(input.query, input.limit);
@@ -170,6 +170,10 @@ export async function POST(request: Request) {
     });
   }
   return rpc(id, undefined, { code: -32601, message: "Method not found" });
+}
+
+function isDocsSearchTool(name: unknown) {
+  return name === TOOL.name || name === "docs.search";
 }
 
 export function OPTIONS() {

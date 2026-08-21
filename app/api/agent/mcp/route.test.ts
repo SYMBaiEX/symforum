@@ -134,7 +134,7 @@ describe("evidence MCP endpoint", () => {
     );
     const toolPayload = await listed.json();
     const searchTool = toolPayload.result.tools.find(
-      (tool: { name: string }) => tool.name === "evidence.search",
+      (tool: { name: string }) => tool.name === "evidence_search",
     );
     expect(searchTool._meta.ui.resourceUri).toBe(
       "ui://symbaiex/evidence-explorer.html",
@@ -220,39 +220,39 @@ describe("evidence MCP endpoint", () => {
     expect(
       payload.result.tools.map((tool: { name: string }) => tool.name),
     ).toEqual([
-      "evidence.status",
-      "evidence.sources",
-      "evidence.source_registry",
-      "evidence.search",
-      "evidence.semantic_search",
-      "evidence.universal_search",
-      "evidence.document",
-      "evidence.changes",
-      "evidence.verify_claim",
-      "evidence.search_entities",
-      "evidence.version_claims",
-      "evidence.claim_timeline",
-      "evidence.products",
-      "evidence.datasets",
-      "evidence.benchmarks",
-      "evidence.quota",
-      "evidence.entitlements",
-      "evidence.usage",
-      "evidence.create_research",
-      "evidence.get_research",
-      "evidence.get_research_artifact",
-      "evidence.create_export",
-      "evidence.get_export",
-      "evidence.get_export_artifact",
-      "evidence.list_webhooks",
-      "evidence.webhook_availability",
-      "evidence.create_webhook",
-      "evidence.set_webhook_status",
-      "evidence.webhook_health",
-      "evidence.webhook_history",
-      "evidence.rotate_webhook_secret",
-      "evidence.replay_webhook_delivery",
-      "evidence.send_webhook_test",
+      "evidence_status",
+      "evidence_sources",
+      "evidence_source_registry",
+      "evidence_search",
+      "evidence_semantic_search",
+      "evidence_universal_search",
+      "evidence_document",
+      "evidence_changes",
+      "evidence_verify_claim",
+      "evidence_search_entities",
+      "evidence_version_claims",
+      "evidence_claim_timeline",
+      "evidence_products",
+      "evidence_datasets",
+      "evidence_benchmarks",
+      "evidence_quota",
+      "evidence_entitlements",
+      "evidence_usage",
+      "evidence_create_research",
+      "evidence_get_research",
+      "evidence_get_research_artifact",
+      "evidence_create_export",
+      "evidence_get_export",
+      "evidence_get_export_artifact",
+      "evidence_list_webhooks",
+      "evidence_webhook_availability",
+      "evidence_create_webhook",
+      "evidence_set_webhook_status",
+      "evidence_webhook_health",
+      "evidence_webhook_history",
+      "evidence_rotate_webhook_secret",
+      "evidence_replay_webhook_delivery",
+      "evidence_send_webhook_test",
     ]);
     expect(
       payload.result.tools.every(
@@ -271,7 +271,7 @@ describe("evidence MCP endpoint", () => {
       ),
     ).toHaveLength(7);
     const semantic = payload.result.tools.find(
-      (tool: { name: string }) => tool.name === "evidence.semantic_search",
+      (tool: { name: string }) => tool.name === "evidence_semantic_search",
     );
     expect(semantic.inputSchema).toMatchObject({
       additionalProperties: false,
@@ -282,7 +282,7 @@ describe("evidence MCP endpoint", () => {
       },
     });
     const timeline = payload.result.tools.find(
-      (tool: { name: string }) => tool.name === "evidence.claim_timeline",
+      (tool: { name: string }) => tool.name === "evidence_claim_timeline",
     );
     expect(timeline).toMatchObject({
       inputSchema: {
@@ -335,7 +335,7 @@ describe("evidence MCP endpoint", () => {
       .fn()
       .mockResolvedValue(jsonResponse(200, [{ status: "outdated" }]));
     vi.stubGlobal("fetch", fetchMock);
-    const name = "evidence.claim_timeline";
+    const name = "evidence_claim_timeline";
     const response = await POST(
       modernRequest(
         "tools/call",
@@ -363,6 +363,33 @@ describe("evidence MCP endpoint", () => {
     expect((await response.json()).result.content).toEqual([
       { type: "text", text: JSON.stringify([{ status: "outdated" }]) },
     ]);
+  });
+
+  test("accepts legacy dotted product tool names as aliases", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, [{ title: "Legacy search" }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      legacyRequest({
+        jsonrpc: "2.0",
+        id: "legacy-search",
+        method: "tools/call",
+        params: {
+          name: "evidence.search",
+          arguments: { query: "compatibility", limit: 1 },
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      operation: "search",
+      input: { query: "compatibility", limit: 1 },
+    });
   });
 
   test("rejects modern initialize, unsupported versions, and header mismatches explicitly", async () => {
@@ -537,7 +564,7 @@ describe("evidence MCP endpoint", () => {
       .mockResolvedValueOnce(jsonResponse(401, { error: "Invalid token." }));
     vi.stubGlobal("fetch", unauthorizedFetch);
     const unauthorized = await POST(
-      modernToolCall("evidence.status", "invalid-token"),
+      modernToolCall("evidence_status", "invalid-token"),
     );
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get("www-authenticate")).toContain(
@@ -555,7 +582,7 @@ describe("evidence MCP endpoint", () => {
       );
     vi.stubGlobal("fetch", forbiddenFetch);
     const forbidden = await POST(
-      modernToolCall("evidence.status", "missing-scope"),
+      modernToolCall("evidence_status", "missing-scope"),
     );
     expect(forbidden.status).toBe(403);
     expect(forbidden.headers.get("www-authenticate")).toContain(
@@ -648,7 +675,7 @@ function modernToolCall(name: string, token: string) {
 }
 
 function modernSemanticToolCall(argumentsValue: Record<string, unknown>) {
-  const name = "evidence.semantic_search";
+  const name = "evidence_semantic_search";
   return new Request("https://www.symbaiex.com/api/agent/mcp", {
     method: "POST",
     headers: {

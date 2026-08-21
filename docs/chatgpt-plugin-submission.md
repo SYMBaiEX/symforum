@@ -45,7 +45,7 @@ perform writes.
    `OPENAI_APPS_CHALLENGE_TOKEN` in the production Vercel project and redeploy.
    The route at `/.well-known/openai-apps-challenge` returns 404 until a valid
    token is configured and returns only the token after configuration.
-4. Scan tools and confirm the only discovered tool is `docs.search`, with all
+4. Scan tools and confirm the only discovered tool is `docs_search`, with all
    three annotations and its output schema.
 5. Import `chatgpt-app-submission.json`, run all eight review cases, choose the
    supported countries, review the policy attestations, and submit for review.
