@@ -360,7 +360,7 @@ function secureAssetResponse(response: Response) {
   if (contentType.includes("text/html")) {
     headers.set(
       "Content-Security-Policy",
-      "default-src 'none'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+      "default-src 'none'; base-uri 'none'; connect-src 'self' https://forum.symbaiex.com https://www.symbaiex.com; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
     );
     headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
   }

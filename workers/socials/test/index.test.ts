@@ -127,6 +127,23 @@ describe("socials worker", () => {
       'href="/images/pets/signal-moth-optimized.webp"',
     );
     expect(LANDING_PAGE).toContain('rel="preload"');
+    for (const origin of [
+      "https://forum.symbaiex.com",
+      "https://www.symbaiex.com",
+    ]) {
+      expect(LANDING_PAGE).toContain(
+        `<link rel="preconnect" href="${origin}" />`,
+      );
+    }
+    for (const origin of [
+      "https://x.com",
+      "https://github.com",
+      "https://www.linkedin.com",
+    ]) {
+      expect(LANDING_PAGE).toContain(
+        `<link rel="dns-prefetch" href="${origin}" />`,
+      );
+    }
     expect(LANDING_PAGE).toContain('src="/signal-moth.js"');
     expect(LANDING_PAGE).toContain('href="/signal-moth.css"');
     expect(SIGNAL_MOTH_STYLES).toContain("signal-moth-patrol 32s");
@@ -181,6 +198,9 @@ describe("socials worker", () => {
     expect(response.headers.get("x-frame-options")).toBe("DENY");
     expect(response.headers.get("content-security-policy")).toContain(
       "script-src 'self'",
+    );
+    expect(response.headers.get("content-security-policy")).toContain(
+      "connect-src 'self' https://forum.symbaiex.com https://www.symbaiex.com",
     );
     expect(response.headers.get("cache-control")).toBe(
       "no-cache, no-store, must-revalidate",
