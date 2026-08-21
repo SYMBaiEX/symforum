@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,14 @@ const WEBHOOK_SECRET = "test-webhook-secret";
 const NOW_SECONDS = 1_787_200_000;
 const LANDING_PAGE = readFileSync(
   new URL("../public/index.html", import.meta.url),
+  "utf8",
+);
+const SIGNAL_MOTH_SCRIPT = readFileSync(
+  new URL("../public/signal-moth.js", import.meta.url),
+  "utf8",
+);
+const SIGNAL_MOTH_STYLES = readFileSync(
+  new URL("../public/signal-moth.css", import.meta.url),
   "utf8",
 );
 
@@ -114,6 +122,26 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).toContain("white-space: nowrap");
     expect(LANDING_PAGE).toContain("text-align: center");
     expect(LANDING_PAGE).toContain("<h1>SYMBiEX's Socials</h1>");
+    expect(LANDING_PAGE).toContain('class="signal-moth-track"');
+    expect(LANDING_PAGE).toContain('src="/signal-moth.js"');
+    expect(LANDING_PAGE).toContain('href="/signal-moth.css"');
+    expect(SIGNAL_MOTH_STYLES).toContain("signal-moth-patrol 32s");
+    expect(SIGNAL_MOTH_STYLES).toContain("prefers-reduced-motion: reduce");
+    expect(SIGNAL_MOTH_SCRIPT).toContain(
+      '["waving", "jumping", "waiting", "review", "failed"]',
+    );
+    expect(SIGNAL_MOTH_SCRIPT).toContain(
+      'addEventListener("click", playAction)',
+    );
+    expect(SIGNAL_MOTH_SCRIPT).not.toMatch(/console\.|debugger/);
+    for (const asset of [
+      "../public/signal-moth.js",
+      "../public/signal-moth.css",
+      "../public/images/pets/signal-moth-thumb.webp",
+      "../public/images/pets/signal-moth-optimized.webp",
+    ]) {
+      expect(existsSync(new URL(asset, import.meta.url))).toBe(true);
+    }
     expect(LANDING_PAGE).not.toContain("text-shadow:");
     expect(LANDING_PAGE).not.toContain("box-shadow:");
     expect(LANDING_PAGE).toContain("justify-content: flex-end");
@@ -147,7 +175,7 @@ describe("socials worker", () => {
     expect(await response.text()).toContain("socials");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
     expect(response.headers.get("content-security-policy")).toContain(
-      "script-src 'none'",
+      "script-src 'self'",
     );
     expect(response.headers.get("cache-control")).toBe(
       "no-cache, no-store, must-revalidate",
