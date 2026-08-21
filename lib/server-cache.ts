@@ -89,3 +89,12 @@ export function readThroughServerCache<T>(
 
   return promise;
 }
+
+export async function invalidateServerCache(...keys: string[]) {
+  for (const key of keys) {
+    serverCache.delete(key);
+  }
+  if (process.env.VERCEL === "1") {
+    await Promise.all(keys.map((key) => runtimeCache.delete(key)));
+  }
+}

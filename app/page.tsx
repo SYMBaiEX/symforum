@@ -3,7 +3,7 @@ import { EntryRow } from "@/components/entry-row";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
-import { getFeaturedPost } from "@/lib/blog-data";
+import { getLatestPost } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import katex from "katex";
 import Link from "next/link";
@@ -57,8 +57,8 @@ function HomeIntro() {
 }
 
 async function HomeContent() {
-  const [featured, dailyNews] = await Promise.all([
-    getFeaturedPost(),
+  const [latestPost, dailyNews] = await Promise.all([
+    getLatestPost(),
     getDailyNews(5),
   ]);
 
@@ -67,8 +67,8 @@ async function HomeContent() {
       <section className="page-frame page-frame-spacious">
         <SectionHeader title="Latest blog" divided={false} />
         <div className="mt-8">
-          {featured ? (
-            <EntryRow post={featured} divided={false} compact />
+          {latestPost ? (
+            <EntryRow post={latestPost} divided={false} compact />
           ) : (
             <div className="border-y border-row-border py-6 font-mono text-xs uppercase text-muted-foreground">
               No published posts yet.

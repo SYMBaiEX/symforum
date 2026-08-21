@@ -68,6 +68,24 @@ export const getFeaturedPost = cache(async function getFeaturedPost() {
   }
 });
 
+/** The homepage's "Latest blog" slot always follows publication time. */
+export const getLatestPost = cache(async function getLatestPost() {
+  const convex = getServerConvexClient();
+  if (convex === null) {
+    return blogPosts[0] ?? null;
+  }
+
+  try {
+    // Deliberately bypass the shared editorial cache: a successful publish must
+    // be visible in the homepage's latest slot on its very next request.
+    const posts = await convex.query(convexRefs.posts.listPublished, {});
+    return posts[0] ? toBlogPost(posts[0]) : null;
+  } catch (error) {
+    console.warn("Falling back to static latest post", error);
+    return blogPosts[0] ?? null;
+  }
+});
+
 export const getBlogPost = cache(async function getBlogPost(slug: string) {
   const convex = getServerConvexClient();
   if (convex === null) {

@@ -8,6 +8,7 @@ import {
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
 import { notifyIndexNow } from "@/lib/indexnow";
+import { invalidateBlogCache } from "@/lib/blog-cache-invalidation";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { after } from "next/server";
 
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
       tokenHash,
       post,
     });
+    if (savedPost) {
+      await invalidateBlogCache(savedPost.slug);
+    }
     if (savedPost?.status === "published") {
       after(() =>
         notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(savedPost.slug)}`)], {

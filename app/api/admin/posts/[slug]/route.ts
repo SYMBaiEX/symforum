@@ -10,6 +10,7 @@ import {
   tokenHashFromRequest,
 } from "@/lib/admin-api-server";
 import { notifyIndexNow } from "@/lib/indexnow";
+import { invalidateBlogCache } from "@/lib/blog-cache-invalidation";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { after } from "next/server";
 
@@ -62,6 +63,9 @@ export async function PATCH(
       tokenHash,
       post,
     });
+    if (savedPost) {
+      await invalidateBlogCache(savedPost.slug);
+    }
     if (savedPost?.status === "published" || existing.status === "published") {
       const resolvedSlug = savedPost?.slug ?? slug;
       after(() =>
@@ -103,6 +107,7 @@ export async function DELETE(
       slug,
     });
     if (result.deleted) {
+      await invalidateBlogCache(slug);
       after(() =>
         notifyIndexNow([primarySiteUrl(`/blog/${encodeURIComponent(slug)}`)], {
           context: {

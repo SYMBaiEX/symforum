@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { readThroughServerCache } from "./server-cache";
+import { invalidateServerCache, readThroughServerCache } from "./server-cache";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -49,5 +49,20 @@ describe("server cache", () => {
     ).resolves.toBe("recovered");
 
     expect(attempts).toBe(2);
+  });
+
+  test("invalidates a local cached value before the next read", async () => {
+    vi.stubEnv("VERCEL", "");
+    const key = `test:invalidate:${crypto.randomUUID()}`;
+    let value = "before";
+    const load = async () => value;
+
+    await expect(readThroughServerCache(key, 60_000, load)).resolves.toBe("before");
+    value = "after";
+    await expect(readThroughServerCache(key, 60_000, load)).resolves.toBe("before");
+
+    await invalidateServerCache(key);
+
+    await expect(readThroughServerCache(key, 60_000, load)).resolves.toBe("after");
   });
 });
