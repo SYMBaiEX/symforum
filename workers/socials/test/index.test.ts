@@ -120,6 +120,9 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).not.toContain('id="links-title"');
     expect(LANDING_PAGE).not.toContain(".links-heading");
     expect(LANDING_PAGE).toContain('aria-label="Social profiles"');
+    expect(LANDING_PAGE).not.toContain('class="index"');
+    expect(LANDING_PAGE).not.toContain(".index {");
+    expect(LANDING_PAGE).toContain("overflow-wrap: anywhere");
     expect(
       LANDING_PAGE.match(/class="signal-link"\s+data-accent=/g),
     ).toHaveLength(6);

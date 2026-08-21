@@ -103,7 +103,7 @@
 
       .signal-link {
         display: grid;
-        grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 1rem;
         min-height: 4.65rem;
@@ -155,16 +155,6 @@
         background: var(--violet);
       }
 
-      .index {
-        color: var(--muted);
-        font-size: 0.68rem;
-      }
-
-      .signal-link:hover .index,
-      .signal-link:focus-visible .index {
-        color: currentColor;
-      }
-
       .network {
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
         font-size: clamp(1.45rem, 3.5vw, 2.25rem);
@@ -209,12 +199,43 @@
 
       @media (max-width: 720px) {
         .shell {
-          width: min(100% - 1.25rem, 56rem);
+          width: min(100% - 2rem, 56rem);
+        }
+
+        .masthead {
+          padding: 2.5rem 0 1.5rem;
+        }
+
+        .masthead h1 {
+          font-size: clamp(1.75rem, 8vw, 2.4rem);
+        }
+
+        main {
+          padding-top: 0.75rem;
         }
 
         .signal-link {
-          grid-template-columns: 2.25rem minmax(0, 1fr) auto;
-          min-height: 4.5rem;
+          min-height: 4.75rem;
+          padding: 0.8rem 0.75rem;
+        }
+
+        .signal-link:hover,
+        .signal-link:focus-visible {
+          padding-right: 0.75rem;
+          padding-left: 0.75rem;
+        }
+
+        .network {
+          font-size: clamp(1.6rem, 7vw, 2rem);
+        }
+
+        .handle {
+          overflow-wrap: anywhere;
+          line-height: 1.45;
+        }
+
+        footer {
+          padding: 1.25rem 0 0.5rem;
         }
       }
 
@@ -247,7 +268,6 @@
                 href="https://x.com/SYMBiEX"
                 rel="me noopener noreferrer"
               >
-                <span class="index">01</span>
                 <span class="network"
                   >X <span class="handle">@SYMBiEX</span></span
                 >
@@ -261,7 +281,6 @@
                 href="https://github.com/SYMBaiEX"
                 rel="me noopener noreferrer"
               >
-                <span class="index">02</span>
                 <span class="network"
                   >GitHub <span class="handle">@SYMBaiEX</span></span
                 >
@@ -275,7 +294,6 @@
                 href="https://www.linkedin.com/in/austinhamiltonal"
                 rel="me noopener noreferrer"
               >
-                <span class="index">03</span>
                 <span class="network"
                   >LinkedIn <span class="handle">Austin Hamilton</span></span
                 >
@@ -288,7 +306,6 @@
                 data-accent="orange"
                 href="https://forum.symbaiex.com/"
               >
-                <span class="index">04</span>
                 <span class="network"
                   >Forum <span class="handle">forum.symbaiex.com</span></span
                 >
@@ -301,7 +318,6 @@
                 data-accent="blue"
                 href="https://www.symbaiex.com/"
               >
-                <span class="index">05</span>
                 <span class="network"
                   >Website <span class="handle">symbaiex.com</span></span
                 >
@@ -314,7 +330,6 @@
                 data-accent="violet"
                 href="mailto:austin@symbaiex.com?subject=SYMBiEX%20social%20contact"
               >
-                <span class="index">06</span>
                 <span class="network"
                   >Email <span class="handle">austin@symbaiex.com</span></span
                 >
