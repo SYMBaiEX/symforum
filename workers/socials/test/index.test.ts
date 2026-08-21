@@ -110,6 +110,9 @@ describe("socials worker", () => {
   it("keeps the compact portrait layout and current contact details", () => {
     expect(LANDING_PAGE).toContain("/about-symbiex-portrait-dark.webp");
     expect(LANDING_PAGE).toContain("mailto:austin@symbaiex.com");
+    expect(LANDING_PAGE).toContain("white-space: nowrap");
+    expect(LANDING_PAGE).not.toContain("text-shadow:");
+    expect(LANDING_PAGE).not.toContain("box-shadow:");
     expect(
       LANDING_PAGE.match(/class="signal-link"\s+data-accent=/g),
     ).toHaveLength(6);

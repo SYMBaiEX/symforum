@@ -77,22 +77,17 @@
 
       .masthead {
         display: grid;
-        grid-template-columns: clamp(7.5rem, 18vw, 10rem) minmax(0, 1fr);
+        grid-template-columns: clamp(6rem, 14vw, 8rem) minmax(0, 1fr);
         align-items: center;
-        gap: clamp(2rem, 6vw, 4.5rem);
+        gap: clamp(1.25rem, 4vw, 3rem);
         padding: clamp(2rem, 5vw, 3.5rem) 0;
         border-bottom: 1px solid var(--ink);
       }
 
       .portrait {
-        position: relative;
         margin: 0;
         aspect-ratio: 4 / 5;
         border: 1px solid var(--ink);
-        box-shadow:
-          0.55rem 0.55rem 0 var(--pink),
-          -0.35rem -0.35rem 0 var(--cyan);
-        transform: rotate(-1.5deg);
       }
 
       .portrait img {
@@ -105,18 +100,11 @@
       .masthead h1 {
         margin: 0;
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(3rem, 8vw, 5.8rem);
+        font-size: clamp(1.5rem, 5.45vw, 4.75rem);
         font-weight: 400;
-        letter-spacing: -0.055em;
-        line-height: 0.88;
-      }
-
-      .masthead h1 span {
-        display: block;
-        width: fit-content;
-        margin-top: 0.08em;
-        color: var(--pink);
-        text-shadow: 0.055em 0.055em 0 var(--cyan);
+        letter-spacing: -0.05em;
+        line-height: 1;
+        white-space: nowrap;
       }
 
       .links-heading {
@@ -251,15 +239,9 @@
         }
 
         .masthead {
-          grid-template-columns: 6.75rem minmax(0, 1fr);
-          gap: 1.25rem;
+          grid-template-columns: 4.5rem minmax(0, 1fr);
+          gap: 0.9rem;
           padding: 1.75rem 0;
-        }
-
-        .portrait {
-          box-shadow:
-            0.35rem 0.35rem 0 var(--pink),
-            -0.2rem -0.2rem 0 var(--cyan);
         }
 
         footer {
@@ -294,7 +276,7 @@
             alt="Stylized SYMBaiEX portrait in a neon city scene"
             width="960"
             height="1200"
-            decoding="async"
+            fetchpriority="high"
           />
         </figure>
         <h1>SYMBiEX's <span>Socials</span></h1>
