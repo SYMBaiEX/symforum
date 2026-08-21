@@ -943,6 +943,14 @@ describe("forum notification preferences", () => {
       body: [
         "[b]Why this matters[/b]",
         "A sourced release is more useful when the thread also gives readers a practical way to evaluate it.",
+        "Readers can compare the stated behavior with the primary source.",
+        "They can record the environment used for each observation.",
+        "They can separate measured results from interpretation.",
+        "They can note any assumptions that affect the result.",
+        "They can repeat the same check after a version change.",
+        "They can preserve the evidence needed for review.",
+        "They can report uncertainty without inventing precision.",
+        "They can stop when the source does not support a conclusion.",
         "",
         "[b]What to check[/b]",
         "[list][*]Read the original notes.[*]Verify the documented tradeoffs.[*]Share a reproducible result.[/list]",
@@ -954,6 +962,7 @@ describe("forum notification preferences", () => {
       ].join("\n"),
       candidateCount: 12,
       categorySlug: "ai-prompts",
+      groundingScore: 100,
       inputTokens: 900,
       outputTokens: 500,
       poll: {
@@ -1034,6 +1043,7 @@ describe("forum notification preferences", () => {
       status: "passed",
       threadId: published.threadId,
       aiAuthorshipDisclosed: true,
+      citationCoverageScore: 100,
       flags: [],
     });
 

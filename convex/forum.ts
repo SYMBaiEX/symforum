@@ -9973,6 +9973,7 @@ export const publishSukiForumThread = internalMutation({
       title,
       body,
       sourceUrls: sources.map((source) => source.sourceUrl),
+      validatedCitationCoverageScore: args.groundingScore,
     };
     const qualityGate = await requireAutomatedResearchPublication(
       ctx,

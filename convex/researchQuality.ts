@@ -157,6 +157,8 @@ export type AutomatedResearchCandidate = {
   title: string;
   body: string;
   sourceUrls: string[];
+  /** Deterministic claim-ledger grounding score from the editorial gate. */
+  validatedCitationCoverageScore?: number;
 };
 
 export class ResearchQualityGateError extends Error {
@@ -189,11 +191,15 @@ async function scoreDraft(ctx: MutationCtx, candidate: AutomatedResearchCandidat
   const terms = normalizedTerms(candidate.title, candidate.body);
   const domains = sourceDomains(candidate.body, candidate.sourceUrls);
   const claims = claimEstimate(candidate.body);
-  // One independently-hosted source is enough for a compact factual brief;
-  // longer drafts need more source coverage. This is deliberately bounded and
-  // deterministic, never a model judgement.
+  // New automated publications reach this gate only after the deterministic
+  // claim ledger has checked body coverage and each cited factual token. Use
+  // that stronger signal when present. The legacy domain heuristic remains a
+  // fail-closed fallback for manual evaluations and older callers.
   const expectedSources = Math.max(1, Math.ceil(claims / 4));
-  const coverage = Math.min(100, Math.round((domains.size / expectedSources) * 100));
+  const legacyCoverage = Math.min(100, Math.round((domains.size / expectedSources) * 100));
+  const coverage = candidate.validatedCitationCoverageScore === undefined
+    ? legacyCoverage
+    : Math.max(0, Math.min(100, Math.round(candidate.validatedCitationCoverageScore)));
   const candidates = await publishedCandidates(ctx, candidate.categoryId);
   const originality = scoreOriginality(terms, candidates);
   const disclosed = author?.isAgent !== true || AI_DISCLOSURE.test(`${candidate.title}\n${candidate.body}`);
