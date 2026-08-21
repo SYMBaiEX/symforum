@@ -7,7 +7,7 @@
   "homepage": "https://www.symbaiex.com/agent/instructions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SYMBaiEX/symbaiex-agent-clients.git",
+    "url": "git+https://github.com/SYMBaiEX/symbaiex-agent-clients.git",
     "directory": "packages/agent-sdk"
   },
   "bugs": "https://github.com/SYMBaiEX/symbaiex-agent-clients/issues",
@@ -35,6 +35,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",

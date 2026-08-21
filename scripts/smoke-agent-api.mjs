@@ -60,24 +60,33 @@ async function publicSmoke() {
     "Custom agent authentication metadata is missing or overclaims OAuth support.",
   );
   await request("GET", "/v1/status", null, null, 401);
-  const missingBearer = await requestDetailed(
+  const publicTools = await requestDetailed(
     "POST",
     "/mcp",
     modernMessage("tools/list", 1),
     null,
-    401,
+    200,
     false,
     modernHeaders("tools/list"),
   );
-  assertAuthChallenge(missingBearer.response, 401);
+  assert(
+    Array.isArray(publicTools.payload?.result?.tools) &&
+      publicTools.payload.result.tools.some(
+        (tool) => tool?.name === "evidence.search",
+      ),
+    "Public MCP discovery did not include evidence.search.",
+  );
   const invalidBearer = await requestDetailed(
     "POST",
     "/mcp",
-    modernMessage("tools/list", 2),
+    modernMessage("tools/call", 2, {
+      name: "evidence.status",
+      arguments: {},
+    }),
     "Bearer invalid-public-smoke-token",
     401,
     false,
-    modernHeaders("tools/list"),
+    modernHeaders("tools/call", "evidence.status"),
   );
   assertAuthChallenge(invalidBearer.response, 401);
   assert(
@@ -94,8 +103,8 @@ async function publicSmoke() {
       openapi: "ok",
       protectedResourceMetadata: "custom-ed25519",
       unauthenticatedRest: 401,
-      unauthenticatedMcp: 401,
-      invalidBearerMcp: 401,
+      publicMcpDiscovery: 200,
+      invalidBearerMcpToolCall: 401,
       paymentAccepted: false,
       graphql: false,
     }),

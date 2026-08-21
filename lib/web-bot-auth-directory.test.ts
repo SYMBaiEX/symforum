@@ -53,6 +53,8 @@ describe("Web Bot Auth directory keysets", () => {
       crv: "Ed25519",
       x: RETIRING_X,
       kid: "retiring-thumbprint",
+      nbf: Math.floor((NOW - 60_000) / 1_000),
+      exp: Math.floor((NOW + 60_000) / 1_000),
     });
   });
 

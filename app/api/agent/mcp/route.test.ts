@@ -88,14 +88,13 @@ describe("evidence MCP endpoint", () => {
     expect(response.status).toBe(204);
   });
 
-  test("advertises protected-resource metadata on GET", async () => {
+  test("keeps unsupported GET separate from authenticated tool calls", async () => {
     const response = GET(new Request("https://www.symbaiex.com/api/agent/mcp"));
-    expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toContain(
-      'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
-    );
+    expect(response.status).toBe(405);
+    expect(response.headers.get("www-authenticate")).toBeNull();
     expect(await response.json()).toMatchObject({
-      code: "AGENT_AUTH_REQUIRED",
+      code: "METHOD_NOT_ALLOWED",
+      resolution: expect.stringContaining("tools/list without credentials"),
     });
   });
 

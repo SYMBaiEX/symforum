@@ -13,6 +13,9 @@ describe("unknown agent API routes", () => {
     await expect(response.json()).resolves.toMatchObject({
       title: "Agent API route not found",
       status: 404,
+      code: "AGENT_API_ROUTE_NOT_FOUND",
+      message: expect.stringContaining("not published"),
+      resolution: expect.stringContaining("OpenAPI"),
       openapi: "https://www.symbaiex.com/api/agent/openapi.json",
     });
   });

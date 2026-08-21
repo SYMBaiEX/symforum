@@ -42,7 +42,7 @@ export const AGENT_SKILLS_INDEX = {
   specification: "https://agentskills.io/specification",
   repository: "https://github.com/SYMBaiEX/skills",
   whenToUse:
-    "Use SYMBaiEX skills for owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
+    "When to use SYMBaiEX: use these skills for owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
   doNotUseFor: [
     "general web search",
     "private data retrieval",
@@ -178,6 +178,17 @@ export const AI_CATALOG = {
   },
   entries: [
     {
+      identifier: "urn:air:symbaiex.com:a2a:documentation",
+      displayName: "SYMBaiEX Documentation A2A Agent",
+      type: "application/json",
+      url: primarySiteUrl("/.well-known/agent-card.json"),
+      description:
+        "Public read-only A2A lookup over curated SYMBaiEX developer documentation.",
+      tags: ["a2a", "documentation", "developer"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("a2a-documentation"),
+    },
+    {
       identifier: "urn:air:symbaiex.com:mcp:evidence",
       displayName: "SYMBaiEX Evidence MCP",
       type: "application/mcp-server-card+json",
@@ -264,7 +275,7 @@ function catalogTrustManifest(artifact: string) {
       verificationMethods: ["https", "dns"],
     },
     privacyPolicyUrl: primarySiteUrl("/privacy"),
-    termsOfServiceUrl: primarySiteUrl("/agent/instructions"),
+    termsOfServiceUrl: primarySiteUrl("/terms"),
   } as const;
 }
 

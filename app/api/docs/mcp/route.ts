@@ -51,6 +51,28 @@ const TOOL = {
       limit: { type: "integer", minimum: 1, maximum: 4, default: 4 },
     },
   },
+  outputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["results"],
+    properties: {
+      results: {
+        type: "array",
+        maxItems: 4,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["uri", "name", "description", "score"],
+          properties: {
+            uri: { type: "string", format: "uri", maxLength: 300 },
+            name: { type: "string", minLength: 1, maxLength: 120 },
+            description: { type: "string", minLength: 1, maxLength: 500 },
+            score: { type: "integer", minimum: 1, maximum: 16 },
+          },
+        },
+      },
+    },
+  },
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,

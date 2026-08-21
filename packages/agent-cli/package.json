@@ -7,7 +7,7 @@
   "homepage": "https://www.symbaiex.com/agent/instructions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SYMBaiEX/symbaiex-agent-clients.git",
+    "url": "git+https://github.com/SYMBaiEX/symbaiex-agent-clients.git",
     "directory": "packages/agent-cli"
   },
   "bugs": "https://github.com/SYMBaiEX/symbaiex-agent-clients/issues",
@@ -29,6 +29,9 @@
   ],
   "engines": {
     "bun": ">=1.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "bun build bin/symbaiex.ts --target bun --format esm --outfile dist/symbaiex.js",

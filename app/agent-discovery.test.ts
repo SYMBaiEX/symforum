@@ -34,6 +34,9 @@ describe("agent discovery surfaces", () => {
         expect.objectContaining({
           url: "https://www.symbaiex.com/api/docs/mcp/server-card",
         }),
+        expect.objectContaining({
+          url: "https://www.symbaiex.com/.well-known/agent-card.json",
+        }),
       ]),
     );
     expect(
@@ -113,7 +116,7 @@ describe("agent discovery surfaces", () => {
 
     expect(index.skills).toHaveLength(PUBLIC_AGENT_SKILLS.length);
     expect(index.skills).toHaveLength(5);
-    expect(index.whenToUse).toContain("Use SYMBaiEX skills");
+    expect(index.whenToUse).toContain("When to use SYMBaiEX");
     for (const skill of index.skills) {
       expect(skill.description).toMatch(/Use (for|when)/);
       expect(skill.url).toMatch(

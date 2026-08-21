@@ -57,6 +57,13 @@ describe("public documentation MCP", () => {
     expect(body.result.tools[0]).toMatchObject({
       name: "docs.search",
       inputSchema: { additionalProperties: false },
+      outputSchema: {
+        additionalProperties: false,
+        required: ["results"],
+        properties: {
+          results: { type: "array", maxItems: 4 },
+        },
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

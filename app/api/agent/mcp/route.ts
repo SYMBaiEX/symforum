@@ -344,15 +344,15 @@ export function OPTIONS(request: Request) {
 }
 
 export function GET(request: Request) {
-  return mcpAuthJson(
+  return mcpJson(
     request,
     {
-      error: "Use an authenticated MCP client for evidence tool calls.",
-      code: "AGENT_AUTH_REQUIRED",
+      error: "Use POST with a JSON-RPC MCP request.",
+      code: "METHOD_NOT_ALLOWED",
       resolution:
-        "Read /auth.md, then use POST JSON-RPC initialize and tools/list before an authenticated tools/call.",
+        "POST initialize and tools/list without credentials; only tools/call requires an owner-approved Ed25519 bearer.",
     },
-    401,
+    405,
   );
 }
 

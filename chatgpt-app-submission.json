@@ -1,0 +1,92 @@
+{
+  "$schema": "https://developers.openai.com/plugins/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "SYMBaiEX Docs",
+    "subtitle": "Search developer docs",
+    "description": "SYMBaiEX Docs searches curated public documentation for agent enrollment, Ed25519 authentication, evidence APIs, MCP usage, quotas, research jobs, exports, and signed webhooks.",
+    "category": "DEVELOPER_TOOLS"
+  },
+  "tools": {
+    "docs.search": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches a fixed public documentation index and does not create or update records.",
+        "open_world_justification": "Does not publish content, send messages, or modify any third-party system.",
+        "destructive_justification": "Cannot delete, overwrite, revoke access, or perform an irreversible action."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Find the agent enrollment procedure.",
+      "user_prompt": "How do I enroll an Ed25519 agent with SYMBaiEX?",
+      "file_attachment_urls": null,
+      "tools_triggered": "docs.search",
+      "expected_output": "Returns the public authentication and enrollment documentation with canonical links.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Locate the evidence API contract.",
+      "user_prompt": "Where is the SYMBaiEX evidence API contract?",
+      "file_attachment_urls": null,
+      "tools_triggered": "docs.search",
+      "expected_output": "Returns the developer guide and live agent API manifest or OpenAPI documentation.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Explain research jobs and exports.",
+      "user_prompt": "How do SYMBaiEX research jobs and evidence exports work?",
+      "file_attachment_urls": null,
+      "tools_triggered": "docs.search",
+      "expected_output": "Returns the bounded public documentation that explains research jobs, citations, and export behavior.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Find evidence-scope guidance.",
+      "user_prompt": "What does the SYMBaiEX evidence scope allow an agent to do?",
+      "file_attachment_urls": null,
+      "tools_triggered": "docs.search",
+      "expected_output": "Returns the agent instructions and scope boundaries without claiming private or payment capabilities.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Find quota and MCP documentation.",
+      "user_prompt": "How can I inspect SYMBaiEX MCP quotas and current API capabilities?",
+      "file_attachment_urls": null,
+      "tools_triggered": "docs.search",
+      "expected_output": "Returns canonical links to the agent manifest, developer guide, and relevant quota documentation.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not invoke for general web search.",
+      "user_prompt": "Search the whole web for today's AI news.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it only searches curated SYMBaiEX documentation.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not invoke for write operations.",
+      "user_prompt": "Create a webhook subscription for my account.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because the documentation MCP is read-only and cannot manage webhooks.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not invoke for private account data.",
+      "user_prompt": "Show me my private SYMBaiEX account records and tokens.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it exposes only public documentation and has no private account access.",
+      "expected_output_url": null
+    }
+  ]
+}

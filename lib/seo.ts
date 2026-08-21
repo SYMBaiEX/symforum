@@ -121,7 +121,7 @@ export function siteStructuredData() {
         provider: { "@id": `${PRIMARY_SITE_URL}#organization` },
         areaServed: "Worldwide",
         url: `${PRIMARY_SITE_URL}/developers`,
-        termsOfService: `${PRIMARY_SITE_URL}/agent/instructions`,
+        termsOfService: `${PRIMARY_SITE_URL}/terms`,
       },
       {
         "@type": "DataCatalog",

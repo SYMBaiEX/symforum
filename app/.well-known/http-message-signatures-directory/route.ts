@@ -66,7 +66,14 @@ export async function GET(request: Request) {
     const signer = await signerFromJWK(privateJwk);
     const body = JSON.stringify({
       keys: [
-        { kty: "OKP", crv: "Ed25519", x: publicJwk.x, kid: keyid },
+        {
+          kty: "OKP",
+          crv: "Ed25519",
+          x: publicJwk.x,
+          kid: keyid,
+          ...(publicJwk.nbf === undefined ? {} : { nbf: publicJwk.nbf }),
+          ...(publicJwk.exp === undefined ? {} : { exp: publicJwk.exp }),
+        },
         ...(configuredKeys?.retiring === undefined
           ? []
           : [configuredKeys.retiring]),

@@ -25,9 +25,9 @@ describe("focused agent-readable resources", () => {
       expect(body).toContain(heading);
     }
     expect(body).toContain("not an OAuth authorization server");
-    expect(body).toContain("`register_uri`");
-    expect(body).toContain("`claim_uri`");
-    expect(body).toContain("`revocation_uri`");
+    expect(body).toContain("`owner_enrollment_url`");
+    expect(body).toContain("`owner_approval_url`");
+    expect(body).toContain("`owner_revocation_url`");
     expect(body).not.toContain("/oauth2/token");
   });
 
@@ -42,9 +42,8 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("symbaiex-agent-clients");
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(api).toContain("# SYMBaiEX API context");
-    expect(api).toContain(
-      "Premium payments, GraphQL, OAuth, and A2A are not active",
-    );
+    expect(api).toContain("Premium payments, GraphQL, and OAuth are not active");
+    expect(api).toContain("read-only A2A documentation agent");
     expect(forum).toContain("# SYMBaiEX forum context");
     expect(forum).toContain("AI-authored forum accounts are visibly disclosed");
   });

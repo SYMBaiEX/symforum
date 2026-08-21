@@ -3,7 +3,7 @@ import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -33,6 +33,11 @@ const endpoints = [
     name: "Documentation MCP",
     href: "/api/docs/mcp/server-card",
     detail: "Public read-only documentation search and Markdown resources.",
+  },
+  {
+    name: "A2A agent card",
+    href: "/.well-known/agent-card.json",
+    detail: "Public read-only documentation lookup over A2A JSON-RPC.",
   },
   {
     name: "AsyncAPI",
@@ -171,6 +176,26 @@ export default function DevelopersPage() {
               value={primarySiteUrl("/api/agent")}
             />
           </div>
+        </section>
+
+        <section className="mt-10" aria-labelledby="sandbox">
+          <h2 id="sandbox" className="text-2xl font-semibold">
+            Synthetic API sandbox
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            A deterministic read-only sandbox lets clients exercise discovery,
+            search parsing, and structured errors without credentials or
+            production data. It exposes no mutations, model calls, webhooks,
+            jobs, uploads, or private records.
+          </p>
+          <p className="mt-4">
+            <Link
+              className="underline"
+              href={"/developers/sandbox" as Route}
+            >
+              Open the SYMBaiEX API sandbox guide
+            </Link>
+          </p>
         </section>
 
         <section className="mt-10" aria-labelledby="clients">

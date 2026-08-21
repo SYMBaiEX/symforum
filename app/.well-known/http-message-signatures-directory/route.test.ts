@@ -119,5 +119,12 @@ describe("Web Bot Auth key directory", () => {
     expect(response.headers.get("cache-control")).toMatch(
       /^public, max-age=[0-3], s-maxage=[0-3]$/,
     );
+    const body = (await response.json()) as {
+      keys: Array<Record<string, unknown>>;
+    };
+    expect(body.keys[0]).toMatchObject({
+      nbf: Math.floor((now - 1_000) / 1_000),
+      exp: Math.floor((now + 3_000) / 1_000),
+    });
   });
 });

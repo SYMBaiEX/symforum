@@ -1,22 +1,13 @@
 import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
 import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
+import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
-import { HOME_FAQS } from "@/lib/seo";
-import katex from "katex";
 import Link from "next/link";
-
-const identityEquation = katex.renderToString(
-  '\\left(\\text{"}\\mathrm{SYMBiEX}\\text{"}\\right)\\;\\equiv\\;\\mathrm{Symbiosis}+\\mathrm{AI}+\\mathrm{Experiment}\\;\\rightarrow\\;\\mathrm{SYMBaiEX}',
-  {
-    throwOnError: false,
-    output: "html",
-  },
-);
 
 export default function HomePage() {
   return (
@@ -44,51 +35,10 @@ function HomeIntro() {
         </h1>
 
         <div className="mt-4 grid gap-5 md:grid-cols-12 md:items-end">
-          <div
-            role="img"
-            className="overflow-x-auto whitespace-nowrap text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl"
-            aria-label="SYMBiEX equals Symbiosis plus AI plus Experiment, making SYMBaiEX"
-            dangerouslySetInnerHTML={{ __html: identityEquation }}
-          />
-        </div>
-        <div className="mt-8 grid gap-5 text-sm leading-7 text-muted-foreground md:grid-cols-12">
-          <p className="agent-ready-summary md:col-span-5 md:col-start-2">
-            I build public software, AI systems, and research infrastructure
-            with a bias toward inspectable sources, durable identity, and tools
-            that remain useful after the demo ends.
-          </p>
-          <p className="agent-ready-usage md:col-span-5">
-            People can read the site normally. User-directed agents can use
-            clean Markdown, published contracts, and owner-approved API or MCP
-            access without guessing at private backend details.
+          <p className="overflow-x-auto whitespace-nowrap font-mono text-[10px] font-normal leading-none text-foreground sm:text-xs md:col-span-10 md:col-start-2 md:text-xl">
+            SYMBiEX ≡ Symbiosis + AI + Experiment
           </p>
         </div>
-        <nav
-          aria-label="Agent and trust resources"
-          className="mt-6 flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs uppercase"
-        >
-          <Link className="underline underline-offset-4" href="/developers">
-            Developer guide
-          </Link>
-          <Link className="underline underline-offset-4" href="/agent">
-            Agent access
-          </Link>
-          <Link className="underline underline-offset-4" href="/privacy">
-            Privacy
-          </Link>
-          <a
-            className="underline underline-offset-4"
-            href="https://github.com/SYMBaiEX/symbaiex-agent-clients"
-          >
-            Agent clients
-          </a>
-          <a
-            className="underline underline-offset-4"
-            href="https://github.com/SYMBaiEX/skills"
-          >
-            Agent Skills
-          </a>
-        </nav>
       </div>
     </section>
   );
@@ -187,24 +137,7 @@ async function HomeContent() {
         </div>
       </section>
 
-      <section
-        className="page-frame page-frame-bottom"
-        aria-labelledby="symbaiex-faq"
-      >
-        <h2 id="symbaiex-faq" className="text-2xl font-semibold tracking-tight">
-          SYMBaiEX FAQ
-        </h2>
-        <dl className="mt-6 grid gap-6 md:grid-cols-3">
-          {HOME_FAQS.map((faq) => (
-            <div key={faq.question}>
-              <dt className="font-medium text-foreground">{faq.question}</dt>
-              <dd className="mt-2 text-sm leading-6 text-muted-foreground">
-                {faq.answer}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      <HomeFaq />
     </>
   );
 }

@@ -8,6 +8,8 @@ export type PublicEd25519Jwk = {
   crv: "Ed25519";
   x: string;
   kid: string;
+  nbf?: number;
+  exp?: number;
 };
 
 type TimedPublicEd25519Jwk = PublicEd25519Jwk & {
@@ -128,7 +130,14 @@ function isPublicEd25519Jwk(
 }
 
 function stripTimes(value: TimedPublicEd25519Jwk): PublicEd25519Jwk {
-  return { kty: "OKP", crv: "Ed25519", x: value.x, kid: value.kid };
+  return {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: value.x,
+    kid: value.kid,
+    nbf: Math.floor(value.notBefore / 1_000),
+    exp: Math.floor(value.notAfter / 1_000),
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

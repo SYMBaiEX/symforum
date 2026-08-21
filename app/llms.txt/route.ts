@@ -19,6 +19,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Custom Ed25519 enrollment, challenge, credential use, errors, refresh, and revocation without fake OAuth claims.
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
+- [Synthetic API sandbox](${PRIMARY_SITE_URL}/developers/sandbox): Credential-free, read-only fixtures for testing discovery, search parsing, and structured errors without production data or writes.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
  - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
  - [Editorial authority and machine contracts](${PRIMARY_SITE_URL}/research/editorial-trust-and-contracts): Canonical mapping and policy constraints for public discovery surfaces.
@@ -64,6 +65,7 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [RFC 9727 API Catalog](${PRIMARY_SITE_URL}/.well-known/api-catalog): Linkset discovery for the public agent API and contracts.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
 - [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
+- [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
 - [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
 - [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
 - [Public client source](https://github.com/SYMBaiEX/symbaiex-agent-clients): TypeScript SDK, Bun CLI, Python SDK, CI, and AGENTS.md rules.

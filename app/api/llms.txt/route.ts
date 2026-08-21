@@ -12,12 +12,13 @@ The stable public machine surface is ${primarySiteUrl("/api/agent")}. Use the ve
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP: ${primarySiteUrl("/api/docs/mcp/server-card")}
+- Public documentation A2A agent: ${primarySiteUrl("/.well-known/agent-card.json")}
 - Authentication: ${primarySiteUrl("/auth.md")}
 - Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 
 ## Boundaries
 
-Authenticated evidence operations require an owner-approved Ed25519 identity and the evidence scope. Quotas, rate limits, idempotency, visibility joins, and server-side authorization are authoritative. Premium payments, GraphQL, OAuth, and A2A are not active. Public discovery and NLWeb list-mode lookup at ${primarySiteUrl("/ask")} do not create records.
+Authenticated evidence operations require an owner-approved Ed25519 identity and the evidence scope. Quotas, rate limits, idempotency, visibility joins, and server-side authorization are authoritative. Premium payments, GraphQL, and OAuth are not active. The read-only A2A documentation agent at ${primarySiteUrl("/api/a2a")} searches only curated public guidance and does not expose product mutations. Public discovery and NLWeb list-mode lookup at ${primarySiteUrl("/ask")} do not create records.
 `;
 
 export function GET() {
