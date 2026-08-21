@@ -40,15 +40,10 @@ if (signalMoth instanceof HTMLButtonElement) {
     }, durations[nextAction]);
   };
 
-  const readyTimeout = window.setTimeout(() => {
-    signalMoth.classList.add("is-ready");
-  }, 5000);
-
   signalMoth.addEventListener("click", playAction);
   window.addEventListener(
     "pagehide",
     () => {
-      window.clearTimeout(readyTimeout);
       window.clearTimeout(actionTimeout);
     },
     { once: true },

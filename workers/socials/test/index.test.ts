@@ -122,7 +122,11 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).toContain("white-space: nowrap");
     expect(LANDING_PAGE).toContain("text-align: center");
     expect(LANDING_PAGE).toContain("<h1>SYMBiEX's Socials</h1>");
-    expect(LANDING_PAGE).toContain('class="signal-moth-track"');
+    expect(LANDING_PAGE).toContain('class="signal-moth-track is-ready"');
+    expect(LANDING_PAGE).toContain(
+      'href="/images/pets/signal-moth-optimized.webp"',
+    );
+    expect(LANDING_PAGE).toContain('rel="preload"');
     expect(LANDING_PAGE).toContain('src="/signal-moth.js"');
     expect(LANDING_PAGE).toContain('href="/signal-moth.css"');
     expect(SIGNAL_MOTH_STYLES).toContain("signal-moth-patrol 32s");
@@ -133,6 +137,7 @@ describe("socials worker", () => {
     expect(SIGNAL_MOTH_SCRIPT).toContain(
       'addEventListener("click", playAction)',
     );
+    expect(SIGNAL_MOTH_SCRIPT).not.toContain("readyTimeout");
     expect(SIGNAL_MOTH_SCRIPT).not.toMatch(/console\.|debugger/);
     for (const asset of [
       "../public/signal-moth.js",
