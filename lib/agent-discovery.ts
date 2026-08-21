@@ -90,6 +90,30 @@ export const MCP_SERVER_CARD = {
     "Authenticated public evidence search, verification, research jobs, exports, and webhooks.",
   websiteUrl: primarySiteUrl("/developers"),
   version: "1.0.0",
+  serverUrl: AGENT_MCP_RESOURCE,
+  transport: "streamable-http",
+  tools: [
+    {
+      name: "evidence.search",
+      description: "Search current public evidence records.",
+    },
+    {
+      name: "evidence.verify_claim",
+      description: "Verify a stored public claim against citations.",
+    },
+    {
+      name: "evidence.claim_timeline",
+      description: "Read bounded public claim revision history.",
+    },
+    {
+      name: "evidence.create_research",
+      description: "Create a bounded source-cited research job.",
+    },
+    {
+      name: "evidence.universal_search",
+      description: "Search the bounded public editorial and evidence corpus.",
+    },
+  ],
   remotes: [
     {
       type: "streamable-http",
@@ -128,6 +152,14 @@ export const DOCS_MCP_SERVER_CARD = {
   description: "Public read-only SYMBaiEX developer and agent documentation.",
   websiteUrl: primarySiteUrl("/developers"),
   version: "1.0.0",
+  serverUrl: primarySiteUrl("/api/docs/mcp"),
+  transport: "streamable-http",
+  tools: [
+    {
+      name: "docs.search",
+      description: "Search the bounded public SYMBaiEX documentation index.",
+    },
+  ],
   remotes: [
     {
       type: "streamable-http",

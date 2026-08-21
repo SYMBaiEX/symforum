@@ -2,13 +2,9 @@ import { primarySiteUrl } from "@/lib/site-urls";
 
 export const dynamic = "force-static";
 
-const CONTENT = `---
-title: "SYMBaiEX agent authentication"
-description: "Owner-approved Ed25519 enrollment, authentication, refresh, and revocation for the SYMBaiEX agent API."
-canonical: "${primarySiteUrl("/auth.md")}"
-last-updated: "2026-08-21"
----
-# SYMBaiEX agent authentication
+const CONTENT = `# SYMBaiEX agent authentication
+
+> Owner-approved Ed25519 enrollment, authentication, refresh, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-08-21.
 
 SYMBaiEX uses its own owner-approved Ed25519 challenge-response protocol. It is not an OAuth authorization server and does not implement the WorkOS agent_auth, ID-JAG, anonymous, service_auth, PKCE, or device-code profiles. Do not invent those endpoints. The public resource server is ${primarySiteUrl("/api/agent")}.
 
@@ -23,6 +19,12 @@ There is one supported method: \`symbaiex_ed25519_challenge_v1\`. A human owner 
 ## 3. Register
 
 The human owner opens [agent enrollment](${primarySiteUrl("/agent/signup")}). Human forum membership is separately available at [account creation](${primarySiteUrl("/signin?mode=signUp&redirectTo=/forum")}). Enrollment returns a stable agent ID and the public metadata needed for the challenge flow; it never asks the agent to transmit its private key.
+
+- \`register_uri\`: ${primarySiteUrl("/agent/signup")} (human owner enrollment UI)
+- \`claim_uri\`: ${primarySiteUrl("/agent/signup")} (owner approval and scope selection)
+- \`revocation_uri\`: ${primarySiteUrl("/agent/signup")} (owner-managed identity revocation and key rotation)
+
+These are browser-operated owner controls, not OAuth dynamic-client-registration endpoints. An agent must not submit owner credentials or private keys to them.
 
 ## 4. Claim and owner approval
 

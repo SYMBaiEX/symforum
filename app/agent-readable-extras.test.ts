@@ -12,7 +12,7 @@ describe("focused agent-readable resources", () => {
     const body = await response.text();
 
     expect(response.headers.get("content-type")).toContain("text/markdown");
-    expect(body.startsWith("---\n")).toBe(true);
+    expect(body.startsWith("# SYMBaiEX agent authentication\n")).toBe(true);
     for (const heading of [
       "## 1. Discover",
       "## 2. Pick a method",
@@ -25,6 +25,9 @@ describe("focused agent-readable resources", () => {
       expect(body).toContain(heading);
     }
     expect(body).toContain("not an OAuth authorization server");
+    expect(body).toContain("`register_uri`");
+    expect(body).toContain("`claim_uri`");
+    expect(body).toContain("`revocation_uri`");
     expect(body).not.toContain("/oauth2/token");
   });
 

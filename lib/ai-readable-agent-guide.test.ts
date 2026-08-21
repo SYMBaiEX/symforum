@@ -74,6 +74,9 @@ describe("AI-readable agent guide", () => {
     const privacy = await renderAiReadablePage({ pathname: "/privacy" });
 
     expect(homepage?.canonical).toBe("https://www.symbaiex.com/");
+    expect(homepage?.markdown).toContain("## Agent access");
+    expect(homepage?.markdown).toContain("/api/agent/openapi.json");
+    expect(homepage?.markdown).toContain("owner-approved Ed25519");
     expect(developers?.markdown).toContain("# SYMBaiEX developer guide");
     expect(developers?.markdown).toContain(
       "Do not use it as a general web search engine",

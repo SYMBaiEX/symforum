@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const originalSiteUrl = process.env.CONVEX_SITE_URL;
 
@@ -46,11 +46,57 @@ describe("evidence MCP endpoint", () => {
         headers: {
           authorization: "Bearer test",
           origin: "https://evil.example",
+          "content-type": "application/json",
         },
-        body: "{}",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "evidence.status", arguments: {} },
+        }),
       }),
     );
     expect(response.status).toBe(403);
+  });
+
+  test("allows a public handshake from an external client origin", async () => {
+    const initialized = await POST(
+      new Request("https://www.symbaiex.com/api/agent/mcp", {
+        method: "POST",
+        headers: {
+          origin: "https://agent-client.example",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-03-26" },
+        }),
+      }),
+    );
+    expect(initialized.status).toBe(200);
+  });
+
+  test("accepts the standard initialized notification without an id", async () => {
+    const response = await POST(
+      legacyRequest(
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        false,
+      ),
+    );
+    expect(response.status).toBe(204);
+  });
+
+  test("advertises protected-resource metadata on GET", async () => {
+    const response = GET(new Request("https://www.symbaiex.com/api/agent/mcp"));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(
+      'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
+    );
+    expect(await response.json()).toMatchObject({
+      code: "AGENT_AUTH_REQUIRED",
+    });
   });
 
   test("supports public legacy initialization and tool discovery", async () => {

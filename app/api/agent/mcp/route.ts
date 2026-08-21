@@ -160,9 +160,6 @@ type JsonRpcError = {
 };
 
 export async function POST(request: Request) {
-  if (!isAllowedAgentOrigin(request)) {
-    return mcpJson(request, { error: "Origin is not allowed." }, 403);
-  }
   const authorization = bearer(request);
   const length = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(length) && length > AGENT_DATA_MAX_BODY_BYTES) {
@@ -182,6 +179,17 @@ export async function POST(request: Request) {
     return mcpJson(request, { error: "Invalid JSON-RPC request." }, 400);
   }
 
+  if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {
+    return rpc(request, "legacy", null, undefined, {
+      code: -32600,
+      message: "Invalid Request",
+    });
+  }
+
+  if (body.method === "notifications/initialized") {
+    return new Response(null, { status: 204, headers: mcpHeaders(request) });
+  }
+
   if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {
     return rpc(request, protocolEraHint(request, body), null, undefined, {
       code: -32600,
@@ -189,11 +197,9 @@ export async function POST(request: Request) {
     });
   }
   const id = body.id;
-  if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {
-    return rpc(request, "legacy", id, undefined, {
-      code: -32600,
-      message: "Invalid Request",
-    });
+
+  if (body.method === "tools/call" && !isAllowedAgentOrigin(request)) {
+    return mcpJson(request, { error: "Origin is not allowed." }, 403);
   }
 
   const protocol = validateProtocolRequest(request, body, id);
@@ -347,6 +353,21 @@ export function OPTIONS(request: Request) {
     ? new Response(null, { status: 204, headers: mcpHeaders(request) })
     : mcpJson(request, { error: "Origin is not allowed." }, 403);
 }
+
+export function GET(request: Request) {
+  return mcpAuthJson(
+    request,
+    {
+      error: "Use an authenticated MCP client for evidence tool calls.",
+      code: "AGENT_AUTH_REQUIRED",
+      resolution:
+        "Read /auth.md, then use POST JSON-RPC initialize and tools/list before an authenticated tools/call.",
+    },
+    401,
+  );
+}
+
+export const HEAD = GET;
 
 function validateProtocolRequest(
   request: Request,

@@ -95,8 +95,15 @@ describe("agent discovery surfaces", () => {
         }),
       ],
     });
+    expect(card.serverUrl).toBe("https://www.symbaiex.com/api/agent/mcp");
+    expect(card.transport).toBe("streamable-http");
+    expect(card.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "evidence.search" }),
+        expect.objectContaining({ name: "evidence.verify_claim" }),
+      ]),
+    );
     expect(JSON.stringify(card)).not.toContain("oauth2");
-    expect(card).not.toHaveProperty("tools");
     expect(card).not.toHaveProperty("capabilities");
   });
 
