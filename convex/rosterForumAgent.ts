@@ -20,7 +20,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v11-openrouter-laguna-free-deepseek-natural-voice-seeded-style-entropy";
+  "roster-forum-v12-openrouter-ox-alpha-free-router-deepseek-low-reasoning-natural-voice-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;

@@ -1,12 +1,13 @@
 /**
- * Zero-cost OpenRouter routes that passed the production structured tool-use
- * canary on 2026-08-20. Laguna is the predictable primary and the newer
- * Nemotron route provides provider diversity without randomly selecting Gemma.
- * https://openrouter.ai/poolside/laguna-s-2.1:free
+ * Zero-cost OpenRouter routes in explicit failover order. Ox Alpha is the
+ * current capable primary; the capability-aware free router then selects a
+ * free model that supports the request's tools/structured-output contract.
+ * https://openrouter.ai/stealth/ox-alpha
+ * https://openrouter.ai/openrouter/free
  */
 export const OPENROUTER_FREE_GENERATION_MODELS = [
-  "poolside/laguna-s-2.1:free",
-  "nvidia/nemotron-3.5-lightning:free",
+  "stealth/ox-alpha",
+  "openrouter/free",
 ] as const;
 
 /** Stable paid reliability fallback; the `~` alias follows V4 Flash updates. */

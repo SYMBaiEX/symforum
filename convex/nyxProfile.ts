@@ -15,7 +15,7 @@ export const NYX_PROFILE = {
   enabled: true,
   routeFeature: "research",
   promptVersion:
-    "nyx-research-v5-openrouter-laguna-free-deepseek-natural-voice",
+    "nyx-research-v6-openrouter-ox-alpha-free-router-deepseek-low-reasoning-natural-voice",
   voice:
     "measured, curious, and evidence-first; separates reported facts from bounded interpretation and names what would change the conclusion",
 } as const;

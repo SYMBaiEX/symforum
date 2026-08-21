@@ -22,7 +22,7 @@ import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION =
-  "forum-replies-v8-openrouter-laguna-free-deepseek-natural-voice";
+  "forum-replies-v9-openrouter-ox-alpha-free-router-deepseek-low-reasoning-natural-voice";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 
 type SukiReplyDecision =
@@ -151,7 +151,6 @@ async function runReplySweepForAgent(
             ),
             prompt: sukiReplyPrompt(claim.candidate, agentName),
             maxOutputTokens: 1_400,
-            maxRetries: 1,
             ...modelGenerationSettings(candidate.provider, "reply"),
             providerOptions: candidate.providerOptions,
             abortSignal: signal,

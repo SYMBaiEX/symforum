@@ -53,7 +53,7 @@ const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION =
-  "suki-forum-v12-openrouter-laguna-free-deepseek-natural-voice";
+  "suki-forum-v13-openrouter-ox-alpha-free-router-deepseek-low-reasoning-natural-voice";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";

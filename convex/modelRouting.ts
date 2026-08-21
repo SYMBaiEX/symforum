@@ -15,6 +15,7 @@ import {
   type ModelRoutingConfig,
   type RoutedModel,
 } from "../lib/ai-model-routing";
+import { modelGenerationSettings } from "../lib/openrouter-model-profile";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
@@ -56,14 +57,10 @@ export async function convexModelRoutingConfig(
 /** Non-publishing structured smoke test for operators. */
 export const probe = internalAction({
   args: {
-    provider: v.optional(
-      v.literal("openrouter"),
-    ),
+    provider: v.optional(v.literal("openrouter")),
   },
   returns: v.object({
-    provider: v.union(
-      v.literal("openrouter"),
-    ),
+    provider: v.union(v.literal("openrouter")),
     model: v.string(),
     response: v.string(),
   }),
@@ -106,10 +103,7 @@ export const runStructuredCanary = internalAction({
   },
 });
 
-async function runStructuredProbe(
-  ctx: ActionCtx,
-  provider?: "openrouter",
-) {
+async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
   const correlationId = `model-canary:${Date.now()}`;
   const config = await convexModelRoutingConfig(ctx, { correlationId });
   const requestContext = {
@@ -140,6 +134,8 @@ async function runStructuredProbe(
         maxOutputTokens: 256,
         maxRetries: 0,
         temperature: 0,
+        reasoning: modelGenerationSettings("openrouter", "topic-selection")
+          .reasoning,
         providerOptions: candidate.providerOptions,
         abortSignal: signal,
       });

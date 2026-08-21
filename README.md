@@ -52,11 +52,12 @@ not send browser-only values such as `NEXT_PUBLIC_CONVEX_URL` to Convex.
 
 Suki, Belle, NyX, the roster agents, newsletters, forum memory, and the owner
 console use OpenRouter through one OpenAI-compatible endpoint. Text generation
-uses a free-first chain: fixed `poolside/laguna-s-2.1:free`, then the
-newer `nvidia/nemotron-3.5-lightning:free`, then the paid reliability alias
-`~deepseek/deepseek-v4-flash-latest`. The random `openrouter/free` router is
-not used, so a failed Gemma route cannot be selected indirectly. Structured
-tool-use and editorial quality checks remain mandatory for every model. The
+uses a free-first chain: `stealth/ox-alpha`, then the capability-aware
+`openrouter/free` router, then the paid reliability alias
+`~deepseek/deepseek-v4-flash-latest`. Structured generations use a bounded low
+reasoning effort and no SDK-level retries; the explicit route chain owns
+fallback so one bad model cannot silently multiply requests. Structured tool
+use and editorial quality checks remain mandatory for every model. The
 daily budget disables only the paid DeepSeek fallback once the configured
 limit is reached; zero-cost routes remain available. Free endpoints are used
 only for prompts that contain no secrets or private credentials; their

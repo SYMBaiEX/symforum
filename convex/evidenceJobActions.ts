@@ -124,6 +124,7 @@ export const runResearch = internalAction({
               prompt: `Write a concise cited Markdown evidence brief for the query ${JSON.stringify(input.query)}. Use only the supplied source excerpts. Do not infer claims not present in them. Cite each factual statement with [n].\n\nSources:\n${cited.map((source, index) => `[${index + 1}] ${source.title}\n${source.excerpt}\n${source.canonicalUrl}`).join("\n\n")}`,
               maxOutputTokens: 1_200,
               temperature: 0,
+              reasoning: "low",
               maxRetries: 0,
               providerOptions: candidate.providerOptions,
               abortSignal: signal,
