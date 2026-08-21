@@ -113,6 +113,9 @@ describe("socials worker", () => {
     expect(LANDING_PAGE).toContain("white-space: nowrap");
     expect(LANDING_PAGE).not.toContain("text-shadow:");
     expect(LANDING_PAGE).not.toContain("box-shadow:");
+    expect(LANDING_PAGE).not.toContain('id="links-title"');
+    expect(LANDING_PAGE).not.toContain(".links-heading");
+    expect(LANDING_PAGE).toContain('aria-label="Social profiles"');
     expect(
       LANDING_PAGE.match(/class="signal-link"\s+data-accent=/g),
     ).toHaveLength(6);

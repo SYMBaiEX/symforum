@@ -81,7 +81,6 @@
         align-items: center;
         gap: clamp(1.25rem, 4vw, 3rem);
         padding: clamp(2rem, 5vw, 3.5rem) 0;
-        border-bottom: 1px solid var(--ink);
       }
 
       .portrait {
@@ -107,16 +106,8 @@
         white-space: nowrap;
       }
 
-      .links-heading {
-        padding: clamp(1.5rem, 4vw, 2.5rem) 0 0.65rem;
-      }
-
-      h2 {
-        margin: 0;
-        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(1.65rem, 4vw, 2.5rem);
-        font-weight: 400;
-        letter-spacing: -0.045em;
+      main {
+        padding-top: clamp(1.5rem, 4vw, 2.5rem);
       }
 
       .link-list {
@@ -283,11 +274,7 @@
       </header>
 
       <main>
-        <section id="links" aria-labelledby="links-title">
-          <div class="links-heading">
-            <h2 id="links-title">Links</h2>
-          </div>
-
+        <section id="links" aria-label="Social profiles">
           <ol class="link-list">
             <li>
               <a
