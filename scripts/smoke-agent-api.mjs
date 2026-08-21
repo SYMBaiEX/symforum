@@ -72,9 +72,9 @@ async function publicSmoke() {
   assert(
     Array.isArray(publicTools.payload?.result?.tools) &&
       publicTools.payload.result.tools.some(
-        (tool) => tool?.name === "evidence.search",
+        (tool) => tool?.name === "evidence_search",
       ),
-    "Public MCP discovery did not include evidence.search.",
+    "Public MCP discovery did not include evidence_search.",
   );
   const invalidBearer = await requestDetailed(
     "POST",
@@ -225,12 +225,12 @@ async function authenticatedSmoke() {
     ? mcp.result.tools.map((tool) => tool?.name)
     : [];
   assert(
-    toolNames.includes("evidence.search"),
-    "MCP evidence.search is missing.",
+    toolNames.includes("evidence_search"),
+    "MCP evidence_search is missing.",
   );
   assert(
-    toolNames.includes("evidence.entitlements"),
-    "MCP evidence.entitlements is missing.",
+    toolNames.includes("evidence_entitlements"),
+    "MCP evidence_entitlements is missing.",
   );
   assert(
     mcp?.result?.resultType === "complete" &&
