@@ -26,6 +26,12 @@
         --paper: #10100f;
         --muted: #a9a69d;
         --line: rgba(244, 241, 232, 0.24);
+        --cyan: #55dfcb;
+        --pink: #ff4fa3;
+        --yellow: #f3df58;
+        --orange: #ff8b5c;
+        --blue: #7db8ff;
+        --violet: #c493ff;
       }
 
       * {
@@ -64,33 +70,63 @@
       }
 
       .shell {
-        width: min(100% - 2rem, 64rem);
+        width: min(100% - 2rem, 56rem);
         margin: 0 auto;
-        padding: 0 0 4rem;
+        padding: 0 0 2rem;
       }
 
       .masthead {
-        padding: clamp(4rem, 11vw, 8rem) 0 clamp(2rem, 5vw, 4rem);
+        display: grid;
+        grid-template-columns: clamp(7.5rem, 18vw, 10rem) minmax(0, 1fr);
+        align-items: center;
+        gap: clamp(2rem, 6vw, 4.5rem);
+        padding: clamp(2rem, 5vw, 3.5rem) 0;
         border-bottom: 1px solid var(--ink);
+      }
+
+      .portrait {
+        position: relative;
+        margin: 0;
+        aspect-ratio: 4 / 5;
+        border: 1px solid var(--ink);
+        box-shadow:
+          0.55rem 0.55rem 0 var(--pink),
+          -0.35rem -0.35rem 0 var(--cyan);
+        transform: rotate(-1.5deg);
+      }
+
+      .portrait img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .masthead h1 {
         margin: 0;
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(3rem, 8vw, 6.5rem);
+        font-size: clamp(3rem, 8vw, 5.8rem);
         font-weight: 400;
         letter-spacing: -0.055em;
-        line-height: 0.95;
+        line-height: 0.88;
+      }
+
+      .masthead h1 span {
+        display: block;
+        width: fit-content;
+        margin-top: 0.08em;
+        color: var(--pink);
+        text-shadow: 0.055em 0.055em 0 var(--cyan);
       }
 
       .links-heading {
-        padding: clamp(2.5rem, 6vw, 4.5rem) 0 1rem;
+        padding: clamp(1.5rem, 4vw, 2.5rem) 0 0.65rem;
       }
 
       h2 {
         margin: 0;
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(2rem, 5vw, 4rem);
+        font-size: clamp(1.65rem, 4vw, 2.5rem);
         font-weight: 400;
         letter-spacing: -0.045em;
       }
@@ -107,8 +143,8 @@
         grid-template-columns: 3.5rem minmax(0, 1fr) auto;
         align-items: center;
         gap: 1rem;
-        min-height: 6.8rem;
-        padding: 1rem 0;
+        min-height: 4.65rem;
+        padding: 0.65rem 0;
         border-bottom: 1px solid var(--line);
         text-decoration: none;
         transition:
@@ -126,6 +162,36 @@
         outline: none;
       }
 
+      .signal-link[data-accent="cyan"]:hover,
+      .signal-link[data-accent="cyan"]:focus-visible {
+        background: var(--cyan);
+      }
+
+      .signal-link[data-accent="pink"]:hover,
+      .signal-link[data-accent="pink"]:focus-visible {
+        background: var(--pink);
+      }
+
+      .signal-link[data-accent="yellow"]:hover,
+      .signal-link[data-accent="yellow"]:focus-visible {
+        background: var(--yellow);
+      }
+
+      .signal-link[data-accent="orange"]:hover,
+      .signal-link[data-accent="orange"]:focus-visible {
+        background: var(--orange);
+      }
+
+      .signal-link[data-accent="blue"]:hover,
+      .signal-link[data-accent="blue"]:focus-visible {
+        background: var(--blue);
+      }
+
+      .signal-link[data-accent="violet"]:hover,
+      .signal-link[data-accent="violet"]:focus-visible {
+        background: var(--violet);
+      }
+
       .index {
         color: var(--muted);
         font-size: 0.68rem;
@@ -138,7 +204,7 @@
 
       .network {
         font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        font-size: clamp(1.75rem, 4vw, 3.1rem);
+        font-size: clamp(1.45rem, 3.5vw, 2.25rem);
         letter-spacing: -0.04em;
       }
 
@@ -147,7 +213,7 @@
         margin-top: 0.25rem;
         color: var(--muted);
         font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-        font-size: 0.68rem;
+        font-size: 0.62rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
@@ -158,7 +224,7 @@
       }
 
       .arrow {
-        font-size: 1.75rem;
+        font-size: 1.35rem;
         transition: transform 180ms ease;
       }
 
@@ -171,7 +237,7 @@
         display: grid;
         grid-template-columns: 1fr auto;
         gap: 2rem;
-        padding-top: 2.5rem;
+        padding-top: 1.5rem;
         color: var(--muted);
         font-size: 0.68rem;
         letter-spacing: 0.08em;
@@ -181,7 +247,19 @@
 
       @media (max-width: 720px) {
         .shell {
-          width: min(100% - 1.25rem, 64rem);
+          width: min(100% - 1.25rem, 56rem);
+        }
+
+        .masthead {
+          grid-template-columns: 6.75rem minmax(0, 1fr);
+          gap: 1.25rem;
+          padding: 1.75rem 0;
+        }
+
+        .portrait {
+          box-shadow:
+            0.35rem 0.35rem 0 var(--pink),
+            -0.2rem -0.2rem 0 var(--cyan);
         }
 
         footer {
@@ -190,7 +268,7 @@
 
         .signal-link {
           grid-template-columns: 2.25rem minmax(0, 1fr) auto;
-          min-height: 5.75rem;
+          min-height: 4.5rem;
         }
       }
 
@@ -210,7 +288,16 @@
     <a class="skip-link" href="#links">Skip to social links</a>
     <div class="shell">
       <header class="masthead">
-        <h1>SYMBiEX's Socials</h1>
+        <figure class="portrait">
+          <img
+            src="/about-symbiex-portrait-dark.webp"
+            alt="Stylized SYMBaiEX portrait in a neon city scene"
+            width="960"
+            height="1200"
+            decoding="async"
+          />
+        </figure>
+        <h1>SYMBiEX's <span>Socials</span></h1>
       </header>
 
       <main>
@@ -223,6 +310,7 @@
             <li>
               <a
                 class="signal-link"
+                data-accent="cyan"
                 href="https://x.com/SYMBiEX"
                 rel="me noopener noreferrer"
               >
@@ -236,6 +324,7 @@
             <li>
               <a
                 class="signal-link"
+                data-accent="pink"
                 href="https://github.com/SYMBaiEX"
                 rel="me noopener noreferrer"
               >
@@ -249,6 +338,7 @@
             <li>
               <a
                 class="signal-link"
+                data-accent="yellow"
                 href="https://www.linkedin.com/in/austinhamiltonal"
                 rel="me noopener noreferrer"
               >
@@ -260,7 +350,11 @@
               </a>
             </li>
             <li>
-              <a class="signal-link" href="https://forum.symbaiex.com/">
+              <a
+                class="signal-link"
+                data-accent="orange"
+                href="https://forum.symbaiex.com/"
+              >
                 <span class="index">04</span>
                 <span class="network"
                   >Forum <span class="handle">forum.symbaiex.com</span></span
@@ -269,7 +363,11 @@
               </a>
             </li>
             <li>
-              <a class="signal-link" href="https://www.symbaiex.com/">
+              <a
+                class="signal-link"
+                data-accent="blue"
+                href="https://www.symbaiex.com/"
+              >
                 <span class="index">05</span>
                 <span class="network"
                   >Website <span class="handle">symbaiex.com</span></span
@@ -280,11 +378,12 @@
             <li>
               <a
                 class="signal-link"
-                href="mailto:solsymbaiex@gmail.com?subject=SYMBiEX%20social%20contact"
+                data-accent="violet"
+                href="mailto:austin@symbaiex.com?subject=SYMBiEX%20social%20contact"
               >
                 <span class="index">06</span>
                 <span class="network"
-                  >Email <span class="handle">solsymbaiex@gmail.com</span></span
+                  >Email <span class="handle">austin@symbaiex.com</span></span
                 >
                 <span class="arrow" aria-hidden="true">↗</span>
               </a>

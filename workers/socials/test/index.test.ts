@@ -1,9 +1,15 @@
+import { existsSync, readFileSync } from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import worker, { type SocialsWorkerEnv } from "../src/index";
 
 const WEBHOOK_SECRET = "test-webhook-secret";
 const NOW_SECONDS = 1_787_200_000;
+const LANDING_PAGE = readFileSync(
+  new URL("../public/index.html", import.meta.url),
+  "utf8",
+);
 
 class TestDatabase {
   inserts: unknown[][] = [];
@@ -101,6 +107,20 @@ afterEach(() => {
 });
 
 describe("socials worker", () => {
+  it("keeps the compact portrait layout and current contact details", () => {
+    expect(LANDING_PAGE).toContain("/about-symbiex-portrait-dark.webp");
+    expect(LANDING_PAGE).toContain("mailto:austin@symbaiex.com");
+    expect(
+      LANDING_PAGE.match(/class="signal-link"\s+data-accent=/g),
+    ).toHaveLength(6);
+    expect(LANDING_PAGE).not.toMatch(/Dallas|Find the|S\/AI|Online/);
+    expect(
+      existsSync(
+        new URL("../public/about-symbiex-portrait-dark.webp", import.meta.url),
+      ),
+    ).toBe(true);
+  });
+
   it("serves the landing page with strict browser headers", async () => {
     const response = await worker.fetch(
       new Request("https://socials.symbaiex.com/"),
