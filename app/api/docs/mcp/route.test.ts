@@ -47,6 +47,25 @@ describe("public documentation MCP", () => {
     expect(body.result.structuredContent.results.length).toBeLessThanOrEqual(2);
   });
 
+  test("advertises an explicit read-only tool contract", async () => {
+    const response = await POST(
+      request({ jsonrpc: "2.0", id: "tools", method: "tools/list" }),
+    );
+    const body = await response.json();
+
+    expect(body.result.tools).toHaveLength(1);
+    expect(body.result.tools[0]).toMatchObject({
+      name: "docs.search",
+      inputSchema: { additionalProperties: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    });
+  });
+
   test("lists and reads public Markdown resources", async () => {
     const listed = await POST(
       request({ jsonrpc: "2.0", id: 2, method: "resources/list", params: {} }),

@@ -51,6 +51,12 @@ const TOOL = {
       limit: { type: "integer", minimum: 1, maximum: 4, default: 4 },
     },
   },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 } as const;
 
 export async function POST(request: Request) {

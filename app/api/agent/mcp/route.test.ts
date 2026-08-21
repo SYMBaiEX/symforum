@@ -116,6 +116,7 @@ describe("evidence MCP endpoint", () => {
       result: {
         protocolVersion: "2025-03-26",
         serverInfo: { name: "symbaiex-evidence", version: "v1" },
+        instructions: expect.stringContaining("product MCP"),
       },
     });
 
@@ -254,6 +255,22 @@ describe("evidence MCP endpoint", () => {
       "evidence.replay_webhook_delivery",
       "evidence.send_webhook_test",
     ]);
+    expect(
+      payload.result.tools.every(
+        (tool: {
+          inputSchema?: { additionalProperties?: boolean };
+          annotations?: { idempotentHint?: boolean };
+        }) =>
+          tool.inputSchema?.additionalProperties === false &&
+          tool.annotations?.idempotentHint === true,
+      ),
+    ).toBe(true);
+    expect(
+      payload.result.tools.filter(
+        (tool: { annotations?: { readOnlyHint?: boolean } }) =>
+          tool.annotations?.readOnlyHint === false,
+      ),
+    ).toHaveLength(7);
     const semantic = payload.result.tools.find(
       (tool: { name: string }) => tool.name === "evidence.semantic_search",
     );

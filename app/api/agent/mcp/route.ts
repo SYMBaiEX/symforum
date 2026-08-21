@@ -69,54 +69,41 @@ const MCP_APP_TOOLS = new Set([
   "evidence.datasets",
   "evidence.benchmarks",
 ]);
+const WRITE_TOOLS = new Set([
+  "evidence.create_research",
+  "evidence.create_export",
+  "evidence.create_webhook",
+  "evidence.set_webhook_status",
+  "evidence.rotate_webhook_secret",
+  "evidence.replay_webhook_delivery",
+  "evidence.send_webhook_test",
+]);
+const OPEN_WORLD_TOOLS = new Set([
+  "evidence.replay_webhook_delivery",
+  "evidence.send_webhook_test",
+]);
+const WEBHOOK_EVENT_TYPES = [
+  "evidence.document.changed",
+  "evidence.research.completed",
+  "evidence.export.completed",
+  "evidence.benchmark.completed",
+  "evidence.claim.verified",
+  "evidence.usage.threshold_reached",
+  "evidence.usage.budget_reached",
+  "evidence.entitlement.status_changed",
+] as const;
 const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name]) => {
-  const definition =
-    name === "evidence.semantic_search"
-      ? {
-          name,
-          description:
-            "Search the public corpus with feature-gated semantic enhancement and a lexical-only fallback.",
-          inputSchema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["query", "idempotencyKey"],
-            properties: {
-              query: { type: "string", minLength: 1, maxLength: 300 },
-              limit: { type: "integer", minimum: 1, maximum: 20, default: 10 },
-              idempotencyKey: {
-                type: "string",
-                minLength: 8,
-                maxLength: 96,
-                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-              },
-            },
-          },
-        }
-      : name === "evidence.claim_timeline"
-        ? {
-            name,
-            description:
-              "Read the bounded public supersession timeline for a claim key. Status changes use supported, contradicted, unresolved, or outdated; they do not create a separate timeline status.",
-            inputSchema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["claimKey"],
-              properties: {
-                claimKey: { type: "string", minLength: 1, maxLength: 200 },
-                limit: {
-                  type: "integer",
-                  minimum: 1,
-                  maximum: 50,
-                  default: 20,
-                },
-              },
-            },
-          }
-        : {
-            name,
-            description: `Read ${name.replace("evidence.", "").replaceAll("_", " ")} from the SYMBaiEX evidence API.`,
-            inputSchema: { type: "object", additionalProperties: true },
-          };
+  const definition = {
+    name,
+    description: toolDescription(name),
+    inputSchema: toolInputSchema(name),
+    annotations: {
+      readOnlyHint: !WRITE_TOOLS.has(name),
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: OPEN_WORLD_TOOLS.has(name),
+    },
+  };
   return {
     ...definition,
     ...(MCP_APP_TOOLS.has(name)
@@ -220,6 +207,8 @@ export async function POST(request: Request) {
       protocolVersion: LEGACY_PROTOCOL_VERSION,
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
+      instructions:
+        "SYMBaiEX product MCP for owner-approved public evidence search, claim verification, research jobs, exports, usage, and signed webhooks. It is not the documentation MCP. Initialize and discovery are public; tools/call requires an active Ed25519 bearer with the evidence scope.",
     });
   }
 
@@ -450,6 +439,218 @@ function validateProtocolRequest(
     }
   }
   return "modern";
+}
+
+function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][0]) {
+  const empty = { type: "object", additionalProperties: false, properties: {} };
+  const limit = {
+    type: "integer",
+    minimum: 1,
+    maximum: 50,
+    default: 20,
+  };
+  const object = (
+    properties: Record<string, unknown>,
+    required: string[] = [],
+  ) => ({
+    type: "object",
+    additionalProperties: false,
+    ...(required.length > 0 ? { required } : {}),
+    properties,
+  });
+  const id = { type: "string", minLength: 1, maxLength: 128 };
+
+  switch (name) {
+    case "evidence.status":
+    case "evidence.source_registry":
+    case "evidence.quota":
+    case "evidence.entitlements":
+    case "evidence.list_webhooks":
+    case "evidence.webhook_availability":
+      return empty;
+    case "evidence.sources":
+    case "evidence.changes":
+    case "evidence.products":
+    case "evidence.datasets":
+    case "evidence.benchmarks":
+    case "evidence.usage":
+      return object({ limit });
+    case "evidence.search":
+    case "evidence.universal_search":
+      return object(
+        {
+          query: { type: "string", minLength: 1, maxLength: 300 },
+          limit,
+        },
+        ["query"],
+      );
+    case "evidence.semantic_search":
+      return object(
+        {
+          query: { type: "string", minLength: 1, maxLength: 300 },
+          limit: { ...limit, maximum: 20, default: 10 },
+          idempotencyKey: {
+            type: "string",
+            minLength: 8,
+            maxLength: 96,
+            pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          },
+        },
+        ["query", "idempotencyKey"],
+      );
+    case "evidence.document":
+      return object({ documentId: id }, ["documentId"]);
+    case "evidence.verify_claim":
+      return object({ claimId: id }, ["claimId"]);
+    case "evidence.search_entities":
+      return object(
+        {
+          query: { type: "string", minLength: 1, maxLength: 200 },
+          limit,
+        },
+        ["query"],
+      );
+    case "evidence.version_claims":
+      return object({ documentVersionId: id, limit }, ["documentVersionId"]);
+    case "evidence.claim_timeline":
+      return object(
+        {
+          claimKey: { type: "string", minLength: 1, maxLength: 200 },
+          limit,
+        },
+        ["claimKey"],
+      );
+    case "evidence.create_research":
+      return object(
+        { query: { type: "string", minLength: 1, maxLength: 300 } },
+        ["query"],
+      );
+    case "evidence.get_research":
+    case "evidence.get_research_artifact":
+    case "evidence.get_export":
+    case "evidence.get_export_artifact":
+      return object({ jobId: id }, ["jobId"]);
+    case "evidence.create_export":
+      return object(
+        {
+          datasetId: id,
+          format: { type: "string", const: "jsonl", default: "jsonl" },
+        },
+        ["datasetId"],
+      );
+    case "evidence.create_webhook":
+      return object(
+        {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          url: { type: "string", format: "uri", maxLength: 2_000 },
+          eventTypes: {
+            type: "array",
+            minItems: 1,
+            maxItems: 12,
+            uniqueItems: true,
+            items: { type: "string", enum: WEBHOOK_EVENT_TYPES },
+          },
+        },
+        ["subscriptionKey", "url", "eventTypes"],
+      );
+    case "evidence.set_webhook_status":
+      return object(
+        {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          status: {
+            type: "string",
+            enum: ["active", "paused", "revoked"],
+          },
+        },
+        ["subscriptionKey", "status"],
+      );
+    case "evidence.webhook_health":
+    case "evidence.rotate_webhook_secret":
+      return object(
+        { subscriptionKey: { type: "string", minLength: 1, maxLength: 96 } },
+        ["subscriptionKey"],
+      );
+    case "evidence.webhook_history":
+      return object(
+        {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          limit,
+        },
+        ["subscriptionKey"],
+      );
+    case "evidence.replay_webhook_delivery":
+      return object(
+        {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          eventKey: { type: "string", minLength: 1, maxLength: 160 },
+        },
+        ["subscriptionKey", "eventKey"],
+      );
+    case "evidence.send_webhook_test":
+      return object(
+        {
+          subscriptionKey: { type: "string", minLength: 1, maxLength: 96 },
+          eventType: { type: "string", enum: WEBHOOK_EVENT_TYPES },
+        },
+        ["subscriptionKey", "eventType"],
+      );
+  }
+}
+
+function toolDescription(name: (typeof TOOL_ENTRIES)[number][0]) {
+  const descriptions: Record<(typeof TOOL_ENTRIES)[number][0], string> = {
+    "evidence.status": "Read product API availability and capability status.",
+    "evidence.sources": "List current active public evidence sources.",
+    "evidence.source_registry":
+      "Read deterministic adapter provenance, cadence, and ingestion bounds.",
+    "evidence.search": "Search normalized current public evidence documents.",
+    "evidence.semantic_search":
+      "Search the public corpus with feature-gated semantic enhancement and lexical fallback.",
+    "evidence.universal_search":
+      "Search public evidence, editorial, news, newsletter, and forum records.",
+    "evidence.document": "Read one public evidence document by its ID.",
+    "evidence.changes": "List recent public evidence change events.",
+    "evidence.verify_claim":
+      "Verify one stored public claim against version-bound citations.",
+    "evidence.search_entities": "Search normalized public evidence entities.",
+    "evidence.version_claims":
+      "List public claims cited to one evidence document version.",
+    "evidence.claim_timeline":
+      "Read the bounded public supersession timeline for a claim key.",
+    "evidence.products": "List current evidence API product definitions.",
+    "evidence.datasets": "List immutable public evidence dataset snapshots.",
+    "evidence.benchmarks": "List public benchmark definitions and recent runs.",
+    "evidence.quota": "Read the authenticated agent's current usage quota.",
+    "evidence.entitlements":
+      "Read effective free-beta product access for the authenticated owner.",
+    "evidence.usage": "Read bounded authenticated usage ledger summaries.",
+    "evidence.create_research": "Create one bounded source-cited research job.",
+    "evidence.get_research": "Read one owner-scoped research job status.",
+    "evidence.get_research_artifact":
+      "Resolve one authenticated first-party research artifact stream.",
+    "evidence.create_export": "Create one bounded public JSONL export job.",
+    "evidence.get_export": "Read one owner-scoped export job status.",
+    "evidence.get_export_artifact":
+      "Resolve one authenticated first-party export artifact stream.",
+    "evidence.list_webhooks": "List owner-scoped webhook subscriptions.",
+    "evidence.webhook_availability":
+      "Read whether webhook creation is currently operator-enabled.",
+    "evidence.create_webhook":
+      "Create an owner-scoped allowlisted signed webhook subscription.",
+    "evidence.set_webhook_status":
+      "Pause, resume, or revoke an owner-scoped webhook subscription.",
+    "evidence.webhook_health":
+      "Read bounded health for one owner-scoped webhook subscription.",
+    "evidence.webhook_history":
+      "List bounded recent deliveries for one webhook subscription.",
+    "evidence.rotate_webhook_secret":
+      "Rotate a webhook signing secret and return it once.",
+    "evidence.replay_webhook_delivery":
+      "Replay one stored webhook event with bounded replay protection.",
+    "evidence.send_webhook_test":
+      "Send one signed test event to an active webhook subscription.",
+  };
+  return descriptions[name];
 }
 
 function semanticSearchInput(value: Record<string, unknown>) {
