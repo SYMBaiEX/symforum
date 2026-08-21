@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,8 +107,9 @@ afterEach(() => {
 });
 
 describe("socials worker", () => {
-  it("keeps the compact portrait layout and current contact details", () => {
-    expect(LANDING_PAGE).toContain("/about-symbiex-portrait-dark.webp");
+  it("keeps the compact responsive layout and current contact details", () => {
+    expect(LANDING_PAGE).not.toContain("/about-symbiex-portrait-dark.webp");
+    expect(LANDING_PAGE).not.toContain(".portrait");
     expect(LANDING_PAGE).toContain("mailto:austin@symbaiex.com");
     expect(LANDING_PAGE).toContain("white-space: nowrap");
     expect(LANDING_PAGE).not.toContain("text-shadow:");
@@ -121,11 +122,6 @@ describe("socials worker", () => {
       LANDING_PAGE.match(/class="signal-link"\s+data-accent=/g),
     ).toHaveLength(6);
     expect(LANDING_PAGE).not.toMatch(/Dallas|Find the|S\/AI|Online/);
-    expect(
-      existsSync(
-        new URL("../public/about-symbiex-portrait-dark.webp", import.meta.url),
-      ),
-    ).toBe(true);
   });
 
   it("serves the landing page with strict browser headers", async () => {
