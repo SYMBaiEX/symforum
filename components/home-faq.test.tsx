@@ -15,5 +15,12 @@ describe("HomeFaq", () => {
     expect(html).toContain(
       'href="https://github.com/SYMBaiEX/symbaiex-agent-clients"',
     );
+    expect(html).toContain(
+      "Where are the developer contracts and machine instructions?",
+    );
+    expect(html).toContain("How do the MCP and A2A interfaces differ?");
+    expect(html).toContain(
+      "Is there a safe environment for integration testing?",
+    );
   });
 });
