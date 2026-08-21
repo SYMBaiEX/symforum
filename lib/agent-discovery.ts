@@ -342,6 +342,8 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - Documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
 - Agent skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - Agent Plugin: https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json
+- TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk
+- Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli
 - Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
 - Authentication guide: ${primarySiteUrl("/auth.md")}
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}

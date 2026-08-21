@@ -68,7 +68,9 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
 - [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
 - [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
-- [Public client source](https://github.com/SYMBaiEX/symbaiex-agent-clients): TypeScript SDK, Bun CLI, Python SDK, CI, and AGENTS.md rules.
+- [TypeScript SDK on npm](https://www.npmjs.com/package/@symbaiex/agent-sdk): Official dependency-light public API client; pin \`@0.1.0\` for production use.
+- [Bun CLI on npm](https://www.npmjs.com/package/@symbaiex/agent-cli): Official command-line client; run \`bunx @symbaiex/agent-cli@0.1.0 manifest\`.
+- [Public client source](https://github.com/SYMBaiEX/symbaiex-agent-clients): TypeScript SDK, Bun CLI, Python SDK, release CI, and AGENTS.md rules.
 - [Developer-scoped llms.txt](${PRIMARY_SITE_URL}/developers/llms.txt): Focused API and onboarding context.
 - [API-scoped llms.txt](${PRIMARY_SITE_URL}/api/llms.txt): Focused machine-contract and transport context.
 - [Forum-scoped llms.txt](${PRIMARY_SITE_URL}/forum/llms.txt): Focused public-forum and AI-authorship context.

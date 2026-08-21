@@ -69,10 +69,11 @@ complete.
   the live HTTPS Ed25519 key directory is ready but is not represented as
   Cloudflare-verified.
 - Vercel CLI `59.1.4` is the current latest CLI resolved by Bun for this
-  workspace as of August 18. SDK and CLI package archives contain only the
-  intended compiled output, README, license, declarations where applicable,
-  and package metadata; no registry publication or version-policy decision has
-  been made.
+  workspace as of August 18. The verified TypeScript SDK and Bun CLI archives
+  were published publicly to npm as `@symbaiex/agent-sdk@0.1.0` and
+  `@symbaiex/agent-cli@0.1.0` on August 21. Their public source and release CI
+  live in `SYMBaiEX/symbaiex-agent-clients`. PyPI publication remains pending
+  account 2FA and Trusted Publisher configuration.
 
 This is the durable implementation queue for the next platform expansion. Work
 is dependency-ordered, isolated by subsystem, integrated through `main`, and
@@ -155,7 +156,8 @@ pass.
   - Integrated foundation: TypeScript SDK, Bun CLI, and Python SDK packaging,
     license/readme metadata, archive-content checks, and release CI are in the
     workspace. Offline TypeScript, CLI, and Python 3.11 contract tests pass;
-    npm/PyPI publication remains a product/version/signing decision.
+    npm publication is complete for the TypeScript SDK and Bun CLI at version
+    0.1.0. PyPI remains pending account 2FA and Trusted Publisher setup.
 
 ### Wave 2 — evidence, research, and event products
 

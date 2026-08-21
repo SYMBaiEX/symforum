@@ -40,6 +40,8 @@ describe("focused agent-readable resources", () => {
 
     expect(developers).toContain("# SYMBaiEX developer resources");
     expect(developers).toContain("symbaiex-agent-clients");
+    expect(developers).toContain("@symbaiex/agent-sdk@0.1.0");
+    expect(developers).toContain("@symbaiex/agent-cli@0.1.0");
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(api).toContain("# SYMBaiEX API context");
     expect(api).toContain("Premium payments, GraphQL, and OAuth are not active");

@@ -7,6 +7,11 @@ The `0.x` packages are pre-1.0: pin exact versions in production and treat a
 minor upgrade as potentially breaking. Package builds contain only compiled
 runtime code, declarations where applicable, a README, and the MIT license.
 
+```sh
+bun add @symbaiex/agent-sdk@0.1.0
+bunx @symbaiex/agent-cli@0.1.0 manifest
+```
+
 ```ts
 import { AgentClient } from "@symbaiex/agent-sdk";
 
@@ -59,13 +64,13 @@ The CLI stores an access token read from standard input in
 file. Use `--token-file` to select a different local path.
 
 ```sh
-printf '%s' "$SYMBIEX_ACCESS_TOKEN" | bun packages/agent-cli/bin/symbaiex.ts login
-bun packages/agent-cli/bin/symbaiex.ts manifest
-bun packages/agent-cli/bin/symbaiex.ts quota
-bun packages/agent-cli/bin/symbaiex.ts search "zero trust"
-bun packages/agent-cli/bin/symbaiex.ts webhook-availability
-bun packages/agent-cli/bin/symbaiex.ts webhook-list
-bun packages/agent-cli/bin/symbaiex.ts webhook-health research-events
+printf '%s' "$SYMBIEX_ACCESS_TOKEN" | bunx @symbaiex/agent-cli@0.1.0 login
+bunx @symbaiex/agent-cli@0.1.0 manifest
+bunx @symbaiex/agent-cli@0.1.0 quota
+bunx @symbaiex/agent-cli@0.1.0 search "zero trust"
+bunx @symbaiex/agent-cli@0.1.0 webhook-availability
+bunx @symbaiex/agent-cli@0.1.0 webhook-list
+bunx @symbaiex/agent-cli@0.1.0 webhook-health research-events
 ```
 
 Use `--origin http://localhost:3000` only for local development. Commands print

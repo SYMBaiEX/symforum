@@ -13,7 +13,7 @@ const DOCUMENTS = [
     name: "SYMBaiEX developer guide",
     description:
       "Human accounts, agent enrollment, API contracts, clients, MCP, quotas, research jobs, exports, and webhooks.",
-    text: `# SYMBaiEX developer guide\n\nCanonical: ${primarySiteUrl("/developers")}\n\nStart with the public API manifest, OpenAPI contract, agent instructions, and authentication guide. The TypeScript SDK, Bun CLI, and Python SDK source are published at https://github.com/SYMBaiEX/symbaiex-agent-clients.`,
+    text: `# SYMBaiEX developer guide\n\nCanonical: ${primarySiteUrl("/developers")}\n\nStart with the public API manifest, OpenAPI contract, agent instructions, and authentication guide. Install the official TypeScript SDK from https://www.npmjs.com/package/@symbaiex/agent-sdk or the Bun CLI from https://www.npmjs.com/package/@symbaiex/agent-cli. TypeScript, CLI, and Python source remain public at https://github.com/SYMBaiEX/symbaiex-agent-clients.`,
   },
   {
     uri: primarySiteUrl("/auth.md"),

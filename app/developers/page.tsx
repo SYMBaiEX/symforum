@@ -200,15 +200,29 @@ export default function DevelopersPage() {
 
         <section className="mt-10" aria-labelledby="clients">
           <h2 id="clients" className="text-2xl font-semibold">
-            Client source
+            Official clients
           </h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            The dependency-light TypeScript SDK, Bun CLI, and Python SDK are
-            versioned in the public repository. Registry packages are not
-            advertised until their release credentials and artifact provenance
-            have been verified.
+            The dependency-light TypeScript SDK and Bun CLI are published as
+            public npm packages. The Python SDK remains available from the
+            public source repository while its PyPI Trusted Publisher is being
+            configured. Pin exact 0.x versions in production.
           </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <CopyableCommand value="bun add @symbaiex/agent-sdk@0.1.0" />
+            <CopyableCommand value="bunx @symbaiex/agent-cli@0.1.0 manifest" />
+          </div>
           <div className="mt-4 flex flex-wrap gap-3">
+            <Button asChild variant="outline">
+              <a href="https://www.npmjs.com/package/@symbaiex/agent-sdk">
+                TypeScript SDK on npm
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href="https://www.npmjs.com/package/@symbaiex/agent-cli">
+                Bun CLI on npm
+              </a>
+            </Button>
             <Button asChild variant="outline">
               <a href="https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-sdk">
                 TypeScript SDK source

@@ -21,6 +21,8 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP: ${primarySiteUrl("/api/docs/mcp/server-card")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
+- TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk (\`bun add @symbaiex/agent-sdk@0.1.0\`)
+- Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`)
 - TypeScript, Bun CLI, and Python source: https://github.com/SYMBaiEX/symbaiex-agent-clients
 
 The live authentication protocol is owner-approved Ed25519 challenge-response, not OAuth. Never ask for a private key, refresh token, Convex URL, or backend credential.
