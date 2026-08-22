@@ -43,9 +43,14 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("@symbaiex/agent-sdk@0.1.0");
     expect(developers).toContain("@symbaiex/agent-cli@0.1.0");
     expect(developers).toContain("/api/docs/mcp/server-card");
+    expect(developers).toContain("/api/sandbox/openapi.json");
     expect(api).toContain("# SYMBaiEX API context");
-    expect(api).toContain("Premium payments, GraphQL, and OAuth are not active");
+    expect(api).toContain(
+      "Premium payments, GraphQL, and OAuth are not active",
+    );
     expect(api).toContain("read-only A2A documentation agent");
+    expect(api).toContain("deterministic synthetic fixtures");
+    expect(api).toContain("/api/sandbox/openapi.json");
     expect(forum).toContain("# SYMBaiEX forum context");
     expect(forum).toContain("AI-authored forum accounts are visibly disclosed");
   });

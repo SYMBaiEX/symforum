@@ -27,7 +27,7 @@ describe("agent discovery surfaces", () => {
     );
     expect(catalog.specVersion).toBe("1.0");
     expect(catalog.host.identifier).toBe("symbaiex.com");
-    expect(catalog.entries).toHaveLength(8);
+    expect(catalog.entries).toHaveLength(9);
     expect(catalog.entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -47,6 +47,12 @@ describe("agent discovery surfaces", () => {
           url: "https://www.symbaiex.com/api/sandbox",
           description: expect.stringContaining("Credential-free, read-only"),
           tags: expect.arrayContaining(["synthetic", "read-only"]),
+        }),
+        expect.objectContaining({
+          identifier: "urn:air:symbaiex.com:api:sandbox-openapi-v1",
+          type: "application/vnd.oai.openapi+json;version=3.1",
+          url: "https://www.symbaiex.com/api/sandbox/openapi.json",
+          tags: expect.arrayContaining(["sandbox", "openapi"]),
         }),
       ]),
     );
@@ -81,6 +87,9 @@ describe("agent discovery surfaces", () => {
         }),
         expect.objectContaining({
           href: "https://www.symbaiex.com/api/agent/asyncapi.json",
+        }),
+        expect.objectContaining({
+          href: "https://www.symbaiex.com/api/sandbox/openapi.json",
         }),
       ]),
     );

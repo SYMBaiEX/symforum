@@ -20,6 +20,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
 - [Synthetic API sandbox](${PRIMARY_SITE_URL}/developers/sandbox): Credential-free, read-only fixtures for testing discovery, search parsing, and structured errors without production data or writes.
+- [Synthetic sandbox OpenAPI contract](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Exact read-only operations and bounded synthetic response schemas; never send production credentials to this server.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.
  - [AI-readable web research](${PRIMARY_SITE_URL}/research/ai-readable-web): Original implementation notes, measurements, and primary references.
  - [Editorial authority and machine contracts](${PRIMARY_SITE_URL}/research/editorial-trust-and-contracts): Canonical mapping and policy constraints for public discovery surfaces.
@@ -63,6 +64,7 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [Web Bot Auth key directory](${PRIMARY_SITE_URL}/.well-known/http-message-signatures-directory): Optional operator-level Ed25519 identity directory; this is not account login or payment.
 - [AI Catalog](${PRIMARY_SITE_URL}/.well-known/ai-catalog.json): Cross-protocol discovery for the public API, MCP server, AsyncAPI events, and Agent Skills.
 - [RFC 9727 API Catalog](${PRIMARY_SITE_URL}/.well-known/api-catalog): Linkset discovery for the public agent API and contracts.
+- [Synthetic sandbox OpenAPI](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Machine-readable contract for the credential-free synthetic test environment.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
 - [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.

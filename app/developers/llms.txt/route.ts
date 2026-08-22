@@ -18,6 +18,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI: ${primarySiteUrl("/api/agent/openapi.json")}
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
+- Synthetic sandbox OpenAPI: ${primarySiteUrl("/api/sandbox/openapi.json")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP: ${primarySiteUrl("/api/docs/mcp/server-card")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}

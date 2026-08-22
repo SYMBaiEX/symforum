@@ -22,6 +22,21 @@ export function NewsletterSignup({
     isError: boolean;
   } | null>(null);
   const [pending, setPending] = useState(false);
+  const webMcpFormAttributes =
+    variant === "footer"
+      ? {
+          toolname: "subscribe_symbaiex_newsletter",
+          tooldescription:
+            "Prepare a SYMBaiEX newsletter subscription using the email address the user provides. The user must review and manually submit the visible form.",
+        }
+      : {};
+  const webMcpEmailAttributes =
+    variant === "footer"
+      ? {
+          toolparamdescription:
+            "Email address to subscribe after the user reviews and submits the visible form.",
+        }
+      : {};
 
   async function subscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +81,7 @@ export function NewsletterSignup({
 
   return (
     <form
+      {...webMcpFormAttributes}
       onSubmit={subscribe}
       className={cn(
         "grid gap-2",
@@ -79,7 +95,9 @@ export function NewsletterSignup({
         Email address
       </label>
       <Input
+        {...webMcpEmailAttributes}
         id={`newsletter-${source}`}
+        name="email"
         type="email"
         value={email}
         onChange={(event) => setEmail(event.target.value)}

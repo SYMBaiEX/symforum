@@ -222,6 +222,17 @@ export const AI_CATALOG = {
       trustManifest: catalogTrustManifest("sandbox-api-v1"),
     },
     {
+      identifier: "urn:air:symbaiex.com:api:sandbox-openapi-v1",
+      displayName: "SYMBaiEX Synthetic Sandbox OpenAPI",
+      type: "application/vnd.oai.openapi+json;version=3.1",
+      url: primarySiteUrl("/api/sandbox/openapi.json"),
+      description:
+        "Machine-readable contract for the credential-free, read-only synthetic sandbox.",
+      tags: ["sandbox", "synthetic", "read-only", "openapi", "developer"],
+      publisher: catalogPublisher(),
+      trustManifest: catalogTrustManifest("sandbox-openapi-v1"),
+    },
+    {
       identifier: "urn:air:symbaiex.com:events:agent-v1",
       displayName: "SYMBaiEX Agent Event API",
       type: "application/vnd.aai.asyncapi+json;version=3.0",
@@ -304,6 +315,10 @@ export const API_CATALOG = {
           href: primarySiteUrl("/api/agent/asyncapi.json"),
           type: "application/vnd.aai.asyncapi+json;version=3.0",
         },
+        {
+          href: primarySiteUrl("/api/sandbox/openapi.json"),
+          type: "application/vnd.oai.openapi+json;version=3.1",
+        },
       ],
       "service-doc": [
         { href: primarySiteUrl("/developers"), type: "text/html" },
@@ -380,6 +395,9 @@ export const DISCOVERY_LINK_HEADER = [
   `<${primarySiteUrl("/.well-known/ai-catalog.json")}>; rel="ai-catalog"; type="application/ai-catalog+json"`,
   `<${primarySiteUrl("/.well-known/ai-catalog.json")}>; rel="service-desc"; type="application/ai-catalog+json"`,
   `<${primarySiteUrl("/api/agent/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
+  `<${primarySiteUrl("/.well-known/mcp/server-card.json")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
+  `<${primarySiteUrl("/api/docs/mcp/server-card")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
+  `<${primarySiteUrl("/api/sandbox/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
 ].join(", ");
 
 export const DISCOVERY_ORIGIN = PRIMARY_SITE_URL;

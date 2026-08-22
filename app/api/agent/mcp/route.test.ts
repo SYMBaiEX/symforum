@@ -264,6 +264,22 @@ describe("evidence MCP endpoint", () => {
           tool.annotations?.idempotentHint === true,
       ),
     ).toBe(true);
+    const zeroArgumentTools = payload.result.tools.filter(
+      (tool: {
+        inputSchema?: {
+          properties?: Record<string, unknown>;
+          required?: string[];
+        };
+      }) => Object.keys(tool.inputSchema?.properties ?? {}).length === 0,
+    );
+    expect(zeroArgumentTools).toHaveLength(6);
+    expect(
+      zeroArgumentTools.every(
+        (tool: { inputSchema?: { required?: string[] } }) =>
+          Array.isArray(tool.inputSchema?.required) &&
+          tool.inputSchema.required.length === 0,
+      ),
+    ).toBe(true);
     expect(
       payload.result.tools.filter(
         (tool: { annotations?: { readOnlyHint?: boolean } }) =>

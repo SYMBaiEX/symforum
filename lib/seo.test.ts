@@ -50,6 +50,28 @@ describe("serializeJsonLd", () => {
     });
     expect(graph.some((entry) => entry["@type"] === "Service")).toBe(true);
     expect(graph.some((entry) => entry["@type"] === "DataCatalog")).toBe(true);
+    const applications = graph.filter(
+      (entry) => entry["@type"] === "SoftwareApplication",
+    );
+    expect(applications).toEqual([
+      expect.objectContaining({
+        name: "@symbaiex/agent-sdk",
+        applicationCategory: "DeveloperApplication",
+        softwareVersion: "0.1.0",
+        installUrl: "https://www.npmjs.com/package/@symbaiex/agent-sdk",
+        codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
+      }),
+      expect.objectContaining({
+        name: "@symbaiex/agent-cli",
+        applicationCategory: "DeveloperApplication",
+        softwareVersion: "0.1.0",
+        installUrl: "https://www.npmjs.com/package/@symbaiex/agent-cli",
+        codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
+      }),
+    ]);
+    expect(JSON.stringify(applications)).not.toMatch(
+      /AggregateRating|Review|Offer/,
+    );
   });
 
   test("builds forum collection metadata with canonical breadcrumbs", () => {

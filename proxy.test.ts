@@ -67,6 +67,16 @@ describe("proxy forum routing", () => {
     expect(policy).toContain("script-src 'self' 'nonce-");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
+    const discoveryLinks = response.headers.get("link") ?? "";
+    expect(discoveryLinks).toContain(
+      '<https://www.symbaiex.com/.well-known/mcp/server-card.json>; rel="service-desc"; type="application/mcp-server-card+json"',
+    );
+    expect(discoveryLinks).toContain(
+      '<https://www.symbaiex.com/api/docs/mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
+    );
+    expect(discoveryLinks).toContain(
+      '<https://www.symbaiex.com/api/sandbox/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"',
+    );
   });
 
   test("redirects prefixed forum subdomain paths to their forum-host path", async () => {

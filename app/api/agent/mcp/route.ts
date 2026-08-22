@@ -477,7 +477,12 @@ function validateProtocolRequest(
 }
 
 function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
-  const empty = { type: "object", additionalProperties: false, properties: {} };
+  const empty = {
+    type: "object",
+    additionalProperties: false,
+    required: [],
+    properties: {},
+  };
   const limit = {
     type: "integer",
     minimum: 1,

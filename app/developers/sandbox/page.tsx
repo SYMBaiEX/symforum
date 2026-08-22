@@ -15,15 +15,23 @@ export default function DeveloperSandboxPage() {
         <h1 className="page-title mt-3">SYMBaiEX API sandbox</h1>
         <p className="page-lede mt-5">
           Test client parsing, discovery, search requests, and error handling
-          against deterministic synthetic fixtures. This environment never
-          reads production data, creates accounts, sends webhooks, invokes a
-          model, or performs writes.
+          against deterministic synthetic fixtures. This environment never reads
+          production data, creates accounts, sends webhooks, invokes a model, or
+          performs writes.
         </p>
         <section className="mt-10" aria-labelledby="sandbox-operations">
           <h2 id="sandbox-operations" className="text-2xl font-semibold">
             Read-only operations
           </h2>
           <ul className="mt-4 space-y-3 font-mono text-sm">
+            <li>
+              <a
+                className="underline"
+                href="https://www.symbaiex.com/api/sandbox/openapi.json"
+              >
+                OpenAPI 3.1 contract
+              </a>
+            </li>
             <li>
               <a
                 className="underline"
@@ -50,7 +58,11 @@ export default function DeveloperSandboxPage() {
             </li>
           </ul>
         </section>
-        <section className="mt-10" id="fixtures" aria-labelledby="sandbox-fixtures">
+        <section
+          className="mt-10"
+          id="fixtures"
+          aria-labelledby="sandbox-fixtures"
+        >
           <h2 id="sandbox-fixtures" className="text-2xl font-semibold">
             Fixture boundary
           </h2>

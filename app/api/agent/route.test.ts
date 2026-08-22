@@ -29,6 +29,7 @@ describe("agent API manifest", () => {
         authenticatedQuota: true,
         authenticatedEvidenceData: true,
         authenticatedSemanticSearchTransport: "feature-gated",
+        syntheticSandbox: true,
         mcp: true,
       },
       monetization: {
@@ -49,6 +50,7 @@ describe("agent API manifest", () => {
         "https://www.symbaiex.com/.well-known/mcp/server-card.json",
       documentationMcpServerCard:
         "https://www.symbaiex.com/api/docs/mcp/server-card",
+      sandboxOpenapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
     });
     expect(manifest.scopes).toContain("evidence");
     expect(manifest.endpoints.evidenceRest).toBe(
@@ -60,6 +62,20 @@ describe("agent API manifest", () => {
     expect(manifest.endpoints.semanticSearch).toBe(
       "https://www.symbaiex.com/api/agent/v1/semantic-search",
     );
+    expect(manifest.endpoints.sandbox).toBe(
+      "https://www.symbaiex.com/api/sandbox",
+    );
+    expect(manifest.sandbox).toEqual({
+      enabled: true,
+      environment: "sandbox",
+      baseUrl: "https://www.symbaiex.com/api/sandbox",
+      openapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
+      documentation: "https://www.symbaiex.com/developers/sandbox",
+      syntheticOnly: true,
+      writesEnabled: false,
+      authenticationRequired: false,
+      productionCredentialsAccepted: false,
+    });
     expect(manifest.search).toMatchObject({
       universalLexical: true,
       semanticVector: "feature-gated",

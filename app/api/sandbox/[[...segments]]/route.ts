@@ -3,21 +3,24 @@ const FIXTURES = [
     id: "sandbox-document-cisa-kev",
     type: "document",
     title: "Synthetic CISA KEV evidence document",
-    excerpt: "Deterministic fixture for SDK parsing and search integration tests.",
+    excerpt:
+      "Deterministic fixture for SDK parsing and search integration tests.",
     canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
   },
   {
     id: "sandbox-claim-release-security",
     type: "claim",
     title: "Synthetic release security claim",
-    excerpt: "Supported by a synthetic version-bound citation in the sandbox only.",
+    excerpt:
+      "Supported by a synthetic version-bound citation in the sandbox only.",
     canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
   },
   {
     id: "sandbox-entity-open-source",
     type: "entity",
     title: "Synthetic open-source project entity",
-    excerpt: "Public fixture with no connection to production data or identities.",
+    excerpt:
+      "Public fixture with no connection to production data or identities.",
     canonicalUrl: "https://www.symbaiex.com/developers/sandbox#fixtures",
   },
 ] as const;
@@ -37,6 +40,7 @@ export async function GET(
       authenticationRequired: false,
       operations: ["GET /v1/status", "GET /v1/search?q=<query>&limit=<1-10>"],
       documentation: "https://www.symbaiex.com/developers/sandbox",
+      openapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
     });
   }
   if (path === "v1/status") {
@@ -50,8 +54,14 @@ export async function GET(
   }
   if (path === "v1/search") {
     const url = new URL(request.url);
-    if ([...url.searchParams.keys()].some((key) => key !== "q" && key !== "limit")) {
-      return sandboxError("INVALID_QUERY", "Only q and limit are supported.", 400);
+    if (
+      [...url.searchParams.keys()].some((key) => key !== "q" && key !== "limit")
+    ) {
+      return sandboxError(
+        "INVALID_QUERY",
+        "Only q and limit are supported.",
+        400,
+      );
     }
     const query = url.searchParams.get("q")?.trim() ?? "";
     const rawLimit = url.searchParams.get("limit") ?? "10";
@@ -69,7 +79,10 @@ export async function GET(
         400,
       );
     }
-    const terms = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const terms = query
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
     const matches = FIXTURES.filter((fixture) =>
       terms.some((term) =>
         `${fixture.type} ${fixture.title} ${fixture.excerpt}`

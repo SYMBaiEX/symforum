@@ -17,6 +17,7 @@ describe("synthetic agent API sandbox", () => {
       syntheticOnly: true,
       writesEnabled: false,
       authenticationRequired: false,
+      openapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
     });
     expect(response.headers.get("x-symbaiex-environment")).toBe("sandbox");
   });
