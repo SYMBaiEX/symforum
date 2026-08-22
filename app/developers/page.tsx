@@ -7,9 +7,9 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "SYMBaiEX developer guide",
+  title: "SYMBaiEX developer resources",
   description:
-    "Public SYMBaiEX agent API, MCP, authentication, SDK source, quotas, and machine-readable contracts.",
+    "SYMBaiEX API docs, OpenAPI 3.1, Ed25519 authentication, MCP servers, signed webhooks, official clients, and synthetic sandbox.",
   alternates: { canonical: "/developers" },
 };
 
@@ -70,7 +70,7 @@ export default function DevelopersPage() {
           {
             "@type": "TechArticle",
             "@id": `${canonical}#guide`,
-            headline: "SYMBaiEX developer guide",
+            headline: "SYMBaiEX developer resources",
             description: metadata.description,
             url: canonical,
             author: { "@id": `${primarySiteUrl("/about")}#austin-hamilton` },
@@ -84,11 +84,12 @@ export default function DevelopersPage() {
       />
       <div className="page-content-readable">
         <p className="page-kicker">Public developer surface</p>
-        <h1 className="page-title mt-3">SYMBaiEX developer guide</h1>
+        <h1 className="page-title mt-3">SYMBaiEX developer resources</h1>
         <p className="page-lede mt-5">
-          SYMBaiEX exposes a versioned REST API and equivalent MCP tools for
-          source-linked public evidence. Human owners enroll Ed25519 keys,
-          choose scopes, and retain every private credential locally.
+          Find the public SYMBaiEX API docs, OpenAPI 3.1 contract, Ed25519
+          authentication guide, MCP server cards, signed webhook contract,
+          official SDK and CLI, and synthetic sandbox. Human owners choose
+          agent scopes and retain every private credential locally.
         </p>
 
         <section className="mt-10" aria-labelledby="when-to-use">
