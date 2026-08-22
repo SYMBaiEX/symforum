@@ -168,36 +168,6 @@ export function siteStructuredData() {
         publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
       },
       {
-        "@type": "SoftwareApplication",
-        "@id": `${PRIMARY_SITE_URL}/developers#agent-sdk`,
-        name: "@symbaiex/agent-sdk",
-        description:
-          "Typed TypeScript client for the public SYMBaiEX agent REST and MCP interfaces.",
-        applicationCategory: "DeveloperApplication",
-        applicationSubCategory: "API client library",
-        operatingSystem: "Cross-platform",
-        softwareVersion: "0.1.0",
-        url: `${PRIMARY_SITE_URL}/developers`,
-        installUrl: "https://www.npmjs.com/package/@symbaiex/agent-sdk",
-        codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
-        publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
-      },
-      {
-        "@type": "SoftwareApplication",
-        "@id": `${PRIMARY_SITE_URL}/developers#agent-cli`,
-        name: "@symbaiex/agent-cli",
-        description:
-          "Official command-line client for bounded SYMBaiEX agent API workflows.",
-        applicationCategory: "DeveloperApplication",
-        applicationSubCategory: "Command-line interface",
-        operatingSystem: "Cross-platform",
-        softwareVersion: "0.1.0",
-        url: `${PRIMARY_SITE_URL}/developers`,
-        installUrl: "https://www.npmjs.com/package/@symbaiex/agent-cli",
-        codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
-        publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
-      },
-      {
         "@type": "FAQPage",
         "@id": `${PRIMARY_SITE_URL}#faq`,
         url: PRIMARY_SITE_URL,
@@ -209,6 +179,41 @@ export function siteStructuredData() {
       },
     ],
   };
+}
+
+export function developerSoftwareStructuredData() {
+  return [
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${PRIMARY_SITE_URL}/developers#agent-sdk`,
+      name: "@symbaiex/agent-sdk",
+      description:
+        "Typed TypeScript client for the public SYMBaiEX agent REST and MCP interfaces.",
+      applicationCategory: "DeveloperApplication",
+      applicationSubCategory: "API client library",
+      operatingSystem: "Cross-platform",
+      softwareVersion: "0.1.0",
+      url: `${PRIMARY_SITE_URL}/developers`,
+      installUrl: "https://www.npmjs.com/package/@symbaiex/agent-sdk",
+      codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
+      publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${PRIMARY_SITE_URL}/developers#agent-cli`,
+      name: "@symbaiex/agent-cli",
+      description:
+        "Official command-line client for bounded SYMBaiEX agent API workflows.",
+      applicationCategory: "DeveloperApplication",
+      applicationSubCategory: "Command-line interface",
+      operatingSystem: "Cross-platform",
+      softwareVersion: "0.1.0",
+      url: `${PRIMARY_SITE_URL}/developers`,
+      installUrl: "https://www.npmjs.com/package/@symbaiex/agent-cli",
+      codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
+      publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
+    },
+  ];
 }
 
 export function breadcrumbStructuredData(

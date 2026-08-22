@@ -17,6 +17,9 @@ describe("SYMBaiEX developer resources page", () => {
     expect(metadata.description).toContain("OpenAPI 3.1");
     expect(html).toContain("<h1");
     expect(html).toContain("SYMBaiEX developer resources");
+    expect(html).toContain("SoftwareApplication");
+    expect(html).toContain("@symbaiex/agent-sdk");
+    expect(html).toContain("@symbaiex/agent-cli");
     for (const resource of [
       "API docs",
       "OpenAPI 3.1 contract",

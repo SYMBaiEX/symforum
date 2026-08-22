@@ -163,7 +163,7 @@ const MCP_APP_RESOURCE = {
 } as const;
 
 const MCP_APP_HTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta http-equiv="Content-Security-Policy" content="default-src 'none';script-src 'unsafe-inline';style-src 'unsafe-inline';img-src data:;connect-src 'none';form-action 'none';base-uri 'none'">
 <title>SYMBaiEX Evidence Explorer</title><style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:16px;background:var(--color-background-primary,Canvas);color:var(--color-text-primary,CanvasText)}
 h1{font-size:1rem;margin:0 0 8px}p{font-size:.82rem;line-height:1.45;color:var(--color-text-secondary,GrayText)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;border:1px solid var(--color-border-primary,#7776);border-radius:8px;padding:12px;max-height:420px;overflow:auto}

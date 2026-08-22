@@ -164,6 +164,15 @@ describe("evidence MCP endpoint", () => {
     expect(readPayload.result.contents[0].text).toContain(
       "ui/notifications/tool-result",
     );
+    expect(readPayload.result.contents[0].text).toContain(
+      '<meta name="color-scheme" content="light dark">',
+    );
+    expect(readPayload.result.contents[0].text).toContain(
+      "Content-Security-Policy",
+    );
+    expect(readPayload.result.contents[0].text).toContain(
+      "default-src 'none'",
+    );
     expect(readPayload.result.contents[0].text).not.toContain("Bearer");
   });
 

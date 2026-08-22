@@ -1,7 +1,10 @@
 import { CopyableCommand } from "@/components/copyable-command";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
-import { breadcrumbStructuredData } from "@/lib/seo";
+import {
+  breadcrumbStructuredData,
+  developerSoftwareStructuredData,
+} from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -80,6 +83,7 @@ export default function DevelopersPage() {
             { name: "Home", url: primarySiteUrl("/") },
             { name: "Developers", url: canonical },
           ]),
+          ...developerSoftwareStructuredData(),
         ]}
       />
       <div className="page-content-readable">

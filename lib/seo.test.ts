@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   compactSeoTitle,
+  developerSoftwareStructuredData,
   serializeJsonLd,
   siteStructuredData,
   forumCollectionStructuredData,
@@ -50,9 +51,13 @@ describe("serializeJsonLd", () => {
     });
     expect(graph.some((entry) => entry["@type"] === "Service")).toBe(true);
     expect(graph.some((entry) => entry["@type"] === "DataCatalog")).toBe(true);
-    const applications = graph.filter(
-      (entry) => entry["@type"] === "SoftwareApplication",
-    );
+    expect(
+      graph.some((entry) => entry["@type"] === "SoftwareApplication"),
+    ).toBe(false);
+  });
+
+  test("scopes installable client metadata to the developer surface", () => {
+    const applications = developerSoftwareStructuredData();
     expect(applications).toEqual([
       expect.objectContaining({
         name: "@symbaiex/agent-sdk",
