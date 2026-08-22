@@ -21,13 +21,11 @@ const actionDurations: Record<SignalMothAction, number> = {
 };
 
 export function SignalMothPet() {
-  const [ready, setReady] = useState(false);
   const [action, setAction] = useState<SignalMothAction | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const lastActionRef = useRef<SignalMothAction | null>(null);
 
   const playAction = useCallback(() => {
-    setReady(true);
     if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current);
     }
@@ -47,9 +45,7 @@ export function SignalMothPet() {
   }, []);
 
   useEffect(() => {
-    const readyTimeout = window.setTimeout(() => setReady(true), 5_000);
     return () => {
-      window.clearTimeout(readyTimeout);
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
       }
@@ -59,7 +55,7 @@ export function SignalMothPet() {
   return (
     <button
       aria-label="Play Signal Moth animation"
-      className={`signal-moth-track${ready ? " is-ready" : ""}${action ? ` is-acting action-${action}` : ""}`}
+      className={`signal-moth-track is-ready${action ? ` is-acting action-${action}` : ""}`}
       onClick={playAction}
       title="Signal Moth"
       type="button"
