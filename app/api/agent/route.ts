@@ -94,6 +94,12 @@ const MANIFEST = {
   },
   mcp: {
     resource: AGENT_MCP_RESOURCE,
+    compatibilityAliases: [
+      primarySiteUrl("/.well-known/mcp.json"),
+      primarySiteUrl("/.well-known/mcp"),
+      primarySiteUrl("/mcp"),
+      primarySiteUrl("/mcp.json"),
+    ],
     serverInfo: {
       name: "symbaiex-evidence",
       version: "v1",

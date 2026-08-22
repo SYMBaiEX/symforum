@@ -85,6 +85,12 @@ describe("agent API manifest", () => {
     });
     expect(manifest.mcp).toMatchObject({
       resource: "https://www.symbaiex.com/api/agent/mcp",
+      compatibilityAliases: [
+        "https://www.symbaiex.com/.well-known/mcp.json",
+        "https://www.symbaiex.com/.well-known/mcp",
+        "https://www.symbaiex.com/mcp",
+        "https://www.symbaiex.com/mcp.json",
+      ],
       serverInfo: {
         name: "symbaiex-evidence",
         version: "v1",
