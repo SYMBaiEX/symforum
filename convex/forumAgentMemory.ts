@@ -1,7 +1,7 @@
 "use node";
 
 import { RAG } from "@convex-dev/rag";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { v } from "convex/values";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";

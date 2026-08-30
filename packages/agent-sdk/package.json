@@ -46,6 +46,6 @@
     "pack:check": "bun pm pack --dry-run"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "5.9.3"
   }
 }

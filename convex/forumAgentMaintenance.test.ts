@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
+import { isLegacyEditorialThread } from "./forumAgentMaintenance";
 import schema from "./schema";
 
 const modules = {
@@ -16,6 +17,33 @@ function setup() {
 }
 
 describe("forum agent maintenance", () => {
+  test("recognizes only expired legacy editorial component threads", () => {
+    const now = 1_800_000_000_000;
+    const old = now - 2 * 24 * 60 * 60 * 1_000;
+    const base = {
+      _id: "legacy-thread",
+      _creationTime: old,
+      title: "suki editorial run 2026-01-01 / 12",
+      summary: "Durable editorial memory for suki:2026-01-01:12",
+    };
+
+    expect(isLegacyEditorialThread(base, now - 24 * 60 * 60 * 1_000)).toBe(
+      true,
+    );
+    expect(
+      isLegacyEditorialThread(
+        { ...base, _creationTime: now - 1_000 },
+        now - 24 * 60 * 60 * 1_000,
+      ),
+    ).toBe(false);
+    expect(
+      isLegacyEditorialThread(
+        { ...base, title: "User-authored conversation" },
+        now - 24 * 60 * 60 * 1_000,
+      ),
+    ).toBe(false);
+  });
+
   test("removes expired operational rows without deleting published forum content", async () => {
     const t = setup();
     const now = 1_800_000_000_000;
@@ -125,10 +153,16 @@ describe("forum agent maintenance", () => {
       continuing: false,
     });
     await t.run(async (ctx) => {
-      expect(await ctx.db.get("forumAgentUsageEvents", ids.oldUsageId)).toBeNull();
+      expect(
+        await ctx.db.get("forumAgentUsageEvents", ids.oldUsageId),
+      ).toBeNull();
       expect(await ctx.db.get("forumAgentRuns", ids.oldRunId)).toBeNull();
-      expect(await ctx.db.get("forumAgentUsageEvents", ids.freshUsageId)).not.toBeNull();
-      expect(await ctx.db.get("forumAgentRuns", ids.referencedRunId)).not.toBeNull();
+      expect(
+        await ctx.db.get("forumAgentUsageEvents", ids.freshUsageId),
+      ).not.toBeNull();
+      expect(
+        await ctx.db.get("forumAgentRuns", ids.referencedRunId),
+      ).not.toBeNull();
       expect(await ctx.db.get("forumThreads", ids.threadId)).toMatchObject({
         title: "Durable published thread",
         status: "active",

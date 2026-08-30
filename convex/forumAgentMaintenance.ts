@@ -1,19 +1,15 @@
 "use node";
 
-import { Agent } from "@convex-dev/agent";
 import { WorkflowManager, type WorkflowId } from "@convex-dev/workflow";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
 import { v } from "convex/values";
-import {
-  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
-  OPENROUTER_EMBEDDING_MODEL,
-} from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { env, internalAction } from "./_generated/server";
+import { type ActionCtx, internalAction } from "./_generated/server";
+import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
-const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
 const workflow = new WorkflowManager(components.workflow);
+const LEGACY_THREAD_BATCH_SIZE = 100;
+const LEGACY_RESOURCE_DELAY_MS = 24 * 60 * 60 * 1_000;
 
 type LegacyResource = {
   runId: Id<"forumAgentRuns">;
@@ -25,28 +21,25 @@ type LegacyResourceCleanupResult = {
   inspected: number;
   clearedAgentThreads: number;
   clearedWorkflows: number;
+  orphanedAgentThreadsQueued: number;
 };
 
-function legacyAgent() {
-  const apiKey = env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) return null;
-  const openRouter = createOpenAICompatible({
-    name: "openrouter",
-    apiKey,
-    baseURL: "https://openrouter.ai/api/v1",
-    headers: {
-      "HTTP-Referer": "https://forum.symbaiex.com",
-      "X-OpenRouter-Title": "SYMBiEX Forum Agents",
-    },
-  });
-  return new Agent(components.agent, {
-    name: "Legacy Forum Editorial Cleanup",
-    // Thread deletion does not generate editorial content, but the Agent
-    // component still requires a language model. Keep this maintenance path
-    // on the same reviewed OpenRouter/DeepSeek fallback boundary as the app.
-    languageModel: openRouter(OPENROUTER_DEEPSEEK_FALLBACK_MODEL),
-    embeddingModel: openRouter.embeddingModel(EMBEDDING_MODEL),
-  });
+type ComponentThread = {
+  _id: string;
+  _creationTime: number;
+  title?: string;
+  summary?: string;
+};
+
+export function isLegacyEditorialThread(
+  thread: ComponentThread,
+  cutoff: number,
+) {
+  return (
+    thread._creationTime < cutoff &&
+    / editorial run \d{4}-\d{2}-\d{2} \/ \d+$/.test(thread.title ?? "") &&
+    (thread.summary ?? "").startsWith("Durable editorial memory for ")
+  );
 }
 
 export const cleanupLegacyResources = internalAction({
@@ -56,19 +49,21 @@ export const cleanupLegacyResources = internalAction({
       internal.forumAgentMaintenanceData.readLegacyResourcesForCleanup,
       args.now === undefined ? {} : { now: args.now },
     );
-    const agent = legacyAgent();
     let clearedAgentThreads = 0;
     let clearedWorkflows = 0;
 
     for (const row of rows) {
       let clearAgentThread = row.agentThreadId === undefined;
       let clearWorkflow = row.workflowId === undefined;
-      if (row.agentThreadId !== undefined && agent !== null) {
+      if (row.agentThreadId !== undefined) {
         try {
-          await agent.deleteThreadAsync(ctx, {
-            threadId: row.agentThreadId,
-            pageSize: 100,
-          });
+          await ctx.runMutation(
+            components.agent.threads.deleteAllForThreadIdAsync,
+            {
+              threadId: row.agentThreadId,
+              limit: 100,
+            },
+          );
           clearAgentThread = true;
           clearedAgentThreads += 1;
         } catch (error) {
@@ -104,9 +99,17 @@ export const cleanupLegacyResources = internalAction({
       }
     }
 
-    if (rows.length >= 25 && clearedAgentThreads + clearedWorkflows > 0) {
+    const orphanedAgentThreadsQueued = await queueOrphanedThreadCleanup(
+      ctx,
+      (args.now ?? Date.now()) - LEGACY_RESOURCE_DELAY_MS,
+    );
+
+    if (
+      (rows.length >= 25 && clearedAgentThreads + clearedWorkflows > 0) ||
+      orphanedAgentThreadsQueued >= LEGACY_THREAD_BATCH_SIZE
+    ) {
       await ctx.scheduler.runAfter(
-        1_000,
+        orphanedAgentThreadsQueued >= LEGACY_THREAD_BATCH_SIZE ? 60_000 : 1_000,
         internal.forumAgentMaintenance.cleanupLegacyResources,
         args.now === undefined ? {} : { now: args.now },
       );
@@ -115,9 +118,39 @@ export const cleanupLegacyResources = internalAction({
       inspected: rows.length,
       clearedAgentThreads,
       clearedWorkflows,
+      orphanedAgentThreadsQueued,
     };
   },
 });
+
+async function queueOrphanedThreadCleanup(ctx: ActionCtx, cutoff: number) {
+  for (const entry of FORUM_AGENT_ROSTER) {
+    const result = await ctx.runQuery(
+      components.agent.threads.listThreadsByUserId,
+      {
+        userId: entry.slug,
+        order: "asc",
+        paginationOpts: { cursor: null, numItems: LEGACY_THREAD_BATCH_SIZE },
+      },
+    );
+    const threads = result.page.filter((thread) =>
+      isLegacyEditorialThread(thread, cutoff),
+    );
+    if (threads.length === 0) continue;
+    for (let offset = 0; offset < threads.length; offset += 10) {
+      await Promise.all(
+        threads.slice(offset, offset + 10).map((thread) =>
+          ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync, {
+            threadId: thread._id,
+            limit: 100,
+          }),
+        ),
+      );
+    }
+    return threads.length;
+  }
+  return 0;
+}
 
 function safeError(error: unknown) {
   return (error instanceof Error ? error.message : String(error))

@@ -1,5 +1,5 @@
 import { RAG } from "@convex-dev/rag";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible-v3";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import {
