@@ -1,6 +1,12 @@
-import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -93,14 +99,25 @@ describe("agent auth certification harness", () => {
   });
 
   test("rejects intermediate lexical symlink parents", () => {
-    const directory = mkdtempSync(join(tmpdir(), "symbaiex-plat01-"));
-    chmodSync(directory, 0o700);
-    const real = join(directory, "real");
-    mkdirSync(real, { mode: 0o700 });
-    const linked = join(directory, "linked");
-    symlinkSync(real, linked);
-    const credential = join(linked, "credential.json");
-    writeFileSync(credential, JSON.stringify({ accessToken: "x" }), { mode: 0o600 });
-    expect(() => assertPrivateJsonFile(credential)).toThrow(/parent.*real directory/i);
+    // GitHub's /tmp is intentionally world-writable, which is rejected before
+    // the symlink under test. A private directory under the current user's home
+    // keeps the parent chain deterministic across macOS and Linux runners.
+    const directory = mkdtempSync(join(homedir(), ".symbaiex-plat01-"));
+    try {
+      chmodSync(directory, 0o700);
+      const real = join(directory, "real");
+      mkdirSync(real, { mode: 0o700 });
+      const linked = join(directory, "linked");
+      symlinkSync(real, linked);
+      const credential = join(linked, "credential.json");
+      writeFileSync(credential, JSON.stringify({ accessToken: "x" }), {
+        mode: 0o600,
+      });
+      expect(() => assertPrivateJsonFile(credential)).toThrow(
+        /parent.*real directory/i,
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
