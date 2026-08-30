@@ -7,7 +7,11 @@ needs, reveals, or accepts a Convex deployment URL.
 ```python
 from symbaiex_agent import AgentClient
 
-client = AgentClient(token="read-from-your-secret-manager")
+client = AgentClient(
+    token="read-from-your-secret-manager",
+    timeout=15,
+    artifact_timeout=60,
+)
 quota = client.quota()
 results = client.universal_search("zero trust", limit=10)
 job = client.create_research("zero trust", idempotency_key="research-2026-08-18-001")
@@ -17,6 +21,12 @@ The client does not persist tokens. Supply one from a keychain, secret manager,
 or an in-memory token provider. Do not pass private Ed25519 key material to the
 client: sign the server-issued challenge locally, then call `sign_in` with the
 resulting signature. All writes require a bounded idempotency key.
+
+Regular API calls and larger artifact downloads have separate bounded
+timeouts. Transport failures are normalized to `NETWORK_ERROR` and
+`REQUEST_TIMEOUT` without exposing local exception details. The client does not
+automatically retry requests because authenticated operations may consume quota;
+callers can retry explicitly with the same idempotency key when appropriate.
 
 `AsyncAgentClient` has the same API and uses a worker thread around the
 dependency-free synchronous transport. This keeps the package dependency-free

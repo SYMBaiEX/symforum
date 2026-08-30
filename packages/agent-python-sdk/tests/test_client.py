@@ -109,6 +109,41 @@ class AgentClientTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "SCOPE_DENIED")
         self.assertNotIn("never-in-error", str(raised.exception))
 
+    def test_transport_failures_and_timeouts_are_normalized(self) -> None:
+        def offline(_request: HttpRequest) -> HttpResponse:
+            raise OSError("private network detail")
+
+        client = AgentClient(token="access-token", transport=offline)
+        with self.assertRaises(AgentApiError) as network_error:
+            client.status()
+        self.assertEqual(network_error.exception.status, 0)
+        self.assertEqual(network_error.exception.code, "NETWORK_ERROR")
+        self.assertNotIn("private network detail", str(network_error.exception))
+
+        def stalled(_request: HttpRequest) -> HttpResponse:
+            raise TimeoutError("private timeout detail")
+
+        client = AgentClient(token="access-token", transport=stalled)
+        with self.assertRaises(AgentApiError) as timeout_error:
+            client.status()
+        self.assertEqual(timeout_error.exception.status, 408)
+        self.assertEqual(timeout_error.exception.code, "REQUEST_TIMEOUT")
+        self.assertNotIn("private timeout detail", str(timeout_error.exception))
+
+        with self.assertRaisesRegex(TypeError, "artifact_timeout"):
+            AgentClient(token="access-token", artifact_timeout=0)
+
+    def test_artifacts_use_the_separate_timeout(self) -> None:
+        recorder = Recorder({})
+        client = AgentClient(
+            token="access-token",
+            timeout=2,
+            artifact_timeout=45,
+            transport=recorder,
+        )
+        client.research_artifact("job-1")
+        self.assertEqual(recorder.requests[0].timeout, 45)
+
     def test_reflected_bearer_and_unbounded_error_body_are_discarded(self) -> None:
         bearer = "UPPERCASE-BEARER-SECRET"
         client = AgentClient(
@@ -170,8 +205,22 @@ class AgentClientTests(unittest.TestCase):
             client = AsyncAgentClient(token="access-token", transport=Recorder([]))
             self.assertEqual(await client.universal_search("public", limit=1), [])
             self.assertEqual(await client.source_registry(), [])
+            self.assertEqual(await client.benchmarks(limit=1), [])
 
         asyncio.run(scenario())
+
+    def test_async_client_matches_the_sync_public_surface(self) -> None:
+        sync_methods = {
+            name
+            for name, value in AgentClient.__dict__.items()
+            if not name.startswith("_") and callable(value)
+        }
+        async_methods = {
+            name
+            for name, value in AsyncAgentClient.__dict__.items()
+            if not name.startswith("_") and callable(value)
+        }
+        self.assertEqual(async_methods, sync_methods)
 
 
 if __name__ == "__main__":

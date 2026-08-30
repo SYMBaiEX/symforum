@@ -28,6 +28,13 @@ packages.
 - Made Convex component cleanup independent of OpenRouter availability. It now
   uses the Agent component's deletion API directly and drains only expired
   threads with the legacy editorial title and summary contract.
+- Expanded the CLI across the SDK's discovery, evidence, entitlement, usage,
+  research, export, claim-verification, and webhook contracts while preserving
+  explicit idempotency keys and secret-safe output.
+- Hardened the TypeScript and Python SDKs with separate regular and artifact
+  timeouts plus sanitized network and timeout errors. Restored async Python
+  parity for benchmark reads, added a public-surface parity guard, and advanced
+  all three client packages to 0.2.0.
 
 ## Production evidence
 
@@ -78,9 +85,8 @@ reimplementing them:
 1. Complete response schemas in the canonical OpenAPI 3.1 document, then
    generate concrete SDK response types so methods no longer default to
    caller-supplied `unknown` shapes.
-2. Expand the CLI over the SDK's existing source registry, semantic search,
-   claim timeline, entitlement, usage, research, export, artifact, and webhook
-   methods. Preserve explicit idempotency keys and secret-safe output.
+2. Generate the Python and TypeScript clients from the same canonical contract
+   so endpoint and response-type changes are applied consistently.
 3. Evaluate Next Cache Components route by route. Do not globally enable them:
    the existing Vercel Runtime Cache already handles shared data, while forum
    identity and authorization must stay request-bound.

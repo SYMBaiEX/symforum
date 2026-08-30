@@ -7,7 +7,11 @@ dependency-free. Its stable default is the public origin
 ```python
 from symbaiex_agent import AgentClient
 
-client = AgentClient(token_provider=lambda: load_secret("symbaiex-access-token"))
+client = AgentClient(
+    token_provider=lambda: load_secret("symbaiex-access-token"),
+    timeout=15,
+    artifact_timeout=60,
+)
 manifest = client.manifest()
 status = client.status()
 quota = client.quota()
@@ -38,10 +42,11 @@ bounded `idempotency_key`. Semantic search stays on the first-party public URL
 and returns lexical-only results whenever semantic enhancement is unavailable;
 those outcomes carry no monetary charge. Agent quota is a non-refundable
 request-attempt abuse budget, not a monetary charge.
-The client
-limits ordinary JSON responses to 2 MiB, artifact responses to 10 MiB, and
-network waits to 10 seconds (30 seconds for first-party artifacts). It follows
-only the `symbaiex.com` production origins; local development requires an
+The client limits ordinary JSON responses to 2 MiB, artifact responses to 10
+MiB, and network waits to 15 seconds (60 seconds for first-party artifacts).
+Transport failures are sanitized as `NETWORK_ERROR` or `REQUEST_TIMEOUT`; the
+SDK does not retry operations automatically. It follows only the `symbaiex.com`
+production origins; local development requires an
 explicit localhost/127.0.0.1 trusted origin. It never follows redirects, so a
 bearer cannot be forwarded to a different host.
 

@@ -49,6 +49,46 @@ describe("AgentClient", () => {
     );
   });
 
+  test("bounds transport time and sanitizes network failures", async () => {
+    const tokenStore = {
+      async getToken() {
+        return "access-token";
+      },
+    };
+    const offline = new AgentClient({
+      fetch: async () => {
+        throw new Error("socket details must not escape");
+      },
+      tokenStore,
+    });
+    await expect(offline.status()).rejects.toMatchObject({
+      status: 0,
+      code: "NETWORK_ERROR",
+      message: "The platform request could not be completed.",
+    });
+
+    const stalled = new AgentClient({
+      fetch: async (_input, init) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        }),
+      tokenStore,
+      requestTimeoutMs: 5,
+    });
+    await expect(stalled.status()).rejects.toMatchObject({
+      status: 408,
+      code: "REQUEST_TIMEOUT",
+      message: "The platform request timed out.",
+    });
+    expect(() => new AgentClient({ requestTimeoutMs: 0 })).toThrow(
+      /requestTimeoutMs/,
+    );
+  });
+
   test("uses the bounded universal lexical-search endpoint", async () => {
     const calls: string[] = [];
     const client = new AgentClient({

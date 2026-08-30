@@ -96,12 +96,18 @@ export type AgentClientOptions = {
   fetch?: FetchLike;
   tokenStore?: TokenStore;
   signer?: RequestSigner;
+  /** Maximum time for JSON requests before a sanitized timeout error. */
+  requestTimeoutMs?: number;
+  /** Maximum time for bounded artifact downloads. */
+  artifactTimeoutMs?: number;
 };
 
 export class AgentClient {
   private readonly origin: string;
   private readonly fetcher: FetchLike;
   private readonly tokenStore?: TokenStore;
+  private readonly requestTimeoutMs: number;
+  private readonly artifactTimeoutMs: number;
   readonly signer?: RequestSigner;
 
   constructor(options: AgentClientOptions = {}) {
@@ -117,6 +123,14 @@ export class AgentClient {
     this.fetcher = options.fetch ?? fetch;
     this.tokenStore = options.tokenStore;
     this.signer = options.signer;
+    this.requestTimeoutMs = validTimeout(
+      options.requestTimeoutMs ?? 15_000,
+      "requestTimeoutMs",
+    );
+    this.artifactTimeoutMs = validTimeout(
+      options.artifactTimeoutMs ?? 60_000,
+      "artifactTimeoutMs",
+    );
   }
 
   async manifest(): Promise<AgentManifest> {
@@ -517,18 +531,21 @@ export class AgentClient {
       headers.set("idempotency-key", options.idempotencyKey);
     if (options.body !== undefined)
       headers.set("content-type", "application/json");
-    const response = await this.fetcher(new URL(path, this.origin), {
-      method: options.method ?? "GET",
-      headers,
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
-      cache: "no-store",
-      redirect: "error",
+    return await this.withTimeout(this.requestTimeoutMs, async (signal) => {
+      const response = await this.fetcher(new URL(path, this.origin), {
+        method: options.method ?? "GET",
+        headers,
+        body:
+          options.body === undefined ? undefined : JSON.stringify(options.body),
+        cache: "no-store",
+        redirect: "error",
+        signal,
+      });
+      const payload = await readJson(response);
+      if (!response.ok)
+        throw toApiError(response.status, payload, token ?? undefined);
+      return payload as T;
     });
-    const payload = await readJson(response);
-    if (!response.ok)
-      throw toApiError(response.status, payload, token ?? undefined);
-    return payload as T;
   }
 
   private async requestBytes(path: string): Promise<Uint8Array> {
@@ -539,26 +556,56 @@ export class AgentClient {
         "AUTH_REQUIRED",
         "An agent access token is required.",
       );
-    const response = await this.fetcher(new URL(path, this.origin), {
-      method: "GET",
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/octet-stream",
-      },
-      cache: "no-store",
-      redirect: "error",
+    return await this.withTimeout(this.artifactTimeoutMs, async (signal) => {
+      const response = await this.fetcher(new URL(path, this.origin), {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/octet-stream",
+        },
+        cache: "no-store",
+        redirect: "error",
+        signal,
+      });
+      if (!response.ok)
+        throw toApiError(response.status, await readJson(response), token);
+      assertResponseSize(response, 10 * 1024 * 1024);
+      const body = new Uint8Array(await response.arrayBuffer());
+      if (body.byteLength > 10 * 1024 * 1024)
+        throw new AgentApiError(
+          response.status,
+          "RESPONSE_TOO_LARGE",
+          "The platform response exceeded the client safety limit.",
+        );
+      return body;
     });
-    if (!response.ok)
-      throw toApiError(response.status, await readJson(response), token);
-    assertResponseSize(response, 10 * 1024 * 1024);
-    const body = new Uint8Array(await response.arrayBuffer());
-    if (body.byteLength > 10 * 1024 * 1024)
+  }
+
+  private async withTimeout<T>(
+    timeoutMs: number,
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await work(controller.signal);
+    } catch (error) {
+      if (error instanceof AgentApiError) throw error;
+      if (controller.signal.aborted) {
+        throw new AgentApiError(
+          408,
+          "REQUEST_TIMEOUT",
+          "The platform request timed out.",
+        );
+      }
       throw new AgentApiError(
-        response.status,
-        "RESPONSE_TOO_LARGE",
-        "The platform response exceeded the client safety limit.",
+        0,
+        "NETWORK_ERROR",
+        "The platform request could not be completed.",
       );
-    return body;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -592,6 +639,12 @@ function validLimit(value: number) {
   return value;
 }
 
+function validTimeout(value: number, label: string) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 120_000)
+    throw new TypeError(`${label} must be an integer between 1 and 120000.`);
+  return value;
+}
+
 function validIdentifier(value: string, label: string, maximum: number) {
   const normalized = value.trim();
   if (!normalized || normalized.length > maximum || /\s/.test(normalized))
@@ -615,12 +668,10 @@ function normalizeOrigin(value: string) {
     url.hostname,
   );
   const local = ["localhost", "127.0.0.1"].includes(url.hostname);
-  if (
-    !(
-      (url.protocol === "https:" && production) ||
-      (url.protocol === "http:" && local)
-    )
-  )
+  if (!(
+    (url.protocol === "https:" && production) ||
+    (url.protocol === "http:" && local)
+  ))
     throw new TypeError(
       "platform origin must use HTTPS or a localhost development origin",
     );

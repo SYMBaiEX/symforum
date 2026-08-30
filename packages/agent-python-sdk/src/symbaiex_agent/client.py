@@ -17,8 +17,8 @@ from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 DEFAULT_PLATFORM_ORIGIN = "https://www.symbaiex.com"
-DEFAULT_TIMEOUT_SECONDS = 10.0
-ARTIFACT_TIMEOUT_SECONDS = 30.0
+DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_ARTIFACT_TIMEOUT_SECONDS = 60.0
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 _SAFE_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
@@ -149,6 +149,7 @@ class AgentClient:
         origin: str = DEFAULT_PLATFORM_ORIGIN,
         trusted_origins: tuple[str, ...] | list[str] | None = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        artifact_timeout: float = DEFAULT_ARTIFACT_TIMEOUT_SECONDS,
         transport: HttpTransport | None = None,
     ) -> None:
         if token is not None and token_provider is not None:
@@ -156,9 +157,8 @@ class AgentClient:
         self._origin = _trusted_origin(origin, trusted_origins)
         self._token = _validate_token(token) if token is not None else None
         self._token_provider = token_provider
-        if not isinstance(timeout, (int, float)) or not 0 < timeout <= 60:
-            raise TypeError("timeout must be a number between 0 and 60 seconds")
-        self._timeout = float(timeout)
+        self._timeout = _timeout(timeout, "timeout")
+        self._artifact_timeout = _timeout(artifact_timeout, "artifact_timeout")
         self._transport = transport or _stdlib_transport
 
     def manifest(self) -> AgentManifest:
@@ -319,7 +319,7 @@ class AgentClient:
         return self._json("GET", f"/api/agent/v1/{resource}?{urlencode(params)}")
 
     def _artifact(self, resource: str) -> bytes:
-        response = self._request("GET", f"/api/agent/v1/{resource}", max_bytes=MAX_ARTIFACT_BYTES, timeout=ARTIFACT_TIMEOUT_SECONDS)
+        response = self._request("GET", f"/api/agent/v1/{resource}", max_bytes=MAX_ARTIFACT_BYTES, timeout=self._artifact_timeout)
         return response.body
 
     def _json(self, method: str, path: str, *, body: Mapping[str, JsonValue] | None = None, authenticated: bool = True, idempotency_key: str | None = None, headers: Mapping[str, str] | None = None) -> JsonValue:
@@ -358,8 +358,10 @@ class AgentClient:
         )
         try:
             response = self._transport(request)
-        except (OSError, socket.timeout, TimeoutError) as error:
-            raise AgentApiError(503, "TRANSPORT_ERROR", "The platform request could not be completed.") from error
+        except (socket.timeout, TimeoutError) as error:
+            raise AgentApiError(408, "REQUEST_TIMEOUT", "The platform request timed out.") from error
+        except OSError as error:
+            raise AgentApiError(0, "NETWORK_ERROR", "The platform request could not be completed.") from error
         if len(response.body) > max_bytes:
             raise AgentApiError(response.status, "RESPONSE_TOO_LARGE", "The platform response exceeded the client safety limit.")
         if not 200 <= response.status < 300:
@@ -395,6 +397,7 @@ class AsyncAgentClient:
     async def claim_timeline(self, claim_key: str, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("claim_timeline", claim_key, limit=limit)
     async def products(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("products", limit=limit)
     async def datasets(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("datasets", limit=limit)
+    async def benchmarks(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("benchmarks", limit=limit)
     async def entitlements(self) -> JsonValue: return await self.__getattr_async("entitlements")
     async def usage(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("usage", limit=limit)
     async def create_research(self, query: str, *, idempotency_key: str) -> ResearchJob: return await self.__getattr_async("create_research", query, idempotency_key=idempotency_key)
@@ -463,6 +466,12 @@ def _limit(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 50:
         raise TypeError("limit must be an integer between 1 and 50")
     return value
+
+
+def _timeout(value: float, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= 120:
+        raise TypeError(f"{name} must be a number between 0 and 120 seconds")
+    return float(value)
 
 
 def _identifier(value: str, name: str, maximum: int) -> str:
@@ -549,6 +558,8 @@ def _stdlib_transport(request: HttpRequest) -> HttpResponse:
     except HTTPError as error:
         return HttpResponse(error.code, dict(error.headers.items()) if error.headers else {}, error.read(request.max_response_bytes + 1))
     except URLError as error:
+        if isinstance(error.reason, (socket.timeout, TimeoutError)):
+            raise TimeoutError("network request timed out") from error
         raise OSError("network request failed") from error
 
 

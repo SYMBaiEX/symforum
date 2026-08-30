@@ -8,8 +8,8 @@ minor upgrade as potentially breaking. Package builds contain only compiled
 runtime code, declarations where applicable, a README, and the MIT license.
 
 ```sh
-bun add @symbaiex/agent-sdk@0.1.0
-bunx @symbaiex/agent-cli@0.1.0 manifest
+bun add @symbaiex/agent-sdk@0.2.0
+bunx @symbaiex/agent-cli@0.2.0 manifest
 ```
 
 ```ts
@@ -21,6 +21,8 @@ const client = new AgentClient({
       return process.env.SYMBIEX_ACCESS_TOKEN ?? null;
     },
   },
+  requestTimeoutMs: 15_000,
+  artifactTimeoutMs: 60_000,
 });
 const manifest = await client.manifest();
 const quota = await client.quota();
@@ -58,32 +60,42 @@ a non-refundable request-attempt abuse budget, not a monetary charge. The SDK
 never receives a Convex URL.
 The TypeScript SDK covers the public REST, authenticated artifact, webhook,
 Ed25519 session, and MCP operations advertised by the live OpenAPI document.
+Regular requests and larger artifact downloads have separate bounded timeouts.
+Network failures and timeouts are returned as sanitized `NETWORK_ERROR` and
+`REQUEST_TIMEOUT` errors. The SDK does not retry automatically because an
+authenticated request may consume quota; callers can retry replay-safe writes
+with the same idempotency key.
 
 The CLI stores an access token read from standard input in
 `~/.config/symbaiex/token` with mode `0600`; it refuses to overwrite an existing
 file. Use `--token-file` to select a different local path.
 
 ```sh
-printf '%s' "$SYMBIEX_ACCESS_TOKEN" | bunx @symbaiex/agent-cli@0.1.0 login
-bunx @symbaiex/agent-cli@0.1.0 manifest
-bunx @symbaiex/agent-cli@0.1.0 quota
-bunx @symbaiex/agent-cli@0.1.0 search "zero trust"
-bunx @symbaiex/agent-cli@0.1.0 webhook-availability
-bunx @symbaiex/agent-cli@0.1.0 webhook-list
-bunx @symbaiex/agent-cli@0.1.0 webhook-health research-events
+printf '%s' "$SYMBIEX_ACCESS_TOKEN" | bunx @symbaiex/agent-cli@0.2.0 login
+bunx @symbaiex/agent-cli@0.2.0 manifest
+bunx @symbaiex/agent-cli@0.2.0 quota
+bunx @symbaiex/agent-cli@0.2.0 search "zero trust"
+bunx @symbaiex/agent-cli@0.2.0 source-registry
+bunx @symbaiex/agent-cli@0.2.0 semantic-search "zero trust" --idempotency-key semantic-cli-001
+bunx @symbaiex/agent-cli@0.2.0 claim-timeline release-security --limit 10
+bunx @symbaiex/agent-cli@0.2.0 webhook-availability
+bunx @symbaiex/agent-cli@0.2.0 webhook-list
+bunx @symbaiex/agent-cli@0.2.0 webhook-health research-events
 ```
 
 Use `--origin http://localhost:3000` only for local development. Commands print
 responses or non-secret error messages only; tokens are never printed.
 
-The CLI deliberately keeps a smaller operational surface. Its webhook status
-and test commands require `--idempotency-key <safe-value>`; use an SDK for
-challenge signing, refresh, artifacts, MCP, and other write calls.
+The CLI covers discovery, search, evidence, product and dataset metadata,
+entitlements, usage, research, exports, claim verification, and webhook
+operations. Provider-capable searches and every write command require
+`--idempotency-key <safe-value>`. Use an SDK for challenge signing, refresh,
+artifact streaming, MCP, and application-level orchestration.
 
 Release checks are deterministic from the repository root:
 
 ```sh
-bun install --frozen-lockfile
+bun ci
 bun run --filter @symbaiex/agent-sdk build
 bun run --filter @symbaiex/agent-sdk test
 bun run --filter @symbaiex/agent-sdk pack:check

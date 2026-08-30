@@ -1,6 +1,6 @@
 {
   "name": "@symbaiex/agent-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bun CLI for the public SYMBaiEX agent API.",
   "license": "MIT",
   "author": "SYMBaiEX",

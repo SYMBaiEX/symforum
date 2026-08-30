@@ -26,11 +26,11 @@ jobs:
   typescript-and-cli:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
-      - run: bun install --frozen-lockfile
+      - run: bun ci
       - run: bun run --filter @symbaiex/agent-sdk build
       - run: bun run --filter @symbaiex/agent-sdk test
       - run: bun run --filter @symbaiex/agent-sdk pack:check
@@ -44,8 +44,8 @@ jobs:
       run:
         working-directory: packages/agent-python-sdk
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: PYTHONPATH=src python -m unittest discover -s tests -v
