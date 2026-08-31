@@ -131,6 +131,12 @@ async function executeCommand(
       );
     case "export-job":
       return await client.exportJob(requiredArgument(args, "export job ID"));
+    case "export-manifest": {
+      const bytes = await client.exportManifest(
+        requiredArgument(args, "export job ID"),
+      );
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
     case "webhook-availability":
       return await client.webhookAvailability();
     case "webhook-list":
@@ -287,7 +293,7 @@ Discovery: manifest, status, quota, sources, source-registry
 Search: search, universal-search, semantic-search, entities
 Evidence: document, changes, claim-timeline, verify-claim
 Catalogs: products, datasets, benchmarks, entitlements, usage
-Jobs: research-create, research-job, export-create, export-job
+Jobs: research-create, research-job, export-create, export-job, export-manifest
 Webhooks: webhook-availability, webhook-list, webhook-health,
   webhook-history, webhook-status, webhook-test
 

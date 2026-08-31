@@ -153,14 +153,27 @@ describe("evidence jobs", () => {
         updatedAt: 1,
       });
     });
-    const rows = await t.query(jobs.records, {
+    const bundle = await t.query(jobs.records, {
       datasetId: catalog.datasetId,
       limit: 999,
     });
-    expect(rows[0]).toEqual(
-      expect.objectContaining({ title: "Public", excerpt: "excerpt" }),
+    expect(bundle).toMatchObject({
+      dataset: {
+        datasetKey: "ai-systems-evidence",
+        exportSchemaVersion: "symbaiex-evidence-document-v2",
+      },
+      scannedRecordCount: 1,
+      selectionScanTruncated: false,
+    });
+    expect(bundle.records[0]).toEqual(
+      expect.objectContaining({
+        schemaVersion: "symbaiex-evidence-document-v2",
+        title: "Public",
+        excerpt: "excerpt",
+        source: expect.objectContaining({ sourceKey: "source" }),
+      }),
     );
-    expect(JSON.stringify(rows[0])).not.toContain("rawStorageId");
+    expect(JSON.stringify(bundle.records[0])).not.toContain("rawStorageId");
     await expect(
       t.mutation(jobs.createExport, {
         ownerUserId: ids.other,
@@ -185,7 +198,9 @@ describe("evidence jobs", () => {
       ctx.storage.store(new Blob(['{"record":1}\n'])),
     );
     const datasetManifestStorageId = await t.run(async (ctx) =>
-      ctx.storage.store(new Blob(['{"format":"jsonl"}'])),
+      ctx.storage.store(
+        new Blob(['{"format":"jsonl"}'], { type: "application/json" }),
+      ),
     );
     await t.mutation(jobs.completeExport, {
       jobId: exportJob.jobId,
@@ -198,7 +213,12 @@ describe("evidence jobs", () => {
       artifactByteLength: 13,
     });
     await t.run(async (ctx) => {
-      const version = await ctx.db.query("evidenceDatasetVersions").unique();
+      const version = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_checksum", (q) =>
+          q.eq("datasetId", catalog.datasetId).eq("checksum", "checksum-one"),
+        )
+        .unique();
       expect(version).toMatchObject({
         datasetId: catalog.datasetId,
         checksum: "checksum-one",
@@ -207,6 +227,83 @@ describe("evidence jobs", () => {
       expect(version?.manifestStorageId).toBe(datasetManifestStorageId);
       expect(version?.manifestStorageId).not.toBe(storageId);
     });
+  });
+
+  test("keeps commercial dataset selections distinct", async () => {
+    const t = setup();
+    await fixture(t);
+    await t.mutation(jobs.catalog, {});
+    const datasetIds = await t.run(async (ctx) => {
+      const now = 1;
+      const insertSource = async (sourceKey: string) =>
+        await ctx.db.insert("evidenceSources", {
+          sourceKey,
+          name: sourceKey,
+          sourceType: "api",
+          ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: now,
+          lastSucceededAt: now,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+      const cisa = await insertSource("cisa-kev");
+      const releases = await insertSource("github-allowlisted-releases");
+      for (const [sourceId, externalKey, kind] of [
+        [cisa, "CVE-TEST", "advisory"],
+        [releases, "release-1", "release"],
+      ] as const) {
+        await ctx.db.insert("evidenceDocuments", {
+          sourceId,
+          externalKey,
+          canonicalUrl: `https://example.com/${externalKey}`,
+          canonicalUrlHash: externalKey,
+          kind,
+          visibility: "public",
+          title: externalKey,
+          excerpt: `${kind} excerpt`,
+          searchText: `${externalKey} ${kind}`,
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: null,
+          firstSeenAt: now,
+          updatedAt: now,
+        });
+      }
+      const datasets = await ctx.db.query("evidenceDatasets").collect();
+      return Object.fromEntries(
+        datasets.map((dataset) => [dataset.datasetKey, dataset._id]),
+      );
+    });
+
+    const security = await t.query(jobs.records, {
+      datasetId: datasetIds["security-advisories"],
+      limit: 100,
+    });
+    const releases = await t.query(jobs.records, {
+      datasetId: datasetIds["software-release-intelligence"],
+      limit: 100,
+    });
+
+    expect(security.records.map((record: { kind: string }) => record.kind)).toEqual([
+      "advisory",
+    ]);
+    expect(releases.records.map((record: { kind: string }) => record.kind)).toEqual([
+      "release",
+    ]);
   });
 
   test("rechecks agent ownership, activity, entitlement, expiry, and manifest before download", async () => {
@@ -228,7 +325,9 @@ describe("evidence jobs", () => {
       ),
     );
     const datasetManifestStorageId = await t.run(async (ctx) =>
-      ctx.storage.store(new Blob(['{"format":"jsonl"}'])),
+      ctx.storage.store(
+        new Blob(['{"format":"jsonl"}'], { type: "application/json" }),
+      ),
     );
     await t.mutation(jobs.completeExport, {
       jobId: job.jobId,
@@ -251,6 +350,17 @@ describe("evidence jobs", () => {
       contentType: "application/x-ndjson",
       sha256: "artifact-checksum-one",
     });
+    await expect(
+      t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "export-manifest",
+        exportJobId: job.jobId,
+      }),
+    ).resolves.toMatchObject({
+      storageId: datasetManifestStorageId,
+      contentType: "application/json",
+      filename: expect.stringContaining("manifest.json"),
+    });
     const downloaded = await t
       .withIdentity({ subject: agent })
       .fetch("/agent/artifact", {
@@ -266,6 +376,17 @@ describe("evidence jobs", () => {
       "artifact-checksum-one",
     );
     expect(await downloaded.text()).toBe('{"record":1}\n');
+    const manifest = await t
+      .withIdentity({ subject: agent })
+      .fetch("/agent/artifact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "export-manifest", jobId: job.jobId }),
+      });
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-disposition")).toContain(
+      "manifest.json",
+    );
     const crossOwner = await t
       .withIdentity({ subject: other })
       .fetch("/agent/artifact", {

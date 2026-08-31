@@ -57,6 +57,11 @@ const TOOL_ENTRIES = [
     "evidence.get_export_artifact",
     "export_artifact",
   ],
+  [
+    "evidence_get_export_manifest",
+    "evidence.get_export_manifest",
+    "export_manifest",
+  ],
   ["evidence_list_webhooks", "evidence.list_webhooks", "webhooks_list"],
   [
     "evidence_webhook_availability",
@@ -569,6 +574,7 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
     case "evidence.get_research_artifact":
     case "evidence.get_export":
     case "evidence.get_export_artifact":
+    case "evidence.get_export_manifest":
       return object({ jobId: id }, ["jobId"]);
     case "evidence.create_export":
       return object(
@@ -658,7 +664,8 @@ function toolDescription(name: (typeof TOOL_ENTRIES)[number][1]) {
     "evidence.claim_timeline":
       "Read the bounded public supersession timeline for a claim key.",
     "evidence.products": "List current evidence API product definitions.",
-    "evidence.datasets": "List immutable public evidence dataset snapshots.",
+    "evidence.datasets":
+      "List public dataset selection contracts and immutable snapshot provenance, coverage, freshness, and citation metrics.",
     "evidence.benchmarks": "List public benchmark definitions and recent runs.",
     "evidence.quota": "Read the authenticated agent's current usage quota.",
     "evidence.entitlements":
@@ -672,6 +679,8 @@ function toolDescription(name: (typeof TOOL_ENTRIES)[number][1]) {
     "evidence.get_export": "Read one owner-scoped export job status.",
     "evidence.get_export_artifact":
       "Resolve one authenticated first-party export artifact stream.",
+    "evidence.get_export_manifest":
+      "Resolve the immutable buyer-readable provenance and coverage manifest for an export.",
     "evidence.list_webhooks": "List owner-scoped webhook subscriptions.",
     "evidence.webhook_availability":
       "Read whether webhook creation is currently operator-enabled.",

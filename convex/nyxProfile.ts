@@ -15,7 +15,7 @@ export const NYX_PROFILE = {
   enabled: true,
   routeFeature: "research",
   promptVersion:
-    "nyx-research-v9-openrouter-ox-alpha-free-router-deepseek-low-reasoning-quality-escalation-natural-voice",
+    "nyx-research-v10-openrouter-free-evidence-reconstruction-natural-voice",
   voice:
     "measured, curious, and evidence-first; separates reported facts from bounded interpretation and names what would change the conclusion",
 } as const;

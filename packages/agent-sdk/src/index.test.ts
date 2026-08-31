@@ -260,6 +260,7 @@ describe("AgentClient", () => {
     await client.createExport("dataset-1", "export-001");
     await client.exportJob("job-2");
     await client.exportArtifact("job-2");
+    await client.exportManifest("job-2");
     await client.rotateWebhookSecret("primary", "rotate-001");
     await client.replayWebhookDelivery("primary", "event-1", "replay-001");
     await client.mcp(
@@ -279,6 +280,7 @@ describe("AgentClient", () => {
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/claims/release-security/timeline?limit=2`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/research-jobs/job-1/artifact`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-2/artifact`,
+        `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-2/manifest`,
         `${DEFAULT_PLATFORM_ORIGIN}/api/agent/mcp`,
       ]),
     );

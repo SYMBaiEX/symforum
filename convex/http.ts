@@ -143,7 +143,9 @@ http.route({
       const body = await readAgentDataBody(request);
       if (
         !isRecord(body) ||
-        (body.kind !== "research" && body.kind !== "export") ||
+        (body.kind !== "research" &&
+          body.kind !== "export" &&
+          body.kind !== "export-manifest") ||
         typeof body.jobId !== "string" ||
         body.jobId.length === 0 ||
         body.jobId.length > 160
@@ -163,7 +165,7 @@ http.route({
             }
           : {
               agentUserId,
-              kind: "export",
+              kind: body.kind,
               exportJobId: body.jobId as Id<"evidenceExportJobs">,
             },
       );

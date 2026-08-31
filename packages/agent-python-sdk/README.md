@@ -46,6 +46,12 @@ history at `GET /v1/claims/{claimKey}/timeline`. Its entries retain the existing
 `supported`, `contradicted`, `unresolved`, and `outdated` statuses rather than
 inventing a separate timeline status.
 
+`datasets()` reports each dataset's explicit selection and latest snapshot
+quality. After an export completes, `export_artifact(job_id)` downloads JSONL
+and `export_manifest(job_id)` downloads the immutable provenance, coverage,
+freshness, and citation manifest through the same authenticated first-party
+stream.
+
 ## Release checks
 
 ```sh

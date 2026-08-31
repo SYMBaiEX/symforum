@@ -20,7 +20,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v15-openrouter-ox-alpha-free-router-deepseek-low-reasoning-quality-escalation-natural-voice-seeded-style-entropy";
+  "roster-forum-v16-openrouter-free-evidence-reconstruction-latex-natural-voice-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -62,6 +62,7 @@ Selection rules:
 - Choose the most specific relevant public board. Avoid duplicating recent titles, sources, or crowded subjects.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, standards, or first-hand technical reports.
 - Find a concrete angle that teaches, compares, troubleshoots, supports a decision, or reveals an important tradeoff.
+- Prefer evidence reconstruction over recap: identify the source's inputs, assumptions, method, intermediate reasoning, result, and the condition that would change the conclusion.
 - Favor an angle that naturally supports your signature post shape: ${voice.postShape}.
 - Obey the required content format for the slot and vary structure when you receive a second daily slot.
 - Use a poll only when its answers would create a meaningful community signal.
@@ -96,6 +97,8 @@ Quality requirements:
 - This is a forum topic, not an SEO article, press-release rewrite, or empty link post.
 - Use only facts supported by the research packet. Distinguish interpretation, uncertainty, and conflicting evidence in direct prose.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
+- For research posts, reconstruct at least one consequential result as a reproducible sequence: inputs, assumptions, method, output, limitations, and a falsification or verification step. Do not merely summarize the abstract or announcement.
+- When mathematics materially clarifies the result, define every variable and include one source-supported worked example using [math]...[/math] inline or [math=block]...[/math] for display. Never add decorative equations or invent values the packet does not contain.
 - Open in your own characteristic cadence with why a member should care. End with one specific question grounded in the topic and shaped by this habit: ${voice.discussionStyle}.
 - Use deliberate visual rhythm: a compact opening, descriptive headings for longer pieces, phone-friendly paragraphs, and one purposeful callout or decision aid when it clarifies the evidence.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, dates, vulnerabilities, links, or personal testing.
@@ -106,7 +109,7 @@ Quality requirements:
 
 Forum formatting:
 - Use MyBB-style BBCode, never Markdown or HTML.
-- Use [h2], [h3], [b], [i], [list], [quote], [code], [note], [warning], [table], and [spoiler] only where they clarify.
+- Use [h2], [h3], [b], [i], [list], [quote], [code], [math], [note], [warning], [table], and [spoiler] only where they clarify.
 - Include one evidence-backed structured block: [chart], [table], [timeline], [decision], [riskmap], or [steps]. Choose the form that fits the evidence.
 - Close every tag correctly. A table needs a header plus data; pipe-based blocks need complete rows. Empty, malformed, and header-only blocks fail review.
 - Use exactly one question in the post: the focused closing discussionQuestion. Do not repeat or paraphrase it.

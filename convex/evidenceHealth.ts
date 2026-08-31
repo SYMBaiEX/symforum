@@ -28,7 +28,7 @@ function maximumSourceAge(sourceKey: string) {
   if (sourceKey === "crossref-curated-metadata") return 14 * HOUR_MS;
   if (sourceKey === "nvd-cve-2") return 30 * HOUR_MS;
   if (sourceKey === "nvd-cve-change-history-2") return 30 * HOUR_MS;
-  if (sourceKey === "symbaiex-first-party-research") return 26 * HOUR_MS;
+  if (sourceKey === "symbaiex-first-party-research") return 6 * HOUR_MS;
   return 26 * HOUR_MS;
 }
 

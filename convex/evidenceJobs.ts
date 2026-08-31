@@ -10,6 +10,8 @@ import {
 
 const MAX_QUERY_LENGTH = 300;
 const MAX_EXPORT_LIMIT = 100;
+const MAX_EXPORT_SCAN = 500;
+const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
 const enqueueWebhookRef = makeFunctionReference<
   "mutation",
@@ -50,6 +52,8 @@ const EXPORT_JOB_RESULT = v.object({
   format: v.union(v.literal("jsonl"), v.literal("parquet")),
 });
 const EXPORTED_DOCUMENT = v.object({
+  schemaVersion: v.string(),
+  datasetKey: v.string(),
   documentId: v.id("evidenceDocuments"),
   versionId: v.union(v.id("evidenceDocumentVersions"), v.null()),
   title: v.string(),
@@ -70,8 +74,52 @@ const EXPORTED_DOCUMENT = v.object({
     v.literal("restricted"),
     v.literal("unknown"),
   ),
+  tags: v.array(v.string()),
+  authors: v.array(v.string()),
   publishedAt: v.union(v.number(), v.null()),
+  firstSeenAt: v.number(),
   updatedAt: v.number(),
+  source: v.object({
+    sourceKey: v.string(),
+    name: v.string(),
+    homepageUrl: v.string(),
+    termsUrl: v.string(),
+    provenanceClass: v.string(),
+    licenseClass: v.string(),
+  }),
+  version: v.union(
+    v.null(),
+    v.object({
+      version: v.number(),
+      contentHash: v.string(),
+      fetchedAt: v.number(),
+      sourceRevision: v.string(),
+      sourceUpdatedAt: v.number(),
+      retrievalUrl: v.string(),
+      metadataJson: v.string(),
+    }),
+  ),
+  citationMetrics: v.object({
+    total: v.number(),
+    supports: v.number(),
+    contradicts: v.number(),
+    context: v.number(),
+    truncated: v.boolean(),
+  }),
+});
+const EXPORT_RECORDS = v.object({
+  dataset: v.object({
+    datasetKey: v.string(),
+    name: v.string(),
+    description: v.string(),
+    includedKinds: v.array(v.string()),
+    includedLicenseClasses: v.array(v.string()),
+    sourceKeys: v.array(v.string()),
+    exportSchemaVersion: v.string(),
+  }),
+  scannedRecordCount: v.number(),
+  selectionScanTruncated: v.boolean(),
+  records: v.array(EXPORTED_DOCUMENT),
 });
 const ARTIFACT_DOWNLOAD = v.object({
   storageId: v.id("_storage"),
@@ -358,7 +406,11 @@ export const getArtifact = internalQuery({
 export const resolveArtifactDownload = internalQuery({
   args: {
     agentUserId: v.id("users"),
-    kind: v.union(v.literal("research"), v.literal("export")),
+    kind: v.union(
+      v.literal("research"),
+      v.literal("export"),
+      v.literal("export-manifest"),
+    ),
     researchJobId: v.optional(v.id("evidenceResearchJobs")),
     exportJobId: v.optional(v.id("evidenceExportJobs")),
   },
@@ -368,7 +420,8 @@ export const resolveArtifactDownload = internalQuery({
       return null;
     if (
       (args.kind === "research" && args.researchJobId === undefined) ||
-      (args.kind === "export" && args.exportJobId === undefined)
+      ((args.kind === "export" || args.kind === "export-manifest") &&
+        args.exportJobId === undefined)
     )
       return null;
     const agent = await ctx.db.get("users", args.agentUserId);
@@ -423,6 +476,30 @@ export const resolveArtifactDownload = internalQuery({
         : product.unitPriceMicroUsd === undefined &&
           product.visibility === "public";
     if (!entitled) return null;
+    if (args.kind === "export-manifest") {
+      const exportJob = job as Doc<"evidenceExportJobs">;
+      const version = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_checksum", (q) =>
+          q.eq("datasetId", exportJob.datasetId).eq("checksum", exportJob.checksum),
+        )
+        .unique();
+      if (version?.manifestStorageId === undefined) return null;
+      const metadata = await ctx.db.system.get(
+        "_storage",
+        version.manifestStorageId,
+      );
+      if (metadata === null) return null;
+      return {
+        storageId: version.manifestStorageId,
+        contentType: metadata.contentType ?? "application/json",
+        byteLength: metadata.size,
+        sha256: metadata.sha256,
+        generatedAt: version.createdAt,
+        expiresAt: exportJob.expiresAt,
+        filename: `symbaiex-export-${exportJob._id}-manifest.json`,
+      };
+    }
     const artifact =
       args.kind === "research"
         ? await ctx.db
@@ -493,31 +570,167 @@ export const readExportInput = internalQuery({
 
 export const readExportDocuments = internalQuery({
   args: { datasetId: v.id("evidenceDatasets"), limit: v.optional(v.number()) },
-  returns: v.array(EXPORTED_DOCUMENT),
+  returns: EXPORT_RECORDS,
   handler: async (ctx, args) => {
-    await ownedDataset(ctx, args.datasetId);
+    const dataset = await ownedDataset(ctx, args.datasetId);
     const limit = Math.max(
       1,
       Math.min(MAX_EXPORT_LIMIT, Math.floor(args.limit ?? MAX_EXPORT_LIMIT)),
     );
-    const documents = await ctx.db
+    const scanned = await ctx.db
       .query("evidenceDocuments")
       .withIndex("by_visibility_and_updatedAt", (q) =>
         q.eq("visibility", "public"),
       )
       .order("desc")
-      .take(limit);
-    return documents.map((document) => ({
-      documentId: document._id,
-      versionId: document.currentVersionId,
-      title: document.title,
-      excerpt: document.excerpt,
-      canonicalUrl: document.canonicalUrl,
-      kind: document.kind,
-      licenseClass: document.licenseClass,
-      publishedAt: document.publishedAt,
-      updatedAt: document.updatedAt,
-    }));
+      .take(MAX_EXPORT_SCAN);
+    const includedKinds = dataset.includedKinds ?? [];
+    const includedLicenseClasses = dataset.includedLicenseClasses ?? [
+      "public-domain",
+      "open",
+      "attributed",
+    ];
+    const sourceKeys = dataset.sourceKeys ?? [];
+    const allowedKinds = new Set(includedKinds);
+    const allowedLicenses = new Set(includedLicenseClasses);
+    const allowedSources = new Set(sourceKeys);
+    const records: Array<{
+      schemaVersion: string;
+      datasetKey: string;
+      documentId: Id<"evidenceDocuments">;
+      versionId: Id<"evidenceDocumentVersions"> | null;
+      title: string;
+      excerpt: string;
+      canonicalUrl: string;
+      kind: Doc<"evidenceDocuments">["kind"];
+      licenseClass: Doc<"evidenceDocuments">["licenseClass"];
+      tags: string[];
+      authors: string[];
+      publishedAt: number | null;
+      firstSeenAt: number;
+      updatedAt: number;
+      source: {
+        sourceKey: string;
+        name: string;
+        homepageUrl: string;
+        termsUrl: string;
+        provenanceClass: string;
+        licenseClass: string;
+      };
+      version: null | {
+        version: number;
+        contentHash: string;
+        fetchedAt: number;
+        sourceRevision: string;
+        sourceUpdatedAt: number;
+        retrievalUrl: string;
+        metadataJson: string;
+      };
+      citationMetrics: {
+        total: number;
+        supports: number;
+        contradicts: number;
+        context: number;
+        truncated: boolean;
+      };
+    }> = [];
+    for (const document of scanned) {
+      if (records.length >= limit) break;
+      if (allowedKinds.size > 0 && !allowedKinds.has(document.kind)) continue;
+      if (!allowedLicenses.has(document.licenseClass)) continue;
+      const source = await ctx.db.get("evidenceSources", document.sourceId);
+      if (
+        source === null ||
+        source.visibility !== "public" ||
+        (allowedSources.size > 0 && !allowedSources.has(source.sourceKey))
+      )
+        continue;
+      const version =
+        document.currentVersionId === null
+          ? null
+          : await ctx.db.get(
+              "evidenceDocumentVersions",
+              document.currentVersionId,
+            );
+      const citations =
+        version === null
+          ? []
+          : await ctx.db
+              .query("evidenceClaimCitations")
+              .withIndex("by_documentVersionId", (q) =>
+                q.eq("documentVersionId", version._id),
+              )
+              .take(MAX_EXPORT_CITATIONS_PER_RECORD + 1);
+      const boundedCitations = citations.slice(
+        0,
+        MAX_EXPORT_CITATIONS_PER_RECORD,
+      );
+      records.push({
+        schemaVersion:
+          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+        datasetKey: dataset.datasetKey,
+        documentId: document._id,
+        versionId: document.currentVersionId,
+        title: document.title,
+        excerpt: document.excerpt,
+        canonicalUrl: document.canonicalUrl,
+        kind: document.kind,
+        licenseClass: document.licenseClass,
+        tags: document.tags,
+        authors: document.authors,
+        publishedAt: document.publishedAt,
+        firstSeenAt: document.firstSeenAt,
+        updatedAt: document.updatedAt,
+        source: {
+          sourceKey: source.sourceKey,
+          name: source.name,
+          homepageUrl: source.homepageUrl,
+          termsUrl: source.termsUrl,
+          provenanceClass: source.provenanceClass,
+          licenseClass: source.licenseClass,
+        },
+        version:
+          version === null
+            ? null
+            : {
+                version: version.version,
+                contentHash: version.contentHash,
+                fetchedAt: version.fetchedAt,
+                sourceRevision: version.sourceRevision,
+                sourceUpdatedAt: version.sourceUpdatedAt,
+                retrievalUrl: version.retrievalUrl,
+                metadataJson: version.metadataJson,
+              },
+        citationMetrics: {
+          total: boundedCitations.length,
+          supports: boundedCitations.filter(
+            (citation) => citation.relation === "supports",
+          ).length,
+          contradicts: boundedCitations.filter(
+            (citation) => citation.relation === "contradicts",
+          ).length,
+          context: boundedCitations.filter(
+            (citation) => citation.relation === "context",
+          ).length,
+          truncated: citations.length > MAX_EXPORT_CITATIONS_PER_RECORD,
+        },
+      });
+    }
+    return {
+      dataset: {
+        datasetKey: dataset.datasetKey,
+        name: dataset.name,
+        description: dataset.description,
+        includedKinds,
+        includedLicenseClasses,
+        sourceKeys,
+        exportSchemaVersion:
+          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+      },
+      scannedRecordCount: scanned.length,
+      selectionScanTruncated: scanned.length === MAX_EXPORT_SCAN,
+      records,
+    };
   },
 });
 
@@ -616,6 +829,16 @@ export const completeExportJob = internalMutation({
     recordCount: v.number(),
     artifactContentType: v.string(),
     artifactByteLength: v.number(),
+    // Optional during rolling deployment so already-scheduled v1 export
+    // actions can finish; all newly generated exports supply v2 metrics.
+    schemaVersion: v.optional(v.string()),
+    sourceCount: v.optional(v.number()),
+    citationCount: v.optional(v.number()),
+    completenessScore: v.optional(v.number()),
+    freshnessScore: v.optional(v.number()),
+    earliestObservedAt: v.optional(v.number()),
+    latestObservedAt: v.optional(v.number()),
+    qualityMetricsJson: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -670,6 +893,28 @@ export const completeExportJob = internalMutation({
               0,
               Math.min(MAX_EXPORT_LIMIT, Math.floor(args.recordCount)),
             ),
+            schemaVersion: bounded(
+              args.schemaVersion ?? "symbaiex-evidence-document-v1",
+              "schemaVersion",
+              120,
+            ),
+            artifactByteLength: Math.max(
+              0,
+              Math.floor(args.artifactByteLength),
+            ),
+            sourceCount: Math.max(0, Math.floor(args.sourceCount ?? 0)),
+            citationCount: Math.max(0, Math.floor(args.citationCount ?? 0)),
+            completenessScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.completenessScore ?? 0)),
+            ),
+            freshnessScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.freshnessScore ?? 0)),
+            ),
+            earliestObservedAt: args.earliestObservedAt,
+            latestObservedAt: args.latestObservedAt,
+            qualityMetricsJson: (args.qualityMetricsJson ?? "{}").slice(0, 20_000),
             manifestStorageId: args.datasetManifestStorageId,
             createdAt: Date.now(),
           },
@@ -872,6 +1117,54 @@ const PRODUCTS = [
   "mcp",
   "webhooks",
 ] as const;
+const DATASET_CATALOG = [
+  {
+    datasetKey: "ai-systems-evidence",
+    name: "AI systems evidence",
+    description:
+      "Attributable public evidence across AI systems, software, research, releases, and security advisories.",
+    licenseClass: "attributed" as const,
+    includedKinds: [] as string[],
+    includedLicenseClasses: ["public-domain", "open", "attributed"],
+    sourceKeys: [] as string[],
+  },
+  {
+    datasetKey: "security-advisories",
+    name: "Security advisories and vulnerability changes",
+    description:
+      "Official, attributable advisory metadata from CISA, GitHub, and NVD with version and citation provenance.",
+    licenseClass: "attributed" as const,
+    includedKinds: ["advisory"],
+    includedLicenseClasses: ["public-domain", "open", "attributed"],
+    sourceKeys: [
+      "cisa-kev",
+      "github-global-advisories",
+      "nvd-cve-2",
+      "nvd-cve-change-history-2",
+    ],
+  },
+  {
+    datasetKey: "software-release-intelligence",
+    name: "Software release intelligence",
+    description:
+      "Versioned release metadata for the code-owned open-source repository allowlist.",
+    licenseClass: "attributed" as const,
+    includedKinds: ["release"],
+    includedLicenseClasses: ["open", "attributed"],
+    sourceKeys: ["github-allowlisted-releases"],
+  },
+  {
+    datasetKey: "research-metadata",
+    name: "Research and benchmark metadata",
+    description:
+      "Curated bibliographic, first-party research, dataset, and benchmark metadata without third-party full text.",
+    licenseClass: "attributed" as const,
+    includedKinds: ["paper", "dataset", "benchmark", "document"],
+    includedLicenseClasses: ["public-domain", "open", "attributed"],
+    sourceKeys: ["crossref-curated-metadata", "symbaiex-first-party-research"],
+  },
+] as const;
+
 export const ensureCatalog = internalMutation({
   args: {},
   returns: v.object({
@@ -899,26 +1192,37 @@ export const ensureCatalog = internalMutation({
         updatedAt: now,
       });
     }
-    let dataset = await ctx.db
-      .query("evidenceDatasets")
-      .withIndex("by_datasetKey", (q) =>
-        q.eq("datasetKey", "ai-systems-evidence"),
-      )
-      .unique();
-    if (dataset === null) {
-      const id = await ctx.db.insert("evidenceDatasets", {
-        datasetKey: "ai-systems-evidence",
-        name: "AI systems evidence",
-        description:
-          "Bounded public metadata and excerpts for AI systems evidence.",
-        visibility: "public",
-        licenseClass: "attributed",
-        status: "active",
-        createdAt: now,
+    let primaryDatasetId: Id<"evidenceDatasets"> | null = null;
+    for (const definition of DATASET_CATALOG) {
+      const existing = await ctx.db
+        .query("evidenceDatasets")
+        .withIndex("by_datasetKey", (q) =>
+          q.eq("datasetKey", definition.datasetKey),
+        )
+        .unique();
+      const values = {
+        ...definition,
+        includedKinds: [...definition.includedKinds],
+        includedLicenseClasses: [...definition.includedLicenseClasses],
+        sourceKeys: [...definition.sourceKeys],
+        exportSchemaVersion: "symbaiex-evidence-document-v2",
+        visibility: "public" as const,
+        status: "active" as const,
         updatedAt: now,
-      });
-      dataset = (await ctx.db.get("evidenceDatasets", id))!;
+      };
+      const datasetId =
+        existing === null
+          ? await ctx.db.insert("evidenceDatasets", {
+              ...values,
+              createdAt: now,
+            })
+          : (await ctx.db.patch("evidenceDatasets", existing._id, values),
+            existing._id);
+      if (definition.datasetKey === "ai-systems-evidence")
+        primaryDatasetId = datasetId;
     }
+    if (primaryDatasetId === null)
+      throw new Error("Primary evidence dataset was not initialized.");
     if (
       (await ctx.db
         .query("evidenceBenchmarks")
@@ -937,6 +1241,6 @@ export const ensureCatalog = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
-    return { datasetId: dataset._id, billingEnabled: false };
+    return { datasetId: primaryDatasetId, billingEnabled: false };
   },
 });

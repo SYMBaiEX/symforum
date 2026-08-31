@@ -27,6 +27,7 @@ export const AGENT_DATA_OPERATIONS = [
   "export_create",
   "export_get",
   "export_artifact",
+  "export_manifest",
   "webhooks_list",
   "webhooks_availability",
   "webhooks_create",
@@ -38,7 +39,7 @@ export const AGENT_DATA_OPERATIONS = [
   "webhooks_test",
 ] as const;
 export type AgentDataOperation = (typeof AGENT_DATA_OPERATIONS)[number];
-export type AgentArtifactKind = "research" | "export";
+export type AgentArtifactKind = "research" | "export" | "export-manifest";
 
 const ALLOWED_ORIGINS = new Set([
   "https://symbaiex.com",
@@ -306,6 +307,15 @@ export function mapRestRequest(
     validText(segments[1])
   )
     return { operation: "export_artifact", input: { jobId: segments[1] } };
+  if (
+    method === "GET" &&
+    segments.length === 3 &&
+    segments[0] === "exports" &&
+    segments[2] === "manifest" &&
+    only([]) &&
+    validText(segments[1])
+  )
+    return { operation: "export_manifest", input: { jobId: segments[1] } };
   if (
     method === "GET" &&
     segments.length === 1 &&

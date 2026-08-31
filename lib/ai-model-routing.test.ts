@@ -10,7 +10,6 @@ import {
   type RoutedModel,
 } from "./ai-model-routing";
 import {
-  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_GENERATION_MODELS,
 } from "./ai-models";
@@ -25,11 +24,8 @@ function candidate(persistedModel: string): RoutedModel {
 }
 
 describe("OpenRouter-only model routing", () => {
-  test("routes every generation stage through the free-first DeepSeek chain", () => {
-    expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual([
-      "stealth/ox-alpha",
-      "openrouter/free",
-    ]);
+  test("routes every generation stage through the OpenRouter free router", () => {
+    expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual(["openrouter/free"]);
     expect(openRouterModelForStage("suki:forum-topic")).toBe(
       OPENROUTER_FREE_GENERATION_MODELS[0],
     );
@@ -44,7 +40,7 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("creates only the canonical OpenRouter free-first candidates", async () => {
+  test("creates only the canonical OpenRouter free candidate", async () => {
     const candidates = await routedModelCandidates({
       openRouterApiKey: "test-openrouter-key",
     });
@@ -57,7 +53,7 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("deduplicates configured candidates and fails closed when all are disabled", async () => {
+  test("deduplicates configured candidates and fails closed when disabled", async () => {
     await expect(
       routedModelCandidates(
         { openRouterApiKey: "test-openrouter-key" },
@@ -65,8 +61,8 @@ describe("OpenRouter-only model routing", () => {
         undefined,
         undefined,
         [
-          OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
-          OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
+          "openrouter/free",
+          "openrouter/free",
         ],
       ),
     ).resolves.toHaveLength(1);
@@ -78,24 +74,8 @@ describe("OpenRouter-only model routing", () => {
     ).rejects.toThrow(/No enabled AI model route/);
   });
 
-  test("keeps both free routes when the paid DeepSeek fallback is disabled", async () => {
-    const candidates = await routedModelCandidates({
-      openRouterApiKey: "test-openrouter-key",
-      disabledModelIds: [OPENROUTER_DEEPSEEK_FALLBACK_MODEL],
-    });
-
-    expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual(
-      OPENROUTER_FREE_GENERATION_MODELS,
-    );
-  });
-
-  test("falls through free failures and records the paid DeepSeek completion", async () => {
-    const run = vi.fn(async (route: RoutedModel) => {
-      if (route.persistedModel !== OPENROUTER_DEEPSEEK_FALLBACK_MODEL) {
-        throw new Error("free route unavailable");
-      }
-      return "deepseek-result";
-    });
+  test("records a completed free-router attempt", async () => {
+    const run = vi.fn(async () => "free-result");
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
       OPENROUTER_GENERATION_MODELS.map(candidate),
@@ -109,19 +89,15 @@ describe("OpenRouter-only model routing", () => {
       },
     );
 
-    expect(result.value).toBe("deepseek-result");
+    expect(result.value).toBe("free-result");
     expect(result.route).toMatchObject({
       provider: "openrouter",
-      persistedModel: OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
+      persistedModel: "openrouter/free",
     });
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(1);
     expect(onAttempt).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ outcome: "failed", fallback: false }),
-    );
-    expect(onAttempt).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ outcome: "completed", fallback: true }),
+      expect.objectContaining({ outcome: "completed", fallback: false }),
     );
   });
 
@@ -131,9 +107,7 @@ describe("OpenRouter-only model routing", () => {
     });
 
     expect(selected.persistedModel).toBe(OPENROUTER_GENERATION_MODELS[0]);
-    expect(selected.providerOptions).toEqual({
-      openrouter: { models: OPENROUTER_GENERATION_MODELS.slice(1) },
-    });
+    expect(selected.providerOptions).toBeUndefined();
   });
 
   test("fails clearly when no OpenRouter key is configured", async () => {

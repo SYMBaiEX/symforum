@@ -103,6 +103,31 @@ describe("symbaiex login", () => {
     );
   });
 
+  test("prints the buyer-readable export manifest as JSON", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-manifest-"));
+    const tokenFile = join(directory, "token");
+    await new FileTokenStore(tokenFile).setToken("test-access-token");
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      new Response('{"schemaVersion":"symbaiex-evidence-document-v2"}'),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+    const output: string[] = [];
+
+    const code = await run(
+      ["export-manifest", "job-1", "--token-file", tokenFile],
+      {
+        log: (value: unknown) => output.push(String(value)),
+        error: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("symbaiex-evidence-document-v2");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://www.symbaiex.com/api/agent/v1/exports/job-1/manifest",
+    );
+  });
+
   test("requires a replay key before semantic provider work", async () => {
     const errors: string[] = [];
     const fetchMock = vi.fn();

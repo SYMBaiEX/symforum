@@ -318,7 +318,33 @@ describe("durable evidence graph", () => {
       t.query(evidence.getPublicDocument, {
         documentId: publicDocument.documentId,
       }),
-    ).resolves.toMatchObject({ title: "August release" });
+    ).resolves.toMatchObject({
+      title: "August release",
+      licenseClass: "attributed",
+      source: {
+        sourceKey: "openai-release-notes",
+        provenanceClass: "official",
+      },
+      currentVersion: {
+        documentVersionId: publicDocument.versionId,
+        contentHash: "hash-v1",
+      },
+      citationMetrics: { total: 0, truncated: false },
+    });
+    await t.run((ctx) =>
+      ctx.db.patch("evidenceSources", sourceId, { visibility: "private" }),
+    );
+    await expect(
+      t.query(evidence.searchPublic, {
+        search: "release evidence",
+        limit: 50,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      t.query(evidence.getPublicDocument, {
+        documentId: publicDocument.documentId,
+      }),
+    ).resolves.toBeNull();
   });
 
   test("requires extant claim and immutable document version for citations", async () => {

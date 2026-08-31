@@ -261,6 +261,9 @@ class AgentClient:
     def export_artifact(self, job_id: str) -> bytes:
         return self._artifact(f"exports/{_path_id(job_id, 'job_id')}/artifact")
 
+    def export_manifest(self, job_id: str) -> bytes:
+        return self._artifact(f"exports/{_path_id(job_id, 'job_id')}/manifest")
+
     def webhooks(self) -> JsonValue:
         return self._get("webhooks")
 
@@ -406,6 +409,7 @@ class AsyncAgentClient:
     async def create_export(self, dataset_id: str, *, idempotency_key: str, format: str = "jsonl") -> ExportJob: return await self.__getattr_async("create_export", dataset_id, idempotency_key=idempotency_key, format=format)
     async def export_job(self, job_id: str) -> JsonValue: return await self.__getattr_async("export_job", job_id)
     async def export_artifact(self, job_id: str) -> bytes: return await self.__getattr_async("export_artifact", job_id)
+    async def export_manifest(self, job_id: str) -> bytes: return await self.__getattr_async("export_manifest", job_id)
     async def webhooks(self) -> JsonValue: return await self.__getattr_async("webhooks")
     async def create_webhook(self, subscription_key: str, url: str, event_types: list[str] | tuple[str, ...], *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("create_webhook", subscription_key, url, event_types, idempotency_key=idempotency_key)
     async def set_webhook_status(self, subscription_key: str, status: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("set_webhook_status", subscription_key, status, idempotency_key=idempotency_key)

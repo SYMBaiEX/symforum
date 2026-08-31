@@ -6,6 +6,10 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { convexModelRoutingConfig } from "./modelRouting";
 import {
+  buildEvidenceDatasetManifest,
+  EVIDENCE_EXPORT_SCHEMA_VERSION,
+} from "../lib/evidence-dataset-manifest";
+import {
   runWithModelFallback,
   type RoutedModel,
 } from "../lib/ai-model-routing";
@@ -21,6 +25,8 @@ type Source = {
   updatedAt: number;
 };
 type ExportRecord = {
+  schemaVersion: string;
+  datasetKey: string;
   documentId: string;
   versionId: string | null;
   title: string;
@@ -28,8 +34,49 @@ type ExportRecord = {
   canonicalUrl: string;
   kind: string;
   licenseClass: string;
+  tags: string[];
+  authors: string[];
   publishedAt: number | null;
+  firstSeenAt: number;
   updatedAt: number;
+  source: {
+    sourceKey: string;
+    name: string;
+    homepageUrl: string;
+    termsUrl: string;
+    provenanceClass: string;
+    licenseClass: string;
+  };
+  version: null | {
+    version: number;
+    contentHash: string;
+    fetchedAt: number;
+    sourceRevision: string;
+    sourceUpdatedAt: number;
+    retrievalUrl: string;
+    metadataJson: string;
+  };
+  citationMetrics: {
+    total: number;
+    supports: number;
+    contradicts: number;
+    context: number;
+    truncated: boolean;
+  };
+};
+type ExportBundle = {
+  dataset: {
+    datasetKey: string;
+    name: string;
+    description: string;
+    includedKinds: string[];
+    includedLicenseClasses: string[];
+    sourceKeys: string[];
+    exportSchemaVersion: string;
+  };
+  scannedRecordCount: number;
+  selectionScanTruncated: boolean;
+  records: ExportRecord[];
 };
 const refs = {
   researchInput: makeFunctionReference<
@@ -50,7 +97,7 @@ const refs = {
   exportDocuments: makeFunctionReference<
     "query",
     { datasetId: string; limit: number },
-    ExportRecord[]
+    ExportBundle
   >("evidenceJobs:readExportDocuments"),
 };
 async function checksum(value: string) {
@@ -61,6 +108,17 @@ async function checksum(value: string) {
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
+}
+
+function metadata(value: string) {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function extractiveDigest(
@@ -129,14 +187,17 @@ export const runResearch = internalAction({
               providerOptions: candidate.providerOptions,
               abortSignal: signal,
             });
-            return result.text.trim();
+            return {
+              text: result.text.trim(),
+              modelId: result.response.modelId,
+            };
           },
         },
       );
-      markdown = generated.value || markdown;
+      markdown = generated.value.text || markdown;
       route = {
         provider: generated.route.provider,
-        model: generated.route.persistedModel,
+        model: generated.value.modelId || generated.route.persistedModel,
       };
     } catch {
       /* Explicit deterministic fallback is persisted below. */
@@ -171,6 +232,14 @@ export const runExport = internalAction({
     recordCount: v.number(),
     artifactContentType: v.string(),
     artifactByteLength: v.number(),
+    schemaVersion: v.string(),
+    sourceCount: v.number(),
+    citationCount: v.number(),
+    completenessScore: v.number(),
+    freshnessScore: v.number(),
+    earliestObservedAt: v.optional(v.number()),
+    latestObservedAt: v.optional(v.number()),
+    qualityMetricsJson: v.string(),
   }),
   handler: async (ctx, args) => {
     const input = await ctx.runQuery(refs.exportInput, {
@@ -181,36 +250,62 @@ export const runExport = internalAction({
       throw new Error(
         "PARQUET_UNSUPPORTED: only jsonl export is currently supported.",
       );
-    const records = await ctx.runQuery(refs.exportDocuments, {
+    const bundle = await ctx.runQuery(refs.exportDocuments, {
       datasetId: input.datasetId,
       limit: 100,
     });
+    const records = bundle.records.map((record) => ({
+      ...record,
+      version:
+        record.version === null
+          ? null
+          : {
+              ...record.version,
+              metadata: metadata(record.version.metadataJson),
+              metadataJson: undefined,
+            },
+    }));
     const jsonl =
-      records.map((record: ExportRecord) => JSON.stringify(record)).join("\n") +
+      records.map((record) => JSON.stringify(record)).join("\n") +
       (records.length ? "\n" : "");
     const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
     const resultStorageId = await ctx.storage.store(artifact);
     const resultChecksum = await checksum(jsonl);
+    const generatedAt = new Date().toISOString();
+    const manifest = buildEvidenceDatasetManifest({
+      datasetKey: bundle.dataset.datasetKey,
+      datasetName: bundle.dataset.name,
+      selection: {
+        includedKinds: bundle.dataset.includedKinds,
+        includedLicenseClasses: bundle.dataset.includedLicenseClasses,
+        sourceKeys: bundle.dataset.sourceKeys,
+      },
+      scannedRecordCount: bundle.scannedRecordCount,
+      selectionScanTruncated: bundle.selectionScanTruncated,
+      artifactChecksum: resultChecksum,
+      artifactByteLength: artifact.size,
+      generatedAt,
+      records: bundle.records,
+    });
     const datasetManifestStorageId = await ctx.storage.store(
       new Blob(
-        [
-          JSON.stringify({
-            format: "jsonl",
-            checksum: resultChecksum,
-            recordCount: records.length,
-            generatedAt: new Date().toISOString(),
-            containsRawPayload: false,
-          }),
-        ],
+        [JSON.stringify(manifest)],
         { type: "application/json" },
       ),
     );
+    const qualityMetricsJson = JSON.stringify({
+      coverage: manifest.coverage,
+      distributions: manifest.distributions,
+    });
     return {
       resultJson: JSON.stringify({
         format: "jsonl",
         recordCount: records.length,
         checksum: resultChecksum,
         containsRawPayload: false,
+        schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+        dataset: manifest.dataset,
+        coverage: manifest.coverage,
       }),
       resultStorageId,
       datasetManifestStorageId,
@@ -218,6 +313,18 @@ export const runExport = internalAction({
       recordCount: records.length,
       artifactContentType: artifact.type,
       artifactByteLength: artifact.size,
+      schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+      sourceCount: manifest.coverage.sourceCount,
+      citationCount: manifest.coverage.citationCount,
+      completenessScore: manifest.coverage.completenessScore,
+      freshnessScore: manifest.coverage.freshnessScore,
+      ...(manifest.coverage.earliestObservedAt === null
+        ? {}
+        : { earliestObservedAt: manifest.coverage.earliestObservedAt }),
+      ...(manifest.coverage.latestObservedAt === null
+        ? {}
+        : { latestObservedAt: manifest.coverage.latestObservedAt }),
+      qualityMetricsJson,
     };
   },
 });

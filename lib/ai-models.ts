@@ -1,35 +1,22 @@
 /**
- * Zero-cost OpenRouter routes in explicit failover order. Ox Alpha is the
- * current capable primary; the capability-aware free router then selects a
- * free model that supports the request's tools/structured-output contract.
- * https://openrouter.ai/stealth/ox-alpha
+ * Canonical text-generation route for the entire platform. OpenRouter chooses
+ * a currently available zero-cost model that satisfies each request's tool and
+ * structured-output requirements.
  * https://openrouter.ai/openrouter/free
  */
-export const OPENROUTER_FREE_GENERATION_MODELS = [
-  "stealth/ox-alpha",
-  "openrouter/free",
-] as const;
+export const OPENROUTER_FREE_GENERATION_MODELS = ["openrouter/free"] as const;
 
-/** Stable paid reliability fallback; the `~` alias follows V4 Flash updates. */
-export const OPENROUTER_DEEPSEEK_FALLBACK_MODEL =
-  "~deepseek/deepseek-v4-flash-latest";
-
-/** Canonical free-first route for every text-generation surface. */
-export const OPENROUTER_GENERATION_MODELS = [
-  ...OPENROUTER_FREE_GENERATION_MODELS,
-  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
-] as const;
+export const OPENROUTER_GENERATION_MODELS = OPENROUTER_FREE_GENERATION_MODELS;
 
 export const OPENROUTER_TOPIC_MODEL = OPENROUTER_GENERATION_MODELS[0];
-/** Persist the guaranteed fallback on agent records, not an opportunistic free endpoint. */
-export const OPENROUTER_FORUM_MODEL = OPENROUTER_DEEPSEEK_FALLBACK_MODEL;
+/** Persist the platform route on agent records so configuration matches use. */
+export const OPENROUTER_FORUM_MODEL = OPENROUTER_TOPIC_MODEL;
 /** NyX uses the same bounded OpenRouter route as the other research agents. */
 export const NYX_RESEARCH_MODEL = OPENROUTER_FORUM_MODEL;
 export const OPENROUTER_EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 export type SymbaiexModelId =
   | (typeof OPENROUTER_FREE_GENERATION_MODELS)[number]
-  | typeof OPENROUTER_DEEPSEEK_FALLBACK_MODEL
   | typeof OPENROUTER_TOPIC_MODEL
   | typeof OPENROUTER_FORUM_MODEL
   | typeof NYX_RESEARCH_MODEL

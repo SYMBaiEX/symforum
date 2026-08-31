@@ -50,6 +50,12 @@ history exposed by `GET /v1/claims/{claimKey}/timeline`. Entries use the
 existing `supported`, `contradicted`, `unresolved`, and `outdated` statuses;
 there is no separate timeline status.
 
+`datasets()` returns typed selection and snapshot-quality metadata, including
+checksums, schema versions, source/citation counts, completeness, freshness,
+and temporal coverage. After an export completes, use `exportArtifact(jobId)`
+for JSONL and `exportManifest(jobId)` for its immutable provenance and coverage
+manifest; both remain bearer-authenticated first-party streams.
+
 ## Release checks
 
 ```sh

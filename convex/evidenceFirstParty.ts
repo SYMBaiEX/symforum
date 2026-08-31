@@ -73,6 +73,33 @@ const enqueueWebhookRef = makeFunctionReference<
   Record<string, unknown>,
   { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
+const publishedResearchRef = makeFunctionReference<
+  "query",
+  { limit?: number },
+  Array<{
+    threadId: Id<"forumThreads">;
+    categorySlug: string;
+    slug: string;
+    title: string;
+    body: string;
+    createdAt: number;
+    updatedAt: number;
+    authorName: string;
+    agentSlug: string;
+    model?: string;
+    promptVersion?: string;
+    contentFormat?: string;
+    qualitySchemaVersion?: string;
+    contentQualityScore?: number;
+    citationCoverageScore: number;
+    originalityScore: number;
+    naturalnessScore?: number;
+    structureScore?: number;
+    sourceDiversityScore?: number;
+    sourceDomains: string[];
+    sourceUrls: string[];
+  }>
+>("researchQuality:listPublishedResearchForEvidenceSync");
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest(
@@ -222,6 +249,142 @@ export const sync = internalAction({
         });
       }
     }
-    return { documents: RESEARCH_PAGES.length, newVersions, claims };
+    const publishedResearch = await ctx.runQuery(publishedResearchRef, {
+      limit: 100,
+    });
+    for (const research of publishedResearch) {
+      const canonicalUrl = `https://forum.symbaiex.com/forum/${encodeURIComponent(research.categorySlug)}/${encodeURIComponent(research.slug)}`;
+      const plainBody = research.body
+        .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const bodyUrls = [...research.body.matchAll(/https?:\/\/[^\s\])>"']+/gi)]
+        .map((match) => match[0])
+        .slice(0, 12);
+      const sourceUrls = [...new Set([...research.sourceUrls, ...bodyUrls])];
+      const metadata = {
+        contentClass: "first-party disclosed agent research",
+        authorship: {
+          name: research.authorName,
+          agentSlug: research.agentSlug,
+          synthetic: true,
+        },
+        publication: {
+          threadId: research.threadId,
+          categorySlug: research.categorySlug,
+          contentFormat: research.contentFormat ?? null,
+          bodyBbcode: research.body,
+        },
+        generation: {
+          provider: "openrouter",
+          model: research.model ?? null,
+          promptVersion: research.promptVersion ?? null,
+        },
+        quality: {
+          schemaVersion: research.qualitySchemaVersion ?? null,
+          contentQualityScore: research.contentQualityScore ?? null,
+          citationCoverageScore: research.citationCoverageScore,
+          originalityScore: research.originalityScore,
+          naturalnessScore: research.naturalnessScore ?? null,
+          structureScore: research.structureScore ?? null,
+          sourceDiversityScore: research.sourceDiversityScore ?? null,
+        },
+        sources: {
+          domains: research.sourceDomains,
+          urls: sourceUrls,
+        },
+      };
+      const stored = await ctx.runMutation(upsertVersionRef, {
+        sourceId: source.sourceId,
+        externalKey: `forum-research:${research.threadId}`,
+        canonicalUrl,
+        canonicalUrlHash: await sha256(canonicalUrl),
+        contentHash: await sha256(
+          JSON.stringify({
+            title: research.title,
+            body: research.body,
+            metadata,
+            updatedAt: research.updatedAt,
+          }),
+        ),
+        kind: "document",
+        visibility: "public",
+        title: research.title,
+        excerpt: plainBody.slice(0, 1_200),
+        searchText: `${research.title} ${plainBody}`.slice(0, 60_000),
+        tags: [
+          "symbaiex",
+          "forum-research",
+          "ai-assisted",
+          `agent:${research.agentSlug}`,
+          `board:${research.categorySlug}`,
+        ],
+        authors: [research.authorName],
+        documentLicenseClass: "attributed",
+        fetchedAt: now,
+        publishedAt: research.createdAt,
+        sourceRevision: `forum-thread:${research.updatedAt}`,
+        sourceUpdatedAt: research.updatedAt,
+        retrievalUrl: canonicalUrl,
+        licenseClass: "attributed",
+        metadataJson: JSON.stringify(metadata),
+      });
+      const agentEntity = await ctx.runMutation(upsertEntityRef, {
+        entityKey: `agent:${research.agentSlug}`,
+        kind: "concept",
+        name: research.authorName,
+        aliases: [research.agentSlug],
+        visibility: "public",
+      });
+      await ctx.runMutation(linkEntityRef, {
+        documentVersionId: stored.versionId,
+        entityId: agentEntity.entityId,
+        role: "publisher",
+      });
+      await ctx.runMutation(linkEntityRef, {
+        documentVersionId: stored.versionId,
+        entityId: project.entityId,
+        role: "subject",
+      });
+      const claim = await ctx.runMutation(upsertClaimRef, {
+        claimKey: `symbaiex-forum-research:${research.threadId}`,
+        statement: `${research.authorName} published the disclosed AI-assisted research thread ${research.title} on the SYMBaiEX forum.`,
+        subjectEntityId: project.entityId,
+        predicate: "publishes-agent-research-thread",
+        objectText: canonicalUrl,
+        status: "supported",
+        confidence: 1,
+        visibility: "public",
+        observedAt: research.updatedAt,
+      });
+      const citation = await ctx.runMutation(recordCitationRef, {
+        claimId: claim.claimId,
+        documentVersionId: stored.versionId,
+        citationKey: `symbaiex-forum-research:${research.threadId}:version:${stored.versionId}`,
+        relation: "supports",
+        locator: canonicalUrl,
+        excerpt: plainBody.slice(0, 800),
+        confidence: 1,
+      });
+      if (!stored.idempotent) {
+        newVersions += 1;
+        await ctx.runMutation(enqueueWebhookRef, {
+          eventKey: `document:${stored.documentId}:version:${stored.version}`,
+          eventType: "evidence.document.changed",
+          payloadJson: JSON.stringify({
+            documentId: stored.documentId,
+            documentVersionId: stored.versionId,
+            version: stored.version,
+            canonicalUrl,
+          }),
+        });
+      }
+      if (citation.created) claims += 1;
+    }
+    return {
+      documents: RESEARCH_PAGES.length + publishedResearch.length,
+      newVersions,
+      claims,
+    };
   },
 });

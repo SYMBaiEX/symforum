@@ -21,7 +21,6 @@ import {
 import { ResearchQualityGateError } from "./researchQuality";
 import { validateForumAgentMarkup } from "../lib/editorial-quality";
 import {
-  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
 } from "../lib/ai-models";
 
@@ -515,10 +514,9 @@ What would you verify first?`,
     expect(forumWriterMaxOutputTokens("revision", false)).toBe(5_500);
     expect(forumWriterMaxOutputTokens("revision", true)).toBe(2_800);
     expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(2);
-    expect(forumEditorialRescueModels()).toEqual([
-      OPENROUTER_FREE_GENERATION_MODELS[1],
-      OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
-    ]);
+    expect(forumEditorialRescueModels()).toEqual(
+      OPENROUTER_FREE_GENERATION_MODELS,
+    );
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {

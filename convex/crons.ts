@@ -48,7 +48,7 @@ crons.cron(
 );
 crons.cron(
   "index first-party research evidence",
-  "5 8 * * *",
+  "5 */4 * * *",
   runWatchdogActionRef,
   { jobKey: "evidence-first-party" },
 );

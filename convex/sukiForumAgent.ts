@@ -56,7 +56,7 @@ const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION =
-  "suki-forum-v16-openrouter-ox-alpha-free-router-deepseek-low-reasoning-quality-escalation-natural-voice";
+  "suki-forum-v17-openrouter-free-evidence-reconstruction-latex-natural-voice";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const USER_AGENT =
@@ -513,7 +513,9 @@ export async function runForumResearchSlot(
       runKey: claim.runKey,
       agentSlug: config.slug,
       stage: "topic",
-      model: selectionGeneration.route.persistedModel,
+      model:
+        selectionResult.response.modelId ||
+        selectionGeneration.route.persistedModel,
       inputTokens: selectionResult.usage.inputTokens,
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
@@ -743,7 +745,7 @@ export async function runForumResearchSlot(
       runKey: claim.runKey,
       agentSlug: config.slug,
       stage: "draft",
-      model: draftGeneration.route.persistedModel,
+      model: draftResult.response.modelId || draftGeneration.route.persistedModel,
       categorySlug: category.slug,
       inputTokens: draftResult.usage.inputTokens,
       outputTokens: draftResult.usage.outputTokens,
@@ -829,7 +831,8 @@ export async function runForumResearchSlot(
         runKey: claim.runKey,
         agentSlug: config.slug,
         stage: "revision",
-        model: revisionGeneration.route.persistedModel,
+        model:
+          revision.response.modelId || revisionGeneration.route.persistedModel,
         categorySlug: category.slug,
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,
@@ -1597,6 +1600,7 @@ Selection rules:
 - Choose the most specific relevant sub-board when the subject clearly fits one. Choose a parent board when the topic crosses several sub-boards or is intentionally broad.
 - Prefer original sources, primary research, official advisories, release notes, or first-hand field reports.
 - Prefer a source with enough evidence to teach, compare, troubleshoot, or help someone decide.
+- Prefer evidence that can be reconstructed: inputs, assumptions, method, intermediate steps, result, limitations, and a concrete way to verify or falsify the conclusion.
 - Diversify boards across the day. Avoid repeating recent board choices and thread titles.
 - A news-analysis post must answer "what changed, why it matters, and what should a reader do or watch next?"
 - A guide needs concrete, source-supported steps. A resource post needs curated context, not a link dump.
@@ -1619,6 +1623,8 @@ This is a forum topic, not a press-release rewrite or SEO article.
 Quality requirements:
 - Use only facts supported by the supplied research. Distinguish inference, uncertainty, and conflicting reports in direct prose.
 - Add original value: a practical checklist, comparison, implications, tested mental model, troubleshooting path, discussion framework, or concrete next steps.
+- For a research post, reconstruct at least one important result as a reproducible sequence rather than paraphrasing the abstract or announcement. State inputs, assumptions, method, output, limitations, and a verification or falsification step.
+- When mathematics materially clarifies the evidence, define every variable and include one source-supported worked example using [math]...[/math] inline or [math=block]...[/math] for display. Never force equations into a non-mathematical topic or invent values absent from the research packet.
 - Open with the reason a forum member should care. Then provide context and useful detail.
 - End with one focused question people can answer from experience. Avoid empty engagement bait.
 - Do not copy source prose. Paraphrase and synthesize.
@@ -1634,7 +1640,7 @@ Quality requirements:
 Forum formatting:
 - Use MyBB-style BBCode, not Markdown or HTML.
 - Use [h2]major section[/h2] or [h3]minor section[/h3] to make longer posts scannable.
-- Use [b]emphasis[/b], [i]context[/i], [list][*]item[/list], [list=1][*]step[/list], [quote=source]...[/quote], and [code]...[/code] only when useful.
+- Use [b]emphasis[/b], [i]context[/i], [list][*]item[/list], [list=1][*]step[/list], [quote=source]...[/quote], [code]...[/code], and [math]...[/math] only when useful.
 - Use [note]...[/note] for a practical aside, [warning]...[/warning] for a real risk, [table][tr][th]...[/th][/tr][/table] for a compact comparison, and [spoiler=Optional deep dive]...[/spoiler] for genuinely optional detail.
 - Every post must include one evidence-backed structured block. Choose the best fit: [chart=Title]Label|0-100|Note[/chart], [table]...[/table], [timeline=Title]When|Event|Why it matters[/timeline], [decision=Title]Option|Verdict|Reason[/decision], [riskmap=Title]Risk|Likelihood 0-100|Impact 0-100|Mitigation[/riskmap], or [steps=Title]Step|Action|Detail[/steps]. Never force a chart into a topic that is better served by a timeline, decision matrix, or actionable sequence.
 - Close every BBCode tag with the matching tag. Tables need a header and at least one complete data row; pipe-based blocks need at least two complete rows except a risk map, which may use one. Never submit an empty or header-only structured block.
@@ -1920,7 +1926,9 @@ export function forumDraftPassesGate(
 }
 
 export function forumEditorialRescueModels() {
-  return OPENROUTER_GENERATION_MODELS.slice(1);
+  // A second editorial pass may still be valuable even with one canonical
+  // alias: OpenRouter can select a different compatible free model per call.
+  return OPENROUTER_GENERATION_MODELS;
 }
 
 export function forumRevisionTier(quality: EvaluatedForumDraft) {

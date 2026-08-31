@@ -47,6 +47,74 @@ export type ExportJob = ResearchJob;
 export type JsonObject = Record<string, unknown>;
 export type McpPayload = JsonObject;
 
+export type EvidenceDataset = {
+  datasetId: string;
+  datasetKey: string;
+  name: string;
+  description: string;
+  licenseClass: string;
+  exportSchemaVersion: string;
+  selection: {
+    includedKinds: string[];
+    includedLicenseClasses: string[];
+    sourceKeys: string[];
+  };
+  latestVersion: null | {
+    datasetVersionId: string;
+    version: string;
+    checksum: string;
+    recordCount: number;
+    schemaVersion: string;
+    artifactByteLength: number;
+    sourceCount: number;
+    citationCount: number;
+    completenessScore: number;
+    freshnessScore: number;
+    earliestObservedAt: number | null;
+    latestObservedAt: number | null;
+    createdAt: number;
+  };
+};
+
+export type EvidenceDocument = {
+  documentId: string;
+  title: string;
+  excerpt: string;
+  canonicalUrl: string;
+  kind: string;
+  licenseClass: string;
+  tags: string[];
+  authors: string[];
+  publishedAt: number | null;
+  firstSeenAt: number;
+  updatedAt: number;
+  source: {
+    sourceKey: string;
+    name: string;
+    homepageUrl: string;
+    termsUrl: string;
+    provenanceClass: string;
+    licenseClass: string;
+  };
+  currentVersion: null | {
+    documentVersionId: string;
+    version: number;
+    contentHash: string;
+    fetchedAt: number;
+    sourceRevision: string;
+    sourceUpdatedAt: number;
+    retrievalUrl: string;
+    licenseClass: string;
+  };
+  citationMetrics: {
+    total: number;
+    supports: number;
+    contradicts: number;
+    context: number;
+    truncated: boolean;
+  };
+};
+
 export type WebhookEventType =
   | "evidence.document.changed"
   | "evidence.research.completed"
@@ -239,7 +307,7 @@ export class AgentClient {
     });
   }
 
-  async document<T = unknown>(documentId: string): Promise<T> {
+  async document<T = EvidenceDocument | null>(documentId: string): Promise<T> {
     return await this.get<T>(`documents/${encodePathSegment(documentId)}`);
   }
 
@@ -285,7 +353,7 @@ export class AgentClient {
     return await this.get<T>("products", limit);
   }
 
-  async datasets<T = unknown>(limit?: number): Promise<T> {
+  async datasets<T = EvidenceDataset[]>(limit?: number): Promise<T> {
     return await this.get<T>("datasets", limit);
   }
 
@@ -350,6 +418,12 @@ export class AgentClient {
   async exportArtifact(jobId: string): Promise<Uint8Array> {
     return await this.requestBytes(
       `/api/agent/v1/exports/${encodePathSegment(jobId)}/artifact`,
+    );
+  }
+
+  async exportManifest(jobId: string): Promise<Uint8Array> {
+    return await this.requestBytes(
+      `/api/agent/v1/exports/${encodePathSegment(jobId)}/manifest`,
     );
   }
 

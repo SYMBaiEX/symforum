@@ -131,16 +131,17 @@ export const PUBLIC_EVIDENCE_SOURCE_REGISTRY = [
     licenseClass: "attributed",
     accessClass: "first-party",
     capability:
-      "explicit curated first-party research registry; no HTML scraping",
-    checkpointModel: "deterministic code registry; no external cursor",
+      "explicit curated research registry plus approved disclosed forum-agent research; no HTML scraping",
+    checkpointModel:
+      "deterministic code registry and latest 100 approved research assessments; no external cursor",
     conditionalRequestModel: "not applicable; no network fetch",
     timeoutMs: 0,
     maxResponseBytes: 0,
-    maxItemsPerRun: 3,
+    maxItemsPerRun: 103,
     maxPagesPerRun: 1,
-    cadence: "5 8 * * *",
+    cadence: "5 */4 * * *",
     fixtureProvenance:
-      "Code-owned RESEARCH_PAGES fixture registry in convex/evidenceFirstParty.ts; no fetched page bodies.",
+      "Code-owned RESEARCH_PAGES registry in convex/evidenceFirstParty.ts plus public approved forum threads and their persisted quality/source metadata; no fetched page bodies.",
   },
   {
     key: "nvd-cve-2",

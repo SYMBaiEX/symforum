@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ForumBbcodeBody } from "./forum-bbcode";
 
 import {
   decodeForumEntities,
@@ -51,6 +53,26 @@ describe("forum BBCode parser", () => {
       ["steps", "Runbook"],
       ["sourcecards", "Related"],
     ]);
+  });
+
+  test("parses inline and display mathematics without enabling raw HTML", () => {
+    const nodes = parseForumBbcode(
+      "Posterior [math]P(H\\mid E)=\\frac{P(E\\mid H)P(H)}{P(E)}[/math][math=block]\\sum_{i=1}^{n} x_i[/math]",
+    );
+
+    expect(nodes).toMatchObject([
+      { type: "text", value: "Posterior " },
+      { type: "tag", name: "math" },
+      { type: "tag", name: "math", value: "block" },
+    ]);
+    const html = renderToStaticMarkup(
+      ForumBbcodeBody({
+        body: "Inline [math]x^2[/math] and [math=block]\\sum_i x_i[/math] <script>alert(1)</script>",
+      }),
+    );
+    expect(html).toContain("katex");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 
   test("preserves link values and unknown markup as text", () => {

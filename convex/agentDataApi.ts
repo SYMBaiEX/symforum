@@ -35,6 +35,7 @@ const operationValidator = v.union(
   v.literal("export_create"),
   v.literal("export_get"),
   v.literal("export_artifact"),
+  v.literal("export_manifest"),
   v.literal("webhooks_list"),
   v.literal("webhooks_availability"),
   v.literal("webhooks_create"),
@@ -70,6 +71,7 @@ type Operation =
   | "export_create"
   | "export_get"
   | "export_artifact"
+  | "export_manifest"
   | "webhooks_list"
   | "webhooks_availability"
   | "webhooks_create"
@@ -381,7 +383,9 @@ export const dispatch = internalMutation({
         ? normalizedId(ctx, "evidenceResearchJobs", input, "jobId")
         : null;
     const exportJobId =
-      args.operation === "export_get" || args.operation === "export_artifact"
+      args.operation === "export_get" ||
+      args.operation === "export_artifact" ||
+      args.operation === "export_manifest"
         ? normalizedId(ctx, "evidenceExportJobs", input, "jobId")
         : null;
     const search =
@@ -716,9 +720,14 @@ export const dispatch = internalMutation({
           jobId: exportJobId!,
         });
       case "research_artifact":
-      case "export_artifact": {
+      case "export_artifact":
+      case "export_manifest": {
         const kind =
-          args.operation === "research_artifact" ? "research" : "export";
+          args.operation === "research_artifact"
+            ? "research"
+            : args.operation === "export_manifest"
+              ? "export-manifest"
+              : "export";
         const artifact = await ctx.runQuery(
           internal.evidenceJobs.resolveArtifactDownload,
           {
@@ -729,7 +738,8 @@ export const dispatch = internalMutation({
                 ? (researchJobId as Id<"evidenceResearchJobs">)
                 : undefined,
             exportJobId:
-              args.operation === "export_artifact"
+              args.operation === "export_artifact" ||
+              args.operation === "export_manifest"
                 ? (exportJobId as Id<"evidenceExportJobs">)
                 : undefined,
           },
@@ -739,7 +749,9 @@ export const dispatch = internalMutation({
         const path =
           args.operation === "research_artifact"
             ? `/research-jobs/${researchJobId}/artifact`
-            : `/exports/${exportJobId}/artifact`;
+            : args.operation === "export_manifest"
+              ? `/exports/${exportJobId}/manifest`
+              : `/exports/${exportJobId}/artifact`;
         return {
           downloadUrl: `${base}${path}`,
           contentType: artifact.contentType,

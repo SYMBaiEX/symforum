@@ -185,6 +185,9 @@ const OPENAPI = {
     "/v1/documents/{documentId}": {
       get: {
         operationId: "getEvidenceDocument",
+        summary: "Read a versioned public evidence document",
+        description:
+          "Returns document identity, licensing, authorship and dates plus public source provenance, current version hash and retrieval metadata, and bounded citation-relation counts. It excludes raw source payloads and private sources.",
         security: [{ bearerAuth: [] }],
         parameters: [
           {
@@ -297,9 +300,22 @@ const OPENAPI = {
     "/v1/datasets": {
       get: {
         operationId: "listEvidenceDatasets",
+        summary: "List versioned evidence datasets and measurable coverage",
+        description:
+          "Returns each public dataset's explicit document/source/license selection plus its latest immutable snapshot checksum, schema version, byte size, source and citation counts, completeness and freshness scores, and temporal coverage. Empty arrays mean no selection restriction; null means no completed snapshot yet.",
         security: [{ bearerAuth: [] }],
         responses: {
-          "200": { description: "Current public evidence datasets." },
+          "200": {
+            description: "Current public evidence datasets and latest snapshot quality metrics.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/EvidenceDataset" },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -451,6 +467,26 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party JSONL artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
+          },
+        },
+      },
+    },
+    "/v1/exports/{jobId}/manifest": {
+      get: {
+        operationId: "getEvidenceExportManifest",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Authenticated first-party immutable JSON manifest containing selection, checksum, bounded-scan disclosure, provenance distributions, citation coverage, completeness, freshness, and temporal coverage.",
           },
         },
       },
@@ -777,6 +813,77 @@ const OPENAPI = {
         properties: {
           datasetId: { type: "string" },
           format: { const: "jsonl", default: "jsonl" },
+        },
+        additionalProperties: false,
+      },
+      EvidenceDataset: {
+        type: "object",
+        required: [
+          "datasetId",
+          "datasetKey",
+          "name",
+          "description",
+          "licenseClass",
+          "exportSchemaVersion",
+          "selection",
+          "latestVersion",
+        ],
+        properties: {
+          datasetId: { type: "string" },
+          datasetKey: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          licenseClass: { type: "string" },
+          exportSchemaVersion: { type: "string" },
+          selection: {
+            type: "object",
+            required: ["includedKinds", "includedLicenseClasses", "sourceKeys"],
+            properties: {
+              includedKinds: { type: "array", items: { type: "string" } },
+              includedLicenseClasses: { type: "array", items: { type: "string" } },
+              sourceKeys: { type: "array", items: { type: "string" } },
+            },
+            additionalProperties: false,
+          },
+          latestVersion: {
+            anyOf: [
+              { type: "null" },
+              {
+                type: "object",
+                required: [
+                  "datasetVersionId",
+                  "version",
+                  "checksum",
+                  "recordCount",
+                  "schemaVersion",
+                  "artifactByteLength",
+                  "sourceCount",
+                  "citationCount",
+                  "completenessScore",
+                  "freshnessScore",
+                  "earliestObservedAt",
+                  "latestObservedAt",
+                  "createdAt",
+                ],
+                properties: {
+                  datasetVersionId: { type: "string" },
+                  version: { type: "string" },
+                  checksum: { type: "string" },
+                  recordCount: { type: "integer", minimum: 0 },
+                  schemaVersion: { type: "string" },
+                  artifactByteLength: { type: "integer", minimum: 0 },
+                  sourceCount: { type: "integer", minimum: 0 },
+                  citationCount: { type: "integer", minimum: 0 },
+                  completenessScore: { type: "integer", minimum: 0, maximum: 100 },
+                  freshnessScore: { type: "integer", minimum: 0, maximum: 100 },
+                  earliestObservedAt: { type: ["number", "null"] },
+                  latestObservedAt: { type: ["number", "null"] },
+                  createdAt: { type: "number" },
+                },
+                additionalProperties: false,
+              },
+            ],
+          },
         },
         additionalProperties: false,
       },

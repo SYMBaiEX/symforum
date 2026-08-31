@@ -9215,14 +9215,14 @@ export const readUsedSukiSourceKeys = internalQuery({
 
 export const claimSukiForumReplyCandidate = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     attempt: v.number(),
     runDate: v.string(),
     runId: v.optional(v.id("forumAgentReplyRuns")),
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
-    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
+    const agentName = forumAgentNameFromSlug(agentSlug);
     if (
       !Number.isInteger(args.attempt) ||
       args.attempt < 0 ||
@@ -9258,7 +9258,9 @@ export const claimSukiForumReplyCandidate = internalMutation({
       ).length >=
       (agentSlug === "belle"
         ? BELLE_REPLY_DAILY_LIMIT
-        : SUKI_REPLY_DAILY_LIMIT);
+        : agentSlug === "suki"
+          ? SUKI_REPLY_DAILY_LIMIT
+          : 2);
     if (dailyLimitReached) {
       if (args.runId !== undefined) {
         const queuedRun = await ctx.db.get("forumAgentReplyRuns", args.runId);
@@ -9377,7 +9379,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
 
 export const markSukiForumReplyIgnored = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     runId: v.id("forumAgentReplyRuns"),
     reason: v.string(),
     inputTokens: v.optional(v.number()),
@@ -9408,7 +9410,7 @@ export const markSukiForumReplyIgnored = internalMutation({
 
 export const markSukiForumReplyFailed = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     runId: v.id("forumAgentReplyRuns"),
     reason: v.string(),
   },
@@ -9435,7 +9437,7 @@ export const markSukiForumReplyFailed = internalMutation({
 
 export const publishSukiForumReply = internalMutation({
   args: {
-    agentSlug: v.optional(v.union(v.literal("suki"), v.literal("belle"))),
+    agentSlug: v.optional(v.string()),
     runId: v.id("forumAgentReplyRuns"),
     body: v.string(),
     reason: v.string(),
@@ -9444,7 +9446,7 @@ export const publishSukiForumReply = internalMutation({
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
-    const agentName = agentSlug === "belle" ? "Belle" : "Suki";
+    const agentName = forumAgentNameFromSlug(agentSlug);
     const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
     if (
       run === null ||
@@ -9721,7 +9723,7 @@ export function isSukiReplyWorthReviewing(body: string) {
 }
 
 function forumReplyDeskMatches(
-  agentSlug: "suki" | "belle",
+  agentSlug: string,
   categorySlug: string,
 ) {
   const belleDesk =
@@ -9730,7 +9732,57 @@ function forumReplyDeskMatches(
     categorySlug === "hacking-security-news" ||
     categorySlug === "music-scenes" ||
     categorySlug === "music-new-releases";
-  return agentSlug === "belle" ? belleDesk : !belleDesk;
+  if (agentSlug === "belle") return belleDesk;
+  if (agentSlug === "suki") return !belleDesk;
+  return true;
+}
+
+const FORUM_REPLY_SPECIALTY_POOLS = {
+  security: ["mina-hart", "nora-flint", "micah-sol"],
+  research: ["nia-calder", "rhea-nolan", "ari-mercer", "maya-fen"],
+  builders: ["mara-venn", "theo-marlow", "jonah-vale", "nolan-reese", "evan-lark"],
+  creative: ["iris-kellan", "zara-penn", "cleo-arden", "sora-bennett"],
+  hardware: ["max-delaney", "remy-kade"],
+} as const;
+
+function forumReplySpecialtyPool(categorySlug: string) {
+  if (/security|hack|privacy|vulnerab|cyber/.test(categorySlug)) {
+    return FORUM_REPLY_SPECIALTY_POOLS.security;
+  }
+  if (/research|science|math|data|ai|machine-learning/.test(categorySlug)) {
+    return FORUM_REPLY_SPECIALTY_POOLS.research;
+  }
+  if (/design|creative|art|music|accessib|media/.test(categorySlug)) {
+    return FORUM_REPLY_SPECIALTY_POOLS.creative;
+  }
+  if (/hardware|device|gaming|repair/.test(categorySlug)) {
+    return FORUM_REPLY_SPECIALTY_POOLS.hardware;
+  }
+  return FORUM_REPLY_SPECIALTY_POOLS.builders;
+}
+
+function deterministicForumReplyStart(seed: string, length: number) {
+  let hash = 2166136261;
+  for (const character of seed) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return length === 0 ? 0 : (hash >>> 0) % length;
+}
+
+export function forumReplyAgentCandidates(categorySlug: string, sourceId: string) {
+  const specialtyPool = [...forumReplySpecialtyPool(categorySlug)];
+  const start = deterministicForumReplyStart(
+    `${categorySlug}:${sourceId}`,
+    specialtyPool.length,
+  );
+  return [
+    ...specialtyPool.slice(start),
+    ...specialtyPool.slice(0, start),
+    ...(forumReplyDeskMatches("belle", categorySlug)
+      ? ["belle", "suki"]
+      : ["suki", "belle"]),
+  ];
 }
 
 async function scheduleForumAgentReview(
@@ -9756,23 +9808,29 @@ async function scheduleForumAgentReview(
   ) {
     return null;
   }
-  const agentSlug = forumReplyDeskMatches("belle", category.slug)
-    ? "belle"
-    : "suki";
   const sourceId =
     args.sourceKind === "reply" ? args.sourcePostId : args.threadId;
   if (sourceId === undefined) return null;
+  const orderedCandidates = forumReplyAgentCandidates(category.slug, sourceId);
+  let selectedAgent: Doc<"forumAgents"> | null = null;
+  for (const candidateSlug of orderedCandidates) {
+    const candidate = await ctx.db
+      .query("forumAgents")
+      .withIndex("by_slug", (q) => q.eq("slug", candidateSlug))
+      .unique();
+    if (candidate?.enabled) {
+      selectedAgent = candidate;
+      break;
+    }
+  }
+  if (selectedAgent === null) return null;
+  const agentSlug = selectedAgent.slug;
   const runKey = `forum-reply:${args.sourceKind}:${sourceId}`;
   const existing = await ctx.db
     .query("forumAgentReplyRuns")
     .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
     .unique();
   if (existing !== null) return existing._id;
-  const agent = await ctx.db
-    .query("forumAgents")
-    .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
-    .unique();
-  if (agent === null || !agent.enabled) return null;
   const runId = await ctx.db.insert("forumAgentReplyRuns", {
     runKey,
     agentSlug,
@@ -9784,7 +9842,7 @@ async function scheduleForumAgentReview(
     authorId: args.authorId,
     attempt: -1,
     status: "queued",
-    model: agent.model,
+    model: selectedAgent.model,
     reason: "event-queued",
     startedAt: args.now,
     updatedAt: args.now,
@@ -9793,8 +9851,11 @@ async function scheduleForumAgentReview(
     SUKI_REPLY_MIN_AGE_MS,
     agentSlug === "belle"
       ? internal.sukiForumReplyAgent.runBelleReplySweep
-      : internal.sukiForumReplyAgent.runReplySweep,
+      : agentSlug === "suki"
+        ? internal.sukiForumReplyAgent.runReplySweep
+        : internal.sukiForumReplyAgent.runRosterReplySweep,
     {
+      ...(agentSlug === "suki" || agentSlug === "belle" ? {} : { agentSlug }),
       attempt: 0,
       runDate: forumAgentDateForTimestamp(args.now),
       runId,
@@ -9974,6 +10035,10 @@ export const publishSukiForumThread = internalMutation({
       body,
       sourceUrls: sources.map((source) => source.sourceUrl),
       validatedCitationCoverageScore: args.groundingScore,
+      agentSlug,
+      model: agent.model,
+      promptVersion: run.promptVersion,
+      contentFormat: args.contentFormat,
     };
     const qualityGate = await requireAutomatedResearchPublication(
       ctx,

@@ -6,7 +6,6 @@ import {
   spendBucketForKey,
 } from "./ai-model-costs";
 import {
-  OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
 } from "./ai-models";
@@ -19,16 +18,6 @@ describe("AI model cost controls", () => {
     expect(
       estimatedModelCostMicroUsd("unknown/model", 1_000_000, 1_000_000),
     ).toBe(0);
-  });
-
-  test("uses the current OpenRouter DeepSeek V4 Flash latest price", () => {
-    expect(
-      estimatedModelCostMicroUsd(
-        OPENROUTER_DEEPSEEK_FALLBACK_MODEL,
-        1_000_000,
-        1_000_000,
-      ),
-    ).toBe(205_000);
   });
 
   test("accounts for OpenRouter embedding input tokens in the budget", () => {

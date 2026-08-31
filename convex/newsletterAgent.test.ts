@@ -97,7 +97,7 @@ const sources = [
 ];
 
 describe("Belle editorial scoring", () => {
-  test("uses the proven free-first route with a DeepSeek fallback", () => {
+  test("uses the canonical OpenRouter free route", () => {
     expect(NEWSLETTER_MODEL_IDS).toEqual(OPENROUTER_GENERATION_MODELS);
   });
 

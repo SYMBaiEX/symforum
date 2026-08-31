@@ -171,4 +171,29 @@ describe("agent evidence REST endpoint", () => {
       }),
     );
   });
+
+  test("streams immutable export manifests through the same authenticated relay", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response('{"schemaVersion":"symbaiex-evidence-document-v2"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const response = await GET(
+      new Request(
+        "https://www.symbaiex.com/api/agent/v1/exports/job-id/manifest",
+        { headers: { authorization: "Bearer agent-token" } },
+      ),
+      context(["exports", "job-id", "manifest"]),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://strong-bee-384.convex.site/agent/artifact",
+      expect.objectContaining({
+        body: JSON.stringify({ kind: "export-manifest", jobId: "job-id" }),
+      }),
+    );
+  });
 });

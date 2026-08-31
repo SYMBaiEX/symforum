@@ -63,7 +63,22 @@ describe("research quality gates", () => {
     await expect(owner.mutation(quality.review, { assessmentId: result.assessmentId, decision: "approved", reason: "Looks good enough" })).rejects.toThrow("BLOCKING_QUALITY_FINDING");
     expect(await t.query(quality.publicationStatus, { threadId })).toEqual(expect.objectContaining({ canPublish: false, status: "needs_review" }));
     expect(await owner.query(quality.listReviewQueue, { limit: 1 })).toHaveLength(1);
-    expect(await owner.query(quality.benchmarkSummary, {})).toEqual(expect.objectContaining({ sampleSize: 1, sampledPerStatusCap: 100 }));
+    const stored = await t.run((ctx) => ctx.db.get("researchQualityAssessments", result.assessmentId));
+    expect(stored).toEqual(expect.objectContaining({
+      qualitySchemaVersion: "research-publication-v2",
+      naturalnessScore: expect.any(Number),
+      contentQualityScore: expect.any(Number),
+      wordCount: expect.any(Number),
+      sourceDomains: [],
+    }));
+    expect(await owner.query(quality.benchmarkSummary, {})).toEqual(expect.objectContaining({
+      sampleSize: 1,
+      sampledPerStatusCap: 100,
+      contentQualityAverage: expect.any(Number),
+      naturalnessAverage: expect.any(Number),
+      structureAverage: expect.any(Number),
+      sourceDiversityAverage: expect.any(Number),
+    }));
   });
 
   test("requires an explicit durable override for a blocked draft and records human accountability", async () => {

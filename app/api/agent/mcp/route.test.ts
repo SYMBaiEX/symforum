@@ -253,6 +253,7 @@ describe("evidence MCP endpoint", () => {
       "evidence_create_export",
       "evidence_get_export",
       "evidence_get_export_artifact",
+      "evidence_get_export_manifest",
       "evidence_list_webhooks",
       "evidence_webhook_availability",
       "evidence_create_webhook",

@@ -1,7 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { getCurrentUser, hasSiteAdminAccess, requireSiteAdmin } from "./authz";
+import { evaluateAgentPublicationHygiene } from "../lib/agent-publication-quality";
 
 const MAX_QUEUE_RESULTS = 100;
 const MAX_COMPARISON_CANDIDATES = 80;
@@ -14,6 +15,7 @@ const AI_DISCLOSURE = /\b(ai[- ](?:assisted|generated)|written by (?:an )?ai|age
 const HTTP_URL = /https?:\/\/[^\s\]>)"']+/gi;
 const WORD = /[a-z0-9][a-z0-9-]{2,}/gi;
 const QUALITY_GATE_PREFIX = "RESEARCH_QUALITY_BLOCKED:";
+const QUALITY_SCHEMA_VERSION = "research-publication-v2";
 
 const assessmentStatusValidator = v.union(
   v.literal("passed"),
@@ -159,6 +161,10 @@ export type AutomatedResearchCandidate = {
   sourceUrls: string[];
   /** Deterministic claim-ledger grounding score from the editorial gate. */
   validatedCitationCoverageScore?: number;
+  agentSlug?: string;
+  model?: string;
+  promptVersion?: string;
+  contentFormat?: string;
 };
 
 export class ResearchQualityGateError extends Error {
@@ -179,6 +185,20 @@ export type AutomatedResearchScore = {
   claimEstimate: number;
   citationCoverageScore: number;
   originalityScore: number;
+  qualitySchemaVersion: string;
+  agentSlug?: string;
+  model?: string;
+  promptVersion?: string;
+  contentFormat?: string;
+  wordCount: number;
+  sentenceCount: number;
+  paragraphCount: number;
+  lexicalDiversityScore: number;
+  structureScore: number;
+  naturalnessScore: number;
+  sourceDiversityScore: number;
+  contentQualityScore: number;
+  sourceDomains: string[];
   aiAuthorshipDisclosed: boolean;
   contentFingerprint: string;
   normalizedTerms: string[];
@@ -202,6 +222,36 @@ async function scoreDraft(ctx: MutationCtx, candidate: AutomatedResearchCandidat
     : Math.max(0, Math.min(100, Math.round(candidate.validatedCitationCoverageScore)));
   const candidates = await publishedCandidates(ctx, candidate.categoryId);
   const originality = scoreOriginality(terms, candidates);
+  const plainBody = candidate.body
+    .replace(/\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi, " code sample ")
+    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = plainBody.match(/[a-z0-9][a-z0-9'’-]*/gi) ?? [];
+  const uniqueWords = new Set(words.map((word) => word.toLowerCase()));
+  const sentences = plainBody.split(/[.!?]+/).filter((sentence) => sentence.trim().length > 0);
+  const paragraphs = candidate.body.split(/\n\s*\n/).filter((paragraph) => paragraph.trim().length > 0);
+  const lexicalRatio = words.length === 0 ? 0 : uniqueWords.size / words.length;
+  const lexicalDiversityScore = Math.round(Math.max(0, Math.min(100, ((lexicalRatio - 0.25) / 0.35) * 100)));
+  const structureSignals = [
+    /\[h[23]\]/i.test(candidate.body),
+    /\[(?:chart|table|timeline|decision|riskmap|steps|sourcecards)(?:=|\])/i.test(candidate.body),
+    /\[list(?:=|\])/i.test(candidate.body),
+    paragraphs.length >= 4,
+    sentences.length >= 6,
+  ];
+  const structureScore = Math.round((structureSignals.filter(Boolean).length / structureSignals.length) * 100);
+  const hygiene = evaluateAgentPublicationHygiene([candidate.title, candidate.body]);
+  const sourceDiversityScore = Math.min(100, domains.size * 34);
+  const contentQualityScore = Math.round(
+    coverage * 0.3 +
+      originality.originalityScore * 0.2 +
+      hygiene.naturalnessScore * 0.15 +
+      structureScore * 0.15 +
+      sourceDiversityScore * 0.1 +
+      lexicalDiversityScore * 0.1,
+  );
   const disclosed = author?.isAgent !== true || AI_DISCLOSURE.test(`${candidate.title}\n${candidate.body}`);
   const flags: string[] = [];
   if (domains.size === 0) flags.push("missing_sources");
@@ -209,12 +259,29 @@ async function scoreDraft(ctx: MutationCtx, candidate: AutomatedResearchCandidat
   if (originality.duplicateOfThreadId !== undefined) flags.push("near_duplicate");
   if (!disclosed) flags.push("missing_ai_authorship_disclosure");
   if (terms.length < 8) flags.push("insufficient_substance");
+  for (const issue of hygiene.issues.filter((issue) => issue.blocking)) {
+    flags.push(`publication_${issue.code}`);
+  }
   return {
     sourceCount: domains.size,
     uniqueSourceDomainCount: domains.size,
     claimEstimate: claims,
     citationCoverageScore: coverage,
     originalityScore: originality.originalityScore,
+    qualitySchemaVersion: QUALITY_SCHEMA_VERSION,
+    agentSlug: candidate.agentSlug,
+    model: candidate.model,
+    promptVersion: candidate.promptVersion,
+    contentFormat: candidate.contentFormat,
+    wordCount: words.length,
+    sentenceCount: sentences.length,
+    paragraphCount: paragraphs.length,
+    lexicalDiversityScore,
+    structureScore,
+    naturalnessScore: hygiene.naturalnessScore,
+    sourceDiversityScore,
+    contentQualityScore,
+    sourceDomains: [...domains].sort().slice(0, 12),
     aiAuthorshipDisclosed: disclosed,
     contentFingerprint: contentFingerprint(`${candidate.title}\n${candidate.body}`),
     normalizedTerms: terms,
@@ -406,8 +473,106 @@ export const benchmarkSummary = query({
       statusCounts: Object.fromEntries(statuses.map((status, index) => [status, samples[index]?.length ?? 0])),
       citationCoverageAverage: average((assessment) => assessment.citationCoverageScore),
       originalityAverage: average((assessment) => assessment.originalityScore),
+      contentQualityAverage: average((assessment) => assessment.contentQualityScore ?? 0),
+      naturalnessAverage: average((assessment) => assessment.naturalnessScore ?? 0),
+      structureAverage: average((assessment) => assessment.structureScore ?? 0),
+      sourceDiversityAverage: average((assessment) => assessment.sourceDiversityScore ?? 0),
       agentDisclosureRate: count === 0 ? 0 : Math.round((assessments.filter((assessment) => assessment.aiAuthorshipDisclosed).length / count) * 100),
     };
+  },
+});
+
+/** Bounded bridge from approved forum research into first-party evidence. */
+export const listPublishedResearchForEvidenceSync = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      threadId: v.id("forumThreads"),
+      categorySlug: v.string(),
+      slug: v.string(),
+      title: v.string(),
+      body: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      authorName: v.string(),
+      agentSlug: v.string(),
+      model: v.optional(v.string()),
+      promptVersion: v.optional(v.string()),
+      contentFormat: v.optional(v.string()),
+      qualitySchemaVersion: v.optional(v.string()),
+      contentQualityScore: v.optional(v.number()),
+      citationCoverageScore: v.number(),
+      originalityScore: v.number(),
+      naturalnessScore: v.optional(v.number()),
+      structureScore: v.optional(v.number()),
+      sourceDiversityScore: v.optional(v.number()),
+      sourceDomains: v.array(v.string()),
+      sourceUrls: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 100)));
+    const statuses: Assessment["status"][] = ["passed", "approved", "overridden"];
+    const samples = await Promise.all(
+      statuses.map((status) =>
+        ctx.db
+          .query("researchQualityAssessments")
+          .withIndex("by_status_and_updatedAt", (q) => q.eq("status", status))
+          .order("desc")
+          .take(limit),
+      ),
+    );
+    const assessments = [...samples.flat()]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .filter(
+        (assessment, index, all) =>
+          assessment.threadId !== undefined &&
+          all.findIndex((candidate) => candidate.threadId === assessment.threadId) === index,
+      )
+      .slice(0, limit);
+    const results = [];
+    for (const assessment of assessments) {
+      const threadId = assessment.threadId!;
+      const [thread, author, sourceUses] = await Promise.all([
+        ctx.db.get("forumThreads", threadId),
+        ctx.db.get("users", assessment.authorUserId),
+        ctx.db
+          .query("forumAgentSourceUses")
+          .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+          .take(12),
+      ]);
+      if (
+        thread === null ||
+        thread.status !== "active" ||
+        author?.isAgent !== true ||
+        !author.agentSlug
+      )
+        continue;
+      results.push({
+        threadId,
+        categorySlug: thread.categorySlug,
+        slug: thread.slug,
+        title: thread.title,
+        body: thread.body,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        authorName: author.username ?? author.name ?? author.agentSlug,
+        agentSlug: author.agentSlug,
+        model: assessment.model,
+        promptVersion: assessment.promptVersion,
+        contentFormat: assessment.contentFormat,
+        qualitySchemaVersion: assessment.qualitySchemaVersion,
+        contentQualityScore: assessment.contentQualityScore,
+        citationCoverageScore: assessment.citationCoverageScore,
+        originalityScore: assessment.originalityScore,
+        naturalnessScore: assessment.naturalnessScore,
+        structureScore: assessment.structureScore,
+        sourceDiversityScore: assessment.sourceDiversityScore,
+        sourceDomains: assessment.sourceDomains ?? [],
+        sourceUrls: sourceUses.map((source) => source.sourceUrl),
+      });
+    }
+    return results;
   },
 });
 

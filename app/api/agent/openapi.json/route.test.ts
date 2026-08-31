@@ -53,16 +53,16 @@ describe("agent API OpenAPI contract", () => {
       /lexical-only[\s\S]*service account[\s\S]*budget/i,
     );
     expect(document.components.parameters.SemanticIdempotencyKey).toMatchObject(
-      {
-        required: true,
-        schema: { minLength: 8, maxLength: 96 },
-      },
+      { required: true, schema: { minLength: 8, maxLength: 96 } },
     );
     expect(document.paths["/v1/research-jobs"].post.operationId).toBe(
       "createEvidenceResearchJob",
     );
     expect(document.paths["/v1/exports"].post.operationId).toBe(
       "createEvidenceExport",
+    );
+    expect(document.paths["/v1/exports/{jobId}/manifest"].get.operationId).toBe(
+      "getEvidenceExportManifest",
     );
     expect(document.paths["/v1/webhooks"].post.operationId).toBe(
       "createEvidenceWebhook",
@@ -84,5 +84,27 @@ describe("agent API OpenAPI contract", () => {
     );
     expect(document.components.parameters.IdempotencyKey.required).toBe(true);
     expect(document.paths["/mcp"].post.operationId).toBe("evidenceMcp");
+  });
+
+  test("describes measurable versioned dataset coverage", async () => {
+    const response = GET();
+    const document = await response.json();
+    const operation = document.paths["/v1/datasets"].get;
+    const schema =
+      operation.responses["200"].content["application/json"].schema;
+
+    expect(operation.operationId).toBe("listEvidenceDatasets");
+    expect(schema.items.$ref).toBe("#/components/schemas/EvidenceDataset");
+    expect(
+      document.components.schemas.EvidenceDataset.properties.latestVersion
+        .anyOf[1].properties,
+    ).toEqual(
+      expect.objectContaining({
+        checksum: expect.any(Object),
+        completenessScore: expect.any(Object),
+        freshnessScore: expect.any(Object),
+        citationCount: expect.any(Object),
+      }),
+    );
   });
 });

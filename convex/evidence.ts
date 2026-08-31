@@ -26,6 +26,13 @@ const sourceStatusValidator = v.union(
   v.literal("paused"),
   v.literal("retired"),
 );
+const provenanceClassValidator = v.union(
+  v.literal("primary"),
+  v.literal("official"),
+  v.literal("dataset"),
+  v.literal("research"),
+  v.literal("derived"),
+);
 const documentKindValidator = v.union(
   v.literal("document"),
   v.literal("advisory"),
@@ -68,6 +75,47 @@ const documentResultValidator = v.object({
   kind: documentKindValidator,
   updatedAt: v.number(),
   currentVersionId: v.union(v.id("evidenceDocumentVersions"), v.null()),
+});
+const detailedDocumentResultValidator = v.object({
+  documentId: v.id("evidenceDocuments"),
+  title: v.string(),
+  excerpt: v.string(),
+  canonicalUrl: v.string(),
+  kind: documentKindValidator,
+  licenseClass: licenseClassValidator,
+  tags: v.array(v.string()),
+  authors: v.array(v.string()),
+  publishedAt: v.union(v.number(), v.null()),
+  firstSeenAt: v.number(),
+  updatedAt: v.number(),
+  source: v.object({
+    sourceKey: v.string(),
+    name: v.string(),
+    homepageUrl: v.string(),
+    termsUrl: v.string(),
+    provenanceClass: provenanceClassValidator,
+    licenseClass: licenseClassValidator,
+  }),
+  currentVersion: v.union(
+    v.null(),
+    v.object({
+      documentVersionId: v.id("evidenceDocumentVersions"),
+      version: v.number(),
+      contentHash: v.string(),
+      fetchedAt: v.number(),
+      sourceRevision: v.string(),
+      sourceUpdatedAt: v.number(),
+      retrievalUrl: v.string(),
+      licenseClass: licenseClassValidator,
+    }),
+  ),
+  citationMetrics: v.object({
+    total: v.number(),
+    supports: v.number(),
+    contradicts: v.number(),
+    context: v.number(),
+    truncated: v.boolean(),
+  }),
 });
 
 function bounded(value: string, name: string, maximum: number) {
@@ -865,32 +913,89 @@ export const searchPublic = internalQuery({
         q.search("searchText", search).eq("visibility", "public"),
       )
       .take(limit);
-    return rows.map((row) => ({
-      documentId: row._id,
-      title: row.title,
-      excerpt: row.excerpt,
-      canonicalUrl: row.canonicalUrl,
-      kind: row.kind,
-      updatedAt: row.updatedAt,
-      currentVersionId: row.currentVersionId,
-    }));
+    const visible = await Promise.all(
+      rows.map(async (row) => {
+        const source = await ctx.db.get("evidenceSources", row.sourceId);
+        return source?.visibility === "public" ? row : null;
+      }),
+    );
+    return visible
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .map((row) => ({
+        documentId: row._id,
+        title: row.title,
+        excerpt: row.excerpt,
+        canonicalUrl: row.canonicalUrl,
+        kind: row.kind,
+        updatedAt: row.updatedAt,
+        currentVersionId: row.currentVersionId,
+      }));
   },
 });
 
 export const getPublicDocument = internalQuery({
   args: { documentId: v.id("evidenceDocuments") },
-  returns: v.union(v.null(), documentResultValidator),
+  returns: v.union(v.null(), detailedDocumentResultValidator),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("evidenceDocuments", args.documentId);
     if (row === null || row.visibility !== "public") return null;
+    const [source, version] = await Promise.all([
+      ctx.db.get("evidenceSources", row.sourceId),
+      row.currentVersionId === null
+        ? null
+        : ctx.db.get("evidenceDocumentVersions", row.currentVersionId),
+    ]);
+    if (source === null || source.visibility !== "public") return null;
+    const citations =
+      version === null
+        ? []
+        : await ctx.db
+            .query("evidenceClaimCitations")
+            .withIndex("by_documentVersionId", (q) =>
+              q.eq("documentVersionId", version._id),
+            )
+            .take(51);
+    const boundedCitations = citations.slice(0, 50);
     return {
       documentId: row._id,
       title: row.title,
       excerpt: row.excerpt,
       canonicalUrl: row.canonicalUrl,
       kind: row.kind,
+      licenseClass: row.licenseClass,
+      tags: row.tags,
+      authors: row.authors,
+      publishedAt: row.publishedAt,
+      firstSeenAt: row.firstSeenAt,
       updatedAt: row.updatedAt,
-      currentVersionId: row.currentVersionId,
+      source: {
+        sourceKey: source.sourceKey,
+        name: source.name,
+        homepageUrl: source.homepageUrl,
+        termsUrl: source.termsUrl,
+        provenanceClass: source.provenanceClass,
+        licenseClass: source.licenseClass,
+      },
+      currentVersion:
+        version === null
+          ? null
+          : {
+              documentVersionId: version._id,
+              version: version.version,
+              contentHash: version.contentHash,
+              fetchedAt: version.fetchedAt,
+              sourceRevision: version.sourceRevision,
+              sourceUpdatedAt: version.sourceUpdatedAt,
+              retrievalUrl: version.retrievalUrl,
+              licenseClass: version.licenseClass,
+            },
+      citationMetrics: {
+        total: boundedCitations.length,
+        supports: boundedCitations.filter((citation) => citation.relation === "supports").length,
+        contradicts: boundedCitations.filter((citation) => citation.relation === "contradicts").length,
+        context: boundedCitations.filter((citation) => citation.relation === "context").length,
+        truncated: citations.length > 50,
+      },
     };
   },
 });
@@ -1311,6 +1416,12 @@ export const listDatasets = query({
       name: v.string(),
       description: v.string(),
       licenseClass: licenseClassValidator,
+      exportSchemaVersion: v.string(),
+      selection: v.object({
+        includedKinds: v.array(v.string()),
+        includedLicenseClasses: v.array(v.string()),
+        sourceKeys: v.array(v.string()),
+      }),
       latestVersion: v.union(
         v.null(),
         v.object({
@@ -1318,6 +1429,14 @@ export const listDatasets = query({
           version: v.string(),
           checksum: v.string(),
           recordCount: v.number(),
+          schemaVersion: v.string(),
+          artifactByteLength: v.number(),
+          sourceCount: v.number(),
+          citationCount: v.number(),
+          completenessScore: v.number(),
+          freshnessScore: v.number(),
+          earliestObservedAt: v.union(v.number(), v.null()),
+          latestObservedAt: v.union(v.number(), v.null()),
           createdAt: v.number(),
         }),
       ),
@@ -1334,7 +1453,17 @@ export const listDatasets = query({
       .order("desc")
       .take(limit);
     const results = [];
-    for (const { _id, datasetKey, name, description, licenseClass } of rows) {
+    for (const {
+      _id,
+      datasetKey,
+      name,
+      description,
+      licenseClass,
+      exportSchemaVersion,
+      includedKinds,
+      includedLicenseClasses,
+      sourceKeys,
+    } of rows) {
       const version = await ctx.db
         .query("evidenceDatasetVersions")
         .withIndex("by_datasetId_and_version", (q) => q.eq("datasetId", _id))
@@ -1346,6 +1475,17 @@ export const listDatasets = query({
         name,
         description,
         licenseClass,
+        exportSchemaVersion:
+          exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+        selection: {
+          includedKinds: includedKinds ?? [],
+          includedLicenseClasses: includedLicenseClasses ?? [
+              "public-domain",
+              "open",
+              "attributed",
+            ],
+          sourceKeys: sourceKeys ?? [],
+        },
         latestVersion:
           version === null
             ? null
@@ -1354,6 +1494,15 @@ export const listDatasets = query({
                 version: version.version,
                 checksum: version.checksum,
                 recordCount: version.recordCount,
+                schemaVersion:
+                  version.schemaVersion ?? "symbaiex-evidence-document-v1",
+                artifactByteLength: version.artifactByteLength ?? 0,
+                sourceCount: version.sourceCount ?? 0,
+                citationCount: version.citationCount ?? 0,
+                completenessScore: version.completenessScore ?? 0,
+                freshnessScore: version.freshnessScore ?? 0,
+                earliestObservedAt: version.earliestObservedAt ?? null,
+                latestObservedAt: version.latestObservedAt ?? null,
                 createdAt: version.createdAt,
               },
       });

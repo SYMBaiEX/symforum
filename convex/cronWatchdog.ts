@@ -146,7 +146,7 @@ const STALENESS_MS: Record<JobKey, number> = {
   "evidence-github-advisories": 8 * 60 * 60 * 1_000,
   "evidence-github-releases": 4 * 60 * 60 * 1_000,
   "evidence-crossref": 14 * 60 * 60 * 1_000,
-  "evidence-first-party": 26 * 60 * 60 * 1_000,
+  "evidence-first-party": 6 * 60 * 60 * 1_000,
   "evidence-nvd-cves": 30 * 60 * 1_000,
   "evidence-nvd-change-history": 30 * 60 * 1_000,
   "evidence-artifact-cleanup": 2 * 60 * 60 * 1_000,

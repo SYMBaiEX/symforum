@@ -92,7 +92,8 @@ async function handler(
     );
   if (
     mapped.operation === "research_artifact" ||
-    mapped.operation === "export_artifact"
+    mapped.operation === "export_artifact" ||
+    mapped.operation === "export_manifest"
   ) {
     const jobId = mapped.input.jobId;
     if (typeof jobId !== "string")
@@ -103,7 +104,11 @@ async function handler(
       );
     return relayAgentArtifact(
       request,
-      mapped.operation === "research_artifact" ? "research" : "export",
+      mapped.operation === "research_artifact"
+        ? "research"
+        : mapped.operation === "export_manifest"
+          ? "export-manifest"
+          : "export",
       jobId,
       authorization,
     );

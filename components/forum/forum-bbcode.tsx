@@ -1,5 +1,6 @@
 import { safeExternalUrl, safeImageUrl } from "@/lib/safe-url";
 import { splitForumMentions } from "@/lib/forum-mentions";
+import katex from "katex";
 import { Fragment, type ReactNode } from "react";
 import { ForumLink } from "./forum-link";
 import {
@@ -89,7 +90,11 @@ function renderFlowNodes(
   }
 
   for (const node of nodes) {
-    if (node.type === "tag" && BLOCK_TAGS.has(node.name)) {
+    if (
+      node.type === "tag" &&
+      (BLOCK_TAGS.has(node.name) ||
+        (node.name === "math" && /^(block|display)$/i.test(node.value ?? "")))
+    ) {
       flushInline();
       const key = `${keyPrefix}-block-${blockIndex}`;
       blockIndex += 1;
@@ -174,6 +179,10 @@ function renderBlockTag(node: ForumBbcodeTagNode, key: string): ReactNode {
         </pre>
       </figure>
     );
+  }
+
+  if (node.name === "math") {
+    return renderForumMath(node, key, true);
   }
 
   if (node.name === "list") {
@@ -867,6 +876,9 @@ function renderInlineNodes(
         </mark>
       );
     }
+    if (node.name === "math") {
+      return renderForumMath(node, key, false);
+    }
     if (node.name === "color") {
       return (
         <span className={forumColorClass(node.value)} key={key}>
@@ -912,6 +924,40 @@ function renderInlineNodes(
       </Fragment>
     );
   });
+}
+
+function renderForumMath(
+  node: ForumBbcodeTagNode,
+  key: string,
+  displayMode: boolean,
+) {
+  const expression = decodeForumEntities(forumBbcodeText(node.children)).trim();
+  if (!expression) {
+    return null;
+  }
+  const html = katex.renderToString(expression.slice(0, 4_000), {
+    displayMode,
+    maxExpand: 500,
+    output: "htmlAndMathml",
+    strict: "warn",
+    throwOnError: false,
+    trust: false,
+  });
+  const Element = displayMode ? "div" : "span";
+  return (
+    <Element
+      aria-label={displayMode ? "Mathematical expression" : undefined}
+      className={
+        displayMode
+          ? "max-w-full overflow-x-auto py-2 text-center"
+          : "inline-block max-w-full align-middle"
+      }
+      dangerouslySetInnerHTML={{ __html: html }}
+      key={key}
+      role={displayMode ? "math" : undefined}
+      tabIndex={displayMode ? 0 : undefined}
+    />
+  );
 }
 
 function renderForumImage(node: ForumBbcodeTagNode, key: string) {

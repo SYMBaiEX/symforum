@@ -3,7 +3,6 @@
 import { generateText, tool } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
-import { OPENROUTER_DEEPSEEK_FALLBACK_MODEL } from "../lib/ai-models";
 import {
   forumDayKey,
   openRouterDailyBudgetMicroUsd,
@@ -45,10 +44,9 @@ export async function convexModelRoutingConfig(
     now,
   });
   const disabledModelIds = new Set(control.disabledModelIds);
-  if (control.paidBudgetExceeded) {
-    // Free routes remain available after the paid budget is exhausted.
-    disabledModelIds.add(OPENROUTER_DEEPSEEK_FALLBACK_MODEL);
-  }
+  // Text generation is free-only. The shared paid budget continues to protect
+  // the OpenRouter embedding route without disabling free generation.
+  void control.paidBudgetExceeded;
 
   void options;
   return { ...base, disabledModelIds: [...disabledModelIds] };
@@ -146,12 +144,12 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
       ) {
         throw new Error("model route did not complete the structured canary");
       }
-      return { response: call.input.message };
+      return { response: call.input.message, modelId: result.response.modelId };
     },
   };
   const generation =
     provider === undefined
-      ? await runWithModelFallback<{ response: string }>(
+      ? await runWithModelFallback<{ response: string; modelId: string }>(
           config,
           requestContext,
           routeArgs,
@@ -168,7 +166,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
         );
   return {
     provider: generation.route.provider,
-    model: generation.route.persistedModel,
+    model: generation.value.modelId || generation.route.persistedModel,
     response: generation.value.response,
   };
 }

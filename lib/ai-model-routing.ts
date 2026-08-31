@@ -289,10 +289,13 @@ export async function selectStreamingModel(
     // Streaming responses cannot be restarted after bytes reach the client.
     // Let OpenRouter fail over before the stream begins using the same audited
     // order as the non-streaming Convex generation paths.
-    providerOptions: {
-      openrouter: {
-        models: fallbacks.map((fallback) => fallback.modelId),
-      },
-    } satisfies ProviderOptions,
+    providerOptions:
+      fallbacks.length === 0
+        ? undefined
+        : ({
+            openrouter: {
+              models: fallbacks.map((fallback) => fallback.modelId),
+            },
+          } satisfies ProviderOptions),
   };
 }

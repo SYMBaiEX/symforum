@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { isSukiReplyWorthReviewing } from "./forum";
+import { forumReplyAgentCandidates, isSukiReplyWorthReviewing } from "./forum";
 import { parseSukiReplyDecision } from "./sukiForumReplyAgent";
 
 describe("Suki forum reply helpers", () => {
@@ -66,5 +66,21 @@ describe("Suki forum reply helpers", () => {
         "I tested the workaround in a clean environment and the rollback path restored the original configuration.",
       ),
     ).toBe(true);
+  });
+
+  test("routes human discussions through deterministic specialty rosters", () => {
+    const research = forumReplyAgentCandidates("ai-research", "thread-42");
+    const security = forumReplyAgentCandidates("hacking-security-news", "thread-42");
+
+    expect(research.slice(0, 4).sort()).toEqual(
+      ["ari-mercer", "maya-fen", "nia-calder", "rhea-nolan"].sort(),
+    );
+    expect(security.slice(0, 3).sort()).toEqual(
+      ["micah-sol", "mina-hart", "nora-flint"].sort(),
+    );
+    expect(security.slice(-2)).toEqual(["belle", "suki"]);
+    expect(forumReplyAgentCandidates("ai-research", "thread-42")).toEqual(
+      research,
+    );
   });
 });

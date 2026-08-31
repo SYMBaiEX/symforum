@@ -52,6 +52,15 @@ class AgentClientTests(unittest.TestCase):
             f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/source-registry",
         )
 
+    def test_export_manifest_uses_the_authenticated_artifact_contract(self) -> None:
+        recorder = Recorder({"schemaVersion": "symbaiex-evidence-document-v2"})
+        client = AgentClient(token="access-token", transport=recorder)
+        self.assertIn(b"schemaVersion", client.export_manifest("job-1"))
+        self.assertEqual(
+            recorder.requests[0].url,
+            f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-1/manifest",
+        )
+
     def test_semantic_search_uses_public_replay_safe_contract(self) -> None:
         recorder = Recorder([])
         client = AgentClient(token="access-token", transport=recorder)
