@@ -117,6 +117,7 @@ describe("AI telemetry", () => {
       inputTokens: 120,
       outputTokens: 360,
       averageQuality: 8.6,
+      p50DurationMs: 1_200,
     });
     expect(result.models).toEqual([
       expect.objectContaining({
@@ -138,6 +139,16 @@ describe("AI telemetry", () => {
       agentSlug: "suki",
       correlationId: "forum:suki:2026-08-11:1",
     });
+    expect(result.recent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "usage",
+          inputTokens: 120,
+          outputTokens: 360,
+          durationMs: 1_200,
+        }),
+      ]),
+    );
   });
 
   test("keeps the telemetry snapshot owner-only", async () => {

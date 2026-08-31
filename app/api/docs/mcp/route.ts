@@ -4,7 +4,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 32 * 1024;
-const PROTOCOL_VERSION = "2025-06-18";
+const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
+const SUPPORTED_PROTOCOL_VERSIONS = new Set([
+  DEFAULT_PROTOCOL_VERSION,
+  "2025-03-26",
+]);
 const SERVER_INFO = { name: "symbaiex-docs", version: "v1" } as const;
 
 const DOCUMENTS = [
@@ -119,8 +123,27 @@ export async function POST(request: Request) {
   if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {
     return rpc(null, undefined, { code: -32600, message: "Invalid Request" });
   }
+  const requestedProtocolVersion = request.headers.get("mcp-protocol-version");
+  if (
+    requestedProtocolVersion !== null &&
+    !SUPPORTED_PROTOCOL_VERSIONS.has(requestedProtocolVersion)
+  ) {
+    return rpc(
+      Object.hasOwn(body, "id") && isJsonRpcId(body.id) ? body.id : null,
+      undefined,
+      {
+        code: -32022,
+        message: "Unsupported protocol version",
+        data: {
+          supported: [...SUPPORTED_PROTOCOL_VERSIONS],
+          requested: requestedProtocolVersion,
+        },
+      },
+      400,
+    );
+  }
   if (body.method === "notifications/initialized") {
-    return new Response(null, { status: 204, headers: headers() });
+    return new Response(null, { status: 202, headers: headers() });
   }
   if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {
     return rpc(null, undefined, { code: -32600, message: "Invalid Request" });
@@ -128,8 +151,48 @@ export async function POST(request: Request) {
   const id = body.id;
 
   if (body.method === "initialize") {
+    const params = isRecord(body.params) ? body.params : null;
+    const paramsProtocolVersion = params?.protocolVersion;
+    if (
+      typeof paramsProtocolVersion === "string" &&
+      !SUPPORTED_PROTOCOL_VERSIONS.has(paramsProtocolVersion)
+    ) {
+      return rpc(
+        id,
+        undefined,
+        {
+          code: -32022,
+          message: "Unsupported protocol version",
+          data: {
+            supported: [...SUPPORTED_PROTOCOL_VERSIONS],
+            requested: paramsProtocolVersion,
+          },
+        },
+        400,
+      );
+    }
+    if (
+      requestedProtocolVersion !== null &&
+      typeof paramsProtocolVersion === "string" &&
+      requestedProtocolVersion !== paramsProtocolVersion
+    ) {
+      return rpc(
+        id,
+        undefined,
+        {
+          code: -32020,
+          message:
+            "Header mismatch: MCP-Protocol-Version must match initialize params.protocolVersion.",
+        },
+        400,
+      );
+    }
+    const protocolVersion =
+      typeof paramsProtocolVersion === "string"
+        ? paramsProtocolVersion
+        : (requestedProtocolVersion ?? DEFAULT_PROTOCOL_VERSION);
     return rpc(id, {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion,
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
       instructions:
@@ -265,9 +328,13 @@ function validSearch(
 function rpc(
   id: string | number | null,
   result?: unknown,
-  error?: { code: number; message: string },
+  error?: { code: number; message: string; data?: unknown },
+  status = 200,
 ) {
-  return json({ jsonrpc: "2.0", id, ...(error ? { error } : { result }) });
+  return json(
+    { jsonrpc: "2.0", id, ...(error ? { error } : { result }) },
+    status,
+  );
 }
 
 function json(body: unknown, status = 200) {

@@ -36,7 +36,6 @@ describe("newsletter confirmation POST", () => {
     expect(mutation).toHaveBeenCalledOnce();
     expect(mutation).toHaveBeenCalledWith(expect.anything(), {
       tokenHash,
-      siteUrl: "https://www.symbaiex.com",
     });
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(

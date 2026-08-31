@@ -38,6 +38,8 @@ export async function GET(request: Request) {
       model: event.model,
       outcome: event.status,
       totalMs: event.durationMs,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
     }));
 
     return noStore(
@@ -50,30 +52,32 @@ export async function GET(request: Request) {
             requests: attempts,
             completed: Math.max(0, attempts - failures),
             failed: failures,
-            rejected: 0,
-            cancelled: 0,
+            rejected: null,
+            cancelled: null,
             errorRate: attempts ? failures / attempts : 0,
             inputTokens: snapshot.totals.inputTokens,
             outputTokens: snapshot.totals.outputTokens,
             totalTokens:
               snapshot.totals.inputTokens + snapshot.totals.outputTokens,
             averageLatencyMs: snapshot.totals.averageDurationMs,
-            p50LatencyMs: snapshot.totals.averageDurationMs,
+            p50LatencyMs: snapshot.totals.p50DurationMs,
             p95LatencyMs: snapshot.totals.p95DurationMs,
-            averageQueueWaitMs: 0,
-            p95QueueWaitMs: 0,
-            averageFirstByteMs: 0,
-            p95FirstByteMs: 0,
-            averageTokensPerSecond: 0,
-            p50TokensPerSecond: 0,
+            averageQueueWaitMs: null,
+            p95QueueWaitMs: null,
+            averageFirstByteMs: null,
+            p95FirstByteMs: null,
+            averageTokensPerSecond: null,
+            p50TokensPerSecond: null,
           },
-          speculativeDecoding: {
-            draftTokens: 0,
-            acceptedDraftTokens: 0,
-            acceptanceRate: 0,
-          },
-          keys: [],
-          series: [],
+          speculativeDecoding: null,
+          keys: null,
+          series: snapshot.series.map((point) => ({
+            at: new Date(point.at).toISOString(),
+            generationEvents: point.generations,
+            failed: point.failures,
+            inputTokens: point.inputTokens,
+            outputTokens: point.outputTokens,
+          })),
           runtime: {
             latest: snapshot.operations.canary
               ? {

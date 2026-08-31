@@ -65,20 +65,29 @@ export function normalizeTokenHash(tokenHash: string) {
   return clean;
 }
 
-export function normalizeSiteUrl(siteUrl: string | undefined) {
+export function trustedNewsletterSiteUrl(
+  newsletterSiteUrl: string | undefined,
+  siteUrl: string | undefined,
+  callerSiteUrl?: string,
+) {
+  // Keep this compatibility argument explicit while ensuring a public caller
+  // can never choose an email-link origin.
+  void callerSiteUrl;
   const fallback = "https://symbaiex.com";
-  if (!siteUrl) {
-    return fallback;
-  }
-  try {
-    const url = new URL(siteUrl);
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return fallback;
+  for (const candidate of [newsletterSiteUrl, siteUrl]) {
+    if (!candidate) {
+      continue;
     }
-    return url.origin;
-  } catch {
-    return fallback;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "https:" || url.protocol === "http:") {
+        return url.origin;
+      }
+    } catch {
+      // Try the next trusted environment value.
+    }
   }
+  return fallback;
 }
 
 export function normalizeNewsletterSource(source: string | undefined) {

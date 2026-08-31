@@ -1,5 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
+import { components } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
@@ -20,6 +22,15 @@ const DEDUPE_WINDOW_MS = 1_500;
 const ADMIN_EVENT_LIMIT = 2_500;
 const ANALYTICS_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 const ANALYTICS_CLEANUP_BATCH = 200;
+
+const publicAnalyticsRateLimiter = new RateLimiter(components.rateLimiter, {
+  anonymousAnalyticsEvents: {
+    kind: "token bucket",
+    rate: 30,
+    period: MINUTE,
+    capacity: 30,
+  },
+});
 
 type AnalyticsSource = Doc<"analyticsEvents">["source"];
 type AnalyticsEvent = Doc<"analyticsEvents">;
@@ -48,6 +59,27 @@ export const record = mutation({
     const sessionId = optionalToken(args.sessionId);
     const visitorId = optionalToken(args.visitorId);
     const actorUserId = await getAuthUserId(ctx);
+
+    if (actorUserId === null) {
+      const capacity = await publicAnalyticsRateLimiter.limit(
+        ctx,
+        "anonymousAnalyticsEvents",
+        {
+          // Deliberately global: caller-provided visitor and session IDs are
+          // untrusted and must not split this public write budget.
+          key: "global",
+        },
+      );
+      if (!capacity.ok) {
+        return {
+          recorded: false,
+          deduped: false,
+          id: null,
+          reason: "RATE_LIMITED" as const,
+          retryAfter: capacity.retryAfter,
+        };
+      }
+    }
 
     if (sessionId !== undefined) {
       const recent = await ctx.db

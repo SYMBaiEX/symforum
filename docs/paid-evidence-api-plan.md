@@ -50,6 +50,26 @@ the first production version of SYMBaiEX's provenance-first data products.
 - [x] Never charge for posting, voting, liking, normal public browsing, search
       discovery, feeds, sitemaps, or `llms.txt`.
 
+## Job execution safety
+
+- Research and export workflows atomically claim a queued job, and the owning
+  action atomically reserves the start of external work. Duplicate workflow or
+  action invocations exit without repeating provider inference or export
+  generation.
+- Workflow action retries are disabled because provider calls and storage
+  writes are not exactly-once external operations. Completion and failure
+  mutations require the owning execution token; rejected completion results
+  delete their returned storage, including both export artifact and manifest.
+- Execution fields are optional for rolling deployment. Already-running
+  tokenless workflows may finish through the legacy completion path; new jobs
+  always require a token. A duplicate workflow that observes work unchanged for
+  30 minutes marks it failed without replaying external work.
+- There is one unavoidable orphan boundary: the Convex action can terminate
+  after `storage.store` commits but before its storage ID is returned or its
+  catch handler runs. Ordinary thrown errors clean up stored objects, and
+  rejected completions clean up returned objects, but an abrupt termination in
+  that interval requires storage inventory/retention cleanup.
+
 ## Release proof
 
 - [x] Focused authorization, idempotency, ingestion, API, and privacy tests.

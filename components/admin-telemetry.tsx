@@ -20,23 +20,23 @@ import { toast } from "sonner";
 
 type ModelTotals = {
   requests: number;
-  completed: number;
+  completed: number | null;
   failed: number;
-  rejected: number;
-  cancelled: number;
-  errorRate: number;
+  rejected: number | null;
+  cancelled: number | null;
+  errorRate: number | null;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   averageLatencyMs: number;
   p50LatencyMs: number;
   p95LatencyMs: number;
-  averageQueueWaitMs: number;
-  p95QueueWaitMs: number;
-  averageFirstByteMs: number;
-  p95FirstByteMs: number;
-  averageTokensPerSecond: number;
-  p50TokensPerSecond: number;
+  averageQueueWaitMs: number | null;
+  p95QueueWaitMs: number | null;
+  averageFirstByteMs: number | null;
+  p95FirstByteMs: number | null;
+  averageTokensPerSecond: number | null;
+  p50TokensPerSecond: number | null;
   apiRejections?: number;
   modelControls?: number;
 };
@@ -76,9 +76,15 @@ type ModelTelemetry = {
     draftTokens: number;
     acceptedDraftTokens: number;
     acceptanceRate: number;
-  };
-  keys: Array<{ keyId: string; keyName: string } & ModelTotals>;
-  series: Array<{ at: string } & ModelTotals>;
+  } | null;
+  keys: Array<{ keyId: string; keyName: string } & ModelTotals> | null;
+  series: Array<{
+    at: string;
+    generationEvents: number;
+    failed: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
   runtime: {
     latest: RuntimeSample | null;
     history: RuntimeSample[];
@@ -441,13 +447,21 @@ export function AdminTelemetry() {
               icon={Zap}
               label="Generation speed"
               value={`${decimal(runtime?.llama?.generationTokensPerSecond)} tok/s`}
-              detail={`${decimal(model?.totals.averageTokensPerSecond)} average/request`}
+              detail={
+                model?.totals.averageTokensPerSecond === null
+                  ? "not measured"
+                  : `${decimal(model?.totals.averageTokensPerSecond)} average/request`
+              }
             />
             <MetricCard
               icon={Timer}
               label="P95 latency"
               value={duration(model?.totals.p95LatencyMs)}
-              detail={`${duration(model?.totals.p95QueueWaitMs)} queue p95`}
+              detail={
+                model?.totals.p95QueueWaitMs === null
+                  ? "queue wait not measured"
+                  : `${duration(model?.totals.p95QueueWaitMs)} queue p95`
+              }
             />
             <MetricCard
               icon={Gauge}
@@ -509,8 +523,12 @@ export function AdminTelemetry() {
             <MetricCard
               icon={Zap}
               label="DFlash acceptance"
-              value={percent(model?.speculativeDecoding.acceptanceRate)}
-              detail={`${integer(model?.speculativeDecoding.acceptedDraftTokens)} accepted drafts`}
+              value={percent(model?.speculativeDecoding?.acceptanceRate)}
+              detail={
+                model?.speculativeDecoding
+                  ? `${integer(model.speculativeDecoding.acceptedDraftTokens)} accepted drafts`
+                  : "not measured"
+              }
             />
           </section>
           <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
@@ -522,7 +540,7 @@ export function AdminTelemetry() {
             <RuntimePanel model={model} runtime={runtime} />
           </section>
           <Panel eyebrow="Access pressure" title="Usage by API key">
-            <KeyUsageTable rows={model?.keys ?? []} />
+            <KeyUsageTable rows={model?.keys ?? null} />
           </Panel>
         </div>
       ) : null}
@@ -731,7 +749,7 @@ export function AdminTelemetry() {
               </dl>
             </Panel>
             <Panel eyebrow="Clients" title="API-key history">
-              <KeyUsageTable rows={model?.keys ?? []} />
+              <KeyUsageTable rows={model?.keys ?? null} />
             </Panel>
           </div>
           <Panel
@@ -806,9 +824,17 @@ function SystemStatusGrid({
       />
       <StatusCell
         label="Inference queue"
-        value={`${number(runtime?.llama?.requestsProcessing)} active`}
+        value={
+          runtime?.llama
+            ? `${number(runtime.llama.requestsProcessing)} active`
+            : "Not measured"
+        }
         tone={(runtime?.llama?.requestsDeferred ?? 0) > 0 ? "warn" : "good"}
-        detail={`${number(runtime?.llama?.requestsDeferred)} deferred`}
+        detail={
+          runtime?.llama
+            ? `${number(runtime.llama.requestsDeferred)} deferred`
+            : "queue telemetry not measured"
+        }
       />
       <StatusCell
         label="Telemetry store"
@@ -850,8 +876,8 @@ function InferenceTraffic({
           key: row.at,
           label: compactTime(row.at, hours),
           primary: row.outputTokens,
-          secondary: row.failed + row.rejected,
-          title: `${row.requests} requests · ${row.outputTokens} output tokens`,
+          secondary: row.failed,
+          title: `${row.generationEvents} generation events · ${row.outputTokens} output tokens`,
         }))}
         empty={
           loading
@@ -883,7 +909,11 @@ function RuntimePanel({
         />
         <RuntimeRow
           label="Prompt throughput"
-          value={`${decimal(runtime?.llama?.inputTokensPerSecond)} tok/s`}
+          value={
+            runtime?.llama?.inputTokensPerSecond === undefined
+              ? "— (not measured)"
+              : `${decimal(runtime.llama.inputTokensPerSecond)} tok/s`
+          }
         />
         <RuntimeRow
           label="Cumulative tokens"
@@ -891,7 +921,11 @@ function RuntimePanel({
         />
         <RuntimeRow
           label="First byte p95"
-          value={duration(model?.totals.p95FirstByteMs)}
+          value={
+            model?.totals.p95FirstByteMs === null
+              ? "— (not measured)"
+              : duration(model?.totals.p95FirstByteMs)
+          }
         />
       </dl>
     </Panel>
@@ -1181,6 +1215,8 @@ function ModelTable({
 }
 
 function KeyUsageTable({ rows }: { rows: ModelTelemetry["keys"] }) {
+  if (rows === null)
+    return <EmptyState>API-key telemetry is not collected</EmptyState>;
   if (!rows.length) return <EmptyState>No key usage in this window</EmptyState>;
   return (
     <div className="space-y-3">
@@ -1201,7 +1237,7 @@ function KeyUsageTable({ rows }: { rows: ModelTelemetry["keys"] }) {
           <div className="mt-2 flex gap-4 font-mono text-[9px] uppercase text-muted-foreground">
             <span>{decimal(row.averageTokensPerSecond)} tok/s</span>
             <span>{duration(row.p95LatencyMs)} p95</span>
-            <span className={cn(row.errorRate > 0 && "text-red-500")}>
+            <span className={cn((row.errorRate ?? 0) > 0 && "text-red-500")}>
               {percent(row.errorRate)} errors
             </span>
           </div>
@@ -1324,32 +1360,34 @@ function mergeRecent(
     .sort((left, right) => right.at - left.at);
 }
 
-function number(value: number | undefined) {
-  return value === undefined ? "—" : String(value);
+function number(value: number | null | undefined) {
+  return value === undefined || value === null ? "—" : String(value);
 }
 
-function integer(value: number | undefined) {
-  if (value === undefined || !Number.isFinite(value)) return "—";
+function integer(value: number | null | undefined) {
+  if (value === undefined || value === null || !Number.isFinite(value))
+    return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
     value,
   );
 }
 
-function decimal(value: number | undefined) {
-  if (value === undefined || !Number.isFinite(value)) return "—";
+function decimal(value: number | null | undefined) {
+  if (value === undefined || value === null || !Number.isFinite(value))
+    return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(
     value,
   );
 }
 
-function percent(value: number | undefined) {
-  return value === undefined || !Number.isFinite(value)
+function percent(value: number | null | undefined) {
+  return value === undefined || value === null || !Number.isFinite(value)
     ? "—"
     : `${decimal(value)}%`;
 }
 
-function currency(value: number | undefined) {
-  return value === undefined || !Number.isFinite(value)
+function currency(value: number | null | undefined) {
+  return value === undefined || value === null || !Number.isFinite(value)
     ? "—"
     : new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -1358,22 +1396,24 @@ function currency(value: number | undefined) {
       }).format(value);
 }
 
-function duration(value: number | undefined) {
-  if (value === undefined || !Number.isFinite(value)) return "—";
+function duration(value: number | null | undefined) {
+  if (value === undefined || value === null || !Number.isFinite(value))
+    return "—";
   return value >= 1_000
     ? `${decimal(value / 1_000)}s`
     : `${Math.round(value)}ms`;
 }
 
-function memory(value: number | undefined) {
-  if (value === undefined || !Number.isFinite(value)) return "—";
+function memory(value: number | null | undefined) {
+  if (value === undefined || value === null || !Number.isFinite(value))
+    return "—";
   return value >= 1_024
     ? `${decimal(value / 1_024)} GiB`
     : `${Math.round(value)} MiB`;
 }
 
-function temperature(value: number | undefined) {
-  return value === undefined || !Number.isFinite(value)
+function temperature(value: number | null | undefined) {
+  return value === undefined || value === null || !Number.isFinite(value)
     ? "—"
     : `${decimal(value)} °C`;
 }

@@ -2747,6 +2747,11 @@ export default defineSchema({
     query: v.string(),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    // Optional for rolling compatibility with jobs created before execution
+    // ownership was introduced. New workflows atomically claim this token.
+    executionToken: v.optional(v.string()),
+    executionClaimedAt: v.optional(v.number()),
+    externalWorkStartedAt: v.optional(v.number()),
     artifactPurgedAt: v.optional(v.number()),
     errorMessage: v.string(),
     expiresAt: v.number(),
@@ -2787,6 +2792,9 @@ export default defineSchema({
     recordCount: v.number(),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
+    executionToken: v.optional(v.string()),
+    executionClaimedAt: v.optional(v.number()),
+    externalWorkStartedAt: v.optional(v.number()),
     artifactPurgedAt: v.optional(v.number()),
     errorMessage: v.string(),
     expiresAt: v.number(),

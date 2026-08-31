@@ -97,7 +97,16 @@ describe("forum subdomain routing", () => {
       "/news/123",
       "/newsletter/preferences",
       "/portfolio/elizaos",
+      "/pricing",
+      "/pricing.md",
       "/privacy",
+      "/agent",
+      "/agent/signup",
+      "/terms",
+      "/research",
+      "/research/methodology",
+      "/auth.md",
+      "/agents.md",
     ]) {
       expect(
         resolveForumSubdomainRoute({

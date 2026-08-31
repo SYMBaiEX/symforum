@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
@@ -12,7 +13,9 @@ const modules = {
 };
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  return t;
 }
 
 describe("system log fingerprints", () => {
@@ -71,5 +74,31 @@ describe("system log fingerprints", () => {
     expect(stored?.fingerprint).toBe(
       "client|application|runtime_error|/portfolio/elizaos|[CONVEX Q(comments:list)] [Request ID] Server Error Called by client",
     );
+  });
+
+  test("enforces one anonymous global budget despite varied fingerprints", async () => {
+    const t = setup();
+    for (let index = 0; index < 20; index += 1) {
+      await expect(
+        t.mutation(api.systemLogs.record, {
+          message: `public error ${index}`,
+          fingerprint: `untrusted-fingerprint-${index}`,
+        }),
+      ).resolves.toMatchObject({ logged: true });
+    }
+
+    await expect(
+      t.mutation(api.systemLogs.record, {
+        message: "must not be written",
+        fingerprint: "different-untrusted-fingerprint",
+      }),
+    ).resolves.toMatchObject({
+      logged: false,
+      deduped: false,
+      reason: "RATE_LIMITED",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("systemLogs").collect()).toHaveLength(20);
+    });
   });
 });

@@ -1,5 +1,4 @@
 import { convexRefs } from "@/lib/convex-refs";
-import { newsletterSiteUrlFromRequest } from "@/lib/newsletter-token";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { ConvexHttpClient } from "convex/browser";
 import { after, NextResponse } from "next/server";
@@ -23,7 +22,6 @@ export async function POST(request: Request) {
         convexRefs.newsletter.confirm,
         {
           tokenHash,
-          siteUrl: newsletterSiteUrlFromRequest(request.url),
         },
       );
     } catch (error) {

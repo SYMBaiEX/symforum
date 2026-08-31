@@ -36,6 +36,36 @@ const jobs = {
   completeExport: makeFunctionReference<"mutation", any, any>(
     "evidenceJobs:completeExportJob",
   ),
+  completeResearch: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:completeResearchJob",
+  ),
+  claimResearch: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:claimResearchExecution",
+  ),
+  claimExport: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:claimExportExecution",
+  ),
+  beginResearch: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:beginResearchExecution",
+  ),
+  beginExport: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:beginExportExecution",
+  ),
+  legacyResearchInput: makeFunctionReference<"query", any, any>(
+    "evidenceJobs:readResearchInput",
+  ),
+  legacyExportInput: makeFunctionReference<"query", any, any>(
+    "evidenceJobs:readExportInput",
+  ),
+  markResearchRunning: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:markResearchRunning",
+  ),
+  failExport: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:failExportJob",
+  ),
+  runExport: makeFunctionReference<"action", any, any>(
+    "evidenceJobActions:runExport",
+  ),
 } as const;
 function setup() {
   return convexTest(schema, modules);
@@ -78,6 +108,17 @@ async function fixture(t: ReturnType<typeof setup>) {
       updatedAt: 1,
     });
     return { owner, other, agent };
+  });
+}
+async function completeOwnedExport(
+  t: ReturnType<typeof setup>,
+  args: Record<string, unknown> & { jobId: string },
+) {
+  const claim = await t.mutation(jobs.claimExport, { jobId: args.jobId });
+  expect(claim).toMatchObject({ executionToken: expect.any(String) });
+  return await t.mutation(jobs.completeExport, {
+    ...args,
+    executionToken: claim.executionToken,
   });
 }
 describe("evidence jobs", () => {
@@ -202,7 +243,7 @@ describe("evidence jobs", () => {
         new Blob(['{"format":"jsonl"}'], { type: "application/json" }),
       ),
     );
-    await t.mutation(jobs.completeExport, {
+    await completeOwnedExport(t, {
       jobId: exportJob.jobId,
       resultJson: JSON.stringify({ recordCount: 1 }),
       resultStorageId: storageId,
@@ -329,7 +370,7 @@ describe("evidence jobs", () => {
         new Blob(['{"format":"jsonl"}'], { type: "application/json" }),
       ),
     );
-    await t.mutation(jobs.completeExport, {
+    await completeOwnedExport(t, {
       jobId: job.jobId,
       resultJson: "{}",
       resultStorageId: storageId,
@@ -485,7 +526,7 @@ describe("evidence jobs", () => {
     const firstArtifactStorageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(['{"record":1}\n'])),
     );
-    await t.mutation(jobs.completeExport, {
+    await completeOwnedExport(t, {
       jobId: first.jobId,
       resultJson: "{}",
       resultStorageId: firstArtifactStorageId,
@@ -507,7 +548,7 @@ describe("evidence jobs", () => {
     const duplicateArtifactStorageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(['{"record":1}\n'])),
     );
-    await t.mutation(jobs.completeExport, {
+    await completeOwnedExport(t, {
       jobId: duplicate.jobId,
       resultJson: "{}",
       resultStorageId: duplicateArtifactStorageId,
@@ -530,6 +571,245 @@ describe("evidence jobs", () => {
         )
         .unique();
       expect(version?.manifestStorageId).toBe(canonicalManifestStorageId);
+    });
+  });
+
+  test("claims external work once and rejects losing completion and failure mutations", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const job = await t.mutation(jobs.createExport, {
+      ownerUserId: owner,
+      agentId: "agent",
+      datasetId: catalog.datasetId,
+      format: "jsonl",
+      idempotencyKey: "execution-owner-export",
+      requestFingerprint: "execution-owner-export",
+      quotaUnits: 1,
+    });
+    const claim = await t.mutation(jobs.claimExport, { jobId: job.jobId });
+    expect(claim).toMatchObject({ executionToken: expect.any(String) });
+    await expect(
+      t.mutation(jobs.claimExport, { jobId: job.jobId }),
+    ).resolves.toBeNull();
+    await expect(
+      t.query(jobs.legacyExportInput, { jobId: job.jobId }),
+    ).resolves.toBeNull();
+    await expect(
+      t.mutation(jobs.beginExport, {
+        jobId: job.jobId,
+        executionToken: "loser",
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      t.mutation(jobs.beginExport, {
+        jobId: job.jobId,
+        executionToken: claim.executionToken,
+      }),
+    ).resolves.toMatchObject({ datasetId: catalog.datasetId, format: "jsonl" });
+    await expect(
+      t.mutation(jobs.beginExport, {
+        jobId: job.jobId,
+        executionToken: claim.executionToken,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      t.action(jobs.runExport, {
+        jobId: job.jobId,
+        executionToken: claim.executionToken,
+      }),
+    ).resolves.toEqual({ started: false });
+
+    const losing = await t.run(async (ctx) => ({
+      artifact: await ctx.storage.store(new Blob(["losing-artifact"])),
+      manifest: await ctx.storage.store(new Blob(["losing-manifest"])),
+    }));
+    const completion = {
+      jobId: job.jobId,
+      resultJson: "{}",
+      resultStorageId: losing.artifact,
+      datasetManifestStorageId: losing.manifest,
+      checksum: "execution-owner-checksum",
+      recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 15,
+    };
+    await t.mutation(jobs.completeExport, {
+      ...completion,
+      executionToken: "loser",
+    });
+    await t.mutation(jobs.failExport, {
+      jobId: job.jobId,
+      executionToken: "loser",
+      errorMessage: "loser failure",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.system.get("_storage", losing.artifact)).toBeNull();
+      expect(await ctx.db.system.get("_storage", losing.manifest)).toBeNull();
+      expect((await ctx.db.get("evidenceExportJobs", job.jobId))?.status).toBe(
+        "running",
+      );
+    });
+
+    const winning = await t.run(async (ctx) => ({
+      artifact: await ctx.storage.store(new Blob(["winning-artifact"])),
+      manifest: await ctx.storage.store(new Blob(["winning-manifest"])),
+    }));
+    const subscriptionId = await t.run(async (ctx) => {
+      const subscriptionId = await ctx.db.insert("apiWebhookSubscriptions", {
+        ownerUserId: owner,
+        subscriptionKey: "execution-owner",
+        url: "https://example.com/evidence-webhook",
+        status: "active",
+        eventTypes: ["evidence.export.completed"],
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("apiWebhookTargets", {
+        subscriptionId,
+        ownerUserId: owner,
+        eventType: "evidence.export.completed",
+        status: "active",
+        updatedAt: 1,
+      });
+      return subscriptionId;
+    });
+    await t.mutation(jobs.completeExport, {
+      ...completion,
+      executionToken: claim.executionToken,
+      resultStorageId: winning.artifact,
+      datasetManifestStorageId: winning.manifest,
+    });
+
+    const duplicate = await t.run(async (ctx) => ({
+      artifact: await ctx.storage.store(new Blob(["duplicate-artifact"])),
+      manifest: await ctx.storage.store(new Blob(["duplicate-manifest"])),
+    }));
+    await t.mutation(jobs.completeExport, {
+      ...completion,
+      executionToken: claim.executionToken,
+      resultStorageId: duplicate.artifact,
+      datasetManifestStorageId: duplicate.manifest,
+    });
+    await t.mutation(jobs.failExport, {
+      jobId: job.jobId,
+      executionToken: claim.executionToken,
+      errorMessage: "late failure",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.system.get("_storage", duplicate.artifact)).toBeNull();
+      expect(await ctx.db.system.get("_storage", duplicate.manifest)).toBeNull();
+      expect(await ctx.db.system.get("_storage", winning.artifact)).not.toBeNull();
+      expect(await ctx.db.system.get("_storage", winning.manifest)).not.toBeNull();
+      expect(
+        await ctx.db
+          .query("evidenceArtifacts")
+          .withIndex("by_exportJobId", (q) => q.eq("exportJobId", job.jobId))
+          .take(2),
+      ).toHaveLength(1);
+      expect(
+        await ctx.db
+          .query("evidenceDatasetVersions")
+          .withIndex("by_datasetId_and_checksum", (q) =>
+            q
+              .eq("datasetId", catalog.datasetId)
+              .eq("checksum", "execution-owner-checksum"),
+          )
+          .take(2),
+      ).toHaveLength(1);
+      const version = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_checksum", (q) =>
+          q
+            .eq("datasetId", catalog.datasetId)
+            .eq("checksum", "execution-owner-checksum"),
+        )
+        .unique();
+      expect(
+        await ctx.db
+          .query("evidenceChangeEvents")
+          .withIndex("by_eventKey", (q) =>
+            q.eq(
+              "eventKey",
+              `dataset:${catalog.datasetId}:version:${version!.version}`,
+            ),
+          )
+          .take(2),
+      ).toHaveLength(1);
+      expect(
+        await ctx.db
+          .query("apiWebhookDeliveries")
+          .withIndex("by_subscriptionId_and_eventKey", (q) =>
+            q
+              .eq("subscriptionId", subscriptionId)
+              .eq("eventKey", `export:${job.jobId}:completed`.toLowerCase()),
+          )
+          .take(2),
+      ).toHaveLength(1);
+      expect((await ctx.db.get("evidenceExportJobs", job.jobId))?.status).toBe(
+        "completed",
+      );
+    });
+
+    const legacy = await t.mutation(jobs.createResearch, {
+      ownerUserId: owner,
+      agentId: "agent",
+      query: "rolling deployment",
+      idempotencyKey: "legacy-running-research",
+      requestFingerprint: "legacy-running-research",
+      quotaUnits: 1,
+    });
+    await t.mutation(jobs.markResearchRunning, { jobId: legacy.jobId });
+    await expect(
+      t.query(jobs.legacyResearchInput, { jobId: legacy.jobId }),
+    ).resolves.toMatchObject({ query: "rolling deployment", status: "running" });
+    await t.mutation(jobs.completeResearch, {
+      jobId: legacy.jobId,
+      resultJson: '{"legacy":true}',
+    });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db.get("evidenceResearchJobs", legacy.jobId),
+      ).toMatchObject({ status: "completed", resultJson: '{"legacy":true}' });
+    });
+
+    const stale = await t.mutation(jobs.createResearch, {
+      ownerUserId: owner,
+      agentId: "agent",
+      query: "stale execution",
+      idempotencyKey: "stale-research",
+      requestFingerprint: "stale-research",
+      quotaUnits: 1,
+    });
+    const staleClaim = await t.mutation(jobs.claimResearch, {
+      jobId: stale.jobId,
+    });
+    await expect(
+      t.query(jobs.legacyResearchInput, { jobId: stale.jobId }),
+    ).resolves.toBeNull();
+    await t.run(async (ctx) => {
+      const staleAt = Date.now() - 31 * 60 * 1_000;
+      await ctx.db.patch("evidenceResearchJobs", stale.jobId, {
+        executionClaimedAt: staleAt,
+        updatedAt: staleAt,
+      });
+    });
+    await expect(
+      t.mutation(jobs.claimResearch, { jobId: stale.jobId }),
+    ).resolves.toBeNull();
+    await expect(
+      t.mutation(jobs.beginResearch, {
+        jobId: stale.jobId,
+        executionToken: staleClaim.executionToken,
+      }),
+    ).resolves.toBeNull();
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("evidenceResearchJobs", stale.jobId)).toMatchObject(
+        {
+          status: "failed",
+          errorMessage: expect.stringMatching(/not retried/i),
+        },
+      );
     });
   });
 

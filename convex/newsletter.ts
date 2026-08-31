@@ -8,6 +8,7 @@ import {
   internalQuery,
   mutation,
   query,
+  env,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
@@ -22,8 +23,8 @@ import {
   normalizeEmail,
   normalizeIssueInput,
   normalizeNewsletterSource,
-  normalizeSiteUrl,
   normalizeTokenHash,
+  trustedNewsletterSiteUrl,
 } from "./newsletterModel";
 import { parseEditorialNewsletterPayload } from "./newsletterPayload";
 
@@ -63,6 +64,14 @@ const sendIssueRef = makeFunctionReference<
   null
 >("newsletterEmails:sendNewsletterIssue");
 
+function scheduledNewsletterSiteUrl(callerSiteUrl?: string) {
+  return trustedNewsletterSiteUrl(
+    env.NEWSLETTER_SITE_URL,
+    env.SITE_URL,
+    callerSiteUrl,
+  );
+}
+
 export const subscribe = mutation({
   args: {
     email: v.string(),
@@ -87,13 +96,13 @@ export const subscribe = mutation({
         await ctx.scheduler.runAfter(0, sendManageSubscriptionEmailRef, {
           subscriberId: subscriber._id,
           token: args.token,
-          siteUrl: normalizeSiteUrl(args.siteUrl),
+          siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
         });
       } else {
         await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
           subscriberId: subscriber._id,
           token: args.token,
-          siteUrl: normalizeSiteUrl(args.siteUrl),
+          siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
         });
       }
     }
@@ -135,7 +144,7 @@ export const requestViewerSubscription = mutation({
       await ctx.scheduler.runAfter(0, sendConfirmationEmailRef, {
         subscriberId: subscriber._id,
         token: args.token,
-        siteUrl: normalizeSiteUrl(args.siteUrl),
+        siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
       });
     }
 
@@ -262,7 +271,7 @@ export const confirm = mutation({
       });
       await ctx.scheduler.runAfter(0, sendWelcomeEmailRef, {
         subscriberId: subscriber._id,
-        siteUrl: normalizeSiteUrl(args.siteUrl),
+        siteUrl: scheduledNewsletterSiteUrl(args.siteUrl),
       });
     } else {
       await ctx.scheduler.runAfter(0, syncSubscriberRef, {

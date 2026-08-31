@@ -1510,6 +1510,7 @@ export type AiTelemetrySnapshotRecord = {
     inputTokens: number;
     outputTokens: number;
     averageDurationMs: number;
+    p50DurationMs: number;
     p95DurationMs: number;
     averageQuality: number;
     estimatedSpendUsd: number;
@@ -1560,7 +1561,7 @@ export type AiTelemetrySnapshotRecord = {
     estimatedCostMicroUsd: number;
   }>;
   recent: Array<{
-    kind: "route" | "publication" | "reply" | "newsletter";
+    kind: "route" | "publication" | "reply" | "newsletter" | "usage";
     at: number;
     correlationId: string;
     agentSlug?: string;
@@ -1569,6 +1570,8 @@ export type AiTelemetrySnapshotRecord = {
     status: string;
     detail?: string;
     durationMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
   }>;
   operations: {
     budget: {
@@ -2416,7 +2419,13 @@ export const convexRefs = {
         device?: string;
         metadataJson?: string;
       },
-      { recorded: boolean; deduped: boolean; id: string | null }
+      {
+        recorded: boolean;
+        deduped: boolean;
+        id: string | null;
+        reason?: "RATE_LIMITED";
+        retryAfter?: number;
+      }
     >("analytics:record"),
   },
   webVitals: {
@@ -2465,7 +2474,13 @@ export const convexRefs = {
         entityId?: string;
         metadataJson?: string;
       },
-      { logged: boolean; deduped: boolean; id: string | null }
+      {
+        logged: boolean;
+        deduped: boolean;
+        id: string | null;
+        reason?: "RATE_LIMITED";
+        retryAfter?: number;
+      }
     >("systemLogs:record"),
   },
   forum: {

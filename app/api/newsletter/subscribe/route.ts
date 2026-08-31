@@ -1,7 +1,6 @@
 import { convexRefs } from "@/lib/convex-refs";
 import {
   createNewsletterToken,
-  newsletterSiteUrlFromRequest,
   newsletterTokenHash,
 } from "@/lib/newsletter-token";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
@@ -37,7 +36,6 @@ export async function POST(request: Request) {
       source: typeof payload.source === "string" ? payload.source : "site",
       token,
       tokenHash: newsletterTokenHash(token),
-      siteUrl: newsletterSiteUrlFromRequest(request.url),
     });
 
     return NextResponse.json(

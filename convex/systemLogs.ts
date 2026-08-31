@@ -1,5 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
+import { components } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 
@@ -26,6 +28,15 @@ const SHORT_LIMIT = 220;
 const METADATA_LIMIT = 2_000;
 const FINGERPRINT_LIMIT = 500;
 const DEDUPE_WINDOW_MS = 60_000;
+
+const publicLogRateLimiter = new RateLimiter(components.rateLimiter, {
+  anonymousSystemLogs: {
+    kind: "token bucket",
+    rate: 20,
+    period: MINUTE,
+    capacity: 20,
+  },
+});
 
 export const record = mutation({
   args: {
@@ -57,6 +68,23 @@ export const record = mutation({
 
     if (message.length === 0) {
       return { logged: false, deduped: false, id: null };
+    }
+
+    if (actorUserId === null) {
+      const capacity = await publicLogRateLimiter.limit(ctx, "anonymousSystemLogs", {
+        // Deliberately global: caller-controlled fingerprints must not create
+        // independent buckets that bypass the public write budget.
+        key: "global",
+      });
+      if (!capacity.ok) {
+        return {
+          logged: false,
+          deduped: false,
+          id: null,
+          reason: "RATE_LIMITED" as const,
+          retryAfter: capacity.retryAfter,
+        };
+      }
     }
 
     const level = args.level ?? "error";

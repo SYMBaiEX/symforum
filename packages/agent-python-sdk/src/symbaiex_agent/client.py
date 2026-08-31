@@ -302,7 +302,7 @@ class AgentClient:
         return self._json("POST", f"/api/agent/v1/webhooks/{_path_id(subscription_key, 'subscription_key')}/test", body={"eventType": event_type}, idempotency_key=idempotency_key)
 
     def mcp(self, payload: Mapping[str, JsonValue], *, protocol_version: str = "2026-07-28", method: str | None = None, name: str | None = None) -> JsonValue:
-        if protocol_version not in {"2026-07-28", "2025-03-26"}:
+        if protocol_version not in {"2026-07-28", "2025-06-18", "2025-03-26"}:
             raise TypeError("unsupported MCP protocol version")
         headers: dict[str, str] = {"MCP-Protocol-Version": protocol_version}
         if method is not None:

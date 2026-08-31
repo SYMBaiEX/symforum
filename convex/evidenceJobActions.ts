@@ -3,6 +3,7 @@
 import { generateText } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import { convexModelRoutingConfig } from "./modelRouting";
 import {
@@ -79,16 +80,16 @@ type ExportBundle = {
   records: ExportRecord[];
 };
 const refs = {
-  researchInput: makeFunctionReference<
-    "query",
-    { jobId: string },
+  beginResearch: makeFunctionReference<
+    "mutation",
+    { jobId: string; executionToken: string },
     { query: string } | null
-  >("evidenceJobs:readResearchInput"),
-  exportInput: makeFunctionReference<
-    "query",
-    { jobId: string },
+  >("evidenceJobs:beginResearchExecution"),
+  beginExport: makeFunctionReference<
+    "mutation",
+    { jobId: string; executionToken: string },
     { datasetId: string; format: "jsonl" | "parquet" } | null
-  >("evidenceJobs:readExportInput"),
+  >("evidenceJobs:beginExportExecution"),
   searchPublic: makeFunctionReference<
     "query",
     { search: string; limit: number },
@@ -135,20 +136,27 @@ function extractiveDigest(
 }
 
 export const runResearch = internalAction({
-  args: { jobId: v.id("evidenceResearchJobs") },
-  returns: v.object({
-    resultJson: v.string(),
-    resultStorageId: v.optional(v.id("_storage")),
-    artifactContentType: v.optional(v.string()),
-    artifactByteLength: v.optional(v.number()),
-    artifactSha256: v.optional(v.string()),
-  }),
+  args: {
+    jobId: v.id("evidenceResearchJobs"),
+    executionToken: v.string(),
+  },
+  returns: v.union(
+    v.object({ started: v.literal(false) }),
+    v.object({
+      started: v.literal(true),
+      resultJson: v.string(),
+      resultStorageId: v.optional(v.id("_storage")),
+      artifactContentType: v.optional(v.string()),
+      artifactByteLength: v.optional(v.number()),
+      artifactSha256: v.optional(v.string()),
+    }),
+  ),
   handler: async (ctx, args) => {
-    const input = await ctx.runQuery(refs.researchInput, {
+    const input = await ctx.runMutation(refs.beginResearch, {
       jobId: args.jobId,
+      executionToken: args.executionToken,
     });
-    if (input === null)
-      throw new Error("Evidence research job does not exist.");
+    if (input === null) return { started: false as const };
     const sources = await ctx.runQuery(refs.searchPublic, {
       search: input.query,
       limit: MAX_SOURCES,
@@ -211,41 +219,60 @@ export const runResearch = internalAction({
       fallback: route === null ? "deterministic-extractive" : null,
     });
     const artifact = new Blob([resultJson], { type: "application/json" });
-    const resultStorageId = await ctx.storage.store(artifact);
-    return {
-      resultJson,
-      resultStorageId,
-      artifactContentType: artifact.type,
-      artifactByteLength: artifact.size,
-      artifactSha256: await checksum(resultJson),
-    };
+    let resultStorageId: Id<"_storage"> | undefined;
+    try {
+      resultStorageId = await ctx.storage.store(artifact);
+      return {
+        started: true as const,
+        resultJson,
+        resultStorageId,
+        artifactContentType: artifact.type,
+        artifactByteLength: artifact.size,
+        artifactSha256: await checksum(resultJson),
+      };
+    } catch (error) {
+      if (resultStorageId !== undefined) {
+        try {
+          await ctx.storage.delete(resultStorageId);
+        } catch {
+          // Preserve the original execution error. Abrupt termination after a
+          // successful store remains an unavoidable storage orphan boundary.
+        }
+      }
+      throw error;
+    }
   },
 });
 
 export const runExport = internalAction({
-  args: { jobId: v.id("evidenceExportJobs") },
-  returns: v.object({
-    resultJson: v.string(),
-    resultStorageId: v.id("_storage"),
-    datasetManifestStorageId: v.id("_storage"),
-    checksum: v.string(),
-    recordCount: v.number(),
-    artifactContentType: v.string(),
-    artifactByteLength: v.number(),
-    schemaVersion: v.string(),
-    sourceCount: v.number(),
-    citationCount: v.number(),
-    completenessScore: v.number(),
-    freshnessScore: v.number(),
-    earliestObservedAt: v.optional(v.number()),
-    latestObservedAt: v.optional(v.number()),
-    qualityMetricsJson: v.string(),
-  }),
+  args: { jobId: v.id("evidenceExportJobs"), executionToken: v.string() },
+  returns: v.union(
+    v.object({ started: v.literal(false) }),
+    v.object({
+      started: v.literal(true),
+      resultJson: v.string(),
+      resultStorageId: v.id("_storage"),
+      datasetManifestStorageId: v.id("_storage"),
+      checksum: v.string(),
+      recordCount: v.number(),
+      artifactContentType: v.string(),
+      artifactByteLength: v.number(),
+      schemaVersion: v.string(),
+      sourceCount: v.number(),
+      citationCount: v.number(),
+      completenessScore: v.number(),
+      freshnessScore: v.number(),
+      earliestObservedAt: v.optional(v.number()),
+      latestObservedAt: v.optional(v.number()),
+      qualityMetricsJson: v.string(),
+    }),
+  ),
   handler: async (ctx, args) => {
-    const input = await ctx.runQuery(refs.exportInput, {
+    const input = await ctx.runMutation(refs.beginExport, {
       jobId: args.jobId,
+      executionToken: args.executionToken,
     });
-    if (input === null) throw new Error("Evidence export job does not exist.");
+    if (input === null) return { started: false as const };
     if (input.format !== "jsonl")
       throw new Error(
         "PARQUET_UNSUPPORTED: only jsonl export is currently supported.",
@@ -269,7 +296,6 @@ export const runExport = internalAction({
       records.map((record) => JSON.stringify(record)).join("\n") +
       (records.length ? "\n" : "");
     const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
-    const resultStorageId = await ctx.storage.store(artifact);
     const resultChecksum = await checksum(jsonl);
     const generatedAt = new Date().toISOString();
     const manifest = buildEvidenceDatasetManifest({
@@ -287,44 +313,57 @@ export const runExport = internalAction({
       generatedAt,
       records: bundle.records,
     });
-    const datasetManifestStorageId = await ctx.storage.store(
-      new Blob(
-        [JSON.stringify(manifest)],
-        { type: "application/json" },
-      ),
-    );
     const qualityMetricsJson = JSON.stringify({
       coverage: manifest.coverage,
       distributions: manifest.distributions,
     });
-    return {
-      resultJson: JSON.stringify({
-        format: "jsonl",
-        recordCount: records.length,
+    let resultStorageId: Id<"_storage"> | undefined;
+    let datasetManifestStorageId: Id<"_storage"> | undefined;
+    try {
+      resultStorageId = await ctx.storage.store(artifact);
+      datasetManifestStorageId = await ctx.storage.store(
+        new Blob([JSON.stringify(manifest)], { type: "application/json" }),
+      );
+      return {
+        started: true as const,
+        resultJson: JSON.stringify({
+          format: "jsonl",
+          recordCount: records.length,
+          checksum: resultChecksum,
+          containsRawPayload: false,
+          schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+          dataset: manifest.dataset,
+          coverage: manifest.coverage,
+        }),
+        resultStorageId,
+        datasetManifestStorageId,
         checksum: resultChecksum,
-        containsRawPayload: false,
+        recordCount: records.length,
+        artifactContentType: artifact.type,
+        artifactByteLength: artifact.size,
         schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
-        dataset: manifest.dataset,
-        coverage: manifest.coverage,
-      }),
-      resultStorageId,
-      datasetManifestStorageId,
-      checksum: resultChecksum,
-      recordCount: records.length,
-      artifactContentType: artifact.type,
-      artifactByteLength: artifact.size,
-      schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
-      sourceCount: manifest.coverage.sourceCount,
-      citationCount: manifest.coverage.citationCount,
-      completenessScore: manifest.coverage.completenessScore,
-      freshnessScore: manifest.coverage.freshnessScore,
-      ...(manifest.coverage.earliestObservedAt === null
-        ? {}
-        : { earliestObservedAt: manifest.coverage.earliestObservedAt }),
-      ...(manifest.coverage.latestObservedAt === null
-        ? {}
-        : { latestObservedAt: manifest.coverage.latestObservedAt }),
-      qualityMetricsJson,
-    };
+        sourceCount: manifest.coverage.sourceCount,
+        citationCount: manifest.coverage.citationCount,
+        completenessScore: manifest.coverage.completenessScore,
+        freshnessScore: manifest.coverage.freshnessScore,
+        ...(manifest.coverage.earliestObservedAt === null
+          ? {}
+          : { earliestObservedAt: manifest.coverage.earliestObservedAt }),
+        ...(manifest.coverage.latestObservedAt === null
+          ? {}
+          : { latestObservedAt: manifest.coverage.latestObservedAt }),
+        qualityMetricsJson,
+      };
+    } catch (error) {
+      for (const storageId of [datasetManifestStorageId, resultStorageId]) {
+        if (storageId === undefined) continue;
+        try {
+          await ctx.storage.delete(storageId);
+        } catch {
+          // Preserve the original execution error; cleanup is best effort.
+        }
+      }
+      throw error;
+    }
   },
 });

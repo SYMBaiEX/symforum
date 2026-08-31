@@ -20,18 +20,34 @@ const FORUM_SUBDOMAIN_SITE_PREFIXES = [
 ];
 const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/about",
+  "/agent",
+  "/agents.md",
   "/ai-policy",
+  "/ask",
+  "/auth.md",
   "/blog",
   "/contact",
+  "/developer",
   "/developers",
+  "/docs",
   "/feed",
+  "/feeds",
   "/llms-full.txt",
   "/llms.txt",
   "/manifest.webmanifest",
+  "/mcp",
+  "/mcp.json",
   "/news",
   "/newsletter",
   "/portfolio",
+  "/pricing",
+  "/pricing.md",
   "/privacy",
+  "/research",
+  "/sandbox",
+  "/schemamap.xml",
+  "/skills.sh",
+  "/terms",
 ];
 
 export type ForumSubdomainRoute =
@@ -91,7 +107,7 @@ export function isForumSubdomainHost(
   return false;
 }
 
-function isForumSubdomainSiteRoute(pathname: string) {
+export function isForumSubdomainSiteRoute(pathname: string) {
   return FORUM_SUBDOMAIN_SITE_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

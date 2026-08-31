@@ -83,6 +83,21 @@ class AgentClientTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "8-96"):
             client.semantic_search("x", idempotency_key="short")
 
+    def test_mcp_accepts_and_emits_the_streamable_http_protocol_version(self) -> None:
+        recorder = Recorder({"jsonrpc": "2.0", "id": 1, "result": {}})
+        client = AgentClient(token="access-token", transport=recorder)
+        self.assertEqual(
+            client.mcp(
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+                protocol_version="2025-06-18",
+            ),
+            {"jsonrpc": "2.0", "id": 1, "result": {}},
+        )
+        self.assertEqual(
+            recorder.requests[0].headers["MCP-Protocol-Version"],
+            "2025-06-18",
+        )
+
     def test_writes_require_and_forward_idempotency_keys(self) -> None:
         recorder = Recorder({"jobId": "job-1", "status": "queued"})
         client = AgentClient(token="access-token", transport=recorder)

@@ -111,6 +111,7 @@ const MCP_APP_TOOLS = new Set([
   "evidence_benchmarks",
 ]);
 const WRITE_TOOLS = new Set([
+  "evidence_verify_claim",
   "evidence_create_research",
   "evidence_create_export",
   "evidence_create_webhook",
@@ -141,7 +142,7 @@ const TOOL_DEFINITIONS = TOOL_ENTRIES.map(([name, legacyName]) => {
     annotations: {
       readOnlyHint: !WRITE_TOOLS.has(name),
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: !WRITE_TOOLS.has(name),
       openWorldHint: OPEN_WORLD_TOOLS.has(name),
     },
   };
@@ -215,7 +216,7 @@ export async function POST(request: Request) {
   }
 
   if (body.method === "notifications/initialized") {
-    return new Response(null, { status: 204, headers: mcpHeaders(request) });
+    return new Response(null, { status: 202, headers: mcpHeaders(request) });
   }
 
   if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {

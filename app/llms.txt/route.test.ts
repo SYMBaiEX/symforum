@@ -8,6 +8,11 @@ describe("llms agent operating contract", () => {
     const content = await response.text();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/markdown");
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=3600, s-maxage=86400",
+    );
+    expect(response.headers.get("content-disposition")).toBe("inline");
     expect(content).toContain("machine-facing operating instructions");
     expect(content).toContain("https://www.symbaiex.com/agent/instructions");
     expect(content).toContain(

@@ -54,6 +54,13 @@ describe("forum host URL helpers", () => {
     expect(primarySiteHrefForForumHost("/signin", forumLocation)).toBe(
       "/signin",
     );
+    expect(primarySiteHrefForForumHost("/signup", forumLocation)).toBe(
+      "/signup",
+    );
+    expect(
+      primarySiteHrefForForumHost("/signup?mode=signUp", forumLocation),
+    ).toBe("/signup?mode=signUp");
+    expect(primarySiteHrefForForumHost("/login", forumLocation)).toBe("/login");
     expect(
       primarySiteHrefForForumHost("https://example.com", forumLocation),
     ).toBe("https://example.com");
@@ -77,6 +84,28 @@ describe("forum host URL helpers", () => {
         protocol: "http:",
       }),
     ).toBe("http://localhost:3000/about");
+  });
+
+  test("rewrites audited primary routes and contracts off the forum host", () => {
+    const forumLocation = {
+      hostname: "forum.symbaiex.com",
+      port: "",
+      protocol: "https:",
+    };
+    for (const pathname of [
+      "/pricing",
+      "/pricing.md",
+      "/agent",
+      "/agent/signup",
+      "/terms",
+      "/research",
+      "/auth.md",
+      "/agents.md",
+    ]) {
+      expect(primarySiteHrefForForumHost(pathname, forumLocation)).toBe(
+        `https://www.symbaiex.com${pathname}`,
+      );
+    }
   });
 
   test("uses forum shell for forum routes and clean forum-host paths", () => {

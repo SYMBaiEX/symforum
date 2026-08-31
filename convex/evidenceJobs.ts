@@ -13,6 +13,11 @@ const MAX_EXPORT_LIMIT = 100;
 const MAX_EXPORT_SCAN = 500;
 const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
+// Provider calls are bounded to two minutes. A much wider lease avoids
+// declaring healthy work stale while still giving duplicate workflow starts a
+// deterministic way to terminally fail abandoned executions without rerunning
+// paid/non-idempotent external work.
+const EXECUTION_STALE_MS = 30 * 60 * 1_000;
 const enqueueWebhookRef = makeFunctionReference<
   "mutation",
   {
@@ -546,7 +551,11 @@ export const readResearchInput = internalQuery({
   ),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    return job === null ? null : { query: job.query, status: job.status };
+    // Rolling-deploy guard: a token means the new workflow owns execution, so
+    // an already-scheduled legacy action must stop before provider work.
+    return job === null || job.executionToken !== undefined
+      ? null
+      : { query: job.query, status: job.status };
   },
 });
 
@@ -562,7 +571,7 @@ export const readExportInput = internalQuery({
   ),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    return job === null
+    return job === null || job.executionToken !== undefined
       ? null
       : { datasetId: job.datasetId, format: job.format, status: job.status };
   },
@@ -760,9 +769,161 @@ export const markExportRunning = internalMutation({
     return null;
   },
 });
+
+const EXECUTION_CLAIM = v.union(
+  v.null(),
+  v.object({ executionToken: v.string() }),
+);
+
+function staleExecutionAt(
+  job: Doc<"evidenceResearchJobs"> | Doc<"evidenceExportJobs">,
+) {
+  return job.externalWorkStartedAt ?? job.executionClaimedAt ?? job.updatedAt;
+}
+
+const STALE_EXECUTION_MESSAGE =
+  "Execution lease expired. External work was not retried because it is not replay-safe.";
+
+/** Atomically gives at most one new workflow ownership of queued research work. */
+export const claimResearchExecution = internalMutation({
+  args: { jobId: v.id("evidenceResearchJobs") },
+  returns: EXECUTION_CLAIM,
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
+    if (job === null) return null;
+    const now = Date.now();
+    if (job.status === "queued") {
+      const executionToken = crypto.randomUUID();
+      await ctx.db.patch("evidenceResearchJobs", job._id, {
+        status: "running",
+        executionToken,
+        executionClaimedAt: now,
+        externalWorkStartedAt: undefined,
+        errorMessage: "",
+        updatedAt: now,
+      });
+      return { executionToken };
+    }
+    if (
+      job.status === "running" &&
+      now - staleExecutionAt(job) >= EXECUTION_STALE_MS
+    ) {
+      await ctx.db.patch("evidenceResearchJobs", job._id, {
+        status: "failed",
+        errorMessage: STALE_EXECUTION_MESSAGE,
+        updatedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
+/** Atomically gives at most one new workflow ownership of queued export work. */
+export const claimExportExecution = internalMutation({
+  args: { jobId: v.id("evidenceExportJobs") },
+  returns: EXECUTION_CLAIM,
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("evidenceExportJobs", args.jobId);
+    if (job === null) return null;
+    const now = Date.now();
+    if (job.status === "queued") {
+      const executionToken = crypto.randomUUID();
+      await ctx.db.patch("evidenceExportJobs", job._id, {
+        status: "running",
+        executionToken,
+        executionClaimedAt: now,
+        externalWorkStartedAt: undefined,
+        errorMessage: "",
+        updatedAt: now,
+      });
+      return { executionToken };
+    }
+    if (
+      job.status === "running" &&
+      now - staleExecutionAt(job) >= EXECUTION_STALE_MS
+    ) {
+      await ctx.db.patch("evidenceExportJobs", job._id, {
+        status: "failed",
+        errorMessage: STALE_EXECUTION_MESSAGE,
+        updatedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
+/**
+ * Reserves the non-idempotent portion of an action. Even if the same action is
+ * invoked twice with the owning token, only the first transaction may proceed.
+ */
+export const beginResearchExecution = internalMutation({
+  args: {
+    jobId: v.id("evidenceResearchJobs"),
+    executionToken: v.string(),
+  },
+  returns: v.union(v.null(), v.object({ query: v.string() })),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
+    if (
+      job === null ||
+      job.status !== "running" ||
+      job.executionToken !== args.executionToken ||
+      job.externalWorkStartedAt !== undefined
+    )
+      return null;
+    await ctx.db.patch("evidenceResearchJobs", job._id, {
+      externalWorkStartedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return { query: job.query };
+  },
+});
+
+export const beginExportExecution = internalMutation({
+  args: {
+    jobId: v.id("evidenceExportJobs"),
+    executionToken: v.string(),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      datasetId: v.id("evidenceDatasets"),
+      format: v.union(v.literal("jsonl"), v.literal("parquet")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("evidenceExportJobs", args.jobId);
+    if (
+      job === null ||
+      job.status !== "running" ||
+      job.executionToken !== args.executionToken ||
+      job.externalWorkStartedAt !== undefined
+    )
+      return null;
+    await ctx.db.patch("evidenceExportJobs", job._id, {
+      externalWorkStartedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return { datasetId: job.datasetId, format: job.format };
+  },
+});
+
+function ownsExecution(
+  job: Doc<"evidenceResearchJobs"> | Doc<"evidenceExportJobs">,
+  executionToken: string | undefined,
+) {
+  if (job.status !== "running") return false;
+  // Missing tokens are accepted only for already-running workflows deployed
+  // before token ownership existed. New claimed jobs always require equality.
+  return executionToken === undefined
+    ? job.executionToken === undefined
+    : job.executionToken === executionToken;
+}
+
 export const completeResearchJob = internalMutation({
   args: {
     jobId: v.id("evidenceResearchJobs"),
+    executionToken: v.optional(v.string()),
     resultJson: v.string(),
     resultStorageId: v.optional(v.id("_storage")),
     artifactContentType: v.optional(v.string()),
@@ -772,7 +933,7 @@ export const completeResearchJob = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    if (job !== null && job.status !== "completed") {
+    if (job !== null && ownsExecution(job, args.executionToken)) {
       await ctx.db.patch("evidenceResearchJobs", job._id, {
         status: "completed",
         resultJson: args.resultJson.slice(0, 100_000),
@@ -815,6 +976,11 @@ export const completeResearchJob = internalMutation({
           expiresAt: job.expiresAt,
         }),
       });
+    } else if (
+      args.resultStorageId !== undefined &&
+      args.resultStorageId !== job?.resultStorageId
+    ) {
+      await removeDownloadStorage(ctx, args.resultStorageId);
     }
     return null;
   },
@@ -822,6 +988,7 @@ export const completeResearchJob = internalMutation({
 export const completeExportJob = internalMutation({
   args: {
     jobId: v.id("evidenceExportJobs"),
+    executionToken: v.optional(v.string()),
     resultJson: v.string(),
     resultStorageId: v.id("_storage"),
     datasetManifestStorageId: v.id("_storage"),
@@ -843,7 +1010,7 @@ export const completeExportJob = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    if (job !== null && job.status !== "completed") {
+    if (job !== null && ownsExecution(job, args.executionToken)) {
       await ctx.db.patch("evidenceExportJobs", job._id, {
         status: "completed",
         resultJson: args.resultJson.slice(0, 20_000),
@@ -938,7 +1105,8 @@ export const completeExportJob = internalMutation({
         // duplicate is not an export artifact and must not linger unreferenced.
         // A caller may have supplied the canonical manifest ID, so first prove
         // that no dataset version references it before deleting anything.
-        await removeDownloadStorage(ctx, args.datasetManifestStorageId);
+        if (args.datasetManifestStorageId !== args.resultStorageId)
+          await removeDownloadStorage(ctx, args.datasetManifestStorageId);
       }
       await ctx.runMutation(enqueueWebhookRef, {
         eventKey: `export:${job._id}:completed`,
@@ -951,16 +1119,28 @@ export const completeExportJob = internalMutation({
           expiresAt: job.expiresAt,
         }),
       });
+    } else {
+      if (args.resultStorageId !== job?.resultStorageId)
+        await removeDownloadStorage(ctx, args.resultStorageId);
+      if (
+        args.datasetManifestStorageId !== args.resultStorageId &&
+        args.datasetManifestStorageId !== job?.resultStorageId
+      )
+        await removeDownloadStorage(ctx, args.datasetManifestStorageId);
     }
     return null;
   },
 });
 export const failResearchJob = internalMutation({
-  args: { jobId: v.id("evidenceResearchJobs"), errorMessage: v.string() },
+  args: {
+    jobId: v.id("evidenceResearchJobs"),
+    executionToken: v.optional(v.string()),
+    errorMessage: v.string(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    if (job !== null && job.status !== "completed")
+    if (job !== null && ownsExecution(job, args.executionToken))
       await ctx.db.patch("evidenceResearchJobs", job._id, {
         status: "failed",
         errorMessage: args.errorMessage.slice(0, 1_000),
@@ -970,11 +1150,15 @@ export const failResearchJob = internalMutation({
   },
 });
 export const failExportJob = internalMutation({
-  args: { jobId: v.id("evidenceExportJobs"), errorMessage: v.string() },
+  args: {
+    jobId: v.id("evidenceExportJobs"),
+    executionToken: v.optional(v.string()),
+    errorMessage: v.string(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    if (job !== null && job.status !== "completed")
+    if (job !== null && ownsExecution(job, args.executionToken))
       await ctx.db.patch("evidenceExportJobs", job._id, {
         status: "failed",
         errorMessage: args.errorMessage.slice(0, 1_000),
@@ -1008,6 +1192,7 @@ async function removeDownloadStorage(
   // Never delete shared storage, including historical exports created before
   // manifests were separated.
   if (await isDatasetManifestStorage(ctx, storageId)) return false;
+  if ((await ctx.db.system.get("_storage", storageId)) === null) return false;
   await ctx.storage.delete(storageId);
   return true;
 }

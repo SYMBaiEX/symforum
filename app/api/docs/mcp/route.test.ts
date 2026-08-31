@@ -2,10 +2,15 @@ import { describe, expect, test } from "vitest";
 
 import { GET, POST } from "./route";
 
-function request(body: unknown) {
+function request(body: unknown, protocolVersion?: string) {
   return new Request("https://www.symbaiex.com/api/docs/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(protocolVersion === undefined
+        ? {}
+        : { "mcp-protocol-version": protocolVersion }),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -24,6 +29,101 @@ describe("public documentation MCP", () => {
     });
     expect(JSON.stringify(body)).toContain("read-only");
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  test("negotiates every card-advertised protocol version", async () => {
+    for (const protocolVersion of ["2025-06-18", "2025-03-26"]) {
+      const response = await POST(
+        request(
+          {
+            jsonrpc: "2.0",
+            id: protocolVersion,
+            method: "initialize",
+            params: { protocolVersion },
+          },
+          protocolVersion,
+        ),
+      );
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        result: { protocolVersion },
+      });
+    }
+  });
+
+  test("rejects unsupported MCP protocol headers with a structured error", async () => {
+    const response = await POST(
+      request({ jsonrpc: "2.0", id: 1, method: "tools/list" }, "2024-11-05"),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      error: {
+        code: -32022,
+        message: "Unsupported protocol version",
+        data: {
+          requested: "2024-11-05",
+          supported: ["2025-06-18", "2025-03-26"],
+        },
+      },
+    });
+  });
+
+  test("rejects a protocol header that disagrees with initialize params", async () => {
+    const response = await POST(
+      request(
+        {
+          jsonrpc: "2.0",
+          id: "mismatch",
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18" },
+        },
+        "2025-03-26",
+      ),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "mismatch",
+      error: {
+        code: -32020,
+        message:
+          "Header mismatch: MCP-Protocol-Version must match initialize params.protocolVersion.",
+      },
+    });
+  });
+
+  test("rejects an unsupported initialize params protocol version", async () => {
+    const response = await POST(
+      request({
+        jsonrpc: "2.0",
+        id: "unsupported-param",
+        method: "initialize",
+        params: { protocolVersion: "2024-11-05" },
+      }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "unsupported-param",
+      error: {
+        code: -32022,
+        message: "Unsupported protocol version",
+        data: {
+          requested: "2024-11-05",
+          supported: ["2025-06-18", "2025-03-26"],
+        },
+      },
+    });
+  });
+
+  test("acknowledges initialized notifications without a JSON-RPC response", async () => {
+    const response = await POST(
+      request({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    );
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("");
   });
 
   test("searches only the bounded curated documentation index", async () => {

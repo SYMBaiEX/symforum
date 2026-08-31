@@ -287,6 +287,14 @@ describe("AgentClient", () => {
     const mcp = calls.at(-1);
     expect(mcp?.headers.get("mcp-protocol-version")).toBe("2026-07-28");
     expect(mcp?.headers.get("mcp-method")).toBe("tools/list");
+
+    await client.mcp(
+      { jsonrpc: "2.0", id: 2, method: "initialize" },
+      { protocolVersion: "2025-06-18" },
+    );
+    expect(calls.at(-1)?.headers.get("mcp-protocol-version")).toBe(
+      "2025-06-18",
+    );
   });
 
   test("rejects reflected bearer material and oversized JSON", async () => {

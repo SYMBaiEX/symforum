@@ -1,27 +1,19 @@
-import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
+import {
+  isForumSubdomainHost,
+  isForumSubdomainSiteRoute,
+} from "@/lib/forum-subdomain-routing";
 
 const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
 const FORUM_PRODUCTION_ORIGIN = `https://${FORUM_PRODUCTION_HOSTNAME}`;
 const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
-const FORUM_SITE_ROUTE_PREFIXES = [
-  "/admin",
-  "/api",
-  "/profile",
-  "/signin",
-  "/u",
-];
-
 export function isForumHostname(hostname: string | undefined | null) {
   return isForumSubdomainHost(hostname);
 }
 
 export function isForumSubdomainSitePath(pathname: string | undefined | null) {
-  if (!pathname) {
-    return false;
-  }
-  return FORUM_SITE_ROUTE_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return pathname
+    ? isForumSubdomainSiteRoute(pathname.split(/[?#]/, 1)[0] ?? pathname)
+    : false;
 }
 
 export function shouldLeaveForumHostForHref(href: string) {

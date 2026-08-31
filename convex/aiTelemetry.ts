@@ -378,6 +378,18 @@ export const snapshotAdmin = query({
           ? run.completedAt - run.startedAt
           : undefined,
       })),
+      ...usage.map((event) => ({
+        kind: "usage" as const,
+        at: event.createdAt,
+        correlationId: event.runKey,
+        agentSlug: event.agentSlug,
+        stage: event.stage,
+        model: event.model,
+        status: "completed",
+        durationMs: event.durationMs,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+      })),
     ]
       .sort((left, right) => right.at - left.at)
       .slice(0, 100);
@@ -399,6 +411,7 @@ export const snapshotAdmin = query({
         inputTokens,
         outputTokens,
         averageDurationMs: average(durations),
+        p50DurationMs: percentile(durations, 0.5),
         p95DurationMs: percentile(durations, 0.95),
         averageQuality: average(qualityScores),
         estimatedSpendUsd: estimatedCostMicroUsd / 1_000_000,

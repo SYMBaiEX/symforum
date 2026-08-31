@@ -227,6 +227,28 @@ describe("proxy forum routing", () => {
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
+  test("redirects audited public routes and Markdown contracts from the forum host", async () => {
+    const proxy = await loadProxy();
+    for (const pathname of [
+      "/pricing?plan=team",
+      "/pricing.md?plan=team",
+      "/agent",
+      "/agent/signup",
+      "/terms",
+      "/research",
+      "/auth.md",
+      "/agents.md",
+    ]) {
+      const response = await proxy(
+        requestFor(`https://forum.symbaiex.com${pathname}`),
+      );
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe(
+        `https://www.symbaiex.com${pathname}`,
+      );
+    }
+  });
+
   test("redirects production forum primary-site routes to the canonical www host", async () => {
     const proxy = await loadProxy();
     const response = await proxy(

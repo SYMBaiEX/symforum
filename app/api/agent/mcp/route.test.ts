@@ -85,7 +85,7 @@ describe("evidence MCP endpoint", () => {
         false,
       ),
     );
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(202);
   });
 
   test("keeps unsupported GET separate from authenticated tool calls", async () => {
@@ -189,9 +189,7 @@ describe("evidence MCP endpoint", () => {
     expect(readPayload.result.contents[0].text).toContain(
       "Content-Security-Policy",
     );
-    expect(readPayload.result.contents[0].text).toContain(
-      "default-src 'none'",
-    );
+    expect(readPayload.result.contents[0].text).toContain("default-src 'none'");
     expect(readPayload.result.contents[0].text).not.toContain("Bearer");
   });
 
@@ -287,10 +285,13 @@ describe("evidence MCP endpoint", () => {
       payload.result.tools.every(
         (tool: {
           inputSchema?: { additionalProperties?: boolean };
-          annotations?: { idempotentHint?: boolean };
+          annotations?: {
+            idempotentHint?: boolean;
+            readOnlyHint?: boolean;
+          };
         }) =>
           tool.inputSchema?.additionalProperties === false &&
-          tool.annotations?.idempotentHint === true,
+          tool.annotations?.idempotentHint === tool.annotations?.readOnlyHint,
       ),
     ).toBe(true);
     const zeroArgumentTools = payload.result.tools.filter(
@@ -314,7 +315,12 @@ describe("evidence MCP endpoint", () => {
         (tool: { annotations?: { readOnlyHint?: boolean } }) =>
           tool.annotations?.readOnlyHint === false,
       ),
-    ).toHaveLength(7);
+    ).toHaveLength(8);
+    expect(
+      payload.result.tools.find(
+        (tool: { name: string }) => tool.name === "evidence_verify_claim",
+      ).annotations.idempotentHint,
+    ).toBe(false);
     const semantic = payload.result.tools.find(
       (tool: { name: string }) => tool.name === "evidence_semantic_search",
     );

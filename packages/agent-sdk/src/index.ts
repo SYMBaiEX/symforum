@@ -538,7 +538,7 @@ export class AgentClient {
   async mcp<T = unknown>(
     payload: McpPayload,
     options: {
-      protocolVersion?: "2026-07-28" | "2025-03-26";
+      protocolVersion?: "2026-07-28" | "2025-06-18" | "2025-03-26";
       method?: string;
       name?: string;
     } = {},

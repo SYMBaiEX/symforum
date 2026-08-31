@@ -1,6 +1,9 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { components } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
@@ -27,6 +30,15 @@ const sendContactRequestEmailRef = makeFunctionReference<
   { requestId: Id<"contactRequests"> },
   null
 >("contactEmails:sendContactRequestEmail");
+
+const publicContactRateLimiter = new RateLimiter(components.rateLimiter, {
+  anonymousContactSubmissions: {
+    kind: "token bucket",
+    rate: 6,
+    period: HOUR,
+    capacity: 3,
+  },
+});
 
 function cleanText(value: string, maxLength: number) {
   return value
@@ -106,6 +118,26 @@ export const submit = mutation({
       });
     }
 
+    const actorUserId = await getAuthUserId(ctx);
+    if (actorUserId === null) {
+      const capacity = await publicContactRateLimiter.limit(
+        ctx,
+        "anonymousContactSubmissions",
+        {
+          // Deliberately global: email addresses are caller controlled and
+          // cannot serve as independent rate-limit keys.
+          key: "global",
+        },
+      );
+      if (!capacity.ok) {
+        throw new ConvexError({
+          code: "RATE_LIMITED",
+          message: "Contact form capacity is temporarily full. Please try again later.",
+          retryAfter: capacity.retryAfter,
+        });
+      }
+    }
+
     const recentFromEmail = await ctx.db
       .query("contactRequests")
       .withIndex("by_emailNormalized_and_createdAt", (q) =>
@@ -173,4 +205,3 @@ export const markContactRequestEmailState = internalMutation({
     return null;
   },
 });
-

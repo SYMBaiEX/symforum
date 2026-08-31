@@ -38,7 +38,6 @@ export function ProfileNewsletterPreferences() {
         source: "profile",
         token,
         tokenHash: await sha256Hex(token),
-        siteUrl: window.location.origin,
       });
       toast.success(
         subscriber.status === "confirmed"
