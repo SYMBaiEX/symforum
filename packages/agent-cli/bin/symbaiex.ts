@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   AgentApiError,
@@ -137,6 +138,14 @@ async function executeCommand(
       );
       return JSON.parse(new TextDecoder().decode(bytes));
     }
+    case "export-download": {
+      const jobId = requiredArgument(args, "export job ID");
+      const output = requiredOption(args, "--output");
+      const artifact = await client.exportArtifact(jobId);
+      await client.verifyExportManifest(jobId, artifact);
+      await writeFile(output, artifact, { flag: "wx", mode: 0o600 });
+      return { output, byteLength: artifact.byteLength, verified: true };
+    }
     case "webhook-availability":
       return await client.webhookAvailability();
     case "webhook-list":
@@ -226,6 +235,7 @@ const VALUE_OPTIONS = new Set([
   "--limit",
   "--origin",
   "--token-file",
+  "--output",
 ]);
 
 function positionalArguments(args: string[]) {
@@ -293,11 +303,12 @@ Discovery: manifest, status, quota, sources, source-registry
 Search: search, universal-search, semantic-search, entities
 Evidence: document, changes, claim-timeline, verify-claim
 Catalogs: products, datasets, benchmarks, entitlements, usage
-Jobs: research-create, research-job, export-create, export-job, export-manifest
+Jobs: research-create, research-job, export-create, export-job, export-manifest,
+  export-download
 Webhooks: webhook-availability, webhook-list, webhook-health,
   webhook-history, webhook-status, webhook-test
 
-Options: --limit <1-50>, --idempotency-key <key>, --token-file <path>,
+Options: --limit <1-50>, --idempotency-key <key>, --token-file <path>, --output <path>,
   --origin <origin>. Provider-capable and write commands require an explicit
   idempotency key.`;
 

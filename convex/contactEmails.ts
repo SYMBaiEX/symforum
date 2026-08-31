@@ -2,6 +2,7 @@ import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
+import { resend } from "./resendClient";
 
 const readContactRequestRef = makeFunctionReference<
   "query",
@@ -15,6 +16,15 @@ const markContactRequestEmailStateRef = makeFunctionReference<
     requestId: Id<"contactRequests">;
     emailedAt?: number;
     emailError?: string;
+    resendEmailId?: string;
+    emailDeliveryStatus?:
+      | "queued"
+      | "sent"
+      | "delivered"
+      | "bounced"
+      | "complained"
+      | "failed"
+      | "delivery_delayed";
   },
   null
 >("contact:markContactRequestEmailState");
@@ -38,75 +48,38 @@ export const sendContactRequestEmail = internalAction({
       return null;
     }
 
-    const result = await sendResendEmail({
-      apiKey,
-      request,
-      to: env.CONTACT_NOTIFICATION_TO || "solsymbaiex@gmail.com",
-      from:
-        env.CONTACT_FROM_EMAIL ||
-        env.NEWSLETTER_FROM_EMAIL ||
-        "SYMBaiEX <contact@symbaiex.com>",
-    });
-
-    await ctx.runMutation(markContactRequestEmailStateRef, {
-      requestId: args.requestId,
-      emailedAt: result.ok ? Date.now() : undefined,
-      emailError: result.ok ? undefined : result.error,
-    });
-    return null;
-  },
-});
-
-async function sendResendEmail({
-  apiKey,
-  from,
-  request,
-  to,
-}: {
-  apiKey: string;
-  from: string;
-  request: Doc<"contactRequests">;
-  to: string;
-}) {
-  let response: Response;
-  try {
-    response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        reply_to: request.email,
+    try {
+      const resendEmailId = await resend.sendEmail(ctx, {
+        from:
+          env.CONTACT_FROM_EMAIL ||
+          env.NEWSLETTER_FROM_EMAIL ||
+          "SYMBaiEX <contact@symbaiex.com>",
+        to: env.CONTACT_NOTIFICATION_TO || "solsymbaiex@gmail.com",
+        replyTo: [request.email],
         subject: contactSubject(request.subject),
         text: contactText(request),
         html: contactHtml(request),
-      }),
-    });
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: limitText(
-        error instanceof Error
-          ? error.message
-          : "Network error while sending contact email",
-        900,
-      ),
-    };
-  }
-
-  if (response.ok) {
-    return { ok: true as const };
-  }
-
-  const errorText = await response.text();
-  return {
-    ok: false as const,
-    error: limitText(errorText || response.statusText, 900),
-  };
-}
+      });
+      await ctx.runMutation(markContactRequestEmailStateRef, {
+        requestId: args.requestId,
+        resendEmailId,
+        emailDeliveryStatus: "queued",
+      });
+    } catch (error) {
+      await ctx.runMutation(markContactRequestEmailStateRef, {
+        requestId: args.requestId,
+        emailError: limitText(
+          error instanceof Error
+            ? error.message
+            : "Contact email could not be queued",
+          900,
+        ),
+        emailDeliveryStatus: "failed",
+      });
+    }
+    return null;
+  },
+});
 
 function contactSubject(subject: string) {
   return limitText(`Contact: ${subject}`, 140);
@@ -174,4 +147,3 @@ function escapeHtml(value: string) {
 function limitText(value: string, maxLength: number) {
   return value.trim().slice(0, maxLength);
 }
-

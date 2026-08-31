@@ -366,6 +366,7 @@ const OPENAPI = {
         responses: {
           "200": {
             description: "Queued or replayed source-cited research job.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } },
           },
           "400": { description: "Invalid or mismatched idempotent request." },
           "429": { description: "Quota or rate limit reached." },
@@ -385,7 +386,7 @@ const OPENAPI = {
           },
         ],
         responses: {
-          "200": { description: "Owner-scoped job status and cited result." },
+          "200": { description: "Owner-scoped job status and cited result.", content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } } },
         },
       },
     },
@@ -405,6 +406,8 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party JSON artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
+            headers: { "X-Artifact-Sha256": { schema: { type: "string", pattern: "^[a-f0-9]{64}$" } }, "Content-Length": { schema: { type: "integer", minimum: 0 } } },
+            content: { "application/json": { schema: { type: "object" } } },
           },
         },
       },
@@ -423,7 +426,7 @@ const OPENAPI = {
           },
         },
         responses: {
-          "200": { description: "Queued or replayed bounded JSONL export." },
+          "200": { description: "Queued or replayed bounded JSONL export.", content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } } },
           "400": {
             description: "Invalid dataset, format, or idempotent request.",
           },
@@ -447,6 +450,7 @@ const OPENAPI = {
           "200": {
             description:
               "Owner-scoped export status, checksum, and record count.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } },
           },
         },
       },
@@ -467,6 +471,8 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party JSONL artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
+            headers: { "X-Artifact-Sha256": { schema: { type: "string", pattern: "^[a-f0-9]{64}$" } }, "Content-Length": { schema: { type: "integer", minimum: 0 } } },
+            content: { "application/x-ndjson": { schema: { type: "string", format: "binary" } } },
           },
         },
       },
@@ -487,6 +493,7 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party immutable JSON manifest containing selection, checksum, bounded-scan disclosure, provenance distributions, citation coverage, completeness, freshness, and temporal coverage.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ExportManifest" } } },
           },
         },
       },
@@ -807,6 +814,51 @@ const OPENAPI = {
         properties: { query: { type: "string", minLength: 1, maxLength: 300 } },
         additionalProperties: false,
       },
+      AgentError: {
+        type: "object",
+        required: ["code"],
+        properties: {
+          code: { type: "string", pattern: "^[A-Z][A-Z0-9_.:-]{0,63}$" },
+          error: { type: "string" },
+          retryAfter: { type: "integer", minimum: 0, description: "Milliseconds before an eligible retry, when supplied." },
+        },
+        additionalProperties: true,
+      },
+      JobStatus: {
+        type: "object",
+        required: ["jobId", "status"],
+        properties: {
+          jobId: { type: "string" },
+          status: { type: "string", enum: ["queued", "running", "completed", "failed", "cancelled", "expired"] },
+          createdAt: { type: "integer", minimum: 0 },
+          updatedAt: { type: "integer", minimum: 0 },
+          expiresAt: { type: "integer", minimum: 0 },
+          error: { $ref: "#/components/schemas/AgentError" },
+        },
+        additionalProperties: true,
+      },
+      ArtifactMetadata: {
+        type: "object",
+        properties: {
+          sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          byteLength: { type: "integer", minimum: 0 },
+          contentType: { type: "string" },
+          generatedAt: { type: "integer", minimum: 0 },
+          expiresAt: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+      ExportManifest: {
+        type: "object",
+        required: ["checksum", "recordCount"],
+        properties: {
+          checksum: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          artifactByteLength: { type: "integer", minimum: 0 },
+          recordCount: { type: "integer", minimum: 0 },
+          schemaVersion: { type: "string" },
+        },
+        additionalProperties: true,
+      },
       ExportRequest: {
         type: "object",
         required: ["datasetId"],
@@ -956,6 +1008,7 @@ const PUBLISHED_OPENAPI = withCompleteOperationDocumentation(OPENAPI);
 function withCompleteOperationDocumentation<T>(source: T): T {
   const document = structuredClone(source) as T & {
     paths: Record<string, Record<string, unknown>>;
+    components: { schemas: Record<string, unknown> };
   };
   for (const [path, pathItem] of Object.entries(document.paths)) {
     for (const [method, candidate] of Object.entries(pathItem)) {
@@ -970,6 +1023,11 @@ function withCompleteOperationDocumentation<T>(source: T): T {
         candidate.description.trim().length === 0
       ) {
         candidate.description = `${summary}. Calls ${method.toUpperCase()} ${path} under the published authentication, scope, quota, visibility, and structured-error contract where applicable.`;
+      }
+      const responses = candidate.responses as Record<string, { content?: Record<string, unknown> }>;
+      for (const [status, response] of Object.entries(responses)) {
+        if (!/^[45]/.test(status) || response.content) continue;
+        response.content = { "application/json": { schema: { $ref: "#/components/schemas/AgentError" } } };
       }
     }
   }

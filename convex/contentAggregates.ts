@@ -1,6 +1,7 @@
 import { TableAggregate } from "@convex-dev/aggregate";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { DataModel, Doc } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -118,14 +119,21 @@ export async function contentSummary(
 
 export const backfillContentAggregates = internalMutation({
   args: {
-    phase: v.union(v.literal("interactions"), v.literal("comments")),
+    phase: v.optional(v.union(v.literal("interactions"), v.literal("comments"))),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
+  returns: v.object({
+    phase: v.union(v.literal("interactions"), v.literal("comments")),
+    processed: v.number(),
+    cursor: v.union(v.string(), v.null()),
+    done: v.boolean(),
+  }),
   handler: async (ctx, args) => {
+    const phase = args.phase ?? (await nextBackfillPhase(ctx));
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 100), 200));
     const key =
-      args.phase === "interactions"
+      phase === "interactions"
         ? INTERACTION_MIGRATION_KEY
         : COMMENT_MIGRATION_KEY;
     const state = await ctx.db
@@ -133,19 +141,22 @@ export const backfillContentAggregates = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
     if (state?.status === "completed") {
-      return { processed: 0, cursor: null, done: true };
+      return { phase, processed: 0, cursor: null, done: true };
     }
+    // Persisted state wins over caller input so a retry cannot rewind a
+    // partially completed migration.
+    const cursor = state?.cursor ?? args.cursor ?? null;
     const page =
-      args.phase === "interactions"
+      phase === "interactions"
         ? await ctx.db.query("interactions").paginate({
-            cursor: args.cursor ?? null,
+            cursor,
             numItems: limit,
           })
         : await ctx.db.query("comments").paginate({
-            cursor: args.cursor ?? null,
+            cursor,
             numItems: limit,
           });
-    if (args.phase === "interactions") {
+    if (phase === "interactions") {
       for (const doc of page.page as Doc<"interactions">[]) {
         await Promise.all([
           interactionScores.insertIfDoesNotExist(ctx, doc),
@@ -163,6 +174,9 @@ export const backfillContentAggregates = internalMutation({
       key,
       status: page.isDone ? ("completed" as const) : ("running" as const),
       processed,
+      phase,
+      cursor: page.isDone ? undefined : page.continueCursor,
+      scheduledAt: page.isDone ? undefined : now,
       updatedAt: now,
       ...(page.isDone ? { completedAt: now } : {}),
     };
@@ -171,13 +185,35 @@ export const backfillContentAggregates = internalMutation({
     } else {
       await ctx.db.patch("optimizationMigrations", state._id, fields);
     }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.contentAggregates.backfillContentAggregates, {
+        phase,
+        limit,
+      });
+    } else if (phase === "interactions") {
+      // Move to the next phase without requiring a human to notice the first
+      // phase completed. Existing callers may still invoke either phase.
+      await ctx.scheduler.runAfter(0, internal.contentAggregates.backfillContentAggregates, {
+        phase: "comments",
+        limit,
+      });
+    }
     return {
+      phase,
       processed: page.page.length,
       cursor: page.isDone ? null : page.continueCursor,
       done: page.isDone,
     };
   },
 });
+
+async function nextBackfillPhase(ctx: MutationCtx) {
+  const interactions = await ctx.db
+    .query("optimizationMigrations")
+    .withIndex("by_key", (q) => q.eq("key", INTERACTION_MIGRATION_KEY))
+    .unique();
+  return interactions?.status === "completed" ? ("comments" as const) : ("interactions" as const);
+}
 
 async function migrationComplete(ctx: QueryCtx, key: string) {
   const state = await ctx.db

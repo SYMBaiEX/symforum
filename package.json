@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.41",
+    "@ai-sdk/otel": "1.0.85",
     "@ai-sdk/react": "4.0.88",
     "@auth/core": "0.41.3",
     "@convex-dev/agent": "0.7.1",

@@ -202,35 +202,15 @@ export const writeEmbeddingBackfillState = internalMutation({
 export const readEditorialOutcomeSnapshot = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const runs = await ctx.db
-      .query("forumAgentRuns")
-      .withIndex("by_runDate")
+    const aggregates = await ctx.db
+      .query("forumAgentModerationOutcomeAggregates")
+      .withIndex("by_updatedAt")
       .order("desc")
-      .take(180);
-    const published = runs.filter(
-      (run) => run.status === "published" && run.threadId !== undefined,
-    );
-    return await Promise.all(
-      published.map(async (run) => {
-        const [thread, poll] = await Promise.all([
-          ctx.db.get("forumThreads", run.threadId!),
-          ctx.db
-            .query("forumPolls")
-            .withIndex("by_threadId", (q) => q.eq("threadId", run.threadId!))
-            .unique(),
-        ]);
-        if (thread === null) return null;
-        return {
-          agentSlug: run.agentSlug,
-          categorySlug: run.categorySlug ?? thread.categorySlug,
-          contentFormat: run.contentFormat ?? "brief",
-          promptVersion: run.promptVersion ?? "legacy",
-          views: thread.viewCount,
-          replies: thread.replyCount,
-          pollVotes: poll?.totalVotes ?? 0,
-          quality: run.qualityScore ?? 70,
-        };
-      }),
+      .take(160);
+    return aggregates.filter(
+      (aggregate) =>
+        aggregate.sampleCount >= aggregate.minimumSampleSize &&
+        aggregate.score !== undefined,
     );
   },
 });
@@ -249,6 +229,12 @@ export const replaceEditorialCohorts = internalMutation({
         totalReplies: v.number(),
         totalPollVotes: v.number(),
         totalQuality: v.number(),
+        feedbackSampleCount: v.number(),
+        helpfulCount: v.number(),
+        sourceIssueCount: v.number(),
+        duplicateConfirmedCount: v.number(),
+        disclosureIssueCount: v.number(),
+        minimumSampleSize: v.number(),
         score: v.number(),
       }),
     ),
@@ -266,7 +252,10 @@ export const replaceEditorialCohorts = internalMutation({
           updatedAt: now,
         });
       } else {
-        await ctx.db.patch("forumAgentEditorialCohorts", existing._id, { ...cohort, updatedAt: now });
+        await ctx.db.patch("forumAgentEditorialCohorts", existing._id, {
+          ...cohort,
+          updatedAt: now,
+        });
       }
     }
     return { updated: Math.min(args.cohorts.length, 160) };
@@ -277,17 +266,25 @@ export const readEditorialStrategies = internalQuery({
   args: { agentSlug: AGENT_SLUG },
   handler: async (ctx, args) => {
     const cohorts = await ctx.db
-      .query("forumAgentEditorialCohorts")
-      .withIndex("by_agentSlug_and_score", (q) =>
+      .query("forumAgentModerationOutcomeAggregates")
+      .withIndex("by_agentSlug_and_updatedAt", (q) =>
         q.eq("agentSlug", args.agentSlug),
       )
       .order("desc")
-      .take(24);
-    return cohorts.map((cohort) => ({
-      categorySlug: cohort.categorySlug,
-      contentFormat: cohort.contentFormat,
-      sampleCount: cohort.sampleCount,
-      score: cohort.score,
-    }));
+      .take(80);
+    return cohorts
+      .filter(
+        (cohort) =>
+          cohort.sampleCount >= cohort.minimumSampleSize &&
+          cohort.score !== undefined,
+      )
+      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+      .slice(0, 24)
+      .map((cohort) => ({
+        categorySlug: cohort.categorySlug,
+        contentFormat: cohort.contentFormat,
+        sampleCount: cohort.sampleCount,
+        score: cohort.score!,
+      }));
   },
 });

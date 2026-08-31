@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import unittest
 
@@ -11,6 +13,7 @@ from symbaiex_agent import (
     AsyncAgentClient,
     HttpRequest,
     HttpResponse,
+    verify_webhook_signature,
 )
 
 
@@ -60,6 +63,24 @@ class AgentClientTests(unittest.TestCase):
             recorder.requests[0].url,
             f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/exports/job-1/manifest",
         )
+
+    def test_wait_verify_manifest_and_webhook_signature(self) -> None:
+        artifact = b"export\n"
+        checksum = hashlib.sha256(artifact).hexdigest()
+        class Transport:
+            reads = 0
+            def __call__(self, request: HttpRequest) -> HttpResponse:
+                if request.url.endswith("/manifest"):
+                    return HttpResponse(200, {}, json.dumps({"checksum": checksum, "artifactByteLength": len(artifact)}).encode())
+                self.reads += 1
+                return HttpResponse(200, {}, json.dumps({"jobId": "job-1", "status": "completed" if self.reads > 1 else "running"}).encode())
+        client = AgentClient(token="access-token", transport=Transport())
+        self.assertEqual(client.wait_for_export("job-1", poll_interval=0.05)["status"], "completed")
+        self.assertEqual(client.verify_export_manifest("job-1", artifact)["checksum"], checksum)
+        timestamp, body, secret = "100", '{"id":"event-1"}', "webhook-secret"
+        signature = "v1=" + hmac.new(secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256).hexdigest()
+        self.assertTrue(verify_webhook_signature(secret=secret, timestamp=timestamp, signature=signature, body=body, now_seconds=100))
+        self.assertFalse(verify_webhook_signature(secret=secret, timestamp=timestamp, signature=signature, body=body, now_seconds=500))
 
     def test_semantic_search_uses_public_replay_safe_contract(self) -> None:
         recorder = Recorder([])
@@ -230,6 +251,17 @@ class AgentClientTests(unittest.TestCase):
             self.assertEqual(await client.universal_search("public", limit=1), [])
             self.assertEqual(await client.source_registry(), [])
             self.assertEqual(await client.benchmarks(limit=1), [])
+
+        asyncio.run(scenario())
+
+    def test_async_pagination_terminates_cleanly(self) -> None:
+        async def scenario() -> None:
+            client = AsyncAgentClient(
+                token="access-token",
+                transport=Recorder({"items": [{"id": "one"}], "nextCursor": None}),
+            )
+            items = [item async for item in client.paginate("/api/agent/v1/sources")]
+            self.assertEqual(items, [{"id": "one"}])
 
         asyncio.run(scenario())
 

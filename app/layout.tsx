@@ -5,6 +5,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SiteShell } from "@/components/site-shell";
+import { VercelAnalytics } from "@/components/vercel-analytics";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
@@ -17,7 +18,6 @@ import {
 } from "@/lib/seo";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { headers } from "next/headers";
-import { Analytics } from "@vercel/analytics/next";
 
 const FORUM_PRODUCTION_HOSTNAME = new URL(FORUM_SITE_URL).hostname;
 const PRIMARY_PRODUCTION_HOSTNAME = new URL(PRIMARY_SITE_URL).hostname;
@@ -188,7 +188,7 @@ export default async function RootLayout({
             </SiteShell>
           </ConvexClientProvider>
         </ThemeProvider>
-        <Analytics />
+        <VercelAnalytics />
       </body>
     </html>
   );

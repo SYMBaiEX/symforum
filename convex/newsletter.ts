@@ -27,6 +27,7 @@ import {
   trustedNewsletterSiteUrl,
 } from "./newsletterModel";
 import { parseEditorialNewsletterPayload } from "./newsletterPayload";
+import { applyContactEmailEvent } from "./contact";
 
 const sendConfirmationEmailRef = makeFunctionReference<
   "action",
@@ -840,6 +841,17 @@ export const markIssueBroadcast = internalMutation({
 export const handleEmailEvent = internalMutation({
   args: vOnEmailEventArgs,
   handler: async (ctx, args) => {
+    // The Resend component emits all application email callbacks through this
+    // hook. Contact notices are matched by the component email id, never by
+    // recipient address, and use their own idempotent event ledger.
+    if (
+      await applyContactEmailEvent(ctx, {
+        resendEmailId: args.id,
+        event: args.event,
+      })
+    ) {
+      return null;
+    }
     const data = args.event.data;
     const to = Array.isArray(data.to) ? data.to[0] : data.to;
     const email = typeof to === "string" ? to.toLowerCase() : undefined;

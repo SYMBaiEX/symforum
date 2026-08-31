@@ -16,6 +16,11 @@ import {
   modelInstructions,
 } from "@/lib/openrouter-model-profile";
 import { after } from "next/server";
+import {
+  OWNER_ADMIN_AI_STREAM_TIMEOUT,
+  OWNER_ADMIN_AI_TELEMETRY,
+  ownerAdminAiRuntimeContext,
+} from "@/lib/ai-telemetry";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -64,13 +69,16 @@ export async function POST(request: Request) {
       tools: adminAgentTools(convex),
       stopWhen: isStepCount(8),
       providerOptions: routedModel.providerOptions,
+      runtimeContext: ownerAdminAiRuntimeContext(correlationId),
+      telemetry: OWNER_ADMIN_AI_TELEMETRY,
       ...modelGenerationSettings(routedModel.provider, "owner-console"),
     });
 
     return createAgentUIStreamResponse({
       agent,
       uiMessages: messages,
-      timeout: { totalMs: 240_000 },
+      abortSignal: request.signal,
+      timeout: OWNER_ADMIN_AI_STREAM_TIMEOUT,
     });
   } catch (error) {
     after(() =>

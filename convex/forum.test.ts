@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import agentTest from "@convex-dev/agent/test";
 import presenceTest from "@convex-dev/presence/test";
 import { describe, expect, test, vi } from "vitest";
 
@@ -17,6 +18,11 @@ import {
   FORUM_REPLY_BODY_MAX_LENGTH,
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
+import {
+  deterministicForumClaimHash,
+  FORUM_AGENT_CLAIM_SNAPSHOT_VERSION,
+} from "./forumAgentClaimProvenance";
+import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 import schema from "./schema";
 
 const modules = {
@@ -26,13 +32,17 @@ const modules = {
 
 function setup() {
   const t = convexTest(schema, modules);
+  agentTest.register(t);
   presenceTest.register(t);
   return t;
 }
 
 async function completeForumSearchProjectionBackfill(t: TestBackend) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const result = await t.mutation(internal.forumSearchProjection.backfill, {});
+    const result = await t.mutation(
+      internal.forumSearchProjection.backfill,
+      {},
+    );
     if (result.done) return;
   }
   throw new Error("Forum search projection backfill did not finish");
@@ -40,18 +50,166 @@ async function completeForumSearchProjectionBackfill(t: TestBackend) {
 
 type TestBackend = ReturnType<typeof setup>;
 
-type ForumThreadResult = { _id?: Id<"forumThreads">; threadId?: Id<"forumThreads">; categoryId?: Id<"forumCategories">; authorId?: Id<"users">; categorySlug?: string; slug?: string; title?: string; body?: string; replyCount?: number; attachments?: Array<{ _id?: Id<"forumAttachments"> }>; prefix?: { slug?: string; label?: string; color?: string } | null };
+type ForumThreadResult = {
+  _id?: Id<"forumThreads">;
+  threadId?: Id<"forumThreads">;
+  categoryId?: Id<"forumCategories">;
+  authorId?: Id<"users">;
+  categorySlug?: string;
+  slug?: string;
+  title?: string;
+  body?: string;
+  replyCount?: number;
+  attachments?: Array<{ _id?: Id<"forumAttachments"> }>;
+  prefix?: { slug?: string; label?: string; color?: string } | null;
+};
 type ForumReportResult = { _id?: string; reportId?: string };
-type ForumCategoryResult = { _id?: Id<"forumCategories">; slug?: string; name?: string; position?: number; viewAccess?: string; children?: unknown[] };
-type ForumSectionResult = { boards: Array<{ slug?: string; threads?: unknown[] }> };
-type ForumPostResult = { _id?: string; postId?: string; threadId?: string; categoryId?: string; categorySlug?: string; authorId?: string; body?: string; postNumber?: number; attachments?: unknown[] };
-type ForumAnnouncementResult = { categoryId?: string; position?: number; slug?: string; status?: string; title?: string };
-type ForumDocumentResult = { body?: string; position?: number; slug?: string; status?: string; title?: string };
-type ForumEventResult = { actorUserId?: string; body?: string; eventType?: string; metadataJson?: string; slug?: string; startsAt?: number; status?: string; title?: string };
-type ForumAttachmentResult = { _id?: string; authorId?: string; body?: string; categoryId?: string; filename?: string; postId?: string; threadId?: string; txt?: string };
+type ForumCategoryResult = {
+  _id?: Id<"forumCategories">;
+  slug?: string;
+  name?: string;
+  position?: number;
+  viewAccess?: string;
+  children?: unknown[];
+};
+type ForumSectionResult = {
+  boards: Array<{ slug?: string; threads?: unknown[] }>;
+};
+type ForumPostResult = {
+  _id?: string;
+  postId?: string;
+  threadId?: string;
+  categoryId?: string;
+  categorySlug?: string;
+  authorId?: string;
+  body?: string;
+  postNumber?: number;
+  attachments?: unknown[];
+};
+type ForumAnnouncementResult = {
+  categoryId?: string;
+  position?: number;
+  slug?: string;
+  status?: string;
+  title?: string;
+};
+type ForumDocumentResult = {
+  body?: string;
+  position?: number;
+  slug?: string;
+  status?: string;
+  title?: string;
+};
+type ForumEventResult = {
+  actorUserId?: string;
+  body?: string;
+  eventType?: string;
+  metadataJson?: string;
+  slug?: string;
+  startsAt?: number;
+  status?: string;
+  title?: string;
+};
+type ForumAttachmentResult = {
+  _id?: string;
+  authorId?: string;
+  body?: string;
+  categoryId?: string;
+  filename?: string;
+  postId?: string;
+  threadId?: string;
+  txt?: string;
+};
 type ForumOptionResult = { label?: string };
 type ForumRecordResult = { username?: string };
 type ForumMessageResult = { _id?: string };
+
+function testForumClaimCitations(
+  sourceCandidateKey: string,
+  sourceUrl: string,
+  claimTexts = [
+    "Readers can compare the stated behavior with the primary source.",
+    "They can preserve the evidence needed for editorial review.",
+  ],
+) {
+  return claimTexts.map((claimText, index) => ({
+    claimText,
+    claimHash: deterministicForumClaimHash(claimText),
+    // Deliberately invalid offsets prove the mutation resolves spans against
+    // the normalized stored body rather than trusting caller positions.
+    bodySpanStart: 0,
+    bodySpanEnd: 1,
+    bodySpanText: "mismatch",
+    bodySpanMatch: "exact" as const,
+    sourceCandidateId: `${sourceCandidateKey}-candidate`,
+    sourceCandidateKey,
+    sourceUrl,
+    snapshotHash: deterministicForumClaimHash(
+      `${sourceCandidateKey}:${sourceUrl}:${index}`,
+    ),
+    snapshotVersion: FORUM_AGENT_CLAIM_SNAPSHOT_VERSION,
+    kind: index === 0 ? ("fact" as const) : ("analysis" as const),
+    confidence: index === 0 ? ("high" as const) : ("medium" as const),
+    supportStatus: "supported" as const,
+    supportScore: 90,
+  }));
+}
+
+async function recordPublishablePrivateDraft(
+  t: TestBackend,
+  args: {
+    agentSlug: string;
+    runKey: string;
+    title: string;
+    body: string;
+    sources: Array<{ sourceKey: string; sourceUrl: string }>;
+    claimCitations: ReturnType<typeof testForumClaimCitations>;
+    qualityScore?: number;
+  },
+) {
+  await t.mutation(
+    internal.forumAgentResearchPackets.beginResearchPacket,
+    {
+      runKey: args.runKey,
+      agentSlug: args.agentSlug,
+      sources: args.sources.map((source) => ({
+        ...source,
+        snapshotHash: forumAgentResearchPayloadHash([
+          source.sourceKey,
+          source.sourceUrl,
+        ]),
+        titleHash: deterministicForumClaimHash(source.sourceKey),
+      })),
+    },
+  );
+  const claimHashes = args.claimCitations.map((citation) => citation.claimHash);
+  await t.mutation(
+    internal.forumAgentResearchPackets.recordDraftRevision,
+    {
+      runKey: args.runKey,
+      agentSlug: args.agentSlug,
+      revision: 0,
+      title: args.title,
+      body: args.body,
+      claimHashes,
+      qualityScore: args.qualityScore ?? 90,
+    },
+  );
+  return await t.mutation(
+    internal.forumAgentResearchPackets.recordPublicationDecision,
+    {
+      runKey: args.runKey,
+      agentSlug: args.agentSlug,
+      revision: 0,
+      title: args.title,
+      body: args.body,
+      claimHashes,
+      qualityScore: args.qualityScore ?? 90,
+      publishable: true,
+      reason: "test-private-draft-approved",
+    },
+  );
+}
 
 async function seedForum(t: TestBackend) {
   return await t.run(async (ctx) => {
@@ -397,10 +555,12 @@ describe("forum notification preferences", () => {
     const threads = await asBoardModerator.query(api.forum.listForumThreads, {
       limit: 10,
     });
-    expect(threads.map((thread: ForumThreadResult) => thread._id)).toContain(seed.publicThreadId);
-    expect(threads.map((thread: ForumThreadResult) => thread._id)).not.toContain(
-      seed.trustedThreadId,
+    expect(threads.map((thread: ForumThreadResult) => thread._id)).toContain(
+      seed.publicThreadId,
     );
+    expect(
+      threads.map((thread: ForumThreadResult) => thread._id),
+    ).not.toContain(seed.trustedThreadId);
 
     const reports = await asBoardModerator.query(api.forum.listForumReports, {
       status: "open",
@@ -409,9 +569,9 @@ describe("forum notification preferences", () => {
     expect(reports.map((report: ForumReportResult) => report._id)).toContain(
       publicReport.reportId,
     );
-    expect(reports.map((report: ForumReportResult) => report._id)).not.toContain(
-      trustedReport.reportId,
-    );
+    expect(
+      reports.map((report: ForumReportResult) => report._id),
+    ).not.toContain(trustedReport.reportId);
 
     await expect(
       asBoardModerator.mutation(api.forum.updateForumReportStatus, {
@@ -432,9 +592,9 @@ describe("forum notification preferences", () => {
     ).rejects.toThrow(/moderator access for this board/i);
 
     const overview = await asBoardModerator.query(api.forum.adminOverview, {});
-    expect(overview.categories.map((category: ForumCategoryResult) => category._id)).toEqual([
-      seed.publicCategoryId,
-    ]);
+    expect(
+      overview.categories.map((category: ForumCategoryResult) => category._id),
+    ).toEqual([seed.publicCategoryId]);
 
     await expect(
       asBoardModerator.mutation(api.forum.moveForumThread, {
@@ -635,10 +795,9 @@ describe("forum notification preferences", () => {
         moderationReason: "Remove duplicate lab reply",
       },
     });
-    expect(snapshot.reportEvents.map((event: ForumEventResult) => event.eventType)).toEqual([
-      "forum_report_created",
-      "forum_report_updated",
-    ]);
+    expect(
+      snapshot.reportEvents.map((event: ForumEventResult) => event.eventType),
+    ).toEqual(["forum_report_created", "forum_report_updated"]);
     expect(snapshot.reportEvents[1]).toMatchObject({
       actorUserId: seed.ownerId,
       metadata: {
@@ -939,8 +1098,7 @@ describe("forum notification preferences", () => {
     });
     expect(claim.claimed).toBe(true);
 
-    const published = await t.mutation(internal.forum.publishSukiForumThread, {
-      body: [
+    const publicationBody = [
         "[b]Why this matters[/b]",
         "A sourced release is more useful when the thread also gives readers a practical way to evaluate it.",
         "Readers can compare the stated behavior with the primary source.",
@@ -959,7 +1117,29 @@ describe("forum notification preferences", () => {
         "",
         "[b]Sources and further reading[/b]",
         "[list][*][url=https://example.com/research]Primary research[/url] — Example Research[/list]",
-      ].join("\n"),
+      ].join("\n");
+    const publicationSources = [
+      {
+        sourceKey: "example-primary-source",
+        sourceUrl: "https://example.com/research",
+      },
+    ];
+    const publicationCitations = testForumClaimCitations(
+      "example-primary-source",
+      "https://example.com/research",
+    );
+    const publicationTitle =
+      "A practical checklist for evaluating a new prompt technique";
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: claim.runKey,
+      title: publicationTitle,
+      body: publicationBody,
+      sources: publicationSources,
+      claimCitations: publicationCitations,
+    });
+    const publicationArgs = {
+      body: publicationBody,
       candidateCount: 12,
       categorySlug: "ai-prompts",
       groundingScore: 100,
@@ -971,19 +1151,35 @@ describe("forum notification preferences", () => {
       },
       prefixSlug: "guide",
       runKey: claim.runKey,
-      sources: [
-        {
-          sourceKey: "example-primary-source",
-          sourceUrl: "https://example.com/research",
-        },
-      ],
-      title: "A practical checklist for evaluating a new prompt technique",
-    });
-    if ("held" in published) throw new Error("Expected quality-passing publication");
+      sources: publicationSources,
+      claimCitations: publicationCitations,
+      title: publicationTitle,
+    };
+    await expect(
+      t.mutation(internal.forum.publishSukiForumThread, {
+        ...publicationArgs,
+        body: `${publicationBody}\nTampered after private approval.`,
+      }),
+    ).rejects.toThrow(/does not match its private draft proof/i);
+    const published = await t.mutation(
+      internal.forum.publishSukiForumThread,
+      publicationArgs,
+    );
+    if ("held" in published)
+      throw new Error("Expected quality-passing publication");
     expect(published.categorySlug).toBe("ai-prompts");
 
     const stored = await t.run(async (ctx) => {
-      const [thread, run, source, profile, poll, projection, quality] = await Promise.all([
+      const [
+        thread,
+        run,
+        source,
+        profile,
+        poll,
+        projection,
+        quality,
+        citations,
+      ] = await Promise.all([
         ctx.db.get("forumThreads", published.threadId),
         ctx.db
           .query("forumAgentRuns")
@@ -1011,8 +1207,23 @@ describe("forum notification preferences", () => {
           .query("researchQualityAssessments")
           .withIndex("by_threadId", (q) => q.eq("threadId", published.threadId))
           .unique(),
+        ctx.db
+          .query("forumAgentClaimCitations")
+          .withIndex("by_runKey_and_claimIndex", (q) =>
+            q.eq("runKey", claim.runKey),
+          )
+          .collect(),
       ]);
-      return { poll, profile, projection, quality, run, source, thread };
+      return {
+        citations,
+        poll,
+        profile,
+        projection,
+        quality,
+        run,
+        source,
+        thread,
+      };
     });
     expect(stored.thread).toMatchObject({
       authorId: first.agentUserId,
@@ -1046,27 +1257,183 @@ describe("forum notification preferences", () => {
       citationCoverageScore: 100,
       flags: [],
     });
+    expect(stored.citations).toHaveLength(2);
+    expect(stored.citations[0]).toMatchObject({
+      runKey: claim.runKey,
+      threadId: published.threadId,
+      sourceCandidateKey: "example-primary-source",
+      sourceUrl: "https://example.com/research",
+      agentSlug: "suki",
+      model: OPENROUTER_FORUM_MODEL,
+      assessmentId: stored.quality?._id,
+      bodySpanMatch: "exact",
+    });
 
-    const blockedClaim = await t.mutation(internal.sukiForumAgentData.claimRun, {
-      attempt: 0,
-      runDate: "2026-07-28",
-      slot: 1,
+    const followUpClaim = await t.mutation(
+      internal.sukiForumAgentData.claimRun,
+      { attempt: 0, runDate: "2026-07-29", slot: 0 },
+    );
+    if (!followUpClaim.claimed) throw new Error("Expected follow-up run claim");
+    const followUpBody =
+      "The follow-up adds a source-backed verification step for readers. The new evidence also clarifies the editorial review boundary.";
+    const followUpSources = [
+      {
+        sourceKey: "example-follow-up-source",
+        sourceUrl: "https://example.com/follow-up",
+      },
+    ];
+    const followUpCitations = testForumClaimCitations(
+      "example-follow-up-source",
+      "https://example.com/follow-up",
+      [
+        "The follow-up adds a source-backed verification step for readers.",
+        "The new evidence also clarifies the editorial review boundary.",
+      ],
+    );
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: followUpClaim.runKey,
+      title: "Source-backed follow-up",
+      body: followUpBody,
+      sources: followUpSources,
+      claimCitations: followUpCitations,
+    });
+    const followUp = await t.mutation(
+      internal.forum.publishForumAgentFollowUp,
+      {
+        agentSlug: "suki",
+        runKey: followUpClaim.runKey,
+        threadId: published.threadId,
+        title: "Source-backed follow-up",
+        body: followUpBody,
+        sources: followUpSources,
+        claimCitations: followUpCitations,
+        candidateCount: 1,
+        contentFormat: "brief",
+      },
+    );
+    const storedFollowUpCitations = await t.run((ctx) =>
+      ctx.db
+        .query("forumAgentClaimCitations")
+        .withIndex("by_runKey_and_claimIndex", (q) =>
+          q.eq("runKey", followUpClaim.runKey),
+        )
+        .collect(),
+    );
+    expect(storedFollowUpCitations).toHaveLength(2);
+    expect(storedFollowUpCitations[0]).toMatchObject({
+      threadId: published.threadId,
+      postId: followUp.postId,
+      bodySpanMatch: "exact",
+    });
+
+    const blockedClaim = await t.mutation(
+      internal.sukiForumAgentData.claimRun,
+      {
+        attempt: 0,
+        runDate: "2026-07-28",
+        slot: 1,
+      },
+    );
+    const heldBody = "[chart=Tiny]Signal|1[/chart]";
+    const heldSources = [
+      { sourceKey: "example-blocked", sourceUrl: "not-a-url" },
+    ];
+    const heldCitations = testForumClaimCitations(
+      "example-blocked",
+      "not-a-url",
+    );
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: blockedClaim.runKey,
+      title: "Tiny",
+      body: heldBody,
+      sources: heldSources,
+      claimCitations: heldCitations,
+      qualityScore: 10,
     });
     const held = await t.mutation(internal.forum.publishSukiForumThread, {
-      body: "[chart=Tiny]Signal|1[/chart]",
+      body: heldBody,
       candidateCount: 1,
       categorySlug: "ai-prompts",
       runKey: blockedClaim.runKey,
-      sources: [{ sourceKey: "example-blocked", sourceUrl: "not-a-url" }],
+      sources: heldSources,
+      claimCitations: heldCitations,
       title: "Tiny",
     });
     expect(held).toMatchObject({ held: true });
-    const blockedAssessment = await t.run((ctx) => ctx.db
-      .query("researchQualityAssessments")
-      .withIndex("by_runKey", (q) => q.eq("runKey", blockedClaim.runKey))
-      .unique());
-    expect(blockedAssessment).toMatchObject({ status: "needs_review" });
-    expect(blockedAssessment?.threadId).toBeUndefined();
+    const blocked = await t.run(async (ctx) => ({
+      assessment: await ctx.db
+        .query("researchQualityAssessments")
+        .withIndex("by_runKey", (q) => q.eq("runKey", blockedClaim.runKey))
+        .unique(),
+      packet: await ctx.db
+        .query("forumAgentResearchPackets")
+        .withIndex("by_runKey", (q) => q.eq("runKey", blockedClaim.runKey))
+        .unique(),
+      publicThreads: await ctx.db
+        .query("forumThreads")
+        .withIndex("by_authorId_and_createdAt", (q) =>
+          q.eq("authorId", first.agentUserId),
+        )
+        .collect(),
+    }));
+    expect(blocked.assessment).toMatchObject({ status: "needs_review" });
+    expect(blocked.assessment?.threadId).toBeUndefined();
+    expect(blocked.packet).toMatchObject({ state: "held" });
+    expect(blocked.publicThreads).toHaveLength(1);
+
+    const mismatchedClaim = await t.mutation(
+      internal.sukiForumAgentData.claimRun,
+      { attempt: 0, runDate: "2026-07-28", slot: 2 },
+    );
+    if (!mismatchedClaim.claimed)
+      throw new Error("Expected source-link test run");
+    const mismatchedBody =
+      "[chart=Source check]Signal|90|Primary evidence\nReview|80|Deterministic provenance[/chart]";
+    const mismatchedCitations = testForumClaimCitations(
+      "different-source",
+      "https://example.com/different",
+    );
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: mismatchedClaim.runKey,
+      title: "Citation source linkage must be exact",
+      body: mismatchedBody,
+      sources: [
+        {
+          sourceKey: "different-source",
+          sourceUrl: "https://example.com/different",
+        },
+      ],
+      claimCitations: mismatchedCitations,
+    });
+    await expect(
+      t.mutation(internal.forum.publishSukiForumThread, {
+        body: mismatchedBody,
+        candidateCount: 1,
+        categorySlug: "ai-prompts",
+        runKey: mismatchedClaim.runKey,
+        sources: [
+          {
+            sourceKey: "declared-source",
+            sourceUrl: "https://example.com/declared",
+          },
+        ],
+        claimCitations: mismatchedCitations,
+        title: "Citation source linkage must be exact",
+      }),
+    ).rejects.toThrow(/does not match a publication source/i);
+    expect(
+      await t.run((ctx) =>
+        ctx.db
+          .query("forumAgentClaimCitations")
+          .withIndex("by_runKey_and_claimIndex", (q) =>
+            q.eq("runKey", mismatchedClaim.runKey),
+          )
+          .collect(),
+      ),
+    ).toEqual([]);
 
     const duplicateClaim = await t.mutation(
       internal.sukiForumAgentData.claimRun,
@@ -1243,9 +1610,73 @@ describe("forum notification preferences", () => {
     ]);
     expect(stored.profile?.postCount).toBe(1);
     expect(stored.run).toMatchObject({
+      admittedAt: expect.any(Number),
+      conversationId: claim.conversationId,
       replyPostId: stored.posts[0]?._id,
       status: "replied",
     });
+
+    const secondRunId = await t.run(async (ctx) => {
+      const now = Date.now() + 1;
+      const sourcePostId = await ctx.db.insert("forumPosts", {
+        threadId: seeded.threadId,
+        categoryId: seeded.categoryId,
+        authorId: seeded.authorId,
+        body: "The schema comparison helped. How should I isolate which earlier turn introduced the first incompatible field?",
+        postNumber: 3,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `forum-reply:reply:${sourcePostId}`,
+        agentSlug: "suki",
+        runDate: "2026-07-29",
+        sourceKind: "reply",
+        sourcePostId,
+        threadId: seeded.threadId,
+        categoryId: seeded.categoryId,
+        authorId: seeded.authorId,
+        attempt: -1,
+        status: "queued",
+        model: OPENROUTER_FORUM_MODEL,
+        reason: "legacy-event-queued",
+        startedAt: now - 3 * 60 * 1_000,
+        updatedAt: now - 3 * 60 * 1_000,
+      });
+    });
+    const secondClaim = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        attempt: 0,
+        runDate: "2026-07-29",
+        runId: secondRunId,
+      },
+    );
+    if (!secondClaim.claimed) {
+      throw new Error(`Expected continuity candidate: ${secondClaim.reason}`);
+    }
+    expect(secondClaim.conversationId).toBe(claim.conversationId);
+    const continuity = await t.run(async (ctx) => ({
+      mappings: await ctx.db
+        .query("forumAgentConversations")
+        .withIndex("by_forumThreadId_and_agentSlug", (q) =>
+          q
+            .eq("forumThreadId", seeded.threadId)
+            .eq("agentSlug", "suki"),
+        )
+        .collect(),
+      secondRun: await ctx.db.get("forumAgentReplyRuns", secondRunId),
+      thread: await ctx.db.get("forumThreads", seeded.threadId),
+    }));
+    expect(continuity.mappings).toHaveLength(1);
+    expect(continuity.secondRun).toMatchObject({
+      admittedAt: expect.any(Number),
+      conversationId: claim.conversationId,
+    });
+    expect(JSON.stringify(continuity.thread)).not.toContain(
+      claim.conversationId,
+    );
 
     await t.run(async (ctx) => {
       const now = Date.now() - 3 * 60 * 1_000;
@@ -1396,28 +1827,46 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     });
     expect(claim.claimed).toBe(true);
 
+    const belleBody = [
+      "[note]The Canary Desk connects today's reporting into one useful thread.[/note]",
+      "[chart=Today's signal map]Research|92|Primary evidence\nInfrastructure|67|Adoption pressure\nCulture|44|Early movement[/chart]",
+      "[h2]The story through it[/h2]",
+      "The daily brief gives readers verified links, a concise summary, and a clearly labeled editorial interpretation.",
+      "[b]Which signal deserves a deeper follow-up tomorrow?[/b]",
+    ].join("\n\n");
+    const belleSources = [
+      {
+        sourceKey: "belle-hn-123-2026-07-28",
+        sourceUrl: "https://example.com/hacker-news-story",
+      },
+    ];
+    const belleCitations = testForumClaimCitations(
+      "belle-hn-123-2026-07-28",
+      "https://example.com/hacker-news-story",
+    );
+    const belleTitle =
+      "Jul 28, 2026 — The infrastructure story hiding in plain sight";
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "belle",
+      runKey: claim.runKey,
+      title: belleTitle,
+      body: belleBody,
+      sources: belleSources,
+      claimCitations: belleCitations,
+    });
     const published = await t.mutation(internal.forum.publishSukiForumThread, {
       agentSlug: "belle",
-      body: [
-        "[note]The Canary Desk connects today's reporting into one useful thread.[/note]",
-        "[chart=Today's signal map]Research|92|Primary evidence\nInfrastructure|67|Adoption pressure\nCulture|44|Early movement[/chart]",
-        "[h2]The story through it[/h2]",
-        "The daily brief gives readers verified links, a concise summary, and a clearly labeled editorial interpretation.",
-        "[b]Which signal deserves a deeper follow-up tomorrow?[/b]",
-      ].join("\n\n"),
+      body: belleBody,
       candidateCount: 8,
       categorySlug: "news-hacker-news",
       prefixSlug: "news",
       runKey: claim.runKey,
-      sources: [
-        {
-          sourceKey: "belle-hn-123-2026-07-28",
-          sourceUrl: "https://example.com/hacker-news-story",
-        },
-      ],
-      title: "Jul 28, 2026 — The infrastructure story hiding in plain sight",
+      sources: belleSources,
+      claimCitations: belleCitations,
+      title: belleTitle,
     });
-    if ("held" in published) throw new Error("Expected quality-passing publication");
+    if ("held" in published)
+      throw new Error("Expected quality-passing publication");
 
     const stored = await t.run(async (ctx) => {
       const [thread, profile] = await Promise.all([
@@ -2863,7 +3312,9 @@ describe("forum privacy regressions", () => {
       now,
       pageSize: 10,
     });
-    const slugs = recent.threads.map((thread: ForumThreadResult) => thread.slug);
+    const slugs = recent.threads.map(
+      (thread: ForumThreadResult) => thread.slug,
+    );
     expect(slugs).toEqual(["trusted-lunar-brief"]);
   });
 
@@ -2903,7 +3354,9 @@ describe("forum privacy regressions", () => {
         now: fakeNow,
         pageSize: 10,
       });
-      const visibleSlugs = recent.threads.map((thread: ForumThreadResult) => thread.slug);
+      const visibleSlugs = recent.threads.map(
+        (thread: ForumThreadResult) => thread.slug,
+      );
       expect(visibleSlugs).toContain("public-today-thread");
       expect(visibleSlugs).not.toContain("trusted-today-thread");
     } finally {
@@ -2963,10 +3416,14 @@ describe("forum privacy regressions", () => {
       categorySlug: "public-square",
       pageSize: 1,
     });
-    expect(unfiltered.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-      "newer-unprefixed-note",
-    ]);
-    expect(unfiltered.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
+    expect(
+      unfiltered.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toEqual(["newer-unprefixed-note"]);
+    expect(
+      unfiltered.activityThreads.map(
+        (thread: ForumThreadResult) => thread.slug,
+      ),
+    ).toEqual([
       "newer-unprefixed-note",
       "older-prefixed-dispatch",
       "public-lunar-brief",
@@ -2977,9 +3434,9 @@ describe("forum privacy regressions", () => {
       page: 2,
       pageSize: 1,
     });
-    expect(secondPage.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-      "older-prefixed-dispatch",
-    ]);
+    expect(
+      secondPage.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toEqual(["older-prefixed-dispatch"]);
     expect(secondPage.activityThreads[0]?.slug).toBe("newer-unprefixed-note");
 
     const prefixed = await t.query(api.forum.listThreads, {
@@ -2987,12 +3444,12 @@ describe("forum privacy regressions", () => {
       prefixId,
       pageSize: 1,
     });
-    expect(prefixed.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-      "older-prefixed-dispatch",
-    ]);
-    expect(prefixed.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-      "older-prefixed-dispatch",
-    ]);
+    expect(
+      prefixed.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toEqual(["older-prefixed-dispatch"]);
+    expect(
+      prefixed.activityThreads.map((thread: ForumThreadResult) => thread.slug),
+    ).toEqual(["older-prefixed-dispatch"]);
     expect(prefixed.pagination.totalItems).toBe(1);
 
     const noPrefix = await t.query(api.forum.listThreads, {
@@ -3000,12 +3457,12 @@ describe("forum privacy regressions", () => {
       prefixId: null,
       pageSize: 10,
     });
-    expect(noPrefix.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
-      "newer-unprefixed-note",
-    );
-    expect(noPrefix.threads.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
-      "older-prefixed-dispatch",
-    );
+    expect(
+      noPrefix.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toContain("newer-unprefixed-note");
+    expect(
+      noPrefix.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).not.toContain("older-prefixed-dispatch");
   });
 
   test("board pages expose visible child boards as navigation choices", async () => {
@@ -3060,7 +3517,9 @@ describe("forum privacy regressions", () => {
       categorySlug: "public-square",
     });
     expect(
-      trustedBoard.category.children?.map((category: ForumCategoryResult) => category.slug),
+      trustedBoard.category.children?.map(
+        (category: ForumCategoryResult) => category.slug,
+      ),
     ).toEqual(["public-guides", "trusted-downloads"]);
     expect(trustedBoard.category).toMatchObject({
       threadCount: 3,
@@ -3118,9 +3577,15 @@ describe("forum privacy regressions", () => {
         now,
       });
       await Promise.all([
-        ctx.db.patch("forumCategories", papersId, { parentCategoryId: researchId }),
-        ctx.db.patch("forumCategories", experimentsId, { parentCategoryId: researchId }),
-        ctx.db.patch("forumCategories", readingListId, { parentCategoryId: researchId }),
+        ctx.db.patch("forumCategories", papersId, {
+          parentCategoryId: researchId,
+        }),
+        ctx.db.patch("forumCategories", experimentsId, {
+          parentCategoryId: researchId,
+        }),
+        ctx.db.patch("forumCategories", readingListId, {
+          parentCategoryId: researchId,
+        }),
       ]);
       const create = async (
         categoryId: Id<"forumCategories">,
@@ -3137,15 +3602,35 @@ describe("forum privacy regressions", () => {
           authorId: seed.trustedUserId,
           now: lastPostAt,
         });
-      const hiddenId = await create(researchId, "research", "hidden-note", now + 130);
-      const lockedId = await create(researchId, "research", "locked-note", now + 125);
+      const hiddenId = await create(
+        researchId,
+        "research",
+        "hidden-note",
+        now + 130,
+      );
+      const lockedId = await create(
+        researchId,
+        "research",
+        "locked-note",
+        now + 125,
+      );
       await Promise.all([
         ctx.db.patch("forumThreads", hiddenId, { status: "hidden" }),
         ctx.db.patch("forumThreads", lockedId, { status: "locked" }),
-        create(experimentsId, "research-experiments", "experiment-newest", now + 110),
+        create(
+          experimentsId,
+          "research-experiments",
+          "experiment-newest",
+          now + 110,
+        ),
         create(researchId, "research", "research-current", now + 100),
         create(papersId, "research-papers", "paper-current", now + 90),
-        create(readingListId, "research-reading-list", "reading-current", now + 80),
+        create(
+          readingListId,
+          "research-reading-list",
+          "reading-current",
+          now + 80,
+        ),
         create(researchId, "research", "research-older-one", now + 70),
         create(researchId, "research", "research-older-two", now + 60),
         create(dataId, "research-data", "private-data-newest", now + 120),
@@ -3162,10 +3647,18 @@ describe("forum privacy regressions", () => {
       "research-older-one",
       "research-older-two",
     ]);
-    expect(new Set(feed.map((thread: ForumThreadResult) => thread._id)).size).toBe(feed.length);
-    expect(feed.map((thread: ForumThreadResult) => thread.categorySlug)).not.toContain("research-data");
-    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain("hidden-note");
-    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain("locked-note");
+    expect(
+      new Set(feed.map((thread: ForumThreadResult) => thread._id)).size,
+    ).toBe(feed.length);
+    expect(
+      feed.map((thread: ForumThreadResult) => thread.categorySlug),
+    ).not.toContain("research-data");
+    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
+      "hidden-note",
+    );
+    expect(feed.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
+      "locked-note",
+    );
 
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", ids.researchId, {
@@ -3242,14 +3735,12 @@ describe("forum privacy regressions", () => {
         days: 30,
         pageSize: 10,
       });
-      expect(result.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-        "fresh-popular-thread",
-        "fresh-quiet-thread",
-      ]);
-      expect(result.activityThreads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-        "fresh-popular-thread",
-        "fresh-quiet-thread",
-      ]);
+      expect(
+        result.threads.map((thread: ForumThreadResult) => thread.slug),
+      ).toEqual(["fresh-popular-thread", "fresh-quiet-thread"]);
+      expect(
+        result.activityThreads.map((thread: ForumThreadResult) => thread.slug),
+      ).toEqual(["fresh-popular-thread", "fresh-quiet-thread"]);
       expect(result.pagination.totalItems).toBe(2);
     } finally {
       vi.useRealTimers();
@@ -3317,8 +3808,9 @@ describe("forum privacy regressions", () => {
       t.query(api.forum.overview, {}),
     ]);
     expect(
-      categories.find((category: ForumCategoryResult) => category.slug === "public-square")
-        ?.lastThread,
+      categories.find(
+        (category: ForumCategoryResult) => category.slug === "public-square",
+      )?.lastThread,
     ).toMatchObject({
       author: "trustedauthor",
       lastPostAuthor: "trustedauthor",
@@ -3339,21 +3831,25 @@ describe("forum privacy regressions", () => {
       query: "lunar",
       pageSize: 10,
     });
-    expect(guestKeyword.threads.map((thread: ForumThreadResult) => thread.categorySlug)).toEqual([
-      "public-square",
-    ]);
-    expect(guestKeyword.posts.map((post: ForumPostResult) => post.categorySlug)).toEqual([
-      "public-square",
-    ]);
+    expect(
+      guestKeyword.threads.map(
+        (thread: ForumThreadResult) => thread.categorySlug,
+      ),
+    ).toEqual(["public-square"]);
+    expect(
+      guestKeyword.posts.map((post: ForumPostResult) => post.categorySlug),
+    ).toEqual(["public-square"]);
 
     const guestAuthor = await t.query(api.forum.search, {
       author: "trustedauthor",
       resultType: "threads",
       pageSize: 10,
     });
-    expect(guestAuthor.threads.map((thread: ForumThreadResult) => thread.categorySlug)).toEqual([
-      "public-square",
-    ]);
+    expect(
+      guestAuthor.threads.map(
+        (thread: ForumThreadResult) => thread.categorySlug,
+      ),
+    ).toEqual(["public-square"]);
 
     const asTrusted = t.withIdentity({
       subject: seed.trustedUserId,
@@ -3364,10 +3860,14 @@ describe("forum privacy regressions", () => {
       pageSize: 10,
     });
     expect(
-      trustedKeyword.threads.map((thread: ForumThreadResult) => thread.categorySlug).sort(),
+      trustedKeyword.threads
+        .map((thread: ForumThreadResult) => thread.categorySlug)
+        .sort(),
     ).toEqual(["public-square", "trusted-lab"]);
     expect(
-      trustedKeyword.posts.map((post: ForumPostResult) => post.categorySlug).sort(),
+      trustedKeyword.posts
+        .map((post: ForumPostResult) => post.categorySlug)
+        .sort(),
     ).toEqual(["public-square", "trusted-lab"]);
   });
 
@@ -3389,20 +3889,33 @@ describe("forum privacy regressions", () => {
       }
     });
     await completeForumSearchProjectionBackfill(t);
-    const second = await t.mutation(internal.forumSearchProjection.backfill, {});
-    expect(second).toMatchObject({ done: true, alreadyCompleted: true, processed: 0 });
+    const second = await t.mutation(
+      internal.forumSearchProjection.backfill,
+      {},
+    );
+    expect(second).toMatchObject({
+      done: true,
+      alreadyCompleted: true,
+      processed: 0,
+    });
 
-    const projections = await t.run(async (ctx) =>
-      await ctx.db.query("forumThreadSearchProjections").collect(),
+    const projections = await t.run(
+      async (ctx) =>
+        await ctx.db.query("forumThreadSearchProjections").collect(),
     );
     expect(projections.length).toBeGreaterThan(0);
     expect(projections.every((row) => row.excerpt.length <= 220)).toBe(true);
-    expect(projections.every((row) => row.searchText.length <= 4_096)).toBe(true);
-    const postProjectionCount = await t.run(async (ctx) =>
-      await ctx.db
-        .query("forumPostSearchProjections")
-        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
-        .collect(),
+    expect(projections.every((row) => row.searchText.length <= 4_096)).toBe(
+      true,
+    );
+    const postProjectionCount = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("forumPostSearchProjections")
+          .withIndex("by_threadId", (q) =>
+            q.eq("threadId", seed.publicThreadId),
+          )
+          .collect(),
     );
     expect(postProjectionCount).toHaveLength(402);
 
@@ -3411,7 +3924,10 @@ describe("forum privacy regressions", () => {
         viewAccess: "trusted",
       });
     });
-    const guest = await t.query(api.forum.search, { query: "lunar", pageSize: 10 });
+    const guest = await t.query(api.forum.search, {
+      query: "lunar",
+      pageSize: 10,
+    });
     expect(guest.threads).toEqual([]);
     expect(guest.posts).toEqual([]);
   });
@@ -3490,9 +4006,9 @@ describe("forum privacy regressions", () => {
         days: 30,
         pageSize: 10,
       });
-      expect(titleOnly.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-        "needle-title-thread",
-      ]);
+      expect(
+        titleOnly.threads.map((thread: ForumThreadResult) => thread.slug),
+      ).toEqual(["needle-title-thread"]);
       expect(titleOnly.posts).toEqual([]);
       expect(titleOnly.filters).toMatchObject({
         target: "titles",
@@ -3507,12 +4023,13 @@ describe("forum privacy regressions", () => {
         resultType: "threads",
         pageSize: 10,
       });
-      expect(bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.slug)).toEqual([
-        "needle-body-high-thread",
-        "needle-body-low-thread",
-      ]);
       expect(
-        bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.replyCount),
+        bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.slug),
+      ).toEqual(["needle-body-high-thread", "needle-body-low-thread"]);
+      expect(
+        bodiesByReplies.threads.map(
+          (thread: ForumThreadResult) => thread.replyCount,
+        ),
       ).toEqual([30, 2]);
       expect(
         bodiesByReplies.threads.map((thread: ForumThreadResult) => thread.slug),
@@ -3584,7 +4101,9 @@ describe("forum privacy regressions", () => {
       includeBoardAnnouncements: true,
     });
     expect(
-      guestAnnouncements.map((announcement: ForumAnnouncementResult) => announcement.title),
+      guestAnnouncements.map(
+        (announcement: ForumAnnouncementResult) => announcement.title,
+      ),
     ).toEqual(["Active global", "Active public"]);
     await expect(
       t.query(api.forum.getAnnouncement, { slug: "active-global" }),
@@ -3608,7 +4127,9 @@ describe("forum privacy regressions", () => {
       { includeBoardAnnouncements: true },
     );
     expect(
-      trustedAnnouncements.map((announcement: ForumAnnouncementResult) => announcement.title),
+      trustedAnnouncements.map(
+        (announcement: ForumAnnouncementResult) => announcement.title,
+      ),
     ).toEqual(["Active global", "Active public", "Active trusted"]);
   });
 
@@ -3662,11 +4183,9 @@ describe("forum privacy regressions", () => {
     });
 
     const documents = await t.query(api.forum.listHelpDocuments, {});
-    expect(documents.map((document: ForumDocumentResult) => document.title)).toEqual([
-      "Alpha help",
-      "Beta help",
-      "Zed help",
-    ]);
+    expect(
+      documents.map((document: ForumDocumentResult) => document.title),
+    ).toEqual(["Alpha help", "Beta help", "Zed help"]);
     expect(documents[0]).toMatchObject({
       title: "Alpha help",
       excerpt: "Alpha help body Read more",
@@ -4638,7 +5157,9 @@ describe("forum privacy regressions", () => {
     });
     expect(threadEdit.updated).toBe(true);
     expect(
-      threadEdit.thread.attachments.map((attachment: ForumAttachmentResult) => attachment._id),
+      threadEdit.thread.attachments.map(
+        (attachment: ForumAttachmentResult) => attachment._id,
+      ),
     ).toEqual([attachmentIds.rootKeep]);
 
     const replyEdit = await asTrusted.mutation(api.forum.updatePostContent, {
@@ -4650,7 +5171,9 @@ describe("forum privacy regressions", () => {
     });
     expect(replyEdit.updated).toBe(true);
     expect(
-      replyEdit.post.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
+      replyEdit.post.attachments?.map(
+        (attachment: ForumAttachmentResult) => attachment._id,
+      ),
     ).toEqual([attachmentIds.replyKeep]);
 
     const noOpReplyEdit = await asTrusted.mutation(
@@ -4664,7 +5187,9 @@ describe("forum privacy regressions", () => {
     );
     expect(noOpReplyEdit.updated).toBe(false);
     expect(
-      noOpReplyEdit.post.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
+      noOpReplyEdit.post.attachments?.map(
+        (attachment: ForumAttachmentResult) => attachment._id,
+      ),
     ).toEqual([attachmentIds.replyKeep]);
 
     const detail = await asTrusted.query(api.forum.getThread, {
@@ -4672,12 +5197,16 @@ describe("forum privacy regressions", () => {
       threadSlug: "public-lunar-brief",
     });
     expect(
-      detail.thread?.attachments.map((attachment: ForumAttachmentResult) => attachment._id),
+      detail.thread?.attachments.map(
+        (attachment: ForumAttachmentResult) => attachment._id,
+      ),
     ).toEqual([attachmentIds.rootKeep]);
     expect(
       detail.replies.page
         .find((post: ForumPostResult) => post._id === seed.publicPostId)
-        ?.attachments?.map((attachment: ForumAttachmentResult) => attachment._id),
+        ?.attachments?.map(
+          (attachment: ForumAttachmentResult) => attachment._id,
+        ),
     ).toEqual([attachmentIds.replyKeep]);
 
     const rows = await t.run(async (ctx) => ({
@@ -5104,9 +5633,9 @@ describe("forum privacy regressions", () => {
       resultType: "threads",
       pageSize: 10,
     });
-    expect(initialSearch.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
-      "public-lunar-brief",
-    );
+    expect(
+      initialSearch.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toContain("public-lunar-brief");
 
     await expect(
       asOtherTrusted.mutation(api.forum.updatePollContent, {
@@ -5133,36 +5662,42 @@ describe("forum privacy regressions", () => {
       question: "Which nebula should we study?",
       viewerCanEdit: true,
     });
-    expect(detail.poll?.options.map((option: ForumOptionResult) => option.label)).toEqual([
-      "Orion",
-      "Crab",
-    ]);
+    expect(
+      detail.poll?.options.map((option: ForumOptionResult) => option.label),
+    ).toEqual(["Orion", "Crab"]);
 
     const search = await asTrusted.query(api.forum.search, {
       query: "nebula",
       resultType: "threads",
       pageSize: 10,
     });
-    expect(search.threads.map((thread: ForumThreadResult) => thread.slug)).toContain(
-      "public-lunar-brief",
-    );
+    expect(
+      search.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).toContain("public-lunar-brief");
 
     const staleSearch = await asTrusted.query(api.forum.search, {
       query: "morning",
       resultType: "threads",
       pageSize: 10,
     });
-    expect(staleSearch.threads.map((thread: ForumThreadResult) => thread.slug)).not.toContain(
-      "public-lunar-brief",
+    expect(
+      staleSearch.threads.map((thread: ForumThreadResult) => thread.slug),
+    ).not.toContain("public-lunar-brief");
+    const pollProjection = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("forumThreadSearchProjections")
+          .withIndex("by_threadId", (q) =>
+            q.eq("threadId", seed.publicThreadId),
+          )
+          .unique(),
     );
-    const pollProjection = await t.run(async (ctx) =>
-      await ctx.db
-        .query("forumThreadSearchProjections")
-        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
-        .unique(),
+    expect(pollProjection?.searchText).toContain(
+      "Which nebula should we study?",
     );
-    expect(pollProjection?.searchText).toContain("Which nebula should we study?");
-    expect(pollProjection?.searchText).not.toContain("Which launch window should we use?");
+    expect(pollProjection?.searchText).not.toContain(
+      "Which launch window should we use?",
+    );
 
     await asTrusted.mutation(api.forum.votePoll, {
       pollId,
@@ -5346,12 +5881,12 @@ describe("forum privacy regressions", () => {
       api.forum.listMyForumRelationships,
       { limit: 10 },
     );
-    expect(relationships.buddies.map((record: ForumRecordResult) => record.username)).toEqual([
-      "othertrusted",
-    ]);
-    expect(relationships.ignored.map((record: ForumRecordResult) => record.username)).toEqual([
-      "othertrusted",
-    ]);
+    expect(
+      relationships.buddies.map((record: ForumRecordResult) => record.username),
+    ).toEqual(["othertrusted"]);
+    expect(
+      relationships.ignored.map((record: ForumRecordResult) => record.username),
+    ).toEqual(["othertrusted"]);
 
     await expect(
       asTrusted.mutation(api.forum.updateForumRelationship, {
@@ -5469,7 +6004,10 @@ describe("forum privacy regressions", () => {
         }>;
       },
       slug: string,
-    ) => overview.categories.find((category: ForumCategoryResult) => category.slug === slug);
+    ) =>
+      overview.categories.find(
+        (category: ForumCategoryResult) => category.slug === slug,
+      );
     const readAt = 1_800_000_010_000;
 
     const initial = await asTrusted.query(api.forum.overview, {});
@@ -5765,9 +6303,9 @@ describe("forum privacy regressions", () => {
       box: "inbox",
       pageSize: 10,
     });
-    expect(ownerInbox.messages.map((message: ForumMessageResult) => message._id)).not.toContain(
-      messageId,
-    );
+    expect(
+      ownerInbox.messages.map((message: ForumMessageResult) => message._id),
+    ).not.toContain(messageId);
 
     await expect(
       asTrusted.mutation(api.forum.markPrivateMessageRead, { messageId }),
@@ -6377,11 +6915,12 @@ describe("forum privacy regressions", () => {
       threadSlug: "trusted-lunar-brief",
       pageSize: 5,
     });
-    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
-      seed.trustedPostId,
-      seed.publicPostId,
-    ]);
-    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([2, 3]);
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post._id),
+    ).toEqual([seed.trustedPostId, seed.publicPostId]);
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post.postNumber),
+    ).toEqual([2, 3]);
   });
 
   test("moderators can split selected replies into a new thread", async () => {
@@ -6569,7 +7108,9 @@ describe("forum privacy regressions", () => {
         .unique(),
       reply: await ctx.db
         .query("forumPostSearchProjections")
-        .withIndex("by_postId", (q) => q.eq("postId", related.extraPublicPostId))
+        .withIndex("by_postId", (q) =>
+          q.eq("postId", related.extraPublicPostId),
+        )
         .unique(),
       newThread: await ctx.db
         .query("forumThreadSearchProjections")
@@ -6610,10 +7151,12 @@ describe("forum privacy regressions", () => {
       pageSize: 5,
     });
     expect(detail.thread.body).toBe("Public reply about lunar launch logs.");
-    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
-      related.extraPublicPostId,
-    ]);
-    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([2]);
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post._id),
+    ).toEqual([related.extraPublicPostId]);
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post.postNumber),
+    ).toEqual([2]);
   });
 
   test("splitting replies requires admin access and a valid single-source selection", async () => {
@@ -6868,14 +7411,16 @@ describe("forum privacy regressions", () => {
       threadSlug: "trusted-lunar-brief",
       pageSize: 5,
     });
-    expect(detail.replies.page.map((post: ForumPostResult) => post._id)).toEqual([
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post._id),
+    ).toEqual([
       seed.trustedPostId,
       result.sourceOpenerPostId,
       seed.publicPostId,
     ]);
-    expect(detail.replies.page.map((post: ForumPostResult) => post.postNumber)).toEqual([
-      2, 3, 4,
-    ]);
+    expect(
+      detail.replies.page.map((post: ForumPostResult) => post.postNumber),
+    ).toEqual([2, 3, 4]);
   });
 
   test("moved historical replies become unread in the destination thread", async () => {
@@ -7322,7 +7867,9 @@ describe("forum privacy regressions", () => {
       });
 
       const movedPostNumbers = detail.replies.page
-        .filter((post: ForumPostResult) => post.threadId === seed.trustedThreadId)
+        .filter(
+          (post: ForumPostResult) => post.threadId === seed.trustedThreadId,
+        )
         .map((post: ForumPostResult) => post.postNumber);
       expect(movedPostNumbers).toEqual([2, 3, 4]);
     } finally {

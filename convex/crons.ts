@@ -85,8 +85,8 @@ crons.interval(
 crons.interval(
   "recover pending webhook deliveries",
   { minutes: 5 },
-  internal.evidenceWebhooks.recoverPendingDeliveries,
-  { limit: 50 },
+  runWatchdogMutationRef,
+  { jobKey: "evidence-webhook-recovery" },
 );
 crons.interval(
   "dispatch pending watchlist webhooks",
@@ -124,8 +124,8 @@ crons.cron(
 crons.cron(
   "check daily SYMBaiEX newsletter schedule",
   "*/15 * * * *",
-  internal.dailyNewsletter.checkDailyNewsletterSchedule,
-  {},
+  runWatchdogActionRef,
+  { jobKey: "newsletter-schedule" },
 );
 crons.cron(
   "draft weekly SYMBaiEX field note",

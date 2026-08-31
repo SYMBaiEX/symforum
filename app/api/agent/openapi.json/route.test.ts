@@ -141,4 +141,12 @@ describe("agent API OpenAPI contract", () => {
       expect(String(operation.description).length).toBeGreaterThan(30);
     }
   });
+
+  test("publishes structured errors and verifiable artifact schemas", async () => {
+    const document = await GET().json();
+    expect(document.components.schemas.AgentError.properties.retryAfter).toMatchObject({ type: "integer", minimum: 0 });
+    expect(document.components.schemas.ArtifactMetadata.properties.sha256.pattern).toContain("64");
+    expect(document.components.schemas.ExportManifest.required).toEqual(expect.arrayContaining(["checksum", "recordCount"]));
+    expect(document.paths["/v1/exports"].post.responses["429"].content["application/json"].schema.$ref).toBe("#/components/schemas/AgentError");
+  });
 });

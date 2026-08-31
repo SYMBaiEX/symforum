@@ -8,7 +8,10 @@ export async function register() {
   }
 
   const { registerOTel } = await import("@vercel/otel");
+  const { registerTelemetry } = await import("ai");
+  const { OpenTelemetry } = await import("@ai-sdk/otel");
   registerOTel("symbaiex");
+  registerTelemetry(new OpenTelemetry({ runtimeContext: true }));
 }
 
 export function onRequestError(

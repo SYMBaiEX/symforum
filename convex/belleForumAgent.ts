@@ -33,12 +33,13 @@ import {
 } from "./sukiForumAgent";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
+import { buildForumAgentClaimCitations } from "./forumAgentClaimProvenance";
+import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION =
-  "belle-forum-v12-openrouter-free-natural-voice";
+const BELLE_PROMPT_VERSION = "belle-forum-v12-openrouter-free-natural-voice";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
@@ -113,6 +114,17 @@ const digestDraftSchema = z.object({
     )
     .length(BELLE_DIGEST_STORY_LIMIT),
   closing: z.string().min(80).max(750),
+  claims: z
+    .array(
+      z.object({
+        claim: z.string().min(12).max(400),
+        sourceCandidateId: z.string().min(1).max(120),
+        confidence: z.enum(["high", "medium"]),
+        kind: z.enum(["fact", "analysis"]),
+      }),
+    )
+    .min(2)
+    .max(12),
 });
 
 type BelleDigestResult =
@@ -304,6 +316,70 @@ export const runDailyHackerNewsDigest = internalAction({
         125,
       )}`;
       assertAgentPublicationHygiene([title, body]);
+      const provenanceSnapshots = snapshots.map((snapshot, index) => ({
+        ...snapshot,
+        sourceKey: `belle-hn-${indexed.stories[index]!.hnItemId}-${runDate}`,
+        url:
+          indexed.stories[index]!.url ??
+          `https://news.ycombinator.com/item?id=${indexed.stories[index]!.hnItemId}`,
+      }));
+      const claimCitations = buildForumAgentClaimCitations({
+        claims: draft.claims,
+        snapshots: provenanceSnapshots,
+        body,
+      });
+      const digestQualityScore = Math.round(
+        claimCitations.reduce(
+          (total, citation) => total + citation.supportScore,
+          0,
+        ) / claimCitations.length,
+      );
+      await ctx.runMutation(
+        internal.forumAgentResearchPackets.beginResearchPacket,
+        {
+          runKey: claim.runKey,
+          agentSlug: "belle",
+          sources: provenanceSnapshots.map((snapshot) => ({
+            sourceKey: snapshot.sourceKey,
+            sourceUrl: snapshot.url,
+            snapshotHash: forumAgentResearchPayloadHash([
+              snapshot.id,
+              snapshot.sourceKey,
+              snapshot.url,
+              snapshot.articleTitle,
+              snapshot.articleDescription,
+              snapshot.articleText,
+            ]),
+            titleHash: forumAgentResearchPayloadHash([snapshot.articleTitle]),
+          })),
+        },
+      );
+      await ctx.runMutation(
+        internal.forumAgentResearchPackets.recordDraftRevision,
+        {
+          runKey: claim.runKey,
+          agentSlug: "belle",
+          revision: 0,
+          title,
+          body,
+          claimHashes: claimCitations.map((citation) => citation.claimHash),
+          qualityScore: digestQualityScore,
+        },
+      );
+      await ctx.runMutation(
+        internal.forumAgentResearchPackets.recordPublicationDecision,
+        {
+          runKey: claim.runKey,
+          agentSlug: "belle",
+          revision: 0,
+          title,
+          body,
+          claimHashes: claimCitations.map((citation) => citation.claimHash),
+          qualityScore: digestQualityScore,
+          publishable: true,
+          reason: "digest-grounding-and-hygiene-gates-passed",
+        },
+      );
       const published = await ctx.runMutation(
         internal.forum.publishSukiForumThread,
         {
@@ -319,6 +395,7 @@ export const runDailyHackerNewsDigest = internalAction({
               story.url ??
               `https://news.ycombinator.com/item?id=${story.hnItemId}`,
           })),
+          claimCitations,
           attachment:
             cachedImage === undefined
               ? undefined
@@ -425,6 +502,7 @@ function digestPrompt(
         const snapshot = snapshotsById.get(story.hnItemId);
         return {
           hnItemId: story.hnItemId,
+          sourceCandidateId: snapshot?.id,
           rank: story.rank,
           title: story.title,
           host: story.host,
@@ -533,6 +611,7 @@ Reporting rules:
 - Avoid hype, press-release language, shallow cheerleading, and cynical snark.
 - The headline should be catchy, specific, and faithful to the edition's unifying story. Do not include the date; the system adds it.
 - Return briefs only for supplied hnItemId values and cover as many supplied stories as the evidence supports.
+- Submit 2-12 concise claims covering the edition's consequential facts and analysis. Each sourceCandidateId must be copied exactly from the supplied story packet.
 - The opening establishes the day's tension. The closing explains what the collection suggests about where technology is moving.
 Return only the requested structured digest.`;
 

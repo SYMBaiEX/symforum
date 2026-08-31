@@ -3,7 +3,12 @@ import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 
 const analyticsSource = v.union(
@@ -71,6 +76,7 @@ export const record = mutation({
         },
       );
       if (!capacity.ok) {
+        await incrementDailyMetric(ctx, now, "droppedRateLimited");
         return {
           recorded: false,
           deduped: false,
@@ -117,6 +123,7 @@ export const record = mutation({
         metadataJson: optionalClean(args.metadataJson, METADATA_LIMIT),
       }),
     });
+    await incrementDailyMetric(ctx, now, "captured");
 
     return { recorded: true, deduped: false, id };
   },
@@ -178,6 +185,18 @@ export const summaryAdmin = query({
       .take(ADMIN_EVENT_LIMIT);
     const events = sample.filter((event) => event.createdAt >= start);
     const pageViews = events.filter((event) => event.name === "page_view");
+    const metrics = await ctx.db
+      .query("analyticsDailyMetrics")
+      .withIndex("by_date", (q) =>
+        q.gte("date", dayKey(start)).lte("date", dayKey(now)),
+      )
+      .take(days);
+    const captured = metrics.reduce((total, row) => total + row.captured, 0);
+    const droppedRateLimited = metrics.reduce(
+      (total, row) => total + row.droppedRateLimited,
+      0,
+    );
+    const attempts = captured + droppedRateLimited;
     const todayKey = dayKey(now);
 
     return {
@@ -194,6 +213,11 @@ export const summaryAdmin = query({
         todayEvents: events.filter(
           (event) => dayKey(event.createdAt) === todayKey,
         ).length,
+      },
+      capture: {
+        captured,
+        droppedRateLimited,
+        captureRatio: attempts === 0 ? null : captured / attempts,
       },
       topEvents: ranked(events, (event) => event.name, 8),
       topPages: ranked(pageViews, (event) => event.path ?? "(unknown)", 10),
@@ -283,6 +307,31 @@ function uniqueCount(values: Array<string | undefined>) {
 
 function dayKey(value: number) {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+async function incrementDailyMetric(
+  ctx: MutationCtx,
+  timestamp: number,
+  field: "captured" | "droppedRateLimited",
+) {
+  const date = dayKey(timestamp);
+  const existing = await ctx.db
+    .query("analyticsDailyMetrics")
+    .withIndex("by_date", (q) => q.eq("date", date))
+    .unique();
+  if (existing === null) {
+    await ctx.db.insert("analyticsDailyMetrics", {
+      date,
+      captured: field === "captured" ? 1 : 0,
+      droppedRateLimited: field === "droppedRateLimited" ? 1 : 0,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+  await ctx.db.patch("analyticsDailyMetrics", existing._id, {
+    [field]: existing[field] + 1,
+    updatedAt: timestamp,
+  });
 }
 
 function referrerHost(value: string | undefined) {

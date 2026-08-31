@@ -3,11 +3,13 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { EmailEvent } from "@convex-dev/resend";
 import { components } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
   mutation,
+  type MutationCtx,
 } from "./_generated/server";
 
 export const contactRequestStatusValidator = v.union(
@@ -41,10 +43,7 @@ const publicContactRateLimiter = new RateLimiter(components.rateLimiter, {
 });
 
 function cleanText(value: string, maxLength: number) {
-  return value
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
+  return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function cleanMultiline(value: string, maxLength: number) {
@@ -132,7 +131,8 @@ export const submit = mutation({
       if (!capacity.ok) {
         throw new ConvexError({
           code: "RATE_LIMITED",
-          message: "Contact form capacity is temporarily full. Please try again later.",
+          message:
+            "Contact form capacity is temporarily full. Please try again later.",
           retryAfter: capacity.retryAfter,
         });
       }
@@ -188,11 +188,32 @@ export const markContactRequestEmailState = internalMutation({
     requestId: v.id("contactRequests"),
     emailedAt: v.optional(v.number()),
     emailError: v.optional(v.string()),
+    resendEmailId: v.optional(v.string()),
+    emailDeliveryStatus: v.optional(
+      v.union(
+        v.literal("queued"),
+        v.literal("sent"),
+        v.literal("delivered"),
+        v.literal("bounced"),
+        v.literal("complained"),
+        v.literal("failed"),
+        v.literal("delivery_delayed"),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     const patch: {
       emailedAt?: number;
       emailError?: string;
+      resendEmailId?: string;
+      emailDeliveryStatus?:
+        | "queued"
+        | "sent"
+        | "delivered"
+        | "bounced"
+        | "complained"
+        | "failed"
+        | "delivery_delayed";
       updatedAt: number;
     } = {
       updatedAt: Date.now(),
@@ -200,8 +221,86 @@ export const markContactRequestEmailState = internalMutation({
     if (args.emailedAt !== undefined) {
       patch.emailedAt = args.emailedAt;
     }
+    if (args.resendEmailId !== undefined) {
+      patch.resendEmailId = args.resendEmailId;
+    }
+    if (args.emailDeliveryStatus !== undefined) {
+      patch.emailDeliveryStatus = args.emailDeliveryStatus;
+    }
     patch.emailError = args.emailError;
     await ctx.db.patch("contactRequests", args.requestId, patch);
     return null;
   },
 });
+
+export async function applyContactEmailEvent(
+  ctx: MutationCtx,
+  args: { resendEmailId: string; event: EmailEvent },
+) {
+  const request = await ctx.db
+    .query("contactRequests")
+    .withIndex("by_resendEmailId", (q) =>
+      q.eq("resendEmailId", args.resendEmailId),
+    )
+    .unique();
+  if (request === null) {
+    return false;
+  }
+
+  const eventId = `${args.resendEmailId}:${args.event.type}:${args.event.created_at}`;
+  const existing = await ctx.db
+    .query("contactEmailEvents")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .unique();
+  if (existing !== null) {
+    return true;
+  }
+
+  const now = Date.now();
+  await ctx.db.insert("contactEmailEvents", {
+    eventId,
+    resendEmailId: args.resendEmailId,
+    eventType: args.event.type,
+    receivedAt: now,
+  });
+  const status = contactDeliveryStatus(args.event.type);
+  const error =
+    status === "bounced"
+      ? "Contact notification bounced"
+      : status === "complained"
+        ? "Contact notification was marked as spam"
+        : status === "failed"
+          ? "Contact notification failed"
+          : undefined;
+  await ctx.db.patch("contactRequests", request._id, {
+    ...(status === null ? {} : { emailDeliveryStatus: status }),
+    ...(status === "sent" || status === "delivered"
+      ? { emailedAt: request.emailedAt ?? now }
+      : {}),
+    emailEventAt: now,
+    ...(status === null ? {} : { emailError: error }),
+    updatedAt: now,
+  });
+  return true;
+}
+
+function contactDeliveryStatus(eventType: EmailEvent["type"]) {
+  switch (eventType) {
+    case "email.sent":
+      return "sent" as const;
+    case "email.delivered":
+      return "delivered" as const;
+    case "email.bounced":
+      return "bounced" as const;
+    case "email.complained":
+      return "complained" as const;
+    case "email.delivery_delayed":
+      return "delivery_delayed" as const;
+    case "email.failed":
+      return "failed" as const;
+    default:
+      // Engagement-only events such as opens/clicks are retained in the
+      // idempotency ledger but must not overwrite the delivery lifecycle.
+      return null;
+  }
+}

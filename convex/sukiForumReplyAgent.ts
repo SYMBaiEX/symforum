@@ -1,8 +1,9 @@
 "use node";
 
-import { APICallError, generateText } from "ai";
+import { Agent } from "@convex-dev/agent";
+import { APICallError, type LanguageModel } from "ai";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   runWithModelFallback,
@@ -19,16 +20,28 @@ import {
 } from "../lib/openrouter-model-profile";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
-import {
-  activeForumAgentBio,
-  forumAgentRosterEntry,
-} from "./forumAgentRoster";
+import { activeForumAgentBio, forumAgentRosterEntry } from "./forumAgentRoster";
 import { forumAgentVoice, forumAgentVoiceSummary } from "./forumAgentVoices";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION =
   "forum-replies-v10-openrouter-free-roster-specialty-natural-voice";
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
+type AgentLanguageModel = Extract<
+  LanguageModel,
+  { specificationVersion: "v4" }
+>;
+
+export const FORUM_REPLY_AGENT_MESSAGE_OPTIONS = {
+  contextOptions: {
+    recentMessages: 20,
+    excludeToolMessages: true,
+    searchOtherThreads: false,
+  },
+  storageOptions: {
+    saveMessages: "promptAndOutput",
+  },
+} as const;
 
 type SukiReplyDecision =
   | {
@@ -98,7 +111,11 @@ async function runReplySweepForAgent(
   agentSlug: string,
 ): Promise<SukiReplyRunResult> {
   const rosterEntry = forumAgentRosterEntry(agentSlug);
-  if (agentSlug !== "suki" && agentSlug !== "belle" && rosterEntry === undefined) {
+  if (
+    agentSlug !== "suki" &&
+    agentSlug !== "belle" &&
+    rosterEntry === undefined
+  ) {
     return { status: "skipped", reason: "unknown-agent" };
   }
   const agentName =
@@ -106,7 +123,7 @@ async function runReplySweepForAgent(
       ? "Belle"
       : agentSlug === "suki"
         ? "Suki"
-        : rosterEntry?.name ?? agentSlug;
+        : (rosterEntry?.name ?? agentSlug);
   const attempt = args.attempt ?? 0;
   const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
   if (agentSlug === "belle" || agentSlug === "suki") {
@@ -166,20 +183,32 @@ async function runReplySweepForAgent(
         agent: agentSlug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: 120_000,
-        run: async (candidate, signal) =>
-          await generateText({
-            model: candidate.model,
+        run: async (candidate, signal) => {
+          const replyAgent = new Agent(components.agent, {
+            name: agentName,
+            // All current OpenRouter candidates come from the AI SDK v7
+            // openai-compatible v4 factory. The broader shared route type also
+            // permits legacy model protocols used by unrelated call sites.
+            languageModel: candidate.model as AgentLanguageModel,
             instructions: modelInstructions(
               candidate.provider,
               "reply",
               replyInstructions(agentSlug),
             ),
-            prompt: sukiReplyPrompt(claim.candidate, agentName),
-            maxOutputTokens: 1_400,
-            ...modelGenerationSettings(candidate.provider, "reply"),
-            providerOptions: candidate.providerOptions,
-            abortSignal: signal,
-          }),
+            ...FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
+          });
+          return await replyAgent.generateText(
+            ctx,
+            { threadId: claim.conversationId },
+            {
+              prompt: sukiReplyPrompt(claim.candidate, agentName),
+              maxOutputTokens: 1_400,
+              ...modelGenerationSettings(candidate.provider, "reply"),
+              providerOptions: candidate.providerOptions,
+              abortSignal: signal,
+            },
+          );
+        },
       },
     );
     const result = generation.value;

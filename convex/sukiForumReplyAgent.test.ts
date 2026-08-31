@@ -2,8 +2,15 @@
 
 import { describe, expect, test } from "vitest";
 
-import { forumReplyAgentCandidates, isSukiReplyWorthReviewing } from "./forum";
-import { parseSukiReplyDecision } from "./sukiForumReplyAgent";
+import {
+  forumReplyAdmissionRejectionReason,
+  forumReplyAgentCandidates,
+  isSukiReplyWorthReviewing,
+} from "./forum";
+import {
+  FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
+  parseSukiReplyDecision,
+} from "./sukiForumReplyAgent";
 
 describe("Suki forum reply helpers", () => {
   test("parses useful BBCode replies", () => {
@@ -70,7 +77,10 @@ describe("Suki forum reply helpers", () => {
 
   test("routes human discussions through deterministic specialty rosters", () => {
     const research = forumReplyAgentCandidates("ai-research", "thread-42");
-    const security = forumReplyAgentCandidates("hacking-security-news", "thread-42");
+    const security = forumReplyAgentCandidates(
+      "hacking-security-news",
+      "thread-42",
+    );
 
     expect(research.slice(0, 4).sort()).toEqual(
       ["ari-mercer", "maya-fen", "nia-calder", "rhea-nolan"].sort(),
@@ -82,5 +92,46 @@ describe("Suki forum reply helpers", () => {
     expect(forumReplyAgentCandidates("ai-research", "thread-42")).toEqual(
       research,
     );
+  });
+
+  test("admits only substantive human content on active public boards", () => {
+    const eligible = {
+      authorIsAgent: false,
+      body: "The rollback works in a clean environment, but why does the health check fail after the second deploy?",
+      categoryIsBoard: true,
+      categoryStatus: "active",
+      categoryViewAccess: "public",
+      threadStatus: "active",
+    };
+    expect(forumReplyAdmissionRejectionReason(eligible)).toBeNull();
+    expect(
+      forumReplyAdmissionRejectionReason({
+        ...eligible,
+        categoryViewAccess: "trusted",
+      }),
+    ).toBe("not-public");
+    expect(
+      forumReplyAdmissionRejectionReason({
+        ...eligible,
+        authorIsAgent: true,
+      }),
+    ).toBe("agent-author");
+    expect(
+      forumReplyAdmissionRejectionReason({ ...eligible, body: "Thanks!" }),
+    ).toBe("not-substantive");
+  });
+
+  test("bounds private continuity to 20 same-thread non-tool messages", () => {
+    expect(FORUM_REPLY_AGENT_MESSAGE_OPTIONS).toEqual({
+      contextOptions: {
+        recentMessages: 20,
+        excludeToolMessages: true,
+        searchOtherThreads: false,
+      },
+      storageOptions: { saveMessages: "promptAndOutput" },
+    });
+    expect(
+      "searchOptions" in FORUM_REPLY_AGENT_MESSAGE_OPTIONS.contextOptions,
+    ).toBe(false);
   });
 });

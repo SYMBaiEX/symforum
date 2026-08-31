@@ -47,6 +47,36 @@ export type ExportJob = ResearchJob;
 export type JsonObject = Record<string, unknown>;
 export type McpPayload = JsonObject;
 
+export type Page<T> = { items: T[]; nextCursor?: string | null };
+export type ArtifactMetadata = {
+  sha256?: string;
+  byteLength?: number;
+  contentType?: string;
+  generatedAt?: number;
+  expiresAt?: number;
+};
+export type ExportManifest = JsonObject & {
+  checksum?: string;
+  sha256?: string;
+  recordCount?: number;
+  artifactByteLength?: number;
+};
+
+export type WaitOptions = {
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  signal?: AbortSignal;
+};
+
+export type WebhookVerificationInput = {
+  secret: string;
+  timestamp: string;
+  signature: string;
+  body: string | Uint8Array;
+  nowSeconds?: number;
+  toleranceSeconds?: number;
+};
+
 export type EvidenceDataset = {
   datasetId: string;
   datasetKey: string;
@@ -151,10 +181,56 @@ export class AgentApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "AgentApiError";
   }
+}
+
+/** Verifies the AsyncAPI v1 HMAC signature before a webhook body is trusted. */
+export async function verifyWebhookSignature(
+  input: WebhookVerificationInput,
+): Promise<boolean> {
+  if (
+    !/^(0|[1-9][0-9]*)$/.test(input.timestamp) ||
+    !/^v1=[a-f0-9]{64}$/.test(input.signature)
+  )
+    return false;
+  const now = input.nowSeconds ?? Math.floor(Date.now() / 1_000);
+  const tolerance = input.toleranceSeconds ?? 300;
+  const timestamp = Number(input.timestamp);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    !Number.isSafeInteger(tolerance) ||
+    tolerance < 0 ||
+    Math.abs(now - timestamp) > tolerance
+  )
+    return false;
+  const encoder = new TextEncoder();
+  const body =
+    typeof input.body === "string" ? encoder.encode(input.body) : input.body;
+  const signed = new Uint8Array(
+    encoder.encode(`${input.timestamp}.`).byteLength + body.byteLength,
+  );
+  signed.set(encoder.encode(`${input.timestamp}.`));
+  signed.set(body, encoder.encode(`${input.timestamp}.`).byteLength);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(input.secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const expected = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, signed),
+  );
+  const received = hexBytes(input.signature.slice(3));
+  if (!received || received.byteLength !== expected.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < expected.byteLength; index += 1)
+    difference |= expected[index]! ^ received[index]!;
+  return difference === 0;
 }
 
 export type AgentClientOptions = {
@@ -397,6 +473,17 @@ export class AgentClient {
     );
   }
 
+  async waitForResearch<T extends ResearchJob = ResearchJob>(
+    jobId: string,
+    options: WaitOptions = {},
+  ): Promise<T> {
+    return await this.waitForJob<T>(
+      jobId,
+      (id) => this.researchJob<T>(id),
+      options,
+    );
+  }
+
   async createExport(
     datasetId: string,
     idempotencyKey: string,
@@ -425,6 +512,83 @@ export class AgentClient {
     return await this.requestBytes(
       `/api/agent/v1/exports/${encodePathSegment(jobId)}/manifest`,
     );
+  }
+
+  async waitForExport<T extends ExportJob = ExportJob>(
+    jobId: string,
+    options: WaitOptions = {},
+  ): Promise<T> {
+    return await this.waitForJob<T>(
+      jobId,
+      (id) => this.exportJob<T>(id),
+      options,
+    );
+  }
+
+  async verifyExportManifest(
+    jobId: string,
+    artifact?: Uint8Array,
+  ): Promise<ExportManifest> {
+    const bytes = await this.exportManifest(jobId);
+    let manifest: ExportManifest;
+    try {
+      manifest = JSON.parse(new TextDecoder().decode(bytes)) as ExportManifest;
+    } catch {
+      throw new AgentApiError(
+        200,
+        "INVALID_MANIFEST",
+        "The export manifest is invalid.",
+      );
+    }
+    if (!artifact) return manifest;
+    const expected = manifest.sha256 ?? manifest.checksum;
+    if (typeof expected !== "string" || !/^[a-fA-F0-9]{64}$/.test(expected))
+      throw new AgentApiError(
+        200,
+        "INVALID_MANIFEST",
+        "The export manifest has no valid SHA-256 checksum.",
+      );
+    const actual = await sha256Hex(artifact);
+    if (actual !== expected.toLowerCase())
+      throw new AgentApiError(
+        200,
+        "CHECKSUM_MISMATCH",
+        "The export artifact checksum does not match its manifest.",
+      );
+    if (
+      typeof manifest.artifactByteLength === "number" &&
+      manifest.artifactByteLength !== artifact.byteLength
+    )
+      throw new AgentApiError(
+        200,
+        "ARTIFACT_SIZE_MISMATCH",
+        "The export artifact size does not match its manifest.",
+      );
+    return manifest;
+  }
+
+  async *paginate<T>(
+    path: string,
+    options: { limit?: number; cursor?: string } = {},
+  ): AsyncGenerator<T, void, void> {
+    let cursor = options.cursor;
+    do {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined)
+        params.set("limit", String(validLimit(options.limit)));
+      if (cursor) params.set("cursor", validIdentifier(cursor, "cursor", 512));
+      const page = await this.request<Page<T>>(
+        `${path}${params.size ? `?${params}` : ""}`,
+      );
+      if (!Array.isArray(page.items))
+        throw new AgentApiError(
+          502,
+          "INVALID_RESPONSE",
+          "The platform returned an invalid pagination response.",
+        );
+      for (const item of page.items) yield item;
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
   }
 
   async webhookAvailability(): Promise<{ enabled: boolean }> {
@@ -559,6 +723,35 @@ export class AgentClient {
     });
   }
 
+  private async waitForJob<T extends ResearchJob>(
+    jobId: string,
+    read: (jobId: string) => Promise<T>,
+    options: WaitOptions,
+  ): Promise<T> {
+    const timeoutMs = validWaitTimeout(options.timeoutMs ?? 60_000);
+    const pollIntervalMs = validWaitInterval(options.pollIntervalMs ?? 1_000);
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      if (options.signal?.aborted)
+        throw new AgentApiError(
+          408,
+          "REQUEST_ABORTED",
+          "Waiting for the job was aborted.",
+        );
+      const job = await read(jobId);
+      if (["completed", "failed", "cancelled", "expired"].includes(job.status))
+        return job;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0)
+        throw new AgentApiError(
+          408,
+          "WAIT_TIMEOUT",
+          "Waiting for the job timed out.",
+        );
+      await delay(Math.min(pollIntervalMs, remaining), options.signal);
+    }
+  }
+
   private async get<T>(resource: string, limit?: number): Promise<T> {
     const query = limit === undefined ? "" : `?limit=${validLimit(limit)}`;
     return await this.request<T>(`/api/agent/v1/${resource}${query}`);
@@ -617,7 +810,12 @@ export class AgentClient {
       });
       const payload = await readJson(response);
       if (!response.ok)
-        throw toApiError(response.status, payload, token ?? undefined);
+        throw toApiError(
+          response.status,
+          payload,
+          token ?? undefined,
+          response.headers.get("retry-after"),
+        );
       return payload as T;
     });
   }
@@ -642,7 +840,12 @@ export class AgentClient {
         signal,
       });
       if (!response.ok)
-        throw toApiError(response.status, await readJson(response), token);
+        throw toApiError(
+          response.status,
+          await readJson(response),
+          token,
+          response.headers.get("retry-after"),
+        );
       assertResponseSize(response, 10 * 1024 * 1024);
       const body = new Uint8Array(await response.arrayBuffer());
       if (body.byteLength > 10 * 1024 * 1024)
@@ -717,6 +920,52 @@ function validTimeout(value: number, label: string) {
   if (!Number.isSafeInteger(value) || value < 1 || value > 120_000)
     throw new TypeError(`${label} must be an integer between 1 and 120000.`);
   return value;
+}
+
+function validWaitTimeout(value: number) {
+  return validTimeout(value, "timeoutMs");
+}
+function validWaitInterval(value: number) {
+  if (!Number.isSafeInteger(value) || value < 50 || value > 30_000)
+    throw new TypeError(
+      "pollIntervalMs must be an integer between 50 and 30000.",
+    );
+  return value;
+}
+
+async function delay(milliseconds: number, signal?: AbortSignal) {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(resolve, milliseconds);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout);
+        reject(
+          new AgentApiError(
+            408,
+            "REQUEST_ABORTED",
+            "Waiting for the job was aborted.",
+          ),
+        );
+      },
+      { once: true },
+    );
+  });
+}
+
+async function sha256Hex(value: Uint8Array) {
+  const digest = await crypto.subtle.digest("SHA-256", value as BufferSource);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexBytes(value: string) {
+  if (!/^[a-f0-9]{64}$/.test(value)) return null;
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < bytes.length; index += 1)
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  return bytes;
 }
 
 function validIdentifier(value: string, label: string, maximum: number) {
@@ -800,7 +1049,12 @@ function assertResponseSize(response: Response, maximum: number) {
     );
 }
 
-function toApiError(status: number, payload: unknown, token?: string) {
+function toApiError(
+  status: number,
+  payload: unknown,
+  token?: string,
+  retryAfter?: string | null,
+) {
   const record =
     payload && typeof payload === "object"
       ? (payload as Record<string, unknown>)
@@ -811,5 +1065,18 @@ function toApiError(status: number, payload: unknown, token?: string) {
     (!token || !candidate.toLowerCase().includes(token.toLowerCase()))
       ? candidate
       : `HTTP_${status}`;
-  return new AgentApiError(status, code, "The platform request failed.");
+  return new AgentApiError(
+    status,
+    code,
+    "The platform request failed.",
+    parseRetryAfter(retryAfter),
+  );
+}
+
+function parseRetryAfter(value: string | null | undefined) {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) && seconds >= 0
+    ? seconds * 1_000
+    : undefined;
 }

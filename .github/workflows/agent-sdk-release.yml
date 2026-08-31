@@ -6,6 +6,14 @@ on:
       - "packages/agent-sdk/**"
       - "packages/agent-cli/**"
       - "packages/agent-python-sdk/**"
+      - "app/api/agent/openapi.json/**"
+      - "app/api/agent/mcp/**"
+      - "app/api/agent/asyncapi.json/**"
+      - "contracts/asyncapi/**"
+      - "lib/agent-data-api-relay.ts"
+      - "scripts/webhook-cert-core.ts"
+      - "scripts/verify-agent-contract-parity.*"
+      - "docs/agent-contract-parity.md"
       - "package.json"
       - "bun.lock"
       - ".github/workflows/agent-sdk-release.yml"
@@ -15,6 +23,14 @@ on:
       - "packages/agent-sdk/**"
       - "packages/agent-cli/**"
       - "packages/agent-python-sdk/**"
+      - "app/api/agent/openapi.json/**"
+      - "app/api/agent/mcp/**"
+      - "app/api/agent/asyncapi.json/**"
+      - "contracts/asyncapi/**"
+      - "lib/agent-data-api-relay.ts"
+      - "scripts/webhook-cert-core.ts"
+      - "scripts/verify-agent-contract-parity.*"
+      - "docs/agent-contract-parity.md"
       - "package.json"
       - "bun.lock"
       - ".github/workflows/agent-sdk-release.yml"
@@ -31,6 +47,7 @@ jobs:
         with:
           bun-version: "1.4.0"
       - run: bun ci
+      - run: bun scripts/verify-agent-contract-parity.mjs
       - run: bun run --filter @symbaiex/agent-sdk build
       - run: bun run --filter @symbaiex/agent-sdk test
       - run: bun run --filter @symbaiex/agent-sdk pack:check

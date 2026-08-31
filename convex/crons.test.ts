@@ -44,6 +44,14 @@ describe("evidence retention cron", () => {
     expect(source).toContain('jobKey: "evidence-crossref"');
     expect(source).toContain('jobKey: "semantic-cleanup"');
     expect(source).toContain('jobKey: "forum-suki-reply-recovery"');
+    expect(source).toContain('jobKey: "newsletter-schedule"');
+    expect(source).toContain('jobKey: "evidence-webhook-recovery"');
+    expect(source).not.toContain(
+      "internal.dailyNewsletter.checkDailyNewsletterSchedule",
+    );
+    expect(source).not.toContain(
+      "internal.evidenceWebhooks.recoverPendingDeliveries",
+    );
     expect(source).toContain('"1,11,21,31,41,51 * * * *"');
     expect(source).not.toContain(
       '"evaluate critical cron effectiveness",\n  { minutes: 5 }',

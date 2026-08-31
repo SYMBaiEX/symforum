@@ -11,7 +11,11 @@ describe("agent data API relay", () => {
       mapRestRequest("GET", ["source-registry"], new URLSearchParams()),
     ).toEqual({ operation: "source_registry", input: {} });
     expect(
-      mapRestRequest("GET", ["source-registry"], new URLSearchParams("limit=1")),
+      mapRestRequest(
+        "GET",
+        ["source-registry"],
+        new URLSearchParams("limit=1"),
+      ),
     ).toBeNull();
     expect(
       mapRestRequest(
@@ -169,6 +173,15 @@ describe("agent data API relay", () => {
     expect(agentDataHeaders(allowed).get("cache-control")).toContain(
       "no-store",
     );
+    expect(
+      agentDataHeaders(allowed).get("access-control-expose-headers"),
+    ).toContain("x-artifact-sha256");
+    expect(
+      agentDataHeaders(allowed).get("access-control-expose-headers"),
+    ).toContain("content-length");
+    expect(
+      agentDataHeaders(allowed).get("access-control-expose-headers"),
+    ).toContain("content-disposition");
     const denied = new Request("https://www.symbaiex.com/api/agent/v1/status", {
       headers: { origin: "https://evil.example" },
     });

@@ -1,0 +1,38 @@
+name: Post-deploy public agent smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Base URL for the deployed agent API, including /api/agent
+        required: true
+        type: string
+      environment:
+        description: Deployment environment being verified
+        required: true
+        type: string
+  repository_dispatch:
+    types: [post-deploy-agent-smoke]
+
+permissions:
+  contents: read
+
+jobs:
+  public-agent-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SYMBAIEX_AGENT_API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || github.event.client_payload.base_url }}
+      SMOKE_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.event.client_payload.environment }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - name: Verify dispatch parameters
+        run: |
+          test -n "$SYMBAIEX_AGENT_API_BASE_URL"
+          test -n "$SMOKE_ENVIRONMENT"
+      - name: Run public agent smoke
+        run: bun run smoke:agent:public -- --base-url "$SYMBAIEX_AGENT_API_BASE_URL"

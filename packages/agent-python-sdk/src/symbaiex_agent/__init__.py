@@ -11,6 +11,7 @@ from .client import (
     HttpRequest,
     HttpResponse,
     ResearchJob,
+    verify_webhook_signature,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "HttpRequest",
     "HttpResponse",
     "ResearchJob",
+    "verify_webhook_signature",
 ]

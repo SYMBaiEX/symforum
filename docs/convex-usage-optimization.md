@@ -16,7 +16,11 @@ sampling on 2026-08-17.
 - Forum liveness uses `@convex-dev/presence`; route location is a low-churn
   snapshot and no longer acts as the heartbeat clock.
 - Interaction scores, saves, and active comment counts use
-  `@convex-dev/aggregate` after a migration-safe backfill.
+  `@convex-dev/aggregate` after a migration-safe, self-scheduling backfill.
+- Analytics capture health is stored as privacy-safe UTC date buckets for
+  captured writes and rate-limited drops only; it retains no visitor, session,
+  user-agent, path, referrer, or raw metadata. The admin summary exposes the
+  resulting capture ratio.
 - Newsletter archive lists use compact issue digests and never read full issue
   bodies after the digest backfill completes.
 
@@ -25,12 +29,12 @@ sampling on 2026-08-17.
 Deploy the Convex functions first. The new reads retain legacy fallbacks until
 their migration status is marked complete.
 
-Run each backfill until it returns `done: true`, passing the returned cursor to
-the next call when present:
+Start each aggregate backfill once. It persists its cursor, schedules the next
+batch itself, and advances interactions to comments automatically. Re-running
+the command is safe and reports the completed state:
 
 ```sh
-bunx convex run contentAggregates:backfillContentAggregates '{"phase":"interactions"}' --prod
-bunx convex run contentAggregates:backfillContentAggregates '{"phase":"comments"}' --prod
+bunx convex run contentAggregates:backfillContentAggregates '{}' --prod
 bunx convex run newsletterDigests:backfillNewsletterIssueDigests '{}' --prod
 bunx convex run evidenceWebhooks:backfillSubscriptionTargets '{}' --prod
 ```
@@ -66,3 +70,6 @@ Expected steady state:
 - no `apiWebhookEvents` growth while there are no subscribers;
 - presence heartbeats isolated inside the Presence component;
 - interaction and newsletter list reads use completed migration records.
+- `analytics:summaryAdmin` includes `capture.captured`,
+  `capture.droppedRateLimited`, and `capture.captureRatio` sourced exclusively
+  from date buckets.

@@ -5,24 +5,9 @@
  * validators, cursors, timestamps, failures, and credentials remain operational
  * state in `evidenceSources` and are never returned from this registry.
  */
-export type PublicEvidenceSourceRegistryRow = {
-  key: string;
-  name: string;
-  officialApiUrl: string;
-  officialTermsUrl: string;
-  officialAttributionUrl: string;
-  licenseClass: "public-domain" | "attributed";
-  accessClass: "public" | "public-optional-token" | "first-party";
-  capability: string;
-  checkpointModel: string;
-  conditionalRequestModel: string;
-  timeoutMs: number;
-  maxResponseBytes: number;
-  maxItemsPerRun: number;
-  maxPagesPerRun: number;
-  cadence: string;
-  fixtureProvenance: string;
-};
+import type { EvidenceSourceAdapterDescriptor } from "./evidenceSourceAdapter";
+
+export type PublicEvidenceSourceRegistryRow = EvidenceSourceAdapterDescriptor;
 
 const MEBIBYTE = 1024 * 1024;
 

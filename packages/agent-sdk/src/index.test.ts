@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { AgentApiError, AgentClient, DEFAULT_PLATFORM_ORIGIN } from "./index";
+import {
+  AgentApiError,
+  AgentClient,
+  DEFAULT_PLATFORM_ORIGIN,
+  verifyWebhookSignature,
+} from "./index";
 
 describe("AgentClient", () => {
   test("uses only the public platform origin and injects bearer auth", async () => {
@@ -87,6 +92,93 @@ describe("AgentClient", () => {
     expect(() => new AgentClient({ requestTimeoutMs: 0 })).toThrow(
       /requestTimeoutMs/,
     );
+  });
+
+  test("retains retry-after metadata without trusting an upstream message", async () => {
+    const client = new AgentClient({
+      fetch: async () =>
+        Response.json(
+          { code: "RATE_LIMITED", error: "untrusted" },
+          { status: 429, headers: { "retry-after": "7" } },
+        ),
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(client.status()).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      retryAfterMs: 7_000,
+      message: "The platform request failed.",
+    });
+  });
+
+  test("waits for terminal jobs and validates downloaded export checksums", async () => {
+    let reads = 0;
+    const artifact = new TextEncoder().encode("export\n");
+    const checksum =
+      "13278fdb7e220736e77342c3dca76191892d725e7722184b8727175b9f2ef886";
+    const client = new AgentClient({
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.endsWith("/manifest"))
+          return new Response(
+            JSON.stringify({
+              checksum,
+              artifactByteLength: artifact.byteLength,
+            }),
+          );
+        if (url.endsWith("/artifact")) return new Response(artifact);
+        return Response.json({
+          jobId: "job-1",
+          status: ++reads > 1 ? "completed" : "running",
+        });
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(
+      client.waitForExport("job-1", { pollIntervalMs: 50 }),
+    ).resolves.toMatchObject({ status: "completed" });
+    await expect(
+      client.verifyExportManifest("job-1", artifact),
+    ).resolves.toMatchObject({ checksum });
+  });
+
+  test("verifies a bounded AsyncAPI webhook signature", async () => {
+    const secret = "webhook-secret";
+    const timestamp = "100";
+    const body = '{"id":"event-1"}';
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const signature = `v1=${[...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${body}`)))].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+    await expect(
+      verifyWebhookSignature({
+        secret,
+        timestamp,
+        signature,
+        body,
+        nowSeconds: 100,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      verifyWebhookSignature({
+        secret,
+        timestamp,
+        signature,
+        body,
+        nowSeconds: 500,
+      }),
+    ).resolves.toBe(false);
   });
 
   test("uses the bounded universal lexical-search endpoint", async () => {
@@ -215,6 +307,26 @@ describe("AgentClient", () => {
         body: '{"eventType":"evidence.research.completed"}',
       },
     ]);
+  });
+
+  test("rejects malformed pagination payloads", async () => {
+    const client = new AgentClient({
+      fetch: async () => Response.json({ nextCursor: null }),
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    const consume = async () => {
+      for await (const _item of client.paginate("/api/agent/v1/sources")) {
+        // The invalid response must fail before yielding.
+      }
+    };
+    await expect(consume()).rejects.toMatchObject({
+      status: 502,
+      code: "INVALID_RESPONSE",
+    });
   });
 
   test("covers public auth, artifact, and MCP contracts without a live network", async () => {

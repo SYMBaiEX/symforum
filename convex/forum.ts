@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { createThread as createAgentThread } from "@convex-dev/agent";
 import { makeFunctionReference, paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import {
@@ -7,7 +8,7 @@ import {
 } from "../lib/agent-publication-quality";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { extractForumMentionUsernames } from "../lib/forum-mentions";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   env,
@@ -34,6 +35,17 @@ import {
   recordAutomatedResearchPublication,
   requireAutomatedResearchPublication,
 } from "./researchQuality";
+import {
+  deterministicForumClaimHash,
+  FORUM_AGENT_CLAIM_SNAPSHOT_VERSION,
+  resolveForumClaimBodySpan,
+  type ForumAgentClaimCitationInput,
+} from "./forumAgentClaimProvenance";
+import {
+  markPrivateForumAgentDraftHeld,
+  markPrivateForumAgentDraftPublished,
+  verifyPrivateForumAgentDraft,
+} from "./forumAgentResearchPackets";
 import {
   FORUM_PRESENCE_ROOM,
   forumPresenceComponent,
@@ -110,6 +122,31 @@ const forumRelationshipKindValidator = v.union(
   v.literal("buddy"),
   v.literal("ignore"),
 );
+const forumAgentClaimCitationValidator = v.object({
+  claimText: v.string(),
+  claimHash: v.string(),
+  bodySpanStart: v.optional(v.number()),
+  bodySpanEnd: v.optional(v.number()),
+  bodySpanText: v.optional(v.string()),
+  bodySpanMatch: v.union(
+    v.literal("exact"),
+    v.literal("lexical_fallback"),
+    v.literal("unmatched"),
+  ),
+  sourceCandidateId: v.string(),
+  sourceCandidateKey: v.string(),
+  sourceUrl: v.string(),
+  snapshotHash: v.string(),
+  snapshotVersion: v.string(),
+  kind: v.union(v.literal("fact"), v.literal("analysis")),
+  confidence: v.union(v.literal("high"), v.literal("medium")),
+  supportStatus: v.union(
+    v.literal("supported"),
+    v.literal("partial"),
+    v.literal("unsupported"),
+  ),
+  supportScore: v.number(),
+});
 const pollStatusValidator = v.union(v.literal("open"), v.literal("closed"));
 const contentReportEntityTypeValidator = v.union(
   v.literal("thread"),
@@ -1711,11 +1748,12 @@ export const listResearchFeedThreads = query({
   args: {},
   handler: async (ctx) => {
     const requestedCategories = await Promise.all(
-      RESEARCH_FEED_CATEGORY_SLUGS.map(async (slug) =>
-        await ctx.db
-          .query("forumCategories")
-          .withIndex("by_slug", (q) => q.eq("slug", slug))
-          .unique(),
+      RESEARCH_FEED_CATEGORY_SLUGS.map(
+        async (slug) =>
+          await ctx.db
+            .query("forumCategories")
+            .withIndex("by_slug", (q) => q.eq("slug", slug))
+            .unique(),
       ),
     );
     const visibleCategories = await visibleCategoriesForUser(
@@ -1724,14 +1762,15 @@ export const listResearchFeedThreads = query({
       null,
     );
     const activeByCategory = await Promise.all(
-      visibleCategories.map(async (category) =>
-        await ctx.db
-          .query("forumThreads")
-          .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
-            q.eq("categoryId", category._id).eq("status", "active"),
-          )
-          .order("desc")
-          .take(RESEARCH_FEED_THREAD_LIMIT),
+      visibleCategories.map(
+        async (category) =>
+          await ctx.db
+            .query("forumThreads")
+            .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
+              q.eq("categoryId", category._id).eq("status", "active"),
+            )
+            .order("desc")
+            .take(RESEARCH_FEED_THREAD_LIMIT),
       ),
     );
     const byThreadId = new Map<Id<"forumThreads">, ForumThreadDoc>();
@@ -2282,19 +2321,19 @@ export const search = query({
     const threadSearch = !searchThreads
       ? { items: [], limited: false }
       : searchQuery === null && authorId !== undefined
-        ? await (useSearchProjections
-            ? searchVisibleThreadProjectionsByAuthor
-            : searchVisibleThreadsByAuthor)(
-            ctx,
-            threadFetchLimit,
-            category,
-            viewer,
-            authorId,
-            { days, sortKey },
-          )
-        : await (useSearchProjections
-            ? searchVisibleThreadProjections
-            : searchVisibleThreads)(
+        ? await (
+            useSearchProjections
+              ? searchVisibleThreadProjectionsByAuthor
+              : searchVisibleThreadsByAuthor
+          )(ctx, threadFetchLimit, category, viewer, authorId, {
+            days,
+            sortKey,
+          })
+        : await (
+            useSearchProjections
+              ? searchVisibleThreadProjections
+              : searchVisibleThreads
+          )(
             ctx,
             searchQuery ?? "",
             threadFetchLimit,
@@ -2315,19 +2354,16 @@ export const search = query({
     const postSearch = !searchPosts
       ? { items: [], limited: false }
       : searchQuery === null && authorId !== undefined
-        ? await (useSearchProjections
-            ? searchVisiblePostProjectionsByAuthor
-            : searchVisiblePostsByAuthor)(
-            ctx,
-            postFetchLimit,
-            category,
-            viewer,
-            authorId,
-            { days, sortKey },
-          )
-        : await (useSearchProjections
-            ? searchVisiblePostProjections
-            : searchVisiblePosts)(
+        ? await (
+            useSearchProjections
+              ? searchVisiblePostProjectionsByAuthor
+              : searchVisiblePostsByAuthor
+          )(ctx, postFetchLimit, category, viewer, authorId, { days, sortKey })
+        : await (
+            useSearchProjections
+              ? searchVisiblePostProjections
+              : searchVisiblePosts
+          )(
             ctx,
             searchQuery ?? "",
             postFetchLimit,
@@ -2371,7 +2407,7 @@ export const search = query({
         slug: thread.slug,
         title: thread.title,
         excerpt: useSearchProjections
-          ? thread.excerpt ?? "Forum discussion on SYMBaiEX."
+          ? (thread.excerpt ?? "Forum discussion on SYMBaiEX.")
           : excerpt(thread.body, 220),
         status: thread.status,
         pinned: thread.pinned,
@@ -2396,10 +2432,10 @@ export const search = query({
           threadSlug: thread.slug,
           threadTitle: thread.title,
           body: useSearchProjections
-            ? post.excerpt ?? "No text preview available."
+            ? (post.excerpt ?? "No text preview available.")
             : excerpt(post.body, 220),
           excerpt: useSearchProjections
-            ? post.excerpt ?? "No text preview available."
+            ? (post.excerpt ?? "No text preview available.")
             : excerpt(post.body, 220),
           createdAt: post.createdAt,
           threadLastPostAt: thread.lastPostAt,
@@ -9305,10 +9341,17 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         return { claimed: false as const, reason: "source-unavailable" };
       }
+      const conversationId = await ensureForumAgentConversation(ctx, {
+        forumThreadId: candidate.threadId,
+        agentSlug,
+        now,
+      });
       await ctx.db.patch("forumAgentReplyRuns", run._id, {
         attempt: args.attempt,
         status: "running",
         reason: undefined,
+        admittedAt: run.admittedAt ?? now,
+        conversationId,
         startedAt: now,
         completedAt: undefined,
         updatedAt: now,
@@ -9316,6 +9359,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       return {
         claimed: true as const,
         runId: run._id,
+        conversationId,
         candidate,
       };
     }
@@ -9362,15 +9406,27 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         continue;
       }
+      const conversationId = await ensureForumAgentConversation(ctx, {
+        forumThreadId: candidate.threadId,
+        agentSlug,
+        now,
+      });
       await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
         attempt: args.attempt,
         status: "running",
         model: agent.model,
+        admittedAt: queuedRun.admittedAt ?? now,
+        conversationId,
         startedAt: now,
         completedAt: undefined,
         updatedAt: now,
       });
-      return { claimed: true as const, runId: queuedRun._id, candidate };
+      return {
+        claimed: true as const,
+        runId: queuedRun._id,
+        conversationId,
+        candidate,
+      };
     }
 
     return { claimed: false as const, reason: "no-candidate" };
@@ -9451,7 +9507,9 @@ export const publishSukiForumReply = internalMutation({
     if (
       run === null ||
       run.agentSlug !== agentSlug ||
-      run.status !== "running"
+      run.status !== "running" ||
+      run.admittedAt === undefined ||
+      run.conversationId === undefined
     ) {
       throw new Error(`${agentName}'s reply run is not active`);
     }
@@ -9469,6 +9527,18 @@ export const publishSukiForumReply = internalMutation({
       user.agentSlug !== agentSlug
     ) {
       throw new Error(`${agentName}'s forum identity is invalid`);
+    }
+    const conversation = await ctx.db
+      .query("forumAgentConversations")
+      .withIndex("by_forumThreadId_and_agentSlug", (q) =>
+        q.eq("forumThreadId", run.threadId).eq("agentSlug", agentSlug),
+      )
+      .unique();
+    if (
+      conversation === null ||
+      conversation.conversationId !== run.conversationId
+    ) {
+      throw new Error(`${agentName}'s private reply conversation is invalid`);
     }
     const candidate = await loadSukiReplyCandidate(ctx, run, user._id);
     const now = Date.now();
@@ -9722,10 +9792,7 @@ export function isSukiReplyWorthReviewing(body: string) {
   return text.length >= 45 && words.length >= 7;
 }
 
-function forumReplyDeskMatches(
-  agentSlug: string,
-  categorySlug: string,
-) {
+function forumReplyDeskMatches(agentSlug: string, categorySlug: string) {
   const belleDesk =
     categorySlug === "news" ||
     categorySlug.startsWith("news-") ||
@@ -9740,7 +9807,13 @@ function forumReplyDeskMatches(
 const FORUM_REPLY_SPECIALTY_POOLS = {
   security: ["mina-hart", "nora-flint", "micah-sol"],
   research: ["nia-calder", "rhea-nolan", "ari-mercer", "maya-fen"],
-  builders: ["mara-venn", "theo-marlow", "jonah-vale", "nolan-reese", "evan-lark"],
+  builders: [
+    "mara-venn",
+    "theo-marlow",
+    "jonah-vale",
+    "nolan-reese",
+    "evan-lark",
+  ],
   creative: ["iris-kellan", "zara-penn", "cleo-arden", "sora-bennett"],
   hardware: ["max-delaney", "remy-kade"],
 } as const;
@@ -9770,7 +9843,10 @@ function deterministicForumReplyStart(seed: string, length: number) {
   return length === 0 ? 0 : (hash >>> 0) % length;
 }
 
-export function forumReplyAgentCandidates(categorySlug: string, sourceId: string) {
+export function forumReplyAgentCandidates(
+  categorySlug: string,
+  sourceId: string,
+) {
   const specialtyPool = [...forumReplySpecialtyPool(categorySlug)];
   const start = deterministicForumReplyStart(
     `${categorySlug}:${sourceId}`,
@@ -9796,22 +9872,15 @@ async function scheduleForumAgentReview(
     now: number;
   },
 ) {
-  const [category, author] = await Promise.all([
-    ctx.db.get("forumCategories", args.categoryId),
-    ctx.db.get("users", args.authorId),
-  ]);
-  if (
-    category === null ||
-    category.status !== "active" ||
-    author === null ||
-    author.isAgent === true
-  ) {
-    return null;
-  }
+  const admission = await forumReplyAdmission(ctx, args);
+  if (!admission.admitted) return null;
   const sourceId =
     args.sourceKind === "reply" ? args.sourcePostId : args.threadId;
   if (sourceId === undefined) return null;
-  const orderedCandidates = forumReplyAgentCandidates(category.slug, sourceId);
+  const orderedCandidates = forumReplyAgentCandidates(
+    admission.category.slug,
+    sourceId,
+  );
   let selectedAgent: Doc<"forumAgents"> | null = null;
   for (const candidateSlug of orderedCandidates) {
     const candidate = await ctx.db
@@ -9831,6 +9900,11 @@ async function scheduleForumAgentReview(
     .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
     .unique();
   if (existing !== null) return existing._id;
+  const conversationId = await ensureForumAgentConversation(ctx, {
+    forumThreadId: args.threadId,
+    agentSlug,
+    now: args.now,
+  });
   const runId = await ctx.db.insert("forumAgentReplyRuns", {
     runKey,
     agentSlug,
@@ -9843,6 +9917,8 @@ async function scheduleForumAgentReview(
     attempt: -1,
     status: "queued",
     model: selectedAgent.model,
+    admittedAt: args.now,
+    conversationId,
     reason: "event-queued",
     startedAt: args.now,
     updatedAt: args.now,
@@ -9864,6 +9940,116 @@ async function scheduleForumAgentReview(
   return runId;
 }
 
+export function forumReplyAdmissionRejectionReason(args: {
+  authorIsAgent: boolean;
+  body: string;
+  categoryIsBoard: boolean;
+  categoryStatus: string;
+  categoryViewAccess: string;
+  threadStatus: string;
+}) {
+  if (args.authorIsAgent) return "agent-author";
+  if (
+    !args.categoryIsBoard ||
+    args.categoryStatus !== "active" ||
+    args.categoryViewAccess !== "public" ||
+    args.threadStatus !== "active"
+  ) {
+    return "not-public";
+  }
+  if (!isSukiReplyWorthReviewing(args.body)) return "not-substantive";
+  return null;
+}
+
+async function forumReplyAdmission(
+  ctx: MutationCtx,
+  args: {
+    sourceKind: "thread" | "reply";
+    sourcePostId?: Id<"forumPosts">;
+    threadId: Id<"forumThreads">;
+    categoryId: Id<"forumCategories">;
+    authorId: Id<"users">;
+  },
+) {
+  const [thread, category, author] = await Promise.all([
+    ctx.db.get("forumThreads", args.threadId),
+    ctx.db.get("forumCategories", args.categoryId),
+    ctx.db.get("users", args.authorId),
+  ]);
+  if (
+    thread === null ||
+    thread.categoryId !== args.categoryId ||
+    category === null ||
+    author === null
+  ) {
+    return { admitted: false as const, reason: "source-unavailable" };
+  }
+  let body: string;
+  if (args.sourceKind === "thread") {
+    if (args.sourcePostId !== undefined || thread.authorId !== args.authorId) {
+      return { admitted: false as const, reason: "source-mismatch" };
+    }
+    body = thread.body;
+  } else {
+    if (args.sourcePostId === undefined) {
+      return { admitted: false as const, reason: "source-mismatch" };
+    }
+    const post = await ctx.db.get("forumPosts", args.sourcePostId);
+    if (
+      post === null ||
+      post.status !== "active" ||
+      post.threadId !== thread._id ||
+      post.categoryId !== category._id ||
+      post.authorId !== author._id
+    ) {
+      return { admitted: false as const, reason: "source-mismatch" };
+    }
+    body = post.body;
+  }
+  const reason = forumReplyAdmissionRejectionReason({
+    authorIsAgent: author.isAgent === true,
+    body,
+    categoryIsBoard: isBoardCategory(category),
+    categoryStatus: category.status,
+    categoryViewAccess: categoryViewAccess(category),
+    threadStatus: thread.status,
+  });
+  if (reason !== null) return { admitted: false as const, reason };
+  if (!(await canViewCategoryWithAncestors(ctx, null, category))) {
+    return { admitted: false as const, reason: "not-public" };
+  }
+  return { admitted: true as const, category };
+}
+
+async function ensureForumAgentConversation(
+  ctx: MutationCtx,
+  args: {
+    forumThreadId: Id<"forumThreads">;
+    agentSlug: string;
+    now: number;
+  },
+) {
+  const existing = await ctx.db
+    .query("forumAgentConversations")
+    .withIndex("by_forumThreadId_and_agentSlug", (q) =>
+      q.eq("forumThreadId", args.forumThreadId).eq("agentSlug", args.agentSlug),
+    )
+    .unique();
+  if (existing !== null) return existing.conversationId;
+  const conversationId = await createAgentThread(ctx, components.agent, {
+    title: `Forum reply continuity: ${args.agentSlug}`,
+    summary: `Private reply history for agent ${args.agentSlug} in forum thread ${args.forumThreadId}`,
+  });
+  await ctx.db.insert("forumAgentConversations", {
+    forumThreadId: args.forumThreadId,
+    agentSlug: args.agentSlug,
+    conversationId,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  return conversationId;
+}
+
 function forumAgentDateForTimestamp(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
@@ -9880,6 +10066,102 @@ function compactForumText(value: string, maximumLength: number) {
   return normalized.length <= maximumLength
     ? normalized
     : `${normalized.slice(0, maximumLength - 1).trimEnd()}…`;
+}
+
+function prepareForumAgentClaimCitations(args: {
+  body: string;
+  citations: ForumAgentClaimCitationInput[];
+  sources: Array<{ sourceKey: string; sourceUrl: string }>;
+}) {
+  if (args.citations.length < 2 || args.citations.length > 12) {
+    throw new Error(
+      "Forum agent publications require 2-12 validated claim citations",
+    );
+  }
+  const sourceUrlsByKey = new Map<string, string>();
+  for (const source of args.sources) {
+    if (sourceUrlsByKey.has(source.sourceKey)) {
+      throw new Error("Forum agent publication source keys must be unique");
+    }
+    sourceUrlsByKey.set(source.sourceKey, source.sourceUrl);
+  }
+  return args.citations.map((citation) => {
+    const claimText = citation.claimText.trim().replace(/\s+/g, " ");
+    if (claimText.length < 12 || claimText.length > 400) {
+      throw new Error("Forum agent claim text must be 12-400 characters");
+    }
+    if (citation.claimHash !== deterministicForumClaimHash(claimText)) {
+      throw new Error("Forum agent claim hash does not match its claim text");
+    }
+    if (
+      sourceUrlsByKey.get(citation.sourceCandidateKey) !== citation.sourceUrl
+    ) {
+      throw new Error(
+        "Forum agent claim citation does not match a publication source",
+      );
+    }
+    if (
+      citation.snapshotVersion !== FORUM_AGENT_CLAIM_SNAPSHOT_VERSION ||
+      !/^fnv1a64-[0-9a-f]{16}$/.test(citation.snapshotHash)
+    ) {
+      throw new Error(
+        "Forum agent claim citation has invalid snapshot provenance",
+      );
+    }
+    if (
+      !Number.isFinite(citation.supportScore) ||
+      citation.supportScore < 0 ||
+      citation.supportScore > 100
+    ) {
+      throw new Error(
+        "Forum agent claim citation has an invalid support score",
+      );
+    }
+    return {
+      ...citation,
+      claimText,
+      supportScore: Math.round(citation.supportScore),
+      ...resolveForumClaimBodySpan(args.body, claimText, citation),
+    };
+  });
+}
+
+async function persistForumAgentClaimCitations(
+  ctx: MutationCtx,
+  args: {
+    citations: ReturnType<typeof prepareForumAgentClaimCitations>;
+    runKey: string;
+    threadId: Id<"forumThreads">;
+    postId?: Id<"forumPosts">;
+    agentSlug: string;
+    model: string;
+    promptVersion?: string;
+    assessmentId?: Id<"researchQualityAssessments">;
+    now: number;
+  },
+) {
+  const ids: Array<Id<"forumAgentClaimCitations">> = [];
+  for (const [claimIndex, citation] of args.citations.entries()) {
+    const citationKey = deterministicForumClaimHash(
+      `${args.runKey}\u0000${claimIndex}\u0000${citation.claimHash}`,
+    );
+    ids.push(
+      await ctx.db.insert("forumAgentClaimCitations", {
+        citationKey,
+        runKey: args.runKey,
+        threadId: args.threadId,
+        postId: args.postId,
+        claimIndex,
+        ...citation,
+        agentSlug: args.agentSlug,
+        model: args.model,
+        promptVersion: args.promptVersion ?? "legacy",
+        assessmentId: args.assessmentId,
+        createdAt: args.now,
+      }),
+    );
+  }
+  return ids;
 }
 
 export const publishSukiForumThread = internalMutation({
@@ -9902,6 +10184,7 @@ export const publishSukiForumThread = internalMutation({
         sourceUrl: v.string(),
       }),
     ),
+    claimCitations: v.array(forumAgentClaimCitationValidator),
     attachment: v.optional(
       v.object({
         storageId: v.id("_storage"),
@@ -9977,6 +10260,18 @@ export const publishSukiForumThread = internalMutation({
     if (sources.length === 0) {
       throw new Error(`${agentName} must cite at least one source`);
     }
+    const privateDraft = await verifyPrivateForumAgentDraft(ctx, {
+      runKey: args.runKey,
+      agentSlug,
+      title: args.title,
+      body: args.body,
+      claimHashes: args.claimCitations.map((citation) => citation.claimHash),
+    });
+    const claimCitations = prepareForumAgentClaimCitations({
+      body,
+      citations: args.claimCitations,
+      sources,
+    });
     if (
       args.attachment === undefined &&
       !/\[(?:chart|table|timeline|decision|riskmap|steps|sourcecards)(?:=|\])/i.test(
@@ -10045,6 +10340,11 @@ export const publishSukiForumThread = internalMutation({
       qualityCandidate,
     );
     if (!qualityGate.allowed) {
+      await markPrivateForumAgentDraftHeld(
+        ctx,
+        privateDraft.draft._id,
+        "research-quality-review",
+      );
       return {
         held: true as const,
         categorySlug: category.slug,
@@ -10086,12 +10386,22 @@ export const publishSukiForumThread = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
-    await recordAutomatedResearchPublication(
+    const assessmentId = await recordAutomatedResearchPublication(
       ctx,
       qualityCandidate,
       qualityGate.score,
       threadId,
     );
+    await persistForumAgentClaimCitations(ctx, {
+      citations: claimCitations,
+      runKey: args.runKey,
+      threadId,
+      agentSlug,
+      model: agent.model,
+      promptVersion: run.promptVersion,
+      assessmentId,
+      now,
+    });
 
     if (poll !== null) {
       const pollId = await ctx.db.insert("forumPolls", {
@@ -10216,6 +10526,7 @@ export const publishSukiForumThread = internalMutation({
       updatedAt: now,
       errorMessage: undefined,
     });
+    await markPrivateForumAgentDraftPublished(ctx, privateDraft.draft._id);
     const [sourceReservations, topicReservations] = await Promise.all([
       ctx.db
         .query("forumAgentSourceReservations")
@@ -10270,6 +10581,7 @@ export const publishForumAgentFollowUp = internalMutation({
         sourceUrl: v.string(),
       }),
     ),
+    claimCitations: v.array(forumAgentClaimCitationValidator),
     attachment: v.optional(
       v.object({
         storageId: v.id("_storage"),
@@ -10335,8 +10647,20 @@ export const publishForumAgentFollowUp = internalMutation({
     if (sources.length === 0) {
       throw new Error("A forum follow-up needs at least one source");
     }
+    const privateDraft = await verifyPrivateForumAgentDraft(ctx, {
+      runKey: args.runKey,
+      agentSlug: args.agentSlug,
+      title: args.title,
+      body: args.body,
+      claimHashes: args.claimCitations.map((citation) => citation.claimHash),
+    });
     assertAgentPublicationHygiene([args.title, args.body]);
     const body = normalizeReplyBody(args.body);
+    const claimCitations = prepareForumAgentClaimCitations({
+      body,
+      citations: args.claimCitations,
+      sources,
+    });
     const now = Date.now();
     const postNumber = await nextPostNumberForThread(ctx, thread);
     const postId = await ctx.db.insert("forumPosts", {
@@ -10350,6 +10674,16 @@ export const publishForumAgentFollowUp = internalMutation({
       updatedAt: now,
     });
     await syncForumPostSearchProjection(ctx, postId);
+    await persistForumAgentClaimCitations(ctx, {
+      citations: claimCitations,
+      runKey: args.runKey,
+      threadId: thread._id,
+      postId,
+      agentSlug: args.agentSlug,
+      model: agent.model,
+      promptVersion: run.promptVersion,
+      now,
+    });
     await ctx.db.patch("forumThreads", thread._id, {
       replyCount: thread.replyCount + 1,
       lastAssignedPostNumber: postNumber,
@@ -10411,6 +10745,7 @@ export const publishForumAgentFollowUp = internalMutation({
       updatedAt: now,
       errorMessage: undefined,
     });
+    await markPrivateForumAgentDraftPublished(ctx, privateDraft.draft._id);
     const [sourceReservations, topicReservations] = await Promise.all([
       ctx.db
         .query("forumAgentSourceReservations")
@@ -12507,6 +12842,14 @@ export const updateForumPostModeration = mutation({
             threadId: thread._id,
             now,
           });
+          await scheduleForumAgentReview(ctx, {
+            sourceKind: "reply",
+            sourcePostId: post._id,
+            threadId: thread._id,
+            categoryId: category._id,
+            authorId: post.authorId,
+            now,
+          });
         }
       }
     } else if (thread.lastPostId === post._id) {
@@ -14162,8 +14505,7 @@ async function normalizeForumAttachmentInputs(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   attachments:
-    | Array<{ storageId: Id<"_storage">; filename: string }>
-    | undefined,
+    Array<{ storageId: Id<"_storage">; filename: string }> | undefined,
 ) {
   if (attachments === undefined || attachments.length === 0) {
     return [];
@@ -14301,8 +14643,7 @@ async function planForumAttachmentEdit(
     postId: Id<"forumPosts"> | undefined;
     userId: Id<"users">;
     attachments:
-      | Array<{ storageId: Id<"_storage">; filename: string }>
-      | undefined;
+      Array<{ storageId: Id<"_storage">; filename: string }> | undefined;
     attachmentIdsToKeep: Array<Id<"forumAttachments">> | undefined;
   },
 ): Promise<ForumAttachmentEditPlan | null> {
@@ -19287,12 +19628,7 @@ function forumModerationEventRecord(
 }
 
 type ThreadListSortKey =
-  | "lastPostAt"
-  | "createdAt"
-  | "replies"
-  | "views"
-  | "rating"
-  | "title";
+  "lastPostAt" | "createdAt" | "replies" | "views" | "rating" | "title";
 type ThreadListSortOrder = "desc" | "asc";
 
 function normalizeThreadListDays(days: number | undefined) {
@@ -19507,11 +19843,7 @@ function forumCalendarEventExcerpt(body: string) {
 
 type ForumSearchTarget = "all" | "titles" | "bodies";
 type ForumSearchSortKey =
-  | "relevance"
-  | "newest"
-  | "oldest"
-  | "replies"
-  | "views";
+  "relevance" | "newest" | "oldest" | "replies" | "views";
 type SearchThreadOptions = {
   days?: number;
   sortKey: ForumSearchSortKey;
@@ -19882,10 +20214,15 @@ function projectedThreadSearchMatches(
 ) {
   const since = searchSinceTimestamp(options.days);
   if (since !== undefined && thread.lastPostAt < since) return false;
-  if (query === null || options.target === undefined || options.target === "all") {
+  if (
+    query === null ||
+    options.target === undefined ||
+    options.target === "all"
+  ) {
     return true;
   }
-  const haystack = options.target === "titles" ? thread.title : thread.searchText;
+  const haystack =
+    options.target === "titles" ? thread.title : thread.searchText;
   return haystack.toLowerCase().includes(query.toLowerCase());
 }
 
@@ -19896,8 +20233,14 @@ function sortProjectedThreads(
   if (sortKey === "relevance") return threads;
   return threads.sort((left, right) => {
     if (sortKey === "oldest") return left.lastPostAt - right.lastPostAt;
-    if (sortKey === "replies") return right.replyCount - left.replyCount || right.lastPostAt - left.lastPostAt;
-    if (sortKey === "views") return right.viewCount - left.viewCount || right.lastPostAt - left.lastPostAt;
+    if (sortKey === "replies")
+      return (
+        right.replyCount - left.replyCount || right.lastPostAt - left.lastPostAt
+      );
+    if (sortKey === "views")
+      return (
+        right.viewCount - left.viewCount || right.lastPostAt - left.lastPostAt
+      );
     return right.lastPostAt - left.lastPostAt;
   });
 }
@@ -19911,15 +20254,28 @@ async function visibleThreadSearchProjections(
   if (category !== null) {
     return isBoardCategory(category) &&
       (await visibleCategoriesForUser(ctx, [category], user)).length === 1
-      ? projections.filter((projection) => projection.categoryId === category._id)
+      ? projections.filter(
+          (projection) => projection.categoryId === category._id,
+        )
       : [];
   }
-  const categoriesById = await loadCategoriesById(ctx, projections.map((projection) => projection.categoryId));
-  const visibleCategoryIds = new Set(
-    (await visibleCategoriesForUser(ctx, Array.from(categoriesById.values()).filter(isBoardCategory), user)).map((row) => row._id),
+  const categoriesById = await loadCategoriesById(
+    ctx,
+    projections.map((projection) => projection.categoryId),
   );
-  return projections.filter((projection) =>
-    visibleCategoryIds.has(projection.categoryId) && isVisibleThreadStatus(projection.status),
+  const visibleCategoryIds = new Set(
+    (
+      await visibleCategoriesForUser(
+        ctx,
+        Array.from(categoriesById.values()).filter(isBoardCategory),
+        user,
+      )
+    ).map((row) => row._id),
+  );
+  return projections.filter(
+    (projection) =>
+      visibleCategoryIds.has(projection.categoryId) &&
+      isVisibleThreadStatus(projection.status),
   );
 }
 
@@ -19932,20 +20288,43 @@ async function searchVisibleThreadProjections(
   authorId?: Id<"users">,
   options: SearchThreadOptions = { sortKey: "relevance" },
 ) {
-  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : limit;
+  const fetchLimit =
+    category === null ? searchVisibilityFetchLimit(limit) : limit;
   const fetchStatus = async (status: "active" | "locked") =>
-    await ctx.db.query("forumThreadSearchProjections").withSearchIndex("search_by_searchText", (q) => {
-      const search = q.search("searchText", searchQuery).eq("status", status);
-      const scoped = category === null ? search : search.eq("categorySlug", category.slug);
-      return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
-    }).take(fetchLimit);
-  const [activeRaw, lockedRaw] = await Promise.all([fetchStatus("active"), fetchStatus("locked")]);
-  const visible = await visibleThreadSearchProjections(ctx, [...activeRaw, ...lockedRaw], category, user);
+    await ctx.db
+      .query("forumThreadSearchProjections")
+      .withSearchIndex("search_by_searchText", (q) => {
+        const search = q.search("searchText", searchQuery).eq("status", status);
+        const scoped =
+          category === null ? search : search.eq("categorySlug", category.slug);
+        return authorId === undefined
+          ? scoped
+          : scoped.eq("authorId", authorId);
+      })
+      .take(fetchLimit);
+  const [activeRaw, lockedRaw] = await Promise.all([
+    fetchStatus("active"),
+    fetchStatus("locked"),
+  ]);
+  const visible = await visibleThreadSearchProjections(
+    ctx,
+    [...activeRaw, ...lockedRaw],
+    category,
+    user,
+  );
   const items = sortProjectedThreads(
-    visible.filter((thread) => projectedThreadSearchMatches(thread, searchQuery, options)),
+    visible.filter((thread) =>
+      projectedThreadSearchMatches(thread, searchQuery, options),
+    ),
     options.sortKey,
   ).slice(0, limit);
-  return { items, limited: category === null && (activeRaw.length >= fetchLimit || lockedRaw.length >= fetchLimit) && items.length < limit };
+  return {
+    items,
+    limited:
+      category === null &&
+      (activeRaw.length >= fetchLimit || lockedRaw.length >= fetchLimit) &&
+      items.length < limit,
+  };
 }
 
 async function searchVisibleThreadProjectionsByAuthor(
@@ -19956,19 +20335,58 @@ async function searchVisibleThreadProjectionsByAuthor(
   authorId: Id<"users">,
   options: SearchThreadOptions = { sortKey: "relevance" },
 ) {
-  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
-  const [active, locked] = await Promise.all(["active", "locked"].map(async (status) =>
-    await ctx.db.query("forumThreadSearchProjections").withIndex("by_authorId_and_status_and_createdAt", (q) => q.eq("authorId", authorId).eq("status", status as "active" | "locked")).order("desc").take(fetchLimit),
-  ));
-  const visible = await visibleThreadSearchProjections(ctx, [...active, ...locked], category, user);
-  const items = sortProjectedThreads(visible.filter((thread) => projectedThreadSearchMatches(thread, null, options)), options.sortKey).slice(0, limit);
-  return { items, limited: active.length >= fetchLimit || locked.length >= fetchLimit && items.length < limit };
+  const fetchLimit =
+    category === null
+      ? searchVisibilityFetchLimit(limit)
+      : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const [active, locked] = await Promise.all(
+    ["active", "locked"].map(
+      async (status) =>
+        await ctx.db
+          .query("forumThreadSearchProjections")
+          .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+            q
+              .eq("authorId", authorId)
+              .eq("status", status as "active" | "locked"),
+          )
+          .order("desc")
+          .take(fetchLimit),
+    ),
+  );
+  const visible = await visibleThreadSearchProjections(
+    ctx,
+    [...active, ...locked],
+    category,
+    user,
+  );
+  const items = sortProjectedThreads(
+    visible.filter((thread) =>
+      projectedThreadSearchMatches(thread, null, options),
+    ),
+    options.sortKey,
+  ).slice(0, limit);
+  return {
+    items,
+    limited:
+      active.length >= fetchLimit ||
+      (locked.length >= fetchLimit && items.length < limit),
+  };
 }
 
-function projectedPostSearchMatches(post: ForumPostSearchProjectionDoc, query: string | null, options: SearchPostOptions) {
+function projectedPostSearchMatches(
+  post: ForumPostSearchProjectionDoc,
+  query: string | null,
+  options: SearchPostOptions,
+) {
   const since = searchSinceTimestamp(options.days);
-  return (since === undefined || post.createdAt >= since) && options.target !== "titles" &&
-    (query === null || options.target === "all" || options.target === undefined || post.searchText.toLowerCase().includes(query.toLowerCase()));
+  return (
+    (since === undefined || post.createdAt >= since) &&
+    options.target !== "titles" &&
+    (query === null ||
+      options.target === "all" ||
+      options.target === undefined ||
+      post.searchText.toLowerCase().includes(query.toLowerCase()))
+  );
 }
 
 async function projectedPostResults(
@@ -19978,42 +20396,120 @@ async function projectedPostResults(
   user: UserDoc | null,
   limit: number,
 ) {
-  const threads = await Promise.all(posts.map(async (post) => await ctx.db.query("forumThreadSearchProjections").withIndex("by_threadId", (q) => q.eq("threadId", post.threadId)).unique()));
-  const visibleThreads = await visibleThreadSearchProjections(ctx, threads.filter((thread): thread is ForumThreadSearchProjectionDoc => thread !== null), category, user);
-  const visibleById = new Map(visibleThreads.map((thread) => [thread.threadId, thread]));
-  return posts.flatMap((post) => {
-    const thread = visibleById.get(post.threadId);
-    return thread === undefined || post.status !== "active" ? [] : [{ post, thread }];
-  }).slice(0, limit);
+  const threads = await Promise.all(
+    posts.map(
+      async (post) =>
+        await ctx.db
+          .query("forumThreadSearchProjections")
+          .withIndex("by_threadId", (q) => q.eq("threadId", post.threadId))
+          .unique(),
+    ),
+  );
+  const visibleThreads = await visibleThreadSearchProjections(
+    ctx,
+    threads.filter(
+      (thread): thread is ForumThreadSearchProjectionDoc => thread !== null,
+    ),
+    category,
+    user,
+  );
+  const visibleById = new Map(
+    visibleThreads.map((thread) => [thread.threadId, thread]),
+  );
+  return posts
+    .flatMap((post) => {
+      const thread = visibleById.get(post.threadId);
+      return thread === undefined || post.status !== "active"
+        ? []
+        : [{ post, thread }];
+    })
+    .slice(0, limit);
 }
 
 function sortProjectedPostHits(
-  hits: Array<{ post: ForumPostSearchProjectionDoc; thread: ForumThreadSearchProjectionDoc }>, sortKey: ForumSearchSortKey,
+  hits: Array<{
+    post: ForumPostSearchProjectionDoc;
+    thread: ForumThreadSearchProjectionDoc;
+  }>,
+  sortKey: ForumSearchSortKey,
 ) {
   if (sortKey === "relevance") return hits;
-  return hits.sort((left, right) => sortKey === "oldest" ? left.post.createdAt - right.post.createdAt : sortKey === "replies" ? right.thread.replyCount - left.thread.replyCount || right.post.createdAt - left.post.createdAt : sortKey === "views" ? right.thread.viewCount - left.thread.viewCount || right.post.createdAt - left.post.createdAt : right.post.createdAt - left.post.createdAt);
+  return hits.sort((left, right) =>
+    sortKey === "oldest"
+      ? left.post.createdAt - right.post.createdAt
+      : sortKey === "replies"
+        ? right.thread.replyCount - left.thread.replyCount ||
+          right.post.createdAt - left.post.createdAt
+        : sortKey === "views"
+          ? right.thread.viewCount - left.thread.viewCount ||
+            right.post.createdAt - left.post.createdAt
+          : right.post.createdAt - left.post.createdAt,
+  );
 }
 
 async function searchVisiblePostProjections(
-  ctx: QueryCtx, searchQuery: string, limit: number, category: ForumCategoryDoc | null, user: UserDoc | null, authorId?: Id<"users">, options: SearchPostOptions = { sortKey: "relevance" },
+  ctx: QueryCtx,
+  searchQuery: string,
+  limit: number,
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  authorId?: Id<"users">,
+  options: SearchPostOptions = { sortKey: "relevance" },
 ) {
-  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 2, SEARCH_VISIBILITY_SCAN_LIMIT);
-  const raw = await ctx.db.query("forumPostSearchProjections").withSearchIndex("search_by_searchText", (q) => {
-    const search = q.search("searchText", searchQuery).eq("status", "active");
-    const scoped = category === null ? search : search.eq("categoryId", category._id);
-    return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
-  }).take(fetchLimit);
+  const fetchLimit =
+    category === null
+      ? searchVisibilityFetchLimit(limit)
+      : Math.min(limit * 2, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const raw = await ctx.db
+    .query("forumPostSearchProjections")
+    .withSearchIndex("search_by_searchText", (q) => {
+      const search = q.search("searchText", searchQuery).eq("status", "active");
+      const scoped =
+        category === null ? search : search.eq("categoryId", category._id);
+      return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
+    })
+    .take(fetchLimit);
   const results = await projectedPostResults(ctx, raw, category, user, limit);
-  return { items: sortProjectedPostHits(results.filter(({ post }) => projectedPostSearchMatches(post, searchQuery, options)), options.sortKey).slice(0, limit), limited: raw.length >= fetchLimit && results.length < limit };
+  return {
+    items: sortProjectedPostHits(
+      results.filter(({ post }) =>
+        projectedPostSearchMatches(post, searchQuery, options),
+      ),
+      options.sortKey,
+    ).slice(0, limit),
+    limited: raw.length >= fetchLimit && results.length < limit,
+  };
 }
 
 async function searchVisiblePostProjectionsByAuthor(
-  ctx: QueryCtx, limit: number, category: ForumCategoryDoc | null, user: UserDoc | null, authorId: Id<"users">, options: SearchPostOptions = { sortKey: "relevance" },
+  ctx: QueryCtx,
+  limit: number,
+  category: ForumCategoryDoc | null,
+  user: UserDoc | null,
+  authorId: Id<"users">,
+  options: SearchPostOptions = { sortKey: "relevance" },
 ) {
-  const fetchLimit = category === null ? searchVisibilityFetchLimit(limit) : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
-  const raw = await ctx.db.query("forumPostSearchProjections").withIndex("by_authorId_and_status_and_createdAt", (q) => q.eq("authorId", authorId).eq("status", "active")).order("desc").take(fetchLimit);
+  const fetchLimit =
+    category === null
+      ? searchVisibilityFetchLimit(limit)
+      : Math.min(limit * 3, SEARCH_VISIBILITY_SCAN_LIMIT);
+  const raw = await ctx.db
+    .query("forumPostSearchProjections")
+    .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+      q.eq("authorId", authorId).eq("status", "active"),
+    )
+    .order("desc")
+    .take(fetchLimit);
   const results = await projectedPostResults(ctx, raw, category, user, limit);
-  return { items: sortProjectedPostHits(results.filter(({ post }) => projectedPostSearchMatches(post, null, options)), options.sortKey).slice(0, limit), limited: raw.length >= fetchLimit && results.length < limit };
+  return {
+    items: sortProjectedPostHits(
+      results.filter(({ post }) =>
+        projectedPostSearchMatches(post, null, options),
+      ),
+      options.sortKey,
+    ).slice(0, limit),
+    limited: raw.length >= fetchLimit && results.length < limit,
+  };
 }
 
 async function visibleSearchPostResults(

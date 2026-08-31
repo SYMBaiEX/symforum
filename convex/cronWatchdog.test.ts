@@ -67,7 +67,7 @@ describe("critical cron watchdog", () => {
     ).resolves.toMatchObject({
       enabled: false,
       healthy: 0,
-      unhealthy: 15,
+      unhealthy: 17,
     });
     await expect(t.query(watchdog.summary, {})).rejects.toThrow(/sign in/i);
   });
@@ -100,14 +100,23 @@ describe("critical cron watchdog", () => {
       { runAction: action } as unknown as Pick<ActionCtx, "runAction">,
       "evidence-first-party",
     );
-    expect(action).toHaveBeenCalledTimes(1);
+    await executeActionTarget(
+      { runAction: action } as unknown as Pick<ActionCtx, "runAction">,
+      "newsletter-schedule",
+    );
+    expect(action).toHaveBeenCalledTimes(2);
 
     const mutation = vi.fn().mockResolvedValue(null);
     await executeMutationTarget(
       { runMutation: mutation } as unknown as Pick<ActionCtx, "runMutation">,
       "web-vitals-slo",
     );
-    expect(mutation).toHaveBeenCalledTimes(1);
+    await executeMutationTarget(
+      { runMutation: mutation } as unknown as Pick<ActionCtx, "runMutation">,
+      "evidence-webhook-recovery",
+    );
+    expect(mutation).toHaveBeenCalledTimes(2);
+    expect(mutation).toHaveBeenLastCalledWith(expect.anything(), { limit: 50 });
 
     const actionFailure = vi.fn().mockRejectedValue(new Error("target failed"));
     await expect(
@@ -163,7 +172,7 @@ describe("critical cron watchdog", () => {
     });
     await expect(
       t.mutation(watchdog.evaluate, { now: now + 3 * 60 * 60 * 1_000 + 20 }),
-    ).resolves.toMatchObject({ unhealthy: 15 });
+    ).resolves.toMatchObject({ unhealthy: 17 });
     await t.mutation(watchdog.evaluate, {
       now: now + 3 * 60 * 60 * 1_000 + 30,
     });
@@ -297,6 +306,64 @@ describe("critical cron watchdog", () => {
       source.indexOf("export const summaryAdmin"),
     );
     expect(summarySource).not.toContain("Date.now");
+  });
+
+  test("uses cadence-appropriate stale windows for newsletter scheduling and webhook recovery", async () => {
+    vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
+    const t = setup();
+    const now = 1_800_000_000_000;
+    for (const jobKey of [
+      "newsletter-schedule",
+      "evidence-webhook-recovery",
+    ] as const) {
+      const run = await t.mutation(watchdog.start, { jobKey, now });
+      await t.mutation(watchdog.complete, {
+        jobKey,
+        runId: run.runId,
+        succeeded: true,
+        startedAt: run.startedAt,
+        now: now + 10,
+      });
+    }
+
+    await expect(
+      t.mutation(watchdog.evaluate, { now: now + 15 * 60 * 1_000 }),
+    ).resolves.toMatchObject({
+      states: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "newsletter-schedule",
+          status: "healthy",
+        }),
+        expect.objectContaining({
+          jobKey: "evidence-webhook-recovery",
+          status: "healthy",
+        }),
+      ]),
+    });
+    await expect(
+      t.mutation(watchdog.evaluate, { now: now + 15 * 60 * 1_000 + 11 }),
+    ).resolves.toMatchObject({
+      states: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "newsletter-schedule",
+          status: "healthy",
+        }),
+        expect.objectContaining({
+          jobKey: "evidence-webhook-recovery",
+          status: "stale",
+        }),
+      ]),
+    });
+    await expect(
+      t.mutation(watchdog.evaluate, { now: now + 30 * 60 * 1_000 + 11 }),
+    ).resolves.toMatchObject({
+      states: expect.arrayContaining([
+        expect.objectContaining({
+          jobKey: "newsletter-schedule",
+          status: "stale",
+        }),
+      ]),
+    });
   });
 
   test("keeps a newer failed run authoritative when an older run succeeds late", async () => {

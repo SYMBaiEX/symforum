@@ -29,6 +29,8 @@ const jobKeyValidator = v.union(
   v.literal("evidence-citation-benchmark"),
   v.literal("semantic-cleanup"),
   v.literal("web-vitals-slo"),
+  v.literal("newsletter-schedule"),
+  v.literal("evidence-webhook-recovery"),
   v.literal("forum-suki-reply-recovery"),
   v.literal("forum-belle-reply-recovery"),
 );
@@ -47,6 +49,7 @@ const actionJobKeyValidator = v.union(
   v.literal("evidence-first-party"),
   v.literal("evidence-nvd-cves"),
   v.literal("evidence-nvd-change-history"),
+  v.literal("newsletter-schedule"),
   v.literal("forum-suki-reply-recovery"),
   v.literal("forum-belle-reply-recovery"),
 );
@@ -57,6 +60,7 @@ const mutationJobKeyValidator = v.union(
   v.literal("evidence-citation-benchmark"),
   v.literal("semantic-cleanup"),
   v.literal("web-vitals-slo"),
+  v.literal("evidence-webhook-recovery"),
 );
 type JobKey = typeof jobKeyValidator.type;
 type ActionJobKey = typeof actionJobKeyValidator.type;
@@ -113,6 +117,11 @@ const actionRefs = {
   belleReplies: makeFunctionReference<"action", Record<string, never>, unknown>(
     "sukiForumReplyAgent:runBelleReplySweep",
   ),
+  newsletterSchedule: makeFunctionReference<
+    "action",
+    Record<string, never>,
+    unknown
+  >("dailyNewsletter:checkDailyNewsletterSchedule"),
 } as const;
 const mutationRefs = {
   artifactCleanup: makeFunctionReference<
@@ -139,6 +148,11 @@ const mutationRefs = {
     Record<string, never>,
     unknown
   >("operationalSlo:evaluate"),
+  webhookRecovery: makeFunctionReference<
+    "mutation",
+    { limit: number },
+    unknown
+  >("evidenceWebhooks:recoverPendingDeliveries"),
 } as const;
 
 const STALENESS_MS: Record<JobKey, number> = {
@@ -155,6 +169,8 @@ const STALENESS_MS: Record<JobKey, number> = {
   "evidence-citation-benchmark": 30 * 60 * 60 * 1_000,
   "semantic-cleanup": 15 * 60 * 1_000,
   "web-vitals-slo": 2 * 60 * 60 * 1_000,
+  "newsletter-schedule": 30 * 60 * 1_000,
+  "evidence-webhook-recovery": 15 * 60 * 1_000,
   "forum-suki-reply-recovery": 2 * 60 * 60 * 1_000,
   "forum-belle-reply-recovery": 2 * 60 * 60 * 1_000,
 };
@@ -237,6 +253,8 @@ export async function executeActionTarget(
       return await ctx.runAction(actionRefs.nvdCves, {});
     case "evidence-nvd-change-history":
       return await ctx.runAction(actionRefs.nvdHistory, {});
+    case "newsletter-schedule":
+      return await ctx.runAction(actionRefs.newsletterSchedule, {});
     case "forum-suki-reply-recovery":
       return await ctx.runAction(actionRefs.sukiReplies, {});
     case "forum-belle-reply-recovery":
@@ -261,6 +279,8 @@ export async function executeMutationTarget(
       return await ctx.runMutation(mutationRefs.semanticCleanup, {});
     case "web-vitals-slo":
       return await ctx.runMutation(mutationRefs.webVitalsSlo, {});
+    case "evidence-webhook-recovery":
+      return await ctx.runMutation(mutationRefs.webhookRecovery, { limit: 50 });
   }
 }
 

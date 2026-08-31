@@ -209,6 +209,11 @@ export default defineSchema({
     key: v.string(),
     status: v.union(v.literal("running"), v.literal("completed")),
     processed: v.number(),
+    // Checkpoints make aggregate backfills resumable across scheduler retries
+    // and operator restarts. Optional for pre-existing migration records.
+    cursor: v.optional(v.string()),
+    phase: v.optional(v.union(v.literal("interactions"), v.literal("comments"))),
+    scheduledAt: v.optional(v.number()),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
@@ -524,15 +529,39 @@ export default defineSchema({
     userAgent: v.optional(v.string()),
     emailedAt: v.optional(v.number()),
     emailError: v.optional(v.string()),
+    // The Resend component owns provider delivery; retain its durable email id
+    // here so lifecycle callbacks can be associated without email matching.
+    resendEmailId: v.optional(v.string()),
+    emailDeliveryStatus: v.optional(
+      v.union(
+        v.literal("queued"),
+        v.literal("sent"),
+        v.literal("delivered"),
+        v.literal("bounced"),
+        v.literal("complained"),
+        v.literal("failed"),
+        v.literal("delivery_delayed"),
+      ),
+    ),
+    emailEventAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_createdAt", ["createdAt"])
     .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_resendEmailId", ["resendEmailId"])
     .index("by_emailNormalized_and_createdAt", [
       "emailNormalized",
       "createdAt",
     ]),
+  // Minimal callback ledger for contact delivery. It intentionally stores no
+  // message body, recipient address, or provider event metadata.
+  contactEmailEvents: defineTable({
+    eventId: v.string(),
+    resendEmailId: v.string(),
+    eventType: v.string(),
+    receivedAt: v.number(),
+  }).index("by_eventId", ["eventId"]),
   newsletterSubscribers: defineTable({
     email: v.string(),
     emailNormalized: v.string(),
@@ -1238,6 +1267,165 @@ export default defineSchema({
     .index("by_runDate", ["runDate"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_startedAt", ["startedAt"]),
+  // Bounded, private provenance for the already-evaluated claim ledger that
+  // accompanied an automated forum publication. One row per claim keeps the
+  // ledger queryable without growing the thread or run document.
+  forumAgentClaimCitations: defineTable({
+    citationKey: v.string(),
+    runKey: v.string(),
+    threadId: v.id("forumThreads"),
+    postId: v.optional(v.id("forumPosts")),
+    claimIndex: v.number(),
+    claimText: v.string(),
+    claimHash: v.string(),
+    bodySpanStart: v.optional(v.number()),
+    bodySpanEnd: v.optional(v.number()),
+    bodySpanText: v.optional(v.string()),
+    bodySpanMatch: v.union(
+      v.literal("exact"),
+      v.literal("lexical_fallback"),
+      v.literal("unmatched"),
+    ),
+    sourceCandidateId: v.string(),
+    sourceCandidateKey: v.string(),
+    sourceUrl: v.string(),
+    snapshotHash: v.string(),
+    snapshotVersion: v.string(),
+    kind: v.union(v.literal("fact"), v.literal("analysis")),
+    confidence: v.union(v.literal("high"), v.literal("medium")),
+    supportStatus: v.union(
+      v.literal("supported"),
+      v.literal("partial"),
+      v.literal("unsupported"),
+    ),
+    supportScore: v.number(),
+    agentSlug: v.string(),
+    model: v.string(),
+    promptVersion: v.string(),
+    assessmentId: v.optional(v.id("researchQualityAssessments")),
+    reviewId: v.optional(v.id("researchQualityReviews")),
+    correctionOfCitationId: v.optional(v.id("forumAgentClaimCitations")),
+    supersededByCitationId: v.optional(v.id("forumAgentClaimCitations")),
+    createdAt: v.number(),
+  })
+    .index("by_citationKey", ["citationKey"])
+    .index("by_runKey_and_claimIndex", ["runKey", "claimIndex"])
+    .index("by_runKey_and_claimHash", ["runKey", "claimHash"])
+    .index("by_threadId_and_claimIndex", ["threadId", "claimIndex"])
+    .index("by_threadId_and_claimHash", ["threadId", "claimHash"])
+    .index("by_postId_and_claimIndex", ["postId", "claimIndex"])
+    .index("by_sourceCandidateKey", ["sourceCandidateKey"]),
+  // Private research state. These tables are intentionally exposed only
+  // through internal functions; public forum records retain only the final
+  // publication and its bounded citation provenance.
+  forumAgentResearchPackets: defineTable({
+    runKey: v.string(),
+    agentSlug: v.string(),
+    state: v.union(
+      v.literal("researching"),
+      v.literal("drafting"),
+      v.literal("publishable"),
+      v.literal("held"),
+      v.literal("published"),
+      v.literal("skipped"),
+      v.literal("failed"),
+    ),
+    currentStage: v.union(
+      v.literal("source_discovery"),
+      v.literal("entity_resolution"),
+      v.literal("claim_extraction"),
+      v.literal("contradiction_detection"),
+      v.literal("reconstruction"),
+      v.literal("quality_evaluation"),
+      v.literal("publication_decision"),
+    ),
+    sourceCount: v.number(),
+    latestRevision: v.optional(v.number()),
+    contentHash: v.optional(v.string()),
+    claimHash: v.optional(v.string()),
+    decisionReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_runKey", ["runKey"])
+    .index("by_agentSlug_and_updatedAt", ["agentSlug", "updatedAt"])
+    .index("by_state_and_updatedAt", ["state", "updatedAt"]),
+  forumAgentResearchSources: defineTable({
+    packetId: v.id("forumAgentResearchPackets"),
+    runKey: v.string(),
+    sourceKey: v.string(),
+    sourceUrl: v.string(),
+    snapshotHash: v.string(),
+    titleHash: v.string(),
+    state: v.union(v.literal("selected"), v.literal("verified")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_packetId_and_sourceKey", ["packetId", "sourceKey"])
+    .index("by_runKey_and_sourceKey", ["runKey", "sourceKey"]),
+  forumAgentResearchStages: defineTable({
+    packetId: v.id("forumAgentResearchPackets"),
+    runKey: v.string(),
+    stage: v.union(
+      v.literal("source_discovery"),
+      v.literal("entity_resolution"),
+      v.literal("claim_extraction"),
+      v.literal("contradiction_detection"),
+      v.literal("reconstruction"),
+      v.literal("quality_evaluation"),
+      v.literal("publication_decision"),
+    ),
+    state: v.union(
+      v.literal("started"),
+      v.literal("completed"),
+      v.literal("held"),
+      v.literal("failed"),
+    ),
+    payloadHash: v.string(),
+    itemCount: v.optional(v.number()),
+    score: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_packetId_and_stage", ["packetId", "stage"])
+    .index("by_runKey_and_stage", ["runKey", "stage"]),
+  forumAgentDraftRevisions: defineTable({
+    packetId: v.id("forumAgentResearchPackets"),
+    runKey: v.string(),
+    agentSlug: v.string(),
+    revision: v.number(),
+    state: v.union(
+      v.literal("drafting"),
+      v.literal("publishable"),
+      v.literal("held"),
+      v.literal("published"),
+    ),
+    title: v.string(),
+    body: v.string(),
+    contentHash: v.string(),
+    claimHash: v.string(),
+    claimCount: v.number(),
+    qualityScore: v.optional(v.number()),
+    decisionReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_packetId_and_revision", ["packetId", "revision"])
+    .index("by_runKey_and_revision", ["runKey", "revision"])
+    .index("by_runKey_and_state", ["runKey", "state"]),
+  // One private Agent component thread backs the full reply conversation for
+  // an agent in a forum thread. Component ids never enter public forum rows.
+  forumAgentConversations: defineTable({
+    forumThreadId: v.id("forumThreads"),
+    agentSlug: v.string(),
+    conversationId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_forumThreadId_and_agentSlug", ["forumThreadId", "agentSlug"])
+    .index("by_conversationId", ["conversationId"]),
   forumAgentReplyRuns: defineTable({
     runKey: v.string(),
     agentSlug: v.string(),
@@ -1256,6 +1444,10 @@ export default defineSchema({
       v.literal("failed"),
     ),
     model: v.string(),
+    // Optional only for legacy queued rows. Claiming lazily admits and maps
+    // those rows before any model generation can run.
+    admittedAt: v.optional(v.number()),
+    conversationId: v.optional(v.string()),
     reason: v.optional(v.string()),
     replyPostId: v.optional(v.id("forumPosts")),
     inputTokens: v.optional(v.number()),
@@ -1406,11 +1598,37 @@ export default defineSchema({
     totalReplies: v.number(),
     totalPollVotes: v.number(),
     totalQuality: v.number(),
+    feedbackSampleCount: v.optional(v.number()),
+    helpfulCount: v.optional(v.number()),
+    sourceIssueCount: v.optional(v.number()),
+    duplicateConfirmedCount: v.optional(v.number()),
+    disclosureIssueCount: v.optional(v.number()),
+    minimumSampleSize: v.optional(v.number()),
     score: v.number(),
     updatedAt: v.number(),
   })
     .index("by_cohortKey", ["cohortKey"])
     .index("by_agentSlug_and_score", ["agentSlug", "score"]),
+  // Outcome-only counters. Moderator notes and identities never enter this
+  // aggregate or the agent selection prompt.
+  forumAgentModerationOutcomeAggregates: defineTable({
+    cohortKey: v.string(),
+    agentSlug: v.string(),
+    categorySlug: v.string(),
+    contentFormat: v.string(),
+    promptVersion: v.string(),
+    sampleCount: v.number(),
+    helpfulCount: v.number(),
+    sourceIssueCount: v.number(),
+    duplicateConfirmedCount: v.number(),
+    disclosureIssueCount: v.number(),
+    minimumSampleSize: v.number(),
+    score: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_cohortKey", ["cohortKey"])
+    .index("by_agentSlug_and_updatedAt", ["agentSlug", "updatedAt"])
+    .index("by_updatedAt", ["updatedAt"]),
   forumAgentMaintenanceState: defineTable({
     key: v.string(),
     cursor: v.optional(v.string()),
@@ -2116,6 +2334,13 @@ export default defineSchema({
     threadId: v.id("forumThreads"),
     assessmentId: v.optional(v.id("researchQualityAssessments")),
     moderatorUserId: v.id("users"),
+    runKey: v.optional(v.string()),
+    agentSlug: v.optional(v.string()),
+    promptVersion: v.optional(v.string()),
+    contentFormat: v.optional(v.string()),
+    cohortKey: v.optional(v.string()),
+    citationIds: v.optional(v.array(v.id("forumAgentClaimCitations"))),
+    eligibleForAggregate: v.optional(v.boolean()),
     outcome: v.union(
       v.literal("source_issue"),
       v.literal("duplicate_confirmed"),
@@ -2125,12 +2350,11 @@ export default defineSchema({
     note: v.string(),
     createdAt: v.number(),
   })
+    .index("by_threadId", ["threadId"])
     .index("by_threadId_and_createdAt", ["threadId", "createdAt"])
     .index("by_assessmentId_and_createdAt", ["assessmentId", "createdAt"])
-    .index("by_moderatorUserId_and_createdAt", [
-      "moderatorUserId",
-      "createdAt",
-    ]),
+    .index("by_moderatorUserId_and_createdAt", ["moderatorUserId", "createdAt"])
+    .index("by_cohortKey_and_createdAt", ["cohortKey", "createdAt"]),
   systemLogs: defineTable({
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2245,6 +2469,14 @@ export default defineSchema({
     .index("by_actorUserId_and_createdAt", ["actorUserId", "createdAt"])
     .index("by_sessionId_and_createdAt", ["sessionId", "createdAt"])
     .index("by_visitorId_and_createdAt", ["visitorId", "createdAt"]),
+  // Date-bucketed operational counters deliberately exclude visitor/session
+  // identifiers, URLs, user agents, referrers, and arbitrary metadata.
+  analyticsDailyMetrics: defineTable({
+    date: v.string(),
+    captured: v.number(),
+    droppedRateLimited: v.number(),
+    updatedAt: v.number(),
+  }).index("by_date", ["date"]),
   // Privacy-scoped field performance samples. These intentionally exclude
   // URLs, query strings, client identifiers, user agents, and account IDs.
   webVitalEvents: defineTable({

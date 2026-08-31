@@ -75,7 +75,7 @@ export function agentDataHeaders(
     "Access-Control-Allow-Headers":
       "authorization, content-type, idempotency-key, mcp-protocol-version, mcp-method, mcp-name",
     "Access-Control-Expose-Headers":
-      "www-authenticate, mcp-server-name, mcp-server-version",
+      "www-authenticate, mcp-server-name, mcp-server-version, x-artifact-sha256, content-length, content-disposition",
   });
   const origin = request.headers.get("origin");
   if (origin && isAllowedAgentOrigin(request))

@@ -44,6 +44,11 @@ import {
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 import { isResearchQualityGateError } from "./researchQuality";
+import {
+  buildForumAgentClaimCitations,
+  deterministicForumClaimHash,
+} from "./forumAgentClaimProvenance";
+import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 
 const FORUM_AGENT_MODEL = OPENROUTER_FORUM_MODEL;
 const FORUM_TIME_ZONE = "America/Chicago";
@@ -639,6 +644,26 @@ export async function runForumResearchSlot(
     const snapshots = await Promise.all(
       selectedCandidates.map(fetchArticleSnapshot),
     );
+    await ctx.runMutation(
+      internal.forumAgentResearchPackets.beginResearchPacket,
+      {
+        runKey: claim.runKey,
+        agentSlug: config.slug,
+        sources: snapshots.map((snapshot) => ({
+          sourceKey: snapshot.sourceKey,
+          sourceUrl: snapshot.url,
+          snapshotHash: forumAgentResearchPayloadHash([
+            snapshot.id,
+            snapshot.sourceKey,
+            snapshot.url,
+            snapshot.articleTitle,
+            snapshot.articleDescription,
+            snapshot.articleText,
+          ]),
+          titleHash: deterministicForumClaimHash(snapshot.articleTitle),
+        })),
+      },
+    );
     const writerRequestContext = {
       ...requestContext,
       tags: [
@@ -733,6 +758,7 @@ export async function runForumResearchSlot(
       draftGeneration.value.draft,
       snapshots,
     );
+    let latestPrivateRevision = 0;
     let revisionInputTokens: number | undefined;
     let revisionOutputTokens: number | undefined;
     let quality = evaluateForumDraft({
@@ -745,13 +771,28 @@ export async function runForumResearchSlot(
       runKey: claim.runKey,
       agentSlug: config.slug,
       stage: "draft",
-      model: draftResult.response.modelId || draftGeneration.route.persistedModel,
+      model:
+        draftResult.response.modelId || draftGeneration.route.persistedModel,
       categorySlug: category.slug,
       inputTokens: draftResult.usage.inputTokens,
       outputTokens: draftResult.usage.outputTokens,
       qualityAfter: quality.qualityScore,
       durationMs: Date.now() - draftStartedAt,
     });
+    await ctx.runMutation(
+      internal.forumAgentResearchPackets.recordDraftRevision,
+      {
+        runKey: claim.runKey,
+        agentSlug: config.slug,
+        revision: latestPrivateRevision,
+        title: draft.title,
+        body: draft.body,
+        claimHashes: draft.claims.map((item) =>
+          deterministicForumClaimHash(item.claim),
+        ),
+        qualityScore: quality.qualityScore,
+      },
+    );
     for (
       let revisionPass = 1;
       revisionPass <= MAX_FORUM_EDITORIAL_REVISION_PASSES &&
@@ -840,8 +881,39 @@ export async function runForumResearchSlot(
         qualityAfter: quality.qualityScore,
         durationMs: Date.now() - revisionStartedAt,
       });
+      latestPrivateRevision = revisionPass;
+      await ctx.runMutation(
+        internal.forumAgentResearchPackets.recordDraftRevision,
+        {
+          runKey: claim.runKey,
+          agentSlug: config.slug,
+          revision: latestPrivateRevision,
+          title: draft.title,
+          body: draft.body,
+          claimHashes: draft.claims.map((item) =>
+            deterministicForumClaimHash(item.claim),
+          ),
+          qualityScore: quality.qualityScore,
+        },
+      );
     }
     if (!forumDraftPassesGate(quality, config.qualityThreshold)) {
+      await ctx.runMutation(
+        internal.forumAgentResearchPackets.recordPublicationDecision,
+        {
+          runKey: claim.runKey,
+          agentSlug: config.slug,
+          revision: latestPrivateRevision,
+          title: draft.title,
+          body: draft.body,
+          claimHashes: draft.claims.map((item) =>
+            deterministicForumClaimHash(item.claim),
+          ),
+          qualityScore: quality.qualityScore,
+          publishable: false,
+          reason: "editorial-quality-gate",
+        },
+      );
       throw new ForumEditorialQualityError(
         `${config.name}'s draft did not clear the editorial quality gate (${quality.qualityScore}/100): ${[
           ...new Set([...quality.blockingIssues, ...quality.feedback]),
@@ -897,6 +969,38 @@ export async function runForumResearchSlot(
       selectionResult.usage.outputTokens,
       addOptionalNumbers(draftResult.usage.outputTokens, revisionOutputTokens),
     );
+    const claimCitations = buildForumAgentClaimCitations({
+      claims: draft.claims,
+      snapshots,
+      body,
+    });
+    latestPrivateRevision += 1;
+    await ctx.runMutation(
+      internal.forumAgentResearchPackets.recordDraftRevision,
+      {
+        runKey: claim.runKey,
+        agentSlug: config.slug,
+        revision: latestPrivateRevision,
+        title: draft.title,
+        body,
+        claimHashes: claimCitations.map((citation) => citation.claimHash),
+        qualityScore: quality.qualityScore,
+      },
+    );
+    await ctx.runMutation(
+      internal.forumAgentResearchPackets.recordPublicationDecision,
+      {
+        runKey: claim.runKey,
+        agentSlug: config.slug,
+        revision: latestPrivateRevision,
+        title: draft.title,
+        body,
+        claimHashes: claimCitations.map((citation) => citation.claimHash),
+        qualityScore: quality.qualityScore,
+        publishable: true,
+        reason: "automated-quality-gates-passed",
+      },
+    );
     const publicationArgs = {
       agentSlug: config.slug,
       runKey: claim.runKey,
@@ -906,6 +1010,7 @@ export async function runForumResearchSlot(
         sourceKey: snapshot.sourceKey,
         sourceUrl: snapshot.url,
       })),
+      claimCitations,
       attachment:
         cachedImage === undefined
           ? undefined
@@ -966,6 +1071,20 @@ export async function runForumResearchSlot(
       title: published.title,
     };
   } catch (error) {
+    const privateDraftHeld =
+      isResearchQualityGateError(error) ||
+      error instanceof ForumEditorialQualityError;
+    await ctx.runMutation(
+      internal.forumAgentResearchPackets.markResearchPacketTerminated,
+      {
+        runKey: claim.runKey,
+        agentSlug: config.slug,
+        state: privateDraftHeld ? "held" : "failed",
+        reason: privateDraftHeld
+          ? "private-draft-held"
+          : "research-run-failed-before-publication",
+      },
+    );
     await ctx.runMutation(
       internal.sukiForumAgentData.releaseResearchReservations,
       { runKey: claim.runKey },

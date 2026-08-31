@@ -20,6 +20,66 @@ function setup() {
 }
 
 describe("content aggregates", () => {
+  test("checkpoints and schedules the next phase without replaying a cursor", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        name: "Reader",
+        username: "reader",
+        usernameNormalized: "reader",
+        role: "reader",
+      });
+      for (let index = 0; index < 2; index += 1) {
+        await ctx.db.insert("interactions", {
+          userId,
+          entityType: "post",
+          entityId: `aggregate-${index}`,
+          vote: 1,
+          saved: false,
+          updatedAt: index,
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(internal.contentAggregates.backfillContentAggregates, {
+        phase: "interactions",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({ phase: "interactions", done: false });
+    await t.run(async (ctx) => {
+      const state = await ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) => q.eq("key", "interaction-aggregates-v1"))
+        .unique();
+      expect(state).toMatchObject({ status: "running", processed: 1 });
+      expect(state?.cursor).toEqual(expect.any(String));
+      expect(
+        await ctx.db.system.query("_scheduled_functions").collect(),
+      ).toHaveLength(1);
+    });
+
+    await expect(
+      t.mutation(internal.contentAggregates.backfillContentAggregates, {
+        phase: "interactions",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({ phase: "interactions", done: true });
+    await t.run(async (ctx) => {
+      const state = await ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) => q.eq("key", "interaction-aggregates-v1"))
+        .unique();
+      expect(state).toMatchObject({ status: "completed", processed: 2 });
+      const jobs = await ctx.db.system.query("_scheduled_functions").collect();
+      expect(
+        jobs.filter(
+          (job) => job.name === "contentAggregates:backfillContentAggregates",
+        ),
+      ).toHaveLength(2);
+    });
+  });
+
   test("backfills without a partial-count window and stays write-through", async () => {
     const t = setup();
     const seeded = await t.run(async (ctx) => {

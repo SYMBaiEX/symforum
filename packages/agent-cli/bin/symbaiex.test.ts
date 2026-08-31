@@ -128,6 +128,23 @@ describe("symbaiex login", () => {
     );
   });
 
+  test("downloads an export only after its manifest checksum verifies", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-export-"));
+    const tokenFile = join(directory, "token");
+    const outputFile = join(directory, "artifact.jsonl");
+    await new FileTokenStore(tokenFile).setToken("test-access-token");
+    const artifact = new TextEncoder().encode("export\n");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/manifest")
+        ? new Response(JSON.stringify({ checksum: "13278fdb7e220736e77342c3dca76191892d725e7722184b8727175b9f2ef886", artifactByteLength: artifact.byteLength }))
+        : new Response(artifact),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+    const code = await run(["export-download", "job-1", "--output", outputFile, "--token-file", tokenFile], { log: () => undefined, error: () => undefined });
+    expect(code).toBe(0);
+    expect(await readFile(outputFile)).toEqual(Buffer.from(artifact));
+  });
+
   test("requires a replay key before semantic provider work", async () => {
     const errors: string[] = [];
     const fetchMock = vi.fn();

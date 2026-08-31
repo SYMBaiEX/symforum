@@ -25,6 +25,35 @@ function setup() {
 }
 
 describe("analytics retention", () => {
+  test("exposes only aggregate capture health in the admin summary", async () => {
+    const t = setup();
+    const adminId = await t.run(async (ctx) =>
+      await ctx.db.insert("users", {
+        name: "Admin",
+        username: "admin",
+        usernameNormalized: "admin",
+        role: "admin",
+      }),
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.insert("analyticsDailyMetrics", {
+        date: "2026-08-31",
+        captured: 8,
+        droppedRateLimited: 2,
+        updatedAt: 1,
+      });
+    });
+
+    await expect(
+      t.withIdentity({ subject: adminId }).query(api.analytics.summaryAdmin, {
+        days: 1,
+        now: Date.parse("2026-08-31T12:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      capture: { captured: 8, droppedRateLimited: 2, captureRatio: 0.8 },
+    });
+  });
+
   test("deletes only bounded events older than ninety days", async () => {
     const now = 1_800_000_000_000;
     vi.setSystemTime(now);
@@ -81,6 +110,9 @@ describe("analytics retention", () => {
     });
     await t.run(async (ctx) => {
       expect(await ctx.db.query("analyticsEvents").collect()).toHaveLength(30);
+      expect(await ctx.db.query("analyticsDailyMetrics").collect()).toMatchObject([
+        { captured: 30, droppedRateLimited: 1 },
+      ]);
     });
   });
 });

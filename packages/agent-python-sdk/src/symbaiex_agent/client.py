@@ -7,9 +7,12 @@ Convex deployment URL. Consumers own credential storage and Ed25519 signing.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import re
 import socket
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol, TypeAlias, TypeVar
 from urllib.error import HTTPError, URLError
@@ -128,10 +131,28 @@ class ExportJob:
 class AgentApiError(RuntimeError):
     """A sanitized platform or transport error. It never includes bearer data."""
 
-    def __init__(self, status: int, code: str, message: str) -> None:
+    def __init__(self, status: int, code: str, message: str, retry_after_seconds: float | None = None) -> None:
         self.status = status
         self.code = code
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(message)
+
+
+def verify_webhook_signature(*, secret: str, timestamp: str, signature: str, body: str | bytes, now_seconds: int | None = None, tolerance_seconds: int = 300) -> bool:
+    """Verify the AsyncAPI v1 HMAC signature and bounded timestamp freshness."""
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)", timestamp) or not re.fullmatch(r"v1=[a-f0-9]{64}", signature):
+        return False
+    if not isinstance(tolerance_seconds, int) or tolerance_seconds < 0:
+        return False
+    current = int(time.time()) if now_seconds is None else now_seconds
+    try:
+        if not isinstance(current, int) or abs(current - int(timestamp)) > tolerance_seconds:
+            return False
+        raw = body.encode("utf-8") if isinstance(body, str) else body
+        expected = "v1=" + hmac.new(secret.encode("utf-8"), timestamp.encode("ascii") + b"." + raw, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    except (TypeError, UnicodeError):
+        return False
 
 
 class AgentClient:
@@ -264,6 +285,46 @@ class AgentClient:
     def export_manifest(self, job_id: str) -> bytes:
         return self._artifact(f"exports/{_path_id(job_id, 'job_id')}/manifest")
 
+    def verify_export_manifest(self, job_id: str, artifact: bytes | None = None) -> Mapping[str, JsonValue]:
+        try:
+            manifest = _as_mapping(json.loads(self.export_manifest(job_id).decode("utf-8")))
+        except (UnicodeDecodeError, json.JSONDecodeError, AgentApiError) as error:
+            if isinstance(error, AgentApiError):
+                raise
+            raise AgentApiError(200, "INVALID_MANIFEST", "The export manifest is invalid.") from error
+        if artifact is None:
+            return manifest
+        expected = manifest.get("sha256", manifest.get("checksum"))
+        if not isinstance(expected, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", expected):
+            raise AgentApiError(200, "INVALID_MANIFEST", "The export manifest has no valid SHA-256 checksum.")
+        if hashlib.sha256(artifact).hexdigest() != expected.lower():
+            raise AgentApiError(200, "CHECKSUM_MISMATCH", "The export artifact checksum does not match its manifest.")
+        length = manifest.get("artifactByteLength")
+        if isinstance(length, int) and not isinstance(length, bool) and length != len(artifact):
+            raise AgentApiError(200, "ARTIFACT_SIZE_MISMATCH", "The export artifact size does not match its manifest.")
+        return manifest
+
+    def wait_for_research(self, job_id: str, *, timeout: float = 60.0, poll_interval: float = 1.0) -> JsonValue:
+        return self._wait_for_job(job_id, self.research_job, timeout=timeout, poll_interval=poll_interval)
+
+    def wait_for_export(self, job_id: str, *, timeout: float = 60.0, poll_interval: float = 1.0) -> JsonValue:
+        return self._wait_for_job(job_id, self.export_job, timeout=timeout, poll_interval=poll_interval)
+
+    def paginate(self, path: str, *, limit: int | None = None, cursor: str | None = None):
+        if not path.startswith("/api/agent/"):
+            raise TypeError("path must be an agent API path")
+        next_cursor = cursor
+        while True:
+            query: dict[str, str] = {}
+            if limit is not None: query["limit"] = str(_limit(limit))
+            if next_cursor is not None: query["cursor"] = _identifier(next_cursor, "cursor", 512)
+            page = _as_mapping(self._json("GET", f"{path}?{urlencode(query)}" if query else path))
+            items = page.get("items", [])
+            if not isinstance(items, list): raise AgentApiError(200, "INVALID_RESPONSE", "The platform returned an unexpected response shape.")
+            yield from items
+            next_cursor = page.get("nextCursor")
+            if not isinstance(next_cursor, str) or not next_cursor: return
+
     def webhooks(self) -> JsonValue:
         return self._get("webhooks")
 
@@ -324,6 +385,21 @@ class AgentClient:
     def _artifact(self, resource: str) -> bytes:
         response = self._request("GET", f"/api/agent/v1/{resource}", max_bytes=MAX_ARTIFACT_BYTES, timeout=self._artifact_timeout)
         return response.body
+
+    def _wait_for_job(self, job_id: str, read: Callable[[str], JsonValue], *, timeout: float, poll_interval: float) -> JsonValue:
+        if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > 120:
+            raise TypeError("timeout must be a number between 0 and 120 seconds")
+        if not isinstance(poll_interval, (int, float)) or poll_interval < 0.05 or poll_interval > 30:
+            raise TypeError("poll_interval must be a number between 0.05 and 30 seconds")
+        deadline = time.monotonic() + float(timeout)
+        while True:
+            job = read(job_id)
+            if isinstance(job, dict) and job.get("status") in {"completed", "failed", "cancelled", "expired"}:
+                return job
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AgentApiError(408, "WAIT_TIMEOUT", "Waiting for the job timed out.")
+            time.sleep(min(float(poll_interval), remaining))
 
     def _json(self, method: str, path: str, *, body: Mapping[str, JsonValue] | None = None, authenticated: bool = True, idempotency_key: str | None = None, headers: Mapping[str, str] | None = None) -> JsonValue:
         response = self._request(method, path, body=body, authenticated=authenticated, idempotency_key=idempotency_key, headers=headers)
@@ -410,6 +486,17 @@ class AsyncAgentClient:
     async def export_job(self, job_id: str) -> JsonValue: return await self.__getattr_async("export_job", job_id)
     async def export_artifact(self, job_id: str) -> bytes: return await self.__getattr_async("export_artifact", job_id)
     async def export_manifest(self, job_id: str) -> bytes: return await self.__getattr_async("export_manifest", job_id)
+    async def verify_export_manifest(self, job_id: str, artifact: bytes | None = None) -> Mapping[str, JsonValue]: return await self.__getattr_async("verify_export_manifest", job_id, artifact)
+    async def wait_for_research(self, job_id: str, *, timeout: float = 60.0, poll_interval: float = 1.0) -> JsonValue: return await self.__getattr_async("wait_for_research", job_id, timeout=timeout, poll_interval=poll_interval)
+    async def wait_for_export(self, job_id: str, *, timeout: float = 60.0, poll_interval: float = 1.0) -> JsonValue: return await self.__getattr_async("wait_for_export", job_id, timeout=timeout, poll_interval=poll_interval)
+    async def paginate(self, path: str, *, limit: int | None = None, cursor: str | None = None):
+        iterator = self._sync.paginate(path, limit=limit, cursor=cursor)
+        exhausted = object()
+        while True:
+            item = await asyncio.to_thread(next, iterator, exhausted)
+            if item is exhausted:
+                return
+            yield item
     async def webhooks(self) -> JsonValue: return await self.__getattr_async("webhooks")
     async def create_webhook(self, subscription_key: str, url: str, event_types: list[str] | tuple[str, ...], *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("create_webhook", subscription_key, url, event_types, idempotency_key=idempotency_key)
     async def set_webhook_status(self, subscription_key: str, status: str, *, idempotency_key: str) -> JsonValue: return await self.__getattr_async("set_webhook_status", subscription_key, status, idempotency_key=idempotency_key)
@@ -549,7 +636,9 @@ def _api_error(response: HttpResponse, *, token: str | None = None) -> AgentApiE
                 code = candidate
     except (UnicodeDecodeError, json.JSONDecodeError):
         pass
-    return AgentApiError(response.status, code, message)
+    retry_after = response.headers.get("Retry-After") or response.headers.get("retry-after")
+    retry_after_seconds = float(retry_after) if retry_after and re.fullmatch(r"\d+(?:\.\d+)?", retry_after) else None
+    return AgentApiError(response.status, code, message, retry_after_seconds)
 
 
 def _stdlib_transport(request: HttpRequest) -> HttpResponse:

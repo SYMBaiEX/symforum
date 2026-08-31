@@ -2,6 +2,7 @@
 
 import { convexRefs } from "@/lib/convex-refs";
 import { getBrowserStorage } from "@/lib/browser-storage";
+import { isPrivateAnalyticsPath } from "@/lib/analytics-privacy";
 import { useMutation } from "convex/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
@@ -10,27 +11,6 @@ const VISITOR_KEY = "symbaiex:analytics:visitor";
 const SESSION_KEY = "symbaiex:analytics:session";
 const SESSION_AT_KEY = "symbaiex:analytics:sessionAt";
 const SESSION_TTL_MS = 30 * 60 * 1000;
-const PRIVATE_ANALYTICS_PATHS = [
-  "/admin",
-  "/profile",
-  "/signin",
-  "/agent/signup",
-  "/newsletter/confirm",
-  "/newsletter/preferences",
-  "/newsletter/unsubscribe",
-  "/forum/control-panel",
-  "/forum/messages",
-  "/forum/moderation",
-  "/forum/saved",
-  "/forum/search",
-  "/forum/subscriptions",
-  "/control-panel",
-  "/messages",
-  "/moderation",
-  "/saved",
-  "/search",
-  "/subscriptions",
-] as const;
 const AUTOMATION_USER_AGENT =
   /(?:bot|crawler|spider|slurp|lighthouse|pagespeed|headlesschrome|adidx)/i;
 
@@ -104,10 +84,7 @@ export function shouldRecordClientAnalytics({
   if (AUTOMATION_USER_AGENT.test(userAgent)) {
     return false;
   }
-  return !PRIVATE_ANALYTICS_PATHS.some(
-    (privatePath) =>
-      pathname === privatePath || pathname.startsWith(`${privatePath}/`),
-  );
+  return !isPrivateAnalyticsPath(pathname);
 }
 
 function analyticsIds() {
