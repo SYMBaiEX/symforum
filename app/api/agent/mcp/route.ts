@@ -12,6 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const MODERN_PROTOCOL_VERSION = "2026-07-28";
+const STREAMABLE_HTTP_PROTOCOL_VERSION = "2025-06-18";
 const LEGACY_PROTOCOL_VERSION = "2025-03-26";
 const SERVER_NAME = "symbaiex-evidence";
 const SERVER_VERSION = "v1";
@@ -244,7 +245,7 @@ export async function POST(request: Request) {
       );
     }
     return rpc(request, protocol, id, {
-      protocolVersion: LEGACY_PROTOCOL_VERSION,
+      protocolVersion: negotiatedInitializeVersion(body),
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
       instructions:
@@ -415,7 +416,12 @@ function validateProtocolRequest(
     headerVersion !== null &&
     headerVersion !== MODERN_PROTOCOL_VERSION
   ) {
-    if (headerVersion === LEGACY_PROTOCOL_VERSION) return "legacy";
+    if (
+      headerVersion === STREAMABLE_HTTP_PROTOCOL_VERSION ||
+      headerVersion === LEGACY_PROTOCOL_VERSION
+    ) {
+      return "legacy";
+    }
     return unsupportedProtocol(request, id, headerVersion);
   }
   if (
@@ -730,10 +736,21 @@ function unsupportedProtocol(request: Request, id: unknown, requested: string) {
     code: -32022,
     message: "Unsupported protocol version",
     data: {
-      supported: [MODERN_PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION],
+      supported: [
+        MODERN_PROTOCOL_VERSION,
+        STREAMABLE_HTTP_PROTOCOL_VERSION,
+        LEGACY_PROTOCOL_VERSION,
+      ],
       requested,
     },
   });
+}
+
+function negotiatedInitializeVersion(body: Record<string, unknown>) {
+  const params = isRecord(body.params) ? body.params : null;
+  return params?.protocolVersion === STREAMABLE_HTTP_PROTOCOL_VERSION
+    ? STREAMABLE_HTTP_PROTOCOL_VERSION
+    : LEGACY_PROTOCOL_VERSION;
 }
 
 function protocolError(request: Request, id: unknown, error: JsonRpcError) {

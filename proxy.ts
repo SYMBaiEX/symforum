@@ -192,7 +192,8 @@ function getMarkdownRequest(request: NextRequest) {
     pathname === "/llms.txt" ||
     pathname === "/llms-full.txt" ||
     pathname === "/agents.md" ||
-    pathname === "/auth.md"
+    pathname === "/auth.md" ||
+    pathname === "/pricing.md"
   ) {
     return null;
   }

@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 32 * 1024;
-const PROTOCOL_VERSION = "2025-03-26";
+const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "symbaiex-docs", version: "v1" } as const;
 
 const DOCUMENTS = [
@@ -35,6 +35,13 @@ const DOCUMENTS = [
     description:
       "Live machine-readable capabilities, endpoints, authentication, quotas, and disabled payment boundaries.",
     text: `# SYMBaiEX Agent API manifest\n\nCanonical: ${primarySiteUrl("/api/agent")}\n\nRead the live JSON manifest and ${primarySiteUrl("/api/agent/openapi.json")} before calling the authenticated evidence API. Public docs MCP reads never create records; evidence tool calls require an owner-approved identity and scope.`,
+  },
+  {
+    uri: primarySiteUrl("/pricing.md"),
+    name: "SYMBaiEX API pricing and limits",
+    description:
+      "Current $0 free-beta policy, quotas, export bounds, and inactive payment boundary.",
+    text: `# SYMBaiEX API pricing\n\nCanonical: ${primarySiteUrl("/pricing.md")}\n\nThe evidence API is a quota-limited $0 free beta. Billing and payment are disabled. Read the canonical pricing contract for exact owner, agent, request, rate, export, and retention limits.`,
   },
 ] as const;
 

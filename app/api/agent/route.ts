@@ -27,6 +27,7 @@ const MANIFEST = {
       "https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json",
     publicClients: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
     authenticationGuide: primarySiteUrl("/auth.md"),
+    pricing: primarySiteUrl("/pricing.md"),
     agentsMarkdown: primarySiteUrl("/agents.md"),
     sandboxOpenapi: primarySiteUrl("/api/sandbox/openapi.json"),
   },
@@ -105,7 +106,11 @@ const MANIFEST = {
       version: "v1",
       responseHeaders: ["Mcp-Server-Name", "Mcp-Server-Version"],
     },
-    supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+    supportedProtocolVersions: [
+      "2026-07-28",
+      "2025-06-18",
+      "2025-03-26",
+    ],
     modernDiscoveryMethod: "server/discover",
     publicDiscoveryMethods: [
       "initialize",
@@ -133,6 +138,7 @@ const MANIFEST = {
   },
   monetization: {
     enabled: false,
+    pricing: primarySiteUrl("/pricing.md"),
     payToPost: false,
     payToVote: false,
     payToLike: false,

@@ -128,6 +128,25 @@ describe("evidence MCP endpoint", () => {
     expect(payload.result.ttlMs).toBeUndefined();
   });
 
+  test("negotiates the standard 2025-06-18 Streamable HTTP version", async () => {
+    const response = await POST(
+      legacyRequest(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: {} },
+        },
+        false,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { protocolVersion: "2025-06-18" },
+    });
+  });
+
   test("publishes a public MCP App resource for read-oriented tools", async () => {
     const listed = await POST(
       legacyRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" }, false),
@@ -449,7 +468,7 @@ describe("evidence MCP endpoint", () => {
       code: -32022,
       data: {
         requested: "2099-01-01",
-        supported: ["2026-07-28", "2025-03-26"],
+        supported: ["2026-07-28", "2025-06-18", "2025-03-26"],
       },
     });
 

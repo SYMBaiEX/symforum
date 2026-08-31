@@ -107,4 +107,38 @@ describe("agent API OpenAPI contract", () => {
       }),
     );
   });
+
+  test("gives every operation a unique id, summary, and description", async () => {
+    const document = await GET().json();
+    const methods = new Set([
+      "get",
+      "post",
+      "put",
+      "patch",
+      "delete",
+      "head",
+      "options",
+    ]);
+    const operations = Object.entries(document.paths).flatMap(
+      ([path, pathItem]) =>
+        Object.entries(pathItem as Record<string, unknown>)
+          .filter(([method]) => methods.has(method))
+          .map(([method, operation]) => ({
+            path,
+            method,
+            operation: operation as Record<string, unknown>,
+          })),
+    );
+    const ids = operations.map(({ operation }) => operation.operationId);
+
+    expect(operations).toHaveLength(39);
+    expect(new Set(ids).size).toBe(operations.length);
+    for (const { operation } of operations) {
+      expect(operation.operationId).toEqual(expect.any(String));
+      expect(operation.summary).toEqual(expect.any(String));
+      expect(String(operation.summary).length).toBeGreaterThan(8);
+      expect(operation.description).toEqual(expect.any(String));
+      expect(String(operation.description).length).toBeGreaterThan(30);
+    }
+  });
 });

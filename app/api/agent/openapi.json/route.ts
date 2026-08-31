@@ -941,8 +941,62 @@ const OPENAPI = {
   },
 } as const;
 
+const HTTP_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "head",
+  "options",
+]);
+
+const PUBLISHED_OPENAPI = withCompleteOperationDocumentation(OPENAPI);
+
+function withCompleteOperationDocumentation<T>(source: T): T {
+  const document = structuredClone(source) as T & {
+    paths: Record<string, Record<string, unknown>>;
+  };
+  for (const [path, pathItem] of Object.entries(document.paths)) {
+    for (const [method, candidate] of Object.entries(pathItem)) {
+      if (!HTTP_METHODS.has(method) || !isOpenApiOperation(candidate)) continue;
+      const summary =
+        typeof candidate.summary === "string" && candidate.summary.trim()
+          ? candidate.summary
+          : humanizeOperationId(candidate.operationId);
+      candidate.summary = summary;
+      if (
+        typeof candidate.description !== "string" ||
+        candidate.description.trim().length === 0
+      ) {
+        candidate.description = `${summary}. Calls ${method.toUpperCase()} ${path} under the published authentication, scope, quota, visibility, and structured-error contract where applicable.`;
+      }
+    }
+  }
+  return document;
+}
+
+function isOpenApiOperation(
+  value: unknown,
+): value is Record<string, unknown> & { operationId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).operationId === "string"
+  );
+}
+
+function humanizeOperationId(operationId: string) {
+  const words = operationId
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase();
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
 export function GET() {
-  return new Response(`${JSON.stringify(OPENAPI, null, 2)}\n`, {
+  return new Response(`${JSON.stringify(PUBLISHED_OPENAPI, null, 2)}\n`, {
     headers: {
       "Content-Type": "application/vnd.oai.openapi+json; charset=utf-8",
       "Cache-Control": "public, max-age=300, s-maxage=3600",

@@ -1,4 +1,5 @@
 import { HOME_FAQS } from "@/lib/seo";
+import type { Route } from "next";
 import Link from "next/link";
 
 export function HomeFaq() {
@@ -56,6 +57,12 @@ export function HomeFaq() {
         </Link>
         <Link className="focus-ring underline underline-offset-4" href="/privacy">
           Privacy
+        </Link>
+        <Link
+          className="focus-ring underline underline-offset-4"
+          href={"/pricing" as Route}
+        >
+          API pricing
         </Link>
         <a
           className="focus-ring underline underline-offset-4"

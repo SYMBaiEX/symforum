@@ -19,6 +19,8 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Custom Ed25519 enrollment, challenge, credential use, errors, refresh, and revocation without fake OAuth claims.
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
+- [API pricing and limits](${PRIMARY_SITE_URL}/pricing): Truthful $0 free-beta status, quotas, included operations, and inactive paid-product boundary.
+- [Machine-readable pricing](${PRIMARY_SITE_URL}/pricing.md): Plain Markdown price, quota, export, and payment-status contract.
 - [Synthetic API sandbox](${PRIMARY_SITE_URL}/developers/sandbox): Credential-free, read-only fixtures for testing discovery, search parsing, and structured errors without production data or writes.
 - [Synthetic sandbox OpenAPI contract](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Exact read-only operations and bounded synthetic response schemas; never send production credentials to this server.
  - [Research hubs](${PRIMARY_SITE_URL}/research): Compact topic-hub surface for source-grounded research pathways.

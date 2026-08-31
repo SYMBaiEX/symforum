@@ -18,7 +18,7 @@ describe("public documentation MCP", () => {
     const body = await response.json();
 
     expect(body.result).toMatchObject({
-      protocolVersion: "2025-03-26",
+      protocolVersion: "2025-06-18",
       capabilities: { tools: {}, resources: {} },
       serverInfo: { name: "symbaiex-docs", version: "v1" },
     });
@@ -97,7 +97,14 @@ describe("public documentation MCP", () => {
       request({ jsonrpc: "2.0", id: 2, method: "resources/list", params: {} }),
     );
     const list = await listed.json();
-    expect(list.result.resources).toHaveLength(4);
+    expect(list.result.resources).toHaveLength(5);
+    expect(list.result.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          uri: "https://www.symbaiex.com/pricing.md",
+        }),
+      ]),
+    );
 
     const read = await POST(
       request({

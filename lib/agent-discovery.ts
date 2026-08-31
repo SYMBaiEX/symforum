@@ -89,6 +89,16 @@ export const MCP_SERVER_CARD = {
   description:
     "Authenticated public evidence search, verification, research jobs, exports, and webhooks.",
   websiteUrl: primarySiteUrl("/developers"),
+  icons: [
+    {
+      src: primarySiteUrl("/favicon.svg"),
+      mimeType: "image/svg+xml",
+    },
+  ],
+  repository: {
+    url: "https://github.com/SYMBaiEX/symbaiex-blog",
+    source: "github",
+  },
   version: "1.0.0",
   serverUrl: AGENT_MCP_RESOURCE,
   transport: "streamable-http",
@@ -118,7 +128,11 @@ export const MCP_SERVER_CARD = {
     {
       type: "streamable-http",
       url: AGENT_MCP_RESOURCE,
-      supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+      supportedProtocolVersions: [
+        "2026-07-28",
+        "2025-06-18",
+        "2025-03-26",
+      ],
       headers: [
         {
           name: "Authorization",
@@ -141,6 +155,12 @@ export const MCP_SERVER_CARD = {
       ownerEnrollment: primarySiteUrl("/agent/signup"),
       documentation: primarySiteUrl("/agent/instructions"),
     },
+    "com.symbaiex/relatedServers": [
+      {
+        relationship: "documentation",
+        serverCard: primarySiteUrl("/api/docs/mcp/server-card"),
+      },
+    ],
   },
 } as const;
 
@@ -151,6 +171,16 @@ export const DOCS_MCP_SERVER_CARD = {
   title: "SYMBaiEX Documentation MCP",
   description: "Public read-only SYMBaiEX developer and agent documentation.",
   websiteUrl: primarySiteUrl("/developers"),
+  icons: [
+    {
+      src: primarySiteUrl("/favicon.svg"),
+      mimeType: "image/svg+xml",
+    },
+  ],
+  repository: {
+    url: "https://github.com/SYMBaiEX/symbaiex-blog",
+    source: "github",
+  },
   version: "1.0.0",
   serverUrl: primarySiteUrl("/api/docs/mcp"),
   transport: "streamable-http",
@@ -164,9 +194,17 @@ export const DOCS_MCP_SERVER_CARD = {
     {
       type: "streamable-http",
       url: primarySiteUrl("/api/docs/mcp"),
-      supportedProtocolVersions: ["2025-03-26"],
+      supportedProtocolVersions: ["2025-06-18", "2025-03-26"],
     },
   ],
+  _meta: {
+    "com.symbaiex/relatedServers": [
+      {
+        relationship: "product",
+        serverCard: primarySiteUrl("/api/agent/mcp/server-card"),
+      },
+    ],
+  },
 } as const;
 
 export const AI_CATALOG = {
@@ -322,6 +360,7 @@ export const API_CATALOG = {
       ],
       "service-doc": [
         { href: primarySiteUrl("/developers"), type: "text/html" },
+        { href: primarySiteUrl("/pricing.md"), type: "text/markdown" },
         {
           href: primarySiteUrl("/agent/instructions"),
           type: "text/markdown",

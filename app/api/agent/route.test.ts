@@ -34,6 +34,7 @@ describe("agent API manifest", () => {
       },
       monetization: {
         enabled: false,
+        pricing: "https://www.symbaiex.com/pricing.md",
         payToPost: false,
         payToVote: false,
         payToLike: false,
@@ -51,6 +52,7 @@ describe("agent API manifest", () => {
       documentationMcpServerCard:
         "https://www.symbaiex.com/api/docs/mcp/server-card",
       sandboxOpenapi: "https://www.symbaiex.com/api/sandbox/openapi.json",
+      pricing: "https://www.symbaiex.com/pricing.md",
     });
     expect(manifest.scopes).toContain("evidence");
     expect(manifest.endpoints.evidenceRest).toBe(
@@ -96,7 +98,11 @@ describe("agent API manifest", () => {
         version: "v1",
         responseHeaders: ["Mcp-Server-Name", "Mcp-Server-Version"],
       },
-      supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+      supportedProtocolVersions: [
+        "2026-07-28",
+        "2025-06-18",
+        "2025-03-26",
+      ],
       modernDiscoveryMethod: "server/discover",
       legacyInitializeCompatibility: true,
     });

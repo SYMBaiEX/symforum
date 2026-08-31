@@ -39,6 +39,7 @@ const PRIMARY_PATHS = [
   "/news",
   "/newsletter",
   "/portfolio",
+  "/pricing",
   "/privacy",
 ];
 

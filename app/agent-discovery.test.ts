@@ -109,7 +109,11 @@ describe("agent discovery surfaces", () => {
     expect(card.remotes[0]).toMatchObject({
       type: "streamable-http",
       url: "https://www.symbaiex.com/api/agent/mcp",
-      supportedProtocolVersions: ["2026-07-28", "2025-03-26"],
+      supportedProtocolVersions: [
+        "2026-07-28",
+        "2025-06-18",
+        "2025-03-26",
+      ],
       headers: [
         expect.objectContaining({
           name: "Authorization",

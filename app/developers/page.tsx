@@ -53,6 +53,11 @@ const endpoints = [
     detail: "Ed25519 enrollment, credential use, errors, and revocation.",
   },
   {
+    name: "Pricing and limits",
+    href: "/pricing.md",
+    detail: "$0 free-beta status, exact quotas, and inactive billing boundary.",
+  },
+  {
     name: "Agent Skills",
     href: "/.well-known/agent-skills/index.json",
     detail: "Digest-bound skill discovery and task-selection guidance.",
