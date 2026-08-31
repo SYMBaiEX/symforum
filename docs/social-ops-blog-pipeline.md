@@ -19,17 +19,33 @@ Provide a JSON object with only the following fields. All required strings are t
   "featured": false,
   "imageUrl": "https://images.example.com/social-ops.png",
   "imageAlt": "An operations checklist",
-  "imageCredit": "Example Studio"
+  "imageCredit": "Example Studio",
+  "inlineImages": [
+    {
+      "token": "mechanism",
+      "path": "../assets/article-mechanism.png",
+      "alt": "Diagram of the article's central mechanism",
+      "credit": "SYMBiEX editorial system"
+    },
+    {
+      "token": "operating-checklist",
+      "path": "../assets/article-checklist.png",
+      "alt": "Operational checklist derived from the article",
+      "credit": "SYMBiEX editorial system"
+    }
+  ]
 }
 ```
 
-Constraints: slugs are lowercase letters/digits separated by single hyphens (maximum 96 characters); title/excerpt/body are nonempty and capped at 180/500/100,000 characters; there are at most 12 unique tags (48 characters each); `readingMinutes` is 1–240; `publishedAt` is either an integer epoch-milliseconds value or a strict ISO-8601 timestamp with time and timezone; and an image URL is HTTPS without embedded credentials. Unknown fields are rejected.
+Place each inline image once in the Markdown body using a standalone token such as `{{inline-image:mechanism}}`. A multi-image document must contain two to eight distinct inline images. Paths are resolved relative to the JSON document; a durable HTTPS `url` may be supplied instead of a local path. During an apply run, the publisher uploads local files to first-party storage and replaces the tokens with ordinary Markdown image blocks. On reconciliation it finds the previously rendered image by exact alt text, verifies its stored SHA-256 digest, and reuses it rather than uploading a duplicate.
+
+Constraints: slugs and inline-image tokens are lowercase letters/digits separated by single hyphens; title/excerpt/body are nonempty and capped at 180/500/100,000 characters; there are at most 12 unique tags (48 characters each); `readingMinutes` is 1–240; `publishedAt` is either an integer epoch-milliseconds value or a strict ISO-8601 timestamp with time and timezone; and image URLs are HTTPS without embedded credentials. Every inline-image token must appear exactly once. Unknown fields are rejected.
 
 ## Live-only workflow
 
 All mutations to symbaiex.com publish live. Draft mutations are disabled as a standing operating rule. The default command remains a non-mutating dry run so content can still be validated before it goes public.
 
-Review the normalized summary first. It includes only title, tag count, reading minutes, featured/image indicators, and result metadata; it intentionally omits the body and every secret:
+Review the normalized summary first. It includes only title, tag count, reading minutes, cover/inline image counts, and result metadata; it intentionally omits the body and every secret:
 
 ```sh
 bun scripts/symbaiex-blog-publisher.mjs --input ./post.json
@@ -48,6 +64,8 @@ bun scripts/symbaiex-blog-publisher.mjs --input ./post.json --image ./cover.png 
 ```
 
 The publisher accepts PNG, JPEG, GIF, and WebP files up to 8 MiB, uploads them to first-party Convex storage through `/api/admin/upload`, and writes the returned durable URL into the post mutation. On repeat runs it compares the stored SHA-256 digest and reuses an identical Convex image instead of uploading a duplicate. Third-party scheduler/CDN URLs should not be used as blog covers because their host policy or response MIME type may be incompatible with the site's image optimizer.
+
+For the SYMBiEX social-ops workspace, `article-visuals.json` is the visual source of truth. Every staged article must register one compositionally distinct cover plus at least two useful in-body visuals before release. Run `bun scripts/build-article-visuals.mjs`, `bun scripts/apply-article-visuals.mjs --apply`, and `bun scripts/validate-article-visuals.mjs` from `/Users/symbiex/dev/austin/socials`. The validator discovers every staged article JSON, rejects unregistered documents, duplicate file hashes, reused composition IDs or alt text, missing 1600×900 assets, and unsynchronized placeholders. A failed visual preflight keeps the release inert.
 
 The command first `GET`s `/api/admin/posts/{slug}`. A 404 leads to one `POST` to `/api/admin/posts`; a matching post is a no-op; a different post fails until it is deliberately re-run with `--update`, which makes one `PATCH` to `/api/admin/posts/{slug}`. Auth (401/403), server errors, malformed responses, and transport failures fail closed. Mutations are never retried automatically.
 

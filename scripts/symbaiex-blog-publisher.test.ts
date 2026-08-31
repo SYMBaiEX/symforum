@@ -20,6 +20,16 @@ async function imageInput(bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0
   await writeFile(path, bytes);
   return { path, bytes };
 }
+async function inlineArticleInput({ duplicate = false } = {}) {
+  const first = await imageInput(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]));
+  const second = duplicate ? first : await imageInput(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x02]));
+  const body = "# Safe\n\n{{inline-image:mechanism}}\n\nA complete body.\n\n{{inline-image:checklist}}";
+  const path = await input({ body, inlineImages: [
+    { token: "mechanism", path: first.path, alt: "A mechanism diagram." },
+    { token: "checklist", path: second.path, alt: "An operational checklist." },
+  ] });
+  return { path, first, second, body };
+}
 function response(status: number, body: unknown) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
 function env(): NodeJS.ProcessEnv { return { NODE_ENV: "test", SYMBAIEX_ADMIN_TOKEN: "test-token", SYMBAIEX_BLOG_API_BASE_URL: "http://localhost:3000/api/admin/posts" }; }
 function emptyEnv(): NodeJS.ProcessEnv { return { NODE_ENV: "test" }; }
@@ -31,6 +41,21 @@ describe("symbaiex blog publisher", () => {
     expect(result).toMatchObject({ action: "dry-run", status: "draft", summary: { title: valid.title } });
     expect(JSON.stringify(result)).not.toContain(valid.body);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  test("dry run validates a three-visual article package without uploading", async () => {
+    const article = await inlineArticleInput();
+    const cover = await imageInput(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x03]));
+    const fetchImpl = vi.fn();
+    const result = await runPublisher({ args: ["--input", article.path, "--image", cover.path], fetchImpl, env: emptyEnv() });
+    expect(result).toMatchObject({ action: "dry-run", summary: { inlineImageCount: 2, totalVisualCount: 3 } });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  test("requires two inline images and one matching placeholder per image", () => {
+    expect(() => validateDocument({ ...valid, body: "{{inline-image:one}}", inlineImages: [{ token: "one", url: "https://example.test/one.png", alt: "One" }] })).toThrow("2 to 8");
+    expect(() => validateDocument({ ...valid, inlineImages: [
+      { token: "one", url: "https://example.test/one.png", alt: "One" },
+      { token: "two", url: "https://example.test/two.png", alt: "Two" },
+    ] })).toThrow("must appear exactly once");
   });
   test("apply requires a token", async () => {
     await expect(runPublisher({ args: ["--input", await input(), "--apply-published"], env: emptyEnv(), platform: "linux" })).rejects.toThrow("admin token is unavailable");
@@ -65,6 +90,31 @@ describe("symbaiex blog publisher", () => {
     expect(fetchImpl.mock.calls[1][1].headers["Content-Type"]).toBe("image/png");
     expect(Buffer.from(fetchImpl.mock.calls[1][1].body)).toEqual(image.bytes);
     expect(JSON.parse(fetchImpl.mock.calls[2][1].body).imageUrl).toBe(storedUrl);
+  });
+  test("uploads two inline images and resolves their body placeholders", async () => {
+    const article = await inlineArticleInput();
+    const firstUrl = "https://example.convex.cloud/api/storage/inline-1";
+    const secondUrl = "https://example.convex.cloud/api/storage/inline-2";
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(404, {}))
+      .mockResolvedValueOnce(response(200, { url: firstUrl }))
+      .mockResolvedValueOnce(response(200, { url: secondUrl }))
+      .mockResolvedValueOnce(response(201, { post: published }));
+    const result = await runPublisher({ args: ["--input", article.path, "--apply-published"], env: env(), fetchImpl });
+    expect(result).toMatchObject({ action: "create", inlineImages: [
+      { token: "mechanism", url: firstUrl, action: "uploaded" },
+      { token: "checklist", url: secondUrl, action: "uploaded" },
+    ] });
+    const posted = JSON.parse(fetchImpl.mock.calls[3][1].body);
+    expect(posted.body).toContain(`![A mechanism diagram.](${firstUrl})`);
+    expect(posted.body).toContain(`![An operational checklist.](${secondUrl})`);
+    expect(posted.body).not.toContain("{{inline-image:");
+  });
+  test("rejects duplicate visual files before a network request", async () => {
+    const article = await inlineArticleInput({ duplicate: true });
+    const fetchImpl = vi.fn();
+    await expect(runPublisher({ args: ["--input", article.path], fetchImpl, env: emptyEnv() })).rejects.toThrow("distinct image files");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
   test("reuses an identical Convex cover without another upload", async () => {
     const image = await imageInput();

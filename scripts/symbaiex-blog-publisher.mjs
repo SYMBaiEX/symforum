@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 const DEFAULT_API_BASE = "https://www.symbaiex.com/api/admin/posts";
 const KEYCHAIN_SERVICE = "symbaiex-blog-admin";
@@ -15,6 +16,8 @@ const MAX_BODY = 100_000;
 const MAX_TAGS = 12;
 const MAX_TAG_LENGTH = 48;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_INLINE_IMAGES = 8;
+const INLINE_IMAGE_TOKEN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export class PublisherError extends Error {}
 
@@ -74,9 +77,39 @@ function safeImageUrl(value) {
   return parsed.toString();
 }
 
+function inlineImages(value, body) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length < 2 || value.length > MAX_INLINE_IMAGES) {
+    fail(`inlineImages must contain 2 to ${MAX_INLINE_IMAGES} images`);
+  }
+  const seen = new Set();
+  return value.map((entry, index) => {
+    const source = record(entry, `inlineImages[${index}]`);
+    const allowed = new Set(["token", "path", "url", "alt", "credit"]);
+    for (const key of Object.keys(source)) if (!allowed.has(key)) fail(`unexpected inlineImages[${index}] field: ${key}`);
+    const token = boundedString(source.token, `inlineImages[${index}].token`, 64).toLowerCase();
+    if (!INLINE_IMAGE_TOKEN.test(token)) fail(`inlineImages[${index}].token must use lowercase letters, digits, and single hyphens`);
+    if (seen.has(token)) fail("inlineImages tokens must be unique");
+    seen.add(token);
+    const path = optionalBoundedString(source.path, `inlineImages[${index}].path`, 1024);
+    const url = safeImageUrl(source.url);
+    if (!path && !url) fail(`inlineImages[${index}] requires path or url`);
+    const placeholder = `{{inline-image:${token}}}`;
+    const occurrences = body.split(placeholder).length - 1;
+    if (occurrences !== 1) fail(`${placeholder} must appear exactly once in body`);
+    return {
+      token,
+      ...(path ? { path } : {}),
+      ...(url ? { url } : {}),
+      alt: boundedString(source.alt, `inlineImages[${index}].alt`, 300),
+      ...(source.credit ? { credit: boundedString(source.credit, `inlineImages[${index}].credit`, 300) } : {}),
+    };
+  });
+}
+
 export function validateDocument(input) {
   const source = record(input);
-  const allowed = new Set(["slug", "title", "excerpt", "body", "tags", "status", "publishedAt", "readingMinutes", "featured", "imageUrl", "imageAlt", "imageCredit"]);
+  const allowed = new Set(["slug", "title", "excerpt", "body", "tags", "status", "publishedAt", "readingMinutes", "featured", "imageUrl", "imageAlt", "imageCredit", "inlineImages"]);
   for (const key of Object.keys(source)) if (!allowed.has(key)) fail(`unexpected input field: ${key}`);
   const slug = boundedString(source.slug, "slug", 96).toLowerCase();
   if (!SLUG.test(slug)) fail("slug must use lowercase letters, digits, and single hyphens");
@@ -89,11 +122,12 @@ export function validateDocument(input) {
   const imageUrl = safeImageUrl(source.imageUrl);
   const imageAlt = optionalBoundedString(source.imageAlt, "imageAlt", 300);
   const imageCredit = optionalBoundedString(source.imageCredit, "imageCredit", 300);
+  const body = boundedString(source.body, "body", MAX_BODY).replace(/\r\n/g, "\n");
   return {
     slug,
     title: boundedString(source.title, "title", MAX_TITLE),
     excerpt: boundedString(source.excerpt, "excerpt", MAX_EXCERPT),
-    body: boundedString(source.body, "body", MAX_BODY).replace(/\r\n/g, "\n"),
+    body,
     tags,
     status: source.status,
     publishedAt: publishedAt(source.publishedAt),
@@ -102,6 +136,7 @@ export function validateDocument(input) {
     ...(imageUrl ? { imageUrl } : {}),
     ...(imageAlt ? { imageAlt } : {}),
     ...(imageCredit ? { imageCredit } : {}),
+    ...(source.inlineImages !== undefined ? { inlineImages: inlineImages(source.inlineImages, body) } : {}),
   };
 }
 
@@ -179,16 +214,51 @@ function imageContentType(bytes) {
   fail("--image must be a PNG, JPEG, GIF, or WebP file");
 }
 
-async function readImage(path) {
+async function readImage(path, label = "--image") {
   let bytes;
-  try { bytes = await readFile(path); } catch { fail("--image could not be read"); }
-  if (bytes.length === 0) fail("--image must not be empty");
-  if (bytes.length > MAX_IMAGE_BYTES) fail("--image exceeds 8388608 bytes");
+  try { bytes = await readFile(path); } catch { fail(`${label} could not be read`); }
+  if (bytes.length === 0) fail(`${label} must not be empty`);
+  if (bytes.length > MAX_IMAGE_BYTES) fail(`${label} exceeds 8388608 bytes`);
   return {
     bytes,
     contentType: imageContentType(bytes),
     digest: createHash("sha256").update(bytes).digest("base64"),
   };
+}
+
+function markdownImageUrl(body, alt) {
+  const pattern = /!\[([^\]]*)\]\((https:\/\/[^\s)]+)\)/g;
+  for (const match of body.matchAll(pattern)) if (match[1] === alt) return match[2];
+  return undefined;
+}
+
+function renderInlineImage(entry, url) {
+  return `![${entry.alt.replace(/[\[\]]/g, "")}](${url})${entry.credit ? `\n\n*Image: ${entry.credit}*` : ""}`;
+}
+
+async function resolveInlineImages({ entries, inputPath, existingBody, fetchImpl, base, token, apply }) {
+  const resolved = [];
+  const digests = new Set();
+  for (const entry of entries) {
+    const localPath = entry.path ? (isAbsolute(entry.path) ? entry.path : resolve(dirname(inputPath), entry.path)) : undefined;
+    const image = localPath ? await readImage(localPath, `inline image ${entry.token}`) : null;
+    if (image) {
+      if (digests.has(image.digest)) fail("inlineImages must use distinct image files");
+      digests.add(image.digest);
+    }
+    let url = entry.url || markdownImageUrl(existingBody || "", entry.alt);
+    let action = url ? "linked" : "pending";
+    if (apply && image) {
+      if (url && await storedImageMatches(fetchImpl, url, image.digest)) action = "reused";
+      else {
+        url = await uploadImage(fetchImpl, base, token, image);
+        action = "uploaded";
+      }
+    }
+    if (apply && !url) fail(`inline image ${entry.token} has no reusable or uploaded URL`);
+    resolved.push({ ...entry, ...(url ? { url } : {}), action, ...(image ? { digest: image.digest } : {}) });
+  }
+  return resolved;
 }
 
 function reusableStorageUrl(value) {
@@ -238,14 +308,18 @@ export async function runPublisher({ args = process.argv.slice(2), env = process
   try { document = JSON.parse(raw); } catch { fail("input must contain valid JSON"); }
   const input = validateDocument(document);
   const image = options.image ? await readImage(options.image) : null;
-  let post = { ...input, status: options.mode === "dry-run" ? input.status : "published" };
+  const { inlineImages: inlineImageEntries = [], ...postInput } = input;
+  let post = { ...postInput, status: options.mode === "dry-run" ? input.status : "published" };
   if (options.mode === "dry-run") {
+    const resolvedInlineImages = await resolveInlineImages({ entries: inlineImageEntries, inputPath: options.input, existingBody: "", fetchImpl, apply: false });
+    const allDigests = [image?.digest, ...resolvedInlineImages.map((entry) => entry.digest)].filter(Boolean);
+    if (new Set(allDigests).size !== allDigests.length) fail("cover and inlineImages must use distinct image files");
     return {
       mode: "dry-run",
       slug: post.slug,
       action: "dry-run",
       status: post.status,
-      summary: { title: post.title, tagCount: post.tags.length, readingMinutes: post.readingMinutes, featured: post.featured, hasImage: Boolean(post.imageUrl || image), localImage: Boolean(image) },
+      summary: { title: post.title, tagCount: post.tags.length, readingMinutes: post.readingMinutes, featured: post.featured, hasImage: Boolean(post.imageUrl || image), localImage: Boolean(image), inlineImageCount: resolvedInlineImages.length, totalVisualCount: Number(Boolean(post.imageUrl || image)) + resolvedInlineImages.length },
     };
   }
 
@@ -253,6 +327,10 @@ export async function runPublisher({ args = process.argv.slice(2), env = process
   if (!token || !String(token).trim()) fail("admin token is unavailable");
   const base = apiBaseFromEnv(env);
   const get = await request(fetchImpl, `${base}/${encodeURIComponent(post.slug)}`, token, "GET");
+  if (get.response.status !== 404 && !get.response.ok) fail(`API GET failed with status ${get.response.status}`);
+  const resolvedInlineImages = await resolveInlineImages({ entries: inlineImageEntries, inputPath: options.input, existingBody: get.response.ok ? get.payload?.post?.body : "", fetchImpl, base, token, apply: true });
+  for (const entry of resolvedInlineImages) post.body = post.body.replace(`{{inline-image:${entry.token}}}`, renderInlineImage(entry, entry.url));
+  if (post.body.length > MAX_BODY) fail(`body exceeds ${MAX_BODY} characters after resolving inline images`);
   let imageAction;
   if (image) {
     const existingImageUrl = get.response.ok ? get.payload?.post?.imageUrl : undefined;
@@ -267,14 +345,13 @@ export async function runPublisher({ args = process.argv.slice(2), env = process
   if (get.response.status === 404) {
     const create = await request(fetchImpl, base, token, "POST", post);
     if (!create.response.ok) fail(`API POST failed with status ${create.response.status}`);
-    return { mode: options.mode, slug: post.slug, action: "create", status: create.response.status, ...(imageAction ? { imageAction } : {}), ...(resultUrl(create.payload?.post) ? { publicUrl: resultUrl(create.payload.post) } : {}) };
+    return { mode: options.mode, slug: post.slug, action: "create", status: create.response.status, ...(imageAction ? { imageAction } : {}), inlineImages: resolvedInlineImages.map(({ token, url, action }) => ({ token, url, action })), ...(resultUrl(create.payload?.post) ? { publicUrl: resultUrl(create.payload.post) } : {}) };
   }
-  if (!get.response.ok) fail(`API GET failed with status ${get.response.status}`);
-  if (comparable(get.payload?.post) === comparable(post)) return { mode: options.mode, slug: post.slug, action: "noop", status: get.response.status, ...(imageAction ? { imageAction } : {}), ...(resultUrl(get.payload?.post) ? { publicUrl: resultUrl(get.payload.post) } : {}) };
+  if (comparable(get.payload?.post) === comparable(post)) return { mode: options.mode, slug: post.slug, action: "noop", status: get.response.status, ...(imageAction ? { imageAction } : {}), inlineImages: resolvedInlineImages.map(({ token, url, action }) => ({ token, url, action })), ...(resultUrl(get.payload?.post) ? { publicUrl: resultUrl(get.payload.post) } : {}) };
   if (!options.update) fail("existing post differs; re-run with --update after reviewing the change");
   const update = await request(fetchImpl, `${base}/${encodeURIComponent(post.slug)}`, token, "PATCH", post);
   if (!update.response.ok) fail(`API PATCH failed with status ${update.response.status}`);
-  return { mode: options.mode, slug: post.slug, action: "update", status: update.response.status, ...(imageAction ? { imageAction } : {}), ...(resultUrl(update.payload?.post) ? { publicUrl: resultUrl(update.payload.post) } : {}) };
+  return { mode: options.mode, slug: post.slug, action: "update", status: update.response.status, ...(imageAction ? { imageAction } : {}), inlineImages: resolvedInlineImages.map(({ token, url, action }) => ({ token, url, action })), ...(resultUrl(update.payload?.post) ? { publicUrl: resultUrl(update.payload.post) } : {}) };
 }
 
 if (import.meta.main) {
