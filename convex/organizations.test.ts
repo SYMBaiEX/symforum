@@ -605,7 +605,7 @@ describe("organization tenant foundation", () => {
 
     const consoleView = await owner.query(organizations.getConsole, {
       organizationId: created.organizationId,
-      monthKey: "2026-08",
+      monthKey: monthKey(),
     });
     expect(consoleView.organization.organizationId).toBe(
       created.organizationId,
