@@ -15,6 +15,9 @@ describe("HomeFaq", () => {
     expect(html).toContain(
       'href="https://github.com/SYMBaiEX/symbaiex-agent-clients"',
     );
+    expect(html).toContain('href="https://ora.ai/score/symbaiex.com"');
+    expect(html).toContain('src="https://ora.ai/api/badge/symbaiex.com"');
+    expect(html).toContain("Ora agent readiness score for symbaiex.com");
     expect(html).toContain(
       "Where are the developer contracts and machine instructions?",
     );
