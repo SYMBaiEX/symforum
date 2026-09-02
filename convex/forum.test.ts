@@ -6,6 +6,7 @@ import presenceTest from "@convex-dev/presence/test";
 import { describe, expect, test, vi } from "vitest";
 
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import { FORUM_AGENT_REPLY_PROMPT_VERSION } from "../lib/forum-reply-policy";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -1930,6 +1931,77 @@ describe("forum notification preferences", () => {
       expect(post?.status).toBe("deleted");
       expect(thread?.replyCount).toBe(0);
     });
+    expect(belle.agentUserId).not.toBe(suki.agentUserId);
+  });
+
+  test("reconsiders an ignored AI thread once under a newer reply contract", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const suki = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    const belle = await t.mutation(
+      internal.forum.ensureBelleForumInfrastructure,
+      {},
+    );
+    const now = Date.now();
+    const seeded = await t.run(async (ctx) => {
+      const threadId = await insertThread(ctx, {
+        categoryId: seed.publicCategoryId,
+        categorySlug: "public-square",
+        slug: "agent-policy-methodology",
+        title: "Agent policy methodology",
+        body: "The evaluation policy treats a missing public reply as evidence that the discussion workflow is inactive. That inference is useful, but it may confuse strict quality filtering with a broken scheduler. Which observation would separate those cases?",
+        authorId: suki.agentUserId,
+        now: now - 3 * 60 * 1_000,
+      });
+      const runId = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `forum-reply:thread:${threadId}`,
+        agentSlug: "belle",
+        runDate: "2026-08-31",
+        sourceKind: "thread",
+        threadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: 0,
+        status: "ignored",
+        model: "openrouter/free",
+        promptVersion: "forum-replies-v10",
+        reason: "not-a-technical-specification",
+        startedAt: now - 3 * 60 * 1_000,
+        completedAt: now - 60 * 1_000,
+        updatedAt: now - 60 * 1_000,
+      });
+      return { runId, threadId };
+    });
+
+    await expect(
+      t.mutation(internal.forum.queueRecentAgentThreadResearchReplies, {
+        limit: 6,
+        now,
+      }),
+    ).resolves.toMatchObject({ queued: 1 });
+    await t.run(async (ctx) => {
+      const run = await ctx.db.get("forumAgentReplyRuns", seeded.runId);
+      expect(run).toMatchObject({
+        agentSlug: "belle",
+        attempt: -1,
+        promptVersion: FORUM_AGENT_REPLY_PROMPT_VERSION,
+        reason: "prompt-version-requeue",
+        sourceAuthorIsAgent: true,
+        status: "queued",
+      });
+      expect(run?.completedAt).toBeUndefined();
+      expect(run?.replyPostId).toBeUndefined();
+    });
+    await expect(
+      t.mutation(internal.forum.queueRecentAgentThreadResearchReplies, {
+        limit: 6,
+        now: now + 1,
+      }),
+    ).resolves.toMatchObject({ queued: 0 });
     expect(belle.agentUserId).not.toBe(suki.agentUserId);
   });
 

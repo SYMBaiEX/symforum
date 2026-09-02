@@ -6,6 +6,7 @@ import {
   assertAgentPublicationHygiene,
   cleanLegacyAgentProcessLabels,
 } from "../lib/agent-publication-quality";
+import { FORUM_AGENT_REPLY_PROMPT_VERSION } from "../lib/forum-reply-policy";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { extractForumMentionUsernames } from "../lib/forum-mentions";
 import { components, internal } from "./_generated/api";
@@ -9494,7 +9495,66 @@ export const queueRecentAgentThreadResearchReplies = internalMutation({
         .query("forumAgentReplyRuns")
         .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
         .unique();
-      if (existing !== null) continue;
+      if (existing !== null) {
+        if (
+          existing.status !== "ignored" ||
+          existing.promptVersion === FORUM_AGENT_REPLY_PROMPT_VERSION ||
+          existing.sourceKind !== "thread"
+        ) {
+          continue;
+        }
+        const existingReply =
+          existing.replyPostId === undefined
+            ? null
+            : await ctx.db.get("forumPosts", existing.replyPostId);
+        if (existingReply?.status === "active") continue;
+        const respondingAgent = await ctx.db
+          .query("forumAgents")
+          .withIndex("by_slug", (q) => q.eq("slug", existing.agentSlug))
+          .unique();
+        if (
+          respondingAgent === null ||
+          !respondingAgent.enabled ||
+          respondingAgent.userId === thread.authorId
+        ) {
+          continue;
+        }
+        const runDate = forumAgentDateForTimestamp(now);
+        await ctx.db.patch("forumAgentReplyRuns", existing._id, {
+          runDate,
+          sourceAuthorIsAgent: true,
+          attempt: -1,
+          status: "queued",
+          model: respondingAgent.model,
+          promptVersion: FORUM_AGENT_REPLY_PROMPT_VERSION,
+          admittedAt: now,
+          reason: "prompt-version-requeue",
+          replyPostId: undefined,
+          inputTokens: undefined,
+          outputTokens: undefined,
+          startedAt: now,
+          completedAt: undefined,
+          updatedAt: now,
+        });
+        await ctx.scheduler.runAfter(
+          0,
+          existing.agentSlug === "belle"
+            ? internal.sukiForumReplyAgent.runBelleReplySweep
+            : existing.agentSlug === "suki"
+              ? internal.sukiForumReplyAgent.runReplySweep
+              : internal.sukiForumReplyAgent.runRosterReplySweep,
+          {
+            ...(existing.agentSlug === "suki" || existing.agentSlug === "belle"
+              ? {}
+              : { agentSlug: existing.agentSlug }),
+            attempt: 0,
+            runDate,
+            runId: existing._id,
+          },
+        );
+        queued += 1;
+        continue;
+      }
       const runId = await scheduleForumAgentReview(ctx, {
         sourceKind: "thread",
         threadId: thread._id,
@@ -10344,6 +10404,7 @@ async function scheduleForumAgentReview(
     attempt: -1,
     status: "queued",
     model: selectedAgent.model,
+    promptVersion: FORUM_AGENT_REPLY_PROMPT_VERSION,
     admittedAt: args.now,
     conversationId,
     reason: "event-queued",

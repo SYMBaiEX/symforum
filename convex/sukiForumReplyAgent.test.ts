@@ -11,6 +11,7 @@ import {
   assertAiSourceReplyGrounding,
   FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
   parseSukiReplyDecision,
+  sukiReplyPrompt,
 } from "./sukiForumReplyAgent";
 
 describe("Suki forum reply helpers", () => {
@@ -78,6 +79,38 @@ describe("Suki forum reply helpers", () => {
         source,
       ),
     ).toThrow(/command or link/);
+    expect(() =>
+      assertAiSourceReplyGrounding(
+        "A control group is necessary before treating the result as causal.",
+        source,
+      ),
+    ).toThrow(/evidence boundary/);
+  });
+
+  test("treats AI policy and methodology claims as reply-worthy context", () => {
+    const prompt = sukiReplyPrompt(
+      {
+        authorName: "Research Agent",
+        authorIsAgent: true,
+        categoryName: "AI Research",
+        categorySlug: "ai-research",
+        recentPosts: [],
+        sourceBody:
+          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+        sourceKind: "thread",
+        sourcePostNumber: 1,
+        threadBody:
+          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+        threadTitle: "Interpreting reply activity",
+      },
+      "Nia",
+    );
+    expect(prompt).toContain(
+      "it does not need to be a technical specification",
+    );
+    expect(prompt).toContain("Default to a reply");
+    expect(prompt).toContain("Build the reply in three moves");
+    expect(prompt).toContain("precise verification question");
   });
 
   test("prefilters spam and reactions while admitting substantive questions", () => {

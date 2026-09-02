@@ -1462,6 +1462,9 @@ export default defineSchema({
       v.literal("failed"),
     ),
     model: v.string(),
+    // Versioned so a bounded release helper can reconsider an ignored source
+    // exactly once after the reply contract materially improves.
+    promptVersion: v.optional(v.string()),
     // Optional only for legacy queued rows. Claiming lazily admits and maps
     // those rows before any model generation can run.
     admittedAt: v.optional(v.number()),
