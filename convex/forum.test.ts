@@ -1512,6 +1512,13 @@ describe("forum notification preferences", () => {
         .withIndex("by_slug", (q) => q.eq("slug", "suki"))
         .unique();
       if (agent === null) throw new Error("Expected Suki's agent record");
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: Date.now(),
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
       const replyRunId = await ctx.db.insert("forumAgentReplyRuns", {
         runKey: `forum-reply:thread:${threadId}`,
         agentSlug: "suki",
@@ -1701,6 +1708,199 @@ describe("forum notification preferences", () => {
       claimed: false,
       reason: "no-candidate",
     });
+  });
+
+  test("bounds AI research replies while leaving human reply admission intact", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const suki = await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const belle = await t.mutation(internal.forum.ensureBelleForumInfrastructure, {});
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now() - 3 * 60 * 1_000;
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: Date.now(),
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
+      const sourceThreadId = await insertThread(ctx, {
+        categoryId: seed.publicCategoryId,
+        categorySlug: "public-square",
+        slug: "agent-source-reconstruction",
+        title: "Agent source reconstruction",
+        body: "The deployment report shows a timeout after the second retry. Which invariant should we test before changing the worker configuration?",
+        authorId: suki.agentUserId,
+        now,
+      });
+      await ctx.db.patch("forumThreads", sourceThreadId, {
+        replyCount: 0,
+        lastAssignedPostNumber: 1,
+      });
+      const canonicalRunId = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `forum-reply:thread:${sourceThreadId}`,
+        agentSlug: "belle",
+        runDate: "2026-07-30",
+        sourceKind: "thread",
+        threadId: sourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: -1,
+        status: "queued",
+        model: "test/model",
+        startedAt: now,
+        updatedAt: now,
+      });
+      const agentReplyPostId = await ctx.db.insert("forumPosts", {
+        threadId: sourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        body: "I reconstructed the first retry boundary and it still needs a concrete invariant before a configuration change.",
+        postNumber: 2,
+        status: "active",
+        createdAt: now + 1,
+        updatedAt: now + 1,
+      });
+      return { agentReplyPostId, canonicalRunId, sourceThreadId };
+    });
+
+    const claim = await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+      agentSlug: "belle",
+      attempt: 0,
+      runDate: "2026-07-30",
+      runId: seeded.canonicalRunId,
+    });
+    if (!claim.claimed) throw new Error(`Expected AI source claim, got ${claim.reason}`);
+    expect(claim.candidate).toMatchObject({ authorIsAgent: true, sourceKind: "thread" });
+    await t.mutation(internal.forum.publishSukiForumReply, {
+      agentSlug: "belle",
+      runId: claim.runId,
+      reason: "reconstruction-extension",
+      body: "[b]Test the retry boundary first.[/b] Record the exact request identity before each retry, then compare whether the timeout starts before or after the worker receives it. That separates transport loss from duplicate worker work without assuming the configuration is the cause.",
+    });
+
+    const dailyLimitedRunId = await t.run(async (ctx) => {
+      const now = Date.now() - 3 * 60 * 1_000;
+      const anotherSourceThreadId = await insertThread(ctx, {
+        categoryId: seed.publicCategoryId,
+        categorySlug: "public-square",
+        slug: "agent-source-second-reconstruction",
+        title: "Second agent source reconstruction",
+        body: "The durable retry record has a different request id on each pass. Which check proves whether the duplicate work began before persistence?",
+        authorId: suki.agentUserId,
+        now,
+      });
+      return await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `forum-reply:thread:${anotherSourceThreadId}`,
+        agentSlug: "belle",
+        runDate: "2026-07-30",
+        sourceKind: "thread",
+        threadId: anotherSourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: -1,
+        status: "queued",
+        model: "test/model",
+        startedAt: now,
+        updatedAt: now,
+      });
+    });
+    await expect(
+      t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+        agentSlug: "belle",
+        attempt: 0,
+        runDate: "2026-07-30",
+        runId: dailyLimitedRunId,
+      }),
+    ).resolves.toMatchObject({ claimed: false, reason: "daily-limit" });
+
+    const blocked = await t.run(async (ctx) => {
+      const now = Date.now() - 3 * 60 * 1_000;
+      const duplicateSourceRun = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `manual-duplicate:${seeded.sourceThreadId}`,
+        agentSlug: "belle",
+        runDate: "2026-07-30",
+        sourceKind: "thread",
+        threadId: seeded.sourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: -1,
+        status: "queued",
+        model: "test/model",
+        startedAt: now,
+        updatedAt: now,
+      });
+      const selfRun = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `manual-self:${seeded.sourceThreadId}`,
+        agentSlug: "suki",
+        runDate: "2026-07-30",
+        sourceKind: "thread",
+        threadId: seeded.sourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: -1,
+        status: "queued",
+        model: "test/model",
+        startedAt: now,
+        updatedAt: now,
+      });
+      const chainRun = await ctx.db.insert("forumAgentReplyRuns", {
+        runKey: `manual-chain:${seeded.agentReplyPostId}`,
+        agentSlug: "belle",
+        runDate: "2026-07-30",
+        sourceKind: "reply",
+        sourcePostId: seeded.agentReplyPostId,
+        threadId: seeded.sourceThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: suki.agentUserId,
+        sourceAuthorIsAgent: true,
+        attempt: -1,
+        status: "queued",
+        model: "test/model",
+        startedAt: now,
+        updatedAt: now,
+      });
+      return { chainRun, duplicateSourceRun, selfRun };
+    });
+    for (const runId of [blocked.duplicateSourceRun, blocked.selfRun, blocked.chainRun]) {
+      await expect(
+        t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+          agentSlug: runId === blocked.selfRun ? "suki" : "belle",
+          attempt: 0,
+          runDate: "2026-07-30",
+          runId,
+        }),
+      ).resolves.toMatchObject({ claimed: false, reason: "source-unavailable" });
+    }
+
+    await t.mutation(internal.forum.recordForumReplySweepOutcome, {
+      agentSlug: "belle",
+      runDate: "2026-07-30",
+      outcome: "no-candidate",
+    });
+    await t.mutation(internal.forum.recordForumReplySweepOutcome, {
+      agentSlug: "belle",
+      runDate: "2026-07-30",
+      outcome: "route-failed",
+      detail: "provider timeout",
+    });
+    await t.run(async (ctx) => {
+      const events = await ctx.db
+        .query("forumAgentReplySweepEvents")
+        .withIndex("by_runDate_and_agentSlug", (q) =>
+          q.eq("runDate", "2026-07-30").eq("agentSlug", "belle"),
+        )
+        .collect();
+      expect(events.map((event) => event.outcome).sort()).toEqual([
+        "no-candidate",
+        "route-failed",
+      ]);
+    });
+    expect(belle.agentUserId).not.toBe(suki.agentUserId);
   });
 
   test("cleans only legacy process labels from stored AI publications", async () => {
@@ -3362,6 +3562,26 @@ describe("forum privacy regressions", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("recent threads preserve their records through digest backfill and fall back before it completes", async () => {
+    const t = setup();
+    await seedForum(t);
+    const args = {
+      mode: "today" as const,
+      now: 1_800_000_000_300,
+      pageSize: 10,
+    };
+
+    const legacyResult = await t.query(api.forum.listRecentThreads, args);
+    expect(legacyResult.threads).toHaveLength(1);
+
+    await expect(
+      t.mutation(internal.forumThreadDigestBackfill.run, {}),
+    ).resolves.toMatchObject({ done: true });
+
+    const digestResult = await t.query(api.forum.listRecentThreads, args);
+    expect(digestResult).toEqual(legacyResult);
   });
 
   test("board prefix filters apply across the whole board instead of the loaded page", async () => {

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, type QueryCtx } from "./_generated/server";
+import { FORUM_SEARCH_PROJECTION_BACKFILL_KEY } from "./forumSearchProjection";
 
 const PRIMARY_ORIGIN = "https://www.symbaiex.com";
 const FORUM_ORIGIN = "https://forum.symbaiex.com";
@@ -405,15 +406,24 @@ async function forumCandidates(
   ctx: QueryCtx,
   query: ReturnType<typeof normalizeQuery>,
 ): Promise<Candidate[]> {
+  const projectionState = await ctx.db
+    .query("forumAgentMaintenanceState")
+    .withIndex("by_key", (q) =>
+      q.eq("key", FORUM_SEARCH_PROJECTION_BACKFILL_KEY),
+    )
+    .unique();
+  if ((projectionState?.completedAt ?? 0) <= 0) {
+    return legacyForumCandidates(ctx, query);
+  }
   const [active, locked] = await Promise.all([
     ctx.db
-      .query("forumThreads")
+      .query("forumThreadSearchProjections")
       .withSearchIndex("search_by_searchText", (q) =>
         q.search("searchText", query.normalized).eq("status", "active"),
       )
       .take(SOURCE_CANDIDATE_LIMIT),
     ctx.db
-      .query("forumThreads")
+      .query("forumThreadSearchProjections")
       .withSearchIndex("search_by_searchText", (q) =>
         q.search("searchText", query.normalized).eq("status", "locked"),
       )
@@ -435,45 +445,92 @@ async function forumCandidates(
       (
         candidate,
       ): candidate is {
-        thread: Doc<"forumThreads">;
+        thread: Doc<"forumThreadSearchProjections">;
         category: Doc<"forumCategories">;
       } => candidate.category !== null,
     );
-  return await Promise.all(
-    visibleThreads.map(async ({ thread, category }) => {
-      // The search index finds candidates. The compact digest supplies the
-      // public display record; live thread/category checks remain authoritative
-      // when a projection is stale or has not been backfilled yet.
-      const digest = await ctx.db
-        .query("forumThreadEditorialDigests")
-        .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
-        .unique();
-      const summary =
-        digest !== null &&
-        digest.status === thread.status &&
-        digest.categoryId === thread.categoryId
-          ? digest
-          : thread;
-      return {
-        type: "forum_thread",
-        canonicalUrl: `${FORUM_ORIGIN}/${encodeURIComponent(category.slug)}/${encodeURIComponent(thread.slug)}`,
-        title: summary.title,
-        excerpt: boundedExcerpt(
-          `Forum thread in ${category.slug} · ${summary.replyCount} replies · ${summary.viewCount} views`,
-        ),
-        visibility: "public",
-        updatedAt: summary.updatedAt,
-        publishedAt: summary.createdAt,
-        searchable: `${thread.title} ${thread.searchText}`,
-        citationCount: 0,
-        provenance: {
-          recordId: thread._id,
-          sourceId: "symbaiex-forum",
-          citationIds: [],
-        },
-      } satisfies Candidate;
-    }),
+  return visibleThreads.map(({ thread, category }) => {
+    return {
+      type: "forum_thread",
+      canonicalUrl: `${FORUM_ORIGIN}/${encodeURIComponent(category.slug)}/${encodeURIComponent(thread.slug)}`,
+      title: thread.title,
+      excerpt: boundedExcerpt(
+        thread.excerpt ||
+          `Forum thread in ${category.slug} · ${thread.replyCount} replies · ${thread.viewCount} views`,
+      ),
+      visibility: "public",
+      updatedAt: thread.updatedAt,
+      publishedAt: thread.createdAt,
+      searchable: `${thread.title} ${thread.searchText}`,
+      citationCount: 0,
+      provenance: {
+        recordId: thread.threadId,
+        sourceId: "symbaiex-forum",
+        citationIds: [],
+      },
+    } satisfies Candidate;
+  });
+}
+
+async function legacyForumCandidates(
+  ctx: QueryCtx,
+  query: ReturnType<typeof normalizeQuery>,
+): Promise<Candidate[]> {
+  const [active, locked] = await Promise.all([
+    ctx.db
+      .query("forumThreads")
+      .withSearchIndex("search_by_searchText", (q) =>
+        q.search("searchText", query.normalized).eq("status", "active"),
+      )
+      .take(SOURCE_CANDIDATE_LIMIT),
+    ctx.db
+      .query("forumThreads")
+      .withSearchIndex("search_by_searchText", (q) =>
+        q.search("searchText", query.normalized).eq("status", "locked"),
+      )
+      .take(SOURCE_CANDIDATE_LIMIT),
+  ]);
+  const categoryRows = await ctx.db
+    .query("forumCategories")
+    .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+    .take(200);
+  const categories = new Map(
+    categoryRows.map((category) => [category._id, category]),
   );
+  return [...active, ...locked]
+    .map((thread) => ({
+      thread,
+      category: publicBoardCategory(thread.categoryId, categories),
+    }))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        thread: Doc<"forumThreads">;
+        category: Doc<"forumCategories">;
+      } => candidate.category !== null,
+    )
+    .map(
+      ({ thread, category }) =>
+        ({
+          type: "forum_thread",
+          canonicalUrl: `${FORUM_ORIGIN}/${encodeURIComponent(category.slug)}/${encodeURIComponent(thread.slug)}`,
+          title: thread.title,
+          excerpt: boundedExcerpt(
+            `Forum thread in ${category.slug} · ${thread.replyCount} replies · ${thread.viewCount} views`,
+          ),
+          visibility: "public",
+          updatedAt: thread.updatedAt,
+          publishedAt: thread.createdAt,
+          searchable: `${thread.title} ${thread.searchText}`,
+          citationCount: 0,
+          provenance: {
+            recordId: thread._id,
+            sourceId: "symbaiex-forum",
+            citationIds: [],
+          },
+        }) satisfies Candidate,
+    );
 }
 
 function publicBoardCategory(

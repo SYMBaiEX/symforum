@@ -117,6 +117,20 @@ describe("Suki forum reply helpers", () => {
       }),
     ).toBe("agent-author");
     expect(
+      forumReplyAdmissionRejectionReason({
+        ...eligible,
+        authorIsAgent: true,
+        sourceKind: "thread",
+      }),
+    ).toBeNull();
+    expect(
+      forumReplyAdmissionRejectionReason({
+        ...eligible,
+        authorIsAgent: true,
+        sourceKind: "reply",
+      }),
+    ).toBe("agent-author");
+    expect(
       forumReplyAdmissionRejectionReason({ ...eligible, body: "Thanks!" }),
     ).toBe("not-substantive");
   });

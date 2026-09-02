@@ -22,6 +22,7 @@ type LegacyResourceCleanupResult = {
   clearedAgentThreads: number;
   clearedWorkflows: number;
   orphanedAgentThreadsQueued: number;
+  deletedReplySweepTelemetry: number;
 };
 
 type ComponentThread = {
@@ -45,6 +46,10 @@ export function isLegacyEditorialThread(
 export const cleanupLegacyResources = internalAction({
   args: { now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<LegacyResourceCleanupResult> => {
+    const telemetry = await ctx.runMutation(
+      internal.forum.cleanupForumReplySweepTelemetry,
+      args.now === undefined ? {} : { now: args.now },
+    );
     const rows: LegacyResource[] = await ctx.runQuery(
       internal.forumAgentMaintenanceData.readLegacyResourcesForCleanup,
       args.now === undefined ? {} : { now: args.now },
@@ -119,6 +124,7 @@ export const cleanupLegacyResources = internalAction({
       clearedAgentThreads,
       clearedWorkflows,
       orphanedAgentThreadsQueued,
+      deletedReplySweepTelemetry: telemetry.deleted,
     };
   },
 });

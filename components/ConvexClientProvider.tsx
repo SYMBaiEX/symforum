@@ -5,6 +5,9 @@ import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
 import { ConvexReactClient } from "convex/react";
 import { ReactNode, useMemo } from "react";
 
+export const CONVEX_QUERY_CACHE_EXPIRATION_MS = 60_000;
+export const CONVEX_QUERY_CACHE_MAX_IDLE_ENTRIES = 80;
+
 export default function ConvexClientProvider({
   children,
 }: {
@@ -23,7 +26,10 @@ export default function ConvexClientProvider({
 
   return (
     <ConvexAuthNextjsProvider client={convex}>
-      <ConvexQueryCacheProvider expiration={15 * 60_000} maxIdleEntries={400}>
+      <ConvexQueryCacheProvider
+        expiration={CONVEX_QUERY_CACHE_EXPIRATION_MS}
+        maxIdleEntries={CONVEX_QUERY_CACHE_MAX_IDLE_ENTRIES}
+      >
         {children}
       </ConvexQueryCacheProvider>
     </ConvexAuthNextjsProvider>

@@ -84,15 +84,18 @@ describe("forum sitemap records", () => {
         });
         await ctx.db.insert("forumThreadEditorialDigests", {
           threadId,
+          threadCreatedAt: 1,
           categoryId,
           categorySlug,
           slug,
           title: slug,
           authorId,
           status: "active",
+          pinned: false,
           replyCount: 0,
           viewCount: 0,
           lastPostAt: 10,
+          lastPostUserId: authorId,
           createdAt: 1,
           updatedAt: 10,
         });

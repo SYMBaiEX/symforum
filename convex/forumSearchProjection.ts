@@ -9,7 +9,8 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
  */
 export const FORUM_SEARCH_TEXT_MAX_LENGTH = 4_096;
 export const FORUM_SEARCH_EXCERPT_MAX_LENGTH = 220;
-const BACKFILL_KEY = "forum-search-projections-v1";
+export const FORUM_SEARCH_PROJECTION_BACKFILL_KEY =
+  "forum-search-projections-v1";
 const BACKFILL_POST_PAGE_SIZE = 100;
 
 type BackfillCursor = {
@@ -30,7 +31,8 @@ function parseBackfillCursor(value: string | undefined): BackfillCursor {
       "threadCursor" in parsed &&
       "threadId" in parsed &&
       "postCursor" in parsed &&
-      (parsed.threadCursor === null || typeof parsed.threadCursor === "string") &&
+      (parsed.threadCursor === null ||
+        typeof parsed.threadCursor === "string") &&
       (parsed.threadId === null || typeof parsed.threadId === "string") &&
       (parsed.postCursor === null || typeof parsed.postCursor === "string")
     ) {
@@ -140,7 +142,9 @@ export const backfill = internalMutation({
   handler: async (ctx, args) => {
     const state = await ctx.db
       .query("forumAgentMaintenanceState")
-      .withIndex("by_key", (q) => q.eq("key", BACKFILL_KEY))
+      .withIndex("by_key", (q) =>
+        q.eq("key", FORUM_SEARCH_PROJECTION_BACKFILL_KEY),
+      )
       .unique();
     if ((state?.completedAt ?? 0) > 0) {
       return { processed: 0, done: true, alreadyCompleted: true };
@@ -155,7 +159,7 @@ export const backfill = internalMutation({
       };
       if (state === null) {
         await ctx.db.insert("forumAgentMaintenanceState", {
-          key: BACKFILL_KEY,
+          key: FORUM_SEARCH_PROJECTION_BACKFILL_KEY,
           ...values,
         });
       } else {
@@ -168,7 +172,8 @@ export const backfill = internalMutation({
         "forumThreads",
         cursor.threadId as Id<"forumThreads">,
       );
-      if (thread !== null) await syncForumThreadSearchProjection(ctx, thread._id);
+      if (thread !== null)
+        await syncForumThreadSearchProjection(ctx, thread._id);
       const posts =
         thread === null
           ? { page: [], isDone: true, continueCursor: null }
@@ -181,17 +186,26 @@ export const backfill = internalMutation({
                 cursor: cursor.postCursor,
                 numItems: BACKFILL_POST_PAGE_SIZE,
               });
-      for (const post of posts.page) await syncForumPostSearchProjection(ctx, post._id);
+      for (const post of posts.page)
+        await syncForumPostSearchProjection(ctx, post._id);
       await saveProgress(
         posts.isDone
-          ? { threadCursor: cursor.threadCursor, threadId: null, postCursor: null }
+          ? {
+              threadCursor: cursor.threadCursor,
+              threadId: null,
+              postCursor: null,
+            }
           : {
               threadCursor: cursor.threadCursor,
               threadId: cursor.threadId,
               postCursor: posts.continueCursor,
             },
       );
-      return { processed: posts.page.length, done: false, alreadyCompleted: false };
+      return {
+        processed: posts.page.length,
+        done: false,
+        alreadyCompleted: false,
+      };
     }
 
     const threads = await ctx.db
@@ -201,20 +215,25 @@ export const backfill = internalMutation({
     const thread = threads.page[0];
     if (thread === undefined) {
       if (state === null) {
-        await ctx.db.insert("forumAgentMaintenanceState", { key: BACKFILL_KEY, completedAt: now, updatedAt: now });
+        await ctx.db.insert("forumAgentMaintenanceState", {
+          key: FORUM_SEARCH_PROJECTION_BACKFILL_KEY,
+          completedAt: now,
+          updatedAt: now,
+        });
       } else {
-        await ctx.db.patch("forumAgentMaintenanceState", state._id, { completedAt: now, updatedAt: now });
+        await ctx.db.patch("forumAgentMaintenanceState", state._id, {
+          completedAt: now,
+          updatedAt: now,
+        });
       }
       return { processed: 0, done: true, alreadyCompleted: false };
     }
     await syncForumThreadSearchProjection(ctx, thread._id);
-    await saveProgress(
-      {
-        threadCursor: threads.continueCursor,
-        threadId: thread._id,
-        postCursor: null,
-      },
-    );
+    await saveProgress({
+      threadCursor: threads.continueCursor,
+      threadId: thread._id,
+      postCursor: null,
+    });
     return { processed: 1, done: false, alreadyCompleted: false };
   },
 });

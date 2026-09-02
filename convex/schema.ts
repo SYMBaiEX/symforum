@@ -212,7 +212,9 @@ export default defineSchema({
     // Checkpoints make aggregate backfills resumable across scheduler retries
     // and operator restarts. Optional for pre-existing migration records.
     cursor: v.optional(v.string()),
-    phase: v.optional(v.union(v.literal("interactions"), v.literal("comments"))),
+    phase: v.optional(
+      v.union(v.literal("interactions"), v.literal("comments")),
+    ),
     scheduledAt: v.optional(v.number()),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -1016,8 +1018,13 @@ export default defineSchema({
     }),
   forumThreadEditorialDigests: defineTable({
     threadId: v.id("forumThreads"),
+    threadCreatedAt: v.optional(v.number()),
     categoryId: v.id("forumCategories"),
     categorySlug: v.string(),
+    prefixId: v.optional(v.id("forumThreadPrefixes")),
+    prefixSlug: v.optional(v.string()),
+    prefixLabel: v.optional(v.string()),
+    prefixColor: v.optional(v.string()),
     slug: v.string(),
     title: v.string(),
     authorId: v.id("users"),
@@ -1028,9 +1035,17 @@ export default defineSchema({
       v.literal("hidden"),
       v.literal("deleted"),
     ),
+    pinned: v.optional(v.boolean()),
     replyCount: v.number(),
+    ratingCount: v.optional(v.number()),
+    ratingTotal: v.optional(v.number()),
+    lastAssignedPostNumber: v.optional(v.number()),
     viewCount: v.number(),
+    lastPostId: v.optional(v.id("forumPosts")),
     lastPostAt: v.number(),
+    lastPostUserId: v.optional(v.id("users")),
+    moderationActivityAt: v.optional(v.number()),
+    moderationRootActivityAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1435,6 +1450,9 @@ export default defineSchema({
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),
     authorId: v.id("users"),
+    // Optional for rolling compatibility with rows queued before this field
+    // was introduced. New rows persist their source author kind at admission.
+    sourceAuthorIsAgent: v.optional(v.boolean()),
     attempt: v.number(),
     status: v.union(
       v.literal("queued"),
@@ -1459,6 +1477,11 @@ export default defineSchema({
     .index("by_runKey", ["runKey"])
     .index("by_sourcePostId", ["sourcePostId"])
     .index("by_runDate", ["runDate"])
+    .index("by_agentSlug_and_runDate_and_status", [
+      "agentSlug",
+      "runDate",
+      "status",
+    ])
     .index("by_agentSlug_and_status_and_updatedAt", [
       "agentSlug",
       "status",
@@ -1466,6 +1489,32 @@ export default defineSchema({
     ])
     .index("by_status_and_updatedAt", ["status", "updatedAt"])
     .index("by_updatedAt", ["updatedAt"]),
+  // Private operational evidence for reply sweeps and admission decisions.
+  // No public query exposes this table; rows are retained only long enough to
+  // distinguish healthy idle sweeps from quality, policy, or route failures.
+  forumAgentReplySweepEvents: defineTable({
+    agentSlug: v.string(),
+    runDate: v.string(),
+    outcome: v.union(
+      v.literal("no-candidate"),
+      v.literal("rejected-agent"),
+      v.literal("rejected-self"),
+      v.literal("rejected-nonpublic"),
+      v.literal("rejected-nonsubstantive"),
+      v.literal("daily-limit"),
+      v.literal("canary-blocked"),
+      v.literal("route-failed"),
+      v.literal("ignored"),
+      v.literal("replied"),
+    ),
+    runId: v.optional(v.id("forumAgentReplyRuns")),
+    sourceKind: v.optional(v.union(v.literal("thread"), v.literal("reply"))),
+    threadId: v.optional(v.id("forumThreads")),
+    detail: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_runDate_and_agentSlug", ["runDate", "agentSlug"]),
   forumAgentUsageEvents: defineTable({
     runKey: v.string(),
     agentSlug: v.string(),

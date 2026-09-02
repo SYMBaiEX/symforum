@@ -3,20 +3,33 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 
-const BACKFILL_KEY = "forum-thread-digests-v1";
+const BACKFILL_KEY = "forum-thread-digests-v2";
 
 function digestValues(thread: Doc<"forumThreads">) {
   return {
     threadId: thread._id,
+    threadCreatedAt: thread._creationTime,
     categoryId: thread.categoryId,
     categorySlug: thread.categorySlug,
+    prefixId: thread.prefixId,
+    prefixSlug: thread.prefixSlug,
+    prefixLabel: thread.prefixLabel,
+    prefixColor: thread.prefixColor,
     slug: thread.slug,
     title: thread.title,
     authorId: thread.authorId,
     status: thread.status,
+    pinned: thread.pinned,
     replyCount: thread.replyCount,
+    ratingCount: thread.ratingCount,
+    ratingTotal: thread.ratingTotal,
+    lastAssignedPostNumber: thread.lastAssignedPostNumber,
     viewCount: thread.viewCount,
+    lastPostId: thread.lastPostId,
     lastPostAt: thread.lastPostAt,
+    lastPostUserId: thread.lastPostUserId,
+    moderationActivityAt: thread.moderationActivityAt,
+    moderationRootActivityAt: thread.moderationRootActivityAt,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
   };

@@ -15,10 +15,19 @@ function setup() {
   return convexTest(schema, modules);
 }
 
-type SearchResult = { provenance: { recordId: string }; title: string; type: string };
+type SearchResult = {
+  provenance: { recordId: string };
+  title: string;
+  type: string;
+};
 
 async function seedPublicCorpus(t: ReturnType<typeof setup>) {
   await t.run(async (ctx) => {
+    await ctx.db.insert("forumAgentMaintenanceState", {
+      key: "forum-search-projections-v1",
+      completedAt: 100,
+      updatedAt: 100,
+    });
     const author = await ctx.db.insert("users", {
       name: "Public author",
       username: "public-author",
@@ -60,7 +69,7 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
         "Alpha private thread",
       ],
     ] as const) {
-      await ctx.db.insert("forumThreads", {
+      const threadId = await ctx.db.insert("forumThreads", {
         categoryId,
         categorySlug,
         slug,
@@ -76,6 +85,24 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
         searchText: `${title} alpha`,
         createdAt: 250,
         updatedAt: 300,
+      });
+      await ctx.db.insert("forumThreadSearchProjections", {
+        threadId,
+        categoryId,
+        categorySlug,
+        slug,
+        title,
+        authorId: author,
+        lastPostUserId: author,
+        status: "active",
+        pinned: false,
+        replyCount: 2,
+        viewCount: 3,
+        createdAt: 250,
+        updatedAt: 300,
+        lastPostAt: 300,
+        searchText: `${title} alpha`,
+        excerpt: "Alpha body",
       });
     }
     await ctx.db.insert("posts", {
@@ -237,6 +264,37 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
 }
 
 describe("universal public lexical search", () => {
+  test("falls back to live thread search until the projection backfill completes", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+    await t.run(async (ctx) => {
+      const marker = await ctx.db
+        .query("forumAgentMaintenanceState")
+        .withIndex("by_key", (q) => q.eq("key", "forum-search-projections-v1"))
+        .unique();
+      if (marker !== null)
+        await ctx.db.delete("forumAgentMaintenanceState", marker._id);
+      for (const projection of await ctx.db
+        .query("forumThreadSearchProjections")
+        .collect()) {
+        await ctx.db.delete("forumThreadSearchProjections", projection._id);
+      }
+    });
+
+    const results = await t.query(internal.universalSearch.searchPublic, {
+      query: "alpha",
+      limit: 50,
+    });
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "forum_thread",
+          title: "Alpha forum thread",
+        }),
+      ]),
+    );
+  });
+
   test("federates public records with stable rank signals and excludes private records", async () => {
     const t = setup();
     await seedPublicCorpus(t);
@@ -250,9 +308,9 @@ describe("universal public lexical search", () => {
       limit: 50,
     });
 
-    expect(first.map((result: SearchResult) => result.provenance.recordId)).toEqual(
-      second.map((result: SearchResult) => result.provenance.recordId),
-    );
+    expect(
+      first.map((result: SearchResult) => result.provenance.recordId),
+    ).toEqual(second.map((result: SearchResult) => result.provenance.recordId));
     expect(first.map((result: SearchResult) => result.type)).toEqual(
       expect.arrayContaining([
         "evidence_document",
@@ -473,9 +531,9 @@ describe("universal public lexical search", () => {
       internal.universalSearch.searchPublic,
       { query: "alpha", limit: 50 },
     );
-    expect(privateAncestorResults.map((result: SearchResult) => result.type)).not.toContain(
-      "forum_thread",
-    );
+    expect(
+      privateAncestorResults.map((result: SearchResult) => result.type),
+    ).not.toContain("forum_thread");
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", sectionId, {
         viewAccess: "public",
@@ -486,8 +544,8 @@ describe("universal public lexical search", () => {
       internal.universalSearch.searchPublic,
       { query: "alpha", limit: 50 },
     );
-    expect(inactiveAncestorResults.map((result: SearchResult) => result.type)).not.toContain(
-      "forum_thread",
-    );
+    expect(
+      inactiveAncestorResults.map((result: SearchResult) => result.type),
+    ).not.toContain("forum_thread");
   });
 });

@@ -15,7 +15,7 @@ import {
   Timer,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 type ModelTotals = {
@@ -116,10 +116,6 @@ type ModelTelemetry = {
   };
 };
 
-type ModelTelemetryEnvelope = {
-  model: ModelTelemetry;
-};
-
 const windows = [
   { label: "24H", hours: 24 },
   { label: "7D", hours: 168 },
@@ -155,15 +151,81 @@ const telemetryViews = [
   },
 ] as const;
 
+export function modelTelemetryFromSnapshot(
+  snapshot: AiTelemetrySnapshotRecord | undefined,
+): ModelTelemetry | undefined {
+  if (snapshot === undefined) return undefined;
+  const attempts = snapshot.totals.routeAttempts;
+  const failures = snapshot.totals.routeFailures;
+  const recent = snapshot.recent.map((event, index) => ({
+    id: `${event.correlationId}:${event.at}:${index}`,
+    at: new Date(event.at).toISOString(),
+    type: event.kind,
+    correlationId: event.correlationId,
+    feature: event.stage,
+    agent: event.agentSlug,
+    model: event.model,
+    outcome: event.status,
+    totalMs: event.durationMs,
+    inputTokens: event.inputTokens,
+    outputTokens: event.outputTokens,
+  }));
+  return {
+    generatedAt: new Date(snapshot.generatedAt).toISOString(),
+    windowHours: snapshot.windowHours,
+    retentionDays: 30,
+    totals: {
+      requests: attempts,
+      completed: Math.max(0, attempts - failures),
+      failed: failures,
+      rejected: null,
+      cancelled: null,
+      errorRate: attempts ? failures / attempts : 0,
+      inputTokens: snapshot.totals.inputTokens,
+      outputTokens: snapshot.totals.outputTokens,
+      totalTokens: snapshot.totals.inputTokens + snapshot.totals.outputTokens,
+      averageLatencyMs: snapshot.totals.averageDurationMs,
+      p50LatencyMs: snapshot.totals.p50DurationMs,
+      p95LatencyMs: snapshot.totals.p95DurationMs,
+      averageQueueWaitMs: null,
+      p95QueueWaitMs: null,
+      averageFirstByteMs: null,
+      p95FirstByteMs: null,
+      averageTokensPerSecond: null,
+      p50TokensPerSecond: null,
+    },
+    speculativeDecoding: null,
+    keys: null,
+    series: snapshot.series.map((point) => ({
+      at: new Date(point.at).toISOString(),
+      generationEvents: point.generations,
+      failed: point.failures,
+      inputTokens: point.inputTokens,
+      outputTokens: point.outputTokens,
+    })),
+    runtime: {
+      latest: snapshot.operations.canary
+        ? {
+            id: "openrouter-canary",
+            at: new Date(snapshot.operations.canary.checkedAt).toISOString(),
+            modelHealthy: snapshot.operations.canary.healthy,
+          }
+        : null,
+      history: [],
+    },
+    recent,
+    storage: {
+      eventCount: attempts,
+      oldestAt: recent.at(-1)?.at ?? null,
+      newestAt: recent.at(0)?.at ?? null,
+    },
+  };
+}
+
 export function AdminTelemetry() {
-  const [queryNow] = useState(() => Date.now());
+  const [queryNow, setQueryNow] = useState(() => Date.now());
   const [hours, setHours] = useState(24);
   const [view, setView] = useState<TelemetryView>("overview");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [modelEnvelope, setModelEnvelope] =
-    useState<ModelTelemetryEnvelope | null>(null);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const [modelLoading, setModelLoading] = useState(true);
   const editorial = useQuery(convexRefs.admin.aiTelemetrySnapshot, {
     hours,
     now: queryNow,
@@ -186,7 +248,7 @@ export function AdminTelemetry() {
       } else {
         await backfillEmbeddings({});
       }
-      setRefreshKey((value) => value + 1);
+      setQueryNow(Date.now());
       toast.success(
         action === "verify"
           ? "Embedding health check queued"
@@ -208,58 +270,12 @@ export function AdminTelemetry() {
     }
   }
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let mounted = true;
-
-    async function load() {
-      setModelLoading(true);
-      try {
-        const response = await fetch(
-          `/api/admin/telemetry/model?hours=${hours}`,
-          {
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        );
-        const body = (await response.json().catch(() => null)) as
-          | ModelTelemetryEnvelope
-          | { error?: string }
-          | null;
-        if (!response.ok || !body || !("model" in body)) {
-          throw new Error(
-            body && "error" in body && body.error
-              ? body.error
-              : `Telemetry returned HTTP ${response.status}`,
-          );
-        }
-        if (mounted) {
-          setModelEnvelope(body);
-          setModelError(null);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted && mounted) {
-          setModelError(
-            error instanceof Error
-              ? error.message
-              : "Model telemetry unavailable",
-          );
-        }
-      } finally {
-        if (mounted) setModelLoading(false);
-      }
-    }
-
-    void load();
-    const interval = window.setInterval(load, 15_000);
-    return () => {
-      mounted = false;
-      controller.abort();
-      window.clearInterval(interval);
-    };
-  }, [hours, refreshKey]);
-
-  const model = modelEnvelope?.model;
+  const model = useMemo(
+    () => modelTelemetryFromSnapshot(editorial),
+    [editorial],
+  );
+  const modelLoading = editorial === undefined;
+  const modelError = null;
   const runtime = model?.runtime.latest;
   const combinedRecent = useMemo(
     () => mergeRecent(model?.recent ?? [], editorial?.recent ?? []),
@@ -339,7 +355,7 @@ export function AdminTelemetry() {
               variant="outline"
               size="sm"
               className="rounded-none"
-              onClick={() => setRefreshKey((value) => value + 1)}
+              onClick={() => setQueryNow(Date.now())}
               disabled={modelLoading}
             >
               <RefreshCw className={cn(modelLoading && "animate-spin")} />
@@ -438,7 +454,6 @@ export function AdminTelemetry() {
         >
           <SystemStatusGrid
             model={model}
-            modelEnvelope={modelEnvelope}
             modelError={modelError}
             runtime={runtime}
           />
@@ -791,12 +806,10 @@ function HeroSignal({
 
 function SystemStatusGrid({
   model,
-  modelEnvelope,
   modelError,
   runtime,
 }: {
   model: ModelTelemetry | undefined;
-  modelEnvelope: ModelTelemetryEnvelope | null;
   modelError: string | null;
   runtime: RuntimeSample | null | undefined;
 }) {

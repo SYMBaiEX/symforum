@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useConvex } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
@@ -83,6 +84,7 @@ export function ForumSearchPage({ enabled }: { enabled: boolean }) {
 
 function LiveForumSearchPage() {
   const router = useRouter();
+  const convex = useConvex();
   const searchParams = useSearchParams();
   const submittedQuery = (searchParams.get("q") ?? "").trim();
   const submittedCategory = searchParams.get("board") ?? ALL_BOARDS;
@@ -113,8 +115,10 @@ function LiveForumSearchPage() {
   const categories = useQuery(forumRefs.listCategories, {
     limit: CATEGORY_SELECT_LIMIT,
   });
-  const searchArgs = canRunSearch
-    ? {
+  const searchArgs = useMemo(
+    () =>
+      canRunSearch
+        ? {
         query: submittedQuery,
         ...(submittedCategory === ALL_BOARDS
           ? {}
@@ -133,9 +137,52 @@ function LiveForumSearchPage() {
           ? {}
           : { sortKey: submittedSortKey }),
         ...(submittedDays === ALL_DATES ? {} : { days: Number(submittedDays) }),
-      }
-    : "skip";
-  const searchResult = useQuery(forumRefs.search, searchArgs);
+          }
+        : null,
+    [
+      canRunSearch,
+      submittedAuthor,
+      submittedCategory,
+      submittedDays,
+      submittedPage,
+      submittedPageSize,
+      submittedQuery,
+      submittedReplyPage,
+      submittedResultType,
+      submittedSortKey,
+      submittedTarget,
+      submittedThreadPage,
+    ],
+  );
+  const [searchResult, setSearchResult] = useState<
+    ForumSearchRecord | undefined
+  >(undefined);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (searchArgs === null) {
+      setSearchResult(undefined);
+      setSearchError(null);
+      return;
+    }
+
+    setSearchResult(undefined);
+    setSearchError(null);
+    void convex.query(forumRefs.search, searchArgs).then(
+      (result) => {
+        if (!cancelled) setSearchResult(result);
+      },
+      () => {
+        if (!cancelled) {
+          setSearchError("Search could not be completed. Please try again.");
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, searchArgs]);
   const categoryMaps = useMemo(() => {
     const bySlug = new Map<string, ForumCategoryRecord>();
     const byId = new Map<string, ForumCategoryRecord>();
@@ -452,6 +499,7 @@ function LiveForumSearchPage() {
         pageSize={submittedPageSize}
         query={submittedQuery}
         result={searchResult}
+        error={searchError}
         searchParams={searchParams}
       />
     </div>
@@ -464,6 +512,7 @@ function ForumSearchResults({
   pageSize,
   query,
   result,
+  error,
   searchParams,
 }: {
   author: string;
@@ -471,6 +520,7 @@ function ForumSearchResults({
   pageSize: number;
   query: string;
   result: ForumSearchRecord | undefined;
+  error: string | null;
   searchParams: { toString(): string };
 }) {
   const authorLabel = author.trim();
@@ -493,6 +543,9 @@ function ForumSearchResults({
   }
 
   if (result === undefined) {
+    if (error !== null) {
+      return <ForumStatusBox title="Search unavailable" body={error} />;
+    }
     return (
       <ForumLoading
         label={`Searching ${searchResultLabel(query, authorLabel)}`}

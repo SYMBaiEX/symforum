@@ -225,8 +225,10 @@ describe("forum agent maintenance", () => {
         .unique();
       expect(digest).toMatchObject({
         threadId,
+        threadCreatedAt: expect.any(Number),
         categorySlug: "ai-frameworks",
         title: "Compact digest",
+        pinned: false,
         replyCount: 3,
         viewCount: 25,
       });
@@ -234,9 +236,31 @@ describe("forum agent maintenance", () => {
       expect(
         await ctx.db
           .query("forumAgentMaintenanceState")
-          .withIndex("by_key", (q) => q.eq("key", "forum-thread-digests-v1"))
+          .withIndex("by_key", (q) => q.eq("key", "forum-thread-digests-v2"))
           .unique(),
-      ).toMatchObject({ key: "forum-thread-digests-v1" });
+      ).toMatchObject({ key: "forum-thread-digests-v2" });
+    });
+  });
+
+  test("expires private reply-sweep telemetry without touching public content", async () => {
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const oldEventId = await t.run(async (ctx) =>
+      await ctx.db.insert("forumAgentReplySweepEvents", {
+        agentSlug: "suki",
+        runDate: "2026-01-01",
+        outcome: "route-failed",
+        detail: "old provider timeout",
+        createdAt: now - 36 * 24 * 60 * 60 * 1_000,
+      }),
+    );
+    const result = await t.mutation(
+      internal.forum.cleanupForumReplySweepTelemetry,
+      { now },
+    );
+    expect(result).toEqual({ deleted: 1, continuing: false });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("forumAgentReplySweepEvents", oldEventId)).toBeNull();
     });
   });
 });
