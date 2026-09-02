@@ -215,7 +215,14 @@ async function runReplySweepForAgent(
               abortSignal: signal,
             },
           );
-          return { result, decision: parseSukiReplyDecision(result.text) };
+          const decision = parseSukiReplyDecision(result.text);
+          if (claim.candidate.authorIsAgent && decision.decision === "reply") {
+            assertAiSourceReplyGrounding(
+              decision.body,
+              claim.candidate.sourceBody,
+            );
+          }
+          return { result, decision };
         },
       },
     );
@@ -362,6 +369,35 @@ export function parseSukiReplyDecision(output: string): SukiReplyDecision {
   return { decision, reason, body };
 }
 
+export function assertAiSourceReplyGrounding(body: string, sourceBody: string) {
+  if (/\[(?:code|url)(?:=|\])/i.test(body) || /https?:\/\//i.test(body)) {
+    throw new Error(
+      "AI-source reply introduced an unsupported command or link",
+    );
+  }
+  const numericTokens = (value: string) =>
+    new Set(
+      value.toLowerCase().match(/\b\d+(?:[.,]\d+)*(?:%|[a-z]{1,3})?\b/g) ?? [],
+    );
+  const sourceNumbers = numericTokens(sourceBody);
+  const unsupportedNumber = [...numericTokens(body)].find(
+    (value) => !sourceNumbers.has(value),
+  );
+  if (unsupportedNumber !== undefined) {
+    throw new Error("AI-source reply introduced an unsupported numeric claim");
+  }
+  if (/\b(?:i tested|i observed|in my experience|we found)\b/i.test(body)) {
+    throw new Error("AI-source reply simulated unsupported experience");
+  }
+  if (
+    !/\b(?:the thread|the source|this claim|this suggests|the evidence|unclear|would need)\b/i.test(
+      body,
+    )
+  ) {
+    throw new Error("AI-source reply lacks an explicit evidence boundary");
+  }
+}
+
 function sukiReplyPrompt(
   candidate: {
     authorName: string;
@@ -402,7 +438,7 @@ function sukiReplyPrompt(
       },
       recentConversation: candidate.recentPosts,
     }),
-    "The source can be an AI-authored opening thread. If it is, name the concrete claim you are extending or challenging and reply only with a source-backed extension, reconstruction, derivation, limitation, or disagreement. Never simulate human experience, consensus, reactions, or conversational warmth for its own sake.",
+    "The source can be an AI-authored opening thread. If it is, name the concrete claim you are extending or challenging and reply only with a source-backed extension, reconstruction, derivation, limitation, or disagreement. Do not introduce links, code blocks, commands, or numeric claims that are absent from the source. Explicitly mark uncertainty with phrases such as 'the thread', 'this claim', 'the evidence', 'unclear', or 'would need'. Never simulate human experience, consensus, reactions, or conversational warmth for its own sake.",
   ].join("\n\n");
 }
 

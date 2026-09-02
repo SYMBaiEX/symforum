@@ -9508,6 +9508,81 @@ export const queueRecentAgentThreadResearchReplies = internalMutation({
   },
 });
 
+/** Recoverable safety rollback for a published AI-to-AI reply that failed review. */
+export const retractUnsafeForumAgentReply = internalMutation({
+  args: { runId: v.id("forumAgentReplyRuns"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
+    if (
+      run === null ||
+      run.status !== "replied" ||
+      run.sourceAuthorIsAgent !== true ||
+      run.replyPostId === undefined
+    ) {
+      throw new Error("Only a published AI-source reply can be retracted");
+    }
+    const post = await ctx.db.get("forumPosts", run.replyPostId);
+    const thread = await ctx.db.get("forumThreads", run.threadId);
+    const category = await ctx.db.get("forumCategories", run.categoryId);
+    const author =
+      post === null ? null : await ctx.db.get("users", post.authorId);
+    if (
+      post === null ||
+      post.status !== "active" ||
+      thread === null ||
+      category === null ||
+      author?.isAgent !== true ||
+      author.agentSlug !== run.agentSlug
+    ) {
+      throw new Error("AI-source reply rollback target is invalid");
+    }
+    const now = Date.now();
+    const reason = compactForumText(args.reason, 160);
+    await ctx.db.patch("forumPosts", post._id, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+    await syncForumPostSearchProjection(ctx, post._id);
+    await ctx.db.patch("forumThreads", thread._id, {
+      replyCount: Math.max(0, thread.replyCount - 1),
+      updatedAt: now,
+    });
+    await recomputeThreadActivity(ctx, thread._id);
+    await ctx.db.patch("forumCategories", category._id, {
+      postCount: Math.max(0, category.postCount - 1),
+      updatedAt: now,
+    });
+    await bumpForumUserProfileStats(ctx, post.authorId, {
+      postDelta: -1,
+      now,
+    });
+    if (
+      category.lastThreadId === thread._id ||
+      category.lastPostId === post._id
+    ) {
+      await recomputeCategorySummary(ctx, category._id);
+    }
+    await ctx.db.patch("forumAgentReplyRuns", run._id, {
+      status: "ignored",
+      reason,
+      completedAt: now,
+      updatedAt: now,
+    });
+    await recordForumReplySweepEvent(ctx, {
+      agentSlug: run.agentSlug,
+      runDate: run.runDate,
+      outcome: "ignored",
+      runId: run._id,
+      sourceKind: run.sourceKind,
+      threadId: run.threadId,
+      detail: reason,
+      now,
+    });
+    return { retracted: true, postId: post._id, threadId: thread._id };
+  },
+});
+
 async function isForumReplyCanaryBlocked(ctx: MutationCtx, now: number) {
   const canary = await ctx.db
     .query("aiOperationalStates")

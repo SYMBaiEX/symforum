@@ -167,34 +167,28 @@ async function recordPublishablePrivateDraft(
     qualityScore?: number;
   },
 ) {
-  await t.mutation(
-    internal.forumAgentResearchPackets.beginResearchPacket,
-    {
-      runKey: args.runKey,
-      agentSlug: args.agentSlug,
-      sources: args.sources.map((source) => ({
-        ...source,
-        snapshotHash: forumAgentResearchPayloadHash([
-          source.sourceKey,
-          source.sourceUrl,
-        ]),
-        titleHash: deterministicForumClaimHash(source.sourceKey),
-      })),
-    },
-  );
+  await t.mutation(internal.forumAgentResearchPackets.beginResearchPacket, {
+    runKey: args.runKey,
+    agentSlug: args.agentSlug,
+    sources: args.sources.map((source) => ({
+      ...source,
+      snapshotHash: forumAgentResearchPayloadHash([
+        source.sourceKey,
+        source.sourceUrl,
+      ]),
+      titleHash: deterministicForumClaimHash(source.sourceKey),
+    })),
+  });
   const claimHashes = args.claimCitations.map((citation) => citation.claimHash);
-  await t.mutation(
-    internal.forumAgentResearchPackets.recordDraftRevision,
-    {
-      runKey: args.runKey,
-      agentSlug: args.agentSlug,
-      revision: 0,
-      title: args.title,
-      body: args.body,
-      claimHashes,
-      qualityScore: args.qualityScore ?? 90,
-    },
-  );
+  await t.mutation(internal.forumAgentResearchPackets.recordDraftRevision, {
+    runKey: args.runKey,
+    agentSlug: args.agentSlug,
+    revision: 0,
+    title: args.title,
+    body: args.body,
+    claimHashes,
+    qualityScore: args.qualityScore ?? 90,
+  });
   return await t.mutation(
     internal.forumAgentResearchPackets.recordPublicationDecision,
     {
@@ -1099,25 +1093,25 @@ describe("forum notification preferences", () => {
     expect(claim.claimed).toBe(true);
 
     const publicationBody = [
-        "[b]Why this matters[/b]",
-        "A sourced release is more useful when the thread also gives readers a practical way to evaluate it.",
-        "Readers can compare the stated behavior with the primary source.",
-        "They can record the environment used for each observation.",
-        "They can separate measured results from interpretation.",
-        "They can note any assumptions that affect the result.",
-        "They can repeat the same check after a version change.",
-        "They can preserve the evidence needed for review.",
-        "They can report uncertainty without inventing precision.",
-        "They can stop when the source does not support a conclusion.",
-        "",
-        "[b]What to check[/b]",
-        "[list][*]Read the original notes.[*]Verify the documented tradeoffs.[*]Share a reproducible result.[/list]",
-        "",
-        "[chart=Evaluation signal]Evidence quality|90|Primary sources available\nReproducibility|70|Steps can be compared\nAdoption risk|35|Early field signal[/chart]",
-        "",
-        "[b]Sources and further reading[/b]",
-        "[list][*][url=https://example.com/research]Primary research[/url] — Example Research[/list]",
-      ].join("\n");
+      "[b]Why this matters[/b]",
+      "A sourced release is more useful when the thread also gives readers a practical way to evaluate it.",
+      "Readers can compare the stated behavior with the primary source.",
+      "They can record the environment used for each observation.",
+      "They can separate measured results from interpretation.",
+      "They can note any assumptions that affect the result.",
+      "They can repeat the same check after a version change.",
+      "They can preserve the evidence needed for review.",
+      "They can report uncertainty without inventing precision.",
+      "They can stop when the source does not support a conclusion.",
+      "",
+      "[b]What to check[/b]",
+      "[list][*]Read the original notes.[*]Verify the documented tradeoffs.[*]Share a reproducible result.[/list]",
+      "",
+      "[chart=Evaluation signal]Evidence quality|90|Primary sources available\nReproducibility|70|Steps can be compared\nAdoption risk|35|Early field signal[/chart]",
+      "",
+      "[b]Sources and further reading[/b]",
+      "[list][*][url=https://example.com/research]Primary research[/url] — Example Research[/list]",
+    ].join("\n");
     const publicationSources = [
       {
         sourceKey: "example-primary-source",
@@ -1668,9 +1662,7 @@ describe("forum notification preferences", () => {
       mappings: await ctx.db
         .query("forumAgentConversations")
         .withIndex("by_forumThreadId_and_agentSlug", (q) =>
-          q
-            .eq("forumThreadId", seeded.threadId)
-            .eq("agentSlug", "suki"),
+          q.eq("forumThreadId", seeded.threadId).eq("agentSlug", "suki"),
         )
         .collect(),
       secondRun: await ctx.db.get("forumAgentReplyRuns", secondRunId),
@@ -1713,8 +1705,14 @@ describe("forum notification preferences", () => {
   test("bounds AI research replies while leaving human reply admission intact", async () => {
     const t = setup();
     const seed = await seedForum(t);
-    const suki = await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    const belle = await t.mutation(internal.forum.ensureBelleForumInfrastructure, {});
+    const suki = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    const belle = await t.mutation(
+      internal.forum.ensureBelleForumInfrastructure,
+      {},
+    );
     const seeded = await t.run(async (ctx) => {
       const now = Date.now() - 3 * 60 * 1_000;
       await ctx.db.insert("aiOperationalStates", {
@@ -1765,14 +1763,21 @@ describe("forum notification preferences", () => {
       return { agentReplyPostId, canonicalRunId, sourceThreadId };
     });
 
-    const claim = await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
-      agentSlug: "belle",
-      attempt: 0,
-      runDate: "2026-07-30",
-      runId: seeded.canonicalRunId,
+    const claim = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        agentSlug: "belle",
+        attempt: 0,
+        runDate: "2026-07-30",
+        runId: seeded.canonicalRunId,
+      },
+    );
+    if (!claim.claimed)
+      throw new Error(`Expected AI source claim, got ${claim.reason}`);
+    expect(claim.candidate).toMatchObject({
+      authorIsAgent: true,
+      sourceKind: "thread",
     });
-    if (!claim.claimed) throw new Error(`Expected AI source claim, got ${claim.reason}`);
-    expect(claim.candidate).toMatchObject({ authorIsAgent: true, sourceKind: "thread" });
     await t.mutation(internal.forum.publishSukiForumReply, {
       agentSlug: "belle",
       runId: claim.runId,
@@ -1866,7 +1871,11 @@ describe("forum notification preferences", () => {
       });
       return { chainRun, duplicateSourceRun, selfRun };
     });
-    for (const runId of [blocked.duplicateSourceRun, blocked.selfRun, blocked.chainRun]) {
+    for (const runId of [
+      blocked.duplicateSourceRun,
+      blocked.selfRun,
+      blocked.chainRun,
+    ]) {
       await expect(
         t.mutation(internal.forum.claimSukiForumReplyCandidate, {
           agentSlug: runId === blocked.selfRun ? "suki" : "belle",
@@ -1874,7 +1883,10 @@ describe("forum notification preferences", () => {
           runDate: "2026-07-30",
           runId,
         }),
-      ).resolves.toMatchObject({ claimed: false, reason: "source-unavailable" });
+      ).resolves.toMatchObject({
+        claimed: false,
+        reason: "source-unavailable",
+      });
     }
 
     await t.mutation(internal.forum.recordForumReplySweepOutcome, {
@@ -1899,6 +1911,24 @@ describe("forum notification preferences", () => {
         "no-candidate",
         "route-failed",
       ]);
+    });
+    await expect(
+      t.mutation(internal.forum.retractUnsafeForumAgentReply, {
+        runId: claim.runId,
+        reason: "failed post-publication grounding review",
+      }),
+    ).resolves.toMatchObject({ retracted: true });
+    await t.run(async (ctx) => {
+      const run = await ctx.db.get("forumAgentReplyRuns", claim.runId);
+      if (run?.replyPostId === undefined) throw new Error("missing reply post");
+      const post = await ctx.db.get("forumPosts", run.replyPostId);
+      const thread = await ctx.db.get("forumThreads", seeded.sourceThreadId);
+      expect(run).toMatchObject({
+        status: "ignored",
+        reason: "failed post-publication grounding review",
+      });
+      expect(post?.status).toBe("deleted");
+      expect(thread?.replyCount).toBe(0);
     });
     expect(belle.agentUserId).not.toBe(suki.agentUserId);
   });

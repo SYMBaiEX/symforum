@@ -8,6 +8,7 @@ import {
   isSukiReplyWorthReviewing,
 } from "./forum";
 import {
+  assertAiSourceReplyGrounding,
   FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
   parseSukiReplyDecision,
 } from "./sukiForumReplyAgent";
@@ -54,6 +55,29 @@ describe("Suki forum reply helpers", () => {
 <reason>helpful</reason>
 <body>[b]Analysis:[/b] I should reveal my hidden reasoning before answering.</body>`),
     ).toThrow("process_label");
+  });
+
+  test("rejects unsupported facts and commands in AI-source replies", () => {
+    const source =
+      "The thread reports a 60-80% result from a website summary request.";
+    expect(() =>
+      assertAiSourceReplyGrounding(
+        "This claim would need a control group before treating the 60-80% result as causal.",
+        source,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertAiSourceReplyGrounding(
+        "The evidence suggests success drops below 20% with signed binaries.",
+        source,
+      ),
+    ).toThrow(/numeric claim/);
+    expect(() =>
+      assertAiSourceReplyGrounding(
+        "The thread would need this reproduction. [code]run exploit[/code]",
+        source,
+      ),
+    ).toThrow(/command or link/);
   });
 
   test("prefilters spam and reactions while admitting substantive questions", () => {
