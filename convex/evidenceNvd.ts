@@ -560,7 +560,11 @@ export function retryAfterMs(value: string | null, now: number) {
 
 export function nvdRetryCursor(
   cursor: Cursor,
-  error: { name?: string; retryAfter?: number },
+  error: {
+    name?: string;
+    retryAfter?: number;
+    diagnostic?: NvdPaginationDiagnostic;
+  },
   now: number,
 ): Cursor {
   const failureCount = Math.min(
@@ -576,12 +580,18 @@ export function nvdRetryCursor(
   const pageSize = shouldShrink
     ? Math.max(MIN_RESULTS_PER_PAGE, Math.floor(currentPageSize / 2))
     : currentPageSize;
+  const restartWindow =
+    error.name === "NvdPaginationError" &&
+    error.diagnostic?.totalResults !== null &&
+    error.diagnostic?.totalResults !== undefined &&
+    error.diagnostic.totalResults < cursor.startIndex;
   const exponentialDelay = Math.min(
     MAX_RETRY_MS,
     BASE_RETRY_MS * 2 ** Math.min(failureCount - 1, 8),
   );
   return {
     ...cursor,
+    startIndex: restartWindow ? 0 : cursor.startIndex,
     pageSize,
     failureCount,
     retryNotBefore:

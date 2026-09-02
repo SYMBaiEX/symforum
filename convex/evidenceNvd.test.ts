@@ -279,6 +279,34 @@ describe("NVD evidence adapters", () => {
     });
   });
 
+  test("rewinds within the same window when the upstream result set shrinks behind the cursor", () => {
+    const cursor = {
+      windowStart: 100,
+      windowEnd: 1_000,
+      startIndex: 60,
+      pageSize: 6,
+      failureCount: 4,
+    };
+    const error = new NvdPaginationError(
+      "NVD returned malformed pagination metadata",
+      {
+        code: "metadata",
+        cursorStartIndex: 60,
+        totalResults: 14,
+        resultsPerPage: 0,
+        itemCount: 0,
+      },
+    );
+
+    expect(nvdRetryCursor(cursor, error, 1_000)).toMatchObject({
+      windowStart: 100,
+      windowEnd: 1_000,
+      startIndex: 0,
+      pageSize: 3,
+      failureCount: 5,
+    });
+  });
+
   test("accepts only the official empty-window shape and bounded final pages", () => {
     const cursor = {
       windowStart: 0,
