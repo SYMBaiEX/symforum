@@ -476,6 +476,10 @@ export function parseNvdPage(
         ? JSON.stringify({
             ...pageCursor,
             startIndex: consumed,
+            pageSize: Math.min(
+              DEFAULT_RESULTS_PER_PAGE,
+              Math.max(pageSize, (cursor.pageSize ?? pageSize) * 2),
+            ),
             failureCount: 0,
           })
         : null,

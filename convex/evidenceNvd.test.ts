@@ -307,6 +307,28 @@ describe("NVD evidence adapters", () => {
     });
   });
 
+  test("ramps a reduced page size back up after a validated recovery page", () => {
+    const page = parseNvdPage(
+      "cves",
+      {
+        windowStart: 100,
+        windowEnd: 1_000,
+        startIndex: 0,
+        pageSize: 1,
+        failureCount: 12,
+      },
+      cvePage(14, 1, 0, 1),
+    );
+
+    expect(parseCursor(page.nextCursor ?? "")).toMatchObject({
+      windowStart: 100,
+      windowEnd: 1_000,
+      startIndex: 1,
+      pageSize: 2,
+      failureCount: 0,
+    });
+  });
+
   test("accepts only the official empty-window shape and bounded final pages", () => {
     const cursor = {
       windowStart: 0,
