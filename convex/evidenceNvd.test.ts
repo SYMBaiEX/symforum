@@ -13,6 +13,7 @@ import {
   parseNvdCves,
   nvdPostVersionWork,
   nvdRetryCursor,
+  NvdPaginationError,
   readBoundedNvdResponse,
   retryAfterMs,
   totalResults,
@@ -247,6 +248,35 @@ describe("NVD evidence adapters", () => {
         startIndex: 1,
       }),
     ).toThrow("malformed pagination metadata");
+  });
+
+  test("returns typed bounded diagnostics and retries malformed pages without advancing", () => {
+    const cursor = {
+      windowStart: 0,
+      windowEnd: 1_000,
+      startIndex: 25,
+      pageSize: 25,
+      failureCount: 0,
+    };
+    let error: unknown;
+    try {
+      parseNvdPage("cves", cursor, cvePage(50, 24, 25, 25));
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(NvdPaginationError);
+    expect((error as NvdPaginationError).diagnostic).toEqual({
+      code: "metadata",
+      cursorStartIndex: 25,
+      totalResults: 50,
+      resultsPerPage: 25,
+      itemCount: 24,
+    });
+    expect(nvdRetryCursor(cursor, error as Error, 1_000)).toMatchObject({
+      startIndex: 25,
+      pageSize: 12,
+      failureCount: 1,
+    });
   });
 
   test("accepts only the official empty-window shape and bounded final pages", () => {

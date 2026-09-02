@@ -116,7 +116,8 @@ export async function routedModelCandidates(
   void telemetry;
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
-  for (const modelId of new Set(openRouterModelIds)) {
+  const modelIds = [...new Set(openRouterModelIds)];
+  for (const modelId of modelIds) {
     if (disabled.has(modelId)) continue;
     const primary = openRouterModel(config, modelId);
     if (primary) candidates.push(primary);
@@ -127,6 +128,15 @@ export async function routedModelCandidates(
     );
   }
   if (!candidates.length) {
+    // A circuit is advisory for this bounded route, not a permanent provider
+    // outage. Retry the free primary as the emergency route so open circuits
+    // cannot force paid traffic or strand the platform indefinitely.
+    const emergencyModelId = modelIds.at(0);
+    const emergency =
+      emergencyModelId === undefined
+        ? undefined
+        : openRouterModel(config, emergencyModelId);
+    if (emergency) return [emergency];
     throw new Error("No enabled AI model route is available.");
   }
   return candidates;

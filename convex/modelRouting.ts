@@ -15,6 +15,7 @@ import {
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
+import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
@@ -44,9 +45,9 @@ export async function convexModelRoutingConfig(
     now,
   });
   const disabledModelIds = new Set(control.disabledModelIds);
-  // Text generation is free-only. The shared paid budget continues to protect
-  // the OpenRouter embedding route without disabling free generation.
-  void control.paidBudgetExceeded;
+  if (control.paidBudgetExceeded) {
+    disabledModelIds.add(OPENROUTER_PAID_FALLBACK_MODEL);
+  }
 
   void options;
   return { ...base, disabledModelIds: [...disabledModelIds] };
@@ -121,11 +122,21 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
     run: async (candidate: RoutedModel, signal: AbortSignal) => {
       const result = await generateText({
         model: candidate.model,
-        prompt: `Call confirmHealth with the exact message: ${CANARY_MESSAGE}`,
+        prompt:
+          "You are validating the exact structured-output contract used by a " +
+          "forum agent before it may publish. Call validateForumDraft exactly " +
+          "once. Do not write prose.",
         tools: {
-          confirmHealth: tool({
-            description: "Confirm that structured forum-agent tool use works.",
-            inputSchema: z.object({ message: z.literal(CANARY_MESSAGE) }),
+          validateForumDraft: tool({
+            description:
+              "Validate a representative topic selection and grounded forum draft without publishing it.",
+            inputSchema: z.object({
+              topic: z.string().min(12).max(120),
+              title: z.string().min(12).max(120),
+              draft: z.string().min(80).max(1_200),
+              sourceUrls: z.array(z.string().url()).min(1).max(3),
+              message: z.literal(CANARY_MESSAGE),
+            }),
           }),
         },
         toolChoice: "required",
@@ -139,8 +150,12 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
       });
       const call = result.staticToolCalls[0];
       if (
-        call?.toolName !== "confirmHealth" ||
-        call.input.message !== CANARY_MESSAGE
+        call?.toolName !== "validateForumDraft" ||
+        call.input.message !== CANARY_MESSAGE ||
+        call.input.topic.trim().length < 12 ||
+        call.input.title.trim().length < 12 ||
+        call.input.draft.trim().length < 80 ||
+        call.input.sourceUrls.length < 1
       ) {
         throw new Error("model route did not complete the structured canary");
       }

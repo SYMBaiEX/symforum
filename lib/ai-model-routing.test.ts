@@ -12,6 +12,7 @@ import {
 import {
   OPENROUTER_FREE_GENERATION_MODELS,
   OPENROUTER_GENERATION_MODELS,
+  OPENROUTER_PAID_FALLBACK_MODEL,
 } from "./ai-models";
 
 function candidate(persistedModel: string): RoutedModel {
@@ -24,7 +25,7 @@ function candidate(persistedModel: string): RoutedModel {
 }
 
 describe("OpenRouter-only model routing", () => {
-  test("routes every generation stage through the OpenRouter free router", () => {
+  test("routes every generation stage through the OpenRouter free router then paid fallback", () => {
     expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual(["openrouter/free"]);
     expect(openRouterModelForStage("suki:forum-topic")).toBe(
       OPENROUTER_FREE_GENERATION_MODELS[0],
@@ -38,6 +39,10 @@ describe("OpenRouter-only model routing", () => {
     expect(openRouterModelsForStage("suki:forum-topic")).toEqual(
       OPENROUTER_GENERATION_MODELS,
     );
+    expect(OPENROUTER_GENERATION_MODELS).toEqual([
+      "openrouter/free",
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    ]);
   });
 
   test("creates only the canonical OpenRouter free candidate", async () => {
@@ -53,17 +58,14 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("deduplicates configured candidates and fails closed when disabled", async () => {
+  test("deduplicates candidates and retains the free emergency route", async () => {
     await expect(
       routedModelCandidates(
         { openRouterApiKey: "test-openrouter-key" },
         undefined,
         undefined,
         undefined,
-        [
-          "openrouter/free",
-          "openrouter/free",
-        ],
+        ["openrouter/free", "openrouter/free"],
       ),
     ).resolves.toHaveLength(1);
     await expect(
@@ -71,7 +73,9 @@ describe("OpenRouter-only model routing", () => {
         openRouterApiKey: "test-openrouter-key",
         disabledModelIds: OPENROUTER_GENERATION_MODELS,
       }),
-    ).rejects.toThrow(/No enabled AI model route/);
+    ).resolves.toMatchObject([
+      { provider: "openrouter", persistedModel: "openrouter/free" },
+    ]);
   });
 
   test("records a completed free-router attempt", async () => {
@@ -101,13 +105,47 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
+  test("falls back within OpenRouter and marks the paid attempt in telemetry", async () => {
+    const onAttempt = vi.fn();
+    const result = await runRoutedCandidates(
+      OPENROUTER_GENERATION_MODELS.map(candidate),
+      {
+        stage: "test-openrouter-paid-fallback",
+        totalTimeoutMs: 5_000,
+        onAttempt,
+        run: async (route) => {
+          if (route.persistedModel === "openrouter/free")
+            throw new Error("free route unavailable");
+          return "paid-result";
+        },
+      },
+    );
+    expect(result).toMatchObject({
+      value: "paid-result",
+      route: {
+        provider: "openrouter",
+        persistedModel: OPENROUTER_PAID_FALLBACK_MODEL,
+      },
+    });
+    expect(onAttempt).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        provider: "openrouter",
+        model: OPENROUTER_PAID_FALLBACK_MODEL,
+        outcome: "completed",
+        fallback: true,
+      }),
+    );
+  });
+
   test("uses OpenRouter-native fallbacks before an owner-console stream starts", async () => {
     const selected = await selectStreamingModel({
       openRouterApiKey: "test-openrouter-key",
     });
 
     expect(selected.persistedModel).toBe(OPENROUTER_GENERATION_MODELS[0]);
-    expect(selected.providerOptions).toBeUndefined();
+    expect(selected.providerOptions).toMatchObject({
+      openrouter: { models: [OPENROUTER_PAID_FALLBACK_MODEL] },
+    });
   });
 
   test("fails clearly when no OpenRouter key is configured", async () => {

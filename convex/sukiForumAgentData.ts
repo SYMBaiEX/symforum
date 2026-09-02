@@ -7,6 +7,7 @@ const SUKI_RUN_STALE_MS = 30 * 60 * 1_000;
 const SUKI_CACHE_CLEANUP_BATCH_SIZE = 100;
 const FORUM_AGENT_RESERVATION_TTL_MS = 20 * 60 * 1_000;
 const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
+const MAX_FAILED_RUNS_PER_DAY = 12;
 
 export const reserveResearchTopic = internalMutation({
   args: {
@@ -229,21 +230,35 @@ export const claimRun = internalMutation({
     ) {
       return { claimed: false as const, reason: "running" as const, runKey };
     }
-    if (existing === null) {
-      const dailyLimit = forumDailyPublicationLimit(
-        env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
-      );
-      const globalRuns = await ctx.db
-        .query("forumAgentRuns")
-        .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
-        .take(dailyLimit);
-      if (globalRuns.length >= dailyLimit) {
-        return {
-          claimed: false as const,
-          reason: "global-daily-attempt-limit" as const,
-          runKey,
-        };
-      }
+    const dailyLimit = forumDailyPublicationLimit(
+      env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
+    );
+    const globalRuns = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
+      .take(dailyLimit + MAX_FAILED_RUNS_PER_DAY + 1);
+    if (
+      existing === null &&
+      globalRuns.filter(
+        (run) => run.status === "running" || run.status === "published",
+      ).length >= dailyLimit
+    ) {
+      return {
+        claimed: false as const,
+        reason: "global-daily-limit" as const,
+        runKey,
+      };
+    }
+    if (
+      existing === null &&
+      globalRuns.filter((run) => run.status === "failed").length >=
+        MAX_FAILED_RUNS_PER_DAY
+    ) {
+      return {
+        claimed: false as const,
+        reason: "global-failure-circuit" as const,
+        runKey,
+      };
     }
     const todayRuns = await ctx.db
       .query("forumAgentRuns")
@@ -251,10 +266,10 @@ export const claimRun = internalMutation({
         q.eq("agentSlug", agentSlug).eq("runDate", args.runDate),
       )
       .take(40);
-    const publishedCount = todayRuns.filter(
-      (run) => run.status === "published",
+    const occupiedCount = todayRuns.filter(
+      (run) => run.status === "running" || run.status === "published",
     ).length;
-    if (publishedCount >= agent.dailyPostTarget) {
+    if (occupiedCount >= agent.dailyPostTarget) {
       if (existing === null) {
         await ctx.db.insert("forumAgentRuns", {
           runKey,
@@ -303,7 +318,7 @@ export const claimRun = internalMutation({
         updatedAt: now,
       });
     }
-    return { claimed: true as const, runKey, publishedCount };
+    return { claimed: true as const, runKey, publishedCount: occupiedCount };
   },
 });
 

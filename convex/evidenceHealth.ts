@@ -32,6 +32,14 @@ function maximumSourceAge(sourceKey: string) {
   return 26 * HOUR_MS;
 }
 
+function sourceFailureAction(sourceKey: string, errorMessage: string) {
+  if (sourceKey.startsWith("nvd-") && /pagination|response|timeout/i.test(errorMessage))
+    return `${sourceKey}: preserve cursor and retry with the stored smaller page size`;
+  if (sourceKey.startsWith("nvd-"))
+    return `${sourceKey}: inspect NVD response and retry after its backoff`;
+  return `${sourceKey}: inspect the last ingestion error before re-enabling`;
+}
+
 /** Hourly bounded operational check for evidence sources and async jobs. */
 export const check = internalMutation({
   args: { now: v.optional(v.number()) },
@@ -91,6 +99,16 @@ export const check = internalMutation({
       )
       .map((source) => source.sourceKey)
       .sort();
+    const failureActions = sources
+      .filter(
+        (source) =>
+          source.lastErrorAt > source.lastSucceededAt ||
+          source.lastErrorMessage.trim().length > 0,
+      )
+      .map((source) =>
+        sourceFailureAction(source.sourceKey, source.lastErrorMessage),
+      )
+      .sort();
     const stuckResearchJobs = queuedResearch.length + runningResearch.length;
     const stuckExportJobs = queuedExports.length + runningExports.length;
     const truncated =
@@ -116,6 +134,7 @@ export const check = internalMutation({
             `${stuckResearchJobs} stuck research job(s)`,
             `${stuckExportJobs} stuck export job(s)`,
             truncated ? "bounded scan saturated" : null,
+            ...failureActions,
           ]
             .filter((part) => part !== null)
             .join("; ");

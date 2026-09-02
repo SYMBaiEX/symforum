@@ -33,7 +33,7 @@ describe("forum agent publication workflow", () => {
     ).toBeNull();
   });
 
-  test("caps all daily attempts, including failed runs", async () => {
+  test("opens a bounded failure circuit before failed routes can consume all slots", async () => {
     const t = convexTest(schema, modules);
     const runDate = "2026-08-17";
     const agentSlug = "attempt-capped-agent";
@@ -72,7 +72,7 @@ describe("forum agent publication workflow", () => {
         createdAt: 1_800_000_000_000,
         updatedAt: 1_800_000_000_000,
       });
-      for (let attempt = 0; attempt < 42; attempt += 1) {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
         await ctx.db.insert("forumAgentRuns", {
           runKey: `other-agent:${runDate}:${attempt}`,
           agentSlug: "other-agent",
@@ -95,6 +95,6 @@ describe("forum agent publication workflow", () => {
         slot: slot!,
         runDate,
       }),
-    ).resolves.toEqual({ queued: false, reason: "global-daily-attempt-limit" });
+    ).resolves.toEqual({ queued: false, reason: "global-failure-circuit" });
   });
 });

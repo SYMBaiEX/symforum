@@ -30,6 +30,7 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
   },
 });
 const STRUCTURED_CANARY_MAX_AGE_MS = 2 * HOUR;
+const MAX_FAILED_RUNS_PER_DAY = 12;
 
 type StructuredCanaryState = {
   healthy: boolean;
@@ -202,8 +203,9 @@ async function publicationPreflight(
     )
     .take(40);
   if (
-    todayRuns.filter((run) => run.status === "published").length >=
-    agent.dailyPostTarget
+    todayRuns.filter(
+      (run) => run.status === "running" || run.status === "published",
+    ).length >= agent.dailyPostTarget
   ) {
     return { ok: false as const, reason: "daily-target" };
   }
@@ -211,14 +213,19 @@ async function publicationPreflight(
   const globalRuns = await ctx.db
     .query("forumAgentRuns")
     .withIndex("by_runDate", (q) => q.eq("runDate", args.runDate))
-    .take(dailyLimit);
-  if (globalRuns.length >= dailyLimit) {
-    return { ok: false as const, reason: "global-daily-attempt-limit" };
-  }
+    .take(dailyLimit + MAX_FAILED_RUNS_PER_DAY + 1);
   if (
-    globalRuns.filter((run) => run.status === "published").length >= dailyLimit
+    globalRuns.filter(
+      (run) => run.status === "running" || run.status === "published",
+    ).length >= dailyLimit
   ) {
     return { ok: false as const, reason: "global-daily-limit" };
+  }
+  if (
+    globalRuns.filter((run) => run.status === "failed").length >=
+    MAX_FAILED_RUNS_PER_DAY
+  ) {
+    return { ok: false as const, reason: "global-failure-circuit" };
   }
   return { ok: true as const };
 }

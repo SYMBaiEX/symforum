@@ -353,6 +353,41 @@ type NvdPage = {
   nextCursor: string | null;
 };
 
+export type NvdPaginationDiagnostic = {
+  code: "metadata" | "incomplete" | "invalid-document";
+  cursorStartIndex: number;
+  totalResults: number | null;
+  resultsPerPage: number | null;
+  itemCount: number;
+};
+
+export class NvdPaginationError extends Error {
+  readonly diagnostic: NvdPaginationDiagnostic;
+
+  constructor(message: string, diagnostic: NvdPaginationDiagnostic) {
+    super(message);
+    this.name = "NvdPaginationError";
+    this.diagnostic = diagnostic;
+  }
+}
+
+function paginationError(
+  code: NvdPaginationDiagnostic["code"],
+  message: string,
+  cursor: Cursor,
+  total: number | null,
+  pageSize: number,
+  itemCount: number,
+) {
+  return new NvdPaginationError(message, {
+    code,
+    cursorStartIndex: cursor.startIndex,
+    totalResults: total,
+    resultsPerPage: Number.isSafeInteger(pageSize) ? pageSize : null,
+    itemCount,
+  });
+}
+
 /**
  * NVD pagination is a correctness boundary: an absent or inconsistent count
  * must never be interpreted as a completed window. Doing so would advance the
@@ -384,7 +419,14 @@ export function parseNvdPage(
     rawItems.length !== pageSize ||
     rawItems.length > total - cursor.startIndex
   ) {
-    throw new Error("NVD returned malformed pagination metadata");
+    throw paginationError(
+      "metadata",
+      "NVD returned malformed pagination metadata",
+      cursor,
+      total,
+      pageSize,
+      rawItems.length,
+    );
   }
 
   const remaining = total - cursor.startIndex;
@@ -398,14 +440,28 @@ export function parseNvdPage(
     (remaining > 0 && rawItems.length === 0) ||
     (remaining > pageSize && rawItems.length !== pageSize)
   ) {
-    throw new Error("NVD returned an incomplete pagination page");
+    throw paginationError(
+      "incomplete",
+      "NVD returned an incomplete pagination page",
+      cursor,
+      total,
+      pageSize,
+      rawItems.length,
+    );
   }
 
   const documents =
     kind === "cves" ? parseNvdCves(payload) : parseNvdChangeHistory(payload);
   // A malformed record is not safe to discard while moving the page cursor.
   if (documents.length !== rawItems.length)
-    throw new Error("NVD returned an invalid document in a pagination page");
+    throw paginationError(
+      "invalid-document",
+      "NVD returned an invalid document in a pagination page",
+      cursor,
+      total,
+      pageSize,
+      rawItems.length,
+    );
 
   const consumed = cursor.startIndex + rawItems.length;
   const {
@@ -514,7 +570,8 @@ export function nvdRetryCursor(
   const shouldShrink =
     error.name === "NvdResponseTooLargeError" ||
     error.name === "NvdRequestTimeoutError" ||
-    error.name === "AbortError";
+    error.name === "AbortError" ||
+    error.name === "NvdPaginationError";
   const currentPageSize = cursor.pageSize ?? DEFAULT_RESULTS_PER_PAGE;
   const pageSize = shouldShrink
     ? Math.max(MIN_RESULTS_PER_PAGE, Math.floor(currentPageSize / 2))
@@ -778,14 +835,14 @@ async function writeCveClaim(
     }),
   });
 }
-async function sync(kind: NvdKind, ctx: ActionCtx) {
+async function sync(kind: NvdKind, ctx: ActionCtx, force = false) {
   const config = sourceConfig(kind);
   const state = await ctx.runQuery(sourceStateRef, { sourceKey: config.key });
   const now = Date.now();
   if (state && (!state.ingestionEnabled || state.status !== "active"))
     return { ok: true, skipped: true, deferred: false, ingested: 0, failed: 0 };
   const cursor = nextNvdCursor(state, now);
-  if (cursor.retryNotBefore && cursor.retryNotBefore > now)
+  if (!force && cursor.retryNotBefore && cursor.retryNotBefore > now)
     return {
       ok: false,
       skipped: true,
@@ -869,8 +926,12 @@ async function sync(kind: NvdKind, ctx: ActionCtx) {
   } catch (error) {
     const typed = error as Error & { status?: number; retryAfter?: number };
     const retryCursor = nvdRetryCursor(cursor, typed, now);
+    const diagnostic =
+      error instanceof NvdPaginationError
+        ? `; diagnostic=${JSON.stringify(error.diagnostic)}`
+        : "";
     const message =
-      text(typed.message || "NVD ingestion failed", 500) ||
+      text(`${typed.message || "NVD ingestion failed"}${diagnostic}`, 500) ||
       "NVD ingestion failed";
     await saveSource(ctx, kind, state, {
       ...nvdFailureCheckpoint(
@@ -904,13 +965,13 @@ async function sync(kind: NvdKind, ctx: ActionCtx) {
 
 /** Incremental, recent-only NVD CVE sync. Historical backfill is intentionally not scheduled. */
 export const syncCves = internalAction({
-  args: {},
+  args: { force: v.optional(v.boolean()) },
   returns: resultValidator,
-  handler: async (ctx) => sync("cves", ctx),
+  handler: async (ctx, args) => sync("cves", ctx, args.force ?? false),
 });
 /** Immutable NVD change events; unchanged CVEs are never re-written by this feed. */
 export const syncChangeHistory = internalAction({
-  args: {},
+  args: { force: v.optional(v.boolean()) },
   returns: resultValidator,
-  handler: async (ctx) => sync("history", ctx),
+  handler: async (ctx, args) => sync("history", ctx, args.force ?? false),
 });

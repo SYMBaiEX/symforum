@@ -8,6 +8,7 @@ import {
 import {
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
+  OPENROUTER_PAID_FALLBACK_MODEL,
 } from "./ai-models";
 
 describe("AI model cost controls", () => {
@@ -24,6 +25,16 @@ describe("AI model cost controls", () => {
     expect(
       estimatedModelCostMicroUsd(OPENROUTER_EMBEDDING_MODEL, 1_000_000, 999),
     ).toBe(20_000);
+  });
+
+  test("accounts for the OpenRouter paid fallback in the shared budget", () => {
+    expect(
+      estimatedModelCostMicroUsd(
+        OPENROUTER_PAID_FALLBACK_MODEL,
+        1_000_000,
+        1_000_000,
+      ),
+    ).toBe(210_000);
   });
 
   test("uses a bounded default budget and stable spend shards", () => {

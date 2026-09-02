@@ -1,6 +1,7 @@
 import {
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
+  OPENROUTER_PAID_FALLBACK_MODEL,
 } from "./ai-models";
 
 type TokenPrice = {
@@ -12,6 +13,12 @@ const MODEL_PRICES: Record<string, TokenPrice> = {
   [OPENROUTER_FREE_GENERATION_MODELS[0]]: {
     inputUsdPerMillion: 0,
     outputUsdPerMillion: 0,
+  },
+  // OpenRouter price snapshot, checked 2026-09-01:
+  // https://openrouter.ai/~deepseek/deepseek-v4-flash-latest
+  [OPENROUTER_PAID_FALLBACK_MODEL]: {
+    inputUsdPerMillion: 0.05,
+    outputUsdPerMillion: 0.16,
   },
   // OpenRouter price snapshot, checked 2026-08-18:
   // https://openrouter.ai/openai/text-embedding-3-small/api ($0.02 / M tokens).

@@ -14,8 +14,6 @@ const modules = {
 const runDate = "2026-08-17";
 const now = 1_800_000_000_000;
 
-type ClaimResult = { claimed: boolean; reason?: string };
-
 async function seedFailedDailyRuns(
   t: TestConvex<typeof schema>,
   count: number,
@@ -40,10 +38,35 @@ async function seedFailedDailyRuns(
 }
 
 describe("forum agent run claims", () => {
-  test("does not create a 43rd run when failed attempts exhaust the daily limit", async () => {
+  test("allows failures below the guard without consuming publication capacity", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    await seedFailedDailyRuns(t, 42);
+    await seedFailedDailyRuns(t, 11);
+
+    await expect(
+      t.mutation(internal.sukiForumAgentData.claimRun, {
+        attempt: 0,
+        runDate,
+        slot: 0,
+      }),
+    ).resolves.toMatchObject({
+      claimed: true,
+      runKey: `suki:${runDate}:0`,
+    });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("forumAgentRuns")
+          .withIndex("by_runDate", (q) => q.eq("runDate", runDate))
+          .collect(),
+      ).toHaveLength(12);
+    });
+  });
+
+  test("opens a bounded circuit after repeated failed routes", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    await seedFailedDailyRuns(t, 12);
 
     await expect(
       t.mutation(internal.sukiForumAgentData.claimRun, {
@@ -53,57 +76,14 @@ describe("forum agent run claims", () => {
       }),
     ).resolves.toMatchObject({
       claimed: false,
-      reason: "global-daily-attempt-limit",
-      runKey: `suki:${runDate}:0`,
-    });
-    await t.run(async (ctx) => {
-      expect(
-        await ctx.db
-          .query("forumAgentRuns")
-          .withIndex("by_runDate", (q) => q.eq("runDate", runDate))
-          .collect(),
-      ).toHaveLength(42);
-    });
-  });
-
-  test("allows only one of two concurrent distinct claims into the final daily slot", async () => {
-    const t = convexTest(schema, modules);
-    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    await seedFailedDailyRuns(t, 41);
-
-    const results = await Promise.all([
-      t.mutation(internal.sukiForumAgentData.claimRun, {
-        attempt: 0,
-        runDate,
-        slot: 0,
-      }),
-      t.mutation(internal.sukiForumAgentData.claimRun, {
-        attempt: 0,
-        runDate,
-        slot: 1,
-      }),
-    ]);
-
-    expect(results.filter((result: ClaimResult) => result.claimed)).toHaveLength(1);
-    expect(results.filter((result: ClaimResult) => !result.claimed)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ reason: "global-daily-attempt-limit" }),
-      ]),
-    );
-    await t.run(async (ctx) => {
-      expect(
-        await ctx.db
-          .query("forumAgentRuns")
-          .withIndex("by_runDate", (q) => q.eq("runDate", runDate))
-          .collect(),
-      ).toHaveLength(42);
+      reason: "global-failure-circuit",
     });
   });
 
   test("recovers an already-counted stale run after the daily limit is reached", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    await seedFailedDailyRuns(t, 41);
+    await seedFailedDailyRuns(t, 11);
     await t.run(async (ctx) => {
       await ctx.db.insert("forumAgentRuns", {
         runKey: `suki:${runDate}:0`,

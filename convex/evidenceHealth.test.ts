@@ -31,6 +31,42 @@ function setup() {
 }
 
 describe("evidence operational health", () => {
+  test("gives an actionable NVD pagination recovery instruction", async () => {
+    const t = setup();
+    const now = 1_800_000_000_000;
+    await t.run(async (ctx) => {
+      await ctx.db.insert("evidenceSources", {
+        sourceKey: "nvd-cve-2",
+        name: "NVD CVE API 2.0",
+        sourceType: "api",
+        ingestionEnabled: true,
+        baseUrl: "https://services.nvd.nist.gov/",
+        homepageUrl: "https://nvd.nist.gov/",
+        status: "active",
+        licenseClass: "public-domain",
+        provenanceClass: "official",
+        visibility: "public",
+        termsUrl: "https://nvd.nist.gov/general/terms-of-use",
+        etag: "",
+        lastModified: "",
+        cursor: "",
+        lastFetchedAt: now,
+        lastSucceededAt: now - 1,
+        lastErrorAt: now,
+        lastErrorMessage: "NVD returned malformed pagination metadata",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    await expect(t.mutation(check, { now })).resolves.toMatchObject({
+      status: "degraded",
+      failedSourceKeys: ["nvd-cve-2"],
+      summary:
+        "0 stale source(s); 1 failed source(s); 0 stuck research job(s); 0 stuck export job(s); nvd-cve-2: preserve cursor and retry with the stored smaller page size",
+    });
+  });
+
   test("records degraded and recovered transitions without leaking job data", async () => {
     const t = setup();
     const now = 1_800_000_000_000;

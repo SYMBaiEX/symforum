@@ -350,8 +350,8 @@ export async function runForumResearchSlot(
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
-    // All editorial generations use OpenRouter. Paid model IDs remain in the
-    // same provider route so budget controls and circuit breakers still apply.
+    // All editorial generations use OpenRouter. The routing control disables
+    // the paid fallback when its daily budget is exhausted.
     const effectiveRoutingConfig = routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
@@ -359,10 +359,7 @@ export async function runForumResearchSlot(
       runKey: claim.runKey,
       agentSlug: config.slug,
     });
-    if (
-      !effectiveRoutingConfig.openRouterApiKey?.trim() &&
-      !effectiveRoutingConfig.openRouterApiKey?.trim()
-    ) {
+    if (!effectiveRoutingConfig.openRouterApiKey?.trim()) {
       throw new ForumAgentConfigurationError(
         "OPENROUTER_API_KEY is not configured in Convex.",
       );
