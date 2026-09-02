@@ -117,4 +117,6 @@ Expected steady state:
   `capture.droppedRateLimited`, and `capture.captureRatio` sourced exclusively
   from date buckets.
 - a post-backfill `forum:listRecentThreads` execution reads compact digest rows
-  and stays below 0.25 MB of database reads for a normal page.
+  and stays below 0.5 MB of database reads for a normal page. The first
+  production measurement after the migration was 417,452 bytes, down from the
+  5.38 MB sampled baseline (about a 92% reduction).
