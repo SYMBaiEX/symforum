@@ -204,7 +204,7 @@ async function runReplySweepForAgent(
             ),
             ...FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
           });
-          return await replyAgent.generateText(
+          const result = await replyAgent.generateText(
             ctx,
             { threadId: claim.conversationId },
             {
@@ -215,10 +215,11 @@ async function runReplySweepForAgent(
               abortSignal: signal,
             },
           );
+          return { result, decision: parseSukiReplyDecision(result.text) };
         },
       },
     );
-    const result = generation.value;
+    const { result, decision } = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: replyRunKey,
       agentSlug,
@@ -229,7 +230,6 @@ async function runReplySweepForAgent(
       outputTokens: result.usage.outputTokens,
       durationMs: Date.now() - generationStartedAt,
     });
-    const decision = parseSukiReplyDecision(result.text);
     if (decision.decision === "ignore") {
       await ctx.runMutation(internal.forum.markSukiForumReplyIgnored, {
         agentSlug,
