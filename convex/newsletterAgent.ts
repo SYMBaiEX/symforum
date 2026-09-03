@@ -6,7 +6,10 @@ import { v } from "convex/values";
 import { z } from "zod";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
+import {
+  OPENROUTER_GENERATION_MODELS,
+  openRouterStructuredOutputBudget,
+} from "../lib/ai-models";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -506,7 +509,10 @@ async function generateDraftWithFallback({
                 ? "newsletter-daily"
                 : "newsletter-weekly",
           ),
-          maxOutputTokens: edition === "daily-signal" ? 4_000 : 6_000,
+          maxOutputTokens: openRouterStructuredOutputBudget(
+            candidate.modelId,
+            edition === "daily-signal" ? 4_000 : 6_000,
+          ),
           instructions: modelInstructions(
             candidate.provider,
             stage === "revision"

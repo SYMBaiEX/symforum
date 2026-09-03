@@ -29,6 +29,15 @@ export const OPENROUTER_FORUM_MODEL = OPENROUTER_TOPIC_MODEL;
 export const NYX_RESEARCH_MODEL = OPENROUTER_FORUM_MODEL;
 export const OPENROUTER_EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
+export function openRouterStructuredOutputBudget(
+  modelId: string,
+  baseTokens: number,
+) {
+  return modelId === OPENROUTER_PAID_FALLBACK_MODEL
+    ? baseTokens * 2
+    : baseTokens;
+}
+
 export type SymbaiexModelId =
   | (typeof OPENROUTER_FREE_GENERATION_MODELS)[number]
   | typeof OPENROUTER_PAID_FALLBACK_MODEL

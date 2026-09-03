@@ -10,6 +10,7 @@ import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   OPENROUTER_FORUM_MODEL,
   OPENROUTER_GENERATION_MODELS,
+  openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
 import {
   runWithModelFallback,
@@ -486,7 +487,10 @@ export async function runForumResearchSlot(
             toolChoice: "required",
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(candidate.provider, "topic-selection"),
-            maxOutputTokens: 3_000,
+            maxOutputTokens: openRouterStructuredOutputBudget(
+              candidate.modelId,
+              3_000,
+            ),
             instructions: modelInstructions(
               candidate.provider,
               "topic-selection",
@@ -717,6 +721,7 @@ export async function runForumResearchSlot(
             maxOutputTokens: forumWriterMaxOutputTokens(
               stage,
               options?.lightRevision ?? false,
+              candidate.modelId,
             ),
             instructions: modelInstructions(
               candidate.provider,
@@ -2445,9 +2450,16 @@ export function structuredBlockContract(
 export function forumWriterMaxOutputTokens(
   stage: "draft" | "revision",
   lightRevision: boolean,
+  modelId?: string,
 ) {
-  if (lightRevision) return 2_800;
-  return stage === "revision" ? 5_500 : 4_800;
+  const baseTokens = lightRevision
+    ? 2_800
+    : stage === "revision"
+      ? 5_500
+      : 4_800;
+  return modelId === undefined
+    ? baseTokens
+    : openRouterStructuredOutputBudget(modelId, baseTokens);
 }
 
 function plainWordCount(value: string) {

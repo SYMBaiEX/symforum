@@ -6,7 +6,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
-import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
+import {
+  OPENROUTER_FORUM_MODEL,
+  openRouterStructuredOutputBudget,
+} from "../lib/ai-models";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -270,7 +273,10 @@ export const runDailyHackerNewsDigest = internalAction({
               toolChoice: "required",
               providerOptions: candidate.providerOptions,
               ...modelGenerationSettings(candidate.provider, "digest"),
-              maxOutputTokens: 5_500,
+              maxOutputTokens: openRouterStructuredOutputBudget(
+                candidate.modelId,
+                5_500,
+              ),
               instructions: modelInstructions(
                 candidate.provider,
                 "digest",

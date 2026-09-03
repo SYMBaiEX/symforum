@@ -14,6 +14,7 @@ import {
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
+  openRouterStructuredOutputBudget,
 } from "./ai-models";
 
 function candidate(persistedModel: string): RoutedModel {
@@ -46,6 +47,12 @@ describe("OpenRouter-only model routing", () => {
     ]);
     expect(openRouterModelsForStage("operator:brainstorm-ideas")).toEqual(
       OPENROUTER_IDEATION_MODELS,
+    );
+    expect(
+      openRouterStructuredOutputBudget(OPENROUTER_PAID_FALLBACK_MODEL, 3_000),
+    ).toBe(6_000);
+    expect(openRouterStructuredOutputBudget("openrouter/free", 3_000)).toBe(
+      3_000,
     );
   });
 
