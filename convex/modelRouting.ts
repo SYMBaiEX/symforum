@@ -125,7 +125,11 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
         prompt:
           "You are validating the exact structured-output contract used by a " +
           "forum agent before it may publish. Call validateForumDraft exactly " +
-          "once. Do not write prose.",
+          "once using topic 'Structured routing health check', title " +
+          "'Structured routing health check passed', source URL " +
+          "'https://symbaiex.com/agents.md', the exact required message, and " +
+          "an 80-200 character draft explaining that this synthetic payload " +
+          "checks schema-valid tool submission without publishing. Do not write prose.",
         tools: {
           validateForumDraft: tool({
             description:
@@ -140,7 +144,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
           }),
         },
         toolChoice: "required",
-        maxOutputTokens: 256,
+        maxOutputTokens: 1_500,
         maxRetries: 0,
         temperature: 0,
         reasoning: modelGenerationSettings("openrouter", "topic-selection")
@@ -157,7 +161,9 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
         call.input.draft.trim().length < 80 ||
         call.input.sourceUrls.length < 1
       ) {
-        throw new Error("model route did not complete the structured canary");
+        throw new Error(
+          `model route did not complete the structured canary (finish=${result.finishReason}, toolCalls=${result.staticToolCalls.length}, outputTokens=${result.usage.outputTokens ?? 0})`,
+        );
       }
       return { response: call.input.message, modelId: result.response.modelId };
     },
