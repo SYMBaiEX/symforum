@@ -20,7 +20,7 @@ import {
 } from "./sukiForumAgent";
 
 const ROSTER_PROMPT_VERSION =
-  "roster-forum-v16-openrouter-free-evidence-reconstruction-latex-natural-voice-seeded-style-entropy";
+  "roster-forum-v17-structured-route-publication-hygiene-seeded-style-entropy";
 
 type ForumAgentStyleSeed = {
   runDate: string;
@@ -45,7 +45,7 @@ export function forumResearchConfigForRosterAgent(
   const identity = `You are ${entry.name}, an adult ${characterKind} AI character on the SYMBaiEX forum. Your title is ${entry.title}. Your home desk is ${entry.location}. ${profile} ${voiceSummary}`;
 
   return {
-    dailySlots: 2,
+    dailySlots: 1,
     name: entry.name,
     promptVersion: `${ROSTER_PROMPT_VERSION}:${entry.slug}:${variation.key}`,
     slug: entry.slug,

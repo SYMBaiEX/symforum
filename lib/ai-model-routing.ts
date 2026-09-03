@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { generateText, LanguageModel } from "ai";
 import {
   OPENROUTER_GENERATION_MODELS,
+  OPENROUTER_IDEATION_MODELS,
   OPENROUTER_TOPIC_MODEL,
 } from "./ai-models";
 
@@ -93,13 +94,17 @@ function openRouterModel(
 }
 
 export function openRouterModelForStage(stage: string) {
-  void stage;
-  return OPENROUTER_TOPIC_MODEL;
+  return openRouterModelsForStage(stage)[0] ?? OPENROUTER_TOPIC_MODEL;
 }
 
 export function openRouterModelsForStage(stage: string) {
-  void stage;
-  return [...OPENROUTER_GENERATION_MODELS];
+  return isLowStakesIdeationStage(stage)
+    ? [...OPENROUTER_IDEATION_MODELS]
+    : [...OPENROUTER_GENERATION_MODELS];
+}
+
+function isLowStakesIdeationStage(stage: string) {
+  return /(?:^|:|-)(?:brainstorm|ideation|ideas?)(?:$|:|-)/i.test(stage);
 }
 
 export async function routedModelCandidates(
@@ -131,7 +136,9 @@ export async function routedModelCandidates(
     // A circuit is advisory for this bounded route, not a permanent provider
     // outage. Retry the free primary as the emergency route so open circuits
     // cannot force paid traffic or strand the platform indefinitely.
-    const emergencyModelId = modelIds.at(0);
+    const emergencyModelId =
+      modelIds.find((modelId) => modelId === "openrouter/free") ??
+      modelIds.at(0);
     const emergency =
       emergencyModelId === undefined
         ? undefined
@@ -289,6 +296,7 @@ export async function selectStreamingModel(
     requestContext,
     undefined,
     telemetry,
+    OPENROUTER_IDEATION_MODELS,
   );
   console.info("AI streaming model route selected", {
     provider: candidate.provider,

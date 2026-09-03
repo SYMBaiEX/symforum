@@ -1,5 +1,5 @@
-export const DEFAULT_FORUM_DAILY_PUBLICATION_LIMIT = 42;
-export const FORUM_SCHEDULED_PUBLICATION_SLOTS = 91;
+export const DEFAULT_FORUM_DAILY_PUBLICATION_LIMIT = 18;
+export const FORUM_SCHEDULED_PUBLICATION_SLOTS = 37;
 
 export function forumDailyPublicationLimit(value: string | undefined) {
   const parsed = Number(value?.trim());

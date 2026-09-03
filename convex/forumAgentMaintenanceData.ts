@@ -9,6 +9,29 @@ const PUBLISHED_RUN_RETENTION_MS = 180 * 24 * 60 * 60 * 1_000;
 const SOURCE_USE_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const RESERVATION_GRACE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LEGACY_RESOURCE_DELAY_MS = 24 * 60 * 60 * 1_000;
+const STALE_AGENT_RUN_MS = 30 * 60 * 1_000;
+
+export const recoverStaleForumAgentRuns = internalMutation({
+  args: { now: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const stale = await ctx.db
+      .query("forumAgentRuns")
+      .withIndex("by_status_and_updatedAt", (q) =>
+        q.eq("status", "running").lt("updatedAt", now - STALE_AGENT_RUN_MS),
+      )
+      .take(BATCH_SIZE);
+    for (const run of stale) {
+      await ctx.db.patch("forumAgentRuns", run._id, {
+        status: "failed",
+        errorMessage: "Recovered stale forum agent run after 30 minutes.",
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+    return { recovered: stale.length, continuing: stale.length === BATCH_SIZE };
+  },
+});
 
 type OperationalCleanupResult = {
   deleted: number;
@@ -145,10 +168,12 @@ export const cleanupExpiredOperationalData = internalMutation({
       await ctx.db.delete("forumAgentReplyRuns", row._id);
     for (const row of usageEvents)
       await ctx.db.delete("forumAgentUsageEvents", row._id);
-    for (const row of routeEvents) await ctx.db.delete("aiRouteEvents", row._id);
+    for (const row of routeEvents)
+      await ctx.db.delete("aiRouteEvents", row._id);
     for (const row of sourceUses)
       await ctx.db.delete("forumAgentSourceUses", row._id);
-    for (const row of spendBuckets) await ctx.db.delete("aiSpendBuckets", row._id);
+    for (const row of spendBuckets)
+      await ctx.db.delete("aiSpendBuckets", row._id);
     for (const row of [
       ...reservedSources,
       ...publishedSources,
@@ -159,7 +184,11 @@ export const cleanupExpiredOperationalData = internalMutation({
         row._id as Id<"forumAgentSourceReservations">,
       );
     }
-    for (const row of [...reservedTopics, ...publishedTopics, ...releasedTopics]) {
+    for (const row of [
+      ...reservedTopics,
+      ...publishedTopics,
+      ...releasedTopics,
+    ]) {
       await ctx.db.delete(
         "forumAgentTopicReservations",
         row._id as Id<"forumAgentTopicReservations">,

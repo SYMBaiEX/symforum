@@ -44,6 +44,55 @@ describe("forum agent maintenance", () => {
     ).toBe(false);
   });
 
+  test("marks abandoned running publication attempts as failed", async () => {
+    const t = setup();
+    const now = 1_800_000_000_000;
+    const staleAt = now - 31 * 60 * 1_000;
+    const freshAt = now - 29 * 60 * 1_000;
+    const ids = await t.run(async (ctx) => ({
+      stale: await ctx.db.insert("forumAgentRuns", {
+        runKey: "suki:stale:0",
+        agentSlug: "suki",
+        runDate: "2027-01-15",
+        slot: 0,
+        attempt: 0,
+        status: "running",
+        model: "test/model",
+        sourceUrls: [],
+        startedAt: staleAt,
+        updatedAt: staleAt,
+      }),
+      fresh: await ctx.db.insert("forumAgentRuns", {
+        runKey: "belle:fresh:0",
+        agentSlug: "belle",
+        runDate: "2027-01-15",
+        slot: 0,
+        attempt: 0,
+        status: "running",
+        model: "test/model",
+        sourceUrls: [],
+        startedAt: freshAt,
+        updatedAt: freshAt,
+      }),
+    }));
+
+    await expect(
+      t.mutation(
+        internal.forumAgentMaintenanceData.recoverStaleForumAgentRuns,
+        { now },
+      ),
+    ).resolves.toMatchObject({ recovered: 1, continuing: false });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("forumAgentRuns", ids.stale)).toMatchObject({
+        status: "failed",
+        errorMessage: "Recovered stale forum agent run after 30 minutes.",
+      });
+      expect(await ctx.db.get("forumAgentRuns", ids.fresh)).toMatchObject({
+        status: "running",
+      });
+    });
+  });
+
   test("removes expired operational rows without deleting published forum content", async () => {
     const t = setup();
     const now = 1_800_000_000_000;
@@ -245,14 +294,15 @@ describe("forum agent maintenance", () => {
   test("expires private reply-sweep telemetry without touching public content", async () => {
     const t = setup();
     const now = 1_800_000_000_000;
-    const oldEventId = await t.run(async (ctx) =>
-      await ctx.db.insert("forumAgentReplySweepEvents", {
-        agentSlug: "suki",
-        runDate: "2026-01-01",
-        outcome: "route-failed",
-        detail: "old provider timeout",
-        createdAt: now - 36 * 24 * 60 * 60 * 1_000,
-      }),
+    const oldEventId = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("forumAgentReplySweepEvents", {
+          agentSlug: "suki",
+          runDate: "2026-01-01",
+          outcome: "route-failed",
+          detail: "old provider timeout",
+          createdAt: now - 36 * 24 * 60 * 60 * 1_000,
+        }),
     );
     const result = await t.mutation(
       internal.forum.cleanupForumReplySweepTelemetry,
@@ -260,7 +310,9 @@ describe("forum agent maintenance", () => {
     );
     expect(result).toEqual({ deleted: 1, continuing: false });
     await t.run(async (ctx) => {
-      expect(await ctx.db.get("forumAgentReplySweepEvents", oldEventId)).toBeNull();
+      expect(
+        await ctx.db.get("forumAgentReplySweepEvents", oldEventId),
+      ).toBeNull();
     });
   });
 });

@@ -8860,7 +8860,7 @@ export const ensureSukiForumInfrastructure = internalMutation({
       persona:
         "A curious, sharp, warm waifu space pirate who scouts original sources and turns useful signals into forum conversations.",
       model: OPENROUTER_FORUM_MODEL,
-      dailyPostTarget: 24,
+      dailyPostTarget: 4,
       updatedAt: now,
     };
     if (existingAgent === null) {
@@ -8967,7 +8967,7 @@ export const ensureBelleForumInfrastructure = internalMutation({
       persona:
         "A bright, discerning adult neko news correspondent who connects original reporting into clear, opinionated, humane forum conversations.",
       model: OPENROUTER_FORUM_MODEL,
-      dailyPostTarget: 7,
+      dailyPostTarget: 2,
       updatedAt: now,
     };
     if (existingAgent === null) {
@@ -9640,6 +9640,72 @@ export const retractUnsafeForumAgentReply = internalMutation({
       now,
     });
     return { retracted: true, postId: post._id, threadId: thread._id };
+  },
+});
+
+/** Recoverable safety rollback for a published agent thread that leaked process copy. */
+export const retractUnsafeForumAgentThread = internalMutation({
+  args: { runId: v.id("forumAgentRuns"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("forumAgentRuns", args.runId);
+    if (
+      run === null ||
+      run.status !== "published" ||
+      run.threadId === undefined
+    ) {
+      throw new Error("Only a published forum agent thread can be retracted");
+    }
+    const thread = await ctx.db.get("forumThreads", run.threadId);
+    const category =
+      thread === null
+        ? null
+        : await ctx.db.get("forumCategories", thread.categoryId);
+    const author =
+      thread === null ? null : await ctx.db.get("users", thread.authorId);
+    if (
+      thread === null ||
+      thread.status !== "active" ||
+      category === null ||
+      author?.isAgent !== true ||
+      author.agentSlug !== run.agentSlug
+    ) {
+      throw new Error("Forum agent thread rollback target is invalid");
+    }
+
+    const now = Date.now();
+    const reason = compactForumText(args.reason, 160);
+    const visibilityProfileDeltaToken = forumVisibilityProfileDeltaToken(
+      thread._id,
+      false,
+      now,
+    );
+    await ctx.db.patch("forumThreads", thread._id, {
+      status: "deleted",
+      deletedAt: now,
+      moderationReason: reason,
+      updatedAt: now,
+      visibilityProfileDeltaToken,
+    });
+    await syncForumThreadEditorialDigest(ctx, thread._id);
+    await syncForumThreadSearchProjection(ctx, thread._id);
+    await ctx.db.patch("forumCategories", category._id, {
+      threadCount: Math.max(0, category.threadCount - 1),
+      postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
+      updatedAt: now,
+    });
+    await applyThreadVisibilityProfileDeltas(ctx, thread, {
+      isVisible: false,
+      now,
+      token: visibilityProfileDeltaToken,
+    });
+    await recomputeCategorySummary(ctx, category._id);
+    await ctx.db.patch("forumAgentRuns", run._id, {
+      status: "failed",
+      errorMessage: `Retracted after publication: ${reason}`,
+      completedAt: now,
+      updatedAt: now,
+    });
+    return { retracted: true, threadId: thread._id };
   },
 });
 

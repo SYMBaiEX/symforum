@@ -181,8 +181,8 @@ function dailyCronAtMinute(minuteOfDay: number) {
   return `${minute} ${hour} * * *`;
 }
 
-Array.from({ length: 24 }, (_, slot) => ({
-  schedule: dailyCronAtMinute(5 + slot * 60),
+Array.from({ length: 4 }, (_, slot) => ({
+  schedule: dailyCronAtMinute(5 + slot * 360),
   slot,
 })).forEach(({ schedule, slot }) => {
   crons.cron(
@@ -193,9 +193,9 @@ Array.from({ length: 24 }, (_, slot) => ({
   );
 });
 
-Array.from({ length: 6 }, (_, index) => ({
-  schedule: dailyCronAtMinute(29 + index * 240),
-  slot: index + 1,
+Array.from({ length: 2 }, (_, slot) => ({
+  schedule: dailyCronAtMinute(29 + slot * 720),
+  slot,
 })).forEach(({ schedule, slot }) => {
   crons.cron(
     `Belle forum post ${slot}`,
@@ -213,14 +213,12 @@ crons.cron(
 );
 
 FORUM_AGENT_ROSTER.forEach((agent, index) => {
-  [0, 1].forEach((slot) => {
-    crons.cron(
-      `${agent.name} forum post ${slot + 1}`,
-      dailyCronAtMinute(13 + index * 48 + slot * 12 * 60),
-      internal.forumAgentWorkflow.queuePublication,
-      { agentSlug: agent.slug, slot },
-    );
-  });
+  crons.cron(
+    `${agent.name} forum post`,
+    dailyCronAtMinute(13 + index * 48),
+    internal.forumAgentWorkflow.queuePublication,
+    { agentSlug: agent.slug, slot: 0 },
+  );
 });
 
 crons.interval(
@@ -255,6 +253,13 @@ crons.cron(
   "cleanup forum agent operational data",
   "35 6 * * *",
   internal.forumAgentMaintenanceData.cleanupExpiredOperationalData,
+  {},
+);
+
+crons.interval(
+  "recover stale forum agent runs",
+  { hours: 1 },
+  internal.forumAgentMaintenanceData.recoverStaleForumAgentRuns,
   {},
 );
 

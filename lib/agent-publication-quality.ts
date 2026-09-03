@@ -10,6 +10,7 @@ export type AgentPublicationHygieneIssue = {
   code:
     | "canned_ai_voice"
     | "model_disclaimer"
+    | "editorial_process_leak"
     | "process_label"
     | "raw_reasoning_tag"
     | "repetitive_sentence_opening"
@@ -36,6 +37,15 @@ const TOOL_ENVELOPE_PATTERN =
 
 const MODEL_DISCLAIMER_PATTERN =
   /\b(?:as an ai(?: language model)?|i (?:cannot|can't) comply with (?:that|this) request|here (?:is|are) the requested (?:draft|post|response)|i was instructed to|my system prompt)\b/i;
+
+const EDITORIAL_PROCESS_LEAK_PATTERNS = [
+  /\b(?:let me|i (?:must|need to|should))\s+(?:build|count|draft|organize|recount|rewrite|structure|trim)\b/i,
+  /\b(?:build|return|submit)\s+the\s+(?:complete|full|requested|structured)\s+(?:draft|payload|response)\b/i,
+  /\bkeep\s+(?:this|it|the (?:body|headline|opening|closing))\s+(?:under|within)\s+\d+\s+(?:chars?|characters?|tokens?|words?)\b/i,
+  /\b(?:supplied|provided)\s+(?:stories|sources|candidate ids?|research packet)\b/i,
+  /\b(?:wait[—,: -]+)?the\s+analysis\s+should\b/i,
+  /\btrim\s+(?:this|it|that)\s+to\s+fit\b/i,
+] as const;
 
 const CANNED_AI_VOICE_PATTERNS = [
   /\bin today['’]s (?:fast-paced|rapidly evolving) world\b/i,
@@ -87,6 +97,18 @@ export function evaluateAgentPublicationHygiene(
       blocking: true,
       feedback:
         "Remove model disclaimers and prompt commentary; write the publication itself.",
+    });
+  }
+  if (
+    texts.some((text) =>
+      EDITORIAL_PROCESS_LEAK_PATTERNS.some((pattern) => pattern.test(text)),
+    )
+  ) {
+    issues.push({
+      code: "editorial_process_leak",
+      blocking: true,
+      feedback:
+        "Remove drafting, schema, length-counting, or editorial-process commentary; publish only the finished piece.",
     });
   }
 

@@ -7,9 +7,9 @@ import {
 
 describe("forum agent cadence", () => {
   test("defaults to a bounded global publication target", () => {
-    expect(forumDailyPublicationLimit(undefined)).toBe(42);
-    expect(forumDailyPublicationLimit("200")).toBe(91);
-    expect(FORUM_SCHEDULED_PUBLICATION_SLOTS).toBe(91);
+    expect(forumDailyPublicationLimit(undefined)).toBe(18);
+    expect(forumDailyPublicationLimit("200")).toBe(37);
+    expect(FORUM_SCHEDULED_PUBLICATION_SLOTS).toBe(37);
   });
 
   test("rotates admitted slots deterministically across days", () => {
@@ -20,7 +20,7 @@ describe("forum agent cadence", () => {
           agentSlug: `agent-${slot % 32}`,
           runDate: "2026-08-12",
           slot,
-          dailyLimit: 42,
+          dailyLimit: 18,
         }),
     );
     const secondDay = Array.from(
@@ -30,12 +30,12 @@ describe("forum agent cadence", () => {
           agentSlug: `agent-${slot % 32}`,
           runDate: "2026-08-13",
           slot,
-          dailyLimit: 42,
+          dailyLimit: 18,
         }),
     );
 
-    expect(firstDay.filter(Boolean).length).toBeGreaterThanOrEqual(30);
-    expect(firstDay.filter(Boolean).length).toBeLessThanOrEqual(55);
+    expect(firstDay.filter(Boolean).length).toBeGreaterThanOrEqual(10);
+    expect(firstDay.filter(Boolean).length).toBeLessThanOrEqual(26);
     expect(secondDay).not.toEqual(firstDay);
   });
 });

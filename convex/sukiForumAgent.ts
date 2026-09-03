@@ -60,8 +60,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION =
-  "suki-forum-v17-openrouter-free-evidence-reconstruction-latex-natural-voice";
+const PROMPT_VERSION = "suki-forum-v18-structured-route-publication-hygiene";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
 const USER_AGENT =
@@ -522,15 +521,6 @@ export async function runForumResearchSlot(
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
     });
-    const selectedCategorySlug =
-      config.forcedCategorySlug ?? selection.categorySlug;
-    const category = context.categories.find(
-      (candidate: (typeof context.categories)[number]) =>
-        candidate.slug === selectedCategorySlug,
-    );
-    if (category === undefined) {
-      throw new Error(`${config.name} selected a board that does not exist`);
-    }
     const selectedCandidates = selection.candidateIds
       .map((id) =>
         shortlistedCandidates.find((candidate) => candidate.id === id),
@@ -540,6 +530,22 @@ export async function runForumResearchSlot(
       );
     if (selectedCandidates.length === 0) {
       throw new Error(`${config.name} selected no valid research candidates`);
+    }
+    const selectedCategorySlug =
+      config.forcedCategorySlug ?? selection.categorySlug;
+    const category =
+      context.categories.find(
+        (candidate: (typeof context.categories)[number]) =>
+          candidate.slug === selectedCategorySlug,
+      ) ??
+      shortlistedCategories.find((candidate) =>
+        selectedCandidates.some((selected) =>
+          selected.boardSlugs.includes(candidate.slug),
+        ),
+      ) ??
+      shortlistedCategories[0];
+    if (category === undefined) {
+      throw new Error(`${config.name} has no available forum board`);
     }
     const semanticMemory = await searchEditorialMemory(ctx, {
       agentSlug: config.slug,
@@ -1785,7 +1791,7 @@ ${PUBLICATION_VOICE_GUARDRAILS}
 - Do not add links, images, a sources section, Markdown, HTML, or commentary about the editing process.`;
 
 const SUKI_RESEARCH_CONFIG: ForumResearchAgentConfig = {
-  dailySlots: 24,
+  dailySlots: 4,
   name: "Suki",
   promptVersion: PROMPT_VERSION,
   slug: "suki",

@@ -15,6 +15,10 @@ describe("agent publication quality", () => {
       "<analysis>private scratch work</analysis>",
       '{"tool_calls":[{"name":"publish"}]}',
       "As an AI language model, here is the requested draft.",
+      "There are 10 supplied stories I must organize into briefs.",
+      "Let me build the full payload with the correct headline length.",
+      "Keep this under 500 chars, then trim it to fit.",
+      "Wait—the analysis should focus on the release timeline.",
     ]) {
       expect(() => assertAgentPublicationHygiene(unsafe)).toThrow(
         "failed output hygiene",
@@ -29,6 +33,11 @@ describe("agent publication quality", () => {
     expect(
       evaluateAgentPublicationHygiene(
         "Analysis of Kubernetes recovery behavior shows one missing checkpoint.",
+      ).blockingIssues,
+    ).toEqual([]);
+    expect(
+      evaluateAgentPublicationHygiene(
+        "Let me know which deployment window works for your team.",
       ).blockingIssues,
     ).toEqual([]);
   });

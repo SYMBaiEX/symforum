@@ -6,7 +6,7 @@ import { FORUM_AGENT_VOICES, forumAgentVoice } from "./forumAgentVoices";
 import { forumResearchConfigForRosterAgent } from "./rosterForumAgent";
 
 describe("roster forum agent configuration", () => {
-  test("gives every character a distinct two-slot posting identity", () => {
+  test("gives every character a distinct rotating posting identity", () => {
     const configs = FORUM_AGENT_ROSTER.map((entry) =>
       forumResearchConfigForRosterAgent(entry),
     );
@@ -16,7 +16,7 @@ describe("roster forum agent configuration", () => {
     expect(Object.keys(FORUM_AGENT_VOICES).sort()).toEqual(
       FORUM_AGENT_ROSTER.map((entry) => entry.slug).sort(),
     );
-    expect(configs.every((config) => config.dailySlots === 2)).toBe(true);
+    expect(configs.every((config) => config.dailySlots === 1)).toBe(true);
     expect(
       configs.every((config) =>
         config.writerInstructions.includes("Never claim to be human"),

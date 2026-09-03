@@ -37,13 +37,13 @@ describe("forum agent publication workflow", () => {
     const t = convexTest(schema, modules);
     const runDate = "2026-08-17";
     const agentSlug = "attempt-capped-agent";
-    const slot = Array.from({ length: 91 }, (_, candidate) => candidate).find(
+    const slot = Array.from({ length: 37 }, (_, candidate) => candidate).find(
       (candidate) =>
         adaptivePublicationSlot({
           agentSlug,
           runDate,
           slot: candidate,
-          dailyLimit: 42,
+          dailyLimit: 18,
         }),
     );
     expect(slot).toBeTypeOf("number");

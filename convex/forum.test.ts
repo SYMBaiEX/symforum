@@ -1065,7 +1065,7 @@ describe("forum notification preferences", () => {
 
     const context = await t.query(internal.forum.readSukiForumContext, {});
     expect(context.agent).toMatchObject({
-      dailyPostTarget: 24,
+      dailyPostTarget: 4,
       enabled: true,
       model: OPENROUTER_FORUM_MODEL,
       name: "Suki",
@@ -2005,6 +2005,97 @@ describe("forum notification preferences", () => {
     expect(belle.agentUserId).not.toBe(suki.agentUserId);
   });
 
+  test("recoverably retracts an unsafe published agent thread", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const belle = await t.mutation(
+      internal.forum.ensureBelleForumInfrastructure,
+      {},
+    );
+    const now = 1_800_000_000_000;
+    const seeded = await t.run(async (ctx) => {
+      const category = await ctx.db.get(
+        "forumCategories",
+        seed.publicCategoryId,
+      );
+      if (category === null) throw new Error("missing public category");
+      const threadId = await ctx.db.insert("forumThreads", {
+        categoryId: category._id,
+        categorySlug: category.slug,
+        slug: "unsafe-agent-process-copy",
+        title: "Let me build the full payload",
+        body: "There are supplied stories I must organize before publishing.",
+        authorId: belle.agentUserId,
+        status: "active",
+        pinned: false,
+        replyCount: 0,
+        lastAssignedPostNumber: 1,
+        viewCount: 0,
+        lastPostAt: now,
+        lastPostUserId: belle.agentUserId,
+        searchText: "unsafe agent process copy",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.patch("forumCategories", category._id, {
+        threadCount: category.threadCount + 1,
+        postCount: category.postCount + 1,
+        lastThreadId: threadId,
+        lastPostAt: now,
+        updatedAt: now,
+      });
+      const profile = await ctx.db
+        .query("forumUserProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", belle.agentUserId))
+        .unique();
+      if (profile === null) throw new Error("missing Belle profile");
+      await ctx.db.patch("forumUserProfiles", profile._id, {
+        threadCount: profile.threadCount + 1,
+        postCount: profile.postCount + 1,
+        updatedAt: now,
+      });
+      const runId = await ctx.db.insert("forumAgentRuns", {
+        runKey: "belle:2027-01-15:0",
+        agentSlug: "belle",
+        runDate: "2027-01-15",
+        slot: 0,
+        attempt: 0,
+        status: "published",
+        model: "test/model",
+        categoryId: category._id,
+        categorySlug: category.slug,
+        threadId,
+        title: "Let me build the full payload",
+        sourceUrls: ["https://example.com/source"],
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+      });
+      return { runId, threadId, profileId: profile._id };
+    });
+
+    await expect(
+      t.mutation(internal.forum.retractUnsafeForumAgentThread, {
+        runId: seeded.runId,
+        reason: "editorial process leaked into public copy",
+      }),
+    ).resolves.toEqual({ retracted: true, threadId: seeded.threadId });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("forumThreads", seeded.threadId)).toMatchObject({
+        status: "deleted",
+        moderationReason: "editorial process leaked into public copy",
+      });
+      expect(await ctx.db.get("forumAgentRuns", seeded.runId)).toMatchObject({
+        status: "failed",
+        errorMessage:
+          "Retracted after publication: editorial process leaked into public copy",
+      });
+      expect(
+        await ctx.db.get("forumUserProfiles", seeded.profileId),
+      ).toMatchObject({ threadCount: 0, postCount: 0 });
+    });
+  });
+
   test("cleans only legacy process labels from stored AI publications", async () => {
     vi.useFakeTimers();
     try {
@@ -2096,7 +2187,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     expect(unavailable).toEqual(["reserved-source"]);
   });
 
-  test("Belle infrastructure targets one digest plus six varied daily posts", async () => {
+  test("Belle infrastructure targets two aligned daily publication slots", async () => {
     const t = setup();
     const infrastructure = await t.mutation(
       internal.forum.ensureBelleForumInfrastructure,
@@ -2105,7 +2196,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     const context = await t.query(internal.forum.readBelleForumContext, {});
 
     expect(context.agent).toMatchObject({
-      dailyPostTarget: 7,
+      dailyPostTarget: 2,
       enabled: true,
       model: OPENROUTER_FORUM_MODEL,
       name: "Belle",

@@ -36,7 +36,7 @@ import { routeTelemetry } from "./aiTelemetryHelpers";
 
 export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
 const PROMPT_VERSION =
-  "belle-newsletter-v10-openrouter-free-natural-voice";
+  "belle-newsletter-v11-structured-route-publication-hygiene";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
@@ -552,8 +552,7 @@ function editorialPrompt(
   revision?: {
     feedback: string[];
     previousDraft:
-      | z.infer<typeof dailyDraftSchema>
-      | z.infer<typeof weeklyDraftSchema>;
+      z.infer<typeof dailyDraftSchema> | z.infer<typeof weeklyDraftSchema>;
   },
 ) {
   const weekly = args.edition === "weekly-field-note";
