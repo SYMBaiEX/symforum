@@ -27,23 +27,19 @@ function candidate(persistedModel: string): RoutedModel {
 }
 
 describe("OpenRouter-only model routing", () => {
-  test("routes structured stages through reliable OpenRouter generation and keeps free-first ideation", () => {
+  test("routes every generation stage through OpenRouter free first with a paid rescue", () => {
     expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual(["openrouter/free"]);
-    expect(openRouterModelForStage("suki:forum-topic")).toBe(
-      OPENROUTER_PAID_FALLBACK_MODEL,
-    );
-    expect(openRouterModelForStage("suki:forum-draft")).toBe(
-      OPENROUTER_PAID_FALLBACK_MODEL,
-    );
+    expect(openRouterModelForStage("suki:forum-topic")).toBe("openrouter/free");
+    expect(openRouterModelForStage("suki:forum-draft")).toBe("openrouter/free");
     expect(openRouterModelForStage("suki:forum-revision-light")).toBe(
-      OPENROUTER_PAID_FALLBACK_MODEL,
+      "openrouter/free",
     );
     expect(openRouterModelsForStage("suki:forum-topic")).toEqual(
       OPENROUTER_GENERATION_MODELS,
     );
     expect(OPENROUTER_GENERATION_MODELS).toEqual([
-      OPENROUTER_PAID_FALLBACK_MODEL,
       "openrouter/free",
+      OPENROUTER_PAID_FALLBACK_MODEL,
     ]);
     expect(openRouterModelsForStage("operator:brainstorm-ideas")).toEqual(
       OPENROUTER_IDEATION_MODELS,
@@ -107,7 +103,7 @@ describe("OpenRouter-only model routing", () => {
     expect(result.value).toBe("primary-result");
     expect(result.route).toMatchObject({
       provider: "openrouter",
-      persistedModel: OPENROUTER_PAID_FALLBACK_MODEL,
+      persistedModel: "openrouter/free",
     });
     expect(run).toHaveBeenCalledTimes(1);
     expect(onAttempt).toHaveBeenNthCalledWith(
@@ -116,7 +112,7 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
-  test("falls back within OpenRouter and marks the free attempt in telemetry", async () => {
+  test("falls back within OpenRouter and marks the paid rescue in telemetry", async () => {
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
       OPENROUTER_GENERATION_MODELS.map(candidate),
@@ -125,23 +121,23 @@ describe("OpenRouter-only model routing", () => {
         totalTimeoutMs: 5_000,
         onAttempt,
         run: async (route) => {
-          if (route.persistedModel === OPENROUTER_PAID_FALLBACK_MODEL)
+          if (route.persistedModel === "openrouter/free")
             throw new Error("structured route unavailable");
-          return "free-result";
+          return "paid-result";
         },
       },
     );
     expect(result).toMatchObject({
-      value: "free-result",
+      value: "paid-result",
       route: {
         provider: "openrouter",
-        persistedModel: "openrouter/free",
+        persistedModel: OPENROUTER_PAID_FALLBACK_MODEL,
       },
     });
     expect(onAttempt).toHaveBeenLastCalledWith(
       expect.objectContaining({
         provider: "openrouter",
-        model: "openrouter/free",
+        model: OPENROUTER_PAID_FALLBACK_MODEL,
         outcome: "completed",
         fallback: true,
       }),
