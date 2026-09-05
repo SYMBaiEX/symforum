@@ -44,6 +44,14 @@ describe("evidence dataset manifests", () => {
             context: 0,
             truncated: false,
           },
+          entities: [{ entityKey: "cve:CVE-TEST", role: "subject" }],
+          claims: [
+            {
+              claimKey: "claim:CVE-TEST",
+              status: "supported",
+              relation: "supports",
+            },
+          ],
         },
       ],
     });
@@ -57,6 +65,10 @@ describe("evidence dataset manifests", () => {
       freshnessScore: 100,
       citationCount: 2,
       supportsCitationCount: 1,
+      entityCount: 1,
+      claimCount: 1,
+      entityCoverageScore: 100,
+      claimCoverageScore: 100,
     });
     expect(manifest.distributions.sources).toEqual({ "nvd-cve-2": 1 });
   });

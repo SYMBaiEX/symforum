@@ -296,27 +296,50 @@ export const startRun = internalMutation({
       .query("cronJobHeartbeats")
       .withIndex("by_jobKey", (q) => q.eq("jobKey", args.jobKey))
       .unique();
-    const recent = await ctx.db
-      .query("cronJobRunSummaries")
-      .withIndex("by_jobKey_and_startedAt", (q) => q.eq("jobKey", args.jobKey))
-      .order("desc")
-      .take(RUN_HISTORY_CAP);
+    let runSequence: number;
+    if (heartbeat?.historyMigratedAt === undefined) {
+      const retained = await ctx.db
+        .query("cronJobRunSummaries")
+        .withIndex("by_jobKey_and_startedAt", (q) =>
+          q.eq("jobKey", args.jobKey),
+        )
+        .order("desc")
+        .take(RUN_HISTORY_CAP);
+      retained.reverse();
+      for (let index = 0; index < retained.length; index += 1) {
+        await ctx.db.patch("cronJobRunSummaries", retained[index]!._id, {
+          runSequence: index + 1,
+        });
+      }
+      runSequence = retained.length + 1;
+    } else {
+      runSequence = (heartbeat.nextRunSequence ?? 0) + 1;
+    }
     const runId = await ctx.db.insert("cronJobRunSummaries", {
       jobKey: args.jobKey,
+      runSequence,
       startedAt: now,
       outcome: "running",
     });
-    if (recent.length === RUN_HISTORY_CAP)
-      await ctx.db.delete(
-        "cronJobRunSummaries",
-        recent[recent.length - 1]!._id,
-      );
+    const expiredSequence = runSequence - RUN_HISTORY_CAP;
+    if (expiredSequence > 0) {
+      const expired = await ctx.db
+        .query("cronJobRunSummaries")
+        .withIndex("by_jobKey_and_runSequence", (q) =>
+          q.eq("jobKey", args.jobKey).eq("runSequence", expiredSequence),
+        )
+        .unique();
+      if (expired !== null)
+        await ctx.db.delete("cronJobRunSummaries", expired._id);
+    }
     const values = {
       jobKey: args.jobKey,
       status: "running" as const,
       currentRunId: runId,
       lastStartedAt: now,
       consecutiveFailures: heartbeat?.consecutiveFailures ?? 0,
+      nextRunSequence: runSequence,
+      historyMigratedAt: heartbeat?.historyMigratedAt ?? now,
       updatedAt: now,
     };
     if (heartbeat === null) await ctx.db.insert("cronJobHeartbeats", values);

@@ -107,8 +107,9 @@ describe("symbaiex login", () => {
     const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-manifest-"));
     const tokenFile = join(directory, "token");
     await new FileTokenStore(tokenFile).setToken("test-access-token");
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
-      new Response('{"schemaVersion":"symbaiex-evidence-document-v2"}'),
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL) =>
+        new Response('{"schemaVersion":"symbaiex-evidence-document-v3"}'),
     );
     globalThis.fetch = fetchMock as typeof fetch;
     const output: string[] = [];
@@ -122,7 +123,7 @@ describe("symbaiex login", () => {
     );
 
     expect(code).toBe(0);
-    expect(output.join("\n")).toContain("symbaiex-evidence-document-v2");
+    expect(output.join("\n")).toContain("symbaiex-evidence-document-v3");
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       "https://www.symbaiex.com/api/agent/v1/exports/job-1/manifest",
     );
@@ -136,11 +137,27 @@ describe("symbaiex login", () => {
     const artifact = new TextEncoder().encode("export\n");
     const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith("/manifest")
-        ? new Response(JSON.stringify({ checksum: "13278fdb7e220736e77342c3dca76191892d725e7722184b8727175b9f2ef886", artifactByteLength: artifact.byteLength }))
+        ? new Response(
+            JSON.stringify({
+              checksum:
+                "13278fdb7e220736e77342c3dca76191892d725e7722184b8727175b9f2ef886",
+              artifactByteLength: artifact.byteLength,
+            }),
+          )
         : new Response(artifact),
     );
     globalThis.fetch = fetchMock as typeof fetch;
-    const code = await run(["export-download", "job-1", "--output", outputFile, "--token-file", tokenFile], { log: () => undefined, error: () => undefined });
+    const code = await run(
+      [
+        "export-download",
+        "job-1",
+        "--output",
+        outputFile,
+        "--token-file",
+        tokenFile,
+      ],
+      { log: () => undefined, error: () => undefined },
+    );
     expect(code).toBe(0);
     expect(await readFile(outputFile)).toEqual(Buffer.from(artifact));
   });

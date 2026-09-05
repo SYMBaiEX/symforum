@@ -1604,6 +1604,11 @@ export const listThreads = query({
             THREAD_PAGE_SCAN_LIMIT,
           )
         : THREAD_PAGE_SCAN_LIMIT;
+    const digestBackfill = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) => q.eq("key", FORUM_THREAD_DIGEST_BACKFILL_KEY))
+      .unique();
+    const useEditorialDigests = digestBackfill !== null;
 
     const [activePinned, activeUnpinned, lockedPinned, lockedUnpinned] =
       await Promise.all([
@@ -1614,6 +1619,7 @@ export const listThreads = query({
           "active",
           true,
           fetchLimit,
+          useEditorialDigests,
         ),
         loadThreadListBucket(
           ctx,
@@ -1622,6 +1628,7 @@ export const listThreads = query({
           "active",
           false,
           fetchLimit,
+          useEditorialDigests,
         ),
         loadThreadListBucket(
           ctx,
@@ -1630,6 +1637,7 @@ export const listThreads = query({
           "locked",
           true,
           fetchLimit,
+          useEditorialDigests,
         ),
         loadThreadListBucket(
           ctx,
@@ -1638,6 +1646,7 @@ export const listThreads = query({
           "locked",
           false,
           fetchLimit,
+          useEditorialDigests,
         ),
       ]);
 
@@ -1876,29 +1885,45 @@ export const listRecentThreads = query({
     ] = await Promise.all([
       ctx.db
         .query("forumThreadEditorialDigests")
-        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+        .withIndex("by_status_and_lastPostAt", (q) => {
+          const indexed = q.eq("status", "active");
+          return since === undefined
+            ? indexed
+            : indexed.gte("lastPostAt", since);
+        })
         .order("desc")
         .take(RECENT_THREAD_SCAN_LIMIT),
       ctx.db
         .query("forumThreadEditorialDigests")
-        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "locked"))
+        .withIndex("by_status_and_lastPostAt", (q) => {
+          const indexed = q.eq("status", "locked");
+          return since === undefined
+            ? indexed
+            : indexed.gte("lastPostAt", since);
+        })
         .order("desc")
         .take(RECENT_THREAD_SCAN_LIMIT),
       digestBackfill === null
         ? ctx.db
             .query("forumThreads")
-            .withIndex("by_status_and_lastPostAt", (q) =>
-              q.eq("status", "active"),
-            )
+            .withIndex("by_status_and_lastPostAt", (q) => {
+              const indexed = q.eq("status", "active");
+              return since === undefined
+                ? indexed
+                : indexed.gte("lastPostAt", since);
+            })
             .order("desc")
             .take(RECENT_THREAD_SCAN_LIMIT)
         : Promise.resolve([]),
       digestBackfill === null
         ? ctx.db
             .query("forumThreads")
-            .withIndex("by_status_and_lastPostAt", (q) =>
-              q.eq("status", "locked"),
-            )
+            .withIndex("by_status_and_lastPostAt", (q) => {
+              const indexed = q.eq("status", "locked");
+              return since === undefined
+                ? indexed
+                : indexed.gte("lastPostAt", since);
+            })
             .order("desc")
             .take(RECENT_THREAD_SCAN_LIMIT)
         : Promise.resolve([]),
@@ -20219,7 +20244,7 @@ function normalizeThreadListDays(days: number | undefined) {
 }
 
 function filterThreadListByDays(
-  threads: ForumThreadDoc[],
+  threads: ForumThreadListSource[],
   days: number | undefined,
 ) {
   if (days === undefined) {
@@ -20230,7 +20255,7 @@ function filterThreadListByDays(
 }
 
 function sortThreadListRecords(
-  threads: ForumThreadDoc[],
+  threads: ForumThreadListSource[],
   sortKey: ThreadListSortKey,
   sortOrder: ThreadListSortOrder,
 ) {
@@ -20240,8 +20265,8 @@ function sortThreadListRecords(
 }
 
 function compareThreadListRecords(
-  left: ForumThreadDoc,
-  right: ForumThreadDoc,
+  left: ForumThreadListSource,
+  right: ForumThreadListSource,
   sortKey: ThreadListSortKey,
   sortOrder: ThreadListSortOrder,
 ) {
@@ -20260,8 +20285,8 @@ function compareThreadListRecords(
 }
 
 function compareThreadListSortValue(
-  left: ForumThreadDoc,
-  right: ForumThreadDoc,
+  left: ForumThreadListSource,
+  right: ForumThreadListSource,
   sortKey: ThreadListSortKey,
 ) {
   switch (sortKey) {
@@ -20320,10 +20345,41 @@ async function loadThreadListBucket(
   status: "active" | "locked",
   pinned: boolean,
   limit: number,
+  useEditorialDigests: boolean,
 ) {
-  if (prefixFilter.kind === "all") {
+  if (!useEditorialDigests) {
+    if (prefixFilter.kind === "all") {
+      return await ctx.db
+        .query("forumThreads")
+        .withIndex("by_categoryId_and_status_and_pinned_and_lastPostAt", (q) =>
+          q
+            .eq("categoryId", categoryId)
+            .eq("status", status)
+            .eq("pinned", pinned),
+        )
+        .order("desc")
+        .take(limit);
+    }
     return await ctx.db
       .query("forumThreads")
+      .withIndex(
+        "by_categoryId_and_prefixId_and_status_and_pinned_and_lastPostAt",
+        (q) =>
+          q
+            .eq("categoryId", categoryId)
+            .eq(
+              "prefixId",
+              prefixFilter.kind === "none" ? undefined : prefixFilter.prefixId,
+            )
+            .eq("status", status)
+            .eq("pinned", pinned),
+      )
+      .order("desc")
+      .take(limit);
+  }
+  if (prefixFilter.kind === "all") {
+    const digests = await ctx.db
+      .query("forumThreadEditorialDigests")
       .withIndex("by_categoryId_and_status_and_pinned_and_lastPostAt", (q) =>
         q
           .eq("categoryId", categoryId)
@@ -20332,10 +20388,11 @@ async function loadThreadListBucket(
       )
       .order("desc")
       .take(limit);
+    return digests.map(forumThreadListSourceFromDigest);
   }
 
-  return await ctx.db
-    .query("forumThreads")
+  const digests = await ctx.db
+    .query("forumThreadEditorialDigests")
     .withIndex(
       "by_categoryId_and_prefixId_and_status_and_pinned_and_lastPostAt",
       (q) =>
@@ -20350,6 +20407,7 @@ async function loadThreadListBucket(
     )
     .order("desc")
     .take(limit);
+  return digests.map(forumThreadListSourceFromDigest);
 }
 
 function buildThreadSearchText(

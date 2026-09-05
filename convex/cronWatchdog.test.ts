@@ -263,6 +263,44 @@ describe("critical cron watchdog", () => {
     });
   });
 
+  test("migrates legacy history once and retains exactly the newest 30 runs", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let startedAt = 1; startedAt <= 30; startedAt += 1) {
+        await ctx.db.insert("cronJobRunSummaries", {
+          jobKey: "evidence-cisa-kev",
+          startedAt,
+          outcome: "succeeded",
+        });
+      }
+      await ctx.db.insert("cronJobHeartbeats", {
+        jobKey: "evidence-cisa-kev",
+        status: "healthy",
+        lastStartedAt: 30,
+        consecutiveFailures: 0,
+        updatedAt: 30,
+      });
+    });
+    for (let startedAt = 31; startedAt <= 35; startedAt += 1) {
+      await t.mutation(watchdog.start, {
+        jobKey: "evidence-cisa-kev",
+        now: startedAt,
+      });
+    }
+    await t.run(async (ctx) => {
+      const runs = await ctx.db
+        .query("cronJobRunSummaries")
+        .withIndex("by_jobKey_and_startedAt", (q) =>
+          q.eq("jobKey", "evidence-cisa-kev"),
+        )
+        .collect();
+      expect(runs).toHaveLength(30);
+      expect(runs.map((run) => run.runSequence)).toEqual(
+        Array.from({ length: 30 }, (_, index) => index + 6),
+      );
+    });
+  });
+
   test("materializes stale status in the evaluator instead of reading wall-clock time in the query", async () => {
     vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
     const t = setup();

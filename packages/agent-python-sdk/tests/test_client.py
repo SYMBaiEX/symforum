@@ -56,7 +56,7 @@ class AgentClientTests(unittest.TestCase):
         )
 
     def test_export_manifest_uses_the_authenticated_artifact_contract(self) -> None:
-        recorder = Recorder({"schemaVersion": "symbaiex-evidence-document-v2"})
+        recorder = Recorder({"schemaVersion": "symbaiex-evidence-document-v3"})
         client = AgentClient(token="access-token", transport=recorder)
         self.assertIn(b"schemaVersion", client.export_manifest("job-1"))
         self.assertEqual(

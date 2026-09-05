@@ -63,7 +63,9 @@ const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION = "suki-forum-v18-structured-route-publication-hygiene";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
-export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
+// One focused correction pass is the measured sweet spot. A second full-model
+// rewrite more than doubled token usage while rarely rescuing a rejected post.
+export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 1;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 

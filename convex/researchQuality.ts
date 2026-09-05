@@ -729,6 +729,22 @@ export const listPublishedResearchForEvidenceSync = internalQuery({
       sourceDiversityScore: v.optional(v.number()),
       sourceDomains: v.array(v.string()),
       sourceUrls: v.array(v.string()),
+      claims: v.array(
+        v.object({
+          claimIndex: v.number(),
+          claimText: v.string(),
+          claimHash: v.string(),
+          bodySpanText: v.optional(v.string()),
+          sourceUrl: v.string(),
+          snapshotHash: v.string(),
+          supportStatus: v.union(
+            v.literal("supported"),
+            v.literal("partial"),
+            v.literal("unsupported"),
+          ),
+          supportScore: v.number(),
+        }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
@@ -760,12 +776,18 @@ export const listPublishedResearchForEvidenceSync = internalQuery({
     const results = [];
     for (const assessment of assessments) {
       const threadId = assessment.threadId!;
-      const [thread, author, sourceUses] = await Promise.all([
+      const [thread, author, sourceUses, claims] = await Promise.all([
         ctx.db.get("forumThreads", threadId),
         ctx.db.get("users", assessment.authorUserId),
         ctx.db
           .query("forumAgentSourceUses")
           .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+          .take(12),
+        ctx.db
+          .query("forumAgentClaimCitations")
+          .withIndex("by_threadId_and_claimIndex", (q) =>
+            q.eq("threadId", threadId),
+          )
           .take(12),
       ]);
       if (
@@ -797,6 +819,16 @@ export const listPublishedResearchForEvidenceSync = internalQuery({
         sourceDiversityScore: assessment.sourceDiversityScore,
         sourceDomains: assessment.sourceDomains ?? [],
         sourceUrls: sourceUses.map((source) => source.sourceUrl),
+        claims: claims.map((claim) => ({
+          claimIndex: claim.claimIndex,
+          claimText: claim.claimText,
+          claimHash: claim.claimHash,
+          bodySpanText: claim.bodySpanText,
+          sourceUrl: claim.sourceUrl,
+          snapshotHash: claim.snapshotHash,
+          supportStatus: claim.supportStatus,
+          supportScore: claim.supportScore,
+        })),
       });
     }
     return results;

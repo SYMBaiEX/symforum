@@ -104,6 +104,29 @@ const EXPORTED_DOCUMENT = v.object({
       metadataJson: v.string(),
     }),
   ),
+  entities: v.array(
+    v.object({
+      entityKey: v.string(),
+      kind: v.string(),
+      name: v.string(),
+      aliases: v.array(v.string()),
+      role: v.string(),
+    }),
+  ),
+  claims: v.array(
+    v.object({
+      claimKey: v.string(),
+      statement: v.string(),
+      predicate: v.string(),
+      objectText: v.string(),
+      status: v.string(),
+      confidence: v.number(),
+      observedAt: v.number(),
+      relation: v.string(),
+      locator: v.string(),
+      excerpt: v.string(),
+    }),
+  ),
   citationMetrics: v.object({
     total: v.number(),
     supports: v.number(),
@@ -486,7 +509,9 @@ export const resolveArtifactDownload = internalQuery({
       const version = await ctx.db
         .query("evidenceDatasetVersions")
         .withIndex("by_datasetId_and_checksum", (q) =>
-          q.eq("datasetId", exportJob.datasetId).eq("checksum", exportJob.checksum),
+          q
+            .eq("datasetId", exportJob.datasetId)
+            .eq("checksum", exportJob.checksum),
         )
         .unique();
       if (version?.manifestStorageId === undefined) return null;
@@ -586,13 +611,6 @@ export const readExportDocuments = internalQuery({
       1,
       Math.min(MAX_EXPORT_LIMIT, Math.floor(args.limit ?? MAX_EXPORT_LIMIT)),
     );
-    const scanned = await ctx.db
-      .query("evidenceDocuments")
-      .withIndex("by_visibility_and_updatedAt", (q) =>
-        q.eq("visibility", "public"),
-      )
-      .order("desc")
-      .take(MAX_EXPORT_SCAN);
     const includedKinds = dataset.includedKinds ?? [];
     const includedLicenseClasses = dataset.includedLicenseClasses ?? [
       "public-domain",
@@ -603,6 +621,54 @@ export const readExportDocuments = internalQuery({
     const allowedKinds = new Set(includedKinds);
     const allowedLicenses = new Set(includedLicenseClasses);
     const allowedSources = new Set(sourceKeys);
+    const sources =
+      sourceKeys.length > 0
+        ? (
+            await Promise.all(
+              sourceKeys.map((sourceKey) =>
+                ctx.db
+                  .query("evidenceSources")
+                  .withIndex("by_sourceKey", (q) =>
+                    q.eq("sourceKey", sourceKey),
+                  )
+                  .unique(),
+              ),
+            )
+          ).filter(
+            (source): source is NonNullable<typeof source> =>
+              source !== null &&
+              source.status === "active" &&
+              source.visibility === "public",
+          )
+        : await ctx.db
+            .query("evidenceSources")
+            .withIndex("by_status_and_visibility", (q) =>
+              q.eq("status", "active").eq("visibility", "public"),
+            )
+            .take(100);
+    const scanLimitPerSource =
+      includedKinds.length === 0 ? limit : MAX_EXPORT_SCAN;
+    const sourceScans = await Promise.all(
+      sources.map(async (source) => ({
+        source,
+        documents: await ctx.db
+          .query("evidenceDocuments")
+          .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
+            q.eq("sourceId", source._id).eq("visibility", "public"),
+          )
+          .order("desc")
+          .take(scanLimitPerSource),
+      })),
+    );
+    const scanned = sourceScans
+      .flatMap(({ source, documents }) =>
+        documents.map((document) => ({ document, source })),
+      )
+      .sort(
+        (left, right) =>
+          right.document.updatedAt - left.document.updatedAt ||
+          String(left.document._id).localeCompare(String(right.document._id)),
+      );
     const records: Array<{
       schemaVersion: string;
       datasetKey: string;
@@ -642,14 +708,32 @@ export const readExportDocuments = internalQuery({
         context: number;
         truncated: boolean;
       };
+      entities: Array<{
+        entityKey: string;
+        kind: string;
+        name: string;
+        aliases: string[];
+        role: string;
+      }>;
+      claims: Array<{
+        claimKey: string;
+        statement: string;
+        predicate: string;
+        objectText: string;
+        status: string;
+        confidence: number;
+        observedAt: number;
+        relation: string;
+        locator: string;
+        excerpt: string;
+      }>;
     }> = [];
-    for (const document of scanned) {
+    for (const candidate of scanned) {
       if (records.length >= limit) break;
+      const { document, source } = candidate;
       if (allowedKinds.size > 0 && !allowedKinds.has(document.kind)) continue;
       if (!allowedLicenses.has(document.licenseClass)) continue;
-      const source = await ctx.db.get("evidenceSources", document.sourceId);
       if (
-        source === null ||
         source.visibility !== "public" ||
         (allowedSources.size > 0 && !allowedSources.has(source.sourceKey))
       )
@@ -674,9 +758,55 @@ export const readExportDocuments = internalQuery({
         0,
         MAX_EXPORT_CITATIONS_PER_RECORD,
       );
+      const entityLinks =
+        version === null
+          ? []
+          : await ctx.db
+              .query("evidenceDocumentEntities")
+              .withIndex("by_documentVersionId", (q) =>
+                q.eq("documentVersionId", version._id),
+              )
+              .take(50);
+      const entities = (
+        await Promise.all(
+          entityLinks.map(async (link) => {
+            const entity = await ctx.db.get("evidenceEntities", link.entityId);
+            return entity === null || entity.visibility !== "public"
+              ? null
+              : {
+                  entityKey: entity.entityKey,
+                  kind: entity.kind,
+                  name: entity.name,
+                  aliases: entity.aliases,
+                  role: link.role,
+                };
+          }),
+        )
+      ).filter((entity) => entity !== null);
+      const claims = (
+        await Promise.all(
+          boundedCitations.map(async (citation) => {
+            const claim = await ctx.db.get("evidenceClaims", citation.claimId);
+            return claim === null || claim.visibility !== "public"
+              ? null
+              : {
+                  claimKey: claim.claimKey,
+                  statement: claim.statement,
+                  predicate: claim.predicate,
+                  objectText: claim.objectText,
+                  status: claim.status,
+                  confidence: claim.confidence,
+                  observedAt: claim.observedAt,
+                  relation: citation.relation,
+                  locator: citation.locator,
+                  excerpt: citation.excerpt,
+                };
+          }),
+        )
+      ).filter((claim) => claim !== null);
       records.push({
         schemaVersion:
-          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v3",
         datasetKey: dataset.datasetKey,
         documentId: document._id,
         versionId: document.currentVersionId,
@@ -710,6 +840,8 @@ export const readExportDocuments = internalQuery({
                 retrievalUrl: version.retrievalUrl,
                 metadataJson: version.metadataJson,
               },
+        entities,
+        claims,
         citationMetrics: {
           total: boundedCitations.length,
           supports: boundedCitations.filter(
@@ -734,12 +866,55 @@ export const readExportDocuments = internalQuery({
         includedLicenseClasses,
         sourceKeys,
         exportSchemaVersion:
-          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+          dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v3",
       },
       scannedRecordCount: scanned.length,
-      selectionScanTruncated: scanned.length === MAX_EXPORT_SCAN,
+      selectionScanTruncated: sourceScans.some(
+        ({ documents }) => documents.length === scanLimitPerSource,
+      ),
       records,
     };
+  },
+});
+
+/** Records a code-owned immutable snapshot without impersonating an enrolled agent. */
+export const recordSystemDatasetSnapshot = internalMutation({
+  args: {
+    datasetId: v.id("evidenceDatasets"),
+    checksum: v.string(),
+    recordCount: v.number(),
+    schemaVersion: v.string(),
+    artifactByteLength: v.number(),
+    sourceCount: v.number(),
+    citationCount: v.number(),
+    completenessScore: v.number(),
+    freshnessScore: v.number(),
+    earliestObservedAt: v.optional(v.number()),
+    latestObservedAt: v.optional(v.number()),
+    qualityMetricsJson: v.string(),
+    manifestStorageId: v.id("_storage"),
+    artifactStorageId: v.id("_storage"),
+  },
+  returns: v.object({
+    versionId: v.id("evidenceDatasetVersions"),
+    created: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await ownedDataset(ctx, args.datasetId);
+    const existing = await ctx.db
+      .query("evidenceDatasetVersions")
+      .withIndex("by_datasetId_and_checksum", (q) =>
+        q.eq("datasetId", args.datasetId).eq("checksum", args.checksum),
+      )
+      .unique();
+    if (existing !== null) return { versionId: existing._id, created: false };
+    const createdAt = Date.now();
+    const versionId = await ctx.db.insert("evidenceDatasetVersions", {
+      ...args,
+      version: new Date(createdAt).toISOString(),
+      createdAt,
+    });
+    return { versionId, created: true };
   },
 });
 
@@ -1081,7 +1256,10 @@ export const completeExportJob = internalMutation({
             ),
             earliestObservedAt: args.earliestObservedAt,
             latestObservedAt: args.latestObservedAt,
-            qualityMetricsJson: (args.qualityMetricsJson ?? "{}").slice(0, 20_000),
+            qualityMetricsJson: (args.qualityMetricsJson ?? "{}").slice(
+              0,
+              20_000,
+            ),
             manifestStorageId: args.datasetManifestStorageId,
             createdAt: Date.now(),
           },
@@ -1336,7 +1514,11 @@ const DATASET_CATALOG = [
     licenseClass: "attributed" as const,
     includedKinds: ["release"],
     includedLicenseClasses: ["open", "attributed"],
-    sourceKeys: ["github-allowlisted-releases"],
+    sourceKeys: [
+      "github-releases-openai-openai-node",
+      "github-releases-vercel-next.js",
+      "github-releases-get-convex-convex-backend",
+    ],
   },
   {
     datasetKey: "research-metadata",
@@ -1390,7 +1572,7 @@ export const ensureCatalog = internalMutation({
         includedKinds: [...definition.includedKinds],
         includedLicenseClasses: [...definition.includedLicenseClasses],
         sourceKeys: [...definition.sourceKeys],
-        exportSchemaVersion: "symbaiex-evidence-document-v2",
+        exportSchemaVersion: "symbaiex-evidence-document-v3",
         visibility: "public" as const,
         status: "active" as const,
         updatedAt: now,

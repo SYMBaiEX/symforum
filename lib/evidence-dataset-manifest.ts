@@ -1,5 +1,5 @@
 export const EVIDENCE_EXPORT_SCHEMA_VERSION =
-  "symbaiex-evidence-document-v2" as const;
+  "symbaiex-evidence-document-v3" as const;
 
 export type EvidenceExportManifestRecord = {
   kind: string;
@@ -24,6 +24,8 @@ export type EvidenceExportManifestRecord = {
     context: number;
     truncated: boolean;
   };
+  entities?: Array<{ entityKey: string; role: string }>;
+  claims?: Array<{ claimKey: string; status: string; relation: string }>;
 };
 
 type ManifestInput = {
@@ -69,6 +71,10 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
   let supportsCitationCount = 0;
   let truncatedCitationRecords = 0;
   let freshnessTotal = 0;
+  let entityCount = 0;
+  let claimCount = 0;
+  let recordsWithEntities = 0;
+  let recordsWithClaims = 0;
 
   for (const record of input.records) {
     increment(sourceDistribution, record.source.sourceKey);
@@ -93,6 +99,10 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
     citationCount += record.citationMetrics.total;
     supportsCitationCount += record.citationMetrics.supports;
     truncatedCitationRecords += Number(record.citationMetrics.truncated);
+    entityCount += record.entities?.length ?? 0;
+    claimCount += record.claims?.length ?? 0;
+    recordsWithEntities += Number((record.entities?.length ?? 0) > 0);
+    recordsWithClaims += Number((record.claims?.length ?? 0) > 0);
   }
 
   const recordCount = input.records.length;
@@ -132,6 +142,12 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
       citationCount,
       supportsCitationCount,
       truncatedCitationRecords,
+      entityCount,
+      claimCount,
+      recordsWithEntities,
+      recordsWithClaims,
+      entityCoverageScore: roundedRatio(recordsWithEntities, recordCount),
+      claimCoverageScore: roundedRatio(recordsWithClaims, recordCount),
     },
     distributions: {
       sources: sourceDistribution,

@@ -66,6 +66,9 @@ const jobs = {
   runExport: makeFunctionReference<"action", any, any>(
     "evidenceJobActions:runExport",
   ),
+  materializeSnapshot: makeFunctionReference<"action", any, any>(
+    "evidenceJobActions:materializeDatasetSnapshot",
+  ),
 } as const;
 function setup() {
   return convexTest(schema, modules);
@@ -122,6 +125,38 @@ async function completeOwnedExport(
   });
 }
 describe("evidence jobs", () => {
+  test("materializes idempotent code-owned dataset snapshots", async () => {
+    const t = setup();
+    await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const first = await t.action(jobs.materializeSnapshot, {
+      datasetId: catalog.datasetId,
+    });
+    const replay = await t.action(jobs.materializeSnapshot, {
+      datasetId: catalog.datasetId,
+    });
+    expect(first).toMatchObject({ created: true, recordCount: 0 });
+    expect(replay).toMatchObject({
+      created: false,
+      versionId: first.versionId,
+      checksum: first.checksum,
+    });
+    await t.run(async (ctx) => {
+      const versions = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_version", (q) =>
+          q.eq("datasetId", catalog.datasetId),
+        )
+        .collect();
+      expect(versions).toHaveLength(1);
+      expect(versions[0]).toMatchObject({
+        schemaVersion: "symbaiex-evidence-document-v3",
+        artifactStorageId: expect.any(String),
+        manifestStorageId: expect.any(String),
+      });
+    });
+  });
+
   test("creates, replays, rejects mismatch, and isolates owners", async () => {
     const t = setup();
     const { owner, other } = await fixture(t);
@@ -175,7 +210,7 @@ describe("evidence jobs", () => {
         createdAt: 1,
         updatedAt: 1,
       });
-      await ctx.db.insert("evidenceDocuments", {
+      const documentId = await ctx.db.insert("evidenceDocuments", {
         sourceId: source,
         externalKey: "one",
         canonicalUrl: "https://example.com/one",
@@ -193,6 +228,64 @@ describe("evidence jobs", () => {
         firstSeenAt: 1,
         updatedAt: 1,
       });
+      const versionId = await ctx.db.insert("evidenceDocumentVersions", {
+        documentId,
+        version: 1,
+        contentHash: "content-hash",
+        title: "Public",
+        excerpt: "excerpt",
+        searchText: "public",
+        fetchedAt: 1,
+        publishedAt: null,
+        sourceRevision: "revision-1",
+        sourceUpdatedAt: 1,
+        rawStorageId: null,
+        retrievalUrl: "https://example.com/one",
+        licenseClass: "open",
+        metadataJson: "{}",
+        createdAt: 1,
+      });
+      await ctx.db.patch("evidenceDocuments", documentId, {
+        currentVersionId: versionId,
+      });
+      const entityId = await ctx.db.insert("evidenceEntities", {
+        entityKey: "concept:public-test",
+        kind: "concept",
+        name: "Public test",
+        aliases: [],
+        visibility: "public",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("evidenceDocumentEntities", {
+        documentVersionId: versionId,
+        entityId,
+        role: "subject",
+        createdAt: 1,
+      });
+      const claimId = await ctx.db.insert("evidenceClaims", {
+        claimKey: "claim:public-test",
+        statement: "The public test exists.",
+        subjectEntityId: entityId,
+        predicate: "exists",
+        objectText: "true",
+        status: "supported",
+        confidence: 1,
+        visibility: "public",
+        observedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("evidenceClaimCitations", {
+        claimId,
+        documentVersionId: versionId,
+        citationKey: "claim:public-test:version:1",
+        relation: "supports",
+        locator: "https://example.com/one",
+        excerpt: "excerpt",
+        confidence: 1,
+        createdAt: 1,
+      });
     });
     const bundle = await t.query(jobs.records, {
       datasetId: catalog.datasetId,
@@ -201,17 +294,29 @@ describe("evidence jobs", () => {
     expect(bundle).toMatchObject({
       dataset: {
         datasetKey: "ai-systems-evidence",
-        exportSchemaVersion: "symbaiex-evidence-document-v2",
+        exportSchemaVersion: "symbaiex-evidence-document-v3",
       },
       scannedRecordCount: 1,
       selectionScanTruncated: false,
     });
     expect(bundle.records[0]).toEqual(
       expect.objectContaining({
-        schemaVersion: "symbaiex-evidence-document-v2",
+        schemaVersion: "symbaiex-evidence-document-v3",
         title: "Public",
         excerpt: "excerpt",
         source: expect.objectContaining({ sourceKey: "source" }),
+        entities: [
+          expect.objectContaining({
+            entityKey: "concept:public-test",
+            role: "subject",
+          }),
+        ],
+        claims: [
+          expect.objectContaining({
+            claimKey: "claim:public-test",
+            relation: "supports",
+          }),
+        ],
       }),
     );
     expect(JSON.stringify(bundle.records[0])).not.toContain("rawStorageId");
@@ -300,7 +405,7 @@ describe("evidence jobs", () => {
           updatedAt: now,
         });
       const cisa = await insertSource("cisa-kev");
-      const releases = await insertSource("github-allowlisted-releases");
+      const releases = await insertSource("github-releases-openai-openai-node");
       for (const [sourceId, externalKey, kind] of [
         [cisa, "CVE-TEST", "advisory"],
         [releases, "release-1", "release"],
@@ -339,12 +444,14 @@ describe("evidence jobs", () => {
       limit: 100,
     });
 
-    expect(security.records.map((record: { kind: string }) => record.kind)).toEqual([
-      "advisory",
-    ]);
-    expect(releases.records.map((record: { kind: string }) => record.kind)).toEqual([
-      "release",
-    ]);
+    expect(
+      security.records.map((record: { kind: string }) => record.kind),
+    ).toEqual(["advisory"]);
+    expect(
+      releases.records.map((record: { kind: string }) => record.kind),
+    ).toEqual(["release"]);
+    expect(releases.scannedRecordCount).toBe(1);
+    expect(releases.selectionScanTruncated).toBe(false);
   });
 
   test("rechecks agent ownership, activity, entitlement, expiry, and manifest before download", async () => {
@@ -697,10 +804,18 @@ describe("evidence jobs", () => {
       errorMessage: "late failure",
     });
     await t.run(async (ctx) => {
-      expect(await ctx.db.system.get("_storage", duplicate.artifact)).toBeNull();
-      expect(await ctx.db.system.get("_storage", duplicate.manifest)).toBeNull();
-      expect(await ctx.db.system.get("_storage", winning.artifact)).not.toBeNull();
-      expect(await ctx.db.system.get("_storage", winning.manifest)).not.toBeNull();
+      expect(
+        await ctx.db.system.get("_storage", duplicate.artifact),
+      ).toBeNull();
+      expect(
+        await ctx.db.system.get("_storage", duplicate.manifest),
+      ).toBeNull();
+      expect(
+        await ctx.db.system.get("_storage", winning.artifact),
+      ).not.toBeNull();
+      expect(
+        await ctx.db.system.get("_storage", winning.manifest),
+      ).not.toBeNull();
       expect(
         await ctx.db
           .query("evidenceArtifacts")
@@ -762,7 +877,10 @@ describe("evidence jobs", () => {
     await t.mutation(jobs.markResearchRunning, { jobId: legacy.jobId });
     await expect(
       t.query(jobs.legacyResearchInput, { jobId: legacy.jobId }),
-    ).resolves.toMatchObject({ query: "rolling deployment", status: "running" });
+    ).resolves.toMatchObject({
+      query: "rolling deployment",
+      status: "running",
+    });
     await t.mutation(jobs.completeResearch, {
       jobId: legacy.jobId,
       resultJson: '{"legacy":true}',
@@ -804,12 +922,12 @@ describe("evidence jobs", () => {
       }),
     ).resolves.toBeNull();
     await t.run(async (ctx) => {
-      expect(await ctx.db.get("evidenceResearchJobs", stale.jobId)).toMatchObject(
-        {
-          status: "failed",
-          errorMessage: expect.stringMatching(/not retried/i),
-        },
-      );
+      expect(
+        await ctx.db.get("evidenceResearchJobs", stale.jobId),
+      ).toMatchObject({
+        status: "failed",
+        errorMessage: expect.stringMatching(/not retried/i),
+      });
     });
   });
 

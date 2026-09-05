@@ -175,7 +175,7 @@ describe("agent evidence REST endpoint", () => {
   test("streams immutable export manifests through the same authenticated relay", async () => {
     vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response('{"schemaVersion":"symbaiex-evidence-document-v2"}', {
+      new Response('{"schemaVersion":"symbaiex-evidence-document-v3"}', {
         status: 200,
         headers: { "content-type": "application/json" },
       }),

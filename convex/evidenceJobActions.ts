@@ -64,6 +64,25 @@ type ExportRecord = {
     context: number;
     truncated: boolean;
   };
+  entities: Array<{
+    entityKey: string;
+    kind: string;
+    name: string;
+    aliases: string[];
+    role: string;
+  }>;
+  claims: Array<{
+    claimKey: string;
+    statement: string;
+    predicate: string;
+    objectText: string;
+    status: string;
+    confidence: number;
+    observedAt: number;
+    relation: string;
+    locator: string;
+    excerpt: string;
+  }>;
 };
 type ExportBundle = {
   dataset: {
@@ -100,6 +119,26 @@ const refs = {
     { datasetId: string; limit: number },
     ExportBundle
   >("evidenceJobs:readExportDocuments"),
+  recordSystemSnapshot: makeFunctionReference<
+    "mutation",
+    {
+      datasetId: Id<"evidenceDatasets">;
+      checksum: string;
+      recordCount: number;
+      schemaVersion: string;
+      artifactByteLength: number;
+      sourceCount: number;
+      citationCount: number;
+      completenessScore: number;
+      freshnessScore: number;
+      earliestObservedAt?: number;
+      latestObservedAt?: number;
+      qualityMetricsJson: string;
+      manifestStorageId: Id<"_storage">;
+      artifactStorageId: Id<"_storage">;
+    },
+    { versionId: Id<"evidenceDatasetVersions">; created: boolean }
+  >("evidenceJobs:recordSystemDatasetSnapshot"),
 };
 async function checksum(value: string) {
   const digest = await crypto.subtle.digest(
@@ -114,7 +153,9 @@ async function checksum(value: string) {
 function metadata(value: string) {
   try {
     const parsed: unknown = JSON.parse(value);
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
       ? parsed
       : {};
   } catch {
@@ -365,5 +406,88 @@ export const runExport = internalAction({
       }
       throw error;
     }
+  },
+});
+
+/** Materializes an immutable, code-owned dataset snapshot for catalog readers. */
+export const materializeDatasetSnapshot = internalAction({
+  args: { datasetId: v.id("evidenceDatasets") },
+  returns: v.object({
+    versionId: v.id("evidenceDatasetVersions"),
+    created: v.boolean(),
+    recordCount: v.number(),
+    checksum: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const bundle = await ctx.runQuery(refs.exportDocuments, {
+      datasetId: args.datasetId,
+      limit: 100,
+    });
+    const records = bundle.records.map((record) => ({
+      ...record,
+      version:
+        record.version === null
+          ? null
+          : {
+              ...record.version,
+              metadata: metadata(record.version.metadataJson),
+              metadataJson: undefined,
+            },
+    }));
+    const jsonl =
+      records.map((record) => JSON.stringify(record)).join("\n") +
+      (records.length ? "\n" : "");
+    const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
+    const resultChecksum = await checksum(jsonl);
+    const manifest = buildEvidenceDatasetManifest({
+      datasetKey: bundle.dataset.datasetKey,
+      datasetName: bundle.dataset.name,
+      selection: {
+        includedKinds: bundle.dataset.includedKinds,
+        includedLicenseClasses: bundle.dataset.includedLicenseClasses,
+        sourceKeys: bundle.dataset.sourceKeys,
+      },
+      scannedRecordCount: bundle.scannedRecordCount,
+      selectionScanTruncated: bundle.selectionScanTruncated,
+      artifactChecksum: resultChecksum,
+      artifactByteLength: artifact.size,
+      generatedAt: new Date().toISOString(),
+      records: bundle.records,
+    });
+    const qualityMetricsJson = JSON.stringify({
+      coverage: manifest.coverage,
+      distributions: manifest.distributions,
+    });
+    const artifactStorageId = await ctx.storage.store(artifact);
+    const manifestStorageId = await ctx.storage.store(
+      new Blob([JSON.stringify(manifest)], { type: "application/json" }),
+    );
+    const recorded = await ctx.runMutation(refs.recordSystemSnapshot, {
+      datasetId: args.datasetId,
+      checksum: resultChecksum,
+      recordCount: manifest.artifact.recordCount,
+      schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+      artifactByteLength: manifest.artifact.byteLength,
+      sourceCount: manifest.coverage.sourceCount,
+      citationCount: manifest.coverage.citationCount,
+      completenessScore: manifest.coverage.completenessScore,
+      freshnessScore: manifest.coverage.freshnessScore,
+      earliestObservedAt: manifest.coverage.earliestObservedAt ?? undefined,
+      latestObservedAt: manifest.coverage.latestObservedAt ?? undefined,
+      qualityMetricsJson,
+      manifestStorageId,
+      artifactStorageId,
+    });
+    if (!recorded.created) {
+      await Promise.all([
+        ctx.storage.delete(artifactStorageId),
+        ctx.storage.delete(manifestStorageId),
+      ]);
+    }
+    return {
+      ...recorded,
+      recordCount: manifest.artifact.recordCount,
+      checksum: resultChecksum,
+    };
   },
 });

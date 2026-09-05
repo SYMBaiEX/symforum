@@ -1050,7 +1050,20 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_threadId", ["threadId"])
-    .index("by_status_and_lastPostAt", ["status", "lastPostAt"]),
+    .index("by_status_and_lastPostAt", ["status", "lastPostAt"])
+    .index("by_categoryId_and_status_and_pinned_and_lastPostAt", [
+      "categoryId",
+      "status",
+      "pinned",
+      "lastPostAt",
+    ])
+    .index("by_categoryId_and_prefixId_and_status_and_pinned_and_lastPostAt", [
+      "categoryId",
+      "prefixId",
+      "status",
+      "pinned",
+      "lastPostAt",
+    ]),
   forumPosts: defineTable({
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),
@@ -2481,9 +2494,12 @@ export default defineSchema({
     lastEvaluatedAt: v.optional(v.number()),
     updatedAt: v.number(),
     openLogId: v.optional(v.id("systemLogs")),
+    nextRunSequence: v.optional(v.number()),
+    historyMigratedAt: v.optional(v.number()),
   }).index("by_jobKey", ["jobKey"]),
   cronJobRunSummaries: defineTable({
     jobKey: v.string(),
+    runSequence: v.optional(v.number()),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
     outcome: v.union(
@@ -2493,7 +2509,9 @@ export default defineSchema({
     ),
     durationMs: v.optional(v.number()),
     failureClass: v.optional(v.string()),
-  }).index("by_jobKey_and_startedAt", ["jobKey", "startedAt"]),
+  })
+    .index("by_jobKey_and_startedAt", ["jobKey", "startedAt"])
+    .index("by_jobKey_and_runSequence", ["jobKey", "runSequence"]),
   analyticsEvents: defineTable({
     name: v.string(),
     source: v.union(
@@ -2691,6 +2709,10 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_sourceId_and_externalKey", ["sourceId", "externalKey"])
+    .index("by_sourceId_and_visibility_and_updatedAt", {
+      fields: ["sourceId", "visibility", "updatedAt"],
+      staged: false,
+    })
     .index("by_visibility_and_updatedAt", ["visibility", "updatedAt"])
     .searchIndex("search_by_searchText", {
       searchField: "searchText",
@@ -2983,6 +3005,7 @@ export default defineSchema({
     latestObservedAt: v.optional(v.number()),
     qualityMetricsJson: v.optional(v.string()),
     manifestStorageId: v.optional(v.id("_storage")),
+    artifactStorageId: v.optional(v.id("_storage")),
     createdAt: v.number(),
   })
     .index("by_datasetId_and_version", ["datasetId", "version"])

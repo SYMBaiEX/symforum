@@ -210,11 +210,7 @@ async function recordClaimRevision(
   args: {
     claim: Doc<"evidenceClaims">;
     changeKind:
-      | "created"
-      | "legacy-baseline"
-      | "semantic"
-      | "status"
-      | "evidence";
+      "created" | "legacy-baseline" | "semantic" | "status" | "evidence";
     actorType: "system" | "agent" | "human";
     actorId: string;
     source: string;
@@ -991,9 +987,15 @@ export const getPublicDocument = internalQuery({
             },
       citationMetrics: {
         total: boundedCitations.length,
-        supports: boundedCitations.filter((citation) => citation.relation === "supports").length,
-        contradicts: boundedCitations.filter((citation) => citation.relation === "contradicts").length,
-        context: boundedCitations.filter((citation) => citation.relation === "context").length,
+        supports: boundedCitations.filter(
+          (citation) => citation.relation === "supports",
+        ).length,
+        contradicts: boundedCitations.filter(
+          (citation) => citation.relation === "contradicts",
+        ).length,
+        context: boundedCitations.filter(
+          (citation) => citation.relation === "context",
+        ).length,
         truncated: citations.length > 50,
       },
     };
@@ -1476,14 +1478,14 @@ export const listDatasets = query({
         description,
         licenseClass,
         exportSchemaVersion:
-          exportSchemaVersion ?? "symbaiex-evidence-document-v2",
+          exportSchemaVersion ?? "symbaiex-evidence-document-v3",
         selection: {
           includedKinds: includedKinds ?? [],
           includedLicenseClasses: includedLicenseClasses ?? [
-              "public-domain",
-              "open",
-              "attributed",
-            ],
+            "public-domain",
+            "open",
+            "attributed",
+          ],
           sourceKeys: sourceKeys ?? [],
         },
         latestVersion:

@@ -98,6 +98,16 @@ const publishedResearchRef = makeFunctionReference<
     sourceDiversityScore?: number;
     sourceDomains: string[];
     sourceUrls: string[];
+    claims: Array<{
+      claimIndex: number;
+      claimText: string;
+      claimHash: string;
+      bodySpanText?: string;
+      sourceUrl: string;
+      snapshotHash: string;
+      supportStatus: "supported" | "partial" | "unsupported";
+      supportScore: number;
+    }>;
   }>
 >("researchQuality:listPublishedResearchForEvidenceSync");
 
@@ -380,6 +390,44 @@ export const sync = internalAction({
         });
       }
       if (citation.created) claims += 1;
+      for (const researchClaim of research.claims) {
+        const status =
+          researchClaim.supportStatus === "supported"
+            ? ("supported" as const)
+            : ("unresolved" as const);
+        const groundedClaim = await ctx.runMutation(upsertClaimRef, {
+          claimKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}`,
+          statement: researchClaim.claimText,
+          subjectEntityId: project.entityId,
+          predicate: "forum-research-assertion",
+          objectText: researchClaim.claimText,
+          status,
+          confidence: Math.max(
+            0,
+            Math.min(1, researchClaim.supportScore / 100),
+          ),
+          visibility: "public",
+          observedAt: research.updatedAt,
+        });
+        const groundedCitation = await ctx.runMutation(recordCitationRef, {
+          claimId: groundedClaim.claimId,
+          documentVersionId: stored.versionId,
+          citationKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}:version:${stored.versionId}`,
+          relation: "context",
+          locator: researchClaim.sourceUrl,
+          excerpt:
+            researchClaim.bodySpanText?.trim() ||
+            researchClaim.claimText.slice(0, 800),
+          confidence: Math.max(
+            0,
+            Math.min(1, researchClaim.supportScore / 100),
+          ),
+          actorType: "agent",
+          actorId: research.agentSlug,
+          source: `forum-ledger:${researchClaim.snapshotHash}`,
+        });
+        if (groundedCitation.created) claims += 1;
+      }
     }
     return {
       documents: RESEARCH_PAGES.length + publishedResearch.length,
