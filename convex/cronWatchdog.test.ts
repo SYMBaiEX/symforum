@@ -67,7 +67,7 @@ describe("critical cron watchdog", () => {
     ).resolves.toMatchObject({
       enabled: false,
       healthy: 0,
-      unhealthy: 17,
+      unhealthy: 18,
     });
     await expect(t.query(watchdog.summary, {})).rejects.toThrow(/sign in/i);
   });
@@ -172,7 +172,7 @@ describe("critical cron watchdog", () => {
     });
     await expect(
       t.mutation(watchdog.evaluate, { now: now + 3 * 60 * 60 * 1_000 + 20 }),
-    ).resolves.toMatchObject({ unhealthy: 17 });
+    ).resolves.toMatchObject({ unhealthy: 18 });
     await t.mutation(watchdog.evaluate, {
       now: now + 3 * 60 * 60 * 1_000 + 30,
     });

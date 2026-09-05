@@ -139,6 +139,21 @@ const refs = {
     },
     { versionId: Id<"evidenceDatasetVersions">; created: boolean }
   >("evidenceJobs:recordSystemDatasetSnapshot"),
+  activeDatasetIds: makeFunctionReference<
+    "query",
+    Record<string, never>,
+    Array<Id<"evidenceDatasets">>
+  >("evidenceJobs:listActiveDatasetIds"),
+  materializeSnapshot: makeFunctionReference<
+    "action",
+    { datasetId: Id<"evidenceDatasets"> },
+    {
+      versionId: Id<"evidenceDatasetVersions">;
+      created: boolean;
+      recordCount: number;
+      checksum: string;
+    }
+  >("evidenceJobActions:materializeDatasetSnapshot"),
 };
 async function checksum(value: string) {
   const digest = await crypto.subtle.digest(
@@ -488,6 +503,34 @@ export const materializeDatasetSnapshot = internalAction({
       ...recorded,
       recordCount: manifest.artifact.recordCount,
       checksum: resultChecksum,
+    };
+  },
+});
+
+export const materializeAllDatasetSnapshots = internalAction({
+  args: {},
+  returns: v.object({
+    datasets: v.number(),
+    created: v.number(),
+    unchanged: v.number(),
+    records: v.number(),
+  }),
+  handler: async (ctx) => {
+    const datasetIds = await ctx.runQuery(refs.activeDatasetIds, {});
+    let created = 0;
+    let records = 0;
+    for (const datasetId of datasetIds) {
+      const result = await ctx.runAction(refs.materializeSnapshot, {
+        datasetId,
+      });
+      created += Number(result.created);
+      records += result.recordCount;
+    }
+    return {
+      datasets: datasetIds.length,
+      created,
+      unchanged: datasetIds.length - created,
+      records,
     };
   },
 });

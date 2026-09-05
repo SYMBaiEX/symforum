@@ -69,6 +69,9 @@ const jobs = {
   materializeSnapshot: makeFunctionReference<"action", any, any>(
     "evidenceJobActions:materializeDatasetSnapshot",
   ),
+  materializeAllSnapshots: makeFunctionReference<"action", any, any>(
+    "evidenceJobActions:materializeAllDatasetSnapshots",
+  ),
 } as const;
 function setup() {
   return convexTest(schema, modules);
@@ -140,6 +143,12 @@ describe("evidence jobs", () => {
       created: false,
       versionId: first.versionId,
       checksum: first.checksum,
+    });
+    await expect(t.action(jobs.materializeAllSnapshots, {})).resolves.toEqual({
+      datasets: 4,
+      created: 3,
+      unchanged: 1,
+      records: 0,
     });
     await t.run(async (ctx) => {
       const versions = await ctx.db

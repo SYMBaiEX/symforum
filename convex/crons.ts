@@ -106,6 +106,12 @@ crons.cron(
   runWatchdogMutationRef,
   { jobKey: "evidence-citation-benchmark" },
 );
+crons.cron(
+  "materialize evidence dataset snapshots",
+  "40 8 * * *",
+  runWatchdogActionRef,
+  { jobKey: "evidence-dataset-snapshots" },
+);
 
 crons.cron(
   "refresh Hacker News snapshot",

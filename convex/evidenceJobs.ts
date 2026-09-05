@@ -877,6 +877,20 @@ export const readExportDocuments = internalQuery({
   },
 });
 
+export const listActiveDatasetIds = internalQuery({
+  args: {},
+  returns: v.array(v.id("evidenceDatasets")),
+  handler: async (ctx) =>
+    (
+      await ctx.db
+        .query("evidenceDatasets")
+        .withIndex("by_visibility_and_status_and_updatedAt", (q) =>
+          q.eq("visibility", "public").eq("status", "active"),
+        )
+        .take(20)
+    ).map((dataset) => dataset._id),
+});
+
 /** Records a code-owned immutable snapshot without impersonating an enrolled agent. */
 export const recordSystemDatasetSnapshot = internalMutation({
   args: {

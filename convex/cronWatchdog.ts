@@ -21,6 +21,7 @@ const jobKeyValidator = v.union(
   v.literal("evidence-github-releases"),
   v.literal("evidence-crossref"),
   v.literal("evidence-first-party"),
+  v.literal("evidence-dataset-snapshots"),
   v.literal("evidence-nvd-cves"),
   v.literal("evidence-nvd-change-history"),
   v.literal("evidence-artifact-cleanup"),
@@ -47,6 +48,7 @@ const actionJobKeyValidator = v.union(
   v.literal("evidence-github-releases"),
   v.literal("evidence-crossref"),
   v.literal("evidence-first-party"),
+  v.literal("evidence-dataset-snapshots"),
   v.literal("evidence-nvd-cves"),
   v.literal("evidence-nvd-change-history"),
   v.literal("newsletter-schedule"),
@@ -105,6 +107,11 @@ const actionRefs = {
   firstParty: makeFunctionReference<"action", Record<string, never>, unknown>(
     "evidenceFirstParty:sync",
   ),
+  datasetSnapshots: makeFunctionReference<
+    "action",
+    Record<string, never>,
+    unknown
+  >("evidenceJobActions:materializeAllDatasetSnapshots"),
   nvdCves: makeFunctionReference<"action", Record<string, never>, unknown>(
     "evidenceNvd:syncCves",
   ),
@@ -161,6 +168,7 @@ const STALENESS_MS: Record<JobKey, number> = {
   "evidence-github-releases": 4 * 60 * 60 * 1_000,
   "evidence-crossref": 14 * 60 * 60 * 1_000,
   "evidence-first-party": 6 * 60 * 60 * 1_000,
+  "evidence-dataset-snapshots": 30 * 60 * 60 * 1_000,
   "evidence-nvd-cves": 30 * 60 * 1_000,
   "evidence-nvd-change-history": 30 * 60 * 1_000,
   "evidence-artifact-cleanup": 2 * 60 * 60 * 1_000,
@@ -249,6 +257,8 @@ export async function executeActionTarget(
       return await ctx.runAction(actionRefs.crossref, {});
     case "evidence-first-party":
       return await ctx.runAction(actionRefs.firstParty, {});
+    case "evidence-dataset-snapshots":
+      return await ctx.runAction(actionRefs.datasetSnapshots, {});
     case "evidence-nvd-cves":
       return await ctx.runAction(actionRefs.nvdCves, {});
     case "evidence-nvd-change-history":
