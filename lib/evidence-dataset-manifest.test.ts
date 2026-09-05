@@ -44,12 +44,19 @@ describe("evidence dataset manifests", () => {
             context: 0,
             truncated: false,
           },
-          entities: [{ entityKey: "cve:CVE-TEST", role: "subject" }],
+          entities: [
+            {
+              entityKey: "cve:CVE-TEST",
+              kind: "vulnerability",
+              role: "subject",
+            },
+          ],
           claims: [
             {
               claimKey: "claim:CVE-TEST",
               status: "supported",
               relation: "supports",
+              confidence: 0.93,
             },
           ],
         },
@@ -61,6 +68,9 @@ describe("evidence dataset manifests", () => {
       scannedRecordCount: 500,
       selectionScanTruncated: true,
       sourceCount: 1,
+      configuredSourceCount: 1,
+      sourceCoverageScore: 100,
+      missingSourceKeys: [],
       completenessScore: 100,
       freshnessScore: 100,
       citationCount: 2,
@@ -69,8 +79,12 @@ describe("evidence dataset manifests", () => {
       claimCount: 1,
       entityCoverageScore: 100,
       claimCoverageScore: 100,
+      citationCoverageScore: 100,
+      averageClaimConfidence: 93,
     });
     expect(manifest.distributions.sources).toEqual({ "nvd-cve-2": 1 });
+    expect(manifest.distributions.entityKinds).toEqual({ vulnerability: 1 });
+    expect(manifest.distributions.claimStatuses).toEqual({ supported: 1 });
   });
 
   test("reports empty snapshots honestly", () => {
@@ -94,6 +108,53 @@ describe("evidence dataset manifests", () => {
       freshnessScore: 0,
       earliestObservedAt: null,
       latestObservedAt: null,
+      sourceCoverageScore: 100,
+      citationCoverageScore: 0,
+    });
+  });
+
+  test("identifies configured sources missing from a snapshot", () => {
+    const manifest = buildEvidenceDatasetManifest({
+      datasetKey: "coverage",
+      datasetName: "Coverage",
+      selection: {
+        includedKinds: ["paper"],
+        includedLicenseClasses: ["open"],
+        sourceKeys: ["present", "missing"],
+      },
+      scannedRecordCount: 1,
+      selectionScanTruncated: false,
+      artifactChecksum: "checksum",
+      artifactByteLength: 1,
+      generatedAt: "2026-08-30T12:00:00.000Z",
+      records: [
+        {
+          kind: "paper",
+          licenseClass: "open",
+          publishedAt: null,
+          updatedAt: Date.parse("2026-08-30T12:00:00.000Z"),
+          source: {
+            sourceKey: "present",
+            provenanceClass: "official",
+            termsUrl: "https://example.com/terms",
+          },
+          version: null,
+          citationMetrics: {
+            total: 0,
+            supports: 0,
+            contradicts: 0,
+            context: 0,
+            truncated: false,
+          },
+        },
+      ],
+    });
+
+    expect(manifest.coverage).toMatchObject({
+      configuredSourceCount: 2,
+      sourceCount: 1,
+      sourceCoverageScore: 50,
+      missingSourceKeys: ["missing"],
     });
   });
 });

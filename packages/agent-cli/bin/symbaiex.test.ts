@@ -129,6 +129,38 @@ describe("symbaiex login", () => {
     );
   });
 
+  test("passes an explicit bounded record count to export creation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-create-"));
+    const tokenFile = join(directory, "token");
+    await new FileTokenStore(tokenFile).setToken("test-access-token");
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({ jobId: "job-1", status: "queued" }),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+    const code = await run(
+      [
+        "export-create",
+        "dataset-1",
+        "--records",
+        "500",
+        "--idempotency-key",
+        "export-500",
+        "--token-file",
+        tokenFile,
+      ],
+      { log: () => undefined, error: () => undefined },
+    );
+    expect(code).toBe(0);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      datasetId: "dataset-1",
+      format: "jsonl",
+      recordLimit: 500,
+    });
+  });
+
   test("downloads an export only after its manifest checksum verifies", async () => {
     const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-export-"));
     const tokenFile = join(directory, "token");

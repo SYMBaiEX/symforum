@@ -306,7 +306,8 @@ const OPENAPI = {
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
-            description: "Current public evidence datasets and latest snapshot quality metrics.",
+            description:
+              "Current public evidence datasets and latest snapshot quality metrics.",
             content: {
               "application/json": {
                 schema: {
@@ -366,7 +367,11 @@ const OPENAPI = {
         responses: {
           "200": {
             description: "Queued or replayed source-cited research job.",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
           },
           "400": { description: "Invalid or mismatched idempotent request." },
           "429": { description: "Quota or rate limit reached." },
@@ -386,7 +391,14 @@ const OPENAPI = {
           },
         ],
         responses: {
-          "200": { description: "Owner-scoped job status and cited result.", content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } } },
+          "200": {
+            description: "Owner-scoped job status and cited result.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
+          },
         },
       },
     },
@@ -406,7 +418,12 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party JSON artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
-            headers: { "X-Artifact-Sha256": { schema: { type: "string", pattern: "^[a-f0-9]{64}$" } }, "Content-Length": { schema: { type: "integer", minimum: 0 } } },
+            headers: {
+              "X-Artifact-Sha256": {
+                schema: { type: "string", pattern: "^[a-f0-9]{64}$" },
+              },
+              "Content-Length": { schema: { type: "integer", minimum: 0 } },
+            },
             content: { "application/json": { schema: { type: "object" } } },
           },
         },
@@ -426,7 +443,14 @@ const OPENAPI = {
           },
         },
         responses: {
-          "200": { description: "Queued or replayed bounded JSONL export.", content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } } },
+          "200": {
+            description: "Queued or replayed bounded JSONL export.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
+          },
           "400": {
             description: "Invalid dataset, format, or idempotent request.",
           },
@@ -450,7 +474,11 @@ const OPENAPI = {
           "200": {
             description:
               "Owner-scoped export status, checksum, and record count.",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/JobStatus" } } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
           },
         },
       },
@@ -471,8 +499,17 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party JSONL artifact stream. The bearer token is rechecked at download time; no storage URL is issued.",
-            headers: { "X-Artifact-Sha256": { schema: { type: "string", pattern: "^[a-f0-9]{64}$" } }, "Content-Length": { schema: { type: "integer", minimum: 0 } } },
-            content: { "application/x-ndjson": { schema: { type: "string", format: "binary" } } },
+            headers: {
+              "X-Artifact-Sha256": {
+                schema: { type: "string", pattern: "^[a-f0-9]{64}$" },
+              },
+              "Content-Length": { schema: { type: "integer", minimum: 0 } },
+            },
+            content: {
+              "application/x-ndjson": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
           },
         },
       },
@@ -493,7 +530,11 @@ const OPENAPI = {
           "200": {
             description:
               "Authenticated first-party immutable JSON manifest containing selection, checksum, bounded-scan disclosure, provenance distributions, citation coverage, completeness, freshness, and temporal coverage.",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/ExportManifest" } } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ExportManifest" },
+              },
+            },
           },
         },
       },
@@ -820,7 +861,12 @@ const OPENAPI = {
         properties: {
           code: { type: "string", pattern: "^[A-Z][A-Z0-9_.:-]{0,63}$" },
           error: { type: "string" },
-          retryAfter: { type: "integer", minimum: 0, description: "Milliseconds before an eligible retry, when supplied." },
+          retryAfter: {
+            type: "integer",
+            minimum: 0,
+            description:
+              "Milliseconds before an eligible retry, when supplied.",
+          },
         },
         additionalProperties: true,
       },
@@ -829,7 +875,17 @@ const OPENAPI = {
         required: ["jobId", "status"],
         properties: {
           jobId: { type: "string" },
-          status: { type: "string", enum: ["queued", "running", "completed", "failed", "cancelled", "expired"] },
+          status: {
+            type: "string",
+            enum: [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "expired",
+            ],
+          },
           createdAt: { type: "integer", minimum: 0 },
           updatedAt: { type: "integer", minimum: 0 },
           expiresAt: { type: "integer", minimum: 0 },
@@ -865,6 +921,12 @@ const OPENAPI = {
         properties: {
           datasetId: { type: "string" },
           format: { const: "jsonl", default: "jsonl" },
+          recordLimit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 500,
+            default: 100,
+          },
         },
         additionalProperties: false,
       },
@@ -892,7 +954,10 @@ const OPENAPI = {
             required: ["includedKinds", "includedLicenseClasses", "sourceKeys"],
             properties: {
               includedKinds: { type: "array", items: { type: "string" } },
-              includedLicenseClasses: { type: "array", items: { type: "string" } },
+              includedLicenseClasses: {
+                type: "array",
+                items: { type: "string" },
+              },
               sourceKeys: { type: "array", items: { type: "string" } },
             },
             additionalProperties: false,
@@ -910,7 +975,15 @@ const OPENAPI = {
                   "schemaVersion",
                   "artifactByteLength",
                   "sourceCount",
+                  "configuredSourceCount",
+                  "sourceCoverageScore",
+                  "missingSourceKeys",
                   "citationCount",
+                  "citationCoverageScore",
+                  "entityCount",
+                  "entityCoverageScore",
+                  "claimCount",
+                  "claimCoverageScore",
                   "completenessScore",
                   "freshnessScore",
                   "earliestObservedAt",
@@ -925,8 +998,39 @@ const OPENAPI = {
                   schemaVersion: { type: "string" },
                   artifactByteLength: { type: "integer", minimum: 0 },
                   sourceCount: { type: "integer", minimum: 0 },
+                  configuredSourceCount: { type: "integer", minimum: 0 },
+                  sourceCoverageScore: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                  missingSourceKeys: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
                   citationCount: { type: "integer", minimum: 0 },
-                  completenessScore: { type: "integer", minimum: 0, maximum: 100 },
+                  citationCoverageScore: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                  entityCount: { type: "integer", minimum: 0 },
+                  entityCoverageScore: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                  claimCount: { type: "integer", minimum: 0 },
+                  claimCoverageScore: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                  completenessScore: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 100,
+                  },
                   freshnessScore: { type: "integer", minimum: 0, maximum: 100 },
                   earliestObservedAt: { type: ["number", "null"] },
                   latestObservedAt: { type: ["number", "null"] },
@@ -1024,10 +1128,17 @@ function withCompleteOperationDocumentation<T>(source: T): T {
       ) {
         candidate.description = `${summary}. Calls ${method.toUpperCase()} ${path} under the published authentication, scope, quota, visibility, and structured-error contract where applicable.`;
       }
-      const responses = candidate.responses as Record<string, { content?: Record<string, unknown> }>;
+      const responses = candidate.responses as Record<
+        string,
+        { content?: Record<string, unknown> }
+      >;
       for (const [status, response] of Object.entries(responses)) {
         if (!/^[45]/.test(status) || response.content) continue;
-        response.content = { "application/json": { schema: { $ref: "#/components/schemas/AgentError" } } };
+        response.content = {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/AgentError" },
+          },
+        };
       }
     }
   }

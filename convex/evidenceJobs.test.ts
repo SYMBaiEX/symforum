@@ -160,6 +160,13 @@ describe("evidence jobs", () => {
       expect(versions).toHaveLength(1);
       expect(versions[0]).toMatchObject({
         schemaVersion: "symbaiex-evidence-document-v3",
+        configuredSourceCount: 0,
+        sourceCount: 0,
+        sourceCoverageScore: 100,
+        missingSourceKeys: [],
+        citationCoverageScore: 0,
+        entityCoverageScore: 0,
+        claimCoverageScore: 0,
         artifactStorageId: expect.any(String),
         manifestStorageId: expect.any(String),
       });
@@ -348,7 +355,11 @@ describe("evidence jobs", () => {
       idempotencyKey: "export-owner-1",
       requestFingerprint: "export-owner-one",
       quotaUnits: 1,
+      recordLimit: 250,
     });
+    await expect(
+      t.query(jobs.legacyExportInput, { jobId: exportJob.jobId }),
+    ).resolves.toMatchObject({ recordLimit: 250 });
     const storageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(['{"record":1}\n'])),
     );

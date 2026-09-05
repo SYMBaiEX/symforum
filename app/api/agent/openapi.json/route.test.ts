@@ -61,6 +61,13 @@ describe("agent API OpenAPI contract", () => {
     expect(document.paths["/v1/exports"].post.operationId).toBe(
       "createEvidenceExport",
     );
+    expect(
+      document.components.schemas.ExportRequest.properties.recordLimit,
+    ).toMatchObject({
+      minimum: 1,
+      maximum: 500,
+      default: 100,
+    });
     expect(document.paths["/v1/exports/{jobId}/manifest"].get.operationId).toBe(
       "getEvidenceExportManifest",
     );
@@ -104,6 +111,14 @@ describe("agent API OpenAPI contract", () => {
         completenessScore: expect.any(Object),
         freshnessScore: expect.any(Object),
         citationCount: expect.any(Object),
+        configuredSourceCount: expect.any(Object),
+        sourceCoverageScore: expect.any(Object),
+        missingSourceKeys: expect.any(Object),
+        citationCoverageScore: expect.any(Object),
+        entityCount: expect.any(Object),
+        entityCoverageScore: expect.any(Object),
+        claimCount: expect.any(Object),
+        claimCoverageScore: expect.any(Object),
       }),
     );
   });
@@ -144,9 +159,19 @@ describe("agent API OpenAPI contract", () => {
 
   test("publishes structured errors and verifiable artifact schemas", async () => {
     const document = await GET().json();
-    expect(document.components.schemas.AgentError.properties.retryAfter).toMatchObject({ type: "integer", minimum: 0 });
-    expect(document.components.schemas.ArtifactMetadata.properties.sha256.pattern).toContain("64");
-    expect(document.components.schemas.ExportManifest.required).toEqual(expect.arrayContaining(["checksum", "recordCount"]));
-    expect(document.paths["/v1/exports"].post.responses["429"].content["application/json"].schema.$ref).toBe("#/components/schemas/AgentError");
+    expect(
+      document.components.schemas.AgentError.properties.retryAfter,
+    ).toMatchObject({ type: "integer", minimum: 0 });
+    expect(
+      document.components.schemas.ArtifactMetadata.properties.sha256.pattern,
+    ).toContain("64");
+    expect(document.components.schemas.ExportManifest.required).toEqual(
+      expect.arrayContaining(["checksum", "recordCount"]),
+    );
+    expect(
+      document.paths["/v1/exports"].post.responses["429"].content[
+        "application/json"
+      ].schema.$ref,
+    ).toBe("#/components/schemas/AgentError");
   });
 });

@@ -129,6 +129,7 @@ async function executeCommand(
       return await client.createExport(
         requiredArgument(args, "dataset ID"),
         requiredOption(args, "--idempotency-key"),
+        optionalRecordLimit(args),
       );
     case "export-job":
       return await client.exportJob(requiredArgument(args, "export job ID"));
@@ -236,6 +237,7 @@ const VALUE_OPTIONS = new Set([
   "--origin",
   "--token-file",
   "--output",
+  "--records",
 ]);
 
 function positionalArguments(args: string[]) {
@@ -274,6 +276,14 @@ function optionalLimit(args: string[]) {
   return Number(value);
 }
 
+function optionalRecordLimit(args: string[]) {
+  const value = option(args, "--records");
+  if (value === undefined) return 100;
+  if (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 500)
+    throw new UsageError("--records must be an integer between 1 and 500.");
+  return Number(value);
+}
+
 function webhookStatus(value: string) {
   if (value === "active" || value === "paused" || value === "revoked")
     return value;
@@ -308,7 +318,7 @@ Jobs: research-create, research-job, export-create, export-job, export-manifest,
 Webhooks: webhook-availability, webhook-list, webhook-health,
   webhook-history, webhook-status, webhook-test
 
-Options: --limit <1-50>, --idempotency-key <key>, --token-file <path>, --output <path>,
+Options: --limit <1-50>, --records <1-500>, --idempotency-key <key>, --token-file <path>, --output <path>,
   --origin <origin>. Provider-capable and write commands require an explicit
   idempotency key.`;
 

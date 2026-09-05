@@ -369,7 +369,10 @@ describe("AgentClient", () => {
     await expect(client.researchArtifact("job-1")).resolves.toEqual(
       new Uint8Array([1, 2, 3]),
     );
-    await client.createExport("dataset-1", "export-001");
+    await client.createExport("dataset-1", "export-001", 500);
+    await expect(
+      client.createExport("dataset-1", "export-invalid", 501),
+    ).rejects.toThrow(/between 1 and 500/i);
     await client.exportJob("job-2");
     await client.exportArtifact("job-2");
     await client.exportManifest("job-2");

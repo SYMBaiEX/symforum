@@ -24,8 +24,13 @@ export type EvidenceExportManifestRecord = {
     context: number;
     truncated: boolean;
   };
-  entities?: Array<{ entityKey: string; role: string }>;
-  claims?: Array<{ claimKey: string; status: string; relation: string }>;
+  entities?: Array<{ entityKey: string; kind?: string; role: string }>;
+  claims?: Array<{
+    claimKey: string;
+    status: string;
+    relation: string;
+    confidence?: number;
+  }>;
 };
 
 type ManifestInput = {
@@ -65,6 +70,10 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
   const kindDistribution: Record<string, number> = {};
   const licenseDistribution: Record<string, number> = {};
   const provenanceDistribution: Record<string, number> = {};
+  const entityKindDistribution: Record<string, number> = {};
+  const entityRoleDistribution: Record<string, number> = {};
+  const claimStatusDistribution: Record<string, number> = {};
+  const claimRelationDistribution: Record<string, number> = {};
   const observedTimes: number[] = [];
   let completenessSignals = 0;
   let citationCount = 0;
@@ -75,6 +84,9 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
   let claimCount = 0;
   let recordsWithEntities = 0;
   let recordsWithClaims = 0;
+  let recordsWithCitations = 0;
+  let claimConfidenceTotal = 0;
+  let claimsWithConfidence = 0;
 
   for (const record of input.records) {
     increment(sourceDistribution, record.source.sourceKey);
@@ -103,6 +115,19 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
     claimCount += record.claims?.length ?? 0;
     recordsWithEntities += Number((record.entities?.length ?? 0) > 0);
     recordsWithClaims += Number((record.claims?.length ?? 0) > 0);
+    recordsWithCitations += Number(record.citationMetrics.total > 0);
+    for (const entity of record.entities ?? []) {
+      increment(entityKindDistribution, entity.kind ?? "unknown");
+      increment(entityRoleDistribution, entity.role);
+    }
+    for (const claim of record.claims ?? []) {
+      increment(claimStatusDistribution, claim.status);
+      increment(claimRelationDistribution, claim.relation);
+      if (claim.confidence !== undefined) {
+        claimConfidenceTotal += claim.confidence;
+        claimsWithConfidence += 1;
+      }
+    }
   }
 
   const recordCount = input.records.length;
@@ -115,6 +140,11 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
   const latestObservedAt = observedTimes.length
     ? Math.max(...observedTimes)
     : null;
+  const configuredSourceKeys = input.selection.sourceKeys;
+  const missingSourceKeys = configuredSourceKeys.filter(
+    (sourceKey) => !sourceDistribution[sourceKey],
+  );
+  const configuredSourceCount = configuredSourceKeys.length;
 
   return {
     schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
@@ -135,6 +165,15 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
       scannedRecordCount: input.scannedRecordCount,
       selectionScanTruncated: input.selectionScanTruncated,
       sourceCount: Object.keys(sourceDistribution).length,
+      configuredSourceCount,
+      missingSourceKeys,
+      sourceCoverageScore:
+        configuredSourceCount === 0
+          ? 100
+          : roundedRatio(
+              configuredSourceCount - missingSourceKeys.length,
+              configuredSourceCount,
+            ),
       earliestObservedAt,
       latestObservedAt,
       completenessScore,
@@ -148,12 +187,21 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
       recordsWithClaims,
       entityCoverageScore: roundedRatio(recordsWithEntities, recordCount),
       claimCoverageScore: roundedRatio(recordsWithClaims, recordCount),
+      citationCoverageScore: roundedRatio(recordsWithCitations, recordCount),
+      averageClaimConfidence:
+        claimsWithConfidence === 0
+          ? 0
+          : Math.round((claimConfidenceTotal / claimsWithConfidence) * 100),
     },
     distributions: {
       sources: sourceDistribution,
       kinds: kindDistribution,
       licenses: licenseDistribution,
       provenance: provenanceDistribution,
+      entityKinds: entityKindDistribution,
+      entityRoles: entityRoleDistribution,
+      claimStatuses: claimStatusDistribution,
+      claimRelations: claimRelationDistribution,
     },
     generatedAt: input.generatedAt,
   };

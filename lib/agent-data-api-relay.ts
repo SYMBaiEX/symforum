@@ -282,13 +282,21 @@ export function mapRestRequest(
     segments.length === 1 &&
     segments[0] === "exports" &&
     only([]) &&
-    onlyBody(body, ["datasetId", "format"]) &&
+    onlyBody(body, ["datasetId", "format", "recordLimit"]) &&
     validText(body.datasetId) &&
-    (body.format === undefined || body.format === "jsonl")
+    (body.format === undefined || body.format === "jsonl") &&
+    (body.recordLimit === undefined ||
+      (Number.isSafeInteger(body.recordLimit) &&
+        (body.recordLimit as number) >= 1 &&
+        (body.recordLimit as number) <= 500))
   )
     return {
       operation: "export_create",
-      input: { datasetId: body.datasetId, format: body.format ?? "jsonl" },
+      input: {
+        datasetId: body.datasetId,
+        format: body.format ?? "jsonl",
+        recordLimit: body.recordLimit ?? 100,
+      },
     };
   if (
     method === "GET" &&

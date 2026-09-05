@@ -97,7 +97,15 @@ export type EvidenceDataset = {
     schemaVersion: string;
     artifactByteLength: number;
     sourceCount: number;
+    configuredSourceCount: number;
+    sourceCoverageScore: number;
+    missingSourceKeys: string[];
     citationCount: number;
+    citationCoverageScore: number;
+    entityCount: number;
+    entityCoverageScore: number;
+    claimCount: number;
+    claimCoverageScore: number;
     completenessScore: number;
     freshnessScore: number;
     earliestObservedAt: number | null;
@@ -487,12 +495,20 @@ export class AgentClient {
   async createExport(
     datasetId: string,
     idempotencyKey: string,
+    recordLimit = 100,
   ): Promise<ExportJob> {
+    if (
+      !Number.isSafeInteger(recordLimit) ||
+      recordLimit < 1 ||
+      recordLimit > 500
+    )
+      throw new TypeError("recordLimit must be an integer between 1 and 500");
     return await this.request<ExportJob>("/api/agent/v1/exports", {
       method: "POST",
       body: {
         datasetId: validIdentifier(datasetId, "datasetId", 512),
         format: "jsonl",
+        recordLimit,
       },
       idempotencyKey: validIdempotencyKey(idempotencyKey),
     });

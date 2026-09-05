@@ -91,6 +91,7 @@ type EvidenceIdTable =
   | "evidenceExportJobs";
 
 const MAX_LIMIT = 50;
+const MAX_EXPORT_RECORD_LIMIT = 500;
 const WEBHOOK_RESULT_VERSION = 1;
 const WEBHOOK_IDEMPOTENT_OPERATIONS = new Set<Operation>([
   "webhooks_create",
@@ -213,6 +214,20 @@ function limit(value: unknown, fallback: number) {
       message: `limit must be an integer between 1 and ${MAX_LIMIT}.`,
     });
   }
+  return value as number;
+}
+
+function exportRecordLimit(value: unknown) {
+  if (value === undefined) return 100;
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > MAX_EXPORT_RECORD_LIMIT
+  )
+    throw new ConvexError({
+      code: "INVALID_REQUEST",
+      message: `recordLimit must be an integer between 1 and ${MAX_EXPORT_RECORD_LIMIT}.`,
+    });
   return value as number;
 }
 
@@ -377,6 +392,10 @@ export const dispatch = internalMutation({
       args.operation === "export_create"
         ? normalizedId(ctx, "evidenceDatasets", input, "datasetId")
         : null;
+    const requestedExportRecordLimit =
+      args.operation === "export_create"
+        ? exportRecordLimit(input.recordLimit)
+        : null;
     const researchJobId =
       args.operation === "research_get" ||
       args.operation === "research_artifact"
@@ -509,15 +528,18 @@ export const dispatch = internalMutation({
         retryAfter: quota.retryAfter,
       });
     }
-    const commerceCommand = await ctx.runMutation(api.apiCommerce.beginOrReplayCommand, {
-      agentId: principal.agentId,
-      productKey: productForOperation(args.operation),
-      idempotencyKey: args.idempotencyKey,
-      requestFingerprint: args.requestFingerprint,
-      operation: `evidence.${args.operation}`,
-      units: requestedUnits,
-      metadataJson: "{}",
-    });
+    const commerceCommand = await ctx.runMutation(
+      api.apiCommerce.beginOrReplayCommand,
+      {
+        agentId: principal.agentId,
+        productKey: productForOperation(args.operation),
+        idempotencyKey: args.idempotencyKey,
+        requestFingerprint: args.requestFingerprint,
+        operation: `evidence.${args.operation}`,
+        units: requestedUnits,
+        metadataJson: "{}",
+      },
+    );
 
     // Webhook writes must replay the original result for retries. The quota
     // and commerce ledgers already detect duplicate keys; do not let a retry
@@ -697,6 +719,7 @@ export const dispatch = internalMutation({
             agentId: principal.agentId,
             datasetId: datasetId!,
             format: "jsonl",
+            recordLimit: requestedExportRecordLimit!,
             idempotencyKey: args.idempotencyKey,
             requestFingerprint: args.requestFingerprint,
             quotaUnits: requestedUnits,
@@ -762,14 +785,20 @@ export const dispatch = internalMutation({
         };
       }
       case "webhooks_list":
-        operationResult = await ctx.runQuery(api.evidenceWebhooks.listMySubscriptions, {});
+        operationResult = await ctx.runQuery(
+          api.evidenceWebhooks.listMySubscriptions,
+          {},
+        );
         break;
       case "webhooks_create":
-        operationResult = await ctx.runMutation(api.evidenceWebhooks.createSubscription, {
-          subscriptionKey: webhookSubscriptionKey!,
-          url: webhookUrl!,
-          eventTypes: webhookEventTypes!,
-        });
+        operationResult = await ctx.runMutation(
+          api.evidenceWebhooks.createSubscription,
+          {
+            subscriptionKey: webhookSubscriptionKey!,
+            url: webhookUrl!,
+            eventTypes: webhookEventTypes!,
+          },
+        );
         break;
       case "webhooks_status":
         operationResult = await ctx.runMutation(
@@ -781,15 +810,21 @@ export const dispatch = internalMutation({
         );
         break;
       case "webhooks_health":
-        operationResult = await ctx.runQuery(api.evidenceWebhooks.getSubscriptionHealth, {
-          subscriptionKey: webhookSubscriptionKey!,
-        });
+        operationResult = await ctx.runQuery(
+          api.evidenceWebhooks.getSubscriptionHealth,
+          {
+            subscriptionKey: webhookSubscriptionKey!,
+          },
+        );
         break;
       case "webhooks_history":
-        operationResult = await ctx.runQuery(api.evidenceWebhooks.listDeliveryHistory, {
-          subscriptionKey: webhookSubscriptionKey!,
-          limit: requestedLimit,
-        });
+        operationResult = await ctx.runQuery(
+          api.evidenceWebhooks.listDeliveryHistory,
+          {
+            subscriptionKey: webhookSubscriptionKey!,
+            limit: requestedLimit,
+          },
+        );
         break;
       case "webhooks_rotate":
         operationResult = await ctx.runMutation(
@@ -798,16 +833,22 @@ export const dispatch = internalMutation({
         );
         break;
       case "webhooks_replay":
-        operationResult = await ctx.runMutation(api.evidenceWebhooks.replayDelivery, {
-          subscriptionKey: webhookSubscriptionKey!,
-          eventKey: webhookEventKey!,
-        });
+        operationResult = await ctx.runMutation(
+          api.evidenceWebhooks.replayDelivery,
+          {
+            subscriptionKey: webhookSubscriptionKey!,
+            eventKey: webhookEventKey!,
+          },
+        );
         break;
       case "webhooks_test":
-        operationResult = await ctx.runMutation(api.evidenceWebhooks.sendTestEvent, {
-          subscriptionKey: webhookSubscriptionKey!,
-          eventType: webhookEventType!,
-        });
+        operationResult = await ctx.runMutation(
+          api.evidenceWebhooks.sendTestEvent,
+          {
+            subscriptionKey: webhookSubscriptionKey!,
+            eventType: webhookEventType!,
+          },
+        );
         break;
     }
     if (WEBHOOK_IDEMPOTENT_OPERATIONS.has(args.operation)) {

@@ -88,8 +88,23 @@ describe("agent data API relay", () => {
       }),
     ).toEqual({
       operation: "export_create",
-      input: { datasetId: "dataset-id", format: "jsonl" },
+      input: { datasetId: "dataset-id", format: "jsonl", recordLimit: 100 },
     });
+    expect(
+      mapRestRequest("POST", ["exports"], new URLSearchParams(), {
+        datasetId: "dataset-id",
+        recordLimit: 500,
+      }),
+    ).toEqual({
+      operation: "export_create",
+      input: { datasetId: "dataset-id", format: "jsonl", recordLimit: 500 },
+    });
+    expect(
+      mapRestRequest("POST", ["exports"], new URLSearchParams(), {
+        datasetId: "dataset-id",
+        recordLimit: 501,
+      }),
+    ).toBeNull();
     expect(
       mapRestRequest("POST", ["exports"], new URLSearchParams(), {
         datasetId: "dataset-id",

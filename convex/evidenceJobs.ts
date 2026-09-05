@@ -9,7 +9,8 @@ import {
 } from "./_generated/server";
 
 const MAX_QUERY_LENGTH = 300;
-const MAX_EXPORT_LIMIT = 100;
+export const DEFAULT_EXPORT_LIMIT = 100;
+export const MAX_EXPORT_LIMIT = 500;
 const MAX_EXPORT_SCAN = 500;
 const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -313,6 +314,7 @@ export const createExportJob = internalMutation({
     agentId: v.string(),
     datasetId: v.id("evidenceDatasets"),
     format: v.union(v.literal("jsonl"), v.literal("parquet")),
+    recordLimit: v.optional(v.number()),
     idempotencyKey: v.string(),
     requestFingerprint: v.string(),
     quotaUnits: v.number(),
@@ -330,6 +332,16 @@ export const createExportJob = internalMutation({
       160,
     );
     const quotaUnits = boundedUnits(args.quotaUnits);
+    const recordLimit = args.recordLimit ?? DEFAULT_EXPORT_LIMIT;
+    if (
+      !Number.isSafeInteger(recordLimit) ||
+      recordLimit < 1 ||
+      recordLimit > MAX_EXPORT_LIMIT
+    )
+      throw new ConvexError({
+        code: "INVALID_EVIDENCE_EXPORT_LIMIT",
+        message: `recordLimit must be an integer between 1 and ${MAX_EXPORT_LIMIT}.`,
+      });
     await requireOwnedAgent(ctx, args.ownerUserId, agentId);
     await ownedDataset(ctx, args.datasetId);
     const existing = await ctx.db
@@ -360,6 +372,7 @@ export const createExportJob = internalMutation({
       quotaUnits,
       status: "queued",
       format: args.format,
+      recordLimit,
       checksum: "",
       recordCount: 0,
       resultJson: "",
@@ -592,13 +605,19 @@ export const readExportInput = internalQuery({
       datasetId: v.id("evidenceDatasets"),
       format: v.union(v.literal("jsonl"), v.literal("parquet")),
       status: JOB_STATUS,
+      recordLimit: v.number(),
     }),
   ),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
     return job === null || job.executionToken !== undefined
       ? null
-      : { datasetId: job.datasetId, format: job.format, status: job.status };
+      : {
+          datasetId: job.datasetId,
+          format: job.format,
+          status: job.status,
+          recordLimit: job.recordLimit ?? DEFAULT_EXPORT_LIMIT,
+        };
   },
 });
 
@@ -609,7 +628,10 @@ export const readExportDocuments = internalQuery({
     const dataset = await ownedDataset(ctx, args.datasetId);
     const limit = Math.max(
       1,
-      Math.min(MAX_EXPORT_LIMIT, Math.floor(args.limit ?? MAX_EXPORT_LIMIT)),
+      Math.min(
+        MAX_EXPORT_LIMIT,
+        Math.floor(args.limit ?? DEFAULT_EXPORT_LIMIT),
+      ),
     );
     const includedKinds = dataset.includedKinds ?? [];
     const includedLicenseClasses = dataset.includedLicenseClasses ?? [
@@ -900,7 +922,15 @@ export const recordSystemDatasetSnapshot = internalMutation({
     schemaVersion: v.string(),
     artifactByteLength: v.number(),
     sourceCount: v.number(),
+    configuredSourceCount: v.number(),
+    sourceCoverageScore: v.number(),
+    missingSourceKeys: v.array(v.string()),
     citationCount: v.number(),
+    citationCoverageScore: v.number(),
+    entityCount: v.number(),
+    entityCoverageScore: v.number(),
+    claimCount: v.number(),
+    claimCoverageScore: v.number(),
     completenessScore: v.number(),
     freshnessScore: v.number(),
     earliestObservedAt: v.optional(v.number()),
@@ -921,7 +951,28 @@ export const recordSystemDatasetSnapshot = internalMutation({
         q.eq("datasetId", args.datasetId).eq("checksum", args.checksum),
       )
       .unique();
-    if (existing !== null) return { versionId: existing._id, created: false };
+    if (existing !== null) {
+      await ctx.db.patch("evidenceDatasetVersions", existing._id, {
+        schemaVersion: args.schemaVersion,
+        artifactByteLength: args.artifactByteLength,
+        sourceCount: args.sourceCount,
+        configuredSourceCount: args.configuredSourceCount,
+        sourceCoverageScore: args.sourceCoverageScore,
+        missingSourceKeys: args.missingSourceKeys,
+        citationCount: args.citationCount,
+        citationCoverageScore: args.citationCoverageScore,
+        entityCount: args.entityCount,
+        entityCoverageScore: args.entityCoverageScore,
+        claimCount: args.claimCount,
+        claimCoverageScore: args.claimCoverageScore,
+        completenessScore: args.completenessScore,
+        freshnessScore: args.freshnessScore,
+        earliestObservedAt: args.earliestObservedAt,
+        latestObservedAt: args.latestObservedAt,
+        qualityMetricsJson: args.qualityMetricsJson,
+      });
+      return { versionId: existing._id, created: false };
+    }
     const createdAt = Date.now();
     const versionId = await ctx.db.insert("evidenceDatasetVersions", {
       ...args,
@@ -1078,6 +1129,7 @@ export const beginExportExecution = internalMutation({
     v.object({
       datasetId: v.id("evidenceDatasets"),
       format: v.union(v.literal("jsonl"), v.literal("parquet")),
+      recordLimit: v.number(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1093,7 +1145,11 @@ export const beginExportExecution = internalMutation({
       externalWorkStartedAt: Date.now(),
       updatedAt: Date.now(),
     });
-    return { datasetId: job.datasetId, format: job.format };
+    return {
+      datasetId: job.datasetId,
+      format: job.format,
+      recordLimit: job.recordLimit ?? DEFAULT_EXPORT_LIMIT,
+    };
   },
 });
 
@@ -1189,7 +1245,15 @@ export const completeExportJob = internalMutation({
     // actions can finish; all newly generated exports supply v2 metrics.
     schemaVersion: v.optional(v.string()),
     sourceCount: v.optional(v.number()),
+    configuredSourceCount: v.optional(v.number()),
+    sourceCoverageScore: v.optional(v.number()),
+    missingSourceKeys: v.optional(v.array(v.string())),
     citationCount: v.optional(v.number()),
+    citationCoverageScore: v.optional(v.number()),
+    entityCount: v.optional(v.number()),
+    entityCoverageScore: v.optional(v.number()),
+    claimCount: v.optional(v.number()),
+    claimCoverageScore: v.optional(v.number()),
     completenessScore: v.optional(v.number()),
     freshnessScore: v.optional(v.number()),
     earliestObservedAt: v.optional(v.number()),
@@ -1259,7 +1323,30 @@ export const completeExportJob = internalMutation({
               Math.floor(args.artifactByteLength),
             ),
             sourceCount: Math.max(0, Math.floor(args.sourceCount ?? 0)),
+            configuredSourceCount: Math.max(
+              0,
+              Math.floor(args.configuredSourceCount ?? 0),
+            ),
+            sourceCoverageScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.sourceCoverageScore ?? 0)),
+            ),
+            missingSourceKeys: (args.missingSourceKeys ?? []).slice(0, 100),
             citationCount: Math.max(0, Math.floor(args.citationCount ?? 0)),
+            citationCoverageScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.citationCoverageScore ?? 0)),
+            ),
+            entityCount: Math.max(0, Math.floor(args.entityCount ?? 0)),
+            entityCoverageScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.entityCoverageScore ?? 0)),
+            ),
+            claimCount: Math.max(0, Math.floor(args.claimCount ?? 0)),
+            claimCoverageScore: Math.max(
+              0,
+              Math.min(100, Math.round(args.claimCoverageScore ?? 0)),
+            ),
             completenessScore: Math.max(
               0,
               Math.min(100, Math.round(args.completenessScore ?? 0)),

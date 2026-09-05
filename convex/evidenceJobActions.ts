@@ -107,7 +107,11 @@ const refs = {
   beginExport: makeFunctionReference<
     "mutation",
     { jobId: string; executionToken: string },
-    { datasetId: string; format: "jsonl" | "parquet" } | null
+    {
+      datasetId: Id<"evidenceDatasets">;
+      format: "jsonl" | "parquet";
+      recordLimit: number;
+    } | null
   >("evidenceJobs:beginExportExecution"),
   searchPublic: makeFunctionReference<
     "query",
@@ -128,7 +132,15 @@ const refs = {
       schemaVersion: string;
       artifactByteLength: number;
       sourceCount: number;
+      configuredSourceCount: number;
+      sourceCoverageScore: number;
+      missingSourceKeys: string[];
       citationCount: number;
+      citationCoverageScore: number;
+      entityCount: number;
+      entityCoverageScore: number;
+      claimCount: number;
+      claimCoverageScore: number;
       completenessScore: number;
       freshnessScore: number;
       earliestObservedAt?: number;
@@ -315,7 +327,15 @@ export const runExport = internalAction({
       artifactByteLength: v.number(),
       schemaVersion: v.string(),
       sourceCount: v.number(),
+      configuredSourceCount: v.number(),
+      sourceCoverageScore: v.number(),
+      missingSourceKeys: v.array(v.string()),
       citationCount: v.number(),
+      citationCoverageScore: v.number(),
+      entityCount: v.number(),
+      entityCoverageScore: v.number(),
+      claimCount: v.number(),
+      claimCoverageScore: v.number(),
       completenessScore: v.number(),
       freshnessScore: v.number(),
       earliestObservedAt: v.optional(v.number()),
@@ -335,7 +355,7 @@ export const runExport = internalAction({
       );
     const bundle = await ctx.runQuery(refs.exportDocuments, {
       datasetId: input.datasetId,
-      limit: 100,
+      limit: input.recordLimit,
     });
     const records = bundle.records.map((record) => ({
       ...record,
@@ -399,7 +419,15 @@ export const runExport = internalAction({
         artifactByteLength: artifact.size,
         schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
         sourceCount: manifest.coverage.sourceCount,
+        configuredSourceCount: manifest.coverage.configuredSourceCount,
+        sourceCoverageScore: manifest.coverage.sourceCoverageScore,
+        missingSourceKeys: manifest.coverage.missingSourceKeys,
         citationCount: manifest.coverage.citationCount,
+        citationCoverageScore: manifest.coverage.citationCoverageScore,
+        entityCount: manifest.coverage.entityCount,
+        entityCoverageScore: manifest.coverage.entityCoverageScore,
+        claimCount: manifest.coverage.claimCount,
+        claimCoverageScore: manifest.coverage.claimCoverageScore,
         completenessScore: manifest.coverage.completenessScore,
         freshnessScore: manifest.coverage.freshnessScore,
         ...(manifest.coverage.earliestObservedAt === null
@@ -484,7 +512,15 @@ export const materializeDatasetSnapshot = internalAction({
       schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
       artifactByteLength: manifest.artifact.byteLength,
       sourceCount: manifest.coverage.sourceCount,
+      configuredSourceCount: manifest.coverage.configuredSourceCount,
+      sourceCoverageScore: manifest.coverage.sourceCoverageScore,
+      missingSourceKeys: manifest.coverage.missingSourceKeys,
       citationCount: manifest.coverage.citationCount,
+      citationCoverageScore: manifest.coverage.citationCoverageScore,
+      entityCount: manifest.coverage.entityCount,
+      entityCoverageScore: manifest.coverage.entityCoverageScore,
+      claimCount: manifest.coverage.claimCount,
+      claimCoverageScore: manifest.coverage.claimCoverageScore,
       completenessScore: manifest.coverage.completenessScore,
       freshnessScore: manifest.coverage.freshnessScore,
       earliestObservedAt: manifest.coverage.earliestObservedAt ?? undefined,
