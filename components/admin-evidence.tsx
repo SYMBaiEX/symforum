@@ -25,6 +25,9 @@ export function AdminEvidence() {
   const initializeCatalog = useAction(
     convexRefs.evidenceAdmin.initializeCatalog,
   );
+  const backfillEvidence = useAction(
+    convexRefs.evidenceAdmin.backfillEvidence,
+  );
   const [running, setRunning] = useState<string | null>(null);
 
   const run = async (
@@ -74,20 +77,36 @@ export function AdminEvidence() {
             source credentials, raw payloads, or payment controls.
           </p>
         </div>
-        <Button
-          variant="outline"
-          disabled={running !== null}
-          onClick={() =>
-            void run(
-              "catalog",
-              initializeCatalog,
-              "Catalog initialization checked",
-            )
-          }
-        >
-          <DatabaseZap />
-          {running === "catalog" ? "Checking" : "Initialize catalog"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={running !== null}
+            onClick={() =>
+              void run(
+                "backfill",
+                () => backfillEvidence({ limit: 50 }),
+                "Legacy evidence reconstruction completed",
+              )
+            }
+          >
+            <RefreshCw />
+            {running === "backfill" ? "Reconstructing" : "Reconstruct evidence"}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={running !== null}
+            onClick={() =>
+              void run(
+                "catalog",
+                initializeCatalog,
+                "Catalog initialization checked",
+              )
+            }
+          >
+            <DatabaseZap />
+            {running === "catalog" ? "Checking" : "Initialize catalog"}
+          </Button>
+        </div>
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -134,6 +153,71 @@ export function AdminEvidence() {
               </p>
             ) : null}
           </div>
+        </div>
+      </section>
+
+      <section>
+        <p className="font-mono text-xs uppercase text-muted-foreground">
+          Dataset operations · {data.operations.window}
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Exported records", data.operations.exportedRecords],
+            ["Artifact bytes", data.operations.artifactBytes.toLocaleString()],
+            ["Read amplification", `${data.operations.readAmplification}x`],
+            ["Record units", data.operations.billableRecordUnits],
+            ["Completed exports", data.operations.completedExports],
+            ["Failed exports", data.operations.failedExports],
+            ["Forum replies", data.operations.forumReplies],
+            ["Route fallbacks", `${data.operations.routeFallbackRate}%`],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="border border-row-border p-4">
+              <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                {label}
+              </p>
+              <p className="mt-2 text-xl font-semibold">{value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Read amplification is an application-level scan-to-export proxy, not
+          a replacement for Convex platform billing telemetry.
+        </p>
+      </section>
+
+      <section>
+        <p className="font-mono text-xs uppercase text-muted-foreground">
+          Latest immutable dataset quality
+        </p>
+        <div className="mt-3 overflow-x-auto border-y border-row-border">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="font-mono text-[10px] uppercase text-muted-foreground">
+              <tr>
+                <th className="py-3 pr-4">Dataset</th>
+                <th className="py-3 pr-4">Records</th>
+                <th className="py-3 pr-4">Bytes</th>
+                <th className="py-3 pr-4">Sources</th>
+                <th className="py-3 pr-4">Citations</th>
+                <th className="py-3 pr-4">Entities</th>
+                <th className="py-3 pr-4">Claims</th>
+                <th className="py-3">Freshness</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-row-border">
+              {data.datasetQuality.map((dataset) => (
+                <tr key={dataset.datasetKey}>
+                  <td className="py-3 pr-4 font-medium">{dataset.datasetKey}</td>
+                  <td className="py-3 pr-4">{dataset.recordCount}</td>
+                  <td className="py-3 pr-4">{dataset.artifactByteLength.toLocaleString()}</td>
+                  <td className="py-3 pr-4">{dataset.sourceCoverageScore}%</td>
+                  <td className="py-3 pr-4">{dataset.citationCoverageScore}%</td>
+                  <td className="py-3 pr-4">{dataset.entityCoverageScore}%</td>
+                  <td className="py-3 pr-4">{dataset.claimCoverageScore}%</td>
+                  <td className="py-3">{dataset.freshnessScore}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 

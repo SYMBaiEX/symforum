@@ -146,7 +146,7 @@ describe("agent API OpenAPI contract", () => {
     );
     const ids = operations.map(({ operation }) => operation.operationId);
 
-    expect(operations).toHaveLength(39);
+    expect(operations).toHaveLength(43);
     expect(new Set(ids).size).toBe(operations.length);
     for (const { operation } of operations) {
       expect(operation.operationId).toEqual(expect.any(String));

@@ -71,6 +71,12 @@ crons.interval(
   { jobKey: "evidence-artifact-cleanup" },
 );
 crons.interval(
+  "apply evidence dataset retention",
+  { hours: 24 },
+  internal.evidenceJobs.cleanupDatasetVersions,
+  { limit: 10 },
+);
+crons.interval(
   "cleanup expired claim revisions",
   { hours: 24 },
   runWatchdogMutationRef,

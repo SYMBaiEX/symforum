@@ -47,10 +47,10 @@ history at `GET /v1/claims/{claimKey}/timeline`. Its entries retain the existing
 inventing a separate timeline status.
 
 `datasets()` reports each dataset's explicit selection and latest snapshot
-quality. After an export completes, `export_artifact(job_id)` downloads JSONL
-and `export_manifest(job_id)` downloads the immutable provenance, coverage,
-freshness, and citation manifest through the same authenticated first-party
-stream.
+quality. `create_export()` supports source-balanced cursor pages in JSONL or
+Parquet. `dataset_versions()`, `dataset_version_diff()`,
+`dataset_version_artifact()`, and `dataset_version_manifest()` expose retained
+history and lineage through authenticated first-party streams.
 
 ## Release checks
 

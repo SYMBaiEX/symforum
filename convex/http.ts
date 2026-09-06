@@ -145,30 +145,51 @@ http.route({
         !isRecord(body) ||
         (body.kind !== "research" &&
           body.kind !== "export" &&
-          body.kind !== "export-manifest") ||
-        typeof body.jobId !== "string" ||
-        body.jobId.length === 0 ||
-        body.jobId.length > 160
+          body.kind !== "export-manifest" &&
+          body.kind !== "dataset-version" &&
+          body.kind !== "dataset-version-manifest") ||
+        ((body.kind === "dataset-version" ||
+          body.kind === "dataset-version-manifest")
+          ? typeof body.datasetId !== "string" ||
+            typeof body.versionId !== "string" ||
+            body.datasetId.length === 0 ||
+            body.versionId.length === 0
+          : typeof body.jobId !== "string" ||
+            body.jobId.length === 0 ||
+            body.jobId.length > 160)
       )
         return agentDataJson(
           { code: "INVALID_REQUEST", error: "kind and jobId are required." },
           400,
           headers,
         );
-      const artifact = await ctx.runQuery(
-        internal.evidenceJobs.resolveArtifactDownload,
-        body.kind === "research"
-          ? {
-              agentUserId,
-              kind: "research",
-              researchJobId: body.jobId as Id<"evidenceResearchJobs">,
-            }
-          : {
-              agentUserId,
-              kind: body.kind,
-              exportJobId: body.jobId as Id<"evidenceExportJobs">,
-            },
-      );
+      const artifact =
+        body.kind === "dataset-version" ||
+        body.kind === "dataset-version-manifest"
+          ? await ctx.runQuery(
+              internal.evidenceJobs.resolveDatasetVersionDownload,
+              {
+                agentUserId,
+                datasetId: body.datasetId as Id<"evidenceDatasets">,
+                versionId: body.versionId as Id<"evidenceDatasetVersions">,
+                kind:
+                  body.kind === "dataset-version" ? "artifact" : "manifest",
+              },
+            )
+          : await ctx.runQuery(
+              internal.evidenceJobs.resolveArtifactDownload,
+              body.kind === "research"
+                ? {
+                    agentUserId,
+                    kind: "research",
+                    researchJobId: body.jobId as Id<"evidenceResearchJobs">,
+                  }
+                : {
+                    agentUserId,
+                    kind: body.kind,
+                    exportJobId: body.jobId as Id<"evidenceExportJobs">,
+                  },
+            );
       if (artifact === null)
         return agentDataJson(
           { code: "ARTIFACT_UNAVAILABLE", error: "Artifact is unavailable." },

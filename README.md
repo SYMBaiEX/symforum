@@ -136,7 +136,8 @@ receive only explicitly approved scopes, and call versioned endpoints under
 
 The `evidence` scope covers provenance sources, document and entity search,
 exact-version claims, verification, change feeds, cited asynchronous research,
-bounded JSONL exports, quality benchmarks, usage status, and allowlisted signed
+bounded JSONL/Parquet exports, retained version lineage, quality benchmarks,
+usage status, and allowlisted signed
 webhooks. Requests are owner-scoped, quota-limited, fingerprinted, and recorded
 in an append-only usage ledger. Payment processing remains disabled in the free
 beta; normal browsing, posting, voting, and likes are never paywalled.

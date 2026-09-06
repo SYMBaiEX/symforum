@@ -1,5 +1,5 @@
 {
-  "lockfileVersion": 1,
+  "lockfileVersion": 2,
   "configVersion": 1,
   "workspaces": {
     "": {
@@ -35,6 +35,8 @@
         "convex": "1.45.0",
         "convex-helpers": "^0.1.123",
         "fast-xml-parser": "5.11.1",
+        "hyparquet": "1.29.2",
+        "hyparquet-writer": "0.16.9",
         "katex": "0.18.4",
         "lucide-react": "0.469.0",
         "next": "16.3.3",
@@ -1103,6 +1105,10 @@
     "http-message-sig": ["http-message-sig@0.2.0", "", { "dependencies": { "structured-headers": "2.0.2" } }, "sha512-9fXSmxsdWDuMgk6Rd5Jc8Fa/wEblmRXZyO89KPkRrGsdeAwYlUkvS5oSOw6aOKKK/qKHNTq3jCHHTRCEid6RaQ=="],
 
     "human-signals": ["human-signals@2.1.0", "", {}, "sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw=="],
+
+    "hyparquet": ["hyparquet@1.29.2", "", {}, "sha512-2LxinZ8X0JqToST+9OXcy9t3t5Q7ZneMTkSqUx/36Hv18pCTk/N71IWZc7APTSNG1Me39l/jjEvzZSZ0R+Knbw=="],
+
+    "hyparquet-writer": ["hyparquet-writer@0.16.9", "", { "dependencies": { "hyparquet": "1.29.2" } }, "sha512-VZvH4Vq9lQwZa/+1y4YrEwF9+FAe5pED+mVN4AHflCoFk5LG2RemMHW9iwVlVqug7fO3ATwEMSG68cr3uZAkjQ=="],
 
     "ignore": ["ignore@5.3.2", "", {}, "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g=="],
 

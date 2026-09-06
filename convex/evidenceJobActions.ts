@@ -10,6 +10,7 @@ import {
   buildEvidenceDatasetManifest,
   EVIDENCE_EXPORT_SCHEMA_VERSION,
 } from "../lib/evidence-dataset-manifest";
+import { serializeEvidenceExport } from "../lib/evidence-export-format";
 import {
   runWithModelFallback,
   type RoutedModel,
@@ -96,6 +97,9 @@ type ExportBundle = {
   };
   scannedRecordCount: number;
   selectionScanTruncated: boolean;
+  selectionStrategy: "balanced" | "recent";
+  snapshotAt: number;
+  continueCursor?: string;
   records: ExportRecord[];
 };
 const refs = {
@@ -111,6 +115,8 @@ const refs = {
       datasetId: Id<"evidenceDatasets">;
       format: "jsonl" | "parquet";
       recordLimit: number;
+      selectionStrategy: "balanced" | "recent";
+      cursor?: string;
     } | null
   >("evidenceJobs:beginExportExecution"),
   searchPublic: makeFunctionReference<
@@ -120,7 +126,12 @@ const refs = {
   >("evidence:searchPublic"),
   exportDocuments: makeFunctionReference<
     "query",
-    { datasetId: string; limit: number },
+    {
+      datasetId: string;
+      limit: number;
+      selectionStrategy?: "balanced" | "recent";
+      cursor?: string;
+    },
     ExportBundle
   >("evidenceJobs:readExportDocuments"),
   recordSystemSnapshot: makeFunctionReference<
@@ -148,6 +159,10 @@ const refs = {
       qualityMetricsJson: string;
       manifestStorageId: Id<"_storage">;
       artifactStorageId: Id<"_storage">;
+      selectionStrategy?: "balanced" | "recent";
+      scannedRecordCount?: number;
+      selectionScanTruncated?: boolean;
+      continueCursor?: string;
     },
     { versionId: Id<"evidenceDatasetVersions">; created: boolean }
   >("evidenceJobs:recordSystemDatasetSnapshot"),
@@ -167,10 +182,14 @@ const refs = {
     }
   >("evidenceJobActions:materializeDatasetSnapshot"),
 };
-async function checksum(value: string) {
+async function checksum(value: string | Uint8Array) {
+  const bytes =
+    typeof value === "string"
+      ? new TextEncoder().encode(value)
+      : new Uint8Array(value);
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(value),
+    bytes.buffer,
   );
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
@@ -341,6 +360,10 @@ export const runExport = internalAction({
       earliestObservedAt: v.optional(v.number()),
       latestObservedAt: v.optional(v.number()),
       qualityMetricsJson: v.string(),
+      selectionStrategy: v.union(v.literal("balanced"), v.literal("recent")),
+      scannedRecordCount: v.number(),
+      selectionScanTruncated: v.boolean(),
+      continueCursor: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -349,13 +372,11 @@ export const runExport = internalAction({
       executionToken: args.executionToken,
     });
     if (input === null) return { started: false as const };
-    if (input.format !== "jsonl")
-      throw new Error(
-        "PARQUET_UNSUPPORTED: only jsonl export is currently supported.",
-      );
     const bundle = await ctx.runQuery(refs.exportDocuments, {
       datasetId: input.datasetId,
       limit: input.recordLimit,
+      selectionStrategy: input.selectionStrategy,
+      cursor: input.cursor,
     });
     const records = bundle.records.map((record) => ({
       ...record,
@@ -368,15 +389,14 @@ export const runExport = internalAction({
               metadataJson: undefined,
             },
     }));
-    const jsonl =
-      records.map((record) => JSON.stringify(record)).join("\n") +
-      (records.length ? "\n" : "");
-    const artifact = new Blob([jsonl], { type: "application/x-ndjson" });
-    const resultChecksum = await checksum(jsonl);
+    const serialized = serializeEvidenceExport(input.format, records);
+    const artifact = new Blob([serialized.bytes], { type: serialized.contentType });
+    const resultChecksum = await checksum(serialized.bytes);
     const generatedAt = new Date().toISOString();
     const manifest = buildEvidenceDatasetManifest({
       datasetKey: bundle.dataset.datasetKey,
       datasetName: bundle.dataset.name,
+      format: input.format,
       selection: {
         includedKinds: bundle.dataset.includedKinds,
         includedLicenseClasses: bundle.dataset.includedLicenseClasses,
@@ -384,6 +404,9 @@ export const runExport = internalAction({
       },
       scannedRecordCount: bundle.scannedRecordCount,
       selectionScanTruncated: bundle.selectionScanTruncated,
+      selectionStrategy: bundle.selectionStrategy,
+      snapshotAt: bundle.snapshotAt,
+      continueCursor: bundle.continueCursor,
       artifactChecksum: resultChecksum,
       artifactByteLength: artifact.size,
       generatedAt,
@@ -403,13 +426,16 @@ export const runExport = internalAction({
       return {
         started: true as const,
         resultJson: JSON.stringify({
-          format: "jsonl",
+          format: input.format,
           recordCount: records.length,
           checksum: resultChecksum,
           containsRawPayload: false,
           schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
           dataset: manifest.dataset,
           coverage: manifest.coverage,
+          selectionStrategy: bundle.selectionStrategy,
+          snapshotAt: bundle.snapshotAt,
+          continueCursor: bundle.continueCursor ?? null,
         }),
         resultStorageId,
         datasetManifestStorageId,
@@ -437,6 +463,12 @@ export const runExport = internalAction({
           ? {}
           : { latestObservedAt: manifest.coverage.latestObservedAt }),
         qualityMetricsJson,
+        selectionStrategy: bundle.selectionStrategy,
+        scannedRecordCount: bundle.scannedRecordCount,
+        selectionScanTruncated: bundle.selectionScanTruncated,
+        ...(bundle.continueCursor === undefined
+          ? {}
+          : { continueCursor: bundle.continueCursor }),
       };
     } catch (error) {
       for (const storageId of [datasetManifestStorageId, resultStorageId]) {
@@ -492,6 +524,9 @@ export const materializeDatasetSnapshot = internalAction({
       },
       scannedRecordCount: bundle.scannedRecordCount,
       selectionScanTruncated: bundle.selectionScanTruncated,
+      selectionStrategy: bundle.selectionStrategy,
+      snapshotAt: bundle.snapshotAt,
+      continueCursor: bundle.continueCursor,
       artifactChecksum: resultChecksum,
       artifactByteLength: artifact.size,
       generatedAt: new Date().toISOString(),
@@ -528,6 +563,10 @@ export const materializeDatasetSnapshot = internalAction({
       qualityMetricsJson,
       manifestStorageId,
       artifactStorageId,
+      selectionStrategy: bundle.selectionStrategy,
+      scannedRecordCount: bundle.scannedRecordCount,
+      selectionScanTruncated: bundle.selectionScanTruncated,
+      continueCursor: bundle.continueCursor,
     });
     if (!recorded.created) {
       await Promise.all([

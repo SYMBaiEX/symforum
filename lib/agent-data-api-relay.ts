@@ -17,6 +17,10 @@ export const AGENT_DATA_OPERATIONS = [
   "claim_timeline",
   "products",
   "datasets",
+  "dataset_versions",
+  "dataset_version_diff",
+  "dataset_version_artifact",
+  "dataset_version_manifest",
   "benchmarks",
   "quota",
   "entitlements",
@@ -39,7 +43,12 @@ export const AGENT_DATA_OPERATIONS = [
   "webhooks_test",
 ] as const;
 export type AgentDataOperation = (typeof AGENT_DATA_OPERATIONS)[number];
-export type AgentArtifactKind = "research" | "export" | "export-manifest";
+export type AgentArtifactKind =
+  | "research"
+  | "export"
+  | "export-manifest"
+  | "dataset-version"
+  | "dataset-version-manifest";
 
 const ALLOWED_ORIGINS = new Set([
   "https://symbaiex.com",
@@ -109,6 +118,23 @@ export function mapRestRequest(
   if ("invalid" in limit) return null;
   const only = (allowed: string[]) =>
     [...search.keys()].every((key) => allowed.includes(key));
+  if (
+    method === "GET" &&
+    segments.length === 5 &&
+    segments[0] === "datasets" &&
+    segments[2] === "versions" &&
+    (segments[4] === "artifact" || segments[4] === "manifest") &&
+    validText(segments[1]) &&
+    validText(segments[3]) &&
+    only([])
+  )
+    return {
+      operation:
+        segments[4] === "artifact"
+          ? "dataset_version_artifact"
+          : "dataset_version_manifest",
+      input: { datasetId: segments[1], versionId: segments[3] },
+    };
   if (
     method === "GET" &&
     segments.length === 1 &&
@@ -208,6 +234,46 @@ export function mapRestRequest(
   )
     return { operation: "usage", input: limit };
   if (
+    method === "GET" &&
+    segments.length === 3 &&
+    segments[0] === "datasets" &&
+    segments[2] === "versions" &&
+    validText(segments[1]) &&
+    only(["limit", "cursor"])
+  ) {
+    const cursor = search.get("cursor");
+    if (cursor !== null && (!cursor || cursor.length > 512)) return null;
+    return {
+      operation: "dataset_versions",
+      input: {
+        datasetId: segments[1],
+        ...limit,
+        ...(cursor === null ? {} : { cursor }),
+      },
+    };
+  }
+  if (
+    method === "GET" &&
+    segments.length === 5 &&
+    segments[0] === "datasets" &&
+    segments[2] === "versions" &&
+    segments[4] === "diff" &&
+    validText(segments[1]) &&
+    validText(segments[3]) &&
+    only(["against"])
+  ) {
+    const againstVersionId = search.get("against");
+    if (againstVersionId !== null && !validText(againstVersionId)) return null;
+    return {
+      operation: "dataset_version_diff",
+      input: {
+        datasetId: segments[1],
+        versionId: segments[3],
+        ...(againstVersionId === null ? {} : { againstVersionId }),
+      },
+    };
+  }
+  if (
     method === "POST" &&
     segments.length === 3 &&
     segments[0] === "claims" &&
@@ -282,9 +348,21 @@ export function mapRestRequest(
     segments.length === 1 &&
     segments[0] === "exports" &&
     only([]) &&
-    onlyBody(body, ["datasetId", "format", "recordLimit"]) &&
+    onlyBody(body, [
+      "datasetId",
+      "format",
+      "recordLimit",
+      "selectionStrategy",
+      "cursor",
+    ]) &&
     validText(body.datasetId) &&
-    (body.format === undefined || body.format === "jsonl") &&
+    (body.format === undefined ||
+      body.format === "jsonl" ||
+      body.format === "parquet") &&
+    (body.selectionStrategy === undefined ||
+      body.selectionStrategy === "balanced" ||
+      body.selectionStrategy === "recent") &&
+    (body.cursor === undefined || validText(body.cursor)) &&
     (body.recordLimit === undefined ||
       (Number.isSafeInteger(body.recordLimit) &&
         (body.recordLimit as number) >= 1 &&
@@ -296,6 +374,10 @@ export function mapRestRequest(
         datasetId: body.datasetId,
         format: body.format ?? "jsonl",
         recordLimit: body.recordLimit ?? 100,
+        ...(body.selectionStrategy === undefined
+          ? {}
+          : { selectionStrategy: body.selectionStrategy }),
+        ...(body.cursor === undefined ? {} : { cursor: body.cursor }),
       },
     };
   if (
@@ -567,6 +649,7 @@ export async function relayAgentArtifact(
   kind: AgentArtifactKind,
   jobId: string,
   authorization: string,
+  datasetId?: string,
 ) {
   const upstream = agentArtifactUpstream();
   if (!upstream)
@@ -588,7 +671,11 @@ export async function relayAgentArtifact(
           ? { origin: request.headers.get("origin")! }
           : {}),
       },
-      body: JSON.stringify({ kind, jobId }),
+      body: JSON.stringify(
+        kind === "dataset-version" || kind === "dataset-version-manifest"
+          ? { kind, datasetId, versionId: jobId }
+          : { kind, jobId },
+      ),
       cache: "no-store",
       redirect: "error",
       signal: controller.signal,

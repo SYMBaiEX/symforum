@@ -546,7 +546,7 @@ export function nvdSuccessCheckpoint(
  */
 export function nvdPostVersionWork(kind: NvdKind, idempotent: boolean) {
   return {
-    writeCveClaim: kind === "cves",
+    writeCveClaim: kind === "cves" || kind === "history",
     enqueueDocumentEvent: true,
     replayingCommittedVersion: idempotent,
   };

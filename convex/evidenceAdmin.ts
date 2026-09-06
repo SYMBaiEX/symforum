@@ -28,6 +28,11 @@ const ensureCatalogRef = makeFunctionReference<
   Record<string, never>,
   { datasetId: string; billingEnabled: boolean }
 >("evidenceJobs:ensureCatalog");
+const backfillEvidenceRef = makeFunctionReference<
+  "action",
+  { limit?: number },
+  { examined: number; enriched: number }
+>("evidenceIngestion:backfillDerivedEvidence");
 const ingestionRefs = {
   "cisa-kev": makeFunctionReference<"action", Record<string, never>, unknown>(
     "evidenceIngestion:syncCisaKev",
@@ -148,6 +153,33 @@ export const dashboard = query({
         updatedAt: v.number(),
       }),
     ),
+    operations: v.object({
+      window: v.string(),
+      completedExports: v.number(),
+      failedExports: v.number(),
+      exportedRecords: v.number(),
+      scannedRecords: v.number(),
+      artifactBytes: v.number(),
+      readAmplification: v.number(),
+      billableRecordUnits: v.number(),
+      forumReplies: v.number(),
+      forumReplyFailures: v.number(),
+      routeFallbackRate: v.number(),
+    }),
+    datasetQuality: v.array(
+      v.object({
+        datasetKey: v.string(),
+        version: v.string(),
+        recordCount: v.number(),
+        artifactByteLength: v.number(),
+        sourceCoverageScore: v.number(),
+        citationCoverageScore: v.number(),
+        entityCoverageScore: v.number(),
+        claimCoverageScore: v.number(),
+        freshnessScore: v.number(),
+        createdAt: v.number(),
+      }),
+    ),
   }),
   handler: async (ctx) => {
     await requireSiteAdmin(ctx);
@@ -163,6 +195,10 @@ export const dashboard = query({
       researchJobs,
       exportJobs,
       health,
+      completedExports,
+      failedExports,
+      forumReplies,
+      routeEvents,
     ] = await Promise.all([
       ctx.db
         .query("evidenceSources")
@@ -227,7 +263,58 @@ export const dashboard = query({
           q.eq("healthKey", "evidence-production"),
         )
         .unique(),
+      ctx.db
+        .query("evidenceExportJobs")
+        .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "completed"))
+        .order("desc")
+        .take(50),
+      ctx.db
+        .query("evidenceExportJobs")
+        .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "failed"))
+        .order("desc")
+        .take(50),
+      ctx.db
+        .query("forumAgentReplyRuns")
+        .withIndex("by_updatedAt")
+        .order("desc")
+        .take(50),
+      ctx.db
+        .query("aiRouteEvents")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(50),
     ]);
+    const datasetQuality = [];
+    for (const dataset of datasets) {
+      const version = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_version", (q) =>
+          q.eq("datasetId", dataset._id),
+        )
+        .order("desc")
+        .first();
+      if (version !== null)
+        datasetQuality.push({
+          datasetKey: dataset.datasetKey,
+          version: version.version,
+          recordCount: version.recordCount,
+          artifactByteLength: version.artifactByteLength ?? 0,
+          sourceCoverageScore: version.sourceCoverageScore ?? 0,
+          citationCoverageScore: version.citationCoverageScore ?? 0,
+          entityCoverageScore: version.entityCoverageScore ?? 0,
+          claimCoverageScore: version.claimCoverageScore ?? 0,
+          freshnessScore: version.freshnessScore ?? 0,
+          createdAt: version.createdAt,
+        });
+    }
+    const exportedRecords = completedExports.reduce(
+      (sum, job) => sum + job.recordCount,
+      0,
+    );
+    const scannedRecords = completedExports.reduce(
+      (sum, job) => sum + (job.scannedRecordCount ?? 0),
+      0,
+    );
     const sources = [...activeSources, ...pausedSources, ...retiredSources]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, take)
@@ -284,6 +371,36 @@ export const dashboard = query({
         errorMessage: job.errorMessage.slice(0, 240),
         updatedAt: job.updatedAt,
       })),
+      operations: {
+        window: "latest 50 rows per metric",
+        completedExports: completedExports.length,
+        failedExports: failedExports.length,
+        exportedRecords,
+        scannedRecords,
+        artifactBytes: completedExports.reduce(
+          (sum, job) => sum + (job.artifactByteLength ?? 0),
+          0,
+        ),
+        readAmplification:
+          exportedRecords === 0
+            ? 0
+            : Math.round((scannedRecords / exportedRecords) * 100) / 100,
+        billableRecordUnits: completedExports.reduce(
+          (sum, job) => sum + job.quotaUnits,
+          0,
+        ),
+        forumReplies: forumReplies.filter((run) => run.status === "replied").length,
+        forumReplyFailures: forumReplies.filter((run) => run.status === "failed").length,
+        routeFallbackRate:
+          routeEvents.length === 0
+            ? 0
+            : Math.round(
+                (routeEvents.filter((event) => event.fallback).length /
+                  routeEvents.length) *
+                  100,
+              ),
+      },
+      datasetQuality,
     };
   },
 });
@@ -337,5 +454,16 @@ export const initializeCatalog = action({
       initialized: true,
       message: "Default evidence catalog is ready; billing remains disabled.",
     };
+  },
+});
+
+export const backfillEvidence = action({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ examined: v.number(), enriched: v.number() }),
+  handler: async (ctx, args) => {
+    await reauthorize(ctx);
+    return await ctx.runAction(backfillEvidenceRef, {
+      limit: Math.max(1, Math.min(100, Math.floor(args.limit ?? 50))),
+    });
   },
 });

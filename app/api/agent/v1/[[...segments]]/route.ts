@@ -93,9 +93,15 @@ async function handler(
   if (
     mapped.operation === "research_artifact" ||
     mapped.operation === "export_artifact" ||
-    mapped.operation === "export_manifest"
+    mapped.operation === "export_manifest" ||
+    mapped.operation === "dataset_version_artifact" ||
+    mapped.operation === "dataset_version_manifest"
   ) {
-    const jobId = mapped.input.jobId;
+    const jobId =
+      mapped.operation === "dataset_version_artifact" ||
+      mapped.operation === "dataset_version_manifest"
+        ? mapped.input.versionId
+        : mapped.input.jobId;
     if (typeof jobId !== "string")
       return agentDataJson(
         request,
@@ -108,9 +114,16 @@ async function handler(
         ? "research"
         : mapped.operation === "export_manifest"
           ? "export-manifest"
+          : mapped.operation === "dataset_version_artifact"
+            ? "dataset-version"
+            : mapped.operation === "dataset_version_manifest"
+              ? "dataset-version-manifest"
           : "export",
       jobId,
       authorization,
+      typeof mapped.input.datasetId === "string"
+        ? mapped.input.datasetId
+        : undefined,
     );
   }
   return relayAgentData(request, mapped.operation, mapped.input, authorization);

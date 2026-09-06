@@ -34,6 +34,7 @@ export type EvidenceExportManifestRecord = {
 };
 
 type ManifestInput = {
+  format?: "jsonl" | "parquet";
   datasetKey: string;
   datasetName: string;
   selection: {
@@ -43,6 +44,9 @@ type ManifestInput = {
   };
   scannedRecordCount: number;
   selectionScanTruncated: boolean;
+  selectionStrategy?: "balanced" | "recent";
+  snapshotAt?: number;
+  continueCursor?: string;
   artifactChecksum: string;
   artifactByteLength: number;
   generatedAt: string;
@@ -153,8 +157,13 @@ export function buildEvidenceDatasetManifest(input: ManifestInput) {
       name: input.datasetName,
       selection: input.selection,
     },
+    lineage: {
+      selectionStrategy: input.selectionStrategy ?? "balanced",
+      snapshotAt: input.snapshotAt ?? Date.parse(input.generatedAt),
+      continueCursor: input.continueCursor ?? null,
+    },
     artifact: {
-      format: "jsonl",
+      format: input.format ?? "jsonl",
       checksumAlgorithm: "sha256",
       checksum: input.artifactChecksum,
       byteLength: input.artifactByteLength,

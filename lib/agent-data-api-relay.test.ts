@@ -106,11 +106,52 @@ describe("agent data API relay", () => {
       }),
     ).toBeNull();
     expect(
+      mapRestRequest(
+        "GET",
+        ["datasets", "dataset-id", "versions"],
+        new URLSearchParams("limit=2&cursor=2026-01-02"),
+      ),
+    ).toEqual({
+      operation: "dataset_versions",
+      input: {
+        datasetId: "dataset-id",
+        limit: 2,
+        cursor: "2026-01-02",
+      },
+    });
+    expect(
+      mapRestRequest(
+        "GET",
+        ["datasets", "dataset-id", "versions", "version-id", "artifact"],
+        new URLSearchParams(),
+      ),
+    ).toEqual({
+      operation: "dataset_version_artifact",
+      input: { datasetId: "dataset-id", versionId: "version-id" },
+    });
+    expect(
+      mapRestRequest(
+        "GET",
+        ["datasets", "dataset-id", "versions", "version-id", "diff"],
+        new URLSearchParams("against=previous-id"),
+      ),
+    ).toEqual({
+      operation: "dataset_version_diff",
+      input: {
+        datasetId: "dataset-id",
+        versionId: "version-id",
+        againstVersionId: "previous-id",
+      },
+    });
+    expect(
       mapRestRequest("POST", ["exports"], new URLSearchParams(), {
         datasetId: "dataset-id",
         format: "parquet",
       }),
-    ).toBeNull();
+    ).toEqual({
+      operation: "export_create",
+      input: { datasetId: "dataset-id", format: "parquet", recordLimit: 100 },
+    });
     expect(
       mapRestRequest("POST", ["webhooks"], new URLSearchParams(), {
         subscriptionKey: "research",

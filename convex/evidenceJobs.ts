@@ -13,6 +13,7 @@ export const DEFAULT_EXPORT_LIMIT = 100;
 export const MAX_EXPORT_LIMIT = 500;
 const MAX_EXPORT_SCAN = 500;
 const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
+const MAX_EXPORT_CURSOR_LENGTH = 512;
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
 // Provider calls are bounded to two minutes. A much wider lease avoids
 // declaring healthy work stale while still giving duplicate workflow starts a
@@ -56,6 +57,8 @@ const EXPORT_JOB_RESULT = v.object({
   checksum: v.string(),
   recordCount: v.number(),
   format: v.union(v.literal("jsonl"), v.literal("parquet")),
+  continueCursor: v.optional(v.string()),
+  artifactByteLength: v.optional(v.number()),
 });
 const EXPORTED_DOCUMENT = v.object({
   schemaVersion: v.string(),
@@ -148,8 +151,52 @@ const EXPORT_RECORDS = v.object({
   }),
   scannedRecordCount: v.number(),
   selectionScanTruncated: v.boolean(),
+  selectionStrategy: v.union(v.literal("balanced"), v.literal("recent")),
+  snapshotAt: v.number(),
+  continueCursor: v.optional(v.string()),
   records: v.array(EXPORTED_DOCUMENT),
 });
+
+type ExportCursor = {
+  v: 1;
+  datasetId: string;
+  selectionStrategy: "balanced" | "recent";
+  snapshotAt: number;
+  offset: number;
+};
+
+function decodeExportCursor(
+  cursor: string | undefined,
+  datasetId: Id<"evidenceDatasets">,
+  strategy: "balanced" | "recent",
+): ExportCursor | null {
+  if (cursor === undefined) return null;
+  if (cursor.length > MAX_EXPORT_CURSOR_LENGTH)
+    throw new ConvexError({ code: "INVALID_EXPORT_CURSOR", message: "Export cursor is too long." });
+  try {
+    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<ExportCursor>;
+    if (
+      value.v !== 1 ||
+      value.datasetId !== String(datasetId) ||
+      value.selectionStrategy !== strategy ||
+      !Number.isSafeInteger(value.snapshotAt) ||
+      !Number.isSafeInteger(value.offset) ||
+      (value.snapshotAt ?? 0) <= 0 ||
+      (value.offset ?? -1) < 0
+    )
+      throw new Error("mismatch");
+    return value as ExportCursor;
+  } catch {
+    throw new ConvexError({
+      code: "INVALID_EXPORT_CURSOR",
+      message: "Export cursor is invalid or does not match this dataset and selection strategy.",
+    });
+  }
+}
+
+function encodeExportCursor(value: ExportCursor) {
+  return encodeURIComponent(JSON.stringify(value));
+}
 const ARTIFACT_DOWNLOAD = v.object({
   storageId: v.id("_storage"),
   contentType: v.string(),
@@ -159,6 +206,37 @@ const ARTIFACT_DOWNLOAD = v.object({
   expiresAt: v.number(),
   filename: v.string(),
 });
+const DATASET_VERSION_SUMMARY = v.object({
+  versionId: v.id("evidenceDatasetVersions"),
+  version: v.string(),
+  parentVersionId: v.optional(v.id("evidenceDatasetVersions")),
+  checksum: v.string(),
+  format: v.union(v.literal("jsonl"), v.literal("parquet")),
+  recordCount: v.number(),
+  artifactByteLength: v.number(),
+  sourceCoverageScore: v.number(),
+  citationCoverageScore: v.number(),
+  entityCoverageScore: v.number(),
+  claimCoverageScore: v.number(),
+  createdAt: v.number(),
+});
+
+function publicDatasetVersion(version: Doc<"evidenceDatasetVersions">) {
+  return {
+    versionId: version._id,
+    version: version.version,
+    parentVersionId: version.parentVersionId,
+    checksum: version.checksum,
+    format: version.format ?? ("jsonl" as const),
+    recordCount: version.recordCount,
+    artifactByteLength: version.artifactByteLength ?? 0,
+    sourceCoverageScore: version.sourceCoverageScore ?? 0,
+    citationCoverageScore: version.citationCoverageScore ?? 0,
+    entityCoverageScore: version.entityCoverageScore ?? 0,
+    claimCoverageScore: version.claimCoverageScore ?? 0,
+    createdAt: version.createdAt,
+  };
+}
 
 function bounded(value: string, name: string, maximum: number) {
   const normalized = value.trim();
@@ -243,6 +321,8 @@ function publicExportJob(job: Doc<"evidenceExportJobs">) {
     checksum: job.checksum,
     recordCount: job.recordCount,
     format: job.format,
+    continueCursor: job.continueCursor,
+    artifactByteLength: job.artifactByteLength,
   };
 }
 
@@ -315,6 +395,10 @@ export const createExportJob = internalMutation({
     datasetId: v.id("evidenceDatasets"),
     format: v.union(v.literal("jsonl"), v.literal("parquet")),
     recordLimit: v.optional(v.number()),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
+    cursor: v.optional(v.string()),
     idempotencyKey: v.string(),
     requestFingerprint: v.string(),
     quotaUnits: v.number(),
@@ -333,6 +417,9 @@ export const createExportJob = internalMutation({
     );
     const quotaUnits = boundedUnits(args.quotaUnits);
     const recordLimit = args.recordLimit ?? DEFAULT_EXPORT_LIMIT;
+    const selectionStrategy = args.selectionStrategy ?? "balanced";
+    if ((args.cursor?.length ?? 0) > MAX_EXPORT_CURSOR_LENGTH)
+      throw new ConvexError({ code: "INVALID_EXPORT_CURSOR", message: "Export cursor is too long." });
     if (
       !Number.isSafeInteger(recordLimit) ||
       recordLimit < 1 ||
@@ -373,6 +460,8 @@ export const createExportJob = internalMutation({
       status: "queued",
       format: args.format,
       recordLimit,
+      selectionStrategy,
+      cursor: args.cursor,
       checksum: "",
       recordCount: 0,
       resultJson: "",
@@ -576,7 +665,90 @@ export const resolveArtifactDownload = internalQuery({
       filename:
         args.kind === "research"
           ? `symbaiex-research-${job._id}.json`
-          : `symbaiex-export-${job._id}.jsonl`,
+          : `symbaiex-export-${job._id}.${(job as Doc<"evidenceExportJobs">).format}`,
+    };
+  },
+});
+
+/** Resolves an immutable historical snapshot without exposing a storage URL. */
+export const resolveDatasetVersionDownload = internalQuery({
+  args: {
+    agentUserId: v.id("users"),
+    datasetId: v.id("evidenceDatasets"),
+    versionId: v.id("evidenceDatasetVersions"),
+    kind: v.union(v.literal("artifact"), v.literal("manifest")),
+  },
+  returns: v.union(v.null(), ARTIFACT_DOWNLOAD),
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get("users", args.agentUserId);
+    if (
+      agent?.isAgent !== true ||
+      agent.agentStatus !== "active" ||
+      !agent.agentScopes?.includes("evidence")
+    )
+      return null;
+    const identity = await ctx.db
+      .query("agentIdentities")
+      .withIndex("by_userId", (q) => q.eq("userId", args.agentUserId))
+      .unique();
+    if (
+      identity === null ||
+      identity.status !== "active" ||
+      identity.ownerUserId === undefined
+    )
+      return null;
+    const dataset = await ctx.db.get("evidenceDatasets", args.datasetId);
+    const version = await ctx.db.get("evidenceDatasetVersions", args.versionId);
+    if (
+      dataset === null ||
+      dataset.status !== "active" ||
+      dataset.visibility !== "public" ||
+      version === null ||
+      version.datasetId !== dataset._id
+    )
+      return null;
+    const product = await ctx.db
+      .query("apiProducts")
+      .withIndex("by_productKey", (q) => q.eq("productKey", "evidence-export"))
+      .unique();
+    if (product === null || product.status !== "active") return null;
+    const explicit = await ctx.db
+      .query("apiEntitlements")
+      .withIndex("by_ownerUserId_and_productId", (q) =>
+        q.eq("ownerUserId", identity.ownerUserId!).eq("productId", product._id),
+      )
+      .unique();
+    const now = Date.now();
+    const entitled =
+      explicit !== null
+        ? explicit.status === "active" &&
+          explicit.startsAt <= now &&
+          (explicit.expiresAt === undefined || explicit.expiresAt > now)
+        : product.unitPriceMicroUsd === undefined && product.visibility === "public";
+    if (!entitled) return null;
+    const storageId =
+      args.kind === "manifest" ? version.manifestStorageId : version.artifactStorageId;
+    if (storageId === undefined) return null;
+    const metadata = await ctx.db.system.get("_storage", storageId);
+    if (metadata === null) return null;
+    const format = version.format ?? "jsonl";
+    return {
+      storageId,
+      contentType:
+        metadata.contentType ??
+        (args.kind === "manifest"
+          ? "application/json"
+          : format === "parquet"
+            ? "application/vnd.apache.parquet"
+            : "application/x-ndjson"),
+      byteLength: metadata.size,
+      sha256: metadata.sha256,
+      generatedAt: version.createdAt,
+      expiresAt: now + 5 * 60_000,
+      filename:
+        args.kind === "manifest"
+          ? `symbaiex-${dataset.datasetKey}-${version.version}-manifest.json`
+          : `symbaiex-${dataset.datasetKey}-${version.version}.${format}`,
     };
   },
 });
@@ -622,7 +794,12 @@ export const readExportInput = internalQuery({
 });
 
 export const readExportDocuments = internalQuery({
-  args: { datasetId: v.id("evidenceDatasets"), limit: v.optional(v.number()) },
+  args: {
+    datasetId: v.id("evidenceDatasets"),
+    limit: v.optional(v.number()),
+    selectionStrategy: v.optional(v.union(v.literal("balanced"), v.literal("recent"))),
+    cursor: v.optional(v.string()),
+  },
   returns: EXPORT_RECORDS,
   handler: async (ctx, args) => {
     const dataset = await ownedDataset(ctx, args.datasetId);
@@ -633,6 +810,10 @@ export const readExportDocuments = internalQuery({
         Math.floor(args.limit ?? DEFAULT_EXPORT_LIMIT),
       ),
     );
+    const selectionStrategy = args.selectionStrategy ?? "balanced";
+    const parsedCursor = decodeExportCursor(args.cursor, dataset._id, selectionStrategy);
+    const snapshotAt = parsedCursor?.snapshotAt ?? Date.now();
+    const offset = parsedCursor?.offset ?? 0;
     const includedKinds = dataset.includedKinds ?? [];
     const includedLicenseClasses = dataset.includedLicenseClasses ?? [
       "public-domain",
@@ -668,29 +849,49 @@ export const readExportDocuments = internalQuery({
               q.eq("status", "active").eq("visibility", "public"),
             )
             .take(100);
-    const scanLimitPerSource =
-      includedKinds.length === 0 ? limit : MAX_EXPORT_SCAN;
+    const scanLimitPerSource = MAX_EXPORT_SCAN;
     const sourceScans = await Promise.all(
       sources.map(async (source) => ({
         source,
         documents: await ctx.db
           .query("evidenceDocuments")
           .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
-            q.eq("sourceId", source._id).eq("visibility", "public"),
+            q
+              .eq("sourceId", source._id)
+              .eq("visibility", "public")
+              .lte("updatedAt", snapshotAt),
           )
           .order("desc")
           .take(scanLimitPerSource),
       })),
     );
-    const scanned = sourceScans
-      .flatMap(({ source, documents }) =>
-        documents.map((document) => ({ document, source })),
-      )
+    const eligibleBySource = sourceScans.map(({ source, documents }) => ({
+      source,
+      documents: documents.filter(
+        (document) =>
+          (allowedKinds.size === 0 || allowedKinds.has(document.kind)) &&
+          allowedLicenses.has(document.licenseClass) &&
+          (allowedSources.size === 0 || allowedSources.has(source.sourceKey)),
+      ),
+    }));
+    const recent = eligibleBySource
+      .flatMap(({ source, documents }) => documents.map((document) => ({ document, source })))
       .sort(
         (left, right) =>
           right.document.updatedAt - left.document.updatedAt ||
           String(left.document._id).localeCompare(String(right.document._id)),
       );
+    const balanced: typeof recent = [];
+    const maximumBucket = Math.max(0, ...eligibleBySource.map(({ documents }) => documents.length));
+    for (let index = 0; index < maximumBucket; index += 1)
+      for (const bucket of eligibleBySource) {
+        const document = bucket.documents[index];
+        if (document !== undefined) balanced.push({ document, source: bucket.source });
+      }
+    const selected = (selectionStrategy === "balanced" ? balanced : recent).slice(
+      offset,
+      offset + limit,
+    );
     const records: Array<{
       schemaVersion: string;
       datasetKey: string;
@@ -750,16 +951,8 @@ export const readExportDocuments = internalQuery({
         excerpt: string;
       }>;
     }> = [];
-    for (const candidate of scanned) {
-      if (records.length >= limit) break;
+    for (const candidate of selected) {
       const { document, source } = candidate;
-      if (allowedKinds.size > 0 && !allowedKinds.has(document.kind)) continue;
-      if (!allowedLicenses.has(document.licenseClass)) continue;
-      if (
-        source.visibility !== "public" ||
-        (allowedSources.size > 0 && !allowedSources.has(source.sourceKey))
-      )
-        continue;
       const version =
         document.currentVersionId === null
           ? null
@@ -890,10 +1083,23 @@ export const readExportDocuments = internalQuery({
         exportSchemaVersion:
           dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v3",
       },
-      scannedRecordCount: scanned.length,
+      scannedRecordCount: sourceScans.reduce((sum, scan) => sum + scan.documents.length, 0),
       selectionScanTruncated: sourceScans.some(
         ({ documents }) => documents.length === scanLimitPerSource,
       ),
+      selectionStrategy,
+      snapshotAt,
+      ...(offset + selected.length < (selectionStrategy === "balanced" ? balanced : recent).length
+        ? {
+            continueCursor: encodeExportCursor({
+              v: 1,
+              datasetId: String(dataset._id),
+              selectionStrategy,
+              snapshotAt,
+              offset: offset + selected.length,
+            }),
+          }
+        : {}),
       records,
     };
   },
@@ -911,6 +1117,83 @@ export const listActiveDatasetIds = internalQuery({
         )
         .take(20)
     ).map((dataset) => dataset._id),
+});
+
+export const listDatasetVersions = internalQuery({
+  args: {
+    datasetId: v.id("evidenceDatasets"),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    versions: v.array(DATASET_VERSION_SUMMARY),
+    continueCursor: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await ownedDataset(ctx, args.datasetId);
+    const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 20)));
+    const rows = await ctx.db
+      .query("evidenceDatasetVersions")
+      .withIndex("by_datasetId_and_version", (q) => {
+        const selected = q.eq("datasetId", args.datasetId);
+        return args.cursor === undefined
+          ? selected
+          : selected.lt("version", args.cursor);
+      })
+      .order("desc")
+      .take(limit + 1);
+    return {
+      versions: rows.slice(0, limit).map(publicDatasetVersion),
+      ...(rows.length > limit
+        ? { continueCursor: rows[limit - 1]!.version }
+        : {}),
+    };
+  },
+});
+
+export const diffDatasetVersions = internalQuery({
+  args: {
+    datasetId: v.id("evidenceDatasets"),
+    versionId: v.id("evidenceDatasetVersions"),
+    againstVersionId: v.optional(v.id("evidenceDatasetVersions")),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      current: DATASET_VERSION_SUMMARY,
+      previous: v.union(v.null(), DATASET_VERSION_SUMMARY),
+      delta: v.object({
+        records: v.number(),
+        artifactBytes: v.number(),
+        sourceCoverage: v.number(),
+        citationCoverage: v.number(),
+        entityCoverage: v.number(),
+        claimCoverage: v.number(),
+      }),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await ownedDataset(ctx, args.datasetId);
+    const current = await ctx.db.get("evidenceDatasetVersions", args.versionId);
+    if (current === null || current.datasetId !== args.datasetId) return null;
+    const previousId = args.againstVersionId ?? current.parentVersionId;
+    const previous = previousId === undefined ? null : await ctx.db.get("evidenceDatasetVersions", previousId);
+    if (previous !== null && previous.datasetId !== args.datasetId) return null;
+    const left = publicDatasetVersion(current);
+    const right = previous === null ? null : publicDatasetVersion(previous);
+    return {
+      current: left,
+      previous: right,
+      delta: {
+        records: left.recordCount - (right?.recordCount ?? 0),
+        artifactBytes: left.artifactByteLength - (right?.artifactByteLength ?? 0),
+        sourceCoverage: left.sourceCoverageScore - (right?.sourceCoverageScore ?? 0),
+        citationCoverage: left.citationCoverageScore - (right?.citationCoverageScore ?? 0),
+        entityCoverage: left.entityCoverageScore - (right?.entityCoverageScore ?? 0),
+        claimCoverage: left.claimCoverageScore - (right?.claimCoverageScore ?? 0),
+      },
+    };
+  },
 });
 
 /** Records a code-owned immutable snapshot without impersonating an enrolled agent. */
@@ -938,6 +1221,12 @@ export const recordSystemDatasetSnapshot = internalMutation({
     qualityMetricsJson: v.string(),
     manifestStorageId: v.id("_storage"),
     artifactStorageId: v.id("_storage"),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
+    scannedRecordCount: v.optional(v.number()),
+    selectionScanTruncated: v.optional(v.boolean()),
+    continueCursor: v.optional(v.string()),
   },
   returns: v.object({
     versionId: v.id("evidenceDatasetVersions"),
@@ -970,13 +1259,27 @@ export const recordSystemDatasetSnapshot = internalMutation({
         earliestObservedAt: args.earliestObservedAt,
         latestObservedAt: args.latestObservedAt,
         qualityMetricsJson: args.qualityMetricsJson,
+        selectionStrategy: args.selectionStrategy ?? "balanced",
+        scannedRecordCount: args.scannedRecordCount ?? 0,
+        selectionScanTruncated: args.selectionScanTruncated ?? false,
+        continueCursor: args.continueCursor,
       });
       return { versionId: existing._id, created: false };
     }
     const createdAt = Date.now();
+    const parentVersion = await ctx.db
+      .query("evidenceDatasetVersions")
+      .withIndex("by_datasetId_and_version", (q) =>
+        q.eq("datasetId", args.datasetId),
+      )
+      .order("desc")
+      .first();
     const versionId = await ctx.db.insert("evidenceDatasetVersions", {
       ...args,
       version: new Date(createdAt).toISOString(),
+      format: "jsonl",
+      parentVersionId: parentVersion?._id,
+      selectionStrategy: args.selectionStrategy ?? "balanced",
       createdAt,
     });
     return { versionId, created: true };
@@ -1130,6 +1433,8 @@ export const beginExportExecution = internalMutation({
       datasetId: v.id("evidenceDatasets"),
       format: v.union(v.literal("jsonl"), v.literal("parquet")),
       recordLimit: v.number(),
+      selectionStrategy: v.union(v.literal("balanced"), v.literal("recent")),
+      cursor: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1149,6 +1454,8 @@ export const beginExportExecution = internalMutation({
       datasetId: job.datasetId,
       format: job.format,
       recordLimit: job.recordLimit ?? DEFAULT_EXPORT_LIMIT,
+      selectionStrategy: job.selectionStrategy ?? "balanced",
+      cursor: job.cursor,
     };
   },
 });
@@ -1259,6 +1566,12 @@ export const completeExportJob = internalMutation({
     earliestObservedAt: v.optional(v.number()),
     latestObservedAt: v.optional(v.number()),
     qualityMetricsJson: v.optional(v.string()),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
+    scannedRecordCount: v.optional(v.number()),
+    selectionScanTruncated: v.optional(v.boolean()),
+    continueCursor: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -1274,6 +1587,12 @@ export const completeExportJob = internalMutation({
           Math.min(MAX_EXPORT_LIMIT, Math.floor(args.recordCount)),
         ),
         errorMessage: "",
+        continueCursor: args.continueCursor,
+        scannedRecordCount: Math.max(
+          0,
+          Math.floor(args.scannedRecordCount ?? 0),
+        ),
+        artifactByteLength: Math.max(0, Math.floor(args.artifactByteLength)),
         updatedAt: Date.now(),
       });
       await ctx.db.insert("evidenceArtifacts", {
@@ -1295,6 +1614,40 @@ export const completeExportJob = internalMutation({
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
+      const artifactUsageKey = `export:${job._id}:artifact-bytes`;
+      if (
+        (await ctx.db
+          .query("apiUsageLedger")
+          .withIndex("by_entryKey", (q) => q.eq("entryKey", artifactUsageKey))
+          .unique()) === null
+      ) {
+        const product = await ctx.db
+          .query("apiProducts")
+          .withIndex("by_productKey", (q) => q.eq("productKey", "evidence-export"))
+          .unique();
+        await ctx.db.insert("apiUsageLedger", {
+          entryKey: artifactUsageKey,
+          ownerUserId: job.ownerUserId,
+          agentId: job.agentId,
+          productId: product?._id,
+          idempotencyKey: `${job.idempotencyKey}:artifact-bytes`.slice(0, 200),
+          operation: "evidence.export.artifact_bytes",
+          entryType: "debit",
+          units: Math.max(0, Math.floor(args.artifactByteLength)),
+          entitlementSnapshotJson: JSON.stringify({ billingEnabled: false }),
+          costBasisJson: JSON.stringify({
+            meter: "artifact_bytes",
+            unitPriceMicroUsd: 0,
+            billingEnabled: false,
+          }),
+          metadataJson: JSON.stringify({
+            exportJobId: job._id,
+            recordCount: args.recordCount,
+            format: job.format,
+          }),
+          createdAt: Date.now(),
+        });
+      }
       const existingVersion = await ctx.db
         .query("evidenceDatasetVersions")
         .withIndex("by_datasetId_and_checksum", (q) =>
@@ -1302,6 +1655,13 @@ export const completeExportJob = internalMutation({
         )
         .unique();
       if (existingVersion === null) {
+        const parentVersion = await ctx.db
+          .query("evidenceDatasetVersions")
+          .withIndex("by_datasetId_and_version", (q) =>
+            q.eq("datasetId", job.datasetId),
+          )
+          .order("desc")
+          .first();
         const version = `${new Date().toISOString().slice(0, 10)}-${args.checksum.slice(0, 12)}`;
         const datasetVersionId = await ctx.db.insert(
           "evidenceDatasetVersions",
@@ -1362,6 +1722,17 @@ export const completeExportJob = internalMutation({
               20_000,
             ),
             manifestStorageId: args.datasetManifestStorageId,
+            artifactStorageId: args.resultStorageId,
+            format: job.format,
+            parentVersionId: parentVersion?._id,
+            selectionStrategy:
+              args.selectionStrategy ?? job.selectionStrategy ?? "balanced",
+            scannedRecordCount: Math.max(
+              0,
+              Math.floor(args.scannedRecordCount ?? 0),
+            ),
+            selectionScanTruncated: args.selectionScanTruncated ?? false,
+            continueCursor: args.continueCursor,
             createdAt: Date.now(),
           },
         );
@@ -1447,7 +1818,7 @@ export const failExportJob = internalMutation({
   },
 });
 
-async function isDatasetManifestStorage(
+async function isDatasetVersionStorage(
   ctx: MutationCtx,
   storageId: Id<"_storage">,
 ) {
@@ -1459,6 +1830,14 @@ async function isDatasetManifestStorage(
           q.eq("manifestStorageId", storageId),
         )
         .take(1)
+    ).length > 0 ||
+    (
+      await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_artifactStorageId", (q) =>
+          q.eq("artifactStorageId", storageId),
+        )
+        .take(1)
     ).length > 0
   );
 }
@@ -1467,10 +1846,9 @@ async function removeDownloadStorage(
   ctx: MutationCtx,
   storageId: Id<"_storage">,
 ) {
-  // A dataset version's immutable manifest is not a downloadable job artifact.
-  // Never delete shared storage, including historical exports created before
-  // manifests were separated.
-  if (await isDatasetManifestStorage(ctx, storageId)) return false;
+  // Dataset-version artifacts and manifests follow dataset retention rather
+  // than the shorter job-download TTL. Never delete shared version storage.
+  if (await isDatasetVersionStorage(ctx, storageId)) return false;
   if ((await ctx.db.system.get("_storage", storageId)) === null) return false;
   await ctx.storage.delete(storageId);
   return true;
@@ -1568,6 +1946,53 @@ export const cleanupExpiredArtifacts = internalMutation({
       exportCleared += 1;
     }
     return { researchCleared, exportCleared };
+  },
+});
+
+/** Applies each dataset's bounded retention policy while preserving lineage depth. */
+export const cleanupDatasetVersions = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ deletedVersions: v.number(), deletedBytes: v.number() }),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(20, Math.floor(args.limit ?? 10)));
+    const datasets = await ctx.db
+      .query("evidenceDatasets")
+      .withIndex("by_visibility_and_status_and_updatedAt", (q) =>
+        q.eq("visibility", "public").eq("status", "active"),
+      )
+      .take(20);
+    let deletedVersions = 0;
+    let deletedBytes = 0;
+    for (const dataset of datasets) {
+      if (deletedVersions >= limit) break;
+      if (dataset.snapshotRetentionDays === undefined) continue;
+      const minimum = Math.max(
+        1,
+        Math.min(50, Math.floor(dataset.minimumRetainedVersions ?? 10)),
+      );
+      const cutoff = Date.now() - dataset.snapshotRetentionDays * 86_400_000;
+      const versions = await ctx.db
+        .query("evidenceDatasetVersions")
+        .withIndex("by_datasetId_and_version", (q) =>
+          q.eq("datasetId", dataset._id),
+        )
+        .order("desc")
+        .take(100);
+      for (const version of versions.slice(minimum)) {
+        if (deletedVersions >= limit || version.createdAt >= cutoff) continue;
+        for (const storageId of [version.manifestStorageId, version.artifactStorageId]) {
+          if (
+            storageId !== undefined &&
+            (await ctx.db.system.get("_storage", storageId)) !== null
+          )
+            await ctx.storage.delete(storageId);
+        }
+        deletedBytes += version.artifactByteLength ?? 0;
+        await ctx.db.delete("evidenceDatasetVersions", version._id);
+        deletedVersions += 1;
+      }
+    }
+    return { deletedVersions, deletedBytes };
   },
 });
 
@@ -1674,6 +2099,8 @@ export const ensureCatalog = internalMutation({
         includedLicenseClasses: [...definition.includedLicenseClasses],
         sourceKeys: [...definition.sourceKeys],
         exportSchemaVersion: "symbaiex-evidence-document-v3",
+        snapshotRetentionDays: 365,
+        minimumRetainedVersions: 10,
         visibility: "public" as const,
         status: "active" as const,
         updatedAt: now,

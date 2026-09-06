@@ -347,8 +347,9 @@ function replySweepOutcomeForClaimReason(reason: string) {
 }
 
 export function parseSukiReplyDecision(output: string): SukiReplyDecision {
-  const decision = tagValue(output, "decision")?.toLowerCase();
-  const reason = compactText(tagValue(output, "reason") ?? "", 160);
+  const repaired = repairedDecisionFields(output);
+  const decision = repaired.decision?.toLowerCase();
+  const reason = compactText(repaired.reason ?? "", 160);
   if (decision !== "reply" && decision !== "ignore") {
     throw new Error("Suki returned an invalid reply decision.");
   }
@@ -359,7 +360,7 @@ export function parseSukiReplyDecision(output: string): SukiReplyDecision {
     return { decision, reason };
   }
   const body =
-    tagValue(output, "body")
+    repaired.body
       ?.replace(/\u0000/g, "")
       .trim() ?? "";
   if (body.length < 20 || body.length > 6_000) {
@@ -367,6 +368,33 @@ export function parseSukiReplyDecision(output: string): SukiReplyDecision {
   }
   assertAgentPublicationHygiene(body);
   return { decision, reason, body };
+}
+
+/** Accepts the strict XML contract plus deterministic JSON emitted by weaker routes. */
+function repairedDecisionFields(output: string) {
+  const tagged = {
+    decision: tagValue(output, "decision"),
+    reason: tagValue(output, "reason"),
+    body: tagValue(output, "body"),
+  };
+  if (tagged.decision !== undefined) return tagged;
+  const candidate = output
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  try {
+    const value: unknown = JSON.parse(candidate);
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return tagged;
+    const record = value as Record<string, unknown>;
+    return {
+      decision: typeof record.decision === "string" ? record.decision : undefined,
+      reason: typeof record.reason === "string" ? record.reason : undefined,
+      body: typeof record.body === "string" ? record.body : undefined,
+    };
+  } catch {
+    return tagged;
+  }
 }
 
 export function assertAiSourceReplyGrounding(body: string, sourceBody: string) {

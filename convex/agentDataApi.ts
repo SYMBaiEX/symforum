@@ -25,6 +25,8 @@ const operationValidator = v.union(
   v.literal("claim_timeline"),
   v.literal("products"),
   v.literal("datasets"),
+  v.literal("dataset_versions"),
+  v.literal("dataset_version_diff"),
   v.literal("benchmarks"),
   v.literal("quota"),
   v.literal("entitlements"),
@@ -61,6 +63,8 @@ type Operation =
   | "claim_timeline"
   | "products"
   | "datasets"
+  | "dataset_versions"
+  | "dataset_version_diff"
   | "benchmarks"
   | "quota"
   | "entitlements"
@@ -87,6 +91,7 @@ type EvidenceIdTable =
   | "evidenceDocumentVersions"
   | "evidenceClaims"
   | "evidenceDatasets"
+  | "evidenceDatasetVersions"
   | "evidenceResearchJobs"
   | "evidenceExportJobs";
 
@@ -298,14 +303,15 @@ function productForOperation(operation: Operation) {
   if (operation === "claim_timeline") return "evidence-verify";
   if (operation.startsWith("research_")) return "evidence-research";
   if (operation.startsWith("export_")) return "evidence-export";
+  if (operation.startsWith("dataset_version")) return "evidence-export";
   if (operation === "benchmarks") return "evidence-benchmarks";
   if (operation.startsWith("webhooks_")) return "evidence-webhooks";
   return "evidence-search";
 }
 
-function unitsForOperation(operation: Operation) {
+function unitsForOperation(operation: Operation, exportRecords = 0) {
   if (operation === "research_create") return 5;
-  if (operation === "export_create") return 10;
+  if (operation === "export_create") return Math.max(1, exportRecords);
   return 1;
 }
 
@@ -389,8 +395,24 @@ export const dispatch = internalMutation({
         ? requiredText(input, "claimKey", 200)
         : null;
     const datasetId =
-      args.operation === "export_create"
+      args.operation === "export_create" ||
+      args.operation === "dataset_versions" ||
+      args.operation === "dataset_version_diff"
         ? normalizedId(ctx, "evidenceDatasets", input, "datasetId")
+        : null;
+    const datasetVersionId =
+      args.operation === "dataset_version_diff"
+        ? normalizedId(ctx, "evidenceDatasetVersions", input, "versionId")
+        : null;
+    const againstVersionId =
+      args.operation === "dataset_version_diff" &&
+      typeof input.againstVersionId === "string"
+        ? normalizedId(
+            ctx,
+            "evidenceDatasetVersions",
+            input,
+            "againstVersionId",
+          )
         : null;
     const requestedExportRecordLimit =
       args.operation === "export_create"
@@ -418,11 +440,12 @@ export const dispatch = internalMutation({
     if (
       args.operation === "export_create" &&
       input.format !== undefined &&
-      input.format !== "jsonl"
+      input.format !== "jsonl" &&
+      input.format !== "parquet"
     ) {
       throw new ConvexError({
         code: "INVALID_REQUEST",
-        message: "Only jsonl exports are currently supported.",
+        message: "format must be jsonl or parquet.",
       });
     }
     const webhookSubscriptionKey =
@@ -509,7 +532,10 @@ export const dispatch = internalMutation({
       });
     }
 
-    const requestedUnits = unitsForOperation(args.operation);
+    const requestedUnits = unitsForOperation(
+      args.operation,
+      requestedExportRecordLimit ?? 0,
+    );
     const quota: AgentQuotaConsumeResult = await ctx.runMutation(
       internal.agentQuota.consumeAgentQuota,
       {
@@ -537,7 +563,14 @@ export const dispatch = internalMutation({
         requestFingerprint: args.requestFingerprint,
         operation: `evidence.${args.operation}`,
         units: requestedUnits,
-        metadataJson: "{}",
+        metadataJson:
+          args.operation === "export_create"
+            ? JSON.stringify({
+                meter: "requested_records",
+                recordLimit: requestedExportRecordLimit,
+                format: input.format ?? "jsonl",
+              })
+            : "{}",
       },
     );
 
@@ -616,6 +649,18 @@ export const dispatch = internalMutation({
       case "datasets":
         return await ctx.runQuery(api.evidence.listDatasets, {
           limit: requestedLimit,
+        });
+      case "dataset_versions":
+        return await ctx.runQuery(internal.evidenceJobs.listDatasetVersions, {
+          datasetId: datasetId!,
+          limit: requestedLimit,
+          cursor: typeof input.cursor === "string" ? input.cursor : undefined,
+        });
+      case "dataset_version_diff":
+        return await ctx.runQuery(internal.evidenceJobs.diffDatasetVersions, {
+          datasetId: datasetId!,
+          versionId: datasetVersionId!,
+          againstVersionId: againstVersionId ?? undefined,
         });
       case "benchmarks":
         return {
@@ -718,8 +763,13 @@ export const dispatch = internalMutation({
             ownerUserId: principal.ownerUserId,
             agentId: principal.agentId,
             datasetId: datasetId!,
-            format: "jsonl",
+            format:
+              input.format === "parquet" ? "parquet" : "jsonl",
             recordLimit: requestedExportRecordLimit!,
+            selectionStrategy:
+              input.selectionStrategy === "recent" ? "recent" : "balanced",
+            cursor:
+              typeof input.cursor === "string" ? input.cursor : undefined,
             idempotencyKey: args.idempotencyKey,
             requestFingerprint: args.requestFingerprint,
             quotaUnits: requestedUnits,

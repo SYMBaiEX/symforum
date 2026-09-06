@@ -404,7 +404,7 @@ describe("NVD evidence adapters", () => {
       enqueueDocumentEvent: true,
       replayingCommittedVersion: true,
     });
-    expect(nvdPostVersionWork("history", true).writeCveClaim).toBe(false);
+    expect(nvdPostVersionWork("history", true).writeCveClaim).toBe(true);
   });
 
   test("uses bounded Retry-After backoff and retains terms attribution", () => {

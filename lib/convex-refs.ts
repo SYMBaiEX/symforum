@@ -1664,6 +1664,31 @@ export const convexRefs = {
           errorMessage: string;
           updatedAt: number;
         }>;
+        operations: {
+          window: string;
+          completedExports: number;
+          failedExports: number;
+          exportedRecords: number;
+          scannedRecords: number;
+          artifactBytes: number;
+          readAmplification: number;
+          billableRecordUnits: number;
+          forumReplies: number;
+          forumReplyFailures: number;
+          routeFallbackRate: number;
+        };
+        datasetQuality: Array<{
+          datasetKey: string;
+          version: string;
+          recordCount: number;
+          artifactByteLength: number;
+          sourceCoverageScore: number;
+          citationCoverageScore: number;
+          entityCoverageScore: number;
+          claimCoverageScore: number;
+          freshnessScore: number;
+          createdAt: number;
+        }>;
       }
     >("evidenceAdmin:dashboard"),
     setSourceStatus: makeFunctionReference<
@@ -1688,6 +1713,11 @@ export const convexRefs = {
       Record<string, never>,
       { initialized: boolean; message: string }
     >("evidenceAdmin:initializeCatalog"),
+    backfillEvidence: makeFunctionReference<
+      "action",
+      { limit?: number },
+      { examined: number; enriched: number }
+    >("evidenceAdmin:backfillEvidence"),
   },
   admin: {
     viewer: makeFunctionReference<

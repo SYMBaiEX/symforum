@@ -15,6 +15,12 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_ITEMS_PER_RUN = 100;
 const USER_AGENT = "SYMBaiEX-Evidence-Ingestion/1.0 (+https://symbaiex.com)";
+const ENRICHMENT_BACKFILL_SOURCES = [
+  "nvd-cve-change-history",
+  "cisa-kev",
+  "github-advisories",
+  "github-releases",
+] as const;
 
 type EvidenceKind = "document" | "advisory" | "release" | "paper";
 type LicenseClass =
@@ -84,6 +90,26 @@ type IngestionState = {
 // These bounded adapters are single-request snapshots. They do not implement
 // pagination, so a generic RFC 8288 Link header is never a safe checkpoint.
 const UNSUPPORTED_ADAPTER_CURSOR = "";
+
+const backfillCandidatesRef = makeFunctionReference<
+  "query",
+  { limit: number },
+  Array<{
+    documentVersionId: string;
+    externalKey: string;
+    canonicalUrl: string;
+    kind: EvidenceKind;
+    title: string;
+    excerpt: string;
+    searchText: string;
+    tags: string[];
+    authors: string[];
+    publishedAt?: number;
+    sourceRevision: string;
+    sourceUpdatedAt: number;
+    metadataJson: string;
+  }>
+>("evidenceIngestion:listEnrichmentBackfillCandidates");
 
 /** These adapters only checkpoint HTTP validators; Link pagination is ignored. */
 export function adapterCheckpointCursor() {
@@ -481,6 +507,39 @@ function supportedClaim(
  */
 export function deriveEvidence(document: NormalizedDocument): DerivedEvidence {
   const metadata = document.metadata;
+  const nvdCve = sanitizeExcerpt(metadata.cveId, 100).toUpperCase();
+  if (nvdCve && /^CVE-\d{4}-\d{4,}$/i.test(nvdCve)) {
+    const cveKey = entityKey("cve", nvdCve);
+    return {
+      entities: [
+        {
+          entityKey: cveKey,
+          kind: "concept",
+          name: nvdCve,
+          aliases: [],
+          role: "subject",
+        },
+        {
+          entityKey: "organization:nvd",
+          kind: "organization",
+          name: "National Vulnerability Database",
+          aliases: ["NVD"],
+          role: "publisher",
+        },
+      ],
+      claims: [
+        supportedClaim(
+          `nvd-cve:${nvdCve.toLowerCase()}`,
+          cveKey,
+          `${nvdCve} has a record in the National Vulnerability Database.`,
+          "published-in-nvd",
+          "National Vulnerability Database",
+          document.canonicalUrl,
+          document.excerpt,
+        ),
+      ],
+    };
+  }
   const cve = sanitizeExcerpt(metadata.cve, 100).toUpperCase();
   if (cve && /^CVE-\d{4}-\d{4,}$/i.test(cve)) {
     const cveKey = entityKey("cve", cve);
@@ -707,6 +766,126 @@ async function enrichDocument(
     }
   }
 }
+
+/** Finds a bounded batch of legacy versions that predate deterministic enrichment. */
+export const listEnrichmentBackfillCandidates = internalQuery({
+  args: { limit: v.number() },
+  returns: v.array(
+    v.object({
+      documentVersionId: v.id("evidenceDocumentVersions"),
+      externalKey: v.string(),
+      canonicalUrl: v.string(),
+      kind: v.union(
+        v.literal("document"),
+        v.literal("advisory"),
+        v.literal("release"),
+        v.literal("paper"),
+      ),
+      title: v.string(),
+      excerpt: v.string(),
+      searchText: v.string(),
+      tags: v.array(v.string()),
+      authors: v.array(v.string()),
+      publishedAt: v.optional(v.number()),
+      sourceRevision: v.string(),
+      sourceUpdatedAt: v.number(),
+      metadataJson: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit)));
+    const results = [];
+    for (const sourceKey of ENRICHMENT_BACKFILL_SOURCES) {
+      if (results.length >= limit) break;
+      const source = await ctx.db
+        .query("evidenceSources")
+        .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+        .unique();
+      if (source === null) continue;
+      const documents = await ctx.db
+        .query("evidenceDocuments")
+        .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
+          q.eq("sourceId", source._id).eq("visibility", "public"),
+        )
+        .order("desc")
+        .take(250);
+      for (const document of documents) {
+        if (results.length >= limit || document.currentVersionId === null)
+          break;
+        const version = await ctx.db.get(
+          "evidenceDocumentVersions",
+          document.currentVersionId,
+        );
+        if (version === null) continue;
+        const existing = await ctx.db
+          .query("evidenceClaimCitations")
+          .withIndex("by_documentVersionId", (q) =>
+            q.eq("documentVersionId", version._id),
+          )
+          .first();
+        if (existing !== null) continue;
+        results.push({
+          documentVersionId: version._id,
+          externalKey: document.externalKey,
+          canonicalUrl: document.canonicalUrl,
+          kind: document.kind as EvidenceKind,
+          title: document.title,
+          excerpt: document.excerpt,
+          searchText: document.searchText,
+          tags: document.tags,
+          authors: document.authors,
+          ...(document.publishedAt === null
+            ? {}
+            : { publishedAt: document.publishedAt }),
+          sourceRevision: version.sourceRevision,
+          sourceUpdatedAt: version.sourceUpdatedAt,
+          metadataJson: version.metadataJson,
+        });
+      }
+    }
+    return results;
+  },
+});
+
+/** Reconstructs entity, claim, and citation rows without model inference. */
+export const backfillDerivedEvidence = internalAction({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ examined: v.number(), enriched: v.number() }),
+  handler: async (ctx, args) => {
+    const candidates = await ctx.runQuery(backfillCandidatesRef, {
+      limit: Math.max(1, Math.min(100, Math.floor(args.limit ?? 50))),
+    });
+    let enriched = 0;
+    for (const candidate of candidates) {
+      let metadata: Record<string, unknown> = {};
+      try {
+        const parsed: unknown = JSON.parse(candidate.metadataJson);
+        if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed))
+          metadata = parsed as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const document: NormalizedDocument = {
+        externalKey: candidate.externalKey,
+        canonicalUrl: candidate.canonicalUrl,
+        kind: candidate.kind,
+        title: candidate.title,
+        excerpt: candidate.excerpt,
+        searchText: candidate.searchText,
+        tags: candidate.tags,
+        authors: candidate.authors,
+        publishedAt: candidate.publishedAt,
+        sourceRevision: candidate.sourceRevision,
+        sourceUpdatedAt: candidate.sourceUpdatedAt,
+        metadata,
+      };
+      if (deriveEvidence(document).claims.length === 0) continue;
+      await enrichDocument(ctx, document, candidate.documentVersionId, Date.now());
+      enriched += 1;
+    }
+    return { examined: candidates.length, enriched };
+  },
+});
 
 export const sourceState = internalQuery({
   args: { sourceKey: v.string() },

@@ -105,6 +105,27 @@ async function executeCommand(
       return await client.products(limit);
     case "datasets":
       return await client.datasets(limit);
+    case "dataset-versions":
+      return await client.datasetVersions(
+        requiredArgument(args, "dataset ID"),
+        limit ?? 20,
+        option(args, "--cursor"),
+      );
+    case "dataset-version-diff":
+      return await client.datasetVersionDiff(
+        requiredArgument(args, "dataset ID"),
+        requiredArgumentAfter(args, "version ID", 1),
+        option(args, "--against"),
+      );
+    case "dataset-version-download": {
+      const output = requiredOption(args, "--output");
+      const artifact = await client.datasetVersionArtifact(
+        requiredArgument(args, "dataset ID"),
+        requiredArgumentAfter(args, "version ID", 1),
+      );
+      await writeFile(output, artifact, { flag: "wx", mode: 0o600 });
+      return { output, byteLength: artifact.byteLength };
+    }
     case "benchmarks":
       return await client.benchmarks(limit);
     case "entitlements":
@@ -130,6 +151,9 @@ async function executeCommand(
         requiredArgument(args, "dataset ID"),
         requiredOption(args, "--idempotency-key"),
         optionalRecordLimit(args),
+        exportFormat(args),
+        exportSelectionStrategy(args),
+        option(args, "--cursor"),
       );
     case "export-job":
       return await client.exportJob(requiredArgument(args, "export job ID"));
@@ -238,6 +262,10 @@ const VALUE_OPTIONS = new Set([
   "--token-file",
   "--output",
   "--records",
+  "--format",
+  "--selection",
+  "--cursor",
+  "--against",
 ]);
 
 function positionalArguments(args: string[]) {
@@ -284,6 +312,18 @@ function optionalRecordLimit(args: string[]) {
   return Number(value);
 }
 
+function exportFormat(args: string[]): "jsonl" | "parquet" {
+  const value = option(args, "--format") ?? "jsonl";
+  if (value === "jsonl" || value === "parquet") return value;
+  throw new UsageError("--format must be jsonl or parquet.");
+}
+
+function exportSelectionStrategy(args: string[]): "balanced" | "recent" {
+  const value = option(args, "--selection") ?? "balanced";
+  if (value === "balanced" || value === "recent") return value;
+  throw new UsageError("--selection must be balanced or recent.");
+}
+
 function webhookStatus(value: string) {
   if (value === "active" || value === "paused" || value === "revoked")
     return value;
@@ -312,13 +352,15 @@ Auth: login
 Discovery: manifest, status, quota, sources, source-registry
 Search: search, universal-search, semantic-search, entities
 Evidence: document, changes, claim-timeline, verify-claim
-Catalogs: products, datasets, benchmarks, entitlements, usage
+Catalogs: products, datasets, dataset-versions, dataset-version-diff,
+  dataset-version-download, benchmarks, entitlements, usage
 Jobs: research-create, research-job, export-create, export-job, export-manifest,
   export-download
 Webhooks: webhook-availability, webhook-list, webhook-health,
   webhook-history, webhook-status, webhook-test
 
-Options: --limit <1-50>, --records <1-500>, --idempotency-key <key>, --token-file <path>, --output <path>,
+Options: --limit <1-50>, --records <1-500>, --format <jsonl|parquet>,
+  --selection <balanced|recent>, --cursor <opaque>, --idempotency-key <key>, --token-file <path>, --output <path>,
   --origin <origin>. Provider-capable and write commands require an explicit
   idempotency key.`;
 

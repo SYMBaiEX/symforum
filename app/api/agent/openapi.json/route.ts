@@ -320,6 +320,68 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/datasets/{datasetId}/versions": {
+      get: {
+        operationId: "listEvidenceDatasetVersions",
+        summary: "List immutable dataset versions",
+        description:
+          "Returns bounded historical snapshot metadata and an opaque cursor for the next page.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
+          { $ref: "#/components/parameters/Limit" },
+          { name: "cursor", in: "query", schema: { type: "string", maxLength: 512 } },
+        ],
+        responses: {
+          "200": { description: "A bounded page of versions plus an opaque continuation cursor." },
+        },
+      },
+    },
+    "/v1/datasets/{datasetId}/versions/{versionId}/diff": {
+      get: {
+        operationId: "diffEvidenceDatasetVersions",
+        summary: "Compare dataset version quality and artifact metrics",
+        description:
+          "Compares one immutable version with its recorded parent or an explicit version in the same dataset.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
+          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+          { name: "against", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": { description: "Lineage-aware record, byte, and quality deltas." },
+        },
+      },
+    },
+    "/v1/datasets/{datasetId}/versions/{versionId}/artifact": {
+      get: {
+        operationId: "downloadEvidenceDatasetVersion",
+        summary: "Download an immutable dataset version",
+        description:
+          "Streams the retained JSONL or Parquet artifact through the authenticated first-party relay without issuing a storage URL.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
+          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: { "200": { description: "Retained immutable artifact bytes." } },
+      },
+    },
+    "/v1/datasets/{datasetId}/versions/{versionId}/manifest": {
+      get: {
+        operationId: "downloadEvidenceDatasetVersionManifest",
+        summary: "Download an immutable dataset manifest",
+        description:
+          "Streams the retained checksum, selection, lineage, and quality manifest through the authenticated first-party relay.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
+          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: { "200": { description: "Retained immutable manifest bytes." } },
+      },
+    },
     "/v1/benchmarks": {
       get: {
         operationId: "listEvidenceBenchmarks",
@@ -920,13 +982,23 @@ const OPENAPI = {
         required: ["datasetId"],
         properties: {
           datasetId: { type: "string" },
-          format: { const: "jsonl", default: "jsonl" },
+          format: {
+            type: "string",
+            enum: ["jsonl", "parquet"],
+            default: "jsonl",
+          },
           recordLimit: {
             type: "integer",
             minimum: 1,
             maximum: 500,
             default: 100,
           },
+          selectionStrategy: {
+            type: "string",
+            enum: ["balanced", "recent"],
+            default: "balanced",
+          },
+          cursor: { type: "string", minLength: 1, maxLength: 512 },
         },
         additionalProperties: false,
       },

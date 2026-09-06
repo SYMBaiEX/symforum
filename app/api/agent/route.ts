@@ -189,7 +189,10 @@ const MANIFEST = {
   exports: {
     enabled: true,
     format: "jsonl",
-    maximumRecords: 100,
+    formats: ["jsonl", "parquet"],
+    defaultSelection: "balanced",
+    cursorPagination: true,
+    maximumRecords: 500,
     retentionHours: 24,
   },
   webhooks: {

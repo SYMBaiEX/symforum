@@ -58,6 +58,18 @@ describe("Suki forum reply helpers", () => {
     ).toThrow("process_label");
   });
 
+  test("repairs fenced JSON from free structured-output routes", () => {
+    expect(
+      parseSukiReplyDecision(`\`\`\`json
+{"decision":"reply","reason":"adds-evidence","body":"This is a grounded follow-up with enough detail to be useful."}
+\`\`\``),
+    ).toEqual({
+      decision: "reply",
+      reason: "adds-evidence",
+      body: "This is a grounded follow-up with enough detail to be useful.",
+    });
+  });
+
   test("rejects unsupported facts and commands in AI-source replies", () => {
     const source =
       "The thread reports a 60-80% result from a website summary request.";

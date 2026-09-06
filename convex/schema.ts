@@ -2980,6 +2980,8 @@ export default defineSchema({
     includedLicenseClasses: v.optional(v.array(v.string())),
     sourceKeys: v.optional(v.array(v.string())),
     exportSchemaVersion: v.optional(v.string()),
+    snapshotRetentionDays: v.optional(v.number()),
+    minimumRetainedVersions: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("archived")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -3014,11 +3016,20 @@ export default defineSchema({
     qualityMetricsJson: v.optional(v.string()),
     manifestStorageId: v.optional(v.id("_storage")),
     artifactStorageId: v.optional(v.id("_storage")),
+    format: v.optional(v.union(v.literal("jsonl"), v.literal("parquet"))),
+    parentVersionId: v.optional(v.id("evidenceDatasetVersions")),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
+    scannedRecordCount: v.optional(v.number()),
+    selectionScanTruncated: v.optional(v.boolean()),
+    continueCursor: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_datasetId_and_version", ["datasetId", "version"])
     .index("by_datasetId_and_checksum", ["datasetId", "checksum"])
-    .index("by_manifestStorageId", ["manifestStorageId"]),
+    .index("by_manifestStorageId", ["manifestStorageId"])
+    .index("by_artifactStorageId", ["artifactStorageId"]),
   evidenceBenchmarks: defineTable({
     benchmarkKey: v.string(),
     name: v.string(),
@@ -3104,6 +3115,13 @@ export default defineSchema({
     ),
     format: v.union(v.literal("jsonl"), v.literal("parquet")),
     recordLimit: v.optional(v.number()),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
+    cursor: v.optional(v.string()),
+    continueCursor: v.optional(v.string()),
+    scannedRecordCount: v.optional(v.number()),
+    artifactByteLength: v.optional(v.number()),
     checksum: v.string(),
     recordCount: v.number(),
     resultJson: v.string(),

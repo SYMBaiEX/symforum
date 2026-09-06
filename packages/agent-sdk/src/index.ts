@@ -471,6 +471,49 @@ export class AgentClient {
     });
   }
 
+  async datasetVersions<T = unknown>(
+    datasetId: string,
+    limit = 20,
+    cursor?: string,
+  ): Promise<T> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor !== undefined) params.set("cursor", cursor);
+    return await this.get<T>(
+      `datasets/${encodePathSegment(datasetId)}/versions?${params}`,
+    );
+  }
+
+  async datasetVersionDiff<T = unknown>(
+    datasetId: string,
+    versionId: string,
+    againstVersionId?: string,
+  ): Promise<T> {
+    const suffix = againstVersionId
+      ? `?against=${encodeURIComponent(againstVersionId)}`
+      : "";
+    return await this.get<T>(
+      `datasets/${encodePathSegment(datasetId)}/versions/${encodePathSegment(versionId)}/diff${suffix}`,
+    );
+  }
+
+  async datasetVersionArtifact(
+    datasetId: string,
+    versionId: string,
+  ): Promise<Uint8Array> {
+    return await this.requestBytes(
+      `/api/agent/v1/datasets/${encodePathSegment(datasetId)}/versions/${encodePathSegment(versionId)}/artifact`,
+    );
+  }
+
+  async datasetVersionManifest(
+    datasetId: string,
+    versionId: string,
+  ): Promise<Uint8Array> {
+    return await this.requestBytes(
+      `/api/agent/v1/datasets/${encodePathSegment(datasetId)}/versions/${encodePathSegment(versionId)}/manifest`,
+    );
+  }
+
   async researchJob<T = unknown>(jobId: string): Promise<T> {
     return await this.get<T>(`research-jobs/${encodePathSegment(jobId)}`);
   }
@@ -496,6 +539,9 @@ export class AgentClient {
     datasetId: string,
     idempotencyKey: string,
     recordLimit = 100,
+    format: "jsonl" | "parquet" = "jsonl",
+    selectionStrategy: "balanced" | "recent" = "balanced",
+    cursor?: string,
   ): Promise<ExportJob> {
     if (
       !Number.isSafeInteger(recordLimit) ||
@@ -503,12 +549,16 @@ export class AgentClient {
       recordLimit > 500
     )
       throw new TypeError("recordLimit must be an integer between 1 and 500");
+    if (cursor !== undefined && (!cursor || cursor.length > 512))
+      throw new TypeError("cursor must be between 1 and 512 characters");
     return await this.request<ExportJob>("/api/agent/v1/exports", {
       method: "POST",
       body: {
         datasetId: validIdentifier(datasetId, "datasetId", 512),
-        format: "jsonl",
+        format,
         recordLimit,
+        selectionStrategy,
+        ...(cursor === undefined ? {} : { cursor }),
       },
       idempotencyKey: validIdempotencyKey(idempotencyKey),
     });

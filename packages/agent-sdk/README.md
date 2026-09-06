@@ -52,9 +52,11 @@ there is no separate timeline status.
 
 `datasets()` returns typed selection and snapshot-quality metadata, including
 checksums, schema versions, source/citation counts, completeness, freshness,
-and temporal coverage. After an export completes, use `exportArtifact(jobId)`
-for JSONL and `exportManifest(jobId)` for its immutable provenance and coverage
-manifest; both remain bearer-authenticated first-party streams.
+and temporal coverage. `createExport()` supports source-balanced cursor pages
+in JSONL or Parquet. `datasetVersions()`, `datasetVersionDiff()`,
+`datasetVersionArtifact()`, and `datasetVersionManifest()` expose retained
+history and lineage. Every download remains a bearer-authenticated first-party
+stream.
 
 ## Release checks
 

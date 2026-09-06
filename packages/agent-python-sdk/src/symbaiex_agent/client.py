@@ -264,16 +264,47 @@ class AgentClient:
         data = self._json("POST", "/api/agent/v1/research-jobs", body={"query": _query(query)}, idempotency_key=idempotency_key)
         return ResearchJob.from_json(_as_mapping(data))
 
+    def dataset_versions(self, dataset_id: str, *, limit: int = 20, cursor: str | None = None) -> JsonValue:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
+            raise TypeError("limit must be an integer between 1 and 50")
+        query = f"?limit={limit}"
+        if cursor is not None:
+            from urllib.parse import quote
+            query += f"&cursor={quote(cursor, safe='')}"
+        return self._get(f"datasets/{_path_id(dataset_id, 'dataset_id')}/versions{query}")
+
+    def dataset_version_diff(self, dataset_id: str, version_id: str, *, against_version_id: str | None = None) -> JsonValue:
+        path = f"datasets/{_path_id(dataset_id, 'dataset_id')}/versions/{_path_id(version_id, 'version_id')}/diff"
+        if against_version_id is not None:
+            from urllib.parse import quote
+            path += f"?against={quote(against_version_id, safe='')}"
+        return self._get(path)
+
+    def dataset_version_artifact(self, dataset_id: str, version_id: str) -> bytes:
+        return self._artifact(f"datasets/{_path_id(dataset_id, 'dataset_id')}/versions/{_path_id(version_id, 'version_id')}/artifact")
+
+    def dataset_version_manifest(self, dataset_id: str, version_id: str) -> bytes:
+        return self._artifact(f"datasets/{_path_id(dataset_id, 'dataset_id')}/versions/{_path_id(version_id, 'version_id')}/manifest")
+
     def research_job(self, job_id: str) -> JsonValue:
         return self._get(f"research-jobs/{_path_id(job_id, 'job_id')}")
 
     def research_artifact(self, job_id: str) -> bytes:
         return self._artifact(f"research-jobs/{_path_id(job_id, 'job_id')}/artifact")
 
-    def create_export(self, dataset_id: str, *, idempotency_key: str, format: str = "jsonl") -> ExportJob:
-        if format != "jsonl":
-            raise TypeError("format must be 'jsonl'")
-        data = self._json("POST", "/api/agent/v1/exports", body={"datasetId": _identifier(dataset_id, "dataset_id", 512), "format": "jsonl"}, idempotency_key=idempotency_key)
+    def create_export(self, dataset_id: str, *, idempotency_key: str, format: str = "jsonl", record_limit: int = 100, selection_strategy: str = "balanced", cursor: str | None = None) -> ExportJob:
+        if format not in ("jsonl", "parquet"):
+            raise TypeError("format must be 'jsonl' or 'parquet'")
+        if not isinstance(record_limit, int) or isinstance(record_limit, bool) or not 1 <= record_limit <= 500:
+            raise TypeError("record_limit must be an integer between 1 and 500")
+        if selection_strategy not in ("balanced", "recent"):
+            raise TypeError("selection_strategy must be 'balanced' or 'recent'")
+        if cursor is not None and (not isinstance(cursor, str) or not 1 <= len(cursor) <= 512):
+            raise TypeError("cursor must be between 1 and 512 characters")
+        body: dict[str, JsonValue] = {"datasetId": _identifier(dataset_id, "dataset_id", 512), "format": format, "recordLimit": record_limit, "selectionStrategy": selection_strategy}
+        if cursor is not None:
+            body["cursor"] = cursor
+        data = self._json("POST", "/api/agent/v1/exports", body=body, idempotency_key=idempotency_key)
         return ExportJob.from_json(_as_mapping(data))
 
     def export_job(self, job_id: str) -> JsonValue:
@@ -480,9 +511,13 @@ class AsyncAgentClient:
     async def entitlements(self) -> JsonValue: return await self.__getattr_async("entitlements")
     async def usage(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("usage", limit=limit)
     async def create_research(self, query: str, *, idempotency_key: str) -> ResearchJob: return await self.__getattr_async("create_research", query, idempotency_key=idempotency_key)
+    async def dataset_versions(self, dataset_id: str, *, limit: int = 20, cursor: str | None = None) -> JsonValue: return await self.__getattr_async("dataset_versions", dataset_id, limit=limit, cursor=cursor)
+    async def dataset_version_diff(self, dataset_id: str, version_id: str, *, against_version_id: str | None = None) -> JsonValue: return await self.__getattr_async("dataset_version_diff", dataset_id, version_id, against_version_id=against_version_id)
+    async def dataset_version_artifact(self, dataset_id: str, version_id: str) -> bytes: return await self.__getattr_async("dataset_version_artifact", dataset_id, version_id)
+    async def dataset_version_manifest(self, dataset_id: str, version_id: str) -> bytes: return await self.__getattr_async("dataset_version_manifest", dataset_id, version_id)
     async def research_job(self, job_id: str) -> JsonValue: return await self.__getattr_async("research_job", job_id)
     async def research_artifact(self, job_id: str) -> bytes: return await self.__getattr_async("research_artifact", job_id)
-    async def create_export(self, dataset_id: str, *, idempotency_key: str, format: str = "jsonl") -> ExportJob: return await self.__getattr_async("create_export", dataset_id, idempotency_key=idempotency_key, format=format)
+    async def create_export(self, dataset_id: str, *, idempotency_key: str, format: str = "jsonl", record_limit: int = 100, selection_strategy: str = "balanced", cursor: str | None = None) -> ExportJob: return await self.__getattr_async("create_export", dataset_id, idempotency_key=idempotency_key, format=format, record_limit=record_limit, selection_strategy=selection_strategy, cursor=cursor)
     async def export_job(self, job_id: str) -> JsonValue: return await self.__getattr_async("export_job", job_id)
     async def export_artifact(self, job_id: str) -> bytes: return await self.__getattr_async("export_artifact", job_id)
     async def export_manifest(self, job_id: str) -> bytes: return await self.__getattr_async("export_manifest", job_id)

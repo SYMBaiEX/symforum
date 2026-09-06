@@ -33,6 +33,15 @@ const jobs = {
   cleanup: makeFunctionReference<"mutation", any, any>(
     "evidenceJobs:cleanupExpiredArtifacts",
   ),
+  cleanupVersions: makeFunctionReference<"mutation", any, any>(
+    "evidenceJobs:cleanupDatasetVersions",
+  ),
+  versions: makeFunctionReference<"query", any, any>(
+    "evidenceJobs:listDatasetVersions",
+  ),
+  versionDiff: makeFunctionReference<"query", any, any>(
+    "evidenceJobs:diffDatasetVersions",
+  ),
   completeExport: makeFunctionReference<"mutation", any, any>(
     "evidenceJobs:completeExportJob",
   ),
@@ -472,6 +481,155 @@ describe("evidence jobs", () => {
     ).toEqual(["release"]);
     expect(releases.scannedRecordCount).toBe(1);
     expect(releases.selectionScanTruncated).toBe(false);
+  });
+
+  test("balances sources, resumes with a pinned cursor, and exposes lineage diffs", async () => {
+    const t = setup();
+    await fixture(t);
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "balanced-test",
+        name: "Balanced test",
+        description: "Two-source fixture",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys: ["source-a", "source-b"],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const sourceIds = [];
+      for (const sourceKey of ["source-a", "source-b"]) {
+        sourceIds.push(
+          await ctx.db.insert("evidenceSources", {
+            sourceKey,
+            name: sourceKey,
+            sourceType: "api",
+            ingestionEnabled: true,
+            baseUrl: `https://${sourceKey}.example.com`,
+            homepageUrl: `https://${sourceKey}.example.com`,
+            status: "active",
+            licenseClass: "open",
+            provenanceClass: "official",
+            visibility: "public",
+            termsUrl: `https://${sourceKey}.example.com/terms`,
+            etag: "",
+            lastModified: "",
+            cursor: "",
+            lastFetchedAt: now,
+            lastSucceededAt: now,
+            lastErrorAt: 0,
+            lastErrorMessage: "",
+            createdAt: now,
+            updatedAt: now,
+          }),
+        );
+      }
+      for (const [index, sourceId] of [sourceIds[0], sourceIds[0], sourceIds[1]].entries())
+        await ctx.db.insert("evidenceDocuments", {
+          sourceId: sourceId!,
+          externalKey: `row-${index}`,
+          canonicalUrl: `https://example.com/${index}`,
+          canonicalUrlHash: `hash-${index}`,
+          kind: "document",
+          visibility: "public",
+          title: `Row ${index}`,
+          excerpt: "Evidence row",
+          searchText: "Evidence row",
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: null,
+          firstSeenAt: now - index,
+          updatedAt: now - index,
+        });
+      const firstVersionId = await ctx.db.insert("evidenceDatasetVersions", {
+        datasetId,
+        version: "2026-01-01",
+        checksum: "one",
+        recordCount: 1,
+        artifactByteLength: 10,
+        sourceCoverageScore: 50,
+        citationCoverageScore: 50,
+        entityCoverageScore: 50,
+        claimCoverageScore: 50,
+        createdAt: now - 1,
+      });
+      const secondVersionId = await ctx.db.insert("evidenceDatasetVersions", {
+        datasetId,
+        version: "2026-01-02",
+        checksum: "two",
+        recordCount: 3,
+        artifactByteLength: 30,
+        sourceCoverageScore: 100,
+        citationCoverageScore: 100,
+        entityCoverageScore: 100,
+        claimCoverageScore: 100,
+        parentVersionId: firstVersionId,
+        createdAt: now,
+      });
+      return { datasetId, firstVersionId, secondVersionId };
+    });
+    const first = await t.query(jobs.records, {
+      datasetId: seeded.datasetId,
+      limit: 2,
+      selectionStrategy: "balanced",
+    });
+    expect(first.records.map((row: any) => row.source.sourceKey)).toEqual([
+      "source-a",
+      "source-b",
+    ]);
+    expect(first.continueCursor).toEqual(expect.any(String));
+    const second = await t.query(jobs.records, {
+      datasetId: seeded.datasetId,
+      limit: 2,
+      selectionStrategy: "balanced",
+      cursor: first.continueCursor,
+    });
+    expect(second.records).toHaveLength(1);
+    expect(second.continueCursor).toBeUndefined();
+    await expect(
+      t.query(jobs.versionDiff, {
+        datasetId: seeded.datasetId,
+        versionId: seeded.secondVersionId,
+      }),
+    ).resolves.toMatchObject({
+      previous: { versionId: seeded.firstVersionId },
+      delta: { records: 2, artifactBytes: 20, sourceCoverage: 50 },
+    });
+  });
+
+  test("applies configured snapshot retention while preserving the minimum", async () => {
+    const t = setup();
+    await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceDatasets", catalog.datasetId, {
+        snapshotRetentionDays: 1,
+        minimumRetainedVersions: 2,
+      });
+      for (let index = 0; index < 4; index += 1)
+        await ctx.db.insert("evidenceDatasetVersions", {
+          datasetId: catalog.datasetId,
+          version: `2025-01-0${index + 1}`,
+          checksum: `old-${index}`,
+          recordCount: 1,
+          createdAt: Date.now() - (10 + index) * 86_400_000,
+        });
+    });
+    await expect(t.mutation(jobs.cleanupVersions, { limit: 10 })).resolves.toEqual({
+      deletedVersions: 2,
+      deletedBytes: 0,
+    });
+    const versions = await t.query(jobs.versions, {
+      datasetId: catalog.datasetId,
+      limit: 10,
+    });
+    expect(versions.versions).toHaveLength(2);
   });
 
   test("rechecks agent ownership, activity, entitlement, expiry, and manifest before download", async () => {

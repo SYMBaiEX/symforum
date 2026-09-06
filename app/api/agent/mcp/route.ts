@@ -587,7 +587,18 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
       return object(
         {
           datasetId: id,
-          format: { type: "string", const: "jsonl", default: "jsonl" },
+          format: {
+            type: "string",
+            enum: ["jsonl", "parquet"],
+            default: "jsonl",
+          },
+          recordLimit: { type: "integer", minimum: 1, maximum: 500, default: 100 },
+          selectionStrategy: {
+            type: "string",
+            enum: ["balanced", "recent"],
+            default: "balanced",
+          },
+          cursor: { type: "string", minLength: 1, maxLength: 512 },
         },
         ["datasetId"],
       );
