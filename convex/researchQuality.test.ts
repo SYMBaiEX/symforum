@@ -168,6 +168,10 @@ describe("research quality gates", () => {
         naturalnessAverage: expect.any(Number),
         structureAverage: expect.any(Number),
         sourceDiversityAverage: expect.any(Number),
+        moderationCohortCount: 0,
+        moderationEligibleCohortCount: 0,
+        moderationFeedbackSampleSize: 0,
+        moderationHelpfulRate: 0,
       }),
     );
   });

@@ -145,6 +145,34 @@ describe("NVD evidence adapters", () => {
     );
   });
 
+  test("extracts bounded CVSS, CWE, and affected-version facts from NVD records", () => {
+    const [document] = parseNvdCves({
+      vulnerabilities: [{
+        cve: {
+          id: "CVE-2026-12345",
+          descriptions: [{ lang: "en", value: "Example issue" }],
+          metrics: {
+            cvssMetricV31: [{
+              cvssData: { baseScore: 9.8, baseSeverity: "CRITICAL", vectorString: "CVSS:3.1/AV:N" },
+            }],
+          },
+          weaknesses: [{ description: [{ lang: "en", value: "CWE-79" }] }],
+          configurations: [{ nodes: [{ cpeMatch: [{
+            criteria: "cpe:2.3:a:example:widget:*:*:*:*:*:*:*:*",
+            versionEndExcluding: "2.0.0",
+          }] }] }],
+        },
+      }],
+    });
+    expect(document?.metadata).toMatchObject({
+      cvssScore: 9.8,
+      cvssSeverity: "CRITICAL",
+      cwes: ["CWE-79"],
+      affectedProducts: [expect.objectContaining({ versionEndExcluding: "2.0.0" })],
+    });
+    expect(document?.tags).toContain("cwe-79");
+  });
+
   test("uses the NVD event UUID as an idempotent immutable change key", () => {
     const event = {
       cveChanges: [

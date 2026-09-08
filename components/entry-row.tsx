@@ -1,4 +1,4 @@
-import { BlogPost } from "@/lib/content";
+import { type BlogPostSummary } from "@/lib/content";
 import { formatDate } from "@/lib/format";
 import { safeImageUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ export function EntryRow({
   priority = false,
   headingLevel = "h3",
 }: {
-  post: BlogPost;
+  post: BlogPostSummary;
   divided?: boolean;
   compact?: boolean;
   priority?: boolean;

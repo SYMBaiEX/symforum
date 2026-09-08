@@ -4,6 +4,22 @@ const serverConvex = vi.hoisted(() => ({
   client: null as null | { query: ReturnType<typeof vi.fn> },
 }));
 
+vi.mock("react", () => {
+  return {
+    cache: <T extends (...args: any[]) => Promise<unknown>>(fn: T) => {
+      const entries = new Map<string, ReturnType<T>>();
+      return (...args: Parameters<T>): ReturnType<T> => {
+        const key = JSON.stringify(args);
+        const existing = entries.get(key);
+        if (existing) return existing;
+        const result = fn(...args);
+        entries.set(key, result as ReturnType<T>);
+        return result as ReturnType<T>;
+      };
+    },
+  };
+});
+
 vi.mock("@/lib/server-convex-auth", () => ({
   getAuthenticatedServerConvexClient: async () => serverConvex.client,
 }));
@@ -38,5 +54,20 @@ describe("forum dynamic route status preflight", () => {
         threadSlug: "launch-thread",
       }),
     ).rejects.toThrow("Convex thread status unavailable");
+  });
+
+  test("coalesces the metadata and page lookup for the same route render", async () => {
+    const response = { exists: true, kind: "category" };
+    serverConvex.client!.query.mockResolvedValue(response);
+    const { resolveForumRouteStatus } = await import("./forum-route-status");
+
+    await expect(
+      Promise.all([
+        resolveForumRouteStatus({ categorySlug: "public-square" }),
+        resolveForumRouteStatus({ categorySlug: "public-square" }),
+      ]),
+    ).resolves.toEqual([response, response]);
+
+    expect(serverConvex.client!.query).toHaveBeenCalledTimes(1);
   });
 });

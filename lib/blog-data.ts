@@ -1,5 +1,14 @@
-import { blogPosts, getPost, type BlogPost } from "@/lib/content";
-import { convexRefs, type ConvexPostRecord } from "@/lib/convex-refs";
+import {
+  blogPosts,
+  getPost,
+  type BlogPost,
+  type BlogPostSummary,
+} from "@/lib/content";
+import {
+  convexRefs,
+  type ConvexPostRecord,
+  type ConvexPostSummaryRecord,
+} from "@/lib/convex-refs";
 import { readThroughServerCache } from "@/lib/server-cache";
 import { getServerConvexClient } from "@/lib/server-convex";
 import { cache } from "react";
@@ -22,6 +31,21 @@ function toBlogPost(post: ConvexPostRecord): BlogPost {
   };
 }
 
+function toBlogPostSummary(post: ConvexPostSummaryRecord): BlogPostSummary {
+  return {
+    slug: post.slug,
+    title: post.title,
+    excerpt: post.excerpt,
+    publishedAt: new Date(post.publishedAt).toISOString().slice(0, 10),
+    readingMinutes: post.readingMinutes,
+    tags: post.tags,
+    featured: post.featured,
+    imageUrl: post.imageUrl,
+    imageAlt: post.imageAlt,
+    imageCredit: post.imageCredit,
+  };
+}
+
 export const getPublishedPosts = cache(async function getPublishedPosts() {
   const convex = getServerConvexClient();
   if (convex === null) {
@@ -40,6 +64,31 @@ export const getPublishedPosts = cache(async function getPublishedPosts() {
     return blogPosts;
   }
 });
+
+/**
+ * List surfaces deliberately request a compact projection. Keep
+ * `getPublishedPosts` for callers that genuinely need article bodies.
+ */
+export const getPublishedPostSummaries = cache(
+  async function getPublishedPostSummaries(): Promise<BlogPostSummary[]> {
+    const convex = getServerConvexClient();
+    if (convex === null) {
+      return blogPosts.map(({ body: _body, ...post }) => post);
+    }
+
+    try {
+      const posts = await readThroughServerCache(
+        "posts:published-summaries",
+        BLOG_DATA_TTL_MS,
+        () => convex.query(convexRefs.posts.listPublishedSummaries, {}),
+      );
+      return posts.map(toBlogPostSummary);
+    } catch (error) {
+      console.warn("Falling back to static post summaries", error);
+      return blogPosts.map(({ body: _body, ...post }) => post);
+    }
+  },
+);
 
 export const getFeaturedPost = cache(async function getFeaturedPost() {
   const convex = getServerConvexClient();
@@ -79,8 +128,11 @@ export const getLatestPosts = cache(async function getLatestPosts(limit = 5) {
   try {
     // Deliberately bypass the shared editorial cache: a successful publish must
     // be visible in the homepage's latest list on its very next request.
-    const posts = await convex.query(convexRefs.posts.listPublished, {});
-    return posts.slice(0, boundedLimit).map(toBlogPost);
+    const posts = await convex.query(
+      convexRefs.posts.listPublishedSummaries,
+      {},
+    );
+    return posts.slice(0, boundedLimit).map(toBlogPostSummary);
   } catch (error) {
     console.warn("Falling back to static latest posts", error);
     return blogPosts.slice(0, boundedLimit);

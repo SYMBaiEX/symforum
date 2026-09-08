@@ -53,7 +53,7 @@ type Normalized = {
   publishedAt?: number;
   sourceRevision: string;
   sourceUpdatedAt: number;
-  metadata: Record<string, string | number | null>;
+  metadata: Record<string, unknown>;
   cveId?: string;
 };
 
@@ -264,6 +264,72 @@ function englishDescription(cve: Record<string, unknown>) {
     700,
   );
 }
+
+function boundedStrings(value: unknown, maximum = 24, itemMaximum = 240) {
+  return array(value)
+    .flatMap((entry) => {
+      const normalized = text(entry, itemMaximum);
+      return normalized ? [normalized] : [];
+    })
+    .slice(0, maximum);
+}
+
+function nvdMetrics(cve: Record<string, unknown>) {
+  const metrics = record(cve.metrics);
+  const metricGroups = ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"];
+  for (const group of metricGroups) {
+    const metric = record(array(metrics?.[group])[0]);
+    const cvssData = record(metric?.cvssData);
+    const score = typeof cvssData?.baseScore === "number" && Number.isFinite(cvssData.baseScore)
+      ? Math.max(0, Math.min(10, cvssData.baseScore))
+      : null;
+    const severity = text(cvssData?.baseSeverity ?? metric?.baseSeverity, 32);
+    const vector = text(cvssData?.vectorString, 240);
+    if (score !== null || severity || vector)
+      return { version: group.replace("cvssMetric", ""), score, severity, vector };
+  }
+  return { version: "", score: null, severity: "", vector: "" };
+}
+
+function nvdWeaknesses(cve: Record<string, unknown>) {
+  return array(cve.weaknesses)
+    .map(record)
+    .filter((weakness): weakness is Record<string, unknown> => weakness !== null)
+    .flatMap((weakness) =>
+      array(weakness.description)
+        .map(record)
+        .filter((entry): entry is Record<string, unknown> => entry !== null)
+        .flatMap((entry) => {
+          const cwe = text(entry.value, 32).toUpperCase();
+          return /^CWE-\d+$/.test(cwe) ? [cwe] : [];
+        }),
+    )
+    .slice(0, 24);
+}
+
+function nvdAffectedProducts(cve: Record<string, unknown>) {
+  const configurations = array(cve.configurations)
+    .map(record)
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+  const matches = configurations.flatMap((configuration) => array(configuration.nodes))
+    .map(record)
+    .filter((node): node is Record<string, unknown> => node !== null)
+    .flatMap((node) => array(node.cpeMatch))
+    .map(record)
+    .filter((match): match is Record<string, unknown> => match !== null)
+    .flatMap((match) => {
+      const criteria = text(match.criteria, 500);
+      if (!criteria) return [];
+      return [{
+        criteria,
+        versionStartIncluding: text(match.versionStartIncluding, 100),
+        versionStartExcluding: text(match.versionStartExcluding, 100),
+        versionEndIncluding: text(match.versionEndIncluding, 100),
+        versionEndExcluding: text(match.versionEndExcluding, 100),
+      }];
+    });
+  return matches.slice(0, 24);
+}
 export function parseNvdCves(payload: unknown): Normalized[] {
   const root = record(payload);
   return array(root?.vulnerabilities)
@@ -276,14 +342,17 @@ export function parseNvdCves(payload: unknown): Normalized[] {
       const publishedAt = time(cve.published);
       const updatedAt = time(cve.lastModified) ?? publishedAt ?? 0;
       const status = text(cve.vulnStatus, 80);
+      const metrics = nvdMetrics(cve);
+      const weaknesses = nvdWeaknesses(cve);
+      const affectedProducts = nvdAffectedProducts(cve);
       return [
         {
           externalKey: id,
           canonicalUrl: `https://nvd.nist.gov/vuln/detail/${id}`,
           title: `${id}: ${description}`.slice(0, 1_000),
           excerpt: description,
-          searchText: `${id} ${description} ${status}`.slice(0, 2_000),
-          tags: ["nvd", "cve", status.toLowerCase()].filter(Boolean),
+          searchText: `${id} ${description} ${status} ${metrics.severity} ${weaknesses.join(" ")} ${affectedProducts.map((entry) => entry.criteria).join(" ")}`.slice(0, 2_000),
+          tags: ["nvd", "cve", status.toLowerCase(), metrics.severity.toLowerCase(), ...weaknesses.map((cwe) => cwe.toLowerCase())].filter(Boolean).slice(0, 32),
           authors: [NVD_ATTRIBUTION],
           publishedAt,
           sourceRevision: text(cve.lastModified, 120) || id,
@@ -294,6 +363,12 @@ export function parseNvdCves(payload: unknown): Normalized[] {
             published: text(cve.published, 80),
             lastModified: text(cve.lastModified, 80),
             sourceIdentifier: text(cve.sourceIdentifier, 160),
+            cvssVersion: metrics.version,
+            cvssScore: metrics.score,
+            cvssSeverity: metrics.severity,
+            cvssVector: metrics.vector,
+            cwes: weaknesses,
+            affectedProducts,
             attribution: NVD_ATTRIBUTION,
           },
           cveId: id,
@@ -835,6 +910,40 @@ async function writeCveClaim(
     actorId: "nvd-cve-2",
     source: "NVD CVE API 2.0",
   });
+  const score = typeof document.metadata.cvssScore === "number" &&
+    Number.isFinite(document.metadata.cvssScore)
+    ? Math.max(0, Math.min(10, document.metadata.cvssScore))
+    : null;
+  const severity = text(document.metadata.cvssSeverity, 32);
+  if (score !== null || severity) {
+    const objectText = severity ? `${score ?? "unscored"} (${severity})` : String(score);
+    const metricClaim = await ctx.runMutation(upsertClaimRef, {
+      claimKey: `nvd-cvss:${document.cveId.toLowerCase()}`,
+      statement: `${document.cveId} has an NVD CVSS assessment of ${objectText}.`,
+      subjectEntityId: cve.entityId,
+      predicate: "has-cvss-assessment",
+      objectText,
+      status: "supported",
+      confidence: 1,
+      visibility: "public",
+      observedAt,
+      actorType: "system",
+      actorId: "nvd-cve-2",
+      source: "NVD CVE API 2.0",
+    });
+    await ctx.runMutation(citationRef, {
+      claimId: metricClaim.claimId,
+      documentVersionId,
+      citationKey: `nvd-cvss:${document.cveId.toLowerCase()}:version:${documentVersionId}`,
+      relation: "supports",
+      locator: document.canonicalUrl,
+      excerpt: document.excerpt,
+      confidence: 1,
+      actorType: "system",
+      actorId: "nvd-cve-2",
+      source: "NVD CVE API 2.0",
+    });
+  }
   // The citation can have committed before an interrupted webhook enqueue;
   // replay the idempotent event key instead of treating `citation.created` as
   // proof that every dependent mutation completed.

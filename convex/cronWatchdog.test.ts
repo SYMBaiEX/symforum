@@ -227,7 +227,7 @@ describe("critical cron watchdog", () => {
         .collect();
       expect(logs).toHaveLength(2);
       expect(logs.every((log) => log.status === "resolved")).toBe(true);
-      expect(logs.find((log) => log.occurrences === 3)).toBeDefined();
+      expect(logs.find((log) => log.occurrences === 2)).toBeDefined();
       expect(logs.every((log) => !log.message.includes("TimeoutError"))).toBe(
         true,
       );
@@ -240,6 +240,55 @@ describe("critical cron watchdog", () => {
       expect(runs).toHaveLength(3);
       expect(runs.find((run) => run.outcome === "failed")).toMatchObject({
         failureClass: "TimeoutError",
+      });
+    });
+  });
+
+  test("suppresses repeat alert writes until a transition or refresh is due", async () => {
+    vi.stubEnv("CRON_WATCHDOG_ENABLED", "true");
+    const t = setup();
+    const now = 1_800_000_000_000;
+    await t.mutation(watchdog.evaluate, { now });
+    const readLog = async () =>
+      await t.run(
+        async (ctx) =>
+          await ctx.db
+            .query("systemLogs")
+            .withIndex("by_fingerprint_and_createdAt", (q) =>
+              q.eq("fingerprint", "cron-watchdog:evidence-cisa-kev:unhealthy"),
+            )
+            .first(),
+      );
+    const initial = await readLog();
+    await t.mutation(watchdog.evaluate, { now: now + 20 });
+    expect(await readLog()).toMatchObject({
+      updatedAt: initial?.updatedAt,
+      lastSeenAt: initial?.lastSeenAt,
+      occurrences: initial?.occurrences,
+    });
+    await t.mutation(watchdog.evaluate, { now: now + 15 * 60 * 1_000 });
+    expect((await readLog())?.occurrences).toBe(
+      (initial?.occurrences ?? 0) + 1,
+    );
+
+    await succeedCisa(t, now + 15 * 60 * 1_000 + 10);
+    await t.mutation(watchdog.evaluate, { now: now + 15 * 60 * 1_000 + 20 });
+    const heartbeat = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("cronJobHeartbeats")
+          .withIndex("by_jobKey", (q) => q.eq("jobKey", "evidence-cisa-kev"))
+          .unique(),
+    );
+    await t.mutation(watchdog.evaluate, { now: now + 15 * 60 * 1_000 + 40 });
+    await t.run(async (ctx) => {
+      const repeated = await ctx.db
+        .query("cronJobHeartbeats")
+        .withIndex("by_jobKey", (q) => q.eq("jobKey", "evidence-cisa-kev"))
+        .unique();
+      expect(repeated).toMatchObject({
+        updatedAt: heartbeat?.updatedAt,
+        lastEvaluatedAt: heartbeat?.lastEvaluatedAt,
       });
     });
   });

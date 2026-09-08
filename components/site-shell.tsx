@@ -229,11 +229,11 @@ function SiteFooter({
       ref={footerRef}
       className="fixed inset-x-0 bottom-0 z-50 border-t border-row-border/70 bg-background/92 backdrop-blur"
     >
-      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs md:gap-4 md:px-8">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4 md:px-8">
         <div className="min-w-0">
           <NewsletterSignup source="footer" variant="footer" />
         </div>
-        <div className="flex shrink-0 items-center justify-end">
+        <div className="flex flex-wrap items-center justify-start sm:shrink-0 sm:justify-end">
           <Button
             asChild
             className="h-9 rounded-none px-2.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground sm:px-3"

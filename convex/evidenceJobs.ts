@@ -13,7 +13,9 @@ export const DEFAULT_EXPORT_LIMIT = 100;
 export const MAX_EXPORT_LIMIT = 500;
 const MAX_EXPORT_SCAN = 500;
 const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
-const MAX_EXPORT_CURSOR_LENGTH = 512;
+// Convex pagination cursors are opaque and can be longer than a small numeric
+// offset. Keep this bounded while leaving enough room for one native cursor.
+const MAX_EXPORT_CURSOR_LENGTH = 4_096;
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
 // Provider calls are bounded to two minutes. A much wider lease avoids
 // declaring healthy work stale while still giving duplicate workflow starts a
@@ -29,6 +31,11 @@ const enqueueWebhookRef = makeFunctionReference<
   },
   { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
+const readSourceExportPageRef = makeFunctionReference<
+  "query",
+  { sourceId: Id<"evidenceSources">; snapshotAt: number; cursor: string | null; limit: number },
+  { documents: Doc<"evidenceDocuments">[]; isDone: boolean; continueCursor: string }
+>("evidenceJobs:readSourceExportPage");
 
 const JOB_STATUS = v.union(
   v.literal("queued"),
@@ -157,12 +164,32 @@ const EXPORT_RECORDS = v.object({
   records: v.array(EXPORTED_DOCUMENT),
 });
 
-type ExportCursor = {
+type LegacyExportCursor = {
   v: 1;
   datasetId: string;
   selectionStrategy: "balanced" | "recent";
   snapshotAt: number;
   offset: number;
+};
+
+/**
+ * A per-source native Convex cursor lets a snapshot walk arbitrarily deep
+ * without repeatedly materializing a capped prefix in application memory.
+ * Sources are traversed deterministically; callers retain snapshotAt so new
+ * documents cannot move the page boundary during an export.
+ */
+type ExportCursor = {
+  v: 2;
+  datasetId: string;
+  selectionStrategy: "balanced" | "recent";
+  snapshotAt: number;
+  /** Native Convex cursors keyed by sourceKey for the balanced walk. */
+  sourceCursors?: Record<string, string | null>;
+  doneSourceKeys?: string[];
+  /** Ordered-source offset used to rotate sparse balanced pages fairly. */
+  nextSourceOffset?: number;
+  /** Native cursor on the global public-documents index for recent order. */
+  recentCursor?: string | null;
 };
 
 function decodeExportCursor(
@@ -174,15 +201,54 @@ function decodeExportCursor(
   if (cursor.length > MAX_EXPORT_CURSOR_LENGTH)
     throw new ConvexError({ code: "INVALID_EXPORT_CURSOR", message: "Export cursor is too long." });
   try {
-    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<ExportCursor>;
+    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<ExportCursor | LegacyExportCursor>;
     if (
-      value.v !== 1 ||
+      value.v === 1 &&
+      value.datasetId === String(datasetId) &&
+      value.selectionStrategy === strategy &&
+      Number.isSafeInteger(value.snapshotAt) &&
+      (value.snapshotAt ?? 0) > 0
+    ) {
+      // v1 only represented an offset into a capped in-memory scan. Restarting
+      // at the stable snapshot is intentionally preferable to silently losing
+      // records beyond that cap. New cursors are always v2.
+      return {
+        v: 2,
+        datasetId: String(datasetId),
+        selectionStrategy: strategy,
+        snapshotAt: value.snapshotAt!,
+      };
+    }
+    const v2Value = value as Partial<ExportCursor>;
+    const sourceCursors = v2Value.sourceCursors;
+    const validSourceCursors =
+      sourceCursors === undefined ||
+      (typeof sourceCursors === "object" &&
+        sourceCursors !== null &&
+        !Array.isArray(sourceCursors) &&
+        Object.entries(sourceCursors).every(
+          ([key, sourceCursor]) =>
+            key.length > 0 &&
+            (sourceCursor === null || typeof sourceCursor === "string"),
+        ));
+    const validDoneSourceKeys =
+      v2Value.doneSourceKeys === undefined ||
+      (Array.isArray(v2Value.doneSourceKeys) &&
+        v2Value.doneSourceKeys.every((key: unknown) => typeof key === "string" && key.length > 0));
+    if (
+      value.v !== 2 ||
       value.datasetId !== String(datasetId) ||
       value.selectionStrategy !== strategy ||
       !Number.isSafeInteger(value.snapshotAt) ||
-      !Number.isSafeInteger(value.offset) ||
       (value.snapshotAt ?? 0) <= 0 ||
-      (value.offset ?? -1) < 0
+      !validSourceCursors ||
+      !validDoneSourceKeys ||
+      (v2Value.recentCursor !== undefined &&
+        v2Value.recentCursor !== null &&
+        typeof v2Value.recentCursor !== "string") ||
+      (v2Value.nextSourceOffset !== undefined &&
+        (!Number.isSafeInteger(v2Value.nextSourceOffset) ||
+          v2Value.nextSourceOffset < 0))
     )
       throw new Error("mismatch");
     return value as ExportCursor;
@@ -793,6 +859,33 @@ export const readExportInput = internalQuery({
   },
 });
 
+/** One native page per source. Kept separate because Convex permits one
+ * `.paginate()` call per function execution; the parent can safely compose
+ * these bounded pages into a balanced response. */
+export const readSourceExportPage = internalQuery({
+  args: {
+    sourceId: v.id("evidenceSources"),
+    snapshotAt: v.number(),
+    cursor: v.union(v.string(), v.null()),
+    limit: v.number(),
+  },
+  returns: v.object({
+    documents: v.array(v.any()),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("evidenceDocuments")
+      .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
+        q.eq("sourceId", args.sourceId).eq("visibility", "public").lte("updatedAt", args.snapshotAt),
+      )
+      .order("desc")
+      .paginate({ cursor: args.cursor, numItems: args.limit });
+    return { documents: page.page, isDone: page.isDone, continueCursor: page.continueCursor };
+  },
+});
+
 export const readExportDocuments = internalQuery({
   args: {
     datasetId: v.id("evidenceDatasets"),
@@ -813,7 +906,6 @@ export const readExportDocuments = internalQuery({
     const selectionStrategy = args.selectionStrategy ?? "balanced";
     const parsedCursor = decodeExportCursor(args.cursor, dataset._id, selectionStrategy);
     const snapshotAt = parsedCursor?.snapshotAt ?? Date.now();
-    const offset = parsedCursor?.offset ?? 0;
     const includedKinds = dataset.includedKinds ?? [];
     const includedLicenseClasses = dataset.includedLicenseClasses ?? [
       "public-domain",
@@ -849,22 +941,97 @@ export const readExportDocuments = internalQuery({
               q.eq("status", "active").eq("visibility", "public"),
             )
             .take(100);
-    const scanLimitPerSource = MAX_EXPORT_SCAN;
-    const sourceScans = await Promise.all(
-      sources.map(async (source) => ({
-        source,
-        documents: await ctx.db
-          .query("evidenceDocuments")
-          .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
-            q
-              .eq("sourceId", source._id)
-              .eq("visibility", "public")
-              .lte("updatedAt", snapshotAt),
-          )
-          .order("desc")
-          .take(scanLimitPerSource),
-      })),
+    const orderedSources = [...sources].sort((left, right) =>
+      left.sourceKey.localeCompare(right.sourceKey),
     );
+    const sourceById = new Map(orderedSources.map((source) => [String(source._id), source]));
+    const cursorState = parsedCursor ?? {
+      v: 2 as const,
+      datasetId: String(dataset._id),
+      selectionStrategy,
+      snapshotAt,
+    };
+    const doneSourceKeys = new Set(cursorState.doneSourceKeys ?? []);
+    let scannedRecordCount = 0;
+    let selectionScanTruncated = false;
+    let continueCursor: string | undefined;
+    let sourceScans: Array<{ source: (typeof orderedSources)[number]; documents: Doc<"evidenceDocuments">[] }> = [];
+    if (selectionStrategy === "balanced") {
+      const sourceCount = orderedSources.length;
+      const startOffset = sourceCount === 0
+        ? 0
+        : (cursorState.nextSourceOffset ?? 0) % sourceCount;
+      const rotatedActiveSources = Array.from({ length: sourceCount }, (_, offset) =>
+        orderedSources[(startOffset + offset) % sourceCount]!,
+      ).filter((source) => !doneSourceKeys.has(source.sourceKey));
+      const base = rotatedActiveSources.length === 0 ? 0 : Math.floor(limit / rotatedActiveSources.length);
+      const remainder = rotatedActiveSources.length === 0 ? 0 : limit % rotatedActiveSources.length;
+      const pages = await Promise.all(
+        rotatedActiveSources.map(async (source, index) => {
+          const requested = Math.min(MAX_EXPORT_SCAN, base + (index < remainder ? 1 : 0));
+          if (requested === 0) return { source, page: null, requested };
+          const page: { documents: Doc<"evidenceDocuments">[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
+            readSourceExportPageRef,
+            { sourceId: source._id, snapshotAt, cursor: cursorState.sourceCursors?.[source.sourceKey] ?? null, limit: requested },
+          );
+          return { source, page, requested };
+        }),
+      );
+      sourceScans = pages.flatMap(({ source, page }) => page === null ? [] : [{ source, documents: page.documents }]);
+      scannedRecordCount = pages.reduce((total, entry) => total + (entry.page?.documents.length ?? 0), 0);
+      selectionScanTruncated = pages.some(({ page, requested }) => page !== null && page.documents.length === requested && !page.isDone);
+      const nextSourceCursors: Record<string, string | null> = {
+        ...(cursorState.sourceCursors ?? {}),
+      };
+      for (const entry of pages) {
+        if (entry.page === null) continue;
+        if (entry.page.isDone) {
+          doneSourceKeys.add(entry.source.sourceKey);
+          delete nextSourceCursors[entry.source.sourceKey];
+        }
+        else nextSourceCursors[entry.source.sourceKey] = entry.page.continueCursor;
+      }
+      if (doneSourceKeys.size < orderedSources.length)
+        // Advance from the final source that was allotted a row, even if that
+        // source happened to finish. This prevents a small page from starving
+        // later sources when source count exceeds its record limit.
+        continueCursor = encodeExportCursor({
+          ...cursorState,
+          sourceCursors: nextSourceCursors,
+          doneSourceKeys: [...doneSourceKeys].sort(),
+          nextSourceOffset:
+            sourceCount === 0 || rotatedActiveSources.length === 0
+              ? 0
+              : (orderedSources.findIndex(
+                    (source) =>
+                      source.sourceKey ===
+                      rotatedActiveSources[Math.min(rotatedActiveSources.length, limit) - 1]?.sourceKey,
+                  ) + 1) % sourceCount,
+          recentCursor: undefined,
+        });
+    } else {
+      // Recent order can use the global native index directly. The fetched raw
+      // page is exactly the maximum returned record count, so no eligible row
+      // is advanced past without being represented in this response.
+      const page = await ctx.db
+        .query("evidenceDocuments")
+        .withIndex("by_visibility_and_updatedAt", (q) => q.eq("visibility", "public").lte("updatedAt", snapshotAt))
+        .order("desc")
+        .paginate({ cursor: cursorState.recentCursor ?? null, numItems: Math.min(MAX_EXPORT_SCAN, limit) });
+      sourceScans = page.page.flatMap((document) => {
+        const source = sourceById.get(String(document.sourceId));
+        return source === undefined ? [] : [{ source, documents: [document] }];
+      });
+      scannedRecordCount = page.page.length;
+      selectionScanTruncated = page.page.length === limit && !page.isDone;
+      if (!page.isDone)
+        continueCursor = encodeExportCursor({
+          ...cursorState,
+          sourceCursors: undefined,
+          doneSourceKeys: undefined,
+          recentCursor: page.continueCursor,
+        });
+    }
     const eligibleBySource = sourceScans.map(({ source, documents }) => ({
       source,
       documents: documents.filter(
@@ -888,10 +1055,7 @@ export const readExportDocuments = internalQuery({
         const document = bucket.documents[index];
         if (document !== undefined) balanced.push({ document, source: bucket.source });
       }
-    const selected = (selectionStrategy === "balanced" ? balanced : recent).slice(
-      offset,
-      offset + limit,
-    );
+    const selected = (selectionStrategy === "balanced" ? balanced : recent).slice(0, limit);
     const records: Array<{
       schemaVersion: string;
       datasetKey: string;
@@ -1083,23 +1247,11 @@ export const readExportDocuments = internalQuery({
         exportSchemaVersion:
           dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v3",
       },
-      scannedRecordCount: sourceScans.reduce((sum, scan) => sum + scan.documents.length, 0),
-      selectionScanTruncated: sourceScans.some(
-        ({ documents }) => documents.length === scanLimitPerSource,
-      ),
+      scannedRecordCount,
+      selectionScanTruncated,
       selectionStrategy,
       snapshotAt,
-      ...(offset + selected.length < (selectionStrategy === "balanced" ? balanced : recent).length
-        ? {
-            continueCursor: encodeExportCursor({
-              v: 1,
-              datasetId: String(dataset._id),
-              selectionStrategy,
-              snapshotAt,
-              offset: offset + selected.length,
-            }),
-          }
-        : {}),
+      ...(continueCursor ? { continueCursor } : {}),
       records,
     };
   },

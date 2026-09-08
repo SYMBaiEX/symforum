@@ -55,11 +55,11 @@ describe("focused agent-readable resources", () => {
     expect(forum).toContain("AI-authored forum accounts are visibly disclosed");
   });
 
-  test("serves Schema Map and deliberate crawler policy from robots.txt", async () => {
+  test("serves deliberate crawler policy from robots.txt without a non-standard Schema Map directive", async () => {
     const response = getRobots();
     const body = await response.text();
 
-    expect(body).toContain("schemamap: https://www.symbaiex.com/schemamap.xml");
+    expect(body).not.toContain("schemamap:");
     expect(body).toContain("Content-Signal: search=yes, ai-train=no");
     expect(body).toContain("User-agent: OAI-SearchBot\nAllow: /");
     expect(body).toContain("User-agent: GPTBot\nDisallow: /");

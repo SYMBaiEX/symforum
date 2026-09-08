@@ -102,7 +102,7 @@ describe("public discovery surfaces", () => {
     expect(filterSource).not.toMatch(/BlogPost\[\]/);
   });
 
-  test("the home LCP uses stable responsive asset URLs", () => {
+  test("the home banner keeps stable responsive URLs without preloading its decorative sprite", () => {
     const source = readFileSync(
       resolve(process.cwd(), "components/home-banner.tsx"),
       "utf8",
@@ -110,6 +110,7 @@ describe("public discovery surfaces", () => {
 
     expect(source).toMatch(/home-banner-dark-750\.webp 750w/);
     expect(source).toMatch(/fetchPriority="high"/);
+    expect(source).not.toMatch(/signal-moth-optimized\.webp/);
     expect(source).not.toMatch(/from "next\/image"/);
   });
 

@@ -1,7 +1,7 @@
 import { BlogPostFilter } from "@/components/blog-post-filter";
 import { EntryRow } from "@/components/entry-row";
 import { SectionHeader } from "@/components/section-header";
-import { getPublishedPosts } from "@/lib/blog-data";
+import { getPublishedPostSummaries } from "@/lib/blog-data";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
 
@@ -46,7 +46,7 @@ export default async function BlogPage({
 }: {
   searchParams: Promise<{ tag?: string | string[] }>;
 }) {
-  const posts = await getPublishedPosts();
+  const posts = await getPublishedPostSummaries();
   const requestedTag = (await searchParams).tag;
   const tagCounts = new Map<string, number>();
   for (const post of posts) {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { primarySiteUrl } from "@/lib/site-urls";
 
 const mocks = vi.hoisted(() => ({
-  getPublishedPosts: vi.fn(),
+  getPublishedPostSummaries: vi.fn(),
   getPortfolioProjects: vi.fn(),
   getPublicNewsletterIssues: vi.fn(),
   getNewsTimeline: vi.fn(),
@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/blog-data", () => ({
-  getPublishedPosts: (...args: unknown[]) => mocks.getPublishedPosts(...args),
+  getPublishedPostSummaries: (...args: unknown[]) =>
+    mocks.getPublishedPostSummaries(...args),
 }));
 
 vi.mock("@/lib/site-content", () => ({
@@ -39,7 +40,7 @@ async function loadSitemapModule() {
 
 beforeEach(() => {
   vi.resetModules();
-  mocks.getPublishedPosts.mockReset();
+  mocks.getPublishedPostSummaries.mockReset();
   mocks.getPortfolioProjects.mockReset();
   mocks.getPublicNewsletterIssues.mockReset();
   mocks.getNewsTimeline.mockReset();
@@ -54,7 +55,7 @@ describe("sitemap health and fallback", () => {
     const { default: runSitemap, resetSitemapHealthForTests } = sitemapModule;
     resetSitemapHealthForTests();
 
-    mocks.getPublishedPosts.mockResolvedValue([]);
+    mocks.getPublishedPostSummaries.mockResolvedValue([]);
     mocks.getPortfolioProjects.mockResolvedValue([]);
     mocks.getPublicNewsletterIssues.mockResolvedValue([]);
     mocks.getNewsTimeline.mockResolvedValue(null);
@@ -80,7 +81,7 @@ describe("sitemap health and fallback", () => {
     } = sitemapModule;
     resetSitemapHealthForTests();
 
-    mocks.getPublishedPosts.mockResolvedValue([
+    mocks.getPublishedPostSummaries.mockResolvedValue([
       {
         slug: "first-post",
         featured: true,
@@ -106,7 +107,7 @@ describe("sitemap health and fallback", () => {
     expect(warmupSnapshot.sources.blog.status).toBe("ok");
     expect(warmupSnapshot.staleSnapshotCount).toBeGreaterThan(0);
 
-    mocks.getPublishedPosts.mockRejectedValue(
+    mocks.getPublishedPostSummaries.mockRejectedValue(
       new Error("blog source unavailable"),
     );
     const fallbackRun = await runSitemap();
@@ -130,7 +131,9 @@ describe("sitemap health and fallback", () => {
     } = sitemapModule;
     resetSitemapHealthForTests();
 
-    mocks.getPublishedPosts.mockRejectedValue(new Error("blog source offline"));
+    mocks.getPublishedPostSummaries.mockRejectedValue(
+      new Error("blog source offline"),
+    );
     mocks.getPortfolioProjects.mockResolvedValue([]);
     mocks.getPublicNewsletterIssues.mockResolvedValue([]);
     mocks.getNewsTimeline.mockResolvedValue(null);

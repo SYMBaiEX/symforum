@@ -483,7 +483,7 @@ describe("evidence jobs", () => {
     expect(releases.selectionScanTruncated).toBe(false);
   });
 
-  test("balances sources, resumes with a pinned cursor, and exposes lineage diffs", async () => {
+  test("balances sources with a pinned native cursor and exposes lineage diffs", async () => {
     const t = setup();
     await fixture(t);
     const seeded = await t.run(async (ctx) => {
@@ -591,6 +591,7 @@ describe("evidence jobs", () => {
       cursor: first.continueCursor,
     });
     expect(second.records).toHaveLength(1);
+    expect(second.records[0]?.source.sourceKey).toBe("source-a");
     expect(second.continueCursor).toBeUndefined();
     await expect(
       t.query(jobs.versionDiff, {
@@ -601,6 +602,92 @@ describe("evidence jobs", () => {
       previous: { versionId: seeded.firstVersionId },
       delta: { records: 2, artifactBytes: 20, sourceCoverage: 50 },
     });
+  });
+
+  test("keeps balanced exports reachable beyond the former 500-row source prefix", async () => {
+    const t = setup();
+    await fixture(t);
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "deep-balanced-test",
+        name: "Deep balanced test",
+        description: "Two deep sources",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys: ["deep-a", "deep-b"],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const sourceIds = await Promise.all(["deep-a", "deep-b"].map((sourceKey) =>
+        ctx.db.insert("evidenceSources", {
+          sourceKey, name: sourceKey, sourceType: "api", ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`, homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active", licenseClass: "open", provenanceClass: "official", visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`, etag: "", lastModified: "", cursor: "",
+          lastFetchedAt: now, lastSucceededAt: now, lastErrorAt: 0, lastErrorMessage: "", createdAt: now, updatedAt: now,
+        }),
+      ));
+      for (let index = 0; index <= 500; index += 1)
+        for (const [sourceIndex, sourceId] of sourceIds.entries())
+          await ctx.db.insert("evidenceDocuments", {
+            sourceId, externalKey: `deep-${sourceIndex}-${index}`,
+            canonicalUrl: `https://example.com/deep/${sourceIndex}/${index}`,
+            canonicalUrlHash: `deep-${sourceIndex}-${index}`, kind: "document", visibility: "public",
+            title: `Deep ${sourceIndex} ${index}`, excerpt: "Evidence row", searchText: "Evidence row",
+            tags: [], authors: [], licenseClass: "open", currentVersionId: null, publishedAt: null,
+            firstSeenAt: now - index, updatedAt: now - index,
+          });
+      return datasetId;
+    });
+    const first = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced" });
+    expect(first.records).toHaveLength(500);
+    expect(first.records.slice(0, 4).map((row: any) => row.source.sourceKey)).toEqual(["deep-a", "deep-b", "deep-a", "deep-b"]);
+    const second = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced", cursor: first.continueCursor });
+    expect(second.records).toHaveLength(500);
+    const final = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced", cursor: second.continueCursor });
+    expect(final.records.map((row: any) => row.title)).toEqual(["Deep 0 500", "Deep 1 500"]);
+    expect(final.records.map((row: any) => row.source.sourceKey)).toEqual(["deep-a", "deep-b"]);
+  });
+
+  test("rotates balanced allocation when a page is smaller than its source set", async () => {
+    const t = setup();
+    await fixture(t);
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now();
+      const sourceKeys = ["rotate-a", "rotate-b", "rotate-c"];
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "rotate-balanced-test", name: "Rotate balanced test", description: "Fair sparse pages",
+        visibility: "public", licenseClass: "open", includedKinds: [], includedLicenseClasses: ["open"],
+        sourceKeys, status: "active", createdAt: now, updatedAt: now,
+      });
+      for (const sourceKey of sourceKeys) {
+        const sourceId = await ctx.db.insert("evidenceSources", {
+          sourceKey, name: sourceKey, sourceType: "api", ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`, homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active", licenseClass: "open", provenanceClass: "official", visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`, etag: "", lastModified: "", cursor: "",
+          lastFetchedAt: now, lastSucceededAt: now, lastErrorAt: 0, lastErrorMessage: "", createdAt: now, updatedAt: now,
+        });
+        for (let index = 0; index < 2; index += 1)
+          await ctx.db.insert("evidenceDocuments", {
+            sourceId, externalKey: `${sourceKey}-${index}`, canonicalUrl: `https://example.com/${sourceKey}/${index}`,
+            canonicalUrlHash: `${sourceKey}-${index}`, kind: "document", visibility: "public", title: `${sourceKey}-${index}`,
+            excerpt: "Evidence row", searchText: "Evidence row", tags: [], authors: [], licenseClass: "open",
+            currentVersionId: null, publishedAt: null, firstSeenAt: now - index, updatedAt: now - index,
+          });
+      }
+      return datasetId;
+    });
+    const first = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced" });
+    const second = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced", cursor: first.continueCursor });
+    const third = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced", cursor: second.continueCursor });
+    expect(first.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-a", "rotate-b"]);
+    expect(second.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-c", "rotate-a"]);
+    expect(third.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-b", "rotate-c"]);
   });
 
   test("applies configured snapshot retention while preserving the minimum", async () => {

@@ -1,4 +1,4 @@
-import { getPublishedPosts } from "@/lib/blog-data";
+import { getPublishedPostSummaries } from "@/lib/blog-data";
 import { getDailyNews, getNewsTimeline } from "@/lib/news-data";
 import { newsStoryPath } from "@/lib/news-slugs";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
@@ -129,7 +129,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const runStartedAt = Date.now();
   const [postsResult, projectsResult, issuesResult, newsResult] =
     await Promise.allSettled([
-      getPublishedPosts(),
+      getPublishedPostSummaries(),
       getPortfolioProjects(),
       getPublicNewsletterIssues(30),
       getPublicNewsStories(),

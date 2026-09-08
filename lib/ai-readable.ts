@@ -1,7 +1,7 @@
 import {
   getBlogPost,
   getFeaturedPost,
-  getPublishedPosts,
+  getPublishedPostSummaries,
 } from "@/lib/blog-data";
 import {
   getDailyNews,
@@ -503,7 +503,7 @@ function renderEditorialTrustResearch() {
 }
 
 async function renderBlogIndex() {
-  const posts = await getPublishedPosts();
+  const posts = await getPublishedPostSummaries();
   const markdown = [
     "# SYMBaiEX blog",
     "",

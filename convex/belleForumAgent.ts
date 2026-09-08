@@ -318,9 +318,8 @@ export const runDailyHackerNewsDigest = internalAction({
         imageSnapshot === undefined
           ? undefined
           : await cacheResearchImage(ctx, imageSnapshot);
-      const title = `${displayDate(runDate)} — ${plainForumText(
+      const title = `${displayDate(runDate)} — ${normalizeGeneratedHeadline(
         draft.headline,
-        125,
       )}`;
       assertAgentPublicationHygiene([title, body]);
       const provenanceSnapshots = snapshots.map((snapshot, index) => ({
@@ -571,9 +570,9 @@ export function buildDigestBody(args: {
       return [
         [
           `[h2]${story.rank}. ${plainForumText(story.title, 170)}[/h2]`,
-          plainForumText(brief.summary, 700),
+          clipGeneratedProse(brief.summary, 700, "summary"),
           "",
-          `[note][b]Belle's read[/b]\n${plainForumText(brief.analysis, 540)}[/note]`,
+          `[note][b]Belle's read[/b]\n${clipGeneratedProse(brief.analysis, 540, "analysis")}[/note]`,
           "",
           `[url=https://www.symbaiex.com/news/${story.hnItemId}]Read on SYMBaiEX News[/url]${directSource} · [url=https://news.ycombinator.com/item?id=${story.hnItemId}]Hacker News discussion[/url]`,
         ].join("\n"),
@@ -585,11 +584,11 @@ export function buildDigestBody(args: {
 
   const body = [
     `[note][b]The Canary Desk · ${displayDate(args.date)}[/b]\n${allNewsLink}. Relative chart bars show Hacker News attention inside today's edition, not objective importance.[/note]`,
-    plainForumText(args.opening, 1_250),
+    clipGeneratedProse(args.opening, 1_250, "opening"),
     `[chart=Today's Hacker News signal map]\n${chartRows}\n[/chart]`,
     sections,
     "[h2]The thread through it[/h2]",
-    plainForumText(args.closing, 800),
+    clipGeneratedProse(args.closing, 800, "closing"),
     "",
     "[b]What story here feels most consequential a month from now—and what evidence are you watching?[/b]",
   ]
@@ -646,6 +645,45 @@ function plainForumText(value: string, maximumLength: number) {
   return clean.length <= maximumLength
     ? clean
     : `${clean.slice(0, maximumLength - 1).trimEnd()}…`;
+}
+
+/** Keeps generated prose publishable without turning an overlong sentence into a fragment. */
+export function clipGeneratedProse(
+  value: string,
+  maximumLength: number,
+  field: "summary" | "analysis" | "opening" | "closing",
+) {
+  const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
+  if (!/[.!?]["')\]]*$/.test(clean)) {
+    throw new Error(`Belle ${field} ends with a dangling sentence.`);
+  }
+  if (clean.length <= maximumLength) return clean;
+  const sentences = clean.match(/[^.!?]+[.!?]["')\]]*/g) ?? [];
+  let clipped = "";
+  for (const sentence of sentences) {
+    const candidate = `${clipped}${clipped ? " " : ""}${sentence.trim()}`;
+    if (candidate.length > maximumLength) break;
+    clipped = candidate;
+  }
+  if (!clipped) {
+    throw new Error(
+      `Belle ${field} cannot be clipped safely within ${maximumLength} characters.`,
+    );
+  }
+  return clipped;
+}
+
+export function normalizeGeneratedHeadline(value: string) {
+  const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
+  if (!clean || /(?:…|\.\.\.|[,;:\-–—])$/.test(clean)) {
+    throw new Error("Belle headline is malformed or dangling.");
+  }
+  if (clean.length > 125) {
+    throw new Error(
+      "Belle headline cannot be clipped safely within 125 characters.",
+    );
+  }
+  return clean;
 }
 
 function safeBbcodeUrl(value: string) {

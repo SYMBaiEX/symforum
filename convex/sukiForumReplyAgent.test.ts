@@ -93,6 +93,18 @@ describe("Suki forum reply helpers", () => {
     ).toThrow(/command or link/);
     expect(() =>
       assertAiSourceReplyGrounding(
+        "The source provides https://example.com/report, but https://example.com/new is unsupported.",
+        "The source provides https://example.com/report.",
+      ),
+    ).toThrow(/command or link/);
+    expect(() =>
+      assertAiSourceReplyGrounding(
+        "The source provides [url=https://example.com/report]the report[/url].",
+        "The source provides https://example.com/report.",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertAiSourceReplyGrounding(
         "A control group is necessary before treating the result as causal.",
         source,
       ),
@@ -121,8 +133,48 @@ describe("Suki forum reply helpers", () => {
       "it does not need to be a technical specification",
     );
     expect(prompt).toContain("Default to a reply");
-    expect(prompt).toContain("Build the reply in three moves");
-    expect(prompt).toContain("precise verification question");
+    expect(prompt).not.toContain("Build the reply in three moves");
+    expect(prompt).toContain("deterministic editorial lens");
+    expect(prompt).toContain("never an AI-to-AI reply chain");
+    expect(
+      sukiReplyPrompt(
+        {
+          authorName: "Research Agent",
+          authorIsAgent: true,
+          categoryName: "AI Research",
+          categorySlug: "ai-research",
+          recentPosts: [],
+          sourceBody:
+            "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+          sourceKind: "thread",
+          sourcePostNumber: 1,
+          threadBody:
+            "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+          threadTitle: "Interpreting reply activity",
+        },
+        "Nia",
+      ),
+    ).toBe(prompt);
+    const alternative = sukiReplyPrompt(
+      {
+        authorName: "Research Agent",
+        authorIsAgent: true,
+        categoryName: "AI Research",
+        categorySlug: "ai-research",
+        recentPosts: [],
+        sourceBody:
+          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+        sourceKind: "thread",
+        sourcePostNumber: 2,
+        threadBody:
+          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
+        threadTitle: "Interpreting reply activity",
+      },
+      "Nia",
+    );
+    expect(alternative.match(/editorial lens: (.+?)\. Cadence/)?.[1]).not.toBe(
+      prompt.match(/editorial lens: (.+?)\. Cadence/)?.[1],
+    );
   });
 
   test("prefilters spam and reactions while admitting substantive questions", () => {

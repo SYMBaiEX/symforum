@@ -14,6 +14,7 @@ const watchdogEnv = env as typeof env & {
 };
 const RUN_HISTORY_CAP = 30;
 const SUMMARY_LIMIT = 20;
+const EVALUATION_REFRESH_INTERVAL_MS = 15 * 60 * 1_000;
 
 const jobKeyValidator = v.union(
   v.literal("evidence-cisa-kev"),
@@ -533,7 +534,15 @@ export const evaluate = internalMutation({
     );
     let healthy = 0;
     for (const state of states) {
-      if (state.heartbeat !== null)
+      const statusChanged =
+        state.heartbeat !== null &&
+        state.heartbeat.evaluatedStatus !== state.status;
+      const evaluationRefreshDue =
+        state.heartbeat !== null &&
+        (state.heartbeat.lastEvaluatedAt === undefined ||
+          now - state.heartbeat.lastEvaluatedAt >=
+            EVALUATION_REFRESH_INTERVAL_MS);
+      if (state.heartbeat !== null && (statusChanged || evaluationRefreshDue))
         await ctx.db.patch("cronJobHeartbeats", state.heartbeat._id, {
           evaluatedStatus: state.status,
           lastEvaluatedAt: now,
@@ -589,7 +598,14 @@ export const evaluate = internalMutation({
                 consecutiveFailures: state.consecutiveFailures,
               }),
             });
-      if (existing !== null && existing.status !== "resolved")
+      const logRefreshDue =
+        existing !== null &&
+        now - existing.lastSeenAt >= EVALUATION_REFRESH_INTERVAL_MS;
+      if (
+        existing !== null &&
+        existing.status !== "resolved" &&
+        (statusChanged || logRefreshDue)
+      )
         await ctx.db.patch("systemLogs", existing._id, {
           lastSeenAt: now,
           updatedAt: now,

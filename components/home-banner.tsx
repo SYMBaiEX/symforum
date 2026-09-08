@@ -7,13 +7,6 @@ const BANNER_SIZES =
 export function HomeBanner() {
   return (
     <section className="page-frame py-4 md:py-5">
-      <link
-        rel="preload"
-        as="image"
-        href="/images/pets/signal-moth-optimized.webp"
-        type="image/webp"
-        fetchPriority="high"
-      />
       <div className="relative">
         <div
           data-home-banner

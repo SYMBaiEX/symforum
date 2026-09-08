@@ -1,5 +1,5 @@
 import { renderAiReadablePage } from "@/lib/ai-readable";
-import { getPublishedPosts } from "@/lib/blog-data";
+import { getPublishedPostSummaries } from "@/lib/blog-data";
 import { getPublicNewsletterIssues } from "@/lib/newsletter-data";
 import { getDailyNews } from "@/lib/news-data";
 import { newsStoryPath } from "@/lib/news-slugs";
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const [posts, issues, stories] = await Promise.all([
-    getPublishedPosts(),
+    getPublishedPostSummaries(),
     getPublicNewsletterIssues(3),
     getDailyNews(5),
   ]);

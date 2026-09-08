@@ -52,7 +52,9 @@ export function buildEditorialCohorts(outcomes: EditorialOutcome[]) {
 
 export const refreshEditorialCohorts = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ updated: number }> => {
+  handler: async (
+    ctx,
+  ): Promise<{ created: number; updated: number; unchanged: number }> => {
     const snapshot = await ctx.runQuery(
       internal.forumAgentEditorialData.readEditorialOutcomeSnapshot,
       {},

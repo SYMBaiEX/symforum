@@ -967,6 +967,8 @@ export type ConvexPostRecord = {
   imageCredit?: string;
 };
 
+export type ConvexPostSummaryRecord = Omit<ConvexPostRecord, "body">;
+
 export type SitePageRecord = {
   _id: string;
   _creationTime: number;
@@ -3485,6 +3487,11 @@ export const convexRefs = {
       Record<string, never>,
       ConvexPostRecord[]
     >("posts:listPublished"),
+    listPublishedSummaries: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      ConvexPostSummaryRecord[]
+    >("posts:listPublishedSummaries"),
     featured: makeFunctionReference<
       "query",
       Record<string, never>,

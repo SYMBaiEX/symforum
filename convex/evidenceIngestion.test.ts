@@ -181,4 +181,60 @@ describe("evidence ingestion normalizers", () => {
       /abstract|full text/i,
     );
   });
+
+  test("retains bounded advisory and release facts as structured, attributable metadata", () => {
+    const [advisory] = parseGithubAdvisories([
+      {
+        ghsa_id: "GHSA-aaaa-bbbb-cccc",
+        html_url: "https://github.com/advisories/GHSA-aaaa-bbbb-cccc",
+        summary: "Example advisory",
+        severity: "high",
+        identifiers: [{ value: "CVE-2026-12345" }],
+        cwes: [{ cwe_id: "CWE-79" }],
+        cvss: { score: 8.1, vector_string: "CVSS:3.1/AV:N" },
+        vulnerabilities: [
+          {
+            package: { ecosystem: "npm", name: "example-package" },
+            vulnerable_version_range: "< 2.0.0",
+            first_patched_version: { identifier: "2.0.0" },
+          },
+        ],
+      },
+    ]);
+    expect(advisory?.metadata).toMatchObject({
+      cwes: ["CWE-79"],
+      cvssScore: 8.1,
+      vulnerablePackages: [
+        expect.objectContaining({ packageName: "example-package", firstPatchedVersion: "2.0.0" }),
+      ],
+    });
+    expect(deriveEvidence(advisory!).entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ entityKey: "cve:cve-2026-12345" }),
+        expect.objectContaining({ entityKey: "cwe:cwe-79" }),
+      ]),
+    );
+    expect(deriveEvidence(advisory!).claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ predicate: "has-severity", objectText: "high" }),
+      ]),
+    );
+
+    const [release] = parseGithubReleases(
+      [{
+        id: 1,
+        tag_name: "v2.0.0",
+        html_url: "https://github.com/openai/openai-node/releases/tag/v2.0.0",
+        name: "Version 2",
+        body: "A bounded release summary.",
+        target_commitish: "abc123",
+        assets: [{ name: "package.tgz", size: 42, browser_download_url: "https://github.com/example/package.tgz" }],
+      }],
+      "openai/openai-node",
+    );
+    expect(release?.metadata).toMatchObject({ assetCount: 1, bodySummary: "A bounded release summary." });
+    expect(deriveEvidence(release!).claims).toEqual(
+      expect.arrayContaining([expect.objectContaining({ predicate: "targets-revision", objectText: "abc123" })]),
+    );
+  });
 });

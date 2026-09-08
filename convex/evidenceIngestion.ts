@@ -325,6 +325,35 @@ export function parseGithubAdvisories(
           return identifier ? [sanitizeExcerpt(identifier.value, 100)] : [];
         })
         .filter(Boolean);
+      const vulnerabilities = asArray(row.vulnerabilities)
+        .map(asRecord)
+        .filter((entry): entry is Record<string, unknown> => entry !== null)
+        .flatMap((entry) => {
+          const packageName = sanitizeExcerpt(asRecord(entry.package)?.name, 180);
+          const ecosystem = sanitizeExcerpt(asRecord(entry.package)?.ecosystem, 80);
+          const vulnerableRange = sanitizeExcerpt(entry.vulnerable_version_range, 240);
+          const firstPatchedVersion = sanitizeExcerpt(
+            asRecord(entry.first_patched_version)?.identifier,
+            160,
+          );
+          return packageName
+            ? [{ packageName, ecosystem, vulnerableRange, firstPatchedVersion }]
+            : [];
+        })
+        .slice(0, 24);
+      const cwes = asArray(row.cwes)
+        .map(asRecord)
+        .filter((entry): entry is Record<string, unknown> => entry !== null)
+        .flatMap((entry) => {
+          const cwe = sanitizeExcerpt(entry.cwe_id, 32).toUpperCase();
+          return /^CWE-\d+$/.test(cwe) ? [cwe] : [];
+        })
+        .slice(0, 24);
+      const cvss = asRecord(row.cvss);
+      const cvssScore = typeof cvss?.score === "number" && Number.isFinite(cvss.score)
+        ? Math.max(0, Math.min(10, cvss.score))
+        : null;
+      const cvssVector = sanitizeExcerpt(cvss?.vector_string, 240);
       const publishedAt = timestamp(row.published_at);
       const updatedAt = timestamp(row.updated_at) ?? publishedAt ?? 0;
       return [
@@ -335,7 +364,7 @@ export function parseGithubAdvisories(
           title,
           excerpt: title,
           searchText: sanitizeExcerpt(
-            `${title} ${identifiers.join(" ")} ${asString(row.severity)}`,
+            `${title} ${identifiers.join(" ")} ${cwes.join(" ")} ${vulnerabilities.map((entry) => entry.packageName).join(" ")} ${asString(row.severity)}`,
             2_000,
           ),
           tags: [
@@ -351,6 +380,10 @@ export function parseGithubAdvisories(
             ghsaId: ghsa,
             cveIds: identifiers.filter((id) => id.startsWith("CVE-")),
             severity: sanitizeExcerpt(row.severity, 30),
+            cwes,
+            cvssScore,
+            cvssVector,
+            vulnerablePackages: vulnerabilities,
             publishedAt: asString(row.published_at),
             updatedAt: asString(row.updated_at),
           },
@@ -381,14 +414,27 @@ export function parseGithubReleases(
         return [];
       const publishedAt = timestamp(row.published_at);
       const updatedAt = timestamp(row.created_at) ?? publishedAt ?? 0;
+      const assets = asArray(row.assets)
+        .map(asRecord)
+        .filter((asset): asset is Record<string, unknown> => asset !== null)
+        .flatMap((asset) => {
+          const name = sanitizeExcerpt(asset.name, 180);
+          const downloadUrl = url(asset.browser_download_url);
+          const size = typeof asset.size === "number" && Number.isSafeInteger(asset.size)
+            ? Math.max(0, asset.size)
+            : null;
+          return name ? [{ name, downloadUrl, size }] : [];
+        })
+        .slice(0, 24);
+      const bodySummary = sanitizeExcerpt(row.body, 1_200);
       return [
         {
           externalKey: `${repository}@${tag}`,
           canonicalUrl,
           kind: "release" as const,
           title: title.slice(0, 300),
-          excerpt: sanitizeExcerpt(`Release ${tag} for ${repository}.`, 300),
-          searchText: sanitizeExcerpt(`${repository} ${tag} ${title}`, 1_000),
+          excerpt: bodySummary || sanitizeExcerpt(`Release ${tag} for ${repository}.`, 300),
+          searchText: sanitizeExcerpt(`${repository} ${tag} ${title} ${bodySummary}`, 2_000),
           tags: ["github", "release", ...repository.split("/")],
           authors: [repository],
           publishedAt,
@@ -400,6 +446,11 @@ export function parseGithubReleases(
             prerelease: row.prerelease === true,
             publishedAt: asString(row.published_at),
             targetCommitish: sanitizeExcerpt(row.target_commitish, 100),
+            releaseId: typeof row.id === "number" ? row.id : null,
+            createdAt: asString(row.created_at),
+            bodySummary,
+            assetCount: assets.length,
+            assets,
           },
         },
       ];
@@ -500,6 +551,15 @@ function supportedClaim(
   };
 }
 
+function metadataStrings(value: unknown, maximum = 24, itemMaximum = 180) {
+  return asArray(value)
+    .flatMap((item) => {
+      const normalized = sanitizeExcerpt(item, itemMaximum);
+      return normalized ? [normalized] : [];
+    })
+    .slice(0, maximum);
+}
+
 /**
  * Extract only facts that are explicit in the normalized upstream record. The
  * result is intentionally deterministic: no model, fuzzy matching, or
@@ -598,34 +658,70 @@ export function deriveEvidence(document: NormalizedDocument): DerivedEvidence {
   const ghsa = sanitizeExcerpt(metadata.ghsaId, 100).toUpperCase();
   if (ghsa && /^GHSA-[\w-]+$/i.test(ghsa)) {
     const advisoryKey = entityKey("ghsa", ghsa);
+    const cveIds = metadataStrings(metadata.cveIds, 24, 32)
+      .map((id) => id.toUpperCase())
+      .filter((id) => /^CVE-\d{4}-\d{4,}$/i.test(id));
+    const cwes = metadataStrings(metadata.cwes, 24, 32)
+      .map((id) => id.toUpperCase())
+      .filter((id) => /^CWE-\d+$/.test(id));
+    const severity = sanitizeExcerpt(metadata.severity, 30).toLowerCase();
+    const entities: EvidenceEntityFact[] = [
+      {
+        entityKey: advisoryKey,
+        kind: "concept",
+        name: ghsa,
+        aliases: cveIds,
+        role: "subject",
+      },
+      {
+        entityKey: "organization:github",
+        kind: "organization",
+        name: "GitHub",
+        aliases: [],
+        role: "publisher",
+      },
+      ...cveIds.map((cve) => ({
+        entityKey: entityKey("cve", cve),
+        kind: "concept" as const,
+        name: cve,
+        aliases: [ghsa],
+        role: "mentioned" as const,
+      })),
+      ...cwes.map((cwe) => ({
+        entityKey: entityKey("cwe", cwe),
+        kind: "concept" as const,
+        name: cwe,
+        aliases: [],
+        role: "mentioned" as const,
+      })),
+    ];
+    const claims = [
+      supportedClaim(
+        `github-advisory:${ghsa.toLowerCase()}`,
+        advisoryKey,
+        `${ghsa} is published in GitHub's Global Security Advisories.`,
+        "published-in-github-advisories",
+        "GitHub Global Security Advisories",
+        document.canonicalUrl,
+        document.excerpt,
+      ),
+      ...(severity
+        ? [
+            supportedClaim(
+              `github-advisory-severity:${ghsa.toLowerCase()}`,
+              advisoryKey,
+              `${ghsa} is classified as ${severity} severity by GitHub.`,
+              "has-severity",
+              severity,
+              document.canonicalUrl,
+              document.excerpt,
+            ),
+          ]
+        : []),
+    ];
     return {
-      entities: [
-        {
-          entityKey: advisoryKey,
-          kind: "concept",
-          name: ghsa,
-          aliases: [],
-          role: "subject",
-        },
-        {
-          entityKey: "organization:github",
-          kind: "organization",
-          name: "GitHub",
-          aliases: [],
-          role: "publisher",
-        },
-      ],
-      claims: [
-        supportedClaim(
-          `github-advisory:${ghsa.toLowerCase()}`,
-          advisoryKey,
-          `${ghsa} is published in GitHub's Global Security Advisories.`,
-          "published-in-github-advisories",
-          "GitHub Global Security Advisories",
-          `GitHub advisory ${ghsa}`,
-          document.excerpt,
-        ),
-      ],
+      entities,
+      claims,
     };
   }
 
@@ -633,23 +729,33 @@ export function deriveEvidence(document: NormalizedDocument): DerivedEvidence {
   const tag = sanitizeExcerpt(metadata.tag, 160);
   if (repository && tag) {
     const projectKey = entityKey("repository", repository);
+    const targetCommitish = sanitizeExcerpt(metadata.targetCommitish, 100);
+    const releaseEntities: EvidenceEntityFact[] = [
+      {
+        entityKey: projectKey,
+        kind: "project",
+        name: repository,
+        aliases: [],
+        role: "subject",
+      },
+      {
+        entityKey: "organization:github",
+        kind: "organization",
+        name: "GitHub",
+        aliases: [],
+        role: "publisher",
+      },
+    ];
+    if (targetCommitish)
+      releaseEntities.push({
+        entityKey: entityKey("revision", `${repository}@${targetCommitish}`),
+        kind: "concept",
+        name: targetCommitish,
+        aliases: [],
+        role: "mentioned",
+      });
     return {
-      entities: [
-        {
-          entityKey: projectKey,
-          kind: "project",
-          name: repository,
-          aliases: [],
-          role: "subject",
-        },
-        {
-          entityKey: "organization:github",
-          kind: "organization",
-          name: "GitHub",
-          aliases: [],
-          role: "publisher",
-        },
-      ],
+      entities: releaseEntities,
       claims: [
         supportedClaim(
           `github-release:${repository.toLowerCase()}:${tag.toLowerCase()}`,
@@ -657,9 +763,22 @@ export function deriveEvidence(document: NormalizedDocument): DerivedEvidence {
           `${repository} published release ${tag}.`,
           "published-release",
           tag,
-          `GitHub release ${repository}@${tag}`,
+          document.canonicalUrl,
           document.excerpt,
         ),
+        ...(targetCommitish
+          ? [
+              supportedClaim(
+                `github-release-target:${repository.toLowerCase()}:${tag.toLowerCase()}`,
+                projectKey,
+                `${repository} release ${tag} targets revision ${targetCommitish}.`,
+                "targets-revision",
+                targetCommitish,
+                document.canonicalUrl,
+                document.excerpt,
+              ),
+            ]
+          : []),
       ],
     };
   }

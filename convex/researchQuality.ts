@@ -659,6 +659,11 @@ export const benchmarkSummary = query({
       ),
     );
     const assessments = samples.flat();
+    const moderationAggregates = await ctx.db
+      .query("forumAgentModerationOutcomeAggregates")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(MAX_QUEUE_RESULTS);
     const count = assessments.length;
     const average = (selector: (assessment: Assessment) => number) =>
       count === 0
@@ -699,6 +704,34 @@ export const benchmarkSummary = query({
                 count) *
                 100,
             ),
+      // These human moderation outcomes are operational observability only.
+      // Raw views, replies, and votes are deliberately excluded so agents
+      // cannot improve their editorial standing by optimizing engagement.
+      moderationCohortCount: moderationAggregates.length,
+      moderationEligibleCohortCount: moderationAggregates.filter(
+        (aggregate) =>
+          aggregate.sampleCount >= aggregate.minimumSampleSize &&
+          aggregate.score !== undefined,
+      ).length,
+      moderationFeedbackSampleSize: moderationAggregates.reduce(
+        (total, aggregate) => total + aggregate.sampleCount,
+        0,
+      ),
+      moderationHelpfulRate: (() => {
+        const sampleSize = moderationAggregates.reduce(
+          (total, aggregate) => total + aggregate.sampleCount,
+          0,
+        );
+        if (sampleSize === 0) return 0;
+        return Math.round(
+          (moderationAggregates.reduce(
+            (total, aggregate) => total + aggregate.helpfulCount,
+            0,
+          ) /
+            sampleSize) *
+            100,
+        );
+      })(),
     };
   },
 });

@@ -2,7 +2,11 @@
 
 import { describe, expect, test } from "vitest";
 
-import { buildDigestBody } from "./belleForumAgent";
+import {
+  buildDigestBody,
+  clipGeneratedProse,
+  normalizeGeneratedHeadline,
+} from "./belleForumAgent";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 
 describe("Belle Hacker News digest", () => {
@@ -91,6 +95,29 @@ describe("Belle Hacker News digest", () => {
     );
     expect(body).toContain(
       "What story here feels most consequential a month from now",
+    );
+  });
+
+  test("clips generated prose at sentence boundaries and rejects dangling copy", () => {
+    expect(
+      clipGeneratedProse(
+        "A complete first sentence. A second sentence that is too long to fit.",
+        28,
+        "summary",
+      ),
+    ).toBe("A complete first sentence.");
+    expect(() =>
+      clipGeneratedProse("A sentence without an ending", 80, "opening"),
+    ).toThrow(/dangling sentence/);
+    expect(() =>
+      clipGeneratedProse(
+        "An overlong first sentence that cannot fit safely.",
+        12,
+        "closing",
+      ),
+    ).toThrow(/cannot be clipped safely/);
+    expect(() => normalizeGeneratedHeadline("A trailing headline:")).toThrow(
+      /malformed or dangling/,
     );
   });
 });

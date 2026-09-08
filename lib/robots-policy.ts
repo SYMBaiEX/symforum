@@ -48,7 +48,6 @@ export function robotsText() {
 
 Content-Signal: search=yes, ai-train=no
 Sitemap: ${primarySiteUrl("/sitemap.xml")}
-schemamap: ${primarySiteUrl("/schemamap.xml")}
 Host: ${PRIMARY_SITE_URL}
 `;
 }

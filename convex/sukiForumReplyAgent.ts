@@ -359,10 +359,7 @@ export function parseSukiReplyDecision(output: string): SukiReplyDecision {
   if (decision === "ignore") {
     return { decision, reason };
   }
-  const body =
-    repaired.body
-      ?.replace(/\u0000/g, "")
-      .trim() ?? "";
+  const body = repaired.body?.replace(/\u0000/g, "").trim() ?? "";
   if (body.length < 20 || body.length > 6_000) {
     throw new Error("Suki returned an invalid forum reply body.");
   }
@@ -388,7 +385,8 @@ function repairedDecisionFields(output: string) {
       return tagged;
     const record = value as Record<string, unknown>;
     return {
-      decision: typeof record.decision === "string" ? record.decision : undefined,
+      decision:
+        typeof record.decision === "string" ? record.decision : undefined,
       reason: typeof record.reason === "string" ? record.reason : undefined,
       body: typeof record.body === "string" ? record.body : undefined,
     };
@@ -398,7 +396,14 @@ function repairedDecisionFields(output: string) {
 }
 
 export function assertAiSourceReplyGrounding(body: string, sourceBody: string) {
-  if (/\[(?:code|url)(?:=|\])/i.test(body) || /https?:\/\//i.test(body)) {
+  if (/\[code(?:=|\])/i.test(body)) {
+    throw new Error(
+      "AI-source reply introduced an unsupported command or link",
+    );
+  }
+  const sourceUrls = urlsIn(sourceBody);
+  const unsupportedUrl = [...urlsIn(body)].find((url) => !sourceUrls.has(url));
+  if (unsupportedUrl !== undefined) {
     throw new Error(
       "AI-source reply introduced an unsupported command or link",
     );
@@ -418,12 +423,47 @@ export function assertAiSourceReplyGrounding(body: string, sourceBody: string) {
     throw new Error("AI-source reply simulated unsupported experience");
   }
   if (
-    !/\b(?:the thread|the source|this claim|this suggests|the evidence|unclear|would need)\b/i.test(
+    !/\b(?:source|claim|evidence|context|shown|provided|unclear|would need|cannot establish)\b/i.test(
       body,
     )
   ) {
     throw new Error("AI-source reply lacks an explicit evidence boundary");
   }
+}
+
+function urlsIn(value: string) {
+  return new Set(
+    [...value.matchAll(/\[url=([^\]]+)\]|https?:\/\/[^\s\]]+/gi)]
+      .map((match) => match[1] ?? match[0])
+      .map((url) => url.replace(/[),.;]+$/, "")),
+  );
+}
+
+function aiSourceReplyPlan(candidate: {
+  sourceBody: string;
+  threadTitle: string;
+  sourcePostNumber: number;
+}) {
+  const seed = `${candidate.threadTitle}\n${candidate.sourceBody}\n${candidate.sourcePostNumber}`;
+  let hash = 0;
+  for (const character of seed)
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  const lenses = [
+    "test the causal link against the supplied evidence",
+    "separate the stated result from the decision it can support",
+    "reconstruct the smallest check that could falsify the claim",
+    "identify the boundary condition the supplied context leaves open",
+  ];
+  const cadences = [
+    "Start with the consequence, then name the evidence boundary.",
+    "Lead with the limitation, then offer one precise next check.",
+    "Open by restating the narrowest supported point, then extend it carefully.",
+    "Use a compact question-first cadence followed by the reason it matters.",
+  ];
+  return {
+    lens: lenses[hash % lenses.length]!,
+    cadence: cadences[(hash >>> 3) % cadences.length]!,
+  };
 }
 
 export function sukiReplyPrompt(
@@ -467,7 +507,7 @@ export function sukiReplyPrompt(
       recentConversation: candidate.recentPosts,
     }),
     candidate.authorIsAgent
-      ? "This is an AI-authored opening thread. Default to a reply when it contains any concrete claim, causal link, recommendation, limitation, method, policy position, or answerable question; it does not need to be a technical specification. Ignore only when no specific assertion can be examined from the supplied text. Build the reply in three moves: (1) begin with 'The thread' or 'This claim' and identify the exact assertion being examined, (2) add one bounded disagreement, reconstruction, derivation, limitation, or source-backed extension, and (3) close with the missing evidence or a precise verification question. Use 90-220 words. Do not introduce links, code blocks, commands, benchmarks, or numeric claims absent from the source. Never simulate experience, consensus, reactions, or conversational warmth for its own sake."
+      ? `This is an AI-authored opening thread. Default to a reply when it contains any concrete claim, causal link, recommendation, limitation, method, policy position, or answerable question; it does not need to be a technical specification. Ignore only when no specific assertion can be examined from the supplied text. Use this deterministic editorial lens: ${aiSourceReplyPlan(candidate).lens}. Cadence: ${aiSourceReplyPlan(candidate).cadence} Address one specific point and make one bounded disagreement, reconstruction, derivation, limitation, or source-backed extension; do not use a fixed scaffold or formulaic opener. This is a single reply to an opening thread, never an AI-to-AI reply chain. Use 90-220 words. Do not introduce code blocks, commands, benchmarks, or numeric claims absent from the source. You may repeat only an exact source URL already present in the supplied source body. Never simulate experience, consensus, reactions, or conversational warmth for its own sake.`
       : "Reply only when you can address a concrete point from the supplied conversation. Ignore reactions, repetition, and anything that would require facts outside the supplied context.",
   ].join("\n\n");
 }

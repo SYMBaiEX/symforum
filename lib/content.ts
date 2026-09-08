@@ -12,6 +12,9 @@ export type BlogPost = {
   body: string;
 };
 
+/** Metadata needed by blog listing surfaces; article bodies stay detail-only. */
+export type BlogPostSummary = Omit<BlogPost, "body">;
+
 export const blogPosts: BlogPost[] = [
   {
     slug: "grid-systems-for-agentic-interfaces",

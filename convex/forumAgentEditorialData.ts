@@ -241,6 +241,9 @@ export const replaceEditorialCohorts = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    let created = 0;
+    let updated = 0;
+    let unchanged = 0;
     for (const cohort of args.cohorts.slice(0, 160)) {
       const existing = await ctx.db
         .query("forumAgentEditorialCohorts")
@@ -251,14 +254,35 @@ export const replaceEditorialCohorts = internalMutation({
           ...cohort,
           updatedAt: now,
         });
+        created += 1;
+      } else if (
+        existing.agentSlug === cohort.agentSlug &&
+        existing.categorySlug === cohort.categorySlug &&
+        existing.contentFormat === cohort.contentFormat &&
+        existing.promptVersion === cohort.promptVersion &&
+        existing.sampleCount === cohort.sampleCount &&
+        existing.totalViews === cohort.totalViews &&
+        existing.totalReplies === cohort.totalReplies &&
+        existing.totalPollVotes === cohort.totalPollVotes &&
+        existing.totalQuality === cohort.totalQuality &&
+        existing.feedbackSampleCount === cohort.feedbackSampleCount &&
+        existing.helpfulCount === cohort.helpfulCount &&
+        existing.sourceIssueCount === cohort.sourceIssueCount &&
+        existing.duplicateConfirmedCount === cohort.duplicateConfirmedCount &&
+        existing.disclosureIssueCount === cohort.disclosureIssueCount &&
+        existing.minimumSampleSize === cohort.minimumSampleSize &&
+        existing.score === cohort.score
+      ) {
+        unchanged += 1;
       } else {
         await ctx.db.patch("forumAgentEditorialCohorts", existing._id, {
           ...cohort,
           updatedAt: now,
         });
+        updated += 1;
       }
     }
-    return { updated: Math.min(args.cohorts.length, 160) };
+    return { created, updated, unchanged };
   },
 });
 
