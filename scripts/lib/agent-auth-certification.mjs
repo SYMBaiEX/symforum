@@ -174,8 +174,8 @@ export async function verifyPublicMetadata({ fetchImpl = fetch, baseUrl = DEFAUL
   if (protectedResource.status !== 200 || authMetadata.status !== 200) {
     throw new Error("Public authentication metadata did not return 200.");
   }
-  if (protectedResource.body?.["x-symbaiex-authentication"]?.oauth2 !== false || authMetadata.body?.oauth2?.supported !== false) {
-    throw new Error("Authentication metadata overclaims OAuth support.");
+  if (protectedResource.body?.["x-symbaiex-authentication"]?.oauth2 !== false || authMetadata.body?.protocol_type !== "custom") {
+    throw new Error("First-party Ed25519 metadata must identify its custom protocol.");
   }
   if (authMetadata.body?.protocol !== "symbaiex_ed25519_challenge_v1") {
     throw new Error("Authentication metadata does not identify the Ed25519 protocol.");

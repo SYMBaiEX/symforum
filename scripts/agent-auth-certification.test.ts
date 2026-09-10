@@ -39,7 +39,7 @@ describe("agent auth certification harness", () => {
   test("accepts truthful Ed25519-only metadata", async () => {
     const fetchImpl = async (url: string) => new Response(JSON.stringify(url.includes("oauth-protected")
       ? { "x-symbaiex-authentication": { oauth2: false } }
-      : { protocol: "symbaiex_ed25519_challenge_v1", oauth2: { supported: false } }), { status: 200 });
+      : { protocol: "symbaiex_ed25519_challenge_v1", protocol_type: "custom" }), { status: 200 });
     await expect(verifyPublicMetadata({ fetchImpl: fetchImpl as typeof fetch })).resolves.toMatchObject({ authentication: "ed25519" });
   });
 

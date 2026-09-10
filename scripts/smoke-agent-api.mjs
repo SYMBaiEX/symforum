@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = parseArgs(process.argv.slice(2));
 const baseUrl = normalizeBaseUrl(
@@ -12,13 +13,15 @@ const baseUrl = normalizeBaseUrl(
     "https://www.symbaiex.com/api/agent",
 );
 
-if (args["public-only"]) {
-  await publicSmoke();
-} else {
-  await authenticatedSmoke();
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  if (args["public-only"]) await publicSmoke();
+  else await authenticatedSmoke();
 }
 
-async function publicSmoke() {
+export async function publicSmoke() {
   const manifest = await request("GET", "", null, null, 200);
   assert(manifest?.version === "v1", "Manifest version is not v1.");
   assert(
@@ -56,9 +59,31 @@ async function publicSmoke() {
   );
   assert(
     authenticationMetadata?.protocol === "symbaiex_ed25519_challenge_v1" &&
-      authenticationMetadata?.oauth2?.supported === false,
-    "Custom agent authentication metadata is missing or overclaims OAuth support.",
+      authenticationMetadata?.protocol_type === "custom",
+    "Custom agent authentication metadata does not identify the Ed25519 protocol.",
   );
+  const oauth = manifest?.authentication?.oauth2;
+  if (oauth && typeof oauth === "object") {
+    const metadata = await request(
+      "GET",
+      `${new URL(baseUrl).origin}/.well-known/oauth-authorization-server`,
+      null,
+      null,
+      200,
+    );
+    assert(
+      metadata?.issuer === oauth.issuer &&
+        protectedResource?.authorization_servers?.includes(metadata.issuer) &&
+        metadata?.code_challenge_methods_supported?.includes("S256") &&
+        metadata?.response_types_supported?.includes("code"),
+      "OAuth issuer discovery or PKCE support is inconsistent.",
+    );
+  } else {
+    assert(
+      !protectedResource?.authorization_servers?.length,
+      "OAuth provider is advertised without matching manifest support.",
+    );
+  }
   await request("GET", "/v1/status", null, null, 401);
   const publicTools = await requestDetailed(
     "POST",
@@ -88,7 +113,7 @@ async function publicSmoke() {
     false,
     modernHeaders("tools/call", "evidence.status"),
   );
-  assertAuthChallenge(invalidBearer.response, 401);
+  await assertAuthChallenge(invalidBearer.response, 401, protectedResource);
   assert(
     invalidBearer.response.headers
       .get("www-authenticate")
@@ -101,7 +126,7 @@ async function publicSmoke() {
       baseUrl,
       manifest: "ok",
       openapi: "ok",
-      protectedResourceMetadata: "custom-ed25519",
+      protectedResourceMetadata: oauth ? "ed25519-and-oauth" : "custom-ed25519",
       unauthenticatedRest: 401,
       publicMcpDiscovery: 200,
       invalidBearerMcpToolCall: 401,
@@ -169,7 +194,7 @@ async function authenticatedSmoke() {
       /scope|active agent identity/i.test(String(denied.payload?.error ?? "")),
       "The denial did not come from the expected agent scope boundary.",
     );
-    assertAuthChallenge(denied.response, 403);
+    await assertAuthChallenge(denied.response, 403);
     console.log(
       JSON.stringify({
         mode: "insufficient-scope",
@@ -337,12 +362,25 @@ function modernHeaders(method, name) {
   };
 }
 
-function assertAuthChallenge(response, status) {
+async function assertAuthChallenge(response, status, protectedResource) {
+  protectedResource ??= await request(
+    "GET",
+    `${new URL(baseUrl).origin}/.well-known/oauth-protected-resource`,
+    null,
+    null,
+    200,
+  );
   const challenge = response.headers.get("www-authenticate") ?? "";
+  const scopes = protectedResource?.scopes_supported;
+  const challengeScopes = challenge.match(/\bscope="([^"]+)"/)?.[1].split(" ");
   assert(
     challenge.includes(
       'resource_metadata="https://www.symbaiex.com/.well-known/oauth-protected-resource"',
-    ) && challenge.includes('scope="evidence"'),
+    ) &&
+      Array.isArray(scopes) &&
+      scopes.length > 0 &&
+      challengeScopes?.length === scopes.length &&
+      scopes.every((scope) => challengeScopes.includes(scope)),
     `MCP ${status} response is missing protected-resource scope metadata.`,
   );
   if (status === 403) {

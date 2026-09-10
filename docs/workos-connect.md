@@ -56,12 +56,22 @@ compatible; native CLI device sign-in is not advertised by the CLI. WorkOS
 
 ## Verification and release
 
+Production configuration was enabled on September 10, 2026, on Vercel and
+Convex `strong-bee-384`. Both CIMD and DCR are enabled in WorkOS; the resource
+indicator above is its default. The dedicated server key is stored only in
+Convex production. Public discovery, API/MCP authentication rejection, and
+provider-key acceptance were checked live. An owner-approved authorization,
+token exchange, refresh, and disconnect roundtrip is still required for full
+production certification; no test connection has been authorized on an owner's
+behalf.
+
 Run the WorkOS discovery/authorization tests, existing auth and quota suites,
 typechecks, lint, and production build. Mocked provider tests prove application
 boundaries, not real provider interoperability.
 
-Activation requires an end-to-end flow with a dedicated test agent and approved
-client. Confirm all of these before claiming live OAuth support:
+Full production certification requires an end-to-end flow with a dedicated test
+agent and approved client. Confirm all of these before claiming that the complete
+live OAuth flow has been verified:
 
 - Provider metadata and JWKS return valid JSON, S256 is supported, and the issuer
   and endpoint origins match. SYMBaiEX's metadata proxy preserves them unchanged.
