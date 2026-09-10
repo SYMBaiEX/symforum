@@ -10,12 +10,6 @@ const API_BASE_URL = primarySiteUrl("/api/agent");
 const METADATA = {
   protocol: "symbaiex_ed25519_challenge_v1",
   protocol_type: "custom",
-  oauth2: {
-    supported: false,
-    authorization_endpoint: null,
-    token_endpoint: null,
-    registration_endpoint: null,
-  },
   protected_resource: AGENT_MCP_RESOURCE,
   required_scope: AGENT_REQUIRED_SCOPE,
   signed_challenge_audience: AGENT_MCP_RESOURCE,

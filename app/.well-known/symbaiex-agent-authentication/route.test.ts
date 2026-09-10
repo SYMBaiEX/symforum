@@ -9,12 +9,6 @@ describe("SYMBaiEX agent authentication metadata", () => {
     expect(metadata).toMatchObject({
       protocol: "symbaiex_ed25519_challenge_v1",
       protocol_type: "custom",
-      oauth2: {
-        supported: false,
-        authorization_endpoint: null,
-        token_endpoint: null,
-        registration_endpoint: null,
-      },
       protected_resource: "https://www.symbaiex.com/api/agent/mcp",
       signed_challenge_audience: "https://www.symbaiex.com/api/agent/mcp",
       audience_binding: {
@@ -27,5 +21,7 @@ describe("SYMBaiEX agent authentication metadata", () => {
         refresh: "https://www.symbaiex.com/api/agent/auth/refresh",
       },
     });
+    expect(metadata).not.toHaveProperty("oauth2");
+    expect(JSON.stringify(metadata)).not.toContain("placeholder");
   });
 });

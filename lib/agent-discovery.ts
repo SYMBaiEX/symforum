@@ -137,7 +137,6 @@ export const MCP_SERVER_CARD = {
           format: "string",
           isRequired: false,
           isSecret: true,
-          placeholder: "Bearer <access-token>",
         },
       ],
     },

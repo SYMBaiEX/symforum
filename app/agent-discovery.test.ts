@@ -131,6 +131,7 @@ describe("agent discovery surfaces", () => {
       ]),
     );
     expect(JSON.stringify(card)).not.toContain("oauth2");
+    expect(JSON.stringify(card)).not.toContain("placeholder");
     expect(card).not.toHaveProperty("capabilities");
   });
 
