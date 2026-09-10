@@ -23,6 +23,8 @@ describe("agent evidence REST endpoint", () => {
       code: "AGENT_AUTH_REQUIRED",
     });
     expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("ratelimit-policy")).toContain("q=60;w=60");
+    expect(response.headers.get("link")).toContain("/developers/api-lifecycle");
   });
 
   test("rejects unknown paths before relaying", async () => {
@@ -135,6 +137,97 @@ describe("agent evidence REST endpoint", () => {
       operation: "claim_timeline",
       input: { claimKey: "release-security", limit: 2 },
     });
+  });
+
+  test("returns accepted job semantics with a canonical polling location", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ jobId: "job-123", status: "queued" }),
+    );
+    const response = await POST(
+      new Request("https://www.symbaiex.com/api/agent/v1/research-jobs", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ query: "Compare current evidence" }),
+      }),
+      context(["research-jobs"]),
+    );
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get("location")).toBe(
+      "https://www.symbaiex.com/api/agent/v1/research-jobs/job-123",
+    );
+  });
+
+  test("publishes retry timing when the shared rate limit is exhausted", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json(
+        { code: "RATE_LIMITED", retryAfter: 1_250 },
+        { status: 429 },
+      ),
+    );
+    const response = await GET(
+      new Request("https://www.symbaiex.com/api/agent/v1/status", {
+        headers: { authorization: "Bearer agent-token" },
+      }),
+      context(["status"]),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("2");
+    expect(response.headers.get("ratelimit")).toContain("r=0;t=2");
+  });
+
+  test("batches bounded read operations without allowing writes or artifacts", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+      .mockResolvedValueOnce(Response.json([{ sourceKey: "example" }]));
+    const response = await POST(
+      new Request("https://www.symbaiex.com/api/agent/v1/batch", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          operations: [
+            { id: "status", path: "/v1/status" },
+            { id: "sources", method: "GET", path: "/v1/sources?limit=2" },
+          ],
+        }),
+      }),
+      context(["batch"]),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      results: [
+        { id: "status", status: 200, body: { ok: true } },
+        { id: "sources", status: 200, body: [{ sourceKey: "example" }] },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const invalid = await POST(
+      new Request("https://www.symbaiex.com/api/agent/v1/batch", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          operations: [{ id: "write", method: "POST", path: "/v1/exports" }],
+        }),
+      }),
+      context(["batch"]),
+    );
+    expect(invalid.status).toBe(400);
   });
 
   test("streams artifacts through the authenticated first-party relay", async () => {

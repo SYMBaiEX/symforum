@@ -28,6 +28,10 @@ type WebMcpDocument = Document & {
   modelContext?: WebMcpModelContext;
 };
 
+type WebMcpNavigator = Navigator & {
+  modelContext?: WebMcpModelContext;
+};
+
 export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
   name: "discover_symbaiex_agent_access",
   title: "Discover SYMBaiEX agent access",
@@ -73,7 +77,9 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
 
 export function AgentWebMcpDiscovery() {
   useEffect(() => {
-    const modelContext = (document as WebMcpDocument).modelContext;
+    const modelContext =
+      (document as WebMcpDocument).modelContext ??
+      (navigator as WebMcpNavigator).modelContext;
     if (!modelContext?.registerTool) {
       return;
     }

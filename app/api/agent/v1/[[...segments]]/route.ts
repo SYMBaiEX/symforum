@@ -12,6 +12,35 @@ import { agentBearerChallenge } from "@/lib/agent-auth-metadata";
 
 export const dynamic = "force-dynamic";
 
+const MAX_BATCH_OPERATIONS = 10;
+const BATCH_READ_OPERATIONS = new Set([
+  "status",
+  "sources",
+  "source_registry",
+  "search",
+  "semantic_search",
+  "universal_search",
+  "document",
+  "changes",
+  "entities",
+  "version_claims",
+  "claim_timeline",
+  "products",
+  "datasets",
+  "dataset_versions",
+  "dataset_version_diff",
+  "benchmarks",
+  "quota",
+  "entitlements",
+  "usage",
+  "research_get",
+  "export_get",
+  "webhooks_list",
+  "webhooks_availability",
+  "webhooks_health",
+  "webhooks_history",
+]);
+
 async function handler(
   request: Request,
   context: { params: Promise<{ segments?: string[] }> },
@@ -78,6 +107,13 @@ async function handler(
     }
   }
   const { segments = [] } = await context.params;
+  if (
+    request.method === "POST" &&
+    segments.length === 1 &&
+    segments[0] === "batch"
+  ) {
+    return handleBatch(request, body, authorization);
+  }
   const mapped = mapRestRequest(
     request.method,
     segments,
@@ -118,7 +154,7 @@ async function handler(
             ? "dataset-version"
             : mapped.operation === "dataset_version_manifest"
               ? "dataset-version-manifest"
-          : "export",
+              : "export",
       jobId,
       authorization,
       typeof mapped.input.datasetId === "string"
@@ -128,6 +164,110 @@ async function handler(
   }
   return relayAgentData(request, mapped.operation, mapped.input, authorization);
 }
+
+async function handleBatch(
+  request: Request,
+  body: Record<string, unknown>,
+  authorization: string,
+) {
+  if (
+    Object.keys(body).some((key) => key !== "operations") ||
+    !Array.isArray(body.operations) ||
+    body.operations.length < 1 ||
+    body.operations.length > MAX_BATCH_OPERATIONS
+  ) {
+    return agentDataJson(
+      request,
+      {
+        error: `Batch requests require 1-${MAX_BATCH_OPERATIONS} operations.`,
+        code: "AGENT_BATCH_INVALID",
+      },
+      400,
+    );
+  }
+
+  const mapped = body.operations.map((candidate, index) => {
+    try {
+      if (!isRecord(candidate)) return null;
+      const keys = Object.keys(candidate);
+      if (
+        keys.some((key) => !["id", "method", "path"].includes(key)) ||
+        typeof candidate.id !== "string" ||
+        candidate.id.length < 1 ||
+        candidate.id.length > 80 ||
+        (candidate.method !== undefined && candidate.method !== "GET") ||
+        typeof candidate.path !== "string" ||
+        !candidate.path.startsWith("/v1/") ||
+        candidate.path.includes("#")
+      ) {
+        return null;
+      }
+      const url = new URL(`/api/agent${candidate.path}`, request.url);
+      if (url.origin !== new URL(request.url).origin) return null;
+      const segments = url.pathname
+        .slice("/api/agent/v1/".length)
+        .split("/")
+        .filter(Boolean)
+        .map(decodeURIComponent);
+      const operation = mapRestRequest("GET", segments, url.searchParams);
+      if (!operation || !BATCH_READ_OPERATIONS.has(operation.operation)) {
+        return null;
+      }
+      return { id: candidate.id, ...operation, index };
+    } catch {
+      return null;
+    }
+  });
+
+  if (mapped.some((entry) => entry === null)) {
+    return agentDataJson(
+      request,
+      {
+        error:
+          "Each batch item must be a unique-id GET request to a documented non-artifact /v1 read endpoint.",
+        code: "AGENT_BATCH_OPERATION_INVALID",
+      },
+      400,
+    );
+  }
+  const ids = mapped.map((entry) => entry!.id);
+  if (new Set(ids).size !== ids.length) {
+    return agentDataJson(
+      request,
+      {
+        error: "Batch operation ids must be unique.",
+        code: "AGENT_BATCH_ID_DUPLICATE",
+      },
+      400,
+    );
+  }
+
+  const results = [];
+  for (const entry of mapped) {
+    const response = await relayAgentData(
+      request,
+      entry!.operation,
+      entry!.input,
+      authorization,
+      `batch:${entry!.index}:${crypto.randomUUID()}`,
+    );
+    const responseBody = await response.json().catch(() => ({
+      error: "Agent API returned a non-JSON batch response.",
+      code: "AGENT_BATCH_RESPONSE_INVALID",
+    }));
+    results.push({
+      id: entry!.id,
+      status: response.status,
+      body: responseBody,
+    });
+  }
+  return agentDataJson(request, { results }, 200);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export const GET = handler;
 export const POST = handler;
 export function OPTIONS(request: Request) {

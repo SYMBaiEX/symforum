@@ -61,6 +61,16 @@ export type ExportManifest = JsonObject & {
   recordCount?: number;
   artifactByteLength?: number;
 };
+export type BatchReadOperation = {
+  id: string;
+  method?: "GET";
+  path: `/v1/${string}`;
+};
+export type BatchReadResult<T = unknown> = {
+  id: string;
+  status: number;
+  body: T;
+};
 
 export type WaitOptions = {
   timeoutMs?: number;
@@ -451,6 +461,37 @@ export class AgentClient {
 
   async usage<T = unknown>(limit?: number): Promise<T> {
     return await this.get<T>("usage", limit);
+  }
+
+  async batch<T = unknown>(
+    operations: readonly BatchReadOperation[],
+  ): Promise<{ results: BatchReadResult<T>[] }> {
+    if (operations.length < 1 || operations.length > 10) {
+      throw new TypeError("batch requires between 1 and 10 operations");
+    }
+    const ids = new Set<string>();
+    const bounded = operations.map((operation) => {
+      const id = validIdentifier(operation.id, "batch operation id", 80);
+      if (ids.has(id))
+        throw new TypeError("batch operation ids must be unique");
+      ids.add(id);
+      if (operation.method !== undefined && operation.method !== "GET") {
+        throw new TypeError("batch supports GET operations only");
+      }
+      if (
+        typeof operation.path !== "string" ||
+        !operation.path.startsWith("/v1/") ||
+        operation.path.includes("#") ||
+        operation.path.length > 2_000
+      ) {
+        throw new TypeError("batch paths must be bounded /v1/ read paths");
+      }
+      return { id, method: "GET" as const, path: operation.path };
+    });
+    return await this.request<{ results: BatchReadResult<T>[] }>(
+      "/api/agent/v1/batch",
+      { method: "POST", body: { operations: bounded } },
+    );
   }
 
   async createResearch(

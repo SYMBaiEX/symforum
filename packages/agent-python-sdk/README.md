@@ -46,6 +46,10 @@ history at `GET /v1/claims/{claimKey}/timeline`. Its entries retain the existing
 `supported`, `contradicted`, `unresolved`, and `outdated` statuses rather than
 inventing a separate timeline status.
 
+`batch()` combines 1-10 independently authorized JSON reads into one request.
+It accepts only documented `/v1/` GET paths; writes and artifact downloads stay
+separate to prevent accidental side-effect or large-transfer amplification.
+
 `datasets()` reports each dataset's explicit selection and latest snapshot
 quality. `create_export()` supports source-balanced cursor pages in JSONL or
 Parquet. `dataset_versions()`, `dataset_version_diff()`,

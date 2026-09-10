@@ -60,6 +60,9 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3001",
 ]);
 
+const AGENT_RATE_LIMIT_POLICY = '"agent-minute";q=60;w=60';
+const API_LIFECYCLE_URL = "https://www.symbaiex.com/developers/api-lifecycle";
+
 export function isAllowedAgentOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (origin === null) return true;
@@ -84,7 +87,9 @@ export function agentDataHeaders(
     "Access-Control-Allow-Headers":
       "authorization, content-type, idempotency-key, mcp-protocol-version, mcp-method, mcp-name",
     "Access-Control-Expose-Headers":
-      "www-authenticate, mcp-server-name, mcp-server-version, x-artifact-sha256, content-length, content-disposition",
+      "www-authenticate, mcp-server-name, mcp-server-version, x-artifact-sha256, content-length, content-disposition, ratelimit, ratelimit-policy, retry-after, location, link",
+    "RateLimit-Policy": AGENT_RATE_LIMIT_POLICY,
+    Link: `<${API_LIFECYCLE_URL}>; rel="deprecation"`,
   });
   const origin = request.headers.get("origin");
   if (origin && isAllowedAgentOrigin(request))
@@ -620,12 +625,24 @@ export async function relayAgentData(
         { error: "Agent API returned an invalid response." },
         502,
       );
+    const headers = agentDataHeaders(
+      request,
+      response.headers.get("content-type") ?? "application/json",
+    );
+    const payload = parseJsonObject(bytes);
+    const retryAfterSeconds = retryAfterFrom(payload, response.status);
+    if (retryAfterSeconds !== null) {
+      headers.set("Retry-After", String(retryAfterSeconds));
+      headers.set("RateLimit", `"agent-minute";r=0;t=${retryAfterSeconds}`);
+    }
+    const asyncLocation = asyncJobLocation(operation, payload);
+    if (asyncLocation !== null) headers.set("Location", asyncLocation);
     return new Response(bytes, {
-      status: response.status,
-      headers: agentDataHeaders(
-        request,
-        response.headers.get("content-type") ?? "application/json",
-      ),
+      status:
+        response.status === 200 && asyncLocation !== null
+          ? 202
+          : response.status,
+      headers,
     });
   } catch {
     return agentDataJson(
@@ -729,6 +746,46 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
+}
+
+function parseJsonObject(bytes: ArrayBuffer): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function retryAfterFrom(
+  payload: Record<string, unknown> | null,
+  status: number,
+) {
+  if (status !== 429) return null;
+  const milliseconds = payload?.retryAfter;
+  return typeof milliseconds === "number" && Number.isFinite(milliseconds)
+    ? Math.max(1, Math.ceil(milliseconds / 1_000))
+    : 60;
+}
+
+function asyncJobLocation(
+  operation: AgentDataOperation,
+  payload: Record<string, unknown> | null,
+) {
+  if (
+    (operation !== "research_create" && operation !== "export_create") ||
+    typeof payload?.jobId !== "string" ||
+    !["queued", "running"].includes(String(payload.status))
+  ) {
+    return null;
+  }
+  const collection =
+    operation === "research_create" ? "research-jobs" : "exports";
+  return `https://www.symbaiex.com/api/agent/v1/${collection}/${encodeURIComponent(payload.jobId)}`;
 }
 function agentDataUpstream() {
   const configured =

@@ -58,6 +58,11 @@ const endpoints = [
     detail: "$0 free-beta status, exact quotas, and inactive billing boundary.",
   },
   {
+    name: "API lifecycle",
+    href: "/developers/api-lifecycle",
+    detail: "Version compatibility, deprecation signals, and sunset notice.",
+  },
+  {
     name: "Agent Skills",
     href: "/.well-known/agent-skills/index.json",
     detail: "Digest-bound skill discovery and task-selection guidance.",
@@ -97,8 +102,8 @@ export default function DevelopersPage() {
         <p className="page-lede mt-5">
           Find the public SYMBaiEX API docs, OpenAPI 3.1 contract, Ed25519
           authentication guide, MCP server cards, signed webhook contract,
-          official SDK and CLI, and synthetic sandbox. Human owners choose
-          agent scopes and retain every private credential locally.
+          official SDK and CLI, and synthetic sandbox. Human owners choose agent
+          scopes and retain every private credential locally.
         </p>
 
         <section className="mt-10" aria-labelledby="when-to-use">
@@ -199,10 +204,7 @@ export default function DevelopersPage() {
             jobs, uploads, or private records.
           </p>
           <p className="mt-4">
-            <Link
-              className="underline"
-              href={"/developers/sandbox" as Route}
-            >
+            <Link className="underline" href={"/developers/sandbox" as Route}>
               Open the SYMBaiEX API sandbox guide
             </Link>
           </p>

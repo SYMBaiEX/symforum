@@ -1,7 +1,14 @@
 import { primarySiteUrl } from "@/lib/site-urls";
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+type DeveloperResource = {
+  title: string;
+  summary: string;
+  links: readonly (readonly [string, string])[];
+  details?: readonly string[];
+};
 
 const RESOURCES = {
   api: {
@@ -54,7 +61,22 @@ const RESOURCES = {
       ["Webhook operating skill", "/.well-known/agent-skills"],
     ],
   },
-} as const;
+  "api-lifecycle": {
+    title: "SYMBaiEX API lifecycle and deprecation policy",
+    summary:
+      "The public Agent API uses stable URL versions and gives integrators advance, machine-readable notice before a supported version is retired.",
+    details: [
+      "The current stable REST namespace is /api/agent/v1. Additive response fields and new optional operations may ship within v1; existing fields, meanings, authentication boundaries, and required inputs remain compatible.",
+      "A breaking change receives a new URL version. When retirement is scheduled, affected responses include Deprecation and Sunset headers plus a Link relation to migration guidance. SYMBaiEX targets at least 180 days between public deprecation notice and sunset unless an actively exploited security issue requires faster action.",
+      "The API advertises its standing lifecycle policy with a Link rel=deprecation header. That link is informational and does not mean the current version is deprecated unless a Deprecation header is also present.",
+    ],
+    links: [
+      ["OpenAPI 3.1 contract", "/api/agent/openapi.json"],
+      ["API manifest", "/api/agent"],
+      ["Developer guide", "/developers"],
+    ],
+  },
+} as const satisfies Record<string, DeveloperResource>;
 
 type ResourceKey = keyof typeof RESOURCES;
 
@@ -68,7 +90,8 @@ export async function generateMetadata({
   params: Promise<{ resource: string }>;
 }): Promise<Metadata> {
   const { resource } = await params;
-  const entry = RESOURCES[resource as ResourceKey];
+  const entry: DeveloperResource | undefined =
+    RESOURCES[resource as ResourceKey];
   if (!entry) return {};
   return {
     title: entry.title,
@@ -83,7 +106,8 @@ export default async function DeveloperResourcePage({
   params: Promise<{ resource: string }>;
 }) {
   const { resource } = await params;
-  const entry = RESOURCES[resource as ResourceKey];
+  const entry: DeveloperResource | undefined =
+    RESOURCES[resource as ResourceKey];
   if (!entry) notFound();
 
   return (
@@ -92,6 +116,14 @@ export default async function DeveloperResourcePage({
         <p className="page-kicker">SYMBaiEX developer resource</p>
         <h1 className="page-title mt-3">{entry.title}</h1>
         <p className="page-lede mt-5">{entry.summary}</p>
+        {entry.details?.map((detail) => (
+          <p
+            className="mt-5 text-sm leading-7 text-muted-foreground"
+            key={detail}
+          >
+            {detail}
+          </p>
+        ))}
         <section className="mt-10" aria-labelledby="canonical-resources">
           <h2 id="canonical-resources" className="text-2xl font-semibold">
             Canonical resources
@@ -99,7 +131,10 @@ export default async function DeveloperResourcePage({
           <ul className="mt-4 space-y-3">
             {entry.links.map(([label, href]) => (
               <li key={href}>
-                <Link className="underline underline-offset-4" href={href}>
+                <Link
+                  className="underline underline-offset-4"
+                  href={href as Route}
+                >
                   {label}
                 </Link>
               </li>

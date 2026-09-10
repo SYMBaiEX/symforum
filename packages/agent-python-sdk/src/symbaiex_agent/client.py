@@ -260,6 +260,28 @@ class AgentClient:
     def usage(self, *, limit: int | None = None) -> JsonValue:
         return self._get("usage", limit=limit)
 
+    def batch(self, operations: list[Mapping[str, JsonValue]] | tuple[Mapping[str, JsonValue], ...]) -> Mapping[str, JsonValue]:
+        """Execute 1-10 bounded read-only ``/v1/`` operations in one request."""
+        if not isinstance(operations, (list, tuple)) or not 1 <= len(operations) <= 10:
+            raise TypeError("batch requires between 1 and 10 operations")
+        ids: set[str] = set()
+        bounded: list[JsonValue] = []
+        for operation in operations:
+            if not isinstance(operation, Mapping) or set(operation) - {"id", "method", "path"}:
+                raise TypeError("batch operations require id, optional GET method, and path")
+            identifier = _identifier(operation.get("id"), "batch operation id", 80)
+            if identifier in ids:
+                raise TypeError("batch operation ids must be unique")
+            ids.add(identifier)
+            method = operation.get("method", "GET")
+            path = operation.get("path")
+            if method != "GET":
+                raise TypeError("batch supports GET operations only")
+            if not isinstance(path, str) or not path.startswith("/v1/") or "#" in path or len(path) > 2_000:
+                raise TypeError("batch paths must be bounded /v1/ read paths")
+            bounded.append({"id": identifier, "method": "GET", "path": path})
+        return _as_mapping(self._json("POST", "/api/agent/v1/batch", body={"operations": bounded}))
+
     def create_research(self, query: str, *, idempotency_key: str) -> ResearchJob:
         data = self._json("POST", "/api/agent/v1/research-jobs", body={"query": _query(query)}, idempotency_key=idempotency_key)
         return ResearchJob.from_json(_as_mapping(data))
@@ -510,6 +532,7 @@ class AsyncAgentClient:
     async def benchmarks(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("benchmarks", limit=limit)
     async def entitlements(self) -> JsonValue: return await self.__getattr_async("entitlements")
     async def usage(self, *, limit: int | None = None) -> JsonValue: return await self.__getattr_async("usage", limit=limit)
+    async def batch(self, operations: list[Mapping[str, JsonValue]] | tuple[Mapping[str, JsonValue], ...]) -> Mapping[str, JsonValue]: return await self.__getattr_async("batch", operations)
     async def create_research(self, query: str, *, idempotency_key: str) -> ResearchJob: return await self.__getattr_async("create_research", query, idempotency_key=idempotency_key)
     async def dataset_versions(self, dataset_id: str, *, limit: int = 20, cursor: str | None = None) -> JsonValue: return await self.__getattr_async("dataset_versions", dataset_id, limit=limit, cursor=cursor)
     async def dataset_version_diff(self, dataset_id: str, version_id: str, *, against_version_id: str | None = None) -> JsonValue: return await self.__getattr_async("dataset_version_diff", dataset_id, version_id, against_version_id=against_version_id)

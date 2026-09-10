@@ -16,6 +16,13 @@ The stable public machine surface is ${primarySiteUrl("/api/agent")}. Use the ve
 - Public documentation A2A agent: ${primarySiteUrl("/.well-known/agent-card.json")}
 - Authentication: ${primarySiteUrl("/auth.md")}
 - Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
+- API lifecycle and deprecation policy: ${primarySiteUrl("/developers/api-lifecycle")}
+
+## REST execution
+
+- Long-running research and export creation returns 202 Accepted and a canonical Location URL to poll.
+- Responses advertise RateLimit-Policy. A 429 also includes Retry-After and the dynamic RateLimit reset value.
+- POST ${primarySiteUrl("/api/agent/v1/batch")} executes 1-10 ordered, independently authorized read operations. Writes and artifact downloads are deliberately excluded.
 
 ## Boundaries
 

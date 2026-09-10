@@ -50,6 +50,11 @@ history exposed by `GET /v1/claims/{claimKey}/timeline`. Entries use the
 existing `supported`, `contradicted`, `unresolved`, and `outdated` statuses;
 there is no separate timeline status.
 
+`batch()` combines 1-10 independently authorized JSON reads into one public
+request. It accepts only documented `/v1/` GET paths; writes and artifact
+downloads remain separate so bulk execution cannot amplify side effects or
+large transfers.
+
 `datasets()` returns typed selection and snapshot-quality metadata, including
 checksums, schema versions, source/citation counts, completeness, freshness,
 and temporal coverage. `createExport()` supports source-balanced cursor pages

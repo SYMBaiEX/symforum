@@ -17,7 +17,8 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
 - [Agent API manifest](${PRIMARY_SITE_URL}/api/agent): Stable public REST/JSON capabilities, scopes, quota policy, and monetization boundaries.
 - [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Custom Ed25519 enrollment, challenge, credential use, errors, refresh, and revocation without fake OAuth claims.
-- [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication and live evidence-read contract; no private backend URL is required.
+- [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication, typed responses, async polling, rate-limit policy, and bounded read batching; no private backend URL is required.
+- [API lifecycle policy](${PRIMARY_SITE_URL}/developers/api-lifecycle): Stable v1 compatibility, advance deprecation notice, Sunset signaling, and migration links.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
 - [API pricing and limits](${PRIMARY_SITE_URL}/pricing): Truthful $0 free-beta status, quotas, included operations, and inactive paid-product boundary.
 - [Machine-readable pricing](${PRIMARY_SITE_URL}/pricing.md): Plain Markdown price, quota, export, and payment-status contract.

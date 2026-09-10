@@ -13,6 +13,7 @@ const OPENAPI = {
     description:
       "Public discovery, Ed25519 authentication, quota, provenance reads, cited research jobs, bounded exports, and signed webhooks. Payments are not accepted; GraphQL is deferred. A future dedicated premium host is not provisioned or advertised by this contract.",
     termsOfService: primarySiteUrl("/terms"),
+    "x-api-lifecycle": primarySiteUrl("/developers/api-lifecycle"),
   },
   servers: [{ url: API_BASE_URL }],
   externalDocs: {
@@ -328,12 +329,24 @@ const OPENAPI = {
           "Returns bounded historical snapshot metadata and an opaque cursor for the next page.",
         security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "datasetId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
           { $ref: "#/components/parameters/Limit" },
-          { name: "cursor", in: "query", schema: { type: "string", maxLength: 512 } },
+          {
+            name: "cursor",
+            in: "query",
+            schema: { type: "string", maxLength: 512 },
+          },
         ],
         responses: {
-          "200": { description: "A bounded page of versions plus an opaque continuation cursor." },
+          "200": {
+            description:
+              "A bounded page of versions plus an opaque continuation cursor.",
+          },
         },
       },
     },
@@ -345,12 +358,24 @@ const OPENAPI = {
           "Compares one immutable version with its recorded parent or an explicit version in the same dataset.",
         security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
-          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "datasetId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "versionId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
           { name: "against", in: "query", schema: { type: "string" } },
         ],
         responses: {
-          "200": { description: "Lineage-aware record, byte, and quality deltas." },
+          "200": {
+            description: "Lineage-aware record, byte, and quality deltas.",
+          },
         },
       },
     },
@@ -362,10 +387,22 @@ const OPENAPI = {
           "Streams the retained JSONL or Parquet artifact through the authenticated first-party relay without issuing a storage URL.",
         security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
-          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "datasetId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "versionId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
         ],
-        responses: { "200": { description: "Retained immutable artifact bytes." } },
+        responses: {
+          "200": { description: "Retained immutable artifact bytes." },
+        },
       },
     },
     "/v1/datasets/{datasetId}/versions/{versionId}/manifest": {
@@ -376,10 +413,22 @@ const OPENAPI = {
           "Streams the retained checksum, selection, lineage, and quality manifest through the authenticated first-party relay.",
         security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "datasetId", in: "path", required: true, schema: { type: "string" } },
-          { name: "versionId", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "datasetId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "versionId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
         ],
-        responses: { "200": { description: "Retained immutable manifest bytes." } },
+        responses: {
+          "200": { description: "Retained immutable manifest bytes." },
+        },
       },
     },
     "/v1/benchmarks": {
@@ -413,6 +462,36 @@ const OPENAPI = {
         },
       },
     },
+    "/v1/batch": {
+      post: {
+        operationId: "batchEvidenceReads",
+        summary: "Batch bounded evidence reads",
+        description:
+          "Executes 1-10 independently authorized GET operations against documented non-artifact /v1 paths. Each item returns its own status and JSON body; writes and artifact downloads are intentionally excluded.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BatchRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Ordered per-operation JSON results.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BatchResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid, duplicate, write, or artifact operation.",
+          },
+        },
+      },
+    },
     "/v1/research-jobs": {
       post: {
         operationId: "createEvidenceResearchJob",
@@ -427,8 +506,22 @@ const OPENAPI = {
           },
         },
         responses: {
+          "202": {
+            description: "Queued source-cited research job.",
+            headers: {
+              Location: {
+                description: "Canonical owner-scoped polling URL.",
+                schema: { type: "string", format: "uri" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
+          },
           "200": {
-            description: "Queued or replayed source-cited research job.",
+            description: "Completed idempotent replay.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/JobStatus" },
@@ -505,8 +598,22 @@ const OPENAPI = {
           },
         },
         responses: {
+          "202": {
+            description: "Queued bounded export.",
+            headers: {
+              Location: {
+                description: "Canonical owner-scoped polling URL.",
+                schema: { type: "string", format: "uri" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/JobStatus" },
+              },
+            },
+          },
           "200": {
-            description: "Queued or replayed bounded JSONL export.",
+            description: "Completed idempotent replay.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/JobStatus" },
@@ -894,6 +1001,30 @@ const OPENAPI = {
         },
         additionalProperties: false,
       },
+      ChallengeResponse: {
+        type: "object",
+        required: ["agentId", "challenge", "expiresAt"],
+        properties: {
+          agentId: { type: "string" },
+          challenge: { type: "string" },
+          audience: { type: "string", format: "uri" },
+          expiresAt: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: true,
+      },
+      AgentSession: {
+        type: "object",
+        required: ["tokens"],
+        properties: {
+          tokens: {
+            type: "object",
+            description:
+              "Convex Auth access and rotating refresh token bundle. Store it outside prompts, logs, and source control.",
+            additionalProperties: true,
+          },
+        },
+        additionalProperties: false,
+      },
       SignInRequest: {
         type: "object",
         required: ["agentId", "challenge", "signature"],
@@ -916,6 +1047,70 @@ const OPENAPI = {
         required: ["query"],
         properties: { query: { type: "string", minLength: 1, maxLength: 300 } },
         additionalProperties: false,
+      },
+      BatchRequest: {
+        type: "object",
+        required: ["operations"],
+        properties: {
+          operations: {
+            type: "array",
+            minItems: 1,
+            maxItems: 10,
+            items: {
+              type: "object",
+              required: ["id", "path"],
+              properties: {
+                id: { type: "string", minLength: 1, maxLength: 80 },
+                method: { type: "string", enum: ["GET"], default: "GET" },
+                path: {
+                  type: "string",
+                  pattern: "^/v1/",
+                  description:
+                    "A documented non-artifact read path, including its bounded query string.",
+                },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      BatchResponse: {
+        type: "object",
+        required: ["results"],
+        properties: {
+          results: {
+            type: "array",
+            maxItems: 10,
+            items: {
+              type: "object",
+              required: ["id", "status", "body"],
+              properties: {
+                id: { type: "string" },
+                status: { type: "integer", minimum: 100, maximum: 599 },
+                body: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/JsonObject" },
+                    { $ref: "#/components/schemas/JsonArray" },
+                  ],
+                },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      JsonObject: {
+        type: "object",
+        additionalProperties: true,
+      },
+      JsonArray: {
+        type: "array",
+        items: {},
+      },
+      NullableJsonObject: {
+        anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }],
       },
       AgentError: {
         type: "object",
@@ -1179,6 +1374,26 @@ const HTTP_METHODS = new Set([
   "options",
 ]);
 
+const ARRAY_RESPONSE_OPERATIONS = new Set([
+  "listEvidenceSources",
+  "searchEvidence",
+  "searchUniversalPublicCorpus",
+  "searchSemanticPublicCorpus",
+  "listEvidenceChanges",
+  "searchEvidenceEntities",
+  "listEvidenceVersionClaims",
+  "listEvidenceClaimTimeline",
+  "listEvidenceProducts",
+  "getEvidenceUsage",
+  "listEvidenceWebhooks",
+  "listEvidenceWebhookDeliveries",
+]);
+
+const NULLABLE_OBJECT_RESPONSE_OPERATIONS = new Set([
+  "getEvidenceDocument",
+  "verifyEvidenceClaim",
+]);
+
 const PUBLISHED_OPENAPI = withCompleteOperationDocumentation(OPENAPI);
 
 function withCompleteOperationDocumentation<T>(source: T): T {
@@ -1202,19 +1417,78 @@ function withCompleteOperationDocumentation<T>(source: T): T {
       }
       const responses = candidate.responses as Record<
         string,
-        { content?: Record<string, unknown> }
+        {
+          content?: Record<string, unknown>;
+          headers?: Record<string, unknown>;
+        }
       >;
       for (const [status, response] of Object.entries(responses)) {
-        if (!/^[45]/.test(status) || response.content) continue;
-        response.content = {
-          "application/json": {
-            schema: { $ref: "#/components/schemas/AgentError" },
-          },
-        };
+        if (response.content) continue;
+        if (/^[45]/.test(status)) {
+          response.content = {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AgentError" },
+            },
+          };
+        } else if (/^2/.test(status)) {
+          response.content = successResponseContent(candidate.operationId);
+        }
+      }
+      if (path.startsWith("/v1/")) {
+        candidate.responses = withAgentResponseHeaders(responses);
       }
     }
   }
   return document;
+}
+
+function successResponseSchema(operationId: string) {
+  if (operationId === "requestAgentLoginChallenge") {
+    return { $ref: "#/components/schemas/ChallengeResponse" };
+  }
+  if (operationId === "signInAgent" || operationId === "refreshAgentSession") {
+    return { $ref: "#/components/schemas/AgentSession" };
+  }
+  if (ARRAY_RESPONSE_OPERATIONS.has(operationId)) {
+    return { $ref: "#/components/schemas/JsonArray" };
+  }
+  if (NULLABLE_OBJECT_RESPONSE_OPERATIONS.has(operationId)) {
+    return { $ref: "#/components/schemas/NullableJsonObject" };
+  }
+  return { $ref: "#/components/schemas/JsonObject" };
+}
+
+function successResponseContent(operationId: string) {
+  if (operationId === "downloadEvidenceDatasetVersion") {
+    return {
+      "application/octet-stream": {
+        schema: { type: "string", format: "binary" },
+      },
+    };
+  }
+  return {
+    "application/json": { schema: successResponseSchema(operationId) },
+  };
+}
+
+function withAgentResponseHeaders(
+  responses: Record<string, { headers?: Record<string, unknown> }>,
+) {
+  for (const response of Object.values(responses)) {
+    response.headers = {
+      ...response.headers,
+      "RateLimit-Policy": {
+        description: "Advertises the sustained owner-scoped request policy.",
+        schema: { type: "string", example: '"agent-minute";q=60;w=60' },
+      },
+      Link: {
+        description:
+          "Links to the stable API lifecycle and deprecation policy.",
+        schema: { type: "string" },
+      },
+    };
+  }
+  return responses;
 }
 
 function isOpenApiOperation(

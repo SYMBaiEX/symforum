@@ -47,6 +47,7 @@ export function robotsText() {
   return `${sections.join("\n\n")}
 
 Content-Signal: search=yes, ai-train=no
+Schemamap: ${primarySiteUrl("/schemamap.xml")}
 Sitemap: ${primarySiteUrl("/sitemap.xml")}
 Host: ${PRIMARY_SITE_URL}
 `;

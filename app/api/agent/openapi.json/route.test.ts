@@ -90,6 +90,23 @@ describe("agent API OpenAPI contract", () => {
       "getEvidenceUsage",
     );
     expect(document.components.parameters.IdempotencyKey.required).toBe(true);
+    expect(document.paths["/v1/batch"].post).toMatchObject({
+      operationId: "batchEvidenceReads",
+      security: [{ bearerAuth: [] }],
+    });
+    expect(
+      document.components.schemas.BatchRequest.properties.operations,
+    ).toMatchObject({
+      minItems: 1,
+      maxItems: 10,
+    });
+    expect(
+      document.paths["/v1/research-jobs"].post.responses["202"].headers
+        .Location,
+    ).toBeDefined();
+    expect(
+      document.paths["/v1/exports"].post.responses["202"].headers.Location,
+    ).toBeDefined();
     expect(document.paths["/mcp"].post.operationId).toBe("evidenceMcp");
   });
 
@@ -146,7 +163,7 @@ describe("agent API OpenAPI contract", () => {
     );
     const ids = operations.map(({ operation }) => operation.operationId);
 
-    expect(operations).toHaveLength(43);
+    expect(operations).toHaveLength(44);
     expect(new Set(ids).size).toBe(operations.length);
     for (const { operation } of operations) {
       expect(operation.operationId).toEqual(expect.any(String));
@@ -173,5 +190,52 @@ describe("agent API OpenAPI contract", () => {
         "application/json"
       ].schema.$ref,
     ).toBe("#/components/schemas/AgentError");
+  });
+
+  test("types every success response and documents API lifecycle headers", async () => {
+    const document = await GET().json();
+    for (const [path, pathItem] of Object.entries(document.paths)) {
+      for (const [method, operation] of Object.entries(
+        pathItem as Record<string, Record<string, unknown>>,
+      )) {
+        if (
+          !new Set([
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+          ]).has(method)
+        )
+          continue;
+        const responses = operation.responses as Record<
+          string,
+          {
+            content?: Record<string, { schema?: unknown }>;
+            headers?: Record<string, unknown>;
+          }
+        >;
+        for (const [status, response] of Object.entries(responses)) {
+          if (!/^2/.test(status)) continue;
+          expect(
+            response.content,
+            `${method.toUpperCase()} ${path} ${status}`,
+          ).toBeDefined();
+          expect(
+            Object.values(response.content ?? {}).some((entry) => entry.schema),
+            `${method.toUpperCase()} ${path} ${status}`,
+          ).toBe(true);
+          if (path.startsWith("/v1/")) {
+            expect(response.headers?.["RateLimit-Policy"]).toBeDefined();
+            expect(response.headers?.Link).toBeDefined();
+          }
+        }
+      }
+    }
+    expect(document.info["x-api-lifecycle"]).toBe(
+      "https://www.symbaiex.com/developers/api-lifecycle",
+    );
   });
 });

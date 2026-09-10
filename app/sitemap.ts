@@ -35,6 +35,7 @@ const PRIMARY_PATHS = [
   "/developers/authentication",
   "/developers/mcp",
   "/developers/webhooks",
+  "/developers/api-lifecycle",
   "/developers/sandbox",
   "/news",
   "/newsletter",

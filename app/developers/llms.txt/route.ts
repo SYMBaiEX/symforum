@@ -17,6 +17,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 
 - API manifest: ${primarySiteUrl("/api/agent")}
 - OpenAPI: ${primarySiteUrl("/api/agent/openapi.json")}
+- API lifecycle and deprecation policy: ${primarySiteUrl("/developers/api-lifecycle")}
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
 - Synthetic sandbox OpenAPI: ${primarySiteUrl("/api/sandbox/openapi.json")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
@@ -27,6 +28,8 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - TypeScript, Bun CLI, and Python source: https://github.com/SYMBaiEX/symbaiex-agent-clients
 
 The live authentication protocol is owner-approved Ed25519 challenge-response, not OAuth. Never ask for a private key, refresh token, Convex URL, or backend credential.
+
+Long-running research and export creation returns 202 Accepted with a Location header for polling. REST responses advertise the current RateLimit-Policy; 429 responses also include Retry-After. Use POST ${primarySiteUrl("/api/agent/v1/batch")} for 1-10 bounded read operations when one round trip is preferable to a client-side loop.
 `;
 
 export function GET() {

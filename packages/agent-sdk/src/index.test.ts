@@ -205,6 +205,38 @@ describe("AgentClient", () => {
     );
   });
 
+  test("batches bounded read paths and rejects side-effecting operations", async () => {
+    const calls: Array<{ url: string; body: string | null }> = [];
+    const client = new AgentClient({
+      fetch: async (input, init) => {
+        calls.push({ url: String(input), body: String(init?.body ?? "") });
+        return Response.json({
+          results: [{ id: "status", status: 200, body: { ok: true } }],
+        });
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+    await expect(
+      client.batch([{ id: "status", path: "/v1/status" }]),
+    ).resolves.toMatchObject({ results: [{ id: "status", status: 200 }] });
+    expect(calls[0]).toEqual({
+      url: `${DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/batch`,
+      body: JSON.stringify({
+        operations: [{ id: "status", method: "GET", path: "/v1/status" }],
+      }),
+    });
+    await expect(
+      client.batch([
+        { id: "same", path: "/v1/status" },
+        { id: "same", path: "/v1/sources" },
+      ]),
+    ).rejects.toThrow(/unique/i);
+  });
+
   test("uses the first-party replay-safe semantic-search endpoint", async () => {
     const calls: Array<{ url: string; idempotencyKey: string | null }> = [];
     const client = new AgentClient({

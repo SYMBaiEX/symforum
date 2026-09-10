@@ -55,6 +55,21 @@ class AgentClientTests(unittest.TestCase):
             f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/source-registry",
         )
 
+    def test_batch_uses_bounded_read_only_contract(self) -> None:
+        recorder = Recorder({"results": [{"id": "status", "status": 200, "body": {"ok": True}}]})
+        client = AgentClient(token="access-token", transport=recorder)
+        result = client.batch(({"id": "status", "path": "/v1/status"},))
+        self.assertEqual(result["results"][0]["status"], 200)
+        self.assertEqual(recorder.requests[0].url, f"{DEFAULT_PLATFORM_ORIGIN}/api/agent/v1/batch")
+        self.assertEqual(json.loads(recorder.requests[0].body or b"{}"), {
+            "operations": [{"id": "status", "method": "GET", "path": "/v1/status"}],
+        })
+        with self.assertRaisesRegex(TypeError, "unique"):
+            client.batch((
+                {"id": "same", "path": "/v1/status"},
+                {"id": "same", "path": "/v1/sources"},
+            ))
+
     def test_export_manifest_uses_the_authenticated_artifact_contract(self) -> None:
         recorder = Recorder({"schemaVersion": "symbaiex-evidence-document-v3"})
         client = AgentClient(token="access-token", transport=recorder)

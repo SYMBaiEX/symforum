@@ -23,7 +23,9 @@ describe("robots policy", () => {
     expect(policy).not.toContain("Disallow: /signin");
     expect(policy).not.toContain("Disallow: /agent/signup");
     expect(policy).toContain("Content-Signal: search=yes, ai-train=no");
-    expect(policy).not.toContain("schemamap:");
+    expect(policy).toContain(
+      "Schemamap: https://www.symbaiex.com/schemamap.xml",
+    );
     expect(policy).toContain("User-agent: GPTBot\nDisallow: /");
   });
 });
