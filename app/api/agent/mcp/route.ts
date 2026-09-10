@@ -507,7 +507,7 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
   ) => ({
     type: "object",
     additionalProperties: false,
-    ...(required.length > 0 ? { required } : {}),
+    required,
     properties,
   });
   const id = { type: "string", minLength: 1, maxLength: 128 };

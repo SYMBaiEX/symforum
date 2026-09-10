@@ -284,13 +284,17 @@ describe("evidence MCP endpoint", () => {
     expect(
       payload.result.tools.every(
         (tool: {
-          inputSchema?: { additionalProperties?: boolean };
+          inputSchema?: {
+            additionalProperties?: boolean;
+            required?: string[];
+          };
           annotations?: {
             idempotentHint?: boolean;
             readOnlyHint?: boolean;
           };
         }) =>
           tool.inputSchema?.additionalProperties === false &&
+          Array.isArray(tool.inputSchema?.required) &&
           tool.annotations?.idempotentHint === tool.annotations?.readOnlyHint,
       ),
     ).toBe(true);
