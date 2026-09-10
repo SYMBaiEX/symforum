@@ -118,6 +118,16 @@ describe("forum subdomain routing", () => {
     }
   });
 
+  test("rewrites the forum MCP alias to the bounded documentation server", () => {
+    expect(
+      resolveForumSubdomainRoute({
+        host: "forum.symbaiex.com",
+        nodeEnv: "production",
+        pathname: "/mcp",
+      }),
+    ).toEqual({ kind: "rewrite", pathname: "/api/docs/mcp" });
+  });
+
   test("does not treat arbitrary forum-prefixed hosts as the forum", () => {
     expect(
       resolveForumSubdomainRoute({

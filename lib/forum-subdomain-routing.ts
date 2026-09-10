@@ -75,6 +75,13 @@ export function resolveForumSubdomainRoute({
     };
   }
 
+  // The forum advertises a documentation MCP surface. Keep its canonical
+  // product MCP on the primary host while giving forum-scoped discovery a
+  // small, read-only toolset instead of duplicating all evidence operations.
+  if (pathname === "/mcp") {
+    return { kind: "rewrite", pathname: "/api/docs/mcp" };
+  }
+
   if (isForumSubdomainSiteRoute(pathname)) {
     return null;
   }
