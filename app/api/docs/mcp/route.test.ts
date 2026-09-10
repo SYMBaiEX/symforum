@@ -172,7 +172,7 @@ describe("public documentation MCP", () => {
     );
     const body = await response.json();
 
-    expect(body.result.tools).toHaveLength(1);
+    expect(body.result.tools).toHaveLength(3);
     expect(body.result.tools[0]).toMatchObject({
       name: "docs_search",
       inputSchema: { additionalProperties: false },
@@ -188,6 +188,50 @@ describe("public documentation MCP", () => {
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
+      },
+    });
+    expect(
+      body.result.tools.map((tool: { name: string }) => tool.name),
+    ).toEqual(["docs_search", "docs_list", "docs_get"]);
+    expect(
+      body.result.tools.every(
+        (tool: { inputSchema: { required?: string[] } }) =>
+          Array.isArray(tool.inputSchema.required),
+      ),
+    ).toBe(true);
+  });
+
+  test("lists and reads documentation through focused tools", async () => {
+    const listed = await POST(
+      request({
+        jsonrpc: "2.0",
+        id: "list-tool",
+        method: "tools/call",
+        params: { name: "docs_list", arguments: {} },
+      }),
+    );
+    const listBody = await listed.json();
+    expect(listBody.result.structuredContent.resources).toHaveLength(5);
+
+    const read = await POST(
+      request({
+        jsonrpc: "2.0",
+        id: "get-tool",
+        method: "tools/call",
+        params: {
+          name: "docs_get",
+          arguments: { uri: "https://www.symbaiex.com/auth.md" },
+        },
+      }),
+    );
+    await expect(read.json()).resolves.toMatchObject({
+      result: {
+        structuredContent: {
+          resource: {
+            uri: "https://www.symbaiex.com/auth.md",
+            mimeType: "text/markdown",
+          },
+        },
       },
     });
   });

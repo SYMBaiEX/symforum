@@ -128,11 +128,7 @@ export const MCP_SERVER_CARD = {
     {
       type: "streamable-http",
       url: AGENT_MCP_RESOURCE,
-      supportedProtocolVersions: [
-        "2026-07-28",
-        "2025-06-18",
-        "2025-03-26",
-      ],
+      supportedProtocolVersions: ["2026-07-28", "2025-06-18", "2025-03-26"],
       headers: [
         {
           name: "Authorization",
@@ -188,6 +184,14 @@ export const DOCS_MCP_SERVER_CARD = {
     {
       name: "docs_search",
       description: "Search the bounded public SYMBaiEX documentation index.",
+    },
+    {
+      name: "docs_list",
+      description: "List canonical public SYMBaiEX documentation resources.",
+    },
+    {
+      name: "docs_get",
+      description: "Read one canonical public documentation resource by URI.",
     },
   ],
   remotes: [

@@ -49,7 +49,7 @@ const DOCUMENTS = [
   },
 ] as const;
 
-const TOOL = {
+const SEARCH_TOOL = {
   name: "docs_search",
   description:
     "Search the bounded public SYMBaiEX developer and agent documentation index.",
@@ -91,6 +91,36 @@ const TOOL = {
     openWorldHint: false,
   },
 } as const;
+
+const LIST_TOOL = {
+  name: "docs_list",
+  description:
+    "List the bounded canonical SYMBaiEX developer and agent documentation resources.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: [],
+    properties: {},
+  },
+  annotations: SEARCH_TOOL.annotations,
+} as const;
+
+const GET_TOOL = {
+  name: "docs_get",
+  description:
+    "Read one canonical SYMBaiEX documentation resource by URI from docs_list.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["uri"],
+    properties: {
+      uri: { type: "string", format: "uri", maxLength: 300 },
+    },
+  },
+  annotations: SEARCH_TOOL.annotations,
+} as const;
+
+const TOOLS = [SEARCH_TOOL, LIST_TOOL, GET_TOOL] as const;
 
 export async function POST(request: Request) {
   const length = Number(request.headers.get("content-length") ?? "0");
@@ -200,7 +230,7 @@ export async function POST(request: Request) {
     });
   }
   if (body.method === "tools/list") {
-    return rpc(id, { tools: [TOOL] });
+    return rpc(id, { tools: TOOLS });
   }
   if (body.method === "resources/list") {
     return rpc(id, {
@@ -227,6 +257,33 @@ export async function POST(request: Request) {
   if (body.method === "tools/call") {
     const params = isRecord(body.params) ? body.params : null;
     const input = isRecord(params?.arguments) ? params.arguments : null;
+    if (params?.name === LIST_TOOL.name && validEmpty(input)) {
+      const resources = DOCUMENTS.map(({ uri, name, description }) => ({
+        uri,
+        name,
+        description,
+        mimeType: "text/markdown",
+      }));
+      return toolResult(id, { resources });
+    }
+    if (params?.name === GET_TOOL.name && validGet(input)) {
+      const document = DOCUMENTS.find((entry) => entry.uri === input.uri);
+      if (!document) {
+        return rpc(id, undefined, {
+          code: -32602,
+          message: "Unknown documentation URI",
+        });
+      }
+      return toolResult(id, {
+        resource: {
+          uri: document.uri,
+          name: document.name,
+          description: document.description,
+          mimeType: "text/markdown",
+          text: document.text,
+        },
+      });
+    }
     if (!isDocsSearchTool(params?.name) || !validSearch(input)) {
       return rpc(id, undefined, {
         code: -32602,
@@ -234,16 +291,35 @@ export async function POST(request: Request) {
       });
     }
     const results = search(input.query, input.limit);
-    return rpc(id, {
-      content: [{ type: "text", text: JSON.stringify({ results }) }],
-      structuredContent: { results },
-    });
+    return toolResult(id, { results });
   }
   return rpc(id, undefined, { code: -32601, message: "Method not found" });
 }
 
 function isDocsSearchTool(name: unknown) {
-  return name === TOOL.name || name === "docs.search";
+  return name === SEARCH_TOOL.name || name === "docs.search";
+}
+
+function toolResult(id: string | number | null, structuredContent: unknown) {
+  return rpc(id, {
+    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+    structuredContent,
+  });
+}
+
+function validEmpty(value: Record<string, unknown> | null) {
+  return value !== null && Object.keys(value).length === 0;
+}
+
+function validGet(
+  value: Record<string, unknown> | null,
+): value is { uri: string } {
+  return (
+    value !== null &&
+    Object.keys(value).length === 1 &&
+    typeof value.uri === "string" &&
+    value.uri.length <= 300
+  );
 }
 
 export function OPTIONS() {
