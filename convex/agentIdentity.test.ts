@@ -203,6 +203,7 @@ describe("agent identity authentication", () => {
       {},
     );
     expect(result.agents).toHaveLength(1);
+    expect(result.truncated).toBe(false);
     expect(result.agents[0]).toMatchObject({
       agentId: "first-console-agent",
       status: "active",
@@ -217,6 +218,37 @@ describe("agent identity authentication", () => {
     await expect(
       t.query(api.agentIdentity.listMyAgentConsoleStatus, {}),
     ).rejects.toThrow(/sign in/i);
+  });
+
+  test("the developer console projection bounds large agent rosters", async () => {
+    const t = setup();
+    const ownerId = await seedOwner(t);
+    const publicKey = await publicKeyBase64((await keyPair()).publicKey);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 51; index += 1) {
+        await ctx.db.insert("agentIdentities", {
+          agentId: `bounded-agent-${String(index).padStart(2, "0")}`,
+          userId: ownerId,
+          ownerUserId: ownerId,
+          publicKey,
+          scopes: ["evidence"],
+          status: "active",
+          keyVersion: 1,
+          createdAt: index,
+          updatedAt: index,
+        });
+      }
+    });
+
+    const result = await t
+      .withIdentity({ subject: ownerId })
+      .query(api.agentIdentity.listMyAgentConsoleStatus, {});
+
+    expect(result.agents).toHaveLength(50);
+    expect(result.truncated).toBe(true);
+    expect(
+      result.agents.some((agent) => agent.agentId === "bounded-agent-00"),
+    ).toBe(false);
   });
 
   test("invalid, replayed, and expired challenges fail closed", async () => {

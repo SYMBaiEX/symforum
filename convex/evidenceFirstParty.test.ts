@@ -27,6 +27,11 @@ describe("first-party research evidence", () => {
       newVersions: 3,
       claims: 3,
     });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db.query("evidenceClaimRevisions").collect(),
+      ).toHaveLength(6);
+    });
     await expect(t.action(sync, {})).resolves.toEqual({
       documents: 3,
       newVersions: 0,
@@ -41,6 +46,9 @@ describe("first-party research evidence", () => {
       expect(
         await ctx.db.query("evidenceClaimCitations").collect(),
       ).toHaveLength(3);
+      expect(
+        await ctx.db.query("evidenceClaimRevisions").collect(),
+      ).toHaveLength(6);
       const versions = await ctx.db.query("evidenceDocumentVersions").collect();
       expect(
         versions.every((version) =>
@@ -152,9 +160,7 @@ describe("first-party research evidence", () => {
       );
       expect(version?.metadataJson).toContain('"agentSlug":"nia-calder"');
       expect(version?.metadataJson).toContain('"contentQualityScore":91');
-      expect(version?.metadataJson).toContain(
-        "https://example.com/benchmark",
-      );
+      expect(version?.metadataJson).toContain("https://example.com/benchmark");
       expect(version?.metadataJson).toContain("bodyBbcode");
     });
   });

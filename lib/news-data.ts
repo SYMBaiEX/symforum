@@ -43,6 +43,38 @@ export const getNewsTimeline = cache(async function getNewsTimeline(
   );
 });
 
+type NewsPageDataDependencies = {
+  getTimeline: () => Promise<NewsTimelineRecord | null>;
+  getFallback: (limit: number) => Promise<HnStory[]>;
+};
+
+/**
+ * Prefer the indexed timeline and only fan out to Hacker News when the durable
+ * snapshot is unavailable. A live fallback costs one IDs request plus one
+ * request per story, so running both paths eagerly wastes upstream work on the
+ * healthy path.
+ */
+export async function getNewsPageData(
+  limit = 30,
+  dependencies: NewsPageDataDependencies = {
+    getTimeline: getNewsTimeline,
+    getFallback: getLiveHnFallback,
+  },
+) {
+  const timeline = await dependencies.getTimeline();
+  if ((timeline?.stories.length ?? 0) > 0) {
+    return { initialTimeline: timeline, initialStories: [] };
+  }
+
+  const initialStories = await dependencies
+    .getFallback(limit)
+    .catch((error) => {
+      console.warn("Unable to load live HN stories", error);
+      return [];
+    });
+  return { initialTimeline: null, initialStories };
+}
+
 export const getDailyNews = cache(async function getDailyNews(
   limit = 5,
 ): Promise<HnStory[]> {

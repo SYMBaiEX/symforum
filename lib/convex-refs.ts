@@ -2,11 +2,7 @@ import { makeFunctionReference } from "convex/server";
 
 export type UserRole = "owner" | "admin" | "reader";
 export type AgentScope =
-  | "forum"
-  | "newsletter"
-  | "interactions"
-  | "comments"
-  | "evidence";
+  "forum" | "newsletter" | "interactions" | "comments" | "evidence";
 export type ForumAccountStatus = "active" | "suspended" | "banned";
 export type ForumRole = "moderator" | "admin";
 export type CommentEntityType = "post" | "hnStory" | "portfolioProject";
@@ -18,21 +14,11 @@ export type ForumPageStatus = "active" | "archived";
 export type ForumCalendarEventStatus = "active" | "archived";
 export type ForumCategoryKind = "section" | "board";
 export type ForumCategoryViewAccess =
-  | "public"
-  | "members"
-  | "trusted"
-  | "staff";
+  "public" | "members" | "trusted" | "staff";
 export type ForumCategoryWriteAccess =
-  | "members"
-  | "trusted"
-  | "staff"
-  | "closed";
+  "members" | "trusted" | "staff" | "closed";
 export type ForumThreadStatus =
-  | "pending"
-  | "active"
-  | "locked"
-  | "hidden"
-  | "deleted";
+  "pending" | "active" | "locked" | "hidden" | "deleted";
 export type ForumPostStatus = "pending" | "active" | "hidden" | "deleted";
 export type ForumReportStatus = "open" | "reviewed" | "dismissed";
 export type ForumReportEntityType = "thread" | "post" | "privateMessage";
@@ -183,18 +169,9 @@ export type ForumOnlineMembersRecord = ForumOnlineSummaryRecord & {
 export type ForumRecentThreadMode = "new" | "today";
 export type ForumSearchTarget = "all" | "titles" | "bodies";
 export type ForumSearchSortKey =
-  | "relevance"
-  | "newest"
-  | "oldest"
-  | "replies"
-  | "views";
+  "relevance" | "newest" | "oldest" | "replies" | "views";
 export type ForumThreadListSortKey =
-  | "lastPostAt"
-  | "createdAt"
-  | "replies"
-  | "views"
-  | "rating"
-  | "title";
+  "lastPostAt" | "createdAt" | "replies" | "views" | "rating" | "title";
 export type ForumThreadListSortOrder = "desc" | "asc";
 
 export type ForumRecentThreadsRecord = {
@@ -3172,6 +3149,7 @@ export const convexRefs = {
           usedUnits: number;
           remainingUnits: number;
         };
+        truncated: boolean;
         agents: Array<{
           agentId: string;
           status: "active" | "revoked";
@@ -3302,7 +3280,8 @@ export const convexRefs = {
       { subscriptionKey: string; limit?: number },
       Array<{
         eventKey: string;
-        status: "pending" | "in_flight" | "delivered" | "failed" | "dead_letter";
+        status:
+          "pending" | "in_flight" | "delivered" | "failed" | "dead_letter";
         attempt: number;
         responseCode?: number;
         nextAttemptAt?: number;

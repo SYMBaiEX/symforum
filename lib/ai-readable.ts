@@ -548,11 +548,10 @@ async function renderBlogPost(slug: string) {
 }
 
 async function renderNewsIndex() {
-  const [timeline, fallback] = await Promise.all([
-    getNewsTimeline(),
-    getLiveHnFallback(30).catch(() => []),
-  ]);
-  const stories = timeline?.stories?.length ? timeline.stories : fallback;
+  const timeline = await getNewsTimeline();
+  const stories = timeline?.stories?.length
+    ? timeline.stories
+    : await getLiveHnFallback(30).catch(() => []);
   const markdown = [
     "# SYMBaiEX daily news",
     "",

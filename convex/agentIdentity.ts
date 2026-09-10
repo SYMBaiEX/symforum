@@ -27,6 +27,7 @@ const CHALLENGE_WINDOW_MS = 15 * 60 * 1_000;
 const MAX_CHALLENGES_PER_WINDOW = 5;
 const MAX_AGENT_ID_LENGTH = 64;
 const MAX_AUDIENCE_LENGTH = 128;
+const MAX_CONSOLE_AGENTS = 50;
 
 const agentIdentifierArgs = {
   agentId: v.optional(v.string()),
@@ -129,11 +130,12 @@ export const listMyAgentConsoleStatus = query({
       });
     }
     const monthKey = currentUtcMonthKey();
-    const [identities, budget] = await Promise.all([
+    const [identityPage, budget] = await Promise.all([
       ctx.db
         .query("agentIdentities")
         .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", owner._id))
-        .collect(),
+        .order("desc")
+        .take(MAX_CONSOLE_AGENTS + 1),
       ctx.db
         .query("agentQuotaBudgets")
         .withIndex("by_ownerUserId_and_monthKey", (q) =>
@@ -141,6 +143,7 @@ export const listMyAgentConsoleStatus = query({
         )
         .unique(),
     ]);
+    const identities = identityPage.slice(0, MAX_CONSOLE_AGENTS);
     const agents = await Promise.all(
       identities.map(async (identity) => {
         const [limit, counter] = await Promise.all([
@@ -196,6 +199,7 @@ export const listMyAgentConsoleStatus = query({
             (budget?.usedUnits ?? 0),
         ),
       },
+      truncated: identityPage.length > MAX_CONSOLE_AGENTS,
       agents: agents.sort((a, b) => a.agentId.localeCompare(b.agentId)),
     };
   },

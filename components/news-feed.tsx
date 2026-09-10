@@ -19,6 +19,7 @@ import {
 import { isAuthRequiredError } from "@/lib/auth-errors";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
+import { emptyNewsFeedState } from "@/lib/news-feed-state";
 import { newsStoryPath } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -108,14 +109,29 @@ function LiveNewsFeed({
   }
 
   if (visibleData === null) {
-    if (initialStories.length === 0) {
+    const emptyState = emptyNewsFeedState({
+      queryResolved: data !== undefined,
+      fallbackStoryCount: initialStories.length,
+      selectedDate,
+    });
+    if (emptyState === "loading") {
       return (
         <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
           Loading stories…
         </div>
       );
     }
-    return <NewsRows interactive stories={initialStories} />;
+    if (emptyState === "fallback") {
+      return <NewsRows interactive stories={initialStories} />;
+    }
+    return (
+      <div
+        className="border-y border-row-border py-5 font-mono text-[10px] uppercase leading-5 text-muted-foreground"
+        role="status"
+      >
+        The news index is temporarily unavailable. Try again shortly.
+      </div>
+    );
   }
 
   const selectedSnapshotDate =

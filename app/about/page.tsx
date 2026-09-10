@@ -22,6 +22,14 @@ export async function generateMetadata(): Promise<Metadata> {
       firstName: "Austin",
       lastName: "Hamilton",
       username: "symbiex",
+      images: [
+        {
+          url: "/opengraph-image",
+          width: 1200,
+          height: 630,
+          alt: "About Austin Hamilton at SYMBaIEX.",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",

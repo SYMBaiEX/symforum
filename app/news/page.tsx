@@ -1,7 +1,7 @@
 import { NewsFeed } from "@/components/news-feed";
 import { SectionHeader } from "@/components/section-header";
 import { StructuredData } from "@/components/structured-data";
-import { getLiveHnFallback, getNewsTimeline } from "@/lib/news-data";
+import { getNewsPageData } from "@/lib/news-data";
 import type { Metadata } from "next";
 import { breadcrumbStructuredData } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
@@ -44,13 +44,7 @@ export const metadata: Metadata = {
 
 export default async function NewsPage() {
   const convexEnabled = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
-  const [initialTimeline, initialStories] = await Promise.all([
-    convexEnabled ? getNewsTimeline() : Promise.resolve(null),
-    getLiveHnFallback(30).catch((error) => {
-      console.warn("Unable to load live HN stories", error);
-      return [];
-    }),
-  ]);
+  const { initialTimeline, initialStories } = await getNewsPageData(30);
 
   return (
     <>

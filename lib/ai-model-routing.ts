@@ -154,6 +154,26 @@ function safeError(error: unknown) {
   return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
+export function routedAttemptTimeoutMs({
+  remainingMs,
+  remainingFallbacks,
+  totalTimeoutMs,
+}: {
+  remainingMs: number;
+  remainingFallbacks: number;
+  totalTimeoutMs: number;
+}) {
+  const reservePerFallback = Math.min(
+    120_000,
+    Math.max(30_000, Math.floor(totalTimeoutMs * 0.4)),
+  );
+  const fallbackReserve =
+    remainingFallbacks > 0
+      ? Math.min(remainingMs - 1_000, reservePerFallback * remainingFallbacks)
+      : 0;
+  return Math.max(1_000, remainingMs - fallbackReserve);
+}
+
 export async function runRoutedCandidates<T>(
   candidates: RoutedModel[],
   args: RouteRunArgs<T>,
@@ -166,15 +186,14 @@ export async function runRoutedCandidates<T>(
     const remaining = deadline - Date.now();
     if (remaining <= 1_000) break;
     const remainingFallbacks = candidates.length - index - 1;
-    const reservePerFallback = Math.min(
-      90_000,
-      Math.max(30_000, Math.floor(args.totalTimeoutMs * 0.25)),
-    );
-    const fallbackReserve =
-      remainingFallbacks > 0
-        ? Math.min(remaining - 1_000, reservePerFallback * remainingFallbacks)
-        : 0;
-    const attemptTimeout = Math.max(1_000, remaining - fallbackReserve);
+    // Structured free routes can legitimately consume most of their window
+    // before revealing that tool calling is unsupported. Preserve a useful
+    // rescue window instead of leaving the paid fallback only the last 25%.
+    const attemptTimeout = routedAttemptTimeoutMs({
+      remainingMs: remaining,
+      remainingFallbacks,
+      totalTimeoutMs: args.totalTimeoutMs,
+    });
     const attemptStartedAt = Date.now();
     let attemptStarted = false;
     try {

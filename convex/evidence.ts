@@ -573,6 +573,14 @@ export const upsertEntity = internalMutation({
       updatedAt: now,
     };
     if (existing !== null) {
+      const unchanged =
+        existing.kind === value.kind &&
+        existing.name === value.name &&
+        existing.visibility === value.visibility &&
+        sameCanonicalDocumentList(existing.aliases, value.aliases);
+      if (unchanged) {
+        return { entityId: existing._id, created: false };
+      }
       await ctx.db.patch("evidenceEntities", existing._id, value);
       return { entityId: existing._id, created: false };
     }
@@ -606,6 +614,15 @@ export const linkDocumentEntity = internalMutation({
     created: v.boolean(),
   }),
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("evidenceDocumentEntities")
+      .withIndex("by_documentVersionId_and_entityId", (q) =>
+        q
+          .eq("documentVersionId", args.documentVersionId)
+          .eq("entityId", args.entityId),
+      )
+      .unique();
+    if (existing !== null) return { linkId: existing._id, created: false };
     const [version, entity] = await Promise.all([
       ctx.db.get("evidenceDocumentVersions", args.documentVersionId),
       ctx.db.get("evidenceEntities", args.entityId),
@@ -616,15 +633,6 @@ export const linkDocumentEntity = internalMutation({
         message: "Document version and entity must exist before linking.",
       });
     }
-    const existing = await ctx.db
-      .query("evidenceDocumentEntities")
-      .withIndex("by_documentVersionId_and_entityId", (q) =>
-        q
-          .eq("documentVersionId", args.documentVersionId)
-          .eq("entityId", args.entityId),
-      )
-      .unique();
-    if (existing !== null) return { linkId: existing._id, created: false };
     return {
       linkId: await ctx.db.insert("evidenceDocumentEntities", {
         ...args,
@@ -652,14 +660,6 @@ export const upsertClaim = internalMutation({
   },
   returns: v.object({ claimId: v.id("evidenceClaims"), created: v.boolean() }),
   handler: async (ctx, args) => {
-    if (
-      args.subjectEntityId !== undefined &&
-      (await ctx.db.get("evidenceEntities", args.subjectEntityId)) === null
-    )
-      throw new ConvexError({
-        code: "EVIDENCE_ENTITY_NOT_FOUND",
-        message: "Claim subject entity does not exist.",
-      });
     if (
       !Number.isFinite(args.confidence) ||
       args.confidence < 0 ||
@@ -712,6 +712,16 @@ export const upsertClaim = internalMutation({
         existing.visibility !== value.visibility ||
         existing.observedAt !== value.observedAt;
       if (!changed) return { claimId: existing._id, created: false };
+    }
+    if (
+      args.subjectEntityId !== undefined &&
+      (await ctx.db.get("evidenceEntities", args.subjectEntityId)) === null
+    )
+      throw new ConvexError({
+        code: "EVIDENCE_ENTITY_NOT_FOUND",
+        message: "Claim subject entity does not exist.",
+      });
+    if (existing !== null) {
       await ctx.db.patch("evidenceClaims", existing._id, value);
       const updated = { ...existing, ...value };
       await recordClaimRevision(ctx, {
@@ -796,6 +806,12 @@ export const recordCitation = internalMutation({
     created: v.boolean(),
   }),
   handler: async (ctx, args) => {
+    const citationKey = bounded(args.citationKey, "citationKey", 240);
+    const existing = await ctx.db
+      .query("evidenceClaimCitations")
+      .withIndex("by_citationKey", (q) => q.eq("citationKey", citationKey))
+      .unique();
+    if (existing !== null) return { citationId: existing._id, created: false };
     const [claim, version] = await Promise.all([
       ctx.db.get("evidenceClaims", args.claimId),
       ctx.db.get("evidenceDocumentVersions", args.documentVersionId),
@@ -825,12 +841,6 @@ export const recordCitation = internalMutation({
         code: "INVALID_EVIDENCE_CONFIDENCE",
         message: "confidence must be between 0 and 1.",
       });
-    const citationKey = bounded(args.citationKey, "citationKey", 240);
-    const existing = await ctx.db
-      .query("evidenceClaimCitations")
-      .withIndex("by_citationKey", (q) => q.eq("citationKey", citationKey))
-      .unique();
-    if (existing !== null) return { citationId: existing._id, created: false };
     const createdAt = Date.now();
     const {
       actorType: _actorType,

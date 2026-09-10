@@ -221,7 +221,7 @@ export const sync = internalAction({
         status: "supported",
         confidence: 1,
         visibility: "public",
-        observedAt: now,
+        observedAt: PUBLISHED_AT,
       });
       const citation = await ctx.runMutation(recordCitationRef, {
         claimId: claim.claimId,

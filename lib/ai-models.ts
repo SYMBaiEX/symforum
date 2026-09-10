@@ -31,7 +31,7 @@ export function openRouterStructuredOutputBudget(
 ) {
   return modelId === OPENROUTER_PAID_FALLBACK_MODEL
     ? baseTokens * 2
-    : baseTokens;
+    : Math.ceil(baseTokens * 1.5);
 }
 
 export type SymbaiexModelId =

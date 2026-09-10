@@ -5,6 +5,7 @@ import {
   openRouterModelForStage,
   openRouterModelsForStage,
   routedModelCandidates,
+  routedAttemptTimeoutMs,
   runRoutedCandidates,
   selectStreamingModel,
   type RoutedModel,
@@ -48,7 +49,7 @@ describe("OpenRouter-only model routing", () => {
       openRouterStructuredOutputBudget(OPENROUTER_PAID_FALLBACK_MODEL, 3_000),
     ).toBe(6_000);
     expect(openRouterStructuredOutputBudget("openrouter/free", 3_000)).toBe(
-      3_000,
+      4_500,
     );
   });
 
@@ -142,6 +143,23 @@ describe("OpenRouter-only model routing", () => {
         fallback: true,
       }),
     );
+  });
+
+  test("reserves a usable structured-generation window for the paid rescue", () => {
+    expect(
+      routedAttemptTimeoutMs({
+        remainingMs: 270_000,
+        remainingFallbacks: 1,
+        totalTimeoutMs: 270_000,
+      }),
+    ).toBe(162_000);
+    expect(
+      routedAttemptTimeoutMs({
+        remainingMs: 108_000,
+        remainingFallbacks: 0,
+        totalTimeoutMs: 270_000,
+      }),
+    ).toBe(108_000);
   });
 
   test("uses OpenRouter-native fallbacks before an owner-console stream starts", async () => {

@@ -42,8 +42,7 @@ import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = 12;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION =
-  "belle-forum-v13-structured-route-publication-hygiene";
+const BELLE_PROMPT_VERSION = "belle-forum-v14-structured-route-rescue-budget";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.

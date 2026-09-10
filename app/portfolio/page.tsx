@@ -28,12 +28,21 @@ export async function generateMetadata(): Promise<Metadata> {
       url: primarySiteUrl("/portfolio"),
       title: page?.title ?? "Portfolio",
       description: page?.heroBody,
+      images: [
+        {
+          url: "/opengraph-image",
+          width: 1200,
+          height: 630,
+          alt: "SYMBaIEX portfolio index and project archive.",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: page?.title ?? "Portfolio",
       description:
-        page?.heroBody ?? "A working record of systems built, contributed to, and shipped.",
+        page?.heroBody ??
+        "A working record of systems built, contributed to, and shipped.",
       images: [
         {
           url: "/opengraph-image",

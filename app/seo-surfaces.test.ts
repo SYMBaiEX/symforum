@@ -63,8 +63,11 @@ describe("public discovery surfaces", () => {
       const source = readFileSync(resolve(process.cwd(), route), "utf8");
       expect(source).toMatch(/openGraph:\s*\{/);
       expect(source).toMatch(/twitter:\s*\{/);
-      expect(source).toMatch(/url:\s*[`\"'][^`\"']*opengraph-image/);
-      expect(source).toMatch(/alt:\s*[`\"']/);
+      const openGraphStart = source.indexOf("openGraph:");
+      const twitterStart = source.indexOf("twitter:", openGraphStart);
+      const openGraphSource = source.slice(openGraphStart, twitterStart);
+      expect(openGraphSource).toMatch(/url:\s*[`\"'][^`\"']*opengraph-image/);
+      expect(openGraphSource).toMatch(/alt:\s*[`\"']/);
     }
   });
 

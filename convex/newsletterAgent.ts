@@ -38,8 +38,7 @@ import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 export const NEWSLETTER_MODEL_IDS = OPENROUTER_GENERATION_MODELS;
-const PROMPT_VERSION =
-  "belle-newsletter-v11-structured-route-publication-hygiene";
+const PROMPT_VERSION = "belle-newsletter-v12-structured-route-rescue-budget";
 const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;

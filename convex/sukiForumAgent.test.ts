@@ -508,9 +508,9 @@ What would you verify first?`,
       "[decision=Decision frame]",
     );
     expect(structuredBlockContract("brief")).toContain("[table]");
-    expect(forumWriterMaxOutputTokens("draft", false)).toBe(4_800);
-    expect(forumWriterMaxOutputTokens("revision", false)).toBe(5_500);
-    expect(forumWriterMaxOutputTokens("revision", true)).toBe(2_800);
+    expect(forumWriterMaxOutputTokens("draft", false)).toBe(7_200);
+    expect(forumWriterMaxOutputTokens("revision", false)).toBe(8_250);
+    expect(forumWriterMaxOutputTokens("revision", true)).toBe(4_200);
     expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(1);
     expect(forumEditorialRescueModels()).toEqual(OPENROUTER_GENERATION_MODELS);
   });

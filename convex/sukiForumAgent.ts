@@ -61,7 +61,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v18-structured-route-publication-hygiene";
+const PROMPT_VERSION = "suki-forum-v19-structured-route-rescue-budget";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // One focused correction pass is the measured sweet spot. A second full-model
 // rewrite more than doubled token usage while rarely rescuing a rejected post.
@@ -2459,9 +2459,10 @@ export function forumWriterMaxOutputTokens(
     : stage === "revision"
       ? 5_500
       : 4_800;
-  return modelId === undefined
-    ? baseTokens
-    : openRouterStructuredOutputBudget(modelId, baseTokens);
+  return openRouterStructuredOutputBudget(
+    modelId ?? OPENROUTER_FORUM_MODEL,
+    baseTokens,
+  );
 }
 
 function plainWordCount(value: string) {
