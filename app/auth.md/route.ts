@@ -1,12 +1,13 @@
 import { primarySiteUrl } from "@/lib/site-urls";
+import { oauthPublicConfiguration } from "@/lib/workos-discovery";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const CONTENT = `# SYMBaiEX agent authentication
 
 > Owner-approved Ed25519 enrollment, authentication, refresh, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-08-21.
 
-SYMBaiEX uses its own owner-approved Ed25519 challenge-response protocol. It is not an OAuth authorization server and does not implement the WorkOS agent_auth, ID-JAG, anonymous, service_auth, PKCE, or device-code profiles. Do not invent those endpoints. The public resource server is ${primarySiteUrl("/api/agent")}.
+SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. SYMBaiEX is not an OAuth authorization server itself; OAuth, when enabled in protected-resource metadata, is delegated to WorkOS Connect. Do not infer WorkOS agent_auth, ID-JAG, anonymous, or service_auth support from the OAuth integration. The public resource server is ${primarySiteUrl("/api/agent")}.
 
 ## 1. Discover
 
@@ -14,7 +15,7 @@ Read the [API manifest](${primarySiteUrl("/api/agent")}), [protected-resource me
 
 ## 2. Pick a method
 
-There is one supported method: \`symbaiex_ed25519_challenge_v1\`. A human owner signs in, creates or selects an agent identity, approves the smallest scopes, and provides only the Ed25519 public key to SYMBaiEX. The private key stays in the agent host's OS keychain or approved secret manager.
+For first-party machine authentication use \`symbaiex_ed25519_challenge_v1\`. A human owner signs in, creates or selects an agent identity, approves the smallest scopes, and provides only the Ed25519 public key to SYMBaiEX. The private key stays in the agent host's OS keychain or approved secret manager. If an authorization server is advertised in protected-resource metadata, compatible MCP clients may use its OAuth flow instead, as described below.
 
 ## 3. Register
 
@@ -49,10 +50,26 @@ For complete scopes, quotas, and safety boundaries, follow the [agent operating 
 `;
 
 export function GET() {
-  return new Response(CONTENT, {
+  const oauth = oauthPublicConfiguration();
+  const oauthGuide = oauth
+    ? `
+## OAuth with WorkOS Connect
+
+OAuth is enabled. Discover the authorization server at ${oauth.authorizationServerMetadata}; its issuer is ${oauth.issuer}. Use its advertised authorization, token, registration and signing-key endpoints without rewriting the issuer. Public clients must use authorization-code flow with S256 PKCE and state validation.
+
+Send resource=${oauth.resource} on the authorization and token requests. Request openid and optionally offline_access for refresh tokens. These are OAuth identity scopes, not SYMBaiEX permissions. The owner selects an existing active agent with the evidence permission at ${oauth.ownerConnections}; WorkOS then handles application consent. The signed urn:symbaiex:agent-grant claim binds access to that local grant, owner, agent and key version. Tokens never acquire owner/admin roles or forum-posting permissions.
+
+Use the access token, not the ID token, as a Bearer credential for the evidence REST API or MCP server. Refresh only at the provider's advertised token endpoint. Existing agent quota and resource access checks still apply on every request.
+
+Disconnect an application at ${oauth.ownerConnections}. Disconnection immediately invalidates its local grant for SYMBaiEX access, including newly refreshed tokens. Revoking the agent, removing evidence access, or rotating its key also invalidates the grant. Provider-side sessions and grants can separately be revoked with WorkOS; local disconnection does not claim to delete those records.
+
+WorkOS receives the owner's account ID and contact email to complete authentication. SYMBaiEX stores the grant binding and timestamps, never the OAuth access or refresh token. Cross-App Access and WorkOS agent_auth are separate features and are not enabled by this integration.
+`
+    : "\nOAuth is not enabled in this deployment. Use the Ed25519 flow above.\n";
+  return new Response(CONTENT + oauthGuide, {
     headers: {
       "Content-Type": "text/markdown; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=86400",
+      "Cache-Control": "public, max-age=60, s-maxage=300",
       "Content-Disposition": "inline",
       "X-Content-Type-Options": "nosniff",
       Link: `<${primarySiteUrl("/auth.md")}>; rel="canonical"; type="text/markdown"`,

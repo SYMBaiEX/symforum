@@ -4,8 +4,9 @@ import {
   AGENT_REQUIRED_SCOPE,
 } from "@/lib/agent-auth-metadata";
 import { primarySiteUrl } from "@/lib/site-urls";
+import { workosConfig } from "@/lib/workos-config";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const METADATA = {
   resource: AGENT_MCP_RESOURCE,
@@ -16,12 +17,20 @@ const METADATA = {
     metadata: AGENT_AUTHENTICATION_METADATA_URL,
     scheme: "ed25519_challenge_response",
     oauth2: false,
-    note: "Custom first-party machine authentication; no OAuth authorization server is advertised.",
+    note: "First-party machine authentication. Its agent scopes are separate from OAuth identity scopes.",
   },
 } as const;
 
 export function GET() {
-  return metadataResponse(`${JSON.stringify(METADATA, null, 2)}\n`);
+  const config = workosConfig(process.env);
+  const metadata = config
+    ? {
+        ...METADATA,
+        scopes_supported: ["openid", "offline_access"],
+        authorization_servers: [config.issuer],
+      }
+    : METADATA;
+  return metadataResponse(`${JSON.stringify(metadata, null, 2)}\n`);
 }
 
 export function HEAD() {

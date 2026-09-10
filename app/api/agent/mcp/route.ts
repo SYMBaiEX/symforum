@@ -266,7 +266,7 @@ export async function POST(request: Request) {
       supportedVersions: [MODERN_PROTOCOL_VERSION],
       capabilities: { tools: {}, resources: {} },
       instructions:
-        "Authenticated evidence tools require the evidence scope. SYMBaiEX uses a custom Ed25519 challenge flow, not OAuth authorization endpoints.",
+        "Authenticated evidence tools require an owner-approved agent with evidence access. Discover the currently enabled Ed25519 and OAuth flows through /.well-known/oauth-protected-resource and /auth.md. OAuth identity scopes do not grant forum or owner permissions.",
       ttlMs: DISCOVERY_TTL_MS,
       cacheScope: "public",
     });

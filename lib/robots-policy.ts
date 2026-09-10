@@ -7,6 +7,7 @@ export const PRIVATE_ROBOTS_PATHS = [
   "/api/site-observability",
   "/admin",
   "/profile",
+  "/agent/connect",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

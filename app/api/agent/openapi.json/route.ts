@@ -877,7 +877,7 @@ const OPENAPI = {
         operationId: "evidenceMcp",
         summary: "Call the stateless MCP evidence server",
         description:
-          "Protocol 2026-07-28 uses server/discover and per-request metadata. Legacy 2025-03-26 initialize remains available only for legacy callers. Initialize, discovery, tool listing, and the read-only MCP App resource are public; tools/call requires the documented custom Ed25519 bearer flow, not OAuth authorization endpoints.",
+          "Protocol 2026-07-28 uses server/discover and per-request metadata. Legacy 2025-03-26 initialize remains available only for legacy callers. Initialize, discovery, tool listing, and the read-only MCP App resource are public; tools/call requires a bearer access token for an owner-approved agent. Read /auth.md and protected-resource metadata for currently enabled Ed25519 and OAuth flows.",
         security: [{}, { bearerAuth: [] }],
         parameters: [
           { $ref: "#/components/parameters/McpProtocolVersion" },

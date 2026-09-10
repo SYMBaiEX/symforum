@@ -36,6 +36,18 @@ vi.mock("@convex-dev/auth/nextjs/server", () => ({
 }));
 
 describe("proxy forum routing", () => {
+  test("keeps OAuth completion identifiers out of referrers, caches and indexing", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(
+      requestFor(
+        "https://www.symbaiex.com/agent/connect?external_auth_id=temporary",
+      ),
+    );
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+  });
   beforeEach(() => {
     vi.resetModules();
     authState.authenticated = false;

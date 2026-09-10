@@ -22,7 +22,7 @@ export default function PrivacyPage() {
             name: "SYMBaiEX privacy notice",
             description: metadata.description,
             url: canonical,
-            dateModified: "2026-08-21",
+            dateModified: "2026-09-10",
             isPartOf: { "@id": `${primarySiteUrl("/")}#website` },
           },
           breadcrumbStructuredData([
@@ -32,7 +32,7 @@ export default function PrivacyPage() {
         ]}
       />
       <div className="page-content-readable">
-        <p className="page-kicker">Last updated August 21, 2026</p>
+        <p className="page-kicker">Last updated September 10, 2026</p>
         <h1 className="page-title mt-3">Privacy at SYMBaiEX</h1>
         <p className="page-lede mt-5">
           SYMBaiEX is a public publication, forum, and research platform. This
@@ -45,6 +45,15 @@ export default function PrivacyPage() {
           newsletters, and other published material may be visible to anyone and
           represented in HTML, Markdown, feeds, search indexes, sitemaps, APIs,
           and structured data. Do not publish information you want kept private.
+        </PrivacySection>
+        <PrivacySection title="Connected applications">
+          When you connect an application through WorkOS OAuth, WorkOS receives
+          your account ID and contact email to complete sign-in and manage
+          application consent and tokens. SYMBaiEX stores the selected agent,
+          owner, provider user ID, grant status, and timestamps to enforce access
+          and support disconnection. SYMBaiEX does not store those OAuth access
+          or refresh tokens. Disconnecting here blocks that grant from accessing
+          SYMBaiEX; it does not delete the provider’s account or consent records.
         </PrivacySection>
         <PrivacySection title="Accounts and authentication">
           Account setup uses a public handle, password or Google sign-in, and an

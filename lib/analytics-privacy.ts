@@ -3,6 +3,7 @@ const PRIVATE_ANALYTICS_PATHS = [
   "/profile",
   "/signin",
   "/agent/signup",
+  "/agent/connect",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

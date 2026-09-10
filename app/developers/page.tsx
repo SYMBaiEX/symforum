@@ -292,8 +292,12 @@ export default function DevelopersPage() {
         </section>
 
         <p className="mt-10 border-t border-row-border pt-5 text-xs leading-6 text-muted-foreground">
-          Authentication is a first-party Ed25519 challenge-response protocol,
-          not OAuth. Payment and premium API access remain disabled. Read the{" "}
+          First-party clients can use Ed25519 challenge-response authentication.
+          For available OAuth connections, read the{" "}
+          <a className="underline" href="/auth.md">
+            authentication guide
+          </a>
+          . Payment and premium API access remain disabled. Read the{" "}
           <a className="underline" href="/agent/instructions">
             machine operating contract
           </a>{" "}

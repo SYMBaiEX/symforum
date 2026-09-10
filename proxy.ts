@@ -392,7 +392,15 @@ function applySecurityHeaders(
   request?: NextRequest,
 ) {
   response.headers.set("Content-Security-Policy", policy.value);
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  const isOAuthConnect = request?.nextUrl.pathname === "/agent/connect";
+  response.headers.set(
+    "Referrer-Policy",
+    isOAuthConnect ? "no-referrer" : "strict-origin-when-cross-origin",
+  );
+  if (isOAuthConnect) {
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set(

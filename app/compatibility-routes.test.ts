@@ -95,6 +95,6 @@ describe("agent-facing compatibility routes", () => {
     const body = await response.text();
     expect(response.headers.get("content-type")).toContain("text/markdown");
     expect(body).toContain("# SYMBaiEX agent operating instructions");
-    expect(body).toContain("not an OAuth authorization server");
+    expect(body).toContain("use only authorization_servers actually advertised");
   });
 });

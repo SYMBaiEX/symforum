@@ -46,7 +46,7 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("/api/sandbox/openapi.json");
     expect(api).toContain("# SYMBaiEX API context");
     expect(api).toContain(
-      "Premium payments, GraphQL, and OAuth are not active",
+      "Premium payments and GraphQL are not active",
     );
     expect(api).toContain("read-only A2A documentation agent");
     expect(api).toContain("deterministic synthetic fixtures");

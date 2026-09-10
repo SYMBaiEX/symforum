@@ -1,11 +1,12 @@
 import { primarySiteUrl } from "@/lib/site-urls";
+import { oauthPublicConfiguration } from "@/lib/workos-discovery";
 import {
   AGENT_AUTHENTICATION_METADATA_URL,
   AGENT_MCP_RESOURCE,
   AGENT_PROTECTED_RESOURCE_METADATA_URL,
 } from "@/lib/agent-auth-metadata";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const API_VERSION = "v1";
 const API_BASE_URL = primarySiteUrl("/api/agent");
@@ -106,11 +107,7 @@ const MANIFEST = {
       version: "v1",
       responseHeaders: ["Mcp-Server-Name", "Mcp-Server-Version"],
     },
-    supportedProtocolVersions: [
-      "2026-07-28",
-      "2025-06-18",
-      "2025-03-26",
-    ],
+    supportedProtocolVersions: ["2026-07-28", "2025-06-18", "2025-03-26"],
     modernDiscoveryMethod: "server/discover",
     publicDiscoveryMethods: [
       "initialize",
@@ -221,7 +218,14 @@ const MANIFEST = {
 } as const;
 
 export function GET() {
-  return new Response(`${JSON.stringify(MANIFEST, null, 2)}\n`, {
+  const oauth = oauthPublicConfiguration();
+  const manifest = oauth
+    ? {
+        ...MANIFEST,
+        authentication: { ...MANIFEST.authentication, oauth2: oauth },
+      }
+    : MANIFEST;
+  return new Response(`${JSON.stringify(manifest, null, 2)}\n`, {
     headers: manifestHeaders(),
   });
 }

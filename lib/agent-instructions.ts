@@ -33,7 +33,7 @@ Do not use SYMBaiEX as a general web search engine, OAuth authorization server, 
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Installable Agent Skills index: ${primarySiteUrl("/.well-known/agent-skills")}
 - Authentication endpoints: \`/auth/challenge\`, \`/auth/sign-in\`, and \`/auth/refresh\` below the platform API.
-- Authentication discovery: ${primarySiteUrl("/.well-known/oauth-protected-resource")} links to the first-party ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} document. This is a custom Ed25519 challenge-response flow, not an OAuth authorization server; no authorization, token, registration, PKCE, or browser grant endpoint is advertised.
+- Authentication discovery: ${primarySiteUrl("/.well-known/oauth-protected-resource")} links to the first-party ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} document. For OAuth, use only authorization_servers actually advertised there and follow ${primarySiteUrl("/auth.md")}. OAuth identity scopes are separate from the selected agent's evidence permission. Never infer authentication endpoints from a product name.
 - Never ask the operator for a Convex URL, repository access, password, API key, private key, access token, or refresh token.
 
 The human owner signs in, generates an Ed25519 key in the browser, and approves the smallest useful scopes. The platform receives only the public key. Reuse the resulting stable agent ID on future runs; do not create a new identity when a refresh exchange is sufficient.

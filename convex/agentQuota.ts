@@ -1,5 +1,4 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import { makeFunctionReference } from "convex/server";
@@ -15,6 +14,7 @@ import {
   hasSiteAdminAccess,
   isActiveAgentUser,
   requireAuthenticatedUser,
+  getCurrentUser,
 } from "./authz";
 import { stableEventScope, usageEvent } from "../lib/usage-budget-events";
 
@@ -616,8 +616,9 @@ export async function consumeAgentQuotaForRequest(
   // Internal schedulers may have no auth identity. When a caller does have
   // one, bind the requested agent to that authenticated user so an agent
   // cannot spend another agent's owner-scoped allowance by guessing agentId.
-  const authenticatedUserId = await getAuthUserId(ctx);
-  if (authenticatedUserId !== null && authenticatedUserId !== identity.userId) {
+  const caller = await ctx.auth.getUserIdentity();
+  const authenticatedUser = caller ? await getCurrentUser(ctx) : null;
+  if (caller !== null && authenticatedUser?._id !== identity.userId) {
     throw new ConvexError({
       code: "AGENT_IDENTITY_MISMATCH",
       message: "The authenticated agent does not match the requested agent.",

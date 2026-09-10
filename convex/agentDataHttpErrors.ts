@@ -27,7 +27,7 @@ const BUDGET_CODES = new Set([
 
 export type AgentDataHttpError = {
   payload: { code: string; error: string };
-  status: 400 | 403 | 409 | 429;
+  status: 400 | 401 | 403 | 409 | 429;
 };
 
 export function normalizeAgentDataHttpError(
@@ -36,28 +36,32 @@ export function normalizeAgentDataHttpError(
   const code = stableConvexErrorCode(error);
   const message = error instanceof Error ? error.message : "";
   const status =
-    (code !== null && BUDGET_CODES.has(code)) ||
-    code === "AGENT_QUOTA_EXCEEDED" ||
-    /quota|rate limit|budget/i.test(message)
-      ? 429
-      : code !== null && CONFLICT_CODES.has(code)
-        ? 409
-        : (code !== null && FORBIDDEN_CODES.has(code)) ||
-            /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
-          ? 403
-          : 400;
+    code === "AUTH_REQUIRED"
+      ? 401
+      : (code !== null && BUDGET_CODES.has(code)) ||
+          code === "AGENT_QUOTA_EXCEEDED" ||
+          /quota|rate limit|budget/i.test(message)
+        ? 429
+        : code !== null && CONFLICT_CODES.has(code)
+          ? 409
+          : (code !== null && FORBIDDEN_CODES.has(code)) ||
+              /AGENT_SCOPE_DENIED|active agent identity/i.test(message)
+            ? 403
+            : 400;
 
   return {
     payload: {
       code: code ?? GENERIC_CODE,
       error:
-        status === 403
-          ? "An active agent identity with the evidence scope is required."
-          : status === 429
-            ? "Agent usage quota, rate limit, or spend budget reached."
-            : status === 409
-              ? "The idempotent request cannot be replayed yet."
-              : GENERIC_ERROR,
+        status === 401
+          ? "A valid bearer access token is required."
+          : status === 403
+            ? "An active agent identity with the evidence scope is required."
+            : status === 429
+              ? "Agent usage quota, rate limit, or spend budget reached."
+              : status === 409
+                ? "The idempotent request cannot be replayed yet."
+                : GENERIC_ERROR,
     },
     status,
   };

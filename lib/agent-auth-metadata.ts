@@ -1,4 +1,5 @@
 import { primarySiteUrl } from "@/lib/site-urls";
+import { workosConfig } from "./workos-config";
 
 export const AGENT_MCP_RESOURCE = primarySiteUrl("/api/agent/mcp");
 export const AGENT_PROTECTED_RESOURCE_METADATA_URL = primarySiteUrl(
@@ -19,7 +20,7 @@ export function agentBearerChallenge(
       : options.invalidToken
         ? 'error="invalid_token"'
         : null,
-    `scope="${AGENT_REQUIRED_SCOPE}"`,
+    `scope="${workosConfig(process.env) ? "openid offline_access" : AGENT_REQUIRED_SCOPE}"`,
     `resource_metadata="${AGENT_PROTECTED_RESOURCE_METADATA_URL}"`,
     options.description
       ? `error_description="${escapeChallengeValue(options.description)}"`

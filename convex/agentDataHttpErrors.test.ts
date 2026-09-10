@@ -4,6 +4,19 @@ import { describe, expect, test } from "vitest";
 import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
 
 describe("agent data HTTP error normalization", () => {
+  test("reports locally revoked OAuth grants as unauthenticated without leaking details", () => {
+    expect(
+      normalizeAgentDataHttpError(
+        new ConvexError({ code: "AUTH_REQUIRED", message: "private-grant" }),
+      ),
+    ).toEqual({
+      status: 401,
+      payload: {
+        code: "AUTH_REQUIRED",
+        error: "A valid bearer access token is required.",
+      },
+    });
+  });
   test("preserves stable ConvexError codes without exposing error data", () => {
     const normalized = normalizeAgentDataHttpError(
       new ConvexError({
@@ -74,9 +87,9 @@ describe("agent data HTTP error normalization", () => {
   });
 
   test("retains legacy status classification for non-Convex errors", () => {
-    expect(normalizeAgentDataHttpError(new Error("rate limit reached")).status).toBe(
-      429,
-    );
+    expect(
+      normalizeAgentDataHttpError(new Error("rate limit reached")).status,
+    ).toBe(429);
     expect(
       normalizeAgentDataHttpError(
         new Error("An active agent identity is required."),

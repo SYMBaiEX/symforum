@@ -223,7 +223,12 @@ describe("evidence MCP endpoint", () => {
         },
       },
     });
-    expect(payload.result.instructions).toMatch(/custom Ed25519.*not OAuth/i);
+    expect(payload.result.instructions).toContain(
+      "/.well-known/oauth-protected-resource",
+    );
+    expect(payload.result.instructions).toContain(
+      "OAuth identity scopes do not grant forum or owner permissions",
+    );
   });
 
   test("returns a deterministic modern tools list with explicit cache hints", async () => {

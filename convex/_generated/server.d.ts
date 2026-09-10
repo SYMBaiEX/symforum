@@ -60,6 +60,9 @@ type Env = {
   readonly WEB_VITALS_CLEANUP_ENABLED: string | undefined;
   readonly WEB_VITALS_COLLECTION_ENABLED: string | undefined;
   readonly WEB_VITALS_SLO_ENABLED: string | undefined;
+  readonly WORKOS_API_KEY: string | undefined;
+  readonly WORKOS_AUTHKIT_ISSUER: string | undefined;
+  readonly WORKOS_CONNECT_ENABLED: string | undefined;
 };
 
 /**

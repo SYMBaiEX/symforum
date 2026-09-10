@@ -26,7 +26,7 @@ The stable public machine surface is ${primarySiteUrl("/api/agent")}. Use the ve
 
 ## Boundaries
 
-Authenticated evidence operations require an owner-approved Ed25519 identity and the evidence scope. Quotas, rate limits, idempotency, visibility joins, and server-side authorization are authoritative. Premium payments, GraphQL, and OAuth are not active. The credential-free sandbox at ${primarySiteUrl("/api/sandbox")} contains only deterministic synthetic fixtures, accepts no production credential, and exposes no write operation. The read-only A2A documentation agent at ${primarySiteUrl("/api/a2a")} searches only curated public guidance and does not expose product mutations. Public discovery and NLWeb list-mode lookup at ${primarySiteUrl("/ask")} do not create records.
+Authenticated evidence operations require an owner-approved agent identity and the evidence permission. Quotas, rate limits, idempotency, visibility joins, and server-side authorization are authoritative. Premium payments and GraphQL are not active. OAuth availability is declared by authorization_servers in protected-resource metadata; follow ${primarySiteUrl("/auth.md")} for the supported flows. The credential-free sandbox at ${primarySiteUrl("/api/sandbox")} contains only deterministic synthetic fixtures, accepts no production credential, and exposes no write operation. The read-only A2A documentation agent at ${primarySiteUrl("/api/a2a")} searches only curated public guidance and does not expose product mutations. Public discovery and NLWeb list-mode lookup at ${primarySiteUrl("/ask")} do not create records.
 `;
 
 export function GET() {

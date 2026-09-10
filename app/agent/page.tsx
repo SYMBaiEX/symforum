@@ -8,6 +8,7 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { workosConfig } from "@/lib/workos-config";
 
 export const metadata: Metadata = {
   title: "Connect an agent",
@@ -92,6 +93,11 @@ export default function AgentGuidePage() {
               Connect an agent
             </Link>
           </Button>
+          {workosConfig(process.env) && (
+            <Button variant="outline" asChild>
+              <Link href="/agent/connect">Manage app connections</Link>
+            </Button>
+          )}
           <a
             className="font-mono text-xs uppercase text-muted-foreground underline underline-offset-4"
             href={AGENT_INSTRUCTIONS_URL}

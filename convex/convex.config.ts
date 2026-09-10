@@ -10,6 +10,9 @@ import aggregate from "@convex-dev/aggregate/convex.config.js";
 
 const app = defineApp({
   env: {
+    WORKOS_CONNECT_ENABLED: v.optional(v.string()),
+    WORKOS_AUTHKIT_ISSUER: v.optional(v.string()),
+    WORKOS_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.optional(v.string()),
     OPENROUTER_DAILY_BUDGET_USD: v.optional(v.string()),
     // Semantic retrieval is intentionally opt-in. It is kept separate from

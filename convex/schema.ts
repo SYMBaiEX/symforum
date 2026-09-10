@@ -248,6 +248,25 @@ export default defineSchema({
     .index("by_agentId", ["agentId"])
     .index("by_userId", ["userId"])
     .index("by_ownerUserId", ["ownerUserId"]),
+  agentOAuthGrants: defineTable({
+    ownerUserId: v.id("users"),
+    agentIdentityId: v.id("agentIdentities"),
+    issuer: v.string(),
+    subject: v.optional(v.string()),
+    externalAuthHash: v.string(),
+    keyVersion: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("revoked"),
+    ),
+    createdAt: v.number(),
+    activatedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_externalAuthHash", ["externalAuthHash"])
+    .index("by_ownerUserId_and_status", ["ownerUserId", "status"])
+    .index("by_ownerUserId_and_createdAt", ["ownerUserId", "createdAt"]),
   organizations: defineTable({
     slug: v.string(),
     name: v.string(),

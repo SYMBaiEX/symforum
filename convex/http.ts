@@ -7,6 +7,7 @@ import { env, httpAction } from "./_generated/server";
 import { resend } from "./resendClient";
 import { AGENT_MCP_RESOURCE_AUDIENCE } from "./agentIdentityCrypto";
 import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
+import { workosConfig } from "../lib/workos-config";
 
 const http = httpRouter();
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -148,8 +149,8 @@ http.route({
           body.kind !== "export-manifest" &&
           body.kind !== "dataset-version" &&
           body.kind !== "dataset-version-manifest") ||
-        ((body.kind === "dataset-version" ||
-          body.kind === "dataset-version-manifest")
+        (body.kind === "dataset-version" ||
+        body.kind === "dataset-version-manifest"
           ? typeof body.datasetId !== "string" ||
             typeof body.versionId !== "string" ||
             body.datasetId.length === 0 ||
@@ -172,8 +173,7 @@ http.route({
                 agentUserId,
                 datasetId: body.datasetId as Id<"evidenceDatasets">,
                 versionId: body.versionId as Id<"evidenceDatasetVersions">,
-                kind:
-                  body.kind === "dataset-version" ? "artifact" : "manifest",
+                kind: body.kind === "dataset-version" ? "artifact" : "manifest",
               },
             )
           : await ctx.runQuery(
@@ -230,7 +230,8 @@ http.route({
       });
     } catch (error) {
       const { payload, status } = normalizeAgentDataHttpError(error);
-      if (status === 403) setAgentDataAuthChallenge(headers, 403);
+      if (status === 401 || status === 403)
+        setAgentDataAuthChallenge(headers, status, status === 401);
       return agentDataJson(payload, status, headers);
     }
   }),
@@ -340,7 +341,8 @@ http.route({
       return agentDataJson(result, 200, headers);
     } catch (error) {
       const { payload, status } = normalizeAgentDataHttpError(error);
-      if (status === 403) setAgentDataAuthChallenge(headers, 403);
+      if (status === 401 || status === 403)
+        setAgentDataAuthChallenge(headers, status, status === 401);
       return agentDataJson(payload, status, headers);
     }
   }),
@@ -708,7 +710,7 @@ function setAgentDataAuthChallenge(
       "Bearer",
       status === 403 ? 'error="insufficient_scope",' : "",
       status === 401 && invalidToken ? 'error="invalid_token",' : "",
-      'scope="evidence",',
+      `scope="${workosConfig(env) ? "openid offline_access" : "evidence"}",`,
       `resource_metadata="${resourceMetadata}"`,
     ]
       .filter(Boolean)
