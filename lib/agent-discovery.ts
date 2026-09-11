@@ -140,6 +140,9 @@ export const MCP_SERVER_CARD = {
     },
   ],
   _meta: {
+    "com.symbaiex/registry": {
+      url: "https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2Fevidence/versions/1.0.0",
+    },
     "com.symbaiex/authentication": {
       scheme: "symbaiex_ed25519_challenge_v1",
       requiredScope: AGENT_REQUIRED_SCOPE,
@@ -196,6 +199,9 @@ export const DOCS_MCP_SERVER_CARD = {
     },
   ],
   _meta: {
+    "com.symbaiex/registry": {
+      url: "https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2Fdocs/versions/1.0.0",
+    },
     "com.symbaiex/relatedServers": [
       {
         relationship: "product",

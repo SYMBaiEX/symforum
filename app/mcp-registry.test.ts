@@ -38,6 +38,9 @@ describe("MCP Registry identity", () => {
       expect(entry.description.length).toBeLessThanOrEqual(100);
       expect(entry.remotes[0].url).toBe(card.remotes[0].url);
       expect(entry.remotes[0].type).toBe("streamable-http");
+      expect(card._meta["com.symbaiex/registry"].url).toBe(
+        `https://registry.modelcontextprotocol.io/v0.1/servers/${encodeURIComponent(entry.name)}/versions/${entry.version}`,
+      );
       expect(entry).not.toHaveProperty("packages");
       expect(entry).not.toHaveProperty("repository");
     },
