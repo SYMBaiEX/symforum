@@ -5,6 +5,8 @@ import {
   AGENT_REQUIRED_SCOPE,
 } from "@/lib/agent-auth-metadata";
 import { PRIMARY_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
+import evidenceRegistry from "@/registry/evidence.server.json";
+import docsRegistry from "@/registry/docs.server.json";
 
 export const PUBLIC_AGENT_SKILLS = [
   {
@@ -84,7 +86,7 @@ export const AGENT_SKILLS_V2_INDEX = {
 export const MCP_SERVER_CARD = {
   $schema:
     "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
-  name: "ai.symbaiex/evidence",
+  name: evidenceRegistry.name,
   title: "SYMBaiEX Evidence MCP",
   description:
     "Authenticated public evidence search, verification, research jobs, exports, and webhooks.",
@@ -95,10 +97,6 @@ export const MCP_SERVER_CARD = {
       mimeType: "image/svg+xml",
     },
   ],
-  repository: {
-    url: "https://github.com/SYMBaiEX/symbaiex-blog",
-    source: "github",
-  },
   version: "1.0.0",
   serverUrl: AGENT_MCP_RESOURCE,
   transport: "streamable-http",
@@ -163,7 +161,7 @@ export const MCP_SERVER_CARD = {
 export const DOCS_MCP_SERVER_CARD = {
   $schema:
     "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
-  name: "ai.symbaiex/docs",
+  name: docsRegistry.name,
   title: "SYMBaiEX Documentation MCP",
   description: "Public read-only SYMBaiEX developer and agent documentation.",
   websiteUrl: primarySiteUrl("/developers"),
@@ -173,10 +171,6 @@ export const DOCS_MCP_SERVER_CARD = {
       mimeType: "image/svg+xml",
     },
   ],
-  repository: {
-    url: "https://github.com/SYMBaiEX/symbaiex-blog",
-    source: "github",
-  },
   version: "1.0.0",
   serverUrl: primarySiteUrl("/api/docs/mcp"),
   transport: "streamable-http",

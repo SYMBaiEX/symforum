@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.symbaiex.www/evidence",
+  "title": "SYMBaiEX Evidence MCP",
+  "description": "Authenticated public evidence search, verification, research jobs, exports, and webhooks.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.symbaiex.com/developers",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.symbaiex.com/api/agent/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer credential required for tools/call; discovery and tool listing are public.",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

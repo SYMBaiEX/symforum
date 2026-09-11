@@ -13,7 +13,7 @@ type WebMcpTool = {
   };
   execute: (
     input: Record<string, unknown>,
-    options: { signal: AbortSignal },
+    options?: { signal?: AbortSignal },
   ) => Promise<Record<string, unknown>>;
 };
 
@@ -46,7 +46,8 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
     readOnlyHint: true,
     untrustedContentHint: false,
   },
-  execute: async (_input, { signal }) => {
+  execute: async (_input, options) => {
+    const signal = executionSignal(options);
     if (signal.aborted) {
       throw signal.reason;
     }
@@ -82,6 +83,12 @@ export const SYMBAIEX_WEBMCP_DISCOVERY_TOOL: WebMcpTool = {
 
 const DOCS_ENDPOINT = "https://www.symbaiex.com/api/docs/mcp";
 const MAX_RESPONSE_BYTES = 64 * 1024;
+
+function executionSignal(options?: { signal?: AbortSignal }): AbortSignal {
+  // Chrome's current WebMCP preview omits the callback-options argument.
+  // Keep older hosts bounded while honoring cancellation on newer hosts.
+  return options?.signal ?? AbortSignal.timeout(10_000);
+}
 
 async function callPublicDocs(
   name: "docs_search" | "docs_get",
@@ -172,7 +179,8 @@ export const SYMBAIEX_WEBMCP_DOCS_SEARCH_TOOL: WebMcpTool = {
     },
   },
   annotations: { readOnlyHint: true, untrustedContentHint: true },
-  execute: async (input, { signal }) => {
+  execute: async (input, options) => {
+    const signal = executionSignal(options);
     signal.throwIfAborted();
     if (
       Object.keys(input).some((key) => key !== "query" && key !== "limit") ||
@@ -206,7 +214,8 @@ export const SYMBAIEX_WEBMCP_DOCS_READ_TOOL: WebMcpTool = {
     properties: { uri: { type: "string", format: "uri", maxLength: 300 } },
   },
   annotations: { readOnlyHint: true, untrustedContentHint: true },
-  execute: async (input, { signal }) => {
+  execute: async (input, options) => {
+    const signal = executionSignal(options);
     signal.throwIfAborted();
     if (
       Object.keys(input).length !== 1 ||

@@ -41,6 +41,30 @@ describe("SYMBaiEX WebMCP discovery tool", () => {
     ).rejects.toThrow("cancelled");
   });
 
+  test("supports native preview hosts that omit execution options or the signal", async () => {
+    const uri = "https://www.symbaiex.com/auth.md";
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply({ results: [{ uri }] }))
+      .mockResolvedValueOnce(
+        reply({ resource: { uri, text: "# Authentication" } }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      SYMBAIEX_WEBMCP_DISCOVERY_TOOL.execute({}),
+    ).resolves.toMatchObject({ service: "SYMBaiEX" });
+    await expect(search.execute({ query: "OAuth" })).resolves.toMatchObject({
+      results: [{ uri }],
+    });
+    await expect(read.execute({ uri }, {})).resolves.toMatchObject({
+      resource: { uri },
+    });
+    for (const [, options] of fetcher.mock.calls) {
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+      expect(options.signal.aborted).toBe(false);
+    }
+  });
+
   test("searches and reads real public MCP documentation without credentials", async () => {
     const uri = "https://www.symbaiex.com/auth.md";
     const fetcher = vi
@@ -153,13 +177,11 @@ describe("SYMBaiEX WebMCP discovery tool", () => {
     }
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          reply({
-            resource: { uri: "https://evil.example/auth.md", text: "wrong" },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        reply({
+          resource: { uri: "https://evil.example/auth.md", text: "wrong" },
+        }),
+      ),
     );
     await expect(
       read.execute(

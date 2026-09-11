@@ -69,7 +69,7 @@ describe("agent-facing compatibility routes", () => {
       transport: "streamable-http",
     });
     await expect(jsonCard.json()).resolves.toMatchObject({
-      name: "ai.symbaiex/evidence",
+      name: "com.symbaiex.www/evidence",
     });
 
     const handshake = await postRootMcp(

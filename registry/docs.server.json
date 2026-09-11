@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.symbaiex.www/docs",
+  "title": "SYMBaiEX Documentation MCP",
+  "description": "Public read-only SYMBaiEX developer and agent documentation.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.symbaiex.com/developers",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.symbaiex.com/api/docs/mcp"
+    }
+  ]
+}
