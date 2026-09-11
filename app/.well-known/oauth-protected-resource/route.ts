@@ -5,6 +5,11 @@ import {
 } from "@/lib/agent-auth-metadata";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { workosConfig } from "@/lib/workos-config";
+import { serviceAuthRelay } from "@/lib/agent-service-auth-relay";
+import {
+  serviceAuthEnabled,
+  SERVICE_AUTH_ISSUER,
+} from "@/lib/agent-service-auth-config";
 
 export const dynamic = "force-dynamic";
 
@@ -21,27 +26,42 @@ const METADATA = {
   },
 } as const;
 
-export function GET() {
+export async function GET(request: Request) {
   const config = workosConfig(process.env);
-  const metadata = config
-    ? {
-        ...METADATA,
-        scopes_supported: ["openid", "offline_access"],
-        authorization_servers: [config.issuer],
-      }
-    : METADATA;
-  return metadataResponse(`${JSON.stringify(metadata, null, 2)}\n`);
+  const enabled = serviceAuthEnabled(process.env);
+  const serviceAuth = enabled && (await serviceAuthRelay(request, "jwks")).ok;
+  const metadata =
+    config || serviceAuth
+      ? {
+          ...METADATA,
+          scopes_supported: [
+            ...(config ? ["openid", "offline_access"] : []),
+            ...(serviceAuth ? ["evidence"] : []),
+          ],
+          authorization_servers: [
+            ...(config ? [config.issuer] : []),
+            ...(serviceAuth ? [SERVICE_AUTH_ISSUER] : []),
+          ],
+        }
+      : METADATA;
+  return metadataResponse(`${JSON.stringify(metadata, null, 2)}\n`, enabled);
 }
 
-export function HEAD() {
-  return metadataResponse(null);
+export async function HEAD(request: Request) {
+  const response = await GET(request);
+  return new Response(null, {
+    status: response.status,
+    headers: response.headers,
+  });
 }
 
-function metadataResponse(body: string | null) {
+function metadataResponse(body: string | null, probeEnabled = false) {
   return new Response(body, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "public, max-age=300, s-maxage=3600",
+      "Cache-Control": probeEnabled
+        ? "no-store"
+        : "public, max-age=300, s-maxage=3600",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD",
       "X-Content-Type-Options": "nosniff",

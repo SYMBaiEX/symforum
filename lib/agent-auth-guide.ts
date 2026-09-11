@@ -1,11 +1,16 @@
 import { primarySiteUrl } from "@/lib/site-urls";
 import { oauthPublicConfiguration } from "@/lib/workos-discovery";
+import {
+  serviceAuthEnabled,
+  SERVICE_AUTH_ISSUER,
+  SERVICE_AUTH_METADATA,
+} from "./agent-service-auth-config";
 
 const CONTENT = `# SYMBaiEX agent authentication
 
-> Owner-approved Ed25519 enrollment, authentication, refresh, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-08-21.
+> Owner-approved agent authentication, credential issuance, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-09-11.
 
-SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. SYMBaiEX is not an OAuth authorization server itself; OAuth, when enabled in protected-resource metadata, is delegated to WorkOS Connect. Do not infer WorkOS agent_auth, ID-JAG, anonymous, or service_auth support from the OAuth integration. The public resource server is ${primarySiteUrl("/api/agent")}.
+SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. WorkOS Connect is a separate managed OAuth issuer. When explicitly enabled below, first-party service_auth uses its own distinct issuer and signing keys. Do not infer WorkOS agent_auth, provider ID-JAG, or anonymous support from either integration. The public resource server is ${primarySiteUrl("/api/agent")}.
 
 ## 1. Discover
 
@@ -27,7 +32,7 @@ These are browser-operated owner controls, not OAuth dynamic-client-registration
 
 ## 4. Claim and owner approval
 
-There is no autonomous claim endpoint. Ownership and scopes are approved in the signed-in browser session. If the user has not approved an identity, stop and direct them to the enrollment page. Never attempt to bypass the human approval step.
+The Ed25519 enrollment flow does not use an autonomous claim endpoint. Ownership and scopes are approved in the signed-in browser session. If the user has not approved an identity, stop and direct them to the enrollment page. Never attempt to bypass the human approval step. The separately enabled service_auth ceremony is described below.
 
 ## 5. Use the credential
 
@@ -63,6 +68,24 @@ Disconnect an application at ${oauth.ownerConnections}. Disconnection immediatel
 
 WorkOS receives the owner's account ID and contact email to complete authentication. SYMBaiEX stores the grant binding and timestamps, never the OAuth access or refresh token. Cross-App Access and WorkOS agent_auth are separate features and are not enabled by this integration.
 `
-    : "\nOAuth is not enabled in this deployment. Use the Ed25519 flow above.\n";
-  return CONTENT + oauthGuide;
+    : "\nWorkOS Connect OAuth is not enabled in this deployment. Use an enabled first-party flow described here.\n";
+  return (
+    CONTENT +
+    oauthGuide +
+    (serviceAuthEnabled(process.env)
+      ? `
+## First-party service_auth (auth.md user-claimed profile)
+
+This independent service implements the user-claimed profile at ${SERVICE_AUTH_ISSUER}. It is not WorkOS-hosted authentication and does not accept provider ID-JAGs or anonymous registration. Existing Ed25519 and WorkOS credentials remain supported.
+
+1. Discover the canonical MCP resource in protected-resource metadata. Its authorization_servers list contains the separate issuer above. Fetch its exact RFC 8414 metadata URL: ${SERVICE_AUTH_METADATA}. Use only the endpoints advertised there. Scope evidence permits the existing evidence API operations and consumes the selected agent's quota; it does not grant account management or forum posting. Review /pricing, /terms and /privacy; integration help: /contact.
+2. Ask the user to consent before submitting their email. POST JSON {"type":"service_auth","login_hint":"OWNER_EMAIL"} to the identity_endpoint. An existing human owner and an existing active evidence agent are required. The response contains registration_id, registration_type, claim_token, claim_token_expires, post_claim_scopes and claim {user_code, verification_uri, expires_in, interval}. No credentials are issued yet. The email is a binding hint, not a verified identity assertion.
+3. Give the user the verification_uri and six-digit user_code. The user signs in with their existing account, enters your code on the service-owned page, selects an evidence agent they own, and explicitly approves one hour of access. Never ask the user to give you their password, session or private key. Do not complete their approval yourself.
+4. Poll token_endpoint with form grant_type=urn:workos:agent-auth:grant-type:claim&claim_token=YOUR_CLAIM_TOKEN, at the returned interval. authorization_pending means wait. On slow_down add at least five seconds to the interval. expired_token means the attempt window closed; while the 24-hour claim window remains open, POST JSON {"claim_token":"YOUR_CLAIM_TOKEN","email":"THE_ORIGINAL_EMAIL"} to claim_endpoint. This rotates the attempt URL and code; the original email cannot change. claim_expired (410) means restart registration.
+5. A successful poll returns access_token, token_type=Bearer, expires_in, scope=evidence, identity_assertion and assertion_expires. Hold secrets only in an approved local secret store, not prompts, source, logs or URLs. The assertion is signed by this service for this service's token endpoint; it is not a provider-issued ID-JAG. Exchange it using form grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=YOUR_ASSERTION&resource=${primarySiteUrl("/api/agent/mcp")}. Assertions are reusable only until the fixed one-hour approval deadline. No refresh_token is issued. Access tokens live at most 15 minutes. Polling never extends approval.
+6. Send only access_token as Authorization: Bearer to the evidence REST API or MCP server. An identity_assertion is not an API access token. invalid_grant means the assertion/registration is expired, revoked or no longer authorized; restart registration with human approval. invalid_scope and invalid_target mean fix the exact requested scope/resource. For rate_limited (429), back off rather than fanning out.
+7. POST form token=YOUR_ACCESS_TOKEN&token_type_hint=access_token to revocation_endpoint to revoke one credential. Empty 200 is idempotent; the assertion remains usable. To stop all issuance, the owner disconnects the registration at ${primarySiteUrl("/agent/claim")}; this immediately invalidates every derived token. Owner deletion, agent revocation, evidence-scope removal and key rotation also invalidate access. No provider SET events are advertised or accepted because no upstream provider identity assertions are accepted. State transitions are retained in a bounded 30-day audit log without bearer secrets.
+`
+      : "\nFirst-party service_auth is not enabled in this deployment.\n")
+  );
 }

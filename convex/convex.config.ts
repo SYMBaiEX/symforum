@@ -10,6 +10,10 @@ import aggregate from "@convex-dev/aggregate/convex.config.js";
 
 const app = defineApp({
   env: {
+    AGENT_SERVICE_AUTH_ENABLED: v.optional(v.string()),
+    AGENT_SERVICE_AUTH_PRIVATE_JWK: v.optional(v.string()),
+    AGENT_SERVICE_AUTH_PUBLIC_JWKS: v.optional(v.string()),
+    AGENT_SERVICE_AUTH_RELAY_SECRET: v.optional(v.string()),
     WORKOS_CONNECT_ENABLED: v.optional(v.string()),
     WORKOS_AUTHKIT_ISSUER: v.optional(v.string()),
     WORKOS_API_KEY: v.optional(v.string()),

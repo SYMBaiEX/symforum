@@ -1,6 +1,7 @@
 "use client";
 
 import { getBrowserStorage } from "@/lib/browser-storage";
+import { isServiceAuthSensitiveLocation } from "@/lib/agent-service-auth-config";
 import { convexRefs, type SystemLogRecord } from "@/lib/convex-refs";
 import { useMutation } from "convex/react";
 import { usePathname } from "next/navigation";
@@ -50,6 +51,15 @@ function LiveAppErrorSurface() {
 
   useEffect(() => {
     function capture(error: unknown, context: AppErrorContext = {}) {
+      // Check live location on every event: same-path search-only navigation
+      // does not reinstall this effect. Never log the bearer attempt handle.
+      if (
+        isServiceAuthSensitiveLocation(
+          window.location.pathname,
+          window.location.search,
+        )
+      )
+        return;
       const normalized = normalizeError(error, context.message);
 
       if (isIgnorableError(normalized, context)) {

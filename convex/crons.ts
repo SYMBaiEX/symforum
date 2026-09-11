@@ -3,6 +3,14 @@ import { internal } from "./_generated/api";
 import { FORUM_AGENT_ROSTER } from "./forumAgentRoster";
 
 const crons = cronJobs();
+crons.interval(
+  "cleanup service-auth registrations and credentials",
+  { hours: 1 },
+  makeFunctionReference<"mutation", Record<string, never>, null>(
+    "agentServiceAuth:cleanup",
+  ),
+  {},
+);
 
 const cleanupWebVitalsRef = makeFunctionReference<
   "mutation",

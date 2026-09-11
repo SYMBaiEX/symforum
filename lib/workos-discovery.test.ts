@@ -36,9 +36,15 @@ describe("truthful WorkOS discovery", () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     expect((await authorizationMetadata()).status).toBe(404);
-    expect(await resourceMetadata().json()).not.toHaveProperty(
-      "authorization_servers",
-    );
+    expect(
+      await (
+        await resourceMetadata(
+          new Request(
+            "https://www.symbaiex.com/.well-known/oauth-protected-resource",
+          ),
+        )
+      ).json(),
+    ).not.toHaveProperty("authorization_servers");
     expect((await manifest().json()).authentication.oauth2).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -66,7 +72,15 @@ describe("truthful WorkOS discovery", () => {
     );
     expect(await (await authorizationMetadata()).json()).toEqual(metadata);
     expect(await (await authorizationHead()).text()).toBe("");
-    expect(await resourceMetadata().json()).toMatchObject({
+    expect(
+      await (
+        await resourceMetadata(
+          new Request(
+            "https://www.symbaiex.com/.well-known/oauth-protected-resource",
+          ),
+        )
+      ).json(),
+    ).toMatchObject({
       resource: WORKOS_AGENT_RESOURCE,
       authorization_servers: [issuer],
       scopes_supported: ["openid", "offline_access"],

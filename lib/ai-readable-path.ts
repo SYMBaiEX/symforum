@@ -4,6 +4,8 @@ const PRIVATE_PREFIXES = [
   "/signin",
   "/agent/signup",
   "/agent/connect",
+  "/agent/claim",
+  "/agent-auth",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

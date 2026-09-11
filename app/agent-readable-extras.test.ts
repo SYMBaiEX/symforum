@@ -24,7 +24,10 @@ describe("focused agent-readable resources", () => {
     ]) {
       expect(body).toContain(heading);
     }
-    expect(body).toContain("not an OAuth authorization server");
+    expect(body).toContain("WorkOS Connect is a separate managed OAuth issuer");
+    expect(body).toContain(
+      "First-party service_auth is not enabled in this deployment",
+    );
     expect(body).toContain("`owner_enrollment_url`");
     expect(body).toContain("`owner_approval_url`");
     expect(body).toContain("`owner_revocation_url`");
@@ -45,9 +48,7 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(developers).toContain("/api/sandbox/openapi.json");
     expect(api).toContain("# SYMBaiEX API context");
-    expect(api).toContain(
-      "Premium payments and GraphQL are not active",
-    );
+    expect(api).toContain("Premium payments and GraphQL are not active");
     expect(api).toContain("read-only A2A documentation agent");
     expect(api).toContain("deterministic synthetic fixtures");
     expect(api).toContain("/api/sandbox/openapi.json");

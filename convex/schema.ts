@@ -2,11 +2,13 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { agentScopeValidator } from "./authz";
+import { serviceAuthTables } from "./agentServiceAuthSchema";
 
 // The schema is normally optional, but Convex Auth
 // requires indexes defined on `authTables`.
 export default defineSchema({
   ...authTables,
+  ...serviceAuthTables,
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

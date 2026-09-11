@@ -6,6 +6,11 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { env } from "./_generated/server";
 import { workosConfig } from "../lib/workos-config";
 import { resolveOAuthAgent } from "./agentOAuthPrincipal";
+import { resolveServiceAuthAgent } from "./agentServiceAuthPrincipal";
+import {
+  serviceAuthEnabled,
+  SERVICE_AUTH_ISSUER,
+} from "../lib/agent-service-auth-config";
 
 type DatabaseCtx = QueryCtx | MutationCtx;
 
@@ -90,6 +95,11 @@ export async function getFirstPartyAuthUserId(ctx: { auth: Auth }) {
 
 export async function getCurrentUser(ctx: DatabaseCtx) {
   const identity = await ctx.auth.getUserIdentity();
+  if (identity?.issuer === SERVICE_AUTH_ISSUER) {
+    return serviceAuthEnabled(env)
+      ? await resolveServiceAuthAgent(ctx, identity)
+      : null;
+  }
   const workos = workosConfig(env);
   if (identity && workos && identity.issuer === workos.issuer) {
     return await resolveOAuthAgent(ctx, identity, workos.issuer);

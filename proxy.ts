@@ -392,7 +392,14 @@ function applySecurityHeaders(
   request?: NextRequest,
 ) {
   response.headers.set("Content-Security-Policy", policy.value);
-  const isOAuthConnect = request?.nextUrl.pathname === "/agent/connect";
+  const isOAuthConnect =
+    request?.nextUrl.pathname === "/agent/connect" ||
+    request?.nextUrl.pathname === "/agent/claim" ||
+    request?.nextUrl.pathname.startsWith("/agent-auth/") ||
+    (request?.nextUrl.pathname === "/signin" &&
+      request.nextUrl.searchParams
+        .get("redirectTo")
+        ?.startsWith("/agent/claim"));
   response.headers.set(
     "Referrer-Policy",
     isOAuthConnect ? "no-referrer" : "strict-origin-when-cross-origin",

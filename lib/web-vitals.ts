@@ -25,6 +25,8 @@ const PRIVATE_PATH_PREFIXES = [
   "/profile",
   "/signin",
   "/agent/signup",
+  "/agent/claim",
+  "/agent-auth",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

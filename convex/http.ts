@@ -7,8 +7,10 @@ import { resend } from "./resendClient";
 import { AGENT_MCP_RESOURCE_AUDIENCE } from "./agentIdentityCrypto";
 import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
 import { workosConfig } from "../lib/workos-config";
+import { addServiceAuthRoutes } from "./agentServiceAuthHttp";
 
 const http = httpRouter();
+addServiceAuthRoutes(http);
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const FORUM_ATTACHMENT_ALLOWED_CONTENT_TYPES = new Set([
   "image/gif",

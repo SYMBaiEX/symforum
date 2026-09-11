@@ -8,6 +8,8 @@ export const PRIVATE_ROBOTS_PATHS = [
   "/admin",
   "/profile",
   "/agent/connect",
+  "/agent/claim",
+  "/agent-auth",
   "/newsletter/confirm",
   "/newsletter/preferences",
   "/newsletter/unsubscribe",

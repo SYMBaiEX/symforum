@@ -9,6 +9,8 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as agentServiceAuth from "../agentServiceAuth.js";
+import type * as agentServiceAuthTokens from "../agentServiceAuthTokens.js";
 import type * as adminApi from "../adminApi.js";
 import type * as agentDataApi from "../agentDataApi.js";
 import type * as agentDataHttpErrors from "../agentDataHttpErrors.js";
@@ -114,6 +116,8 @@ declare const fullApi: ApiFromModules<{
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
   agentOAuth: typeof agentOAuth;
+  agentServiceAuth: typeof agentServiceAuth;
+  agentServiceAuthTokens: typeof agentServiceAuthTokens;
   agentOAuthConnect: typeof agentOAuthConnect;
   agentOAuthPrincipal: typeof agentOAuthPrincipal;
   agentQuota: typeof agentQuota;

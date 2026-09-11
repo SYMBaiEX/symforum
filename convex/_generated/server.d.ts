@@ -28,6 +28,10 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
+  readonly AGENT_SERVICE_AUTH_ENABLED: string | undefined;
+  readonly AGENT_SERVICE_AUTH_PRIVATE_JWK: string | undefined;
+  readonly AGENT_SERVICE_AUTH_PUBLIC_JWKS: string | undefined;
+  readonly AGENT_SERVICE_AUTH_RELAY_SECRET: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENT_SEMANTIC_RELAY_SECRET: string | undefined;
