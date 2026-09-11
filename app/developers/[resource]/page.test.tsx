@@ -41,6 +41,19 @@ describe("developer integration guides", () => {
     }
   });
 
+  test("makes the separate owner-approved service-auth method discoverable without implying anonymous access", () => {
+    const doc = publicDocumentation().find((d) =>
+      d.uri.endsWith("/developers/authentication"),
+    );
+    expect(doc?.text).toContain("separately advertised /agent-auth issuer");
+    expect(doc?.text).toContain("no credentials are issued before approval");
+    expect(doc?.text).toContain("does not accept anonymous");
+    expect(DEVELOPER_RESOURCES.authentication.links).toContainEqual([
+      "Owner temporary agent approvals",
+      "/agent/claim",
+    ]);
+  });
+
   test("rejects missing resources including prototype property names", async () => {
     for (const resource of [
       "missing",

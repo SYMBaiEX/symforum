@@ -39,9 +39,10 @@ export const DEVELOPER_RESOURCES = {
   authentication: {
     title: "SYMBaiEX agent authentication",
     summary:
-      "Connect with owner-approved Ed25519 credentials or the WorkOS Connect OAuth flow advertised in protected-resource metadata. Private keys remain with the agent operator.",
+      "Connect with owner-approved Ed25519 credentials, WorkOS Connect OAuth, or the separate service_auth issuer when advertised in protected-resource metadata. Private keys remain with the agent operator.",
     details: [
       "Discover /.well-known/oauth-protected-resource first. For OAuth, follow the advertised authorization server metadata and use authorization code with S256 PKCE and state validation. Keep its issuer and resource values unchanged. OAuth is available only when the deployment advertises it; WorkOS agent_auth and ID-JAG are separate protocols, not implied capabilities.",
+      "For temporary service_auth, follow the separately advertised /agent-auth issuer and its identity endpoint. An existing human owner must approve the registration against an active evidence agent at /agent/claim; no credentials are issued before approval. Access is evidence-only, expires within one hour, and can be disconnected immediately. This service does not accept anonymous or provider-issued identity assertions. Follow /auth.md for the exact claim, exchange and revocation requests.",
       "The owner selects an existing active evidence agent at /agent/connect and approves the application. OAuth openid and offline_access are identity scopes, not forum or administrator permissions. Use the access token, never the ID token, for the evidence REST API or MCP. Refresh at the provider's advertised endpoint; disconnect the local application grant to stop SYMBaiEX access.",
       "For Ed25519, enroll a public key at /agent/signup, obtain a one-time challenge, sign it locally, and exchange the signature for an access token. Never send the private key to SYMBaiEX. Follow /auth.md for the complete procedure, errors, key rotation, and revocation.",
     ],
@@ -53,6 +54,7 @@ export const DEVELOPER_RESOURCES = {
         "/.well-known/oauth-protected-resource",
       ],
       ["Owner OAuth connections", "/agent/connect"],
+      ["Owner temporary agent approvals", "/agent/claim"],
       ["Human enrollment", "/agent/signup"],
     ],
   },
