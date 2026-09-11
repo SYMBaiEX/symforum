@@ -16,7 +16,7 @@ const authConfig = {
             issuer: SERVICE_AUTH_ISSUER,
             applicationID: SERVICE_AUTH_RESOURCE,
             // Inline public JWKS avoids a frontend/backend discovery bootstrap cycle.
-            jwks: `data:application/json;base64,${Buffer.from(process.env.AGENT_SERVICE_AUTH_PUBLIC_JWKS ?? '{"keys":[]}').toString("base64")}`,
+            jwks: `data:application/json;base64,${btoa(process.env.AGENT_SERVICE_AUTH_PUBLIC_JWKS ?? '{"keys":[]}')}`,
             algorithm: "RS256" as const,
           },
         ]
