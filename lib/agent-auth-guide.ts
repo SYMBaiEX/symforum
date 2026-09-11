@@ -6,13 +6,15 @@ import {
   SERVICE_AUTH_METADATA,
 } from "./agent-service-auth-config";
 
-const CONTENT = `# SYMBaiEX agent authentication
+const INTRODUCTION = `# SYMBaiEX agent authentication
 
 > Owner-approved agent authentication, credential issuance, and revocation for the SYMBaiEX agent API. Canonical URL: ${primarySiteUrl("/auth.md")}. Last updated: 2026-09-11.
 
 SYMBaiEX supports owner-approved Ed25519 challenge-response authentication. WorkOS Connect is a separate managed OAuth issuer. When explicitly enabled below, first-party service_auth uses its own distinct issuer and signing keys. Do not infer WorkOS agent_auth, provider ID-JAG, or anonymous support from either integration. The public resource server is ${primarySiteUrl("/api/agent")}.
 
-## 1. Discover
+`;
+
+const CONTENT = `## 1. Discover
 
 Read the [API manifest](${primarySiteUrl("/api/agent")}), [protected-resource metadata](${primarySiteUrl("/.well-known/oauth-protected-resource")}), [authentication metadata](${primarySiteUrl("/.well-known/symbaiex-agent-authentication")}), and [OpenAPI contract](${primarySiteUrl("/api/agent/openapi.json")}). A protected endpoint returns \`WWW-Authenticate: Bearer resource_metadata="${primarySiteUrl("/.well-known/oauth-protected-resource")}" scope="evidence"\` when a credential is absent.
 
@@ -70,6 +72,14 @@ WorkOS receives the owner's account ID and contact email to complete authenticat
 `
     : "\nWorkOS Connect OAuth is not enabled in this deployment. Use an enabled first-party flow described here.\n";
   return (
+    INTRODUCTION +
+    (serviceAuthEnabled(process.env)
+      ? `## Temporary owner-approved service_auth: start here
+
+For this distinct issuer, discover ${SERVICE_AUTH_METADATA}. It advertises identity_endpoint: ${SERVICE_AUTH_ISSUER}/identity and claim_endpoint: ${SERVICE_AUTH_ISSUER}/identity/claim. The token endpoint is ${SERVICE_AUTH_ISSUER}/token; revoke a token at ${SERVICE_AUTH_ISSUER}/revoke. The user must approve on the service-owned page before any credential is issued. The full procedure, request formats, one-hour lifetime and owner disconnection are below. This is separate from WorkOS OAuth and Ed25519 enrollment.
+
+`
+      : "") +
     CONTENT +
     oauthGuide +
     (serviceAuthEnabled(process.env)

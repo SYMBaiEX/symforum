@@ -44,6 +44,9 @@ const queries: Record<
 };
 
 export const ARD_CATALOG = {
+  // Preserve the AI Catalog 1.0 envelope for older consumers. ARD v0.91
+  // explicitly ignores additional top-level fields and uses the entries below.
+  ...AI_CATALOG,
   entries: AI_CATALOG.entries.map((entry) => ({
     ...entry,
     "@context": "https://agenticresourcediscovery.org/context/v1",

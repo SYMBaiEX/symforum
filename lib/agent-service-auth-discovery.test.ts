@@ -72,6 +72,13 @@ describe("service_auth discovery and transport", () => {
         `https://www.symbaiex.com/agent-auth/${path}`,
       );
   });
+  test("surfaces the enabled issuer early without losing the main heading", () => {
+    vi.stubEnv("AGENT_SERVICE_AUTH_ENABLED", "true");
+    expect(agentAuthGuide()).toMatch(/^# SYMBaiEX agent authentication/);
+    expect(agentAuthGuide().slice(0, 2000)).toContain(
+      "https://www.symbaiex.com/agent-auth/identity/claim",
+    );
+  });
   test("requires configured trusted relay and bounds streamed bodies", async () => {
     vi.stubEnv("AGENT_SERVICE_AUTH_ENABLED", "true");
     expect(

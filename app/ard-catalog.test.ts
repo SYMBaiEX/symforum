@@ -6,7 +6,9 @@ test("publishes ARD v0.91 entries with stable identity, live targets and useful 
   const response = GET();
   expect(response.headers.get("content-type")).toContain("application/json");
   expect(response.headers.get("access-control-allow-origin")).toBe("*");
-  const { entries } = await response.json();
+  const { entries, specVersion, host } = await response.json();
+  expect(specVersion).toBe(AI_CATALOG.specVersion);
+  expect(host).toEqual(AI_CATALOG.host);
   expect(entries).toHaveLength(AI_CATALOG.entries.length);
   for (const [index, entry] of entries.entries()) {
     expect(entry.identifier).toBe(AI_CATALOG.entries[index].identifier);
