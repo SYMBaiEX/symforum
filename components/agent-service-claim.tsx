@@ -11,7 +11,7 @@ export function AgentServiceClaim({
 }: {
   attemptToken: string | null;
 }) {
-  const viewer = useQuery(api.users.viewer, {});
+  const viewer = useQuery(api.users.maybeViewer, {});
   const human = !!viewer && !viewer.isAgent;
   const claim = useQuery(
     api.agentServiceAuth.viewClaim,

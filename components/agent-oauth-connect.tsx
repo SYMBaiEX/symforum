@@ -12,7 +12,7 @@ export function AgentOAuthConnect({
 }: {
   externalAuthId: string | null;
 }) {
-  const viewer = useQuery(api.users.viewer, {});
+  const viewer = useQuery(api.users.maybeViewer, {});
   const status = useQuery(
     api.agentIdentity.listMyAgentConsoleStatus,
     viewer && !viewer.isAgent ? {} : "skip",

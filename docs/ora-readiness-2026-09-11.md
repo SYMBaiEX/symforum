@@ -20,7 +20,9 @@ Live checks passed for local issuer discovery and its alias, public-only JWKS, i
 
 Two release-only findings were corrected with regression tests: Convex's auth configuration evaluator has no Node `Buffer`, and the public smoke incorrectly required a challenge to request every supported scope rather than a valid subset (RFC 9728 section 7.2). Neither fix broadens permissions. The deployment evaluator rejected the first attempt before applying it.
 
-Final local verification: **930 application tests**, both typechecks, lint and production build passed. SDK 15, CLI 13 and socials 8 tests also passed during the integrated verification. GitHub verification for `6bd2aea` passed. Local builds report an existing stale-development-backend fallback for `posts:listPublishedSummaries`; production checks use the explicitly selected production deployment, not that development backend.
+A separate isolated-browser check found that `/agent/claim` crashed before a signed-out visitor could reach sign-in: both owner-approval components used the strict `users.viewer` query, which throws for anonymous visitors. The claim and WorkOS connection components now use the existing nullable `users.maybeViewer` query. Ten regressions cover signed-out entry, preserved encoded return URLs, loading, rejection of agent sessions, and continued human access. Private owner queries remain skipped until a human is signed in; the strict backend query is unchanged.
+
+Local verification includes **941 application tests**, both typechecks, lint and production build. SDK 15, CLI 13 and socials 8 tests also passed during the integrated verification. GitHub verification for `6bd2aea` passed. Local builds report an existing stale-development-backend fallback for `posts:listPublishedSummaries`; production checks use the explicitly selected production deployment, not that development backend. Final release and browser acceptance are recorded in the release handoff, separately from the still-pending human approval ceremony.
 
 ## Why the fresh scan still misses capabilities
 
@@ -33,6 +35,8 @@ A forced Ora scan completed at **2026-09-11T11:01:29.915Z**, scoring **92/100 (A
 - Search sampling still finds weak developer-page coverage. Eleven canonical URLs were accepted by IndexNow, and real registry backlinks are public, but crawling and ranking are external outcomes.
 
 The follow-up adds the current ARD v0.91 `/.well-known/ard.json` path and `rel=ard` discovery while retaining the legacy catalog. All nine entries retain stable identities and targets and add two capability-specific query examples. It also adds direct local auth endpoint URLs to `/auth.md` and visible links to both official registry records in `/developers`; these improve practical discoverability without inventing services or identity claims.
+
+The new catalog passed the official ARD JSON schema. Ora's targeted check nevertheless expected the older `specVersion` envelope, so the catalog retains those compatible legacy fields as well. The service-auth starting points now appear near the top of the authentication guide for clients with shorter reading limits. Targeted checks do not update the full score above.
 
 ## External constraints
 
