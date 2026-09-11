@@ -1,4 +1,4 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";

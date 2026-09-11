@@ -1,5 +1,4 @@
 import { httpRouter, makeFunctionReference } from "convex/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
@@ -119,7 +118,7 @@ http.route({
       );
     let agentUserId;
     try {
-      agentUserId = await getAuthUserId(ctx);
+      agentUserId = await ctx.runQuery(internal.agentOAuth.currentEvidenceUserId, {});
     } catch {
       agentUserId = null;
     }

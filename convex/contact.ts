@@ -1,4 +1,4 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";

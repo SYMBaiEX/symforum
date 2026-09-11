@@ -39,18 +39,13 @@ export const complete = action({
       ) {
         throw new Error("Unexpected authorization redirect.");
       }
-      // WorkOS's external ID is not the JWT subject. Resolve the real WorkOS user
-      // by the authenticated owner's immutable ID; never link accounts by email.
-      const user = await workos.userManagement.getUserByExternalId(
-        grant.ownerId,
-      );
-      if (user.externalId !== grant.ownerId)
-        throw new Error("Identity mismatch.");
+      // Standalone Connect signs the exact external user.id supplied above as
+      // sub, not the separately provisioned AuthKit user_... directory ID.
       const active = await ctx.runMutation(
         internal.agentOAuth.finishConnection,
         {
           grantId: grant.grantId,
-          subject: user.id,
+          subject: grant.ownerId,
         },
       );
       if (!active) throw new Error("Connection expired.");

@@ -1,4 +1,4 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { vOnEmailEventArgs } from "@convex-dev/resend";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";

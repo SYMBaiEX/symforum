@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { Auth } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -80,16 +81,22 @@ export function hasSiteAdminAccess(user: Doc<"users"> | null | undefined) {
   return user?.role === "owner" || user?.role === "admin";
 }
 
+/** Only Convex Auth may interpret a token subject as a first-party user ID. */
+export async function getFirstPartyAuthUserId(ctx: { auth: Auth }) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity || identity.issuer !== env.CONVEX_SITE_URL) return null;
+  return await getAuthUserId(ctx);
+}
+
 export async function getCurrentUser(ctx: DatabaseCtx) {
   const identity = await ctx.auth.getUserIdentity();
   const workos = workosConfig(env);
   if (identity && workos && identity.issuer === workos.issuer) {
     return await resolveOAuthAgent(ctx, identity, workos.issuer);
   }
-  // A WorkOS subject must never fall through to Convex Auth's raw user-ID parser,
-  // including after the operator disables Connect.
-  if (identity?.subject.startsWith("user_")) return null;
-  const userId = await getAuthUserId(ctx);
+  // Standalone Connect also uses the owner's local ID as its subject. The issuer
+  // boundary must hold even when Connect is disabled or its configuration changes.
+  const userId = await getFirstPartyAuthUserId(ctx);
   if (userId === null) {
     return null;
   }

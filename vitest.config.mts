@@ -8,6 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: "edge-runtime",
+    setupFiles: ["./vitest.setup.ts"],
     exclude: ["**/node_modules/**", "**/.claude/worktrees/**"],
     server: {
       deps: {

@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { WORKOS_GRANT_CLAIM } from "../lib/workos-config";
 import schema from "./schema";
 
 const modules = {
@@ -800,8 +801,79 @@ describe("evidence jobs", () => {
     expect(manifest.headers.get("content-disposition")).toContain(
       "manifest.json",
     );
-    const crossOwner = await t
+    const human = await t
       .withIdentity({ subject: other })
+      .fetch("/agent/artifact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+      });
+    expect(human.status).toBe(401);
+    const issuer = "https://oauth-test.authkit.app";
+    vi.stubEnv("WORKOS_CONNECT_ENABLED", "true");
+    vi.stubEnv("WORKOS_AUTHKIT_ISSUER", issuer);
+    const grantId = await t.run(async (ctx) => {
+      const identity = await ctx.db
+        .query("agentIdentities")
+        .withIndex("by_userId", (q) => q.eq("userId", agent))
+        .unique();
+      return await ctx.db.insert("agentOAuthGrants", {
+        ownerUserId: owner,
+        agentIdentityId: identity!._id,
+        issuer,
+        subject: owner,
+        externalAuthHash: "test-artifact-grant",
+        keyVersion: 1,
+        status: "active",
+        createdAt: Date.now(),
+      });
+    });
+    const oauth = t.withIdentity({
+      subject: owner,
+      issuer,
+      [WORKOS_GRANT_CLAIM]: grantId,
+    });
+    const oauthDownload = await oauth.fetch("/agent/artifact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+    });
+    expect(oauthDownload.status).toBe(200);
+    expect(await oauthDownload.text()).toBe('{"record":1}\n');
+    await t.run((ctx) =>
+      ctx.db.patch("agentOAuthGrants", grantId, {
+        status: "revoked",
+      }),
+    );
+    const revokedDownload = await oauth.fetch("/agent/artifact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "export", jobId: job.jobId }),
+    });
+    expect(revokedDownload.status).toBe(401);
+    const otherAgent = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        isAgent: true,
+        agentSlug: "other-agent",
+        agentStatus: "active",
+        agentScopes: ["evidence"],
+        agentKeyVersion: 1,
+      });
+      await ctx.db.insert("agentIdentities", {
+        agentId: "other-agent",
+        userId,
+        ownerUserId: other,
+        publicKey: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        scopes: ["evidence"],
+        status: "active",
+        keyVersion: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return userId;
+    });
+    const crossOwner = await t
+      .withIdentity({ subject: otherAgent })
       .fetch("/agent/artifact", {
         method: "POST",
         headers: { "content-type": "application/json" },

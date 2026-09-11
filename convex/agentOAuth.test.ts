@@ -4,14 +4,13 @@ import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { getCurrentUser } from "./authz";
+import { getCurrentUser, getFirstPartyAuthUserId } from "./authz";
 import { WORKOS_GRANT_CLAIM } from "../lib/workos-config";
 
-const mocks = vi.hoisted(() => ({ complete: vi.fn(), getUser: vi.fn() }));
+const mocks = vi.hoisted(() => ({ complete: vi.fn() }));
 vi.mock("@workos-inc/node", () => ({
   WorkOS: class {
     connect = { completeOAuth2: mocks.complete };
-    userManagement = { getUserByExternalId: mocks.getUser };
   },
 }));
 const modules = {
@@ -76,11 +75,11 @@ async function activeFixture() {
   );
   await f.owner.mutation(internal.agentOAuth.finishConnection, {
     grantId: prepared.grantId,
-    subject: "user_test_subject",
+    subject: f.ownerId,
   });
   const claims = {
     issuer,
-    subject: "user_test_subject",
+    subject: f.ownerId,
     [WORKOS_GRANT_CLAIM]: prepared.grantId,
   };
   return {
@@ -143,10 +142,10 @@ describe("WorkOS owner-approved agent authorization", () => {
   test("rejects unbound, wrong-owner, wrong-subject, and wrong-issuer credentials", async () => {
     const f = await activeFixture();
     for (const claims of [
-      { issuer, subject: "user_test_subject" },
+      { issuer, subject: f.ownerId },
       { ...f.claims, subject: "user_other" },
       { ...f.claims, issuer: "https://other.authkit.app" },
-      { ...f.claims, subject: f.ownerId },
+      { ...f.claims, subject: f.otherId },
       { ...f.claims, [WORKOS_GRANT_CLAIM]: f.ownerId },
     ])
       expect(await f.t.withIdentity(claims).run(getCurrentUser)).toBeNull();
@@ -268,7 +267,7 @@ describe("WorkOS owner-approved agent authorization", () => {
     expect(
       await f.owner.mutation(internal.agentOAuth.finishConnection, {
         grantId: grant.grantId,
-        subject: "user_test",
+        subject: f.ownerId,
       }),
     ).toBe(false);
     expect(
@@ -303,14 +302,10 @@ describe("WorkOS owner-approved agent authorization", () => {
     ).rejects.toThrow(/limit reached/i);
   });
 
-  test("completes through the real SDK boundary and binds the provider subject, not an email", async () => {
+  test("binds the immutable external ID sent to Standalone Connect, not a directory ID or email", async () => {
     const f = await fixture();
     mocks.complete.mockResolvedValue({
       redirectUri: `${issuer}/oauth2/consent`,
-    });
-    mocks.getUser.mockResolvedValue({
-      id: "user_real_subject",
-      externalId: f.ownerId,
     });
     await expect(
       f.owner.action(api.agentOAuthConnect.complete, {
@@ -323,15 +318,14 @@ describe("WorkOS owner-approved agent authorization", () => {
         user: { id: f.ownerId, email: "owner@example.test" },
       }),
     );
-    expect(mocks.getUser).toHaveBeenCalledWith(f.ownerId);
     const grants = await f.owner.query(api.agentOAuth.listMyConnections, {});
     expect(grants).toHaveLength(1);
     expect(
       await f.t.run((ctx) => ctx.db.get("agentOAuthGrants", grants[0].id)),
-    ).toMatchObject({ subject: "user_real_subject", status: "active" });
+    ).toMatchObject({ subject: f.ownerId, status: "active" });
   });
 
-  test.each(["redirect", "identity", "provider"])(
+  test.each(["redirect", "provider"])(
     "fails closed with sanitized errors for a bad %s response",
     async (reason) => {
       const f = await fixture();
@@ -340,10 +334,6 @@ describe("WorkOS owner-approved agent authorization", () => {
           reason === "redirect"
             ? "https://evil.example/steal"
             : `${issuer}/oauth2/consent`,
-      });
-      mocks.getUser.mockResolvedValue({
-        id: "user_wrong",
-        externalId: f.otherId,
       });
       if (reason === "provider")
         mocks.complete.mockRejectedValue(new Error("secret-provider-error"));
@@ -362,4 +352,112 @@ describe("WorkOS owner-approved agent authorization", () => {
       expect(grants[0].status).toBe("revoked");
     },
   );
+
+  test.each(["user_directory_id", "other-owner"])(
+    "cannot activate a grant for the wrong subject: %s",
+    async (subject) => {
+      const f = await fixture();
+      const prepared = await f.owner.mutation(
+        internal.agentOAuth.prepareConnection,
+        { agentId: "oauth-agent", externalAuthId },
+      );
+      expect(
+        await f.owner.mutation(internal.agentOAuth.finishConnection, {
+          grantId: prepared.grantId,
+          subject: subject === "other-owner" ? f.otherId : subject,
+        }),
+      ).toBe(false);
+    },
+  );
+
+  test.each(["true", "false"])(
+    "never interprets an OAuth subject as a human session when Connect is %s",
+    async (enabled) => {
+      const f = await activeFixture();
+      vi.stubEnv("WORKOS_CONNECT_ENABLED", enabled);
+      for (const tokenIssuer of [
+        issuer,
+        "https://untrusted.example",
+        "https://other.authkit.app",
+      ]) {
+        const identity = f.t.withIdentity({
+          issuer: tokenIssuer,
+          subject: f.ownerId,
+        });
+        expect(await identity.run(getFirstPartyAuthUserId)).toBeNull();
+        expect(await identity.run(getCurrentUser)).toBeNull();
+        expect(await identity.query(api.users.maybeViewer, {})).toBeNull();
+        await expect(identity.query(api.users.viewer, {})).rejects.toThrow(
+          /not signed in/i,
+        );
+      }
+      expect(await f.owner.run(getFirstPartyAuthUserId)).toBe(f.ownerId);
+    },
+  );
+
+  test("artifact authorization resolves the restricted agent and rejects disconnected grants", async () => {
+    const f = await activeFixture();
+    expect(
+      await f.oauth.query(internal.agentOAuth.currentEvidenceUserId, {}),
+    ).toBe(f.agentUserId);
+    expect(
+      await f.owner.query(internal.agentOAuth.currentEvidenceUserId, {}),
+    ).toBeNull();
+    await f.owner.mutation(api.agentOAuth.revokeConnection, {
+      grantId: f.grantId,
+    });
+    expect(
+      await f.oauth.query(internal.agentOAuth.currentEvidenceUserId, {}),
+    ).toBeNull();
+    const response = await f.oauth.fetch("/agent/artifact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "research", jobId: "test" }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("a valid research grant cannot use legacy profile, newsletter, posting or presence entrypoints", async () => {
+    const f = await activeFixture();
+    expect(await f.oauth.query(api.users.maybeViewer, {})).toBeNull();
+    expect(
+      await f.oauth.query(api.newsletter.viewerPreferences, {}),
+    ).toBeNull();
+    await expect(f.oauth.query(api.users.viewer, {})).rejects.toThrow(
+      /not signed in/i,
+    );
+    await expect(
+      f.oauth.mutation(api.comments.add, {
+        entityType: "post",
+        entityId: "not-a-real-post",
+        body: "This must never publish.",
+      }),
+    ).rejects.toThrow(/sign in/i);
+    await expect(
+      f.oauth.mutation(api.interactions.set, {
+        entityType: "post",
+        entityId: "not-a-real-post",
+        vote: 1,
+        saved: false,
+      }),
+    ).rejects.toThrow(/not authenticated/i);
+    await expect(
+      f.oauth.mutation(api.newsletter.requestViewerSubscription, {
+        email: "owner@example.test",
+        token: "test",
+        tokenHash: "test",
+      }),
+    ).rejects.toThrow(/sign in/i);
+    await expect(
+      f.oauth.query(api.forum.listMyThreadSubscriptions, {}),
+    ).rejects.toThrow(/sign in/i);
+    await expect(
+      f.oauth.mutation(api.presence.heartbeat, {
+        roomId: "forum",
+        userId: f.ownerId,
+        sessionId: "oauth-must-not-impersonate-owner",
+        interval: 30_000,
+      }),
+    ).rejects.toThrow(/trusted forum access/i);
+  });
 });

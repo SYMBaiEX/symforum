@@ -8,8 +8,7 @@ export async function resolveOAuthAgent(
   identity: UserIdentity,
   issuer: string,
 ) {
-  if (identity.issuer !== issuer || !identity.subject.startsWith("user_"))
-    return null;
+  if (identity.issuer !== issuer || !identity.subject) return null;
   const grantValue = identity[WORKOS_GRANT_CLAIM];
   if (typeof grantValue !== "string") return null;
   const grantId = ctx.db.normalizeId("agentOAuthGrants", grantValue);
@@ -19,7 +18,8 @@ export async function resolveOAuthAgent(
     !grant ||
     grant.status !== "active" ||
     grant.issuer !== issuer ||
-    grant.subject !== identity.subject
+    grant.subject !== identity.subject ||
+    grant.subject !== grant.ownerUserId
   )
     return null;
   // OAuth identity scopes are not SYMBaiEX permissions. The signed consent

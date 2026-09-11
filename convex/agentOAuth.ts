@@ -1,8 +1,28 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, mutation, query, env } from "./_generated/server";
-import { requireAuthenticatedUser } from "./authz";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  env,
+} from "./_generated/server";
+import {
+  getCurrentUser,
+  hasAgentScope,
+  requireAuthenticatedUser,
+} from "./authz";
 import { sha256Base64Url } from "./agentIdentityCrypto";
 import { workosConfig } from "../lib/workos-config";
+
+/** Artifact HTTP actions must resolve the same grant-bound principal as the API. */
+export const currentEvidenceUserId = internalQuery({
+  args: {},
+  returns: v.union(v.id("users"), v.null()),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    return user && hasAgentScope(user, "evidence") ? user._id : null;
+  },
+});
 
 export const listMyConnections = query({
   args: {},
@@ -149,7 +169,7 @@ export const finishConnection = internalMutation({
       )
       .take(50);
     const active = Boolean(
-      subject?.startsWith("user_") &&
+      subject === owner._id &&
       agent?.status === "active" &&
       agent.ownerUserId === owner._id &&
       agent.keyVersion === grant.keyVersion &&
