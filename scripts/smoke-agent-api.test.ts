@@ -10,6 +10,7 @@ function mockResponses(
   oauth: boolean,
   advertisedIssuer = issuer,
   challengeScope = oauth ? "openid offline_access" : "evidence",
+  serviceAuth = false,
 ) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -31,9 +32,18 @@ function mockResponses(
     if (url.endsWith("/oauth-protected-resource"))
       return Response.json({
         resource: "https://www.symbaiex.com/api/agent/mcp",
-        scopes_supported: oauth ? ["openid", "offline_access"] : ["evidence"],
+        scopes_supported: oauth
+          ? ["openid", "offline_access", ...(serviceAuth ? ["evidence"] : [])]
+          : ["evidence"],
         "x-symbaiex-authentication": { oauth2: false },
-        ...(oauth ? { authorization_servers: [advertisedIssuer] } : {}),
+        ...(oauth
+          ? {
+              authorization_servers: [
+                advertisedIssuer,
+                ...(serviceAuth ? ["https://www.symbaiex.com/agent-auth"] : []),
+              ],
+            }
+          : {}),
       });
     if (url.endsWith("/symbaiex-agent-authentication"))
       return Response.json({
@@ -84,6 +94,18 @@ describe("public authentication release smoke", () => {
   test("fails mismatched advertised issuers", async () => {
     vi.stubGlobal("fetch", mockResponses(true, "https://other.authkit.app"));
     await expect(publicSmoke()).rejects.toThrow(/inconsistent/i);
+  });
+  test.each(["openid offline_access", "evidence"])(
+    "accepts a supported scope subset with multiple issuers: %s",
+    async (scope) => {
+      vi.stubGlobal("fetch", mockResponses(true, issuer, scope, true));
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      await expect(publicSmoke()).resolves.toBeUndefined();
+    },
+  );
+  test("rejects scopes outside the multi-issuer resource metadata", async () => {
+    vi.stubGlobal("fetch", mockResponses(true, issuer, "admin", true));
+    await expect(publicSmoke()).rejects.toThrow(/scope metadata/i);
   });
   test("fails when the OAuth challenge still advertises the custom protocol scope", async () => {
     vi.stubGlobal("fetch", mockResponses(true, issuer, "evidence"));

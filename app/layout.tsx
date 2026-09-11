@@ -136,6 +136,7 @@ export default async function RootLayout({
     // class attribute on it */
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="ard" type="application/json" href="/.well-known/ard.json" />
         <link
           rel="ai-catalog"
           type="application/ai-catalog+json"

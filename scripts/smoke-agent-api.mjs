@@ -379,8 +379,10 @@ async function assertAuthChallenge(response, status, protectedResource) {
     ) &&
       Array.isArray(scopes) &&
       scopes.length > 0 &&
-      challengeScopes?.length === scopes.length &&
-      scopes.every((scope) => challengeScopes.includes(scope)),
+      // RFC 9728 section 7.2: supported scopes are not all required scopes.
+      // Distinct issuers may authorize this resource using different subsets.
+      challengeScopes?.length > 0 &&
+      challengeScopes.every((scope) => scopes.includes(scope)),
     `MCP ${status} response is missing protected-resource scope metadata.`,
   );
   if (status === 403) {

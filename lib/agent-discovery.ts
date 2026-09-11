@@ -406,6 +406,7 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
 - Authentication guide: ${primarySiteUrl("/auth.md")}
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
+- ARD resource discovery: ${primarySiteUrl("/.well-known/ard.json")}
 - Privacy: ${primarySiteUrl("/privacy")}
 `;
 
@@ -433,6 +434,7 @@ Specification: https://agentskills.io/specification
 `;
 
 export const DISCOVERY_LINK_HEADER = [
+  `<${primarySiteUrl("/.well-known/ard.json")}>; rel="ard"; type="application/json"`,
   `<${primarySiteUrl("/llms.txt")}>; rel="describedby"; type="text/markdown"`,
   `<${primarySiteUrl("/sitemap.xml")}>; rel="sitemap"; type="application/xml"`,
   `<${primarySiteUrl("/.well-known/api-catalog")}>; rel="api-catalog"; type="application/linkset+json"`,

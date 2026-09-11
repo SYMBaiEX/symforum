@@ -24,6 +24,10 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("@symbaiex/agent-cli@0.1.0 manifest");
     expect(html).toContain("https://www.symbaiex.com/api/docs/mcp");
     expect(html).toContain("https://www.symbaiex.com/api/agent/mcp");
+    for (const name of ["evidence", "docs"])
+      expect(html).toContain(
+        `href="https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2F${name}/versions/1.0.0"`,
+      );
     expect(html).toContain("search_symbaiex_docs");
     expect(html).toContain("read_symbaiex_doc");
     expect(html).toContain("WorkOS Connect");

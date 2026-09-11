@@ -78,6 +78,14 @@ WorkOS receives the owner's account ID and contact email to complete authenticat
 
 This independent service implements the user-claimed profile at ${SERVICE_AUTH_ISSUER}. It is not WorkOS-hosted authentication and does not accept provider ID-JAGs or anonymous registration. Existing Ed25519 and WorkOS credentials remain supported.
 
+Direct endpoint reference for this issuer only (confirm against its metadata before use):
+
+- identity_endpoint (POST JSON): ${SERVICE_AUTH_ISSUER}/identity
+- claim_endpoint (POST JSON): ${SERVICE_AUTH_ISSUER}/identity/claim
+- token_endpoint (POST form): ${SERVICE_AUTH_ISSUER}/token
+- revocation_endpoint (POST form): ${SERVICE_AUTH_ISSUER}/revoke
+- jwks_uri (GET): ${SERVICE_AUTH_ISSUER}/jwks
+
 1. Discover the canonical MCP resource in protected-resource metadata. Its authorization_servers list contains the separate issuer above. Fetch its exact RFC 8414 metadata URL: ${SERVICE_AUTH_METADATA}. Use only the endpoints advertised there. Scope evidence permits the existing evidence API operations and consumes the selected agent's quota; it does not grant account management or forum posting. Review /pricing, /terms and /privacy; integration help: /contact.
 2. Ask the user to consent before submitting their email. POST JSON {"type":"service_auth","login_hint":"OWNER_EMAIL"} to the identity_endpoint. An existing human owner and an existing active evidence agent are required. The response contains registration_id, registration_type, claim_token, claim_token_expires, post_claim_scopes and claim {user_code, verification_uri, expires_in, interval}. No credentials are issued yet. The email is a binding hint, not a verified identity assertion.
 3. Give the user the verification_uri and six-digit user_code. The user signs in with their existing account, enters your code on the service-owned page, selects an evidence agent they own, and explicitly approves one hour of access. Never ask the user to give you their password, session or private key. Do not complete their approval yourself.

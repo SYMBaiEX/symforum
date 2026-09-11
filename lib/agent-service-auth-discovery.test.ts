@@ -61,6 +61,16 @@ describe("service_auth discovery and transport", () => {
     expect(agentAuthGuide()).toContain(
       "First-party service_auth (auth.md user-claimed profile)",
     );
+    for (const path of [
+      "identity",
+      "identity/claim",
+      "token",
+      "revoke",
+      "jwks",
+    ])
+      expect(agentAuthGuide()).toContain(
+        `https://www.symbaiex.com/agent-auth/${path}`,
+      );
   });
   test("requires configured trusted relay and bounds streamed bodies", async () => {
     vi.stubEnv("AGENT_SERVICE_AUTH_ENABLED", "true");

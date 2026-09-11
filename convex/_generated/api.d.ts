@@ -9,8 +9,6 @@
  */
 
 import type * as admin from "../admin.js";
-import type * as agentServiceAuth from "../agentServiceAuth.js";
-import type * as agentServiceAuthTokens from "../agentServiceAuthTokens.js";
 import type * as adminApi from "../adminApi.js";
 import type * as agentDataApi from "../agentDataApi.js";
 import type * as agentDataHttpErrors from "../agentDataHttpErrors.js";
@@ -21,6 +19,11 @@ import type * as agentOAuthConnect from "../agentOAuthConnect.js";
 import type * as agentOAuthPrincipal from "../agentOAuthPrincipal.js";
 import type * as agentQuota from "../agentQuota.js";
 import type * as agentSemanticApi from "../agentSemanticApi.js";
+import type * as agentServiceAuth from "../agentServiceAuth.js";
+import type * as agentServiceAuthHttp from "../agentServiceAuthHttp.js";
+import type * as agentServiceAuthPrincipal from "../agentServiceAuthPrincipal.js";
+import type * as agentServiceAuthSchema from "../agentServiceAuthSchema.js";
+import type * as agentServiceAuthTokens from "../agentServiceAuthTokens.js";
 import type * as aiRoutingControlData from "../aiRoutingControlData.js";
 import type * as aiTelemetry from "../aiTelemetry.js";
 import type * as aiTelemetryHelpers from "../aiTelemetryHelpers.js";
@@ -116,12 +119,15 @@ declare const fullApi: ApiFromModules<{
   agentIdentity: typeof agentIdentity;
   agentIdentityCrypto: typeof agentIdentityCrypto;
   agentOAuth: typeof agentOAuth;
-  agentServiceAuth: typeof agentServiceAuth;
-  agentServiceAuthTokens: typeof agentServiceAuthTokens;
   agentOAuthConnect: typeof agentOAuthConnect;
   agentOAuthPrincipal: typeof agentOAuthPrincipal;
   agentQuota: typeof agentQuota;
   agentSemanticApi: typeof agentSemanticApi;
+  agentServiceAuth: typeof agentServiceAuth;
+  agentServiceAuthHttp: typeof agentServiceAuthHttp;
+  agentServiceAuthPrincipal: typeof agentServiceAuthPrincipal;
+  agentServiceAuthSchema: typeof agentServiceAuthSchema;
+  agentServiceAuthTokens: typeof agentServiceAuthTokens;
   aiRoutingControlData: typeof aiRoutingControlData;
   aiTelemetry: typeof aiTelemetry;
   aiTelemetryHelpers: typeof aiTelemetryHelpers;

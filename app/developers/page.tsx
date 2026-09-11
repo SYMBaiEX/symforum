@@ -1,6 +1,7 @@
 import { CopyableCommand } from "@/components/copyable-command";
 import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
 import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
+import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,6 +182,23 @@ export default function DevelopersPage() {
               value={primarySiteUrl("/api/agent/mcp")}
             />
           </div>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            Official MCP Registry entries:{" "}
+            <a
+              className="underline"
+              href={DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+            >
+              SYMBaiEX Documentation MCP
+            </a>{" "}
+            and{" "}
+            <a
+              className="underline"
+              href={MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+            >
+              SYMBaiEX Evidence MCP
+            </a>
+            .
+          </p>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
             For compatible OAuth clients, follow the{" "}
             <Link
