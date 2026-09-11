@@ -176,6 +176,9 @@ export function AgentServiceClaim({
                 >
                   <span>
                     {row.agentId}
+                    <span className="block break-all font-mono text-xs text-muted-foreground">
+                      Registration {row.id}
+                    </span>
                     <span className="block text-sm text-muted-foreground">
                       Expires {new Date(row.expiresAt).toLocaleString()}
                     </span>

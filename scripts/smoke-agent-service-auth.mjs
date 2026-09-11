@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 // Live, owner-approved smoke. Never prints tokens, assertions, codes or attempt URLs.
 const origin = "https://www.symbaiex.com";
 const issuer = `${origin}/agent-auth`;
+const workosIssuer = "https://unique-evening-77.authkit.app";
 const resource = `${origin}/api/agent/mcp`;
 const grant = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const claimGrant = "urn:workos:agent-auth:grant-type:claim";
@@ -59,6 +60,55 @@ const status = (token) =>
   call(`${origin}/api/agent/v1/status`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+const mcpStatus = (token) =>
+  call(resource, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": "tools/call",
+      "mcp-name": "evidence_status",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "service-auth-smoke-status",
+      method: "tools/call",
+      params: {
+        name: "evidence_status",
+        arguments: {},
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientInfo": {
+            name: "symbaiex-service-auth-smoke",
+            version: "1.0.0",
+          },
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
+    }),
+  });
+async function checkMcpAccess(token) {
+  const response = await mcpStatus(token);
+  const result = response.data?.result;
+  check(
+    response.status === 200 &&
+      response.data?.id === "service-auth-smoke-status" &&
+      !response.data.error &&
+      result?.resultType === "complete" &&
+      !result.isError,
+    "Approved credential failed on MCP tools/call",
+  );
+  const content = result.content?.find((item) => item.type === "text");
+  let evidence;
+  try {
+    evidence = JSON.parse(content?.text ?? "null");
+  } catch {
+    throw new Error("Invalid MCP evidence response");
+  }
+  check(evidence?.status === "available", "MCP did not return evidence status");
+}
 try {
   const metadata = await call(
     `${origin}/.well-known/oauth-authorization-server/agent-auth`,
@@ -83,11 +133,33 @@ try {
   );
   const prm = await call(`${origin}/.well-known/oauth-protected-resource`);
   check(
-    prm.data.resource === resource &&
-      prm.data.authorization_servers.includes(issuer),
-    "PRM missing the service issuer",
+    prm.status === 200 &&
+      prm.data.resource === resource &&
+      prm.data.authorization_servers.includes(issuer) &&
+      prm.data.authorization_servers.includes(workosIssuer),
+    "PRM must retain WorkOS alongside the service issuer",
   );
-  console.log("PASS discovery and issuer separation");
+  const hostedWorkos = await call(
+    `${workosIssuer}/.well-known/oauth-authorization-server`,
+  );
+  const mirroredWorkos = await call(
+    `${origin}/.well-known/oauth-authorization-server`,
+  );
+  check(
+    hostedWorkos.status === 200 &&
+      mirroredWorkos.status === 200 &&
+      hostedWorkos.data.issuer === workosIssuer &&
+      mirroredWorkos.data.issuer === workosIssuer,
+    "Existing WorkOS issuer was not preserved",
+  );
+  for (const field of ["authorization_endpoint", "token_endpoint", "jwks_uri"])
+    check(
+      typeof hostedWorkos.data[field] === "string" &&
+        new URL(hostedWorkos.data[field]).origin === workosIssuer &&
+        mirroredWorkos.data[field] === hostedWorkos.data[field],
+      "WorkOS mirror must preserve hosted authorization endpoints",
+    );
+  console.log("PASS service discovery and preserved WorkOS issuer/endpoints");
   const registration = await call(`${issuer}/identity`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -170,15 +242,22 @@ try {
     (await status(received.data.identity_assertion)).status === 401,
     "Assertion accepted as an API access token",
   );
+  await checkMcpAccess(accessToken);
+  check(
+    (await mcpStatus(received.data.identity_assertion)).status === 401,
+    "Assertion accepted as an MCP access token",
+  );
   console.log(
-    "PASS owner approval, evidence API access and assertion isolation",
+    "PASS owner approval, evidence REST/MCP tools/call and assertion isolation",
   );
   const revoked = await form(`${issuer}/revoke`, {
     token: accessToken,
     token_type_hint: "access_token",
   });
   check(
-    revoked.status === 200 && (await status(accessToken)).status === 401,
+    revoked.status === 200 &&
+      (await status(accessToken)).status === 401 &&
+      (await mcpStatus(accessToken)).status === 401,
     "Token revocation failed",
   );
   const refresh = await form(`${issuer}/token`, {
@@ -196,6 +275,7 @@ try {
     (await status(accessToken)).status === 200,
     "Refreshed token cannot access evidence API",
   );
+  await checkMcpAccess(accessToken);
   console.log(
     `PASS token revoke and bounded assertion reuse. Now disconnect registration ${registration.data.registration_id} at ${origin}/agent/claim. Waiting up to five minutes.`,
   );
@@ -209,6 +289,10 @@ try {
     }
   }
   check(denied, "Owner revocation timed out");
+  check(
+    (await mcpStatus(accessToken)).status === 401,
+    "Owner revocation did not block MCP access",
+  );
   const blocked = await form(`${issuer}/token`, {
     grant_type: grant,
     assertion: received.data.identity_assertion,
@@ -219,7 +303,7 @@ try {
     "Owner revocation did not block token issuance",
   );
   console.log(
-    "PASS owner disconnect invalidates API access and future issuance. Service-auth activation smoke complete.",
+    "PASS owner disconnect invalidates REST/MCP access and future issuance. Service-auth activation smoke complete.",
   );
 } catch (error) {
   console.error(
