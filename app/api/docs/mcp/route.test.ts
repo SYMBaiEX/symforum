@@ -1,4 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { GET as authGuide, HEAD as authHead } from "@/app/auth.md/route";
+import { GET as pricingGuide } from "@/app/pricing.md/route";
+import { DOCS_MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import { publicDocumentation } from "@/lib/public-documentation";
 
 import { GET, POST } from "./route";
 
@@ -16,6 +20,7 @@ function request(body: unknown, protocolVersion?: string) {
 }
 
 describe("public documentation MCP", () => {
+  afterEach(() => vi.unstubAllEnvs());
   test("initializes without credentials and advertises read-only capabilities", async () => {
     const response = await POST(
       request({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
@@ -64,7 +69,7 @@ describe("public documentation MCP", () => {
         message: "Unsupported protocol version",
         data: {
           requested: "2024-11-05",
-          supported: ["2025-06-18", "2025-03-26"],
+          supported: ["2026-07-28", "2025-06-18", "2025-03-26"],
         },
       },
     });
@@ -140,10 +145,14 @@ describe("public documentation MCP", () => {
     );
     const body = await response.json();
 
-    expect(body.result.structuredContent.results[0]).toMatchObject({
-      uri: "https://www.symbaiex.com/auth.md",
-      name: "SYMBaiEX authentication",
-    });
+    expect(body.result.structuredContent.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          uri: "https://www.symbaiex.com/auth.md",
+          name: "SYMBaiEX authentication",
+        }),
+      ]),
+    );
     expect(body.result.structuredContent.results.length).toBeLessThanOrEqual(2);
   });
 
@@ -211,7 +220,9 @@ describe("public documentation MCP", () => {
       }),
     );
     const listBody = await listed.json();
-    expect(listBody.result.structuredContent.resources).toHaveLength(5);
+    expect(listBody.result.structuredContent.resources).toHaveLength(
+      publicDocumentation().length,
+    );
 
     const read = await POST(
       request({
@@ -241,7 +252,7 @@ describe("public documentation MCP", () => {
       request({ jsonrpc: "2.0", id: 2, method: "resources/list", params: {} }),
     );
     const list = await listed.json();
-    expect(list.result.resources).toHaveLength(5);
+    expect(list.result.resources).toHaveLength(publicDocumentation().length);
     expect(list.result.resources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -292,4 +303,184 @@ describe("public documentation MCP", () => {
       resolution: expect.stringContaining("Initialize"),
     });
   });
+
+  test("serves the exact current auth and pricing guides, including enabled OAuth", async () => {
+    vi.stubEnv("WORKOS_CONNECT_ENABLED", "true");
+    vi.stubEnv("WORKOS_AUTHKIT_ISSUER", "https://example.authkit.app");
+    for (const [uri, guide] of [
+      ["/auth.md", authGuide],
+      ["/pricing.md", pricingGuide],
+    ] as const) {
+      const response = await POST(
+        request({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "resources/read",
+          params: { uri: `https://www.symbaiex.com${uri}` },
+        }),
+      );
+      const body = await response.json();
+      expect(body.result.contents[0].text).toBe(await guide().text());
+      expect(body.result.contents[0].text.length).toBeGreaterThan(1000);
+    }
+    expect(await authGuide().text()).toContain("OAuth is enabled.");
+    expect(await authHead().text()).toBe("");
+    vi.stubEnv("WORKOS_CONNECT_ENABLED", "false");
+    expect(
+      publicDocumentation().find((d) => d.uri.endsWith("/auth.md"))?.text,
+    ).toContain("OAuth is not enabled in this deployment.");
+  });
+
+  test("does not manufacture relevance or fetch unindexed URLs", async () => {
+    expect(
+      publicDocumentation().find((d) => d.uri.endsWith("/agent/instructions"))
+        ?.text,
+    ).toContain("JSONL (default) and Parquet");
+    expect(
+      publicDocumentation().find((d) => d.uri.endsWith("/agent/instructions"))
+        ?.text,
+    ).not.toContain("JSONL-only");
+    const response = await POST(
+      request({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "docs_search", arguments: { query: "zzzxxyynomatch" } },
+      }),
+    );
+    expect((await response.json()).result.structuredContent.results).toEqual(
+      [],
+    );
+    for (const uri of [
+      "https://evil.example/auth.md",
+      "https://www.symbaiex.com/api/admin",
+      "file:///etc/passwd",
+    ]) {
+      const response = await POST(
+        request({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "docs_get", arguments: { uri } },
+        }),
+      );
+      expect((await response.json()).error.code).toBe(-32602);
+    }
+  });
+
+  test("supports card-advertised modern discovery, tools and resources without credentials", async () => {
+    expect(DOCS_MCP_SERVER_CARD.remotes[0].supportedProtocolVersions).toContain(
+      "2026-07-28",
+    );
+    for (const [method, params] of [
+      ["server/discover", {}],
+      ["tools/list", {}],
+      ["resources/list", {}],
+      [
+        "tools/call",
+        { name: "docs_search", arguments: { query: "OAuth PKCE" } },
+      ],
+      ["resources/read", { uri: "https://www.symbaiex.com/auth.md" }],
+    ] as const) {
+      const response = await POST(modernRequest(method, params));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("mcp-protocol-version")).toBe("2026-07-28");
+      const body = await response.json();
+      expect(body.result).toMatchObject({
+        resultType: "complete",
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": {
+            name: "symbaiex-docs",
+            version: "v1",
+          },
+        },
+      });
+      if (method === "server/discover")
+        expect(body.result).toMatchObject({
+          supportedVersions: ["2026-07-28"],
+          capabilities: { tools: {}, resources: {} },
+          cacheScope: "public",
+        });
+    }
+    const oldHandshake = await POST(modernRequest("initialize", {}));
+    expect(oldHandshake.status).toBe(404);
+  });
+
+  test("validates modern metadata and both tool and resource routing headers", async () => {
+    for (const [method, params, header] of [
+      ["tools/list", {}, "mcp-method"],
+      ["tools/call", { name: "docs_list", arguments: {} }, "mcp-name"],
+      [
+        "resources/read",
+        { uri: "https://www.symbaiex.com/auth.md" },
+        "mcp-name",
+      ],
+    ] as const) {
+      const req = modernRequest(method, params);
+      req.headers.set(header, "wrong");
+      const response = await POST(req);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.code).toBe(-32020);
+    }
+    const missingMeta = await POST(
+      request({ jsonrpc: "2.0", id: 1, method: "tools/list" }, "2026-07-28"),
+    );
+    expect((await missingMeta.json()).error.code).toBe(-32020);
+    const missingCapabilities = modernRequest("tools/list", {
+      _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" },
+    });
+    expect((await (await POST(missingCapabilities)).json()).error.code).toBe(
+      -32600,
+    );
+    const encoded = modernRequest("tools/call", {
+      name: "docs_list",
+      arguments: {},
+    });
+    encoded.headers.set("mcp-name", `=?base64?${btoa("docs_list")}?=`);
+    expect((await POST(encoded)).status).toBe(200);
+  });
+
+  test("bounds streamed bodies without trusting Content-Length", async () => {
+    const cancel = vi.fn();
+    const stream = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(20_000));
+      },
+      cancel,
+    });
+    const req = new Request("https://www.symbaiex.com/api/docs/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    expect((await POST(req)).status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
+
+function modernRequest(method: string, params: Record<string, unknown>) {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "mcp-protocol-version": "2026-07-28",
+    "mcp-method": method,
+  };
+  if (method === "tools/call") headers["mcp-name"] = String(params.name);
+  if (method === "resources/read") headers["mcp-name"] = String(params.uri);
+  return new Request("https://www.symbaiex.com/api/docs/mcp", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params: {
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+        ...params,
+      },
+    }),
+  });
+}

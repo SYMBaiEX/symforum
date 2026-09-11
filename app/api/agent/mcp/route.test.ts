@@ -231,6 +231,28 @@ describe("evidence MCP endpoint", () => {
     );
   });
 
+  test("requires modern resource routing headers to match the URI", async () => {
+    const uri = "ui://symbaiex/evidence-explorer.html";
+    const body = {
+      jsonrpc: "2.0",
+      id: "resource-routing",
+      method: "resources/read",
+      params: { uri, ...modernParams() },
+    };
+    for (const name of [undefined, "wrong-resource"]) {
+      const response = await POST(
+        modernRequest("resources/read", body, "2026-07-28", name),
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.code).toBe(-32020);
+    }
+    const response = await POST(
+      modernRequest("resources/read", body, "2026-07-28", uri),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).result.contents[0].uri).toBe(uri);
+  });
+
   test("returns a deterministic modern tools list with explicit cache hints", async () => {
     vi.stubGlobal("fetch", validAuthentication());
 

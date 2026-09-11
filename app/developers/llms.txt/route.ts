@@ -21,13 +21,17 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
 - Synthetic sandbox OpenAPI: ${primarySiteUrl("/api/sandbox/openapi.json")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
-- Public documentation MCP: ${primarySiteUrl("/api/docs/mcp/server-card")}
+- Public documentation MCP endpoint (Streamable HTTP POST, no credentials): ${primarySiteUrl("/api/docs/mcp")}
+- Public documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
+- Evidence MCP endpoint (Streamable HTTP POST, authenticated tool calls): ${primarySiteUrl("/api/agent/mcp")}
+- OAuth protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
+- MCP connection guide: ${primarySiteUrl("/developers/mcp")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk (\`bun add @symbaiex/agent-sdk@0.1.0\`)
 - Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`)
 - TypeScript, Bun CLI, and Python source: https://github.com/SYMBaiEX/symbaiex-agent-clients
 
-The live authentication protocol is owner-approved Ed25519 challenge-response, not OAuth. Never ask for a private key, refresh token, Convex URL, or backend credential.
+Authentication supports owner-approved Ed25519 challenge-response and the WorkOS Connect OAuth flow advertised in protected-resource metadata. Follow the actual authorization server, use S256 PKCE, and preserve its resource binding. OAuth identity scopes do not grant forum or administrator access. WorkOS agent_auth and ID-JAG are separate capabilities, not implied by OAuth. Never ask for a private key, refresh token, Convex URL, or backend credential.
 
 Long-running research and export creation returns 202 Accepted with a Location header for polling. REST responses advertise the current RateLimit-Policy; 429 responses also include Retry-After. Use POST ${primarySiteUrl("/api/agent/v1/batch")} for 1-10 bounded read operations when one round trip is preferable to a client-side loop.
 `;

@@ -79,9 +79,32 @@ describe("AI-readable agent guide", () => {
     expect(homepage?.markdown).toContain("owner-approved Ed25519");
     expect(developers?.markdown).toContain("# SYMBaiEX developer guide");
     expect(developers?.markdown).toContain(
-      "Do not use it as a general web search engine",
+      "It is not a general web search engine",
     );
     expect(privacy?.markdown).toContain("# Privacy at SYMBaiEX");
     expect(privacy?.markdown).toContain("Vercel Analytics");
+  });
+
+  test("serves the same complete developer resource guidance to Markdown clients", async () => {
+    for (const resource of [
+      "api",
+      "openapi",
+      "authentication",
+      "mcp",
+      "webhooks",
+      "api-lifecycle",
+    ]) {
+      const page = await renderAiReadablePage({
+        pathname: `/developers/${resource}`,
+      });
+      expect(page?.canonical).toBe(
+        `https://www.symbaiex.com/developers/${resource}`,
+      );
+      expect(page?.markdown).toContain("## Integration guidance");
+      expect(page?.markdown.length).toBeGreaterThan(1000);
+    }
+    const mcp = await renderAiReadablePage({ pathname: "/developers/mcp" });
+    expect(mcp?.markdown).toContain("https://www.symbaiex.com/api/docs/mcp");
+    expect(mcp?.markdown).toContain("https://www.symbaiex.com/api/agent/mcp");
   });
 });

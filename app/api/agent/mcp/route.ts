@@ -250,7 +250,7 @@ export async function POST(request: Request) {
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
       instructions:
-        "SYMBaiEX product MCP for owner-approved public evidence search, claim verification, research jobs, exports, usage, and signed webhooks. It is not the documentation MCP. Initialize and discovery are public; tools/call requires an active Ed25519 bearer with the evidence scope.",
+        "SYMBaiEX product MCP for owner-approved public evidence search, claim verification, research jobs, exports, usage, and signed webhooks. Initialize and discovery are public; tools/call requires an owner-approved evidence credential. Discover Ed25519 and enabled WorkOS Connect OAuth through /.well-known/oauth-protected-resource and /auth.md. Public documentation tools are separately available at https://www.symbaiex.com/api/docs/mcp.",
     });
   }
 
@@ -392,7 +392,7 @@ export function GET(request: Request) {
       error: "Use POST with a JSON-RPC MCP request.",
       code: "METHOD_NOT_ALLOWED",
       resolution:
-        "POST initialize and tools/list without credentials; only tools/call requires an owner-approved Ed25519 bearer.",
+        "POST initialize and tools/list without credentials; only tools/call requires an owner-approved evidence bearer. Discover available OAuth and Ed25519 flows at /.well-known/oauth-protected-resource.",
     },
     405,
   );
@@ -475,13 +475,15 @@ function validateProtocolRequest(
       message: "Header mismatch: Mcp-Method must match the request method.",
     });
   }
-  if (body.method === "tools/call") {
-    const bodyName = typeof params?.name === "string" ? params.name : null;
+  if (body.method === "tools/call" || body.method === "resources/read") {
+    const value = body.method === "tools/call" ? params?.name : params?.uri;
+    const bodyName = typeof value === "string" ? value : null;
     const headerName = decodeMcpHeaderValue(request.headers.get("mcp-name"));
     if (bodyName === null || headerName === null || headerName !== bodyName) {
       return protocolError(request, id, {
         code: -32020,
-        message: "Header mismatch: Mcp-Name must match the requested tool.",
+        message:
+          "Header mismatch: Mcp-Name must match the requested tool or resource URI.",
       });
     }
   }
@@ -592,7 +594,12 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
             enum: ["jsonl", "parquet"],
             default: "jsonl",
           },
-          recordLimit: { type: "integer", minimum: 1, maximum: 500, default: 100 },
+          recordLimit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 500,
+            default: 100,
+          },
           selectionStrategy: {
             type: "string",
             enum: ["balanced", "recent"],

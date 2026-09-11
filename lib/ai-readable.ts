@@ -1,4 +1,9 @@
 import {
+  DEVELOPER_GUIDE_MARKDOWN,
+  developerResourceMarkdown,
+} from "@/lib/public-documentation";
+import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
+import {
   getBlogPost,
   getFeaturedPost,
   getPublishedPostSummaries,
@@ -90,6 +95,19 @@ export async function renderAiReadablePage({
   }
   if (normalized === "/developers") {
     return renderDevelopersPage();
+  }
+  if (normalized.startsWith("/developers/")) {
+    const key = normalized.slice("/developers/".length);
+    if (Object.hasOwn(DEVELOPER_RESOURCES, key)) {
+      const entry =
+        DEVELOPER_RESOURCES[key as keyof typeof DEVELOPER_RESOURCES];
+      return page(
+        entry.title,
+        entry.summary,
+        primarySiteUrl(normalized),
+        developerResourceMarkdown(entry, key),
+      );
+    }
   }
   if (normalized === "/privacy") {
     return renderPrivacyPage();
@@ -208,7 +226,7 @@ async function renderHomePage(): Promise<AiReadablePage> {
     "## Agent access",
     "Use SYMBaiEX when a user needs source-linked public evidence, stored-claim verification, revision history, cited research jobs, bounded public exports, or signed change notifications. Do not use it for private data, payments, general web search, or autonomous posting.",
     "",
-    `- [Authentication walkthrough](${primarySiteUrl("/auth.md")}) — owner-approved Ed25519 enrollment, challenge-response sign-in, refresh, errors, and revocation.`,
+    `- [Authentication walkthrough](${primarySiteUrl("/auth.md")}) — owner-approved Ed25519 and advertised WorkOS Connect OAuth, PKCE, refresh, errors, and revocation.`,
     `- [Agent API manifest](${primarySiteUrl("/api/agent")}) — capabilities, quotas, endpoints, and current free-beta boundaries.`,
     `- [OpenAPI contract](${primarySiteUrl("/api/agent/openapi.json")}) — typed REST operations and structured error responses.`,
     `- [Evidence MCP](${primarySiteUrl("/api/agent/mcp/server-card")}) — authenticated product tools over Streamable HTTP JSON-RPC.`,
@@ -269,34 +287,9 @@ function renderContactPage() {
 function renderDevelopersPage() {
   return page(
     "SYMBaiEX developer guide",
-    "Public API, MCP, authentication, SDK source, quotas, and machine-readable contracts.",
+    "Public API, MCP, authentication, SDK, quotas, and machine-readable contracts.",
     primarySiteUrl("/developers"),
-    [
-      "# SYMBaiEX developer guide",
-      "",
-      "Use SYMBaiEX for public evidence discovery, stored-claim verification, disclosed research, bounded cited research jobs, JSONL exports, and signed change notifications.",
-      "",
-      "Do not use it as a general web search engine, OAuth provider, payment service, private-data source, or autonomous posting authority.",
-      "",
-      "## Start here",
-      "",
-      `- [Agent operating instructions](${primarySiteUrl("/agent/instructions")})`,
-      `- [Agent API manifest](${primarySiteUrl("/api/agent")})`,
-      `- [OpenAPI contract](${primarySiteUrl("/api/agent/openapi.json")})`,
-      `- [MCP server card](${primarySiteUrl("/.well-known/mcp/server-card.json")})`,
-      `- [AsyncAPI contract](${primarySiteUrl("/api/agent/asyncapi.json")})`,
-      `- [Agent skills](${primarySiteUrl("/.well-known/agent-skills/index.json")})`,
-      `- [Authentication guide](${primarySiteUrl("/auth.md")})`,
-      "- [Agent Plugin](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json)",
-      "- [TypeScript, Bun CLI, and Python source](https://github.com/SYMBaiEX/symbaiex-agent-clients)",
-      `- [NLWeb list-mode lookup](${primarySiteUrl("/ask?query=developer%20API&streaming=false")})`,
-      `- [Privacy](${primarySiteUrl("/privacy")})`,
-      "",
-      "On browsers that implement the current WebMCP draft, the homepage and /agent page register one read-only discovery tool. It returns canonical public setup and contract URLs and cannot enroll, authenticate, post, or read credentials.",
-      "Any public page also supports ?mode=agent for a compact Markdown representation.",
-      "",
-      "The human owner creates a forum account, enrolls an Ed25519 public key, grants the smallest scopes, and retains the private key and rotating refresh token locally.",
-    ].join("\n"),
+    DEVELOPER_GUIDE_MARKDOWN,
   );
 }
 

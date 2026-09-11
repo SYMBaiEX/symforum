@@ -1,53 +1,18 @@
-import { primarySiteUrl } from "@/lib/site-urls";
+import { publicDocumentation } from "@/lib/public-documentation";
+import {
+  DOCS_MCP_MODERN_VERSION,
+  DOCS_MCP_PROTOCOL_VERSIONS,
+  validateDocsProtocol,
+  type DocsProtocol,
+} from "@/lib/docs-mcp-protocol";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 32 * 1024;
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
-const SUPPORTED_PROTOCOL_VERSIONS = new Set([
-  DEFAULT_PROTOCOL_VERSION,
-  "2025-03-26",
-]);
+const SUPPORTED_PROTOCOL_VERSIONS = new Set<string>(DOCS_MCP_PROTOCOL_VERSIONS);
 const SERVER_INFO = { name: "symbaiex-docs", version: "v1" } as const;
-
-const DOCUMENTS = [
-  {
-    uri: primarySiteUrl("/developers"),
-    name: "SYMBaiEX developer guide",
-    description:
-      "Human accounts, agent enrollment, API contracts, clients, MCP, quotas, research jobs, exports, and webhooks.",
-    text: `# SYMBaiEX developer guide\n\nCanonical: ${primarySiteUrl("/developers")}\n\nStart with the public API manifest, OpenAPI contract, agent instructions, and authentication guide. Install the official TypeScript SDK from https://www.npmjs.com/package/@symbaiex/agent-sdk or the Bun CLI from https://www.npmjs.com/package/@symbaiex/agent-cli. TypeScript, CLI, and Python source remain public at https://github.com/SYMBaiEX/symbaiex-agent-clients.`,
-  },
-  {
-    uri: primarySiteUrl("/auth.md"),
-    name: "SYMBaiEX authentication",
-    description:
-      "Owner-approved Ed25519 enrollment, challenge-response sign-in, refresh, errors, and revocation.",
-    text: `# SYMBaiEX authentication\n\nCanonical: ${primarySiteUrl("/auth.md")}\n\nSYMBaiEX uses a custom owner-approved Ed25519 challenge flow, not OAuth. Keep private keys local, use bearer tokens only with https://www.symbaiex.com, and follow the canonical auth.md walkthrough.`,
-  },
-  {
-    uri: primarySiteUrl("/agent/instructions"),
-    name: "SYMBaiEX agent instructions",
-    description:
-      "When to use SYMBaiEX, public reading, identity, scope, quota, attribution, and consequential-action boundaries.",
-    text: `# SYMBaiEX agent instructions\n\nCanonical: ${primarySiteUrl("/agent/instructions")}\n\nUse SYMBaiEX for public source-linked evidence, claim verification, cited research jobs, and signed change events. Do not infer private data, payment rails, OAuth, GraphQL, or autonomous posting authority.`,
-  },
-  {
-    uri: primarySiteUrl("/api/agent"),
-    name: "SYMBaiEX Agent API manifest",
-    description:
-      "Live machine-readable capabilities, endpoints, authentication, quotas, and disabled payment boundaries.",
-    text: `# SYMBaiEX Agent API manifest\n\nCanonical: ${primarySiteUrl("/api/agent")}\n\nRead the live JSON manifest and ${primarySiteUrl("/api/agent/openapi.json")} before calling the authenticated evidence API. Public docs MCP reads never create records; evidence tool calls require an owner-approved identity and scope.`,
-  },
-  {
-    uri: primarySiteUrl("/pricing.md"),
-    name: "SYMBaiEX API pricing and limits",
-    description:
-      "Current $0 free-beta policy, quotas, export bounds, and inactive payment boundary.",
-    text: `# SYMBaiEX API pricing\n\nCanonical: ${primarySiteUrl("/pricing.md")}\n\nThe evidence API is a quota-limited $0 free beta. Billing and payment are disabled. Read the canonical pricing contract for exact owner, agent, request, rate, export, and retention limits.`,
-  },
-] as const;
 
 const SEARCH_TOOL = {
   name: "docs_search",
@@ -123,6 +88,7 @@ const GET_TOOL = {
 const TOOLS = [SEARCH_TOOL, LIST_TOOL, GET_TOOL] as const;
 
 export async function POST(request: Request) {
+  const DOCUMENTS = publicDocumentation();
   const length = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(length) && length > MAX_BODY_BYTES) {
     return json({ error: "Request body is too large." }, 413);
@@ -134,13 +100,30 @@ export async function POST(request: Request) {
   ) {
     return json({ error: "Content-Type must be application/json." }, 415);
   }
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_BODY_BYTES) {
-    return json({ error: "Request body is too large." }, 413);
-  }
-
   let body: Record<string, unknown>;
   try {
+    const reader = request.body?.getReader();
+    if (!reader) throw new Error("Empty body");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > MAX_BODY_BYTES)
+          return json({ error: "Request body is too large." }, 413);
+        chunks.push(part.value);
+      }
+    } finally {
+      await reader.cancel();
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
     const parsed: unknown = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     );
@@ -154,38 +137,66 @@ export async function POST(request: Request) {
     return rpc(null, undefined, { code: -32600, message: "Invalid Request" });
   }
   const requestedProtocolVersion = request.headers.get("mcp-protocol-version");
-  if (
-    requestedProtocolVersion !== null &&
-    !SUPPORTED_PROTOCOL_VERSIONS.has(requestedProtocolVersion)
-  ) {
+  const protocol = validateDocsProtocol(request, body);
+  if (typeof protocol !== "string")
     return rpc(
-      Object.hasOwn(body, "id") && isJsonRpcId(body.id) ? body.id : null,
+      isJsonRpcId(body.id) ? body.id : null,
       undefined,
-      {
-        code: -32022,
-        message: "Unsupported protocol version",
-        data: {
-          supported: [...SUPPORTED_PROTOCOL_VERSIONS],
-          requested: requestedProtocolVersion,
-        },
-      },
+      protocol,
       400,
+      requestedProtocolVersion === DOCS_MCP_MODERN_VERSION
+        ? "modern"
+        : "legacy",
     );
-  }
-  if (body.method === "notifications/initialized") {
+  const respond = (
+    id: string | number | null,
+    result?: unknown,
+    error?: { code: number; message: string; data?: unknown },
+    status = 200,
+  ) => rpc(id, result, error, status, protocol);
+  if (
+    body.method === "notifications/initialized" &&
+    protocol === "legacy" &&
+    !Object.hasOwn(body, "id")
+  ) {
     return new Response(null, { status: 202, headers: headers() });
   }
   if (!Object.hasOwn(body, "id") || !isJsonRpcId(body.id)) {
-    return rpc(null, undefined, { code: -32600, message: "Invalid Request" });
+    return respond(
+      null,
+      undefined,
+      { code: -32600, message: "Invalid Request" },
+      400,
+    );
   }
   const id = body.id;
+
+  if (protocol === "modern" && body.method === "server/discover") {
+    return respond(id, {
+      supportedVersions: [DOCS_MCP_MODERN_VERSION],
+      capabilities: { tools: {}, resources: {} },
+      instructions:
+        "Public read-only SYMBaiEX documentation. Search with docs_search, list with docs_list, and read returned URIs with docs_get. Evidence tools are a separate authenticated server at https://www.symbaiex.com/api/agent/mcp.",
+      ttl: 300,
+      cacheScope: "public",
+    });
+  }
+  if (protocol === "modern" && body.method === "initialize") {
+    return respond(
+      id,
+      undefined,
+      { code: -32601, message: "Use server/discover for protocol 2026-07-28." },
+      404,
+    );
+  }
 
   if (body.method === "initialize") {
     const params = isRecord(body.params) ? body.params : null;
     const paramsProtocolVersion = params?.protocolVersion;
     if (
       typeof paramsProtocolVersion === "string" &&
-      !SUPPORTED_PROTOCOL_VERSIONS.has(paramsProtocolVersion)
+      (!SUPPORTED_PROTOCOL_VERSIONS.has(paramsProtocolVersion) ||
+        paramsProtocolVersion === DOCS_MCP_MODERN_VERSION)
     ) {
       return rpc(
         id,
@@ -194,7 +205,7 @@ export async function POST(request: Request) {
           code: -32022,
           message: "Unsupported protocol version",
           data: {
-            supported: [...SUPPORTED_PROTOCOL_VERSIONS],
+            supported: DOCS_MCP_PROTOCOL_VERSIONS.slice(1),
             requested: paramsProtocolVersion,
           },
         },
@@ -221,7 +232,7 @@ export async function POST(request: Request) {
       typeof paramsProtocolVersion === "string"
         ? paramsProtocolVersion
         : (requestedProtocolVersion ?? DEFAULT_PROTOCOL_VERSION);
-    return rpc(id, {
+    return respond(id, {
       protocolVersion,
       capabilities: { tools: {}, resources: {} },
       serverInfo: SERVER_INFO,
@@ -230,10 +241,10 @@ export async function POST(request: Request) {
     });
   }
   if (body.method === "tools/list") {
-    return rpc(id, { tools: TOOLS });
+    return respond(id, { tools: TOOLS });
   }
   if (body.method === "resources/list") {
-    return rpc(id, {
+    return respond(id, {
       resources: DOCUMENTS.map(({ uri, name, description }) => ({
         uri,
         name,
@@ -246,9 +257,12 @@ export async function POST(request: Request) {
     const params = isRecord(body.params) ? body.params : null;
     const document = DOCUMENTS.find((entry) => entry.uri === params?.uri);
     if (!document) {
-      return rpc(id, undefined, { code: -32602, message: "Unknown resource" });
+      return respond(id, undefined, {
+        code: -32602,
+        message: "Unknown resource",
+      });
     }
-    return rpc(id, {
+    return respond(id, {
       contents: [
         { uri: document.uri, mimeType: "text/markdown", text: document.text },
       ],
@@ -264,47 +278,67 @@ export async function POST(request: Request) {
         description,
         mimeType: "text/markdown",
       }));
-      return toolResult(id, { resources });
+      return toolResult(id, { resources }, protocol);
     }
     if (params?.name === GET_TOOL.name && validGet(input)) {
       const document = DOCUMENTS.find((entry) => entry.uri === input.uri);
       if (!document) {
-        return rpc(id, undefined, {
+        return respond(id, undefined, {
           code: -32602,
           message: "Unknown documentation URI",
         });
       }
-      return toolResult(id, {
-        resource: {
-          uri: document.uri,
-          name: document.name,
-          description: document.description,
-          mimeType: "text/markdown",
-          text: document.text,
+      return toolResult(
+        id,
+        {
+          resource: {
+            uri: document.uri,
+            name: document.name,
+            description: document.description,
+            mimeType: "text/markdown",
+            text: document.text,
+          },
         },
-      });
+        protocol,
+      );
     }
     if (!isDocsSearchTool(params?.name) || !validSearch(input)) {
-      return rpc(id, undefined, {
+      return respond(id, undefined, {
         code: -32602,
         message: "Invalid docs_search arguments",
       });
     }
-    const results = search(input.query, input.limit);
-    return toolResult(id, { results });
+    const results = search(DOCUMENTS, input.query, input.limit);
+    return toolResult(id, { results }, protocol);
   }
-  return rpc(id, undefined, { code: -32601, message: "Method not found" });
+  if (body.method === "ping") return respond(id, {});
+  return respond(
+    id,
+    undefined,
+    { code: -32601, message: "Method not found" },
+    protocol === "modern" ? 404 : 200,
+  );
 }
 
 function isDocsSearchTool(name: unknown) {
   return name === SEARCH_TOOL.name || name === "docs.search";
 }
 
-function toolResult(id: string | number | null, structuredContent: unknown) {
-  return rpc(id, {
-    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
-    structuredContent,
-  });
+function toolResult(
+  id: string | number | null,
+  structuredContent: unknown,
+  protocol: DocsProtocol,
+) {
+  return rpc(
+    id,
+    {
+      content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+      structuredContent,
+    },
+    undefined,
+    200,
+    protocol,
+  );
 }
 
 function validEmpty(value: Record<string, unknown> | null) {
@@ -344,7 +378,11 @@ export const PUT = unsupportedMethod;
 export const PATCH = unsupportedMethod;
 export const DELETE = unsupportedMethod;
 
-function search(query: string, requestedLimit: number | undefined) {
+function search(
+  DOCUMENTS: ReturnType<typeof publicDocumentation>,
+  query: string,
+  requestedLimit: number | undefined,
+) {
   const terms = [
     ...new Set(
       query
@@ -357,6 +395,9 @@ function search(query: string, requestedLimit: number | undefined) {
   const limit = Math.min(4, Math.max(1, requestedLimit ?? 4));
   const ranked = DOCUMENTS.map((document) => ({
     document,
+    titleMatches: terms.filter((term) =>
+      document.name.toLowerCase().includes(term),
+    ).length,
     score: terms.filter((term) =>
       `${document.name} ${document.description} ${document.text}`
         .toLowerCase()
@@ -367,17 +408,17 @@ function search(query: string, requestedLimit: number | undefined) {
     .sort(
       (left, right) =>
         right.score - left.score ||
+        right.titleMatches - left.titleMatches ||
+        left.document.name.length - right.document.name.length ||
         left.document.name.localeCompare(right.document.name),
     )
     .slice(0, limit);
-  return (ranked.length > 0 ? ranked : [{ document: DOCUMENTS[0], score: 1 }])
-    .slice(0, limit)
-    .map(({ document, score }) => ({
-      uri: document.uri,
-      name: document.name,
-      description: document.description,
-      score,
-    }));
+  return ranked.map(({ document, score }) => ({
+    uri: document.uri,
+    name: document.name,
+    description: document.description,
+    score,
+  }));
 }
 
 function validSearch(
@@ -406,11 +447,23 @@ function rpc(
   result?: unknown,
   error?: { code: number; message: string; data?: unknown },
   status = 200,
+  protocol: DocsProtocol = "legacy",
 ) {
-  return json(
-    { jsonrpc: "2.0", id, ...(error ? { error } : { result }) },
+  const value =
+    protocol === "modern" && isRecord(result)
+      ? {
+          ...result,
+          resultType: "complete",
+          _meta: { "io.modelcontextprotocol/serverInfo": SERVER_INFO },
+        }
+      : result;
+  const response = json(
+    { jsonrpc: "2.0", id, ...(error ? { error } : { result: value }) },
     status,
   );
+  if (protocol === "modern")
+    response.headers.set("MCP-Protocol-Version", DOCS_MCP_MODERN_VERSION);
+  return response;
 }
 
 function json(body: unknown, status = 200) {
@@ -425,7 +478,8 @@ function headers() {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers":
       "content-type, mcp-protocol-version, mcp-method, mcp-name",
-    "Access-Control-Expose-Headers": "mcp-server-name, mcp-server-version",
+    "Access-Control-Expose-Headers":
+      "mcp-server-name, mcp-server-version, mcp-protocol-version",
     "Mcp-Server-Name": SERVER_INFO.name,
     "Mcp-Server-Version": SERVER_INFO.version,
     "X-Content-Type-Options": "nosniff",

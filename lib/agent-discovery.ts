@@ -153,6 +153,7 @@ export const MCP_SERVER_CARD = {
     "com.symbaiex/relatedServers": [
       {
         relationship: "documentation",
+        url: primarySiteUrl("/api/docs/mcp"),
         serverCard: primarySiteUrl("/api/docs/mcp/server-card"),
       },
     ],
@@ -197,13 +198,14 @@ export const DOCS_MCP_SERVER_CARD = {
     {
       type: "streamable-http",
       url: primarySiteUrl("/api/docs/mcp"),
-      supportedProtocolVersions: ["2025-06-18", "2025-03-26"],
+      supportedProtocolVersions: ["2026-07-28", "2025-06-18", "2025-03-26"],
     },
   ],
   _meta: {
     "com.symbaiex/relatedServers": [
       {
         relationship: "product",
+        url: AGENT_MCP_RESOURCE,
         serverCard: primarySiteUrl("/api/agent/mcp/server-card"),
       },
     ],

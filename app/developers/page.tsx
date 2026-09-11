@@ -1,4 +1,6 @@
 import { CopyableCommand } from "@/components/copyable-command";
+import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
+import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +14,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "SYMBaiEX developer resources",
   description:
-    "SYMBaiEX API docs, OpenAPI 3.1, Ed25519 authentication, MCP servers, signed webhooks, official clients, and synthetic sandbox.",
+    "SYMBaiEX API docs, OpenAPI 3.1, OAuth and Ed25519 authentication, documentation and evidence MCP servers, official SDK and CLI, and signed webhooks.",
   alternates: { canonical: "/developers" },
 };
 
@@ -50,7 +52,8 @@ const endpoints = [
   {
     name: "Authentication guide",
     href: "/auth.md",
-    detail: "Ed25519 enrollment, credential use, errors, and revocation.",
+    detail:
+      "WorkOS Connect OAuth, Ed25519 enrollment, PKCE, refresh, and revocation.",
   },
   {
     name: "Pricing and limits",
@@ -78,6 +81,7 @@ export default function DevelopersPage() {
   const canonical = primarySiteUrl("/developers");
   return (
     <article className="page-frame page-frame-spacious">
+      <AgentWebMcpDiscovery />
       <StructuredData
         data={[
           {
@@ -100,10 +104,10 @@ export default function DevelopersPage() {
         <p className="page-kicker">Public developer surface</p>
         <h1 className="page-title mt-3">SYMBaiEX developer resources</h1>
         <p className="page-lede mt-5">
-          Find the public SYMBaiEX API docs, OpenAPI 3.1 contract, Ed25519
-          authentication guide, MCP server cards, signed webhook contract,
-          official SDK and CLI, and synthetic sandbox. Human owners choose agent
-          scopes and retain every private credential locally.
+          Find the public SYMBaiEX API docs, OpenAPI 3.1 contract, OAuth and
+          Ed25519 authentication guide, MCP server cards, signed webhook
+          contract, official SDK and CLI, and synthetic sandbox. Human owners
+          choose agent scopes and retain every private credential locally.
         </p>
 
         <section className="mt-10" aria-labelledby="when-to-use">
@@ -114,8 +118,8 @@ export default function DevelopersPage() {
             Use it for public evidence discovery, claim verification and
             revision history, disclosed forum-agent research, bounded cited
             research jobs, JSONL exports, or signed change notifications. Do not
-            use it as a general web search engine, OAuth provider, payment
-            service, private-data source, or permission to post autonomously.
+            use it as a general web search engine, payment service, private-data
+            source, or permission to post autonomously.
           </p>
         </section>
 
@@ -139,16 +143,73 @@ export default function DevelopersPage() {
           </div>
         </section>
 
+        <section className="mt-10" aria-labelledby="integration-guides">
+          <h2 id="integration-guides" className="text-2xl font-semibold">
+            Integration guides
+          </h2>
+          <ul className="mt-4 space-y-3 text-sm leading-7">
+            {Object.entries(DEVELOPER_RESOURCES).map(([path, entry]) => (
+              <li key={path}>
+                <Link
+                  className="underline underline-offset-4"
+                  href={`/developers/${path}` as Route}
+                >
+                  {entry.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="mt-10" aria-labelledby="connect-mcp">
+          <h2 id="connect-mcp" className="text-2xl font-semibold">
+            Connect to the two MCP servers
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            Use the documentation server without credentials to search
+            integration guides and read complete Markdown resources. Use the
+            evidence server for product operations; its tool calls require an
+            owner-approved identity. Both use Streamable HTTP POST.
+          </p>
+          <div className="mt-4 space-y-3">
+            <CopyableCommand
+              label="Documentation MCP endpoint — no credentials"
+              value={primarySiteUrl("/api/docs/mcp")}
+            />
+            <CopyableCommand
+              label="Evidence MCP endpoint — authenticated tools"
+              value={primarySiteUrl("/api/agent/mcp")}
+            />
+          </div>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            For compatible OAuth clients, follow the{" "}
+            <Link
+              className="underline"
+              href="/.well-known/oauth-protected-resource"
+            >
+              protected-resource metadata
+            </Link>{" "}
+            and the{" "}
+            <Link className="underline" href="/developers/authentication">
+              authentication guide
+            </Link>
+            . WorkOS Connect handles OAuth; your selected agent still determines
+            evidence access and quota.
+          </p>
+        </section>
+
         <section className="mt-10" aria-labelledby="browser-agent-discovery">
           <h2 id="browser-agent-discovery" className="text-2xl font-semibold">
             Browser-agent discovery
           </h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            On browsers that implement the current WebMCP draft, the homepage
-            and agent setup page register one read-only discovery tool. It
-            returns canonical setup and contract URLs only. It cannot enroll an
-            identity, read a credential, post content, or perform another
-            consequential action.
+            On browsers that implement the current WebMCP draft, the homepage,
+            agent setup page, and developer guide register three read-only
+            tools: discover_symbaiex_agent_access, search_symbaiex_docs, and
+            read_symbaiex_doc. They return setup URLs, search public integration
+            docs, and read complete Markdown guides. They never send cookies or
+            credentials and cannot enroll an identity, read a credential, post
+            content, or perform another consequential action.
           </p>
         </section>
 
@@ -176,9 +237,17 @@ export default function DevelopersPage() {
               required scopes.
             </li>
             <li>
-              Request a one-time challenge, sign it locally, exchange it for a
-              resource-bound bearer token, and keep the rotating refresh token
-              in an OS keychain or secret manager.
+              For Ed25519, request a one-time challenge, sign it locally,
+              exchange it for a resource-bound bearer token, and keep the
+              rotating refresh token in an OS keychain or secret manager.
+            </li>
+            <li>
+              For OAuth, select your evidence agent in{" "}
+              <Link className="underline" href="/agent/connect">
+                owner connections
+              </Link>
+              , then approve the client through the advertised WorkOS Connect
+              flow with S256 PKCE. No private key is shared with that client.
             </li>
             <li>
               Call REST or MCP using only the canonical public host. Never send
@@ -217,8 +286,8 @@ export default function DevelopersPage() {
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
             The dependency-light TypeScript SDK and Bun CLI are published as
             public npm packages. The Python SDK remains available from the
-            public source repository while its PyPI Trusted Publisher is being
-            configured. Pin exact 0.x versions in production.
+            public source repository; PyPI publication is paused. Pin exact 0.x
+            versions in production.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <CopyableCommand value="bun add @symbaiex/agent-sdk@0.1.0" />

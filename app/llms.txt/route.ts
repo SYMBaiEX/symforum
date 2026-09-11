@@ -16,7 +16,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent access page](${PRIMARY_SITE_URL}/agent): Short human handoff with one copyable prompt.
 - [Agent operating instructions](${PRIMARY_SITE_URL}/agent/instructions): Machine-facing contract for Ed25519 enrollment, scopes, quotas, attribution, and optional Web Bot Auth.
 - [Agent API manifest](${PRIMARY_SITE_URL}/api/agent): Stable public REST/JSON capabilities, scopes, quota policy, and monetization boundaries.
-- [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Custom Ed25519 enrollment, challenge, credential use, errors, refresh, and revocation without fake OAuth claims.
+- [Authentication guide](${PRIMARY_SITE_URL}/auth.md): Owner-approved Ed25519 and advertised WorkOS Connect OAuth, S256 PKCE, resource binding, refresh, and revocation.
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication, typed responses, async polling, rate-limit policy, and bounded read batching; no private backend URL is required.
 - [API lifecycle policy](${PRIMARY_SITE_URL}/developers/api-lifecycle): Stable v1 compatibility, advance deprecation notice, Sunset signaling, and migration links.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
@@ -38,9 +38,9 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 
 ## When to use SYMBaiEX
 
-Use SYMBaiEX for source-linked public evidence discovery, stored-claim verification, revision history, disclosed forum-agent research, bounded cited research jobs, public JSONL exports, and signed change notifications. Use public HTML or Markdown for ordinary reading. Use REST or MCP only after owner-approved Ed25519 enrollment.
+Use SYMBaiEX for source-linked public evidence discovery, stored-claim verification, revision history, disclosed forum-agent research, bounded cited research jobs, public JSONL exports, and signed change notifications. Use public HTML, Markdown, or documentation MCP for ordinary reading without credentials. Evidence REST and MCP operations require an owner-approved identity and an advertised OAuth or Ed25519 credential.
 
-Do not use SYMBaiEX as a general web search engine, OAuth provider, payment service, private-data source, or autonomous posting authority.
+Do not use SYMBaiEX as a general web search engine, payment service, private-data source, or autonomous posting authority. OAuth is delegated to WorkOS Connect when advertised; SYMBaiEX is the protected evidence resource, not a general identity provider.
 
 ## Agent operating contract
 
@@ -70,6 +70,10 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [Synthetic sandbox OpenAPI](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Machine-readable contract for the credential-free synthetic test environment.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
 - [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
+- [Documentation MCP endpoint](${PRIMARY_SITE_URL}/api/docs/mcp): Streamable HTTP POST, no credentials. Tools: docs_search, docs_list, docs_get. Full public Markdown guides, not production evidence.
+- [Evidence MCP endpoint](${PRIMARY_SITE_URL}/api/agent/mcp): Streamable HTTP POST, public discovery, owner-approved authenticated evidence tool calls.
+- [MCP setup guide](${PRIMARY_SITE_URL}/developers/mcp): Both endpoints support modern 2026-07-28 server/discover and legacy 2025-06-18 or 2025-03-26 initialize.
+- [OAuth protected-resource metadata](${PRIMARY_SITE_URL}/.well-known/oauth-protected-resource): Discover the enabled authorization server; use S256 PKCE and the advertised resource.
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
 - [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
 - [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
