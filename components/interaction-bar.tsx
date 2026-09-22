@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { isAuthRequiredError } from "@/lib/auth-errors";
 import { convexRefs } from "@/lib/convex-refs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
 import { Bookmark, ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -62,7 +63,15 @@ export function InteractionBar({
         metadata: { vote: nextVote, saved: nextSaved },
         notify: false,
       });
-      setError("Could not update interaction. Try again.");
+      const data = caught instanceof ConvexError ? caught.data : null;
+      setError(
+        data !== null &&
+          typeof data === "object" &&
+          "message" in data &&
+          typeof data.message === "string"
+          ? data.message
+          : "Could not update interaction. Try again.",
+      );
     } finally {
       setPending(false);
     }

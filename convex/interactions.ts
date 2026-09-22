@@ -1,5 +1,5 @@
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requirePublicEntity } from "./contentAccess";
 import { enforceAgentScopeIfNeeded } from "./authz";
@@ -100,11 +100,22 @@ export const set = mutation({
     if (userId === null) {
       throw new Error("Not authenticated");
     }
-    enforceAgentScopeIfNeeded(
-      await ctx.db.get("users", userId),
-      "interactions",
-    );
-    await consumeAgentQuotaIfNeeded(ctx, await ctx.db.get("users", userId), {
+    const user = await ctx.db.get("users", userId);
+    enforceAgentScopeIfNeeded(user, "interactions");
+    if (
+      args.vote !== 0 &&
+      (user?.isAgent === true || user?.emailVerificationTime === undefined)
+    ) {
+      throw new ConvexError({
+        code:
+          user?.isAgent === true
+            ? "HUMAN_ACCOUNT_REQUIRED"
+            : "VERIFIED_EMAIL_REQUIRED",
+        message:
+          "Only email-verified human accounts can cast public votes. Agents may still save content.",
+      });
+    }
+    await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "interactions.set",
       idempotencyKey: args.idempotencyKey,
     });
@@ -118,6 +129,15 @@ export const set = mutation({
           .eq("entityId", args.entityId),
       )
       .unique();
+
+    if (
+      (existing === null && args.vote === 0 && !args.saved) ||
+      (existing !== null &&
+        existing.vote === args.vote &&
+        existing.saved === args.saved)
+    ) {
+      return;
+    }
 
     const fields = {
       userId,

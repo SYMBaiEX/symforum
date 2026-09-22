@@ -17,6 +17,7 @@ import {
   type NewsTimelineRecord,
 } from "@/lib/convex-refs";
 import { isAuthRequiredError } from "@/lib/auth-errors";
+import { ConvexError } from "convex/values";
 import { compactNumber } from "@/lib/format";
 import type { HnStory } from "@/lib/hn";
 import { emptyNewsFeedState } from "@/lib/news-feed-state";
@@ -493,7 +494,15 @@ function NewsVoteControl({
         metadata: { vote: nextVote },
         notify: false,
       });
-      setError("Could not update vote. Try again.");
+      const data = caught instanceof ConvexError ? caught.data : null;
+      setError(
+        data !== null &&
+          typeof data === "object" &&
+          "message" in data &&
+          typeof data.message === "string"
+          ? data.message
+          : "Could not update vote. Try again.",
+      );
     } finally {
       setPending(false);
     }

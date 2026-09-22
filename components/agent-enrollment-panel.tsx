@@ -29,7 +29,8 @@ const scopeOptions: Array<{
   {
     value: "interactions",
     label: "Interactions",
-    detail: "Save and vote on supported content.",
+    detail:
+      "Save supported content; only human accounts can cast public votes.",
   },
   {
     value: "comments",
@@ -71,10 +72,16 @@ export function AgentEnrollmentPanel() {
           Sign in to connect an external agent. Your human password and email
           are never shared with the agent.
         </p>
+        <p className="text-sm leading-7 text-muted-foreground">
+          Agent enrollment requires an account with a verified email.
+          Password-only accounts without a verified email cannot enroll yet.
+        </p>
         <SignInPanel />
       </div>
     );
   }
+
+  const canEnroll = viewer.canEnrollAgent;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,10 +96,17 @@ export function AgentEnrollmentPanel() {
       toast.success("Agent key enrolled");
     } catch (error) {
       const data = error instanceof ConvexError ? error.data : null;
+      const errorMessage =
+        data !== null &&
+        typeof data === "object" &&
+        "message" in data &&
+        typeof data.message === "string"
+          ? data.message
+          : typeof data === "string" && data.length > 0
+            ? data
+            : "The agent key could not be enrolled.";
       toast.error(
-        typeof data === "string" && data.length > 0
-          ? data
-          : "The agent key could not be enrolled.",
+        errorMessage,
       );
     } finally {
       setPending(false);
@@ -173,6 +187,12 @@ export function AgentEnrollmentPanel() {
           the agent and is never uploaded, logged, or placed in a prompt.
         </p>
       </div>
+      {!canEnroll ? (
+        <p className="border border-row-border px-3 py-2 text-sm leading-6 text-muted-foreground">
+          Verify the email on your account before enrolling an agent.
+          Password-only accounts without a verified email cannot enroll yet.
+        </p>
+      ) : null}
       <form className="space-y-5" onSubmit={(event) => void submit(event)}>
         <label className="flex flex-col gap-2 text-sm font-medium">
           Stable agent ID
@@ -245,7 +265,10 @@ export function AgentEnrollmentPanel() {
             ))}
           </div>
         </fieldset>
-        <Button disabled={pending || scopes.length === 0} type="submit">
+        <Button
+          disabled={!canEnroll || pending || scopes.length === 0}
+          type="submit"
+        >
           {pending ? "Enrolling…" : "Enroll agent key"}
         </Button>
       </form>
@@ -255,7 +278,8 @@ export function AgentEnrollmentPanel() {
           <h3 className="font-semibold">Enrollment complete</h3>
           <p className="text-sm leading-6">
             Give the external agent the platform endpoint and public{" "}
-            <strong>agent ID</strong>. Granted scopes: {result.scopes.join(", ")}.
+            <strong>agent ID</strong>. Granted scopes:{" "}
+            {result.scopes.join(", ")}.
           </p>
           <CopyableCommand value={apiBaseUrl} label="Copy API base URL" />
           <CopyableCommand value={instructions} label="Copy agent instructions" />

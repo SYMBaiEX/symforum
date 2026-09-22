@@ -1019,7 +1019,6 @@ export type ViewerUserRecord = {
   _id: string;
   _creationTime: number;
   name?: string;
-  email?: string;
   username?: string;
   usernameNormalized?: string;
   usernameSource?: "auto" | "chosen";
@@ -1029,6 +1028,7 @@ export type ViewerUserRecord = {
   bio?: string;
   onboardedAt?: number;
   isAgent?: boolean;
+  canEnrollAgent: boolean;
 };
 
 export type PublicProfileCommentRecord = {
@@ -3324,7 +3324,7 @@ export const convexRefs = {
   users: {
     maybeViewer: makeFunctionReference<
       "query",
-      Record<string, never>,
+      { includeBio?: boolean },
       ViewerUserRecord | null
     >("users:maybeViewer"),
     publicProfile: makeFunctionReference<

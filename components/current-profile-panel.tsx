@@ -12,7 +12,7 @@ import Link from "next/link";
 
 export function CurrentProfilePanel() {
   const { signOut } = useAuthActions();
-  const viewer = useQuery(convexRefs.users.maybeViewer, {});
+  const viewer = useQuery(convexRefs.users.maybeViewer, { includeBio: true });
 
   if (viewer === undefined) {
     return <ProfilePanelSkeleton />;

@@ -1,4 +1,6 @@
 import { ConvexError, v } from "convex/values";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
+import { components } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
@@ -28,6 +30,22 @@ const MAX_CHALLENGES_PER_WINDOW = 5;
 const MAX_AGENT_ID_LENGTH = 64;
 const MAX_AUDIENCE_LENGTH = 128;
 const MAX_CONSOLE_AGENTS = 50;
+const MAX_ENROLLED_AGENTS_PER_OWNER = MAX_CONSOLE_AGENTS;
+const agentEnrollmentRateLimiter = new RateLimiter(components.rateLimiter, {
+  enrollmentPerOwner: {
+    kind: "token bucket",
+    rate: 5,
+    period: HOUR,
+    capacity: 5,
+  },
+  enrollmentGlobal: {
+    kind: "token bucket",
+    rate: 60,
+    period: HOUR,
+    capacity: 30,
+    shards: 6,
+  },
+});
 
 const agentIdentifierArgs = {
   agentId: v.optional(v.string()),
@@ -217,6 +235,47 @@ export const enrollAgent = mutation({
       throw new ConvexError({
         code: "HUMAN_ACCOUNT_REQUIRED",
         message: "A human account must enroll an external agent.",
+      });
+    }
+    if (
+      !hasSiteAdminAccess(owner) &&
+      owner.emailVerificationTime === undefined
+    ) {
+      throw new ConvexError({
+        code: "VERIFIED_EMAIL_REQUIRED",
+        message:
+          "Verify your account email before enrolling an agent. Password-only accounts without a verified email are not eligible yet.",
+      });
+    }
+    const capacity = await agentEnrollmentRateLimiter.limit(
+      ctx,
+      "enrollmentGlobal",
+      { key: "global" },
+    );
+    const ownerCapacity = await agentEnrollmentRateLimiter.limit(
+      ctx,
+      "enrollmentPerOwner",
+      { key: owner._id },
+    );
+    if (!capacity.ok || !ownerCapacity.ok) {
+      throw new ConvexError({
+        code: "AGENT_ENROLLMENT_RATE_LIMITED",
+        message:
+          "Agent enrollment is temporarily rate limited. Please try again later.",
+        retryAfter: Math.max(
+          capacity.ok ? 0 : capacity.retryAfter,
+          ownerCapacity.ok ? 0 : ownerCapacity.retryAfter,
+        ),
+      });
+    }
+    const ownedIdentities = await ctx.db
+      .query("agentIdentities")
+      .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", owner._id))
+      .take(MAX_ENROLLED_AGENTS_PER_OWNER);
+    if (ownedIdentities.length >= MAX_ENROLLED_AGENTS_PER_OWNER) {
+      throw new ConvexError({
+        code: "AGENT_OWNER_IDENTITY_LIMIT",
+        message: `An account may enroll at most ${MAX_ENROLLED_AGENTS_PER_OWNER} agents.`,
       });
     }
     const agentId = resolveAgentId(args);

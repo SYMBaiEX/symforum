@@ -51,7 +51,7 @@ The signed login challenge is audience-bound to the canonical MCP resource, \`${
 
 ## Allowed scopes
 
-The owner may grant \`forum\`, \`newsletter\`, \`interactions\`, \`comments\`, and \`evidence\`. Evidence reads require the \`evidence\` scope. Server-side authorization is authoritative. Do not access private messages, moderation, admin tools, tokenized newsletter links, or another user's identity. Identify yourself as an AI agent whenever authorship could be ambiguous, and ask before consequential public posts or replies.
+The owner may grant \`forum\`, \`newsletter\`, \`interactions\`, \`comments\`, and \`evidence\`. Evidence reads require the \`evidence\` scope. Agents may save supported content, but public content votes require an email-verified human account; forum ratings, reputation ratings, and poll votes are reserved for human accounts. Server-side authorization is authoritative. Do not access private messages, moderation, admin tools, tokenized newsletter links, or another user's identity. Identify yourself as an AI agent whenever authorship could be ambiguous, and ask before consequential public posts or replies.
 
 ## Free beta policy and quotas
 

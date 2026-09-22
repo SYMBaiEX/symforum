@@ -34,10 +34,9 @@ const publicAnalyticsRateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 30,
     period: MINUTE,
     capacity: 30,
-    // Anonymous analytics deliberately share one global budget, but a single
-    // rate-limit row caused burst traffic to contend on every write. The
-    // component preserves the aggregate ceiling while spreading consumption
-    // across three rows (10 tokens per shard).
+    // All actors share one global budget; caller-controlled account, visitor,
+    // and session IDs must not split it. Six shards preserve the same 30/min
+    // ceiling while reducing contention on the limiter component.
     shards: 3,
   },
 });
@@ -70,26 +69,20 @@ export const record = mutation({
     const visitorId = optionalToken(args.visitorId);
     const actorUserId = await getAuthUserId(ctx);
 
-    if (actorUserId === null) {
-      const capacity = await publicAnalyticsRateLimiter.limit(
-        ctx,
-        "anonymousAnalyticsEvents",
-        {
-          // Deliberately global: caller-provided visitor and session IDs are
-          // untrusted and must not split this public write budget.
-          key: "global",
-        },
-      );
-      if (!capacity.ok) {
-        await incrementDailyMetric(ctx, now, "droppedRateLimited");
-        return {
-          recorded: false,
-          deduped: false,
-          id: null,
-          reason: "RATE_LIMITED" as const,
-          retryAfter: capacity.retryAfter,
-        };
-      }
+    const capacity = await publicAnalyticsRateLimiter.limit(
+      ctx,
+      "anonymousAnalyticsEvents",
+      { key: "global" },
+    );
+    if (!capacity.ok) {
+      await incrementDailyMetric(ctx, now, "droppedRateLimited");
+      return {
+        recorded: false,
+        deduped: false,
+        id: null,
+        reason: "RATE_LIMITED" as const,
+        retryAfter: capacity.retryAfter,
+      };
     }
 
     if (sessionId !== undefined) {

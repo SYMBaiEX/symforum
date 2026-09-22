@@ -118,24 +118,22 @@ export const submit = mutation({
     }
 
     const actorUserId = await getAuthUserId(ctx);
-    if (actorUserId === null) {
-      const capacity = await publicContactRateLimiter.limit(
-        ctx,
-        "anonymousContactSubmissions",
-        {
-          // Deliberately global: email addresses are caller controlled and
-          // cannot serve as independent rate-limit keys.
-          key: "global",
-        },
-      );
-      if (!capacity.ok) {
-        throw new ConvexError({
-          code: "RATE_LIMITED",
-          message:
-            "Contact form capacity is temporarily full. Please try again later.",
-          retryAfter: capacity.retryAfter,
-        });
-      }
+    const capacity = await publicContactRateLimiter.limit(
+      ctx,
+      "anonymousContactSubmissions",
+      {
+        // Deliberately global: accounts and email addresses are caller
+        // controlled and cannot serve as independent limiter keys.
+        key: "global",
+      },
+    );
+    if (!capacity.ok) {
+      throw new ConvexError({
+        code: "RATE_LIMITED",
+        message:
+          "Contact form capacity is temporarily full. Please try again later.",
+        retryAfter: capacity.retryAfter,
+      });
     }
 
     const recentFromEmail = await ctx.db

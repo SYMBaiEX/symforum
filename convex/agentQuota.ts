@@ -20,7 +20,13 @@ import { stableEventScope, usageEvent } from "../lib/usage-budget-events";
 
 const usageWebhookRef = makeFunctionReference<
   "mutation",
-  { eventKey: string; eventType: "evidence.usage.threshold_reached" | "evidence.usage.budget_reached"; payloadJson: string; ownerUserId: Id<"users"> },
+  {
+    eventKey: string;
+    eventType:
+      "evidence.usage.threshold_reached" | "evidence.usage.budget_reached";
+    payloadJson: string;
+    ownerUserId: Id<"users">;
+  },
   { eventId: Id<"apiWebhookEvents"> | null; enqueued: number }
 >("evidenceWebhooks:enqueueEvent");
 
@@ -45,6 +51,16 @@ const quotaRateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 60,
     period: MINUTE,
     capacity: 20,
+  },
+  agentOwnerQuotaRequests: {
+    kind: "token bucket",
+    rate: 30,
+    period: MINUTE,
+    capacity: 10,
+    // Every agent enrolled by one owner shares this budget. Two shards keep
+    // concurrent fleet writes from contending on one limiter document while
+    // preserving the same aggregate ceiling.
+    shards: 2,
   },
 });
 
@@ -707,6 +723,21 @@ export async function consumeAgentQuotaForRequest(
     });
   }
 
+  const ownerRateStatus = await quotaRateLimiter.limit(
+    ctx,
+    "agentOwnerQuotaRequests",
+    { key: ownerUserId },
+  );
+  if (!ownerRateStatus.ok) {
+    return quotaResult(state, {
+      accepted: false,
+      idempotent: false,
+      units,
+      reason: "rate-limited",
+      retryAfter: ownerRateStatus.retryAfter,
+    });
+  }
+
   const rateStatus = await quotaRateLimiter.limit(ctx, "agentQuotaRequests", {
     key: `${ownerUserId}:${agentId}`,
   });
@@ -755,21 +786,37 @@ export async function consumeAgentQuotaForRequest(
     remainingUnits: Math.max(0, state.hardCapUnits - nextUsedUnits),
   };
   const priorUsedUnits = budget.usedUnits;
-  if (priorUsedUnits < budget.hardCapUnits * 0.8 && nextUsedUnits >= budget.hardCapUnits * 0.8) {
-    await emitUsageEvent(ctx, usageWebhookRef, usageEvent(
-      "evidence.usage.threshold_reached",
-      `usage:${eventScope}:${monthKey}:threshold-80`,
-      Math.floor(now / 1_000),
-      { ...eventBase, thresholdPercent: 80 },
-    ), ownerUserId);
+  if (
+    priorUsedUnits < budget.hardCapUnits * 0.8 &&
+    nextUsedUnits >= budget.hardCapUnits * 0.8
+  ) {
+    await emitUsageEvent(
+      ctx,
+      usageWebhookRef,
+      usageEvent(
+        "evidence.usage.threshold_reached",
+        `usage:${eventScope}:${monthKey}:threshold-80`,
+        Math.floor(now / 1_000),
+        { ...eventBase, thresholdPercent: 80 },
+      ),
+      ownerUserId,
+    );
   }
-  if (priorUsedUnits < budget.hardCapUnits && nextUsedUnits >= budget.hardCapUnits) {
-    await emitUsageEvent(ctx, usageWebhookRef, usageEvent(
-      "evidence.usage.budget_reached",
-      `usage:${eventScope}:${monthKey}:budget-reached`,
-      Math.floor(now / 1_000),
-      { ...eventBase, remainingUnits: 0 },
-    ), ownerUserId);
+  if (
+    priorUsedUnits < budget.hardCapUnits &&
+    nextUsedUnits >= budget.hardCapUnits
+  ) {
+    await emitUsageEvent(
+      ctx,
+      usageWebhookRef,
+      usageEvent(
+        "evidence.usage.budget_reached",
+        `usage:${eventScope}:${monthKey}:budget-reached`,
+        Math.floor(now / 1_000),
+        { ...eventBase, remainingUnits: 0 },
+      ),
+      ownerUserId,
+    );
   }
   return quotaResult(
     {

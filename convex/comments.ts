@@ -1,4 +1,5 @@
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -10,6 +11,7 @@ import {
 import { requirePublicEntity } from "./contentAccess";
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import { components } from "./_generated/api";
 import {
   insertCommentAggregate,
   replaceCommentAggregate,
@@ -26,6 +28,21 @@ const COMMENT_MIN_LENGTH = 2;
 const COMMENT_MAX_LENGTH = 1200;
 const RATE_LIMIT_MS = 2_500;
 const DUPLICATE_WINDOW_MS = 15_000;
+const commentRateLimiter = new RateLimiter(components.rateLimiter, {
+  commentsPerAccount: {
+    kind: "token bucket",
+    rate: 10,
+    period: HOUR,
+    capacity: 5,
+  },
+  commentsGlobal: {
+    kind: "token bucket",
+    rate: 120,
+    period: HOUR,
+    capacity: 30,
+    shards: 6,
+  },
+});
 type CommentStatus = NonNullable<Doc<"comments">["status"]>;
 type UserDoc = Doc<"users">;
 
@@ -96,6 +113,21 @@ export const add = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireSignedInUserId(ctx);
+    const user = await ctx.db.get("users", userId);
+    const [accountCapacity, globalCapacity] = await Promise.all([
+      commentRateLimiter.limit(ctx, "commentsPerAccount", { key: userId }),
+      commentRateLimiter.limit(ctx, "commentsGlobal", { key: "global" }),
+    ]);
+    if (!accountCapacity.ok || !globalCapacity.ok) {
+      throw new ConvexError({
+        code: "COMMENT_RATE_LIMITED",
+        message: "Commenting is temporarily rate limited. Please try later.",
+        retryAfter: Math.max(
+          accountCapacity.ok ? 0 : accountCapacity.retryAfter,
+          globalCapacity.ok ? 0 : globalCapacity.retryAfter,
+        ),
+      });
+    }
     await requirePublicEntity(ctx, args.entityType, args.entityId);
 
     const body = args.body.trim();
@@ -154,7 +186,7 @@ export const add = mutation({
       });
     }
 
-    await consumeAgentQuotaIfNeeded(ctx, await ctx.db.get("users", userId), {
+    await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "comments.add",
       idempotencyKey: args.idempotencyKey,
     });

@@ -1,5 +1,6 @@
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { createThread as createAgentThread } from "@convex-dev/agent";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { makeFunctionReference, paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import {
@@ -737,6 +738,21 @@ const SUKI_FORUM_TAXONOMY = [
 
 const THREAD_RATE_LIMIT_MS = 15_000;
 const REPLY_RATE_LIMIT_MS = 2_500;
+const pendingForumRateLimiter = new RateLimiter(components.rateLimiter, {
+  pendingPerAccount: {
+    kind: "token bucket",
+    rate: 3,
+    period: HOUR,
+    capacity: 3,
+  },
+  pendingGlobal: {
+    kind: "token bucket",
+    rate: 60,
+    period: HOUR,
+    capacity: 30,
+    shards: 6,
+  },
+});
 const THREAD_DUPLICATE_WINDOW_MS = 60_000;
 const REPLY_DUPLICATE_WINDOW_MS = 15_000;
 const REPORT_DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1_000;
@@ -4161,6 +4177,9 @@ export const createThread = mutation({
     const searchBody = searchBodyParts.join("\n");
     const initialStatus: ForumThreadStatus =
       shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
+    if (initialStatus === "pending") {
+      await enforcePendingForumSubmissionLimits(ctx, user);
+    }
     await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "forum.create-thread",
       idempotencyKey: args.idempotencyKey,
@@ -4640,6 +4659,9 @@ export const createReply = mutation({
     const postNumber = await nextPostNumberForThread(ctx, thread);
     const initialStatus: ForumPostDoc["status"] =
       shouldHoldForumSubmissionForApproval(user) ? "pending" : "active";
+    if (initialStatus === "pending") {
+      await enforcePendingForumSubmissionLimits(ctx, user);
+    }
     await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "forum.create-reply",
       idempotencyKey: args.idempotencyKey,
@@ -5311,6 +5333,7 @@ export const votePoll = mutation({
       ctx,
       "Sign in with a SYM handle to vote.",
     );
+    requireHumanForumVoter(user);
     const poll = await ctx.db.get("forumPolls", args.pollId);
     if (poll === null) {
       throw forumError("POLL_NOT_FOUND", "That poll is not available.");
@@ -5549,6 +5572,7 @@ export const setForumReputation = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(ctx, "Sign in to rate forum posts.");
+    requireHumanForumVoter(user);
     requireTrustedForumUser(
       user,
       "Ask the site owner to approve your forum access before rating posts.",
@@ -5668,6 +5692,7 @@ export const rateThread = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireSignedInUser(ctx, "Sign in to rate this thread.");
+    requireHumanForumVoter(user);
     requireTrustedForumUser(
       user,
       "Ask the site owner to approve your forum access before rating threads.",
@@ -13636,6 +13661,35 @@ async function requireSignedInUser(
   }
   enforceAgentScopeIfNeeded(user, "forum");
   return user;
+}
+
+function requireHumanForumVoter(user: UserDoc) {
+  if (user.isAgent === true) {
+    throw forumError(
+      "HUMAN_ACCOUNT_REQUIRED",
+      "Public ratings and poll votes are limited to human accounts.",
+    );
+  }
+}
+
+async function enforcePendingForumSubmissionLimits(
+  ctx: MutationCtx,
+  user: UserDoc,
+) {
+  const [accountCapacity, globalCapacity] = await Promise.all([
+    pendingForumRateLimiter.limit(ctx, "pendingPerAccount", {
+      key: user._id,
+    }),
+    pendingForumRateLimiter.limit(ctx, "pendingGlobal", {
+      key: "global",
+    }),
+  ]);
+  if (!accountCapacity.ok || !globalCapacity.ok) {
+    throw forumError(
+      "PENDING_SUBMISSION_RATE_LIMITED",
+      "Pending posts are temporarily rate limited. Please try again later.",
+    );
+  }
 }
 
 async function requireModerator(ctx: QueryCtx | MutationCtx) {

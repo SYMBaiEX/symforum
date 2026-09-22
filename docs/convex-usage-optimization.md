@@ -123,6 +123,15 @@ sampling on 2026-08-17 and 2026-09-01.
 
 ## September 2026 audit
 
+The latest aggregate production usage snapshot checked on 2026-09-22 reported
+34,578 function calls, 0.8797 GB of database I/O, 0.0262 GB of data egress, and
+37.3902 Search Query-GB for the current-day window. Convex's CLI returns these
+as deployment-wide metrics and does not attribute Search Query-GB to individual
+functions. The 72-hour Insights view showed no broad read-limit issue. Analytics
+was its most frequent OCC signal, but sampled retry counts were zero, so the
+existing three-shard configuration remains in place. This snapshot alone does
+not establish that search is the source of the high usage.
+
 The 2026-09-01 production snapshot for `strong-bee-384` reported 0.1368 GB of
 database I/O, 0.0020 GB of data egress, 3,202 function calls, and 0.1199
 Search Query-GB for the current day. The current-month Search Query-GB total

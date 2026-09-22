@@ -276,8 +276,8 @@ export const viewer = query({
 });
 
 export const maybeViewer = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { includeBio: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return null;
@@ -286,11 +286,32 @@ export const maybeViewer = query({
     if (user === null) {
       return null;
     }
-    const forumProfile = await ctx.db
-      .query("forumUserProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
-    return { ...user, bio: user.bio ?? forumProfile?.bio };
+    const forumProfile = args.includeBio
+      ? await ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", userId))
+          .unique()
+      : null;
+    return {
+      _id: user._id,
+      _creationTime: user._creationTime,
+      name: user.name,
+      username: user.username,
+      usernameNormalized: user.usernameNormalized,
+      usernameSource: user.usernameSource,
+      role: user.role,
+      forumRole: user.forumRole,
+      contactEmail: user.contactEmail,
+      ...(args.includeBio
+        ? { bio: user.bio ?? forumProfile?.bio }
+        : {}),
+      onboardedAt: user.onboardedAt,
+      isAgent: user.isAgent,
+      canEnrollAgent:
+        user.emailVerificationTime !== undefined ||
+        user.role === "owner" ||
+        user.role === "admin",
+    };
   },
 });
 

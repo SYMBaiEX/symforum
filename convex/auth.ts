@@ -2,14 +2,23 @@ import Google from "@auth/core/providers/google";
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, type Value } from "convex/values";
 import type { DataModel, Id } from "./_generated/dataModel";
+import { components, internal } from "./_generated/api";
 import { env, type MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { verifyEd25519Signature } from "./agentIdentityCrypto";
 
 const USERNAME_PATTERN = /^sym-\d{1,8}$|^[a-z0-9][a-z0-9_-]{2,31}$/;
 const AUTH_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1_000;
+const accountCreationRateLimiter = new RateLimiter(components.rateLimiter, {
+  newAccounts: {
+    kind: "token bucket",
+    rate: 20,
+    period: HOUR,
+    capacity: 10,
+  },
+});
 const AUTH_REDIRECT_ORIGINS = new Set([
   "http://localhost:3000",
   "http://symbaiex.localhost:3000",
@@ -241,6 +250,21 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   callbacks: {
     redirect: authRedirect,
     async afterUserCreatedOrUpdated(ctx, args) {
+      if (args.existingUserId === null) {
+        const capacity = await accountCreationRateLimiter.limit(
+          ctx,
+          "newAccounts",
+          { key: "global" },
+        );
+        if (!capacity.ok) {
+          throw new ConvexError({
+            code: "SIGNUP_RATE_LIMITED",
+            message:
+              "Account creation is temporarily busy. Please try again later.",
+            retryAfter: capacity.retryAfter,
+          });
+        }
+      }
       await ensureUserDefaults(
         ctx as MutationCtx,
         args.userId as Id<"users">,

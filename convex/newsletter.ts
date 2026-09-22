@@ -1,8 +1,10 @@
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
+import { HOUR, MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { vOnEmailEventArgs } from "@convex-dev/resend";
 import { makeFunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { components } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
@@ -30,6 +32,30 @@ import {
 } from "./newsletterModel";
 import { parseEditorialNewsletterPayload } from "./newsletterPayload";
 import { applyContactEmailEvent } from "./contact";
+import { sha256Base64Url } from "./agentIdentityCrypto";
+
+const newsletterPublicRateLimiter = new RateLimiter(components.rateLimiter, {
+  subscribeGlobal: {
+    kind: "token bucket",
+    rate: 60,
+    period: HOUR,
+    capacity: 30,
+    shards: 6,
+  },
+  subscribePerEmail: {
+    kind: "token bucket",
+    rate: 3,
+    period: HOUR,
+    capacity: 3,
+  },
+  engagementGlobal: {
+    kind: "token bucket",
+    rate: 600,
+    period: MINUTE,
+    capacity: 120,
+    shards: 6,
+  },
+});
 
 const sendConfirmationEmailRef = makeFunctionReference<
   "action",
@@ -84,8 +110,29 @@ export const subscribe = mutation({
     siteUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const normalizedEmail = normalizeEmail(args.email);
+    const emailKey = await sha256Base64Url(normalizedEmail);
+    const [globalCapacity, emailCapacity] = await Promise.all([
+      newsletterPublicRateLimiter.limit(ctx, "subscribeGlobal", {
+        key: "global",
+      }),
+      newsletterPublicRateLimiter.limit(ctx, "subscribePerEmail", {
+        key: emailKey,
+      }),
+    ]);
+    if (!globalCapacity.ok || !emailCapacity.ok) {
+      throw new ConvexError({
+        code: "NEWSLETTER_RATE_LIMITED",
+        message:
+          "Newsletter signup is temporarily rate limited. Please try again later.",
+        retryAfter: Math.max(
+          globalCapacity.ok ? 0 : globalCapacity.retryAfter,
+          emailCapacity.ok ? 0 : emailCapacity.retryAfter,
+        ),
+      });
+    }
     const { subscriber, tokenStored } = await upsertPendingSubscriber(ctx, {
-      email: args.email,
+      email: normalizedEmail,
       source: args.source,
       tokenHash: args.tokenHash,
     });
@@ -417,6 +464,18 @@ export const recordPublicEngagement = mutation({
     visitorKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const capacity = await newsletterPublicRateLimiter.limit(
+      ctx,
+      "engagementGlobal",
+      { key: "global" },
+    );
+    if (!capacity.ok) {
+      return {
+        recorded: false,
+        reason: "RATE_LIMITED" as const,
+        retryAfter: capacity.retryAfter,
+      };
+    }
     const issue = await publicIssueRoutingBySlug(ctx, args.slug);
     if (issue === null) return { recorded: false };
     const storyEvent =
@@ -441,15 +500,13 @@ export const recordPublicEngagement = mutation({
         args.eventType === "archive_view" ? 60 * 60 * 1000 : 10 * 1000;
       const duplicate = await ctx.db
         .query("newsletterEngagements")
-        .withIndex(
-        "by_issue_event_visitor_story_created",
-          (q) =>
-            q
-              .eq("issueId", issue.issueId)
-              .eq("eventType", args.eventType)
-              .eq("visitorKey", visitorKey)
-              .eq("hnItemId", args.hnItemId)
-              .gt("createdAt", now - dedupeWindow),
+        .withIndex("by_issue_event_visitor_story_created", (q) =>
+          q
+            .eq("issueId", issue.issueId)
+            .eq("eventType", args.eventType)
+            .eq("visitorKey", visitorKey)
+            .eq("hnItemId", args.hnItemId)
+            .gt("createdAt", now - dedupeWindow),
         )
         .order("desc")
         .take(1);

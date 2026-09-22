@@ -70,21 +70,23 @@ export const record = mutation({
       return { logged: false, deduped: false, id: null };
     }
 
-    if (actorUserId === null) {
-      const capacity = await publicLogRateLimiter.limit(ctx, "anonymousSystemLogs", {
-        // Deliberately global: caller-controlled fingerprints must not create
-        // independent buckets that bypass the public write budget.
+    const capacity = await publicLogRateLimiter.limit(
+      ctx,
+      "anonymousSystemLogs",
+      {
+        // Deliberately global: account identities and caller-controlled
+        // fingerprints must not create independent buckets.
         key: "global",
-      });
-      if (!capacity.ok) {
-        return {
-          logged: false,
-          deduped: false,
-          id: null,
-          reason: "RATE_LIMITED" as const,
-          retryAfter: capacity.retryAfter,
-        };
-      }
+      },
+    );
+    if (!capacity.ok) {
+      return {
+        logged: false,
+        deduped: false,
+        id: null,
+        reason: "RATE_LIMITED" as const,
+        retryAfter: capacity.retryAfter,
+      };
     }
 
     const level = args.level ?? "error";
