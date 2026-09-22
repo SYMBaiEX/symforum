@@ -374,8 +374,14 @@ describe("agent data API dispatch", () => {
         idempotencyKey: "webhook-create-once",
         requestFingerprint: "sha256-webhook-create-once",
       };
-      const created = await agent.mutation(internal.agentDataApi.dispatch, createArgs);
-      const createdReplay = await agent.mutation(internal.agentDataApi.dispatch, createArgs);
+      const created = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        createArgs,
+      );
+      const createdReplay = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        createArgs,
+      );
       expect(createdReplay).toEqual(created);
       await expect(
         agent.mutation(internal.agentDataApi.dispatch, {
@@ -390,8 +396,14 @@ describe("agent data API dispatch", () => {
         idempotencyKey: "webhook-rotate-once",
         requestFingerprint: "sha256-webhook-rotate-once",
       };
-      const rotated = await agent.mutation(internal.agentDataApi.dispatch, rotateArgs);
-      const rotatedReplay = await agent.mutation(internal.agentDataApi.dispatch, rotateArgs);
+      const rotated = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        rotateArgs,
+      );
+      const rotatedReplay = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        rotateArgs,
+      );
       expect(rotatedReplay).toEqual(rotated);
 
       const testArgs = {
@@ -403,21 +415,37 @@ describe("agent data API dispatch", () => {
         idempotencyKey: "webhook-test-once",
         requestFingerprint: "sha256-webhook-test-once",
       };
-      const sent = await agent.mutation(internal.agentDataApi.dispatch, testArgs);
-      const sentReplay = await agent.mutation(internal.agentDataApi.dispatch, testArgs);
+      const sent = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        testArgs,
+      );
+      const sentReplay = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        testArgs,
+      );
       expect(sentReplay).toEqual(sent);
       await t.run(async (ctx) => {
-        expect(await ctx.db.query("apiWebhookEvents").collect()).toHaveLength(1);
-        expect(await ctx.db.query("apiWebhookDeliveries").collect()).toHaveLength(1);
+        expect(await ctx.db.query("apiWebhookEvents").collect()).toHaveLength(
+          1,
+        );
+        expect(
+          await ctx.db.query("apiWebhookDeliveries").collect(),
+        ).toHaveLength(1);
       });
 
       const replayDelivery = await t.run(async (ctx) => {
-        const subscription = await ctx.db.query("apiWebhookSubscriptions").first();
-        if (subscription === null) throw new Error("Expected webhook subscription");
+        const subscription = await ctx.db
+          .query("apiWebhookSubscriptions")
+          .first();
+        if (subscription === null)
+          throw new Error("Expected webhook subscription");
         await ctx.db.insert("apiWebhookEvents", {
           provider: "evidence-delivery",
           eventKey: "research:failed-once",
-          payloadJson: JSON.stringify({ eventType: "evidence.research.completed", payloadJson: JSON.stringify({ failed: true }) }),
+          payloadJson: JSON.stringify({
+            eventType: "evidence.research.completed",
+            payloadJson: JSON.stringify({ failed: true }),
+          }),
           receivedAt: Date.now(),
         });
         return await ctx.db.insert("apiWebhookDeliveries", {
@@ -432,17 +460,28 @@ describe("agent data API dispatch", () => {
       });
       const replayArgs = {
         operation: "webhooks_replay" as const,
-        input: { subscriptionKey: "research-events", eventKey: "research:failed-once" },
+        input: {
+          subscriptionKey: "research-events",
+          eventKey: "research:failed-once",
+        },
         idempotencyKey: "webhook-replay-once",
         requestFingerprint: "sha256-webhook-replay-once",
       };
-      const replayed = await agent.mutation(internal.agentDataApi.dispatch, replayArgs);
-      const replayedAgain = await agent.mutation(internal.agentDataApi.dispatch, replayArgs);
+      const replayed = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        replayArgs,
+      );
+      const replayedAgain = await agent.mutation(
+        internal.agentDataApi.dispatch,
+        replayArgs,
+      );
       expect(replayedAgain).toEqual(replayed);
       await t.run(async (ctx) => {
-        expect(await ctx.db.get("apiWebhookDeliveries", replayDelivery)).toMatchObject({
+        expect(
+          await ctx.db.get("apiWebhookDeliveries", replayDelivery),
+        ).toMatchObject({
           replayCount: 1,
-          status: "in_flight",
+          status: "pending",
         });
       });
     } finally {
@@ -586,6 +625,30 @@ describe("agent data API dispatch", () => {
         input: { claimId: privateEvidence.claimId },
         idempotencyKey: "verify-private-citation",
         requestFingerprint: "sha256-verify-private-citation",
+      }),
+    ).resolves.toMatchObject({ citations: [] });
+    await t.run(async (ctx) => {
+      const version = await ctx.db.get(
+        "evidenceDocumentVersions",
+        privateEvidence.versionId,
+      );
+      const document = await ctx.db.get(
+        "evidenceDocuments",
+        version!.documentId,
+      );
+      await ctx.db.patch("evidenceDocuments", document!._id, {
+        visibility: "public",
+      });
+      await ctx.db.patch("evidenceSources", document!.sourceId, {
+        visibility: "private",
+      });
+    });
+    await expect(
+      agent.mutation(internal.agentDataApi.dispatch, {
+        operation: "verify",
+        input: { claimId: privateEvidence.claimId },
+        idempotencyKey: "verify-private-source",
+        requestFingerprint: "verify-private-source",
       }),
     ).resolves.toMatchObject({ citations: [] });
     await expect(

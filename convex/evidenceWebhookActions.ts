@@ -21,29 +21,37 @@ const getDeliveryInputRef = makeFunctionReference<
       errorMessage: string;
     }
   | {
-    kind: "ready";
-    deliveryId: Id<"apiWebhookDeliveries">;
-    deliveryGeneration: number;
-    subscriptionId: Id<"apiWebhookSubscriptions">;
-    attempt: number;
-    eventKey: string;
-    url: string;
-    status: "active" | "paused" | "revoked";
-    eventType:
-      | "evidence.document.changed"
-      | "evidence.research.completed"
-      | "evidence.export.completed"
-      | "evidence.benchmark.completed"
-      | "evidence.claim.verified"
-      | "evidence.usage.threshold_reached"
-      | "evidence.usage.budget_reached"
-      | "evidence.entitlement.status_changed";
-    payloadJson: string;
-    signingSecretCiphertext?: string;
-    signingSecretNonce?: string;
-  }
+      kind: "ready";
+      deliveryId: Id<"apiWebhookDeliveries">;
+      deliveryGeneration: number;
+      subscriptionId: Id<"apiWebhookSubscriptions">;
+      attempt: number;
+      eventKey: string;
+      url: string;
+      status: "active" | "paused" | "revoked";
+      eventType:
+        | "evidence.document.changed"
+        | "evidence.research.completed"
+        | "evidence.export.completed"
+        | "evidence.benchmark.completed"
+        | "evidence.claim.verified"
+        | "evidence.usage.threshold_reached"
+        | "evidence.usage.budget_reached"
+        | "evidence.entitlement.status_changed";
+      payloadJson: string;
+      signingSecretCiphertext?: string;
+      signingSecretNonce?: string;
+    }
   | null
 >("evidenceWebhooks:getDeliveryInput");
+const startDeliveryAttemptRef = makeFunctionReference<
+  "mutation",
+  {
+    deliveryId: Id<"apiWebhookDeliveries">;
+    deliveryGeneration: number;
+  },
+  boolean
+>("evidenceWebhooks:startDeliveryAttempt");
 const markDeliveryRef = makeFunctionReference<
   "mutation",
   {
@@ -99,6 +107,8 @@ export const deliver = internalAction({
       readonly EVIDENCE_WEBHOOK_ALLOWED_HOSTS: string | undefined;
       readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
     };
+    const started = await ctx.runMutation(startDeliveryAttemptRef, args);
+    if (!started) return null;
     const input = await ctx.runQuery(getDeliveryInputRef, {
       deliveryId: args.deliveryId,
       deliveryGeneration: args.deliveryGeneration,
@@ -181,7 +191,11 @@ export const deliver = internalAction({
       });
       return null;
     }
-    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    if (
+      payload === null ||
+      typeof payload !== "object" ||
+      Array.isArray(payload)
+    ) {
       await ctx.runMutation(markDeliveryRef, {
         deliveryId: input.deliveryId,
         deliveryGeneration: input.deliveryGeneration,

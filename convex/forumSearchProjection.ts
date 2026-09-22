@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import {
+  resumeUniversalSearchAfterForumBackfill,
+  syncForumThreadUniversalSearchProjection,
+} from "./universalSearchProjection";
 
 /**
  * A deliberately small search representation.  These limits are in characters
@@ -101,6 +105,11 @@ function postValues(post: Doc<"forumPosts">) {
   };
 }
 
+function projectionMatches(existing: object, values: Record<string, unknown>) {
+  const current = existing as Record<string, unknown>;
+  return Object.entries(values).every(([key, value]) => current[key] === value);
+}
+
 export async function syncForumThreadSearchProjection(
   ctx: MutationCtx,
   threadId: Id<"forumThreads">,
@@ -113,10 +122,26 @@ export async function syncForumThreadSearchProjection(
     .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
     .unique();
   if (existing === null) {
-    await ctx.db.insert("forumThreadSearchProjections", values);
+    const projectionId = await ctx.db.insert(
+      "forumThreadSearchProjections",
+      values,
+    );
+    const projection = await ctx.db.get(
+      "forumThreadSearchProjections",
+      projectionId,
+    );
+    if (projection !== null) {
+      await syncForumThreadUniversalSearchProjection(ctx, projection);
+    }
     return;
   }
-  await ctx.db.patch("forumThreadSearchProjections", existing._id, values);
+  if (!projectionMatches(existing, values)) {
+    await ctx.db.patch("forumThreadSearchProjections", existing._id, values);
+  }
+  await syncForumThreadUniversalSearchProjection(ctx, {
+    ...existing,
+    ...values,
+  });
 }
 
 export async function syncForumPostSearchProjection(
@@ -134,6 +159,7 @@ export async function syncForumPostSearchProjection(
     await ctx.db.insert("forumPostSearchProjections", values);
     return;
   }
+  if (projectionMatches(existing, values)) return;
   await ctx.db.patch("forumPostSearchProjections", existing._id, values);
 }
 
@@ -148,6 +174,7 @@ export const backfill = internalMutation({
       )
       .unique();
     if ((state?.completedAt ?? 0) > 0) {
+      await resumeUniversalSearchAfterForumBackfill(ctx);
       return { processed: 0, done: true, alreadyCompleted: true };
     }
     const now = Date.now();
@@ -166,7 +193,11 @@ export const backfill = internalMutation({
       } else {
         await ctx.db.patch("forumAgentMaintenanceState", state._id, values);
       }
-      await ctx.scheduler.runAfter(1_000, internal.forumSearchProjection.backfill, {});
+      await ctx.scheduler.runAfter(
+        1_000,
+        internal.forumSearchProjection.backfill,
+        {},
+      );
     };
 
     if (cursor.threadId !== null) {
@@ -187,6 +218,8 @@ export const backfill = internalMutation({
               .paginate({
                 cursor: cursor.postCursor,
                 numItems: BACKFILL_POST_PAGE_SIZE,
+                maximumRowsRead: BACKFILL_POST_PAGE_SIZE + 1,
+                maximumBytesRead: 512 * 1024,
               });
       for (const post of posts.page)
         await syncForumPostSearchProjection(ctx, post._id);
@@ -228,6 +261,7 @@ export const backfill = internalMutation({
           updatedAt: now,
         });
       }
+      await resumeUniversalSearchAfterForumBackfill(ctx);
       return { processed: 0, done: true, alreadyCompleted: false };
     }
     await syncForumThreadSearchProjection(ctx, thread._id);

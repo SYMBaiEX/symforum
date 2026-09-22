@@ -11,6 +11,10 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireAgentScope, requireAuthenticatedUser } from "./authz";
+import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+} from "./evidenceVisibility";
 
 const MAX_SUBSCRIPTION_KEY_LENGTH = 96;
 const MAX_EVENT_TYPES = 12;
@@ -108,7 +112,10 @@ export async function encryptWebhookSecret(kek: string, secret: string) {
     await encryptionKey(kek),
     new TextEncoder().encode(secret),
   );
-  return { ciphertext: base64Url(new Uint8Array(ciphertext)), nonce: base64Url(nonce) };
+  return {
+    ciphertext: base64Url(new Uint8Array(ciphertext)),
+    nonce: base64Url(nonce),
+  };
 }
 
 export async function decryptWebhookSecret(
@@ -125,9 +132,18 @@ export async function decryptWebhookSecret(
 }
 
 export function configuredWebhookKek() {
-  const webhookEnv = env as typeof env & { readonly EVIDENCE_WEBHOOK_KEK: string | undefined };
-  if (!webhookEnv.EVIDENCE_WEBHOOK_KEK || !/^[A-Za-z0-9_-]{32,}$/.test(webhookEnv.EVIDENCE_WEBHOOK_KEK)) {
-    throw new ConvexError({ code: "WEBHOOK_SIGNING_UNAVAILABLE", message: "Webhook signing is unavailable until EVIDENCE_WEBHOOK_KEK is configured." });
+  const webhookEnv = env as typeof env & {
+    readonly EVIDENCE_WEBHOOK_KEK: string | undefined;
+  };
+  if (
+    !webhookEnv.EVIDENCE_WEBHOOK_KEK ||
+    !/^[A-Za-z0-9_-]{32,}$/.test(webhookEnv.EVIDENCE_WEBHOOK_KEK)
+  ) {
+    throw new ConvexError({
+      code: "WEBHOOK_SIGNING_UNAVAILABLE",
+      message:
+        "Webhook signing is unavailable until EVIDENCE_WEBHOOK_KEK is configured.",
+    });
   }
   return webhookEnv.EVIDENCE_WEBHOOK_KEK;
 }
@@ -528,14 +544,29 @@ export const rotateSigningSecret = mutation({
   returns: safeSubscriptionValidator,
   handler: async (ctx, args) => {
     const principal = await evidencePrincipal(ctx);
-    const subscriptionKey = identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH);
+    const subscriptionKey = identifier(
+      args.subscriptionKey,
+      "subscriptionKey",
+      MAX_SUBSCRIPTION_KEY_LENGTH,
+    );
     const subscription = await ctx.db
       .query("apiWebhookSubscriptions")
-      .withIndex("by_ownerUserId_and_subscriptionKey", (q) => q.eq("ownerUserId", principal.ownerUserId).eq("subscriptionKey", subscriptionKey))
+      .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
+        q
+          .eq("ownerUserId", principal.ownerUserId)
+          .eq("subscriptionKey", subscriptionKey),
+      )
       .unique();
-    if (subscription === null) throw new ConvexError({ code: "WEBHOOK_SUBSCRIPTION_NOT_FOUND", message: "Webhook subscription was not found." });
+    if (subscription === null)
+      throw new ConvexError({
+        code: "WEBHOOK_SUBSCRIPTION_NOT_FOUND",
+        message: "Webhook subscription was not found.",
+      });
     const secret = base64Url(crypto.getRandomValues(new Uint8Array(32)));
-    const encrypted = await encryptWebhookSecret(configuredWebhookKek(), secret);
+    const encrypted = await encryptWebhookSecret(
+      configuredWebhookKek(),
+      secret,
+    );
     const now = Date.now();
     await ctx.db.patch("apiWebhookSubscriptions", subscription._id, {
       signingSecretCiphertext: encrypted.ciphertext,
@@ -543,7 +574,10 @@ export const rotateSigningSecret = mutation({
       signingSecretVersion: (subscription.signingSecretVersion ?? 0) + 1,
       updatedAt: now,
     });
-    return { ...safeSubscription({ ...subscription, updatedAt: now }), signingSecret: secret };
+    return {
+      ...safeSubscription({ ...subscription, updatedAt: now }),
+      signingSecret: secret,
+    };
   },
 });
 
@@ -552,10 +586,16 @@ async function ownedSubscription(ctx: DatabaseCtx, subscriptionKey: string) {
   const subscription = await ctx.db
     .query("apiWebhookSubscriptions")
     .withIndex("by_ownerUserId_and_subscriptionKey", (q) =>
-      q.eq("ownerUserId", principal.ownerUserId).eq("subscriptionKey", subscriptionKey),
+      q
+        .eq("ownerUserId", principal.ownerUserId)
+        .eq("subscriptionKey", subscriptionKey),
     )
     .unique();
-  if (subscription === null) throw new ConvexError({ code: "WEBHOOK_SUBSCRIPTION_NOT_FOUND", message: "Webhook subscription was not found." });
+  if (subscription === null)
+    throw new ConvexError({
+      code: "WEBHOOK_SUBSCRIPTION_NOT_FOUND",
+      message: "Webhook subscription was not found.",
+    });
   return subscription;
 }
 
@@ -563,35 +603,86 @@ export const listDeliveryHistory = query({
   args: { subscriptionKey: v.string(), limit: v.optional(v.number()) },
   returns: v.array(safeDeliveryValidator),
   handler: async (ctx, args) => {
-    const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
-    const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 20), MAX_HISTORY_LIMIT));
-    const rows = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id))
-      .order("desc").take(limit);
-    return rows.map(({ eventKey, status, attempt, responseCode, nextAttemptAt, createdAt, updatedAt }) => ({ eventKey, status, attempt, responseCode, nextAttemptAt, createdAt, updatedAt }));
+    const subscription = await ownedSubscription(
+      ctx,
+      identifier(
+        args.subscriptionKey,
+        "subscriptionKey",
+        MAX_SUBSCRIPTION_KEY_LENGTH,
+      ),
+    );
+    const limit = Math.max(
+      1,
+      Math.min(Math.floor(args.limit ?? 20), MAX_HISTORY_LIMIT),
+    );
+    const rows = await ctx.db
+      .query("apiWebhookDeliveries")
+      .withIndex("by_subscriptionId_and_updatedAt", (q) =>
+        q.eq("subscriptionId", subscription._id),
+      )
+      .order("desc")
+      .take(limit);
+    return rows.map(
+      ({
+        eventKey,
+        status,
+        attempt,
+        responseCode,
+        nextAttemptAt,
+        createdAt,
+        updatedAt,
+      }) => ({
+        eventKey,
+        status,
+        attempt,
+        responseCode,
+        nextAttemptAt,
+        createdAt,
+        updatedAt,
+      }),
+    );
   },
 });
 
 export const getSubscriptionHealth = query({
   args: { subscriptionKey: v.string() },
-  returns: v.object({ delivered: v.number(), failed: v.number(), deadLetter: v.number(), pending: v.number() }),
+  returns: v.object({
+    delivered: v.number(),
+    failed: v.number(),
+    deadLetter: v.number(),
+    pending: v.number(),
+  }),
   handler: async (ctx, args) => {
-    const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
-    const rows = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_updatedAt", (q) => q.eq("subscriptionId", subscription._id))
+    const subscription = await ownedSubscription(
+      ctx,
+      identifier(
+        args.subscriptionKey,
+        "subscriptionKey",
+        MAX_SUBSCRIPTION_KEY_LENGTH,
+      ),
+    );
+    const rows = await ctx.db
+      .query("apiWebhookDeliveries")
+      .withIndex("by_subscriptionId_and_updatedAt", (q) =>
+        q.eq("subscriptionId", subscription._id),
+      )
       .order("desc")
       .take(MAX_HISTORY_LIMIT);
-    return rows.reduce((health, row) => {
-      if (row.status === "delivered") health.delivered += 1;
-      else if (row.status === "dead_letter") health.deadLetter += 1;
-      else if (row.status === "pending" || row.status === "in_flight") health.pending += 1;
-      else health.failed += 1;
-      return health;
-    }, { delivered: 0, failed: 0, deadLetter: 0, pending: 0 });
+    return rows.reduce(
+      (health, row) => {
+        if (row.status === "delivered") health.delivered += 1;
+        else if (row.status === "dead_letter") health.deadLetter += 1;
+        else if (row.status === "pending" || row.status === "in_flight")
+          health.pending += 1;
+        else health.failed += 1;
+        return health;
+      },
+      { delivered: 0, failed: 0, deadLetter: 0, pending: 0 },
+    );
   },
 });
 
-async function scheduleDeliveryClaim(
+async function scheduleDeliveryAttempt(
   ctx: MutationCtx,
   delivery: Doc<"apiWebhookDeliveries">,
   delayMs: number,
@@ -600,42 +691,117 @@ async function scheduleDeliveryClaim(
   const boundedDelayMs = Math.max(0, Math.floor(delayMs));
   const deliveryGeneration = (delivery.deliveryGeneration ?? 0) + 1;
   const nextAttemptAt = now + boundedDelayMs;
-  const leaseExpiresAt = nextAttemptAt + DELIVERY_LEASE_MS;
   await ctx.db.patch("apiWebhookDeliveries", delivery._id, {
-    status: "in_flight",
+    status: "pending",
     deliveryGeneration,
     nextAttemptAt,
-    leaseExpiresAt,
+    leaseExpiresAt: undefined,
     updatedAt: now,
   });
   await ctx.scheduler.runAfter(boundedDelayMs, DELIVERY_ACTION_REF, {
     deliveryId: delivery._id,
     deliveryGeneration,
   });
-  await ctx.scheduler.runAfter(boundedDelayMs + DELIVERY_LEASE_MS + 1,
-    makeFunctionReference<"mutation">("evidenceWebhooks:recoverDeliveryLease"), {
-      deliveryId: delivery._id, deliveryGeneration,
-    });
-  return { deliveryGeneration, leaseExpiresAt, nextAttemptAt };
+  return { deliveryGeneration, nextAttemptAt };
 }
+
+/**
+ * Starts a delivery lease when the worker actually begins, not when its action
+ * is merely placed on the scheduler. A delayed scheduler therefore cannot
+ * consume retry budget or dead-letter an event that made no HTTP attempt.
+ */
+export const startDeliveryAttempt = internalMutation({
+  args: {
+    deliveryId: v.id("apiWebhookDeliveries"),
+    deliveryGeneration: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("apiWebhookDeliveries", args.deliveryId);
+    const now = Date.now();
+    if (
+      row === null ||
+      row.status !== "pending" ||
+      row.deliveryGeneration !== args.deliveryGeneration ||
+      row.nextAttemptAt === undefined ||
+      row.nextAttemptAt > now
+    ) {
+      return false;
+    }
+    const leaseExpiresAt = now + DELIVERY_LEASE_MS;
+    await ctx.db.patch("apiWebhookDeliveries", row._id, {
+      status: "in_flight",
+      nextAttemptAt: undefined,
+      leaseExpiresAt,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(
+      DELIVERY_LEASE_MS + 1,
+      makeFunctionReference<"mutation">(
+        "evidenceWebhooks:recoverDeliveryLease",
+      ),
+      {
+        deliveryId: row._id,
+        deliveryGeneration: args.deliveryGeneration,
+      },
+    );
+    return true;
+  },
+});
 
 export const replayDelivery = mutation({
   args: { subscriptionKey: v.string(), eventKey: v.string() },
   returns: safeDeliveryValidator,
   handler: async (ctx, args) => {
-    const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
-    const eventKey = identifier(args.eventKey, "eventKey", MAX_EVENT_KEY_LENGTH);
-    const delivery = await ctx.db.query("apiWebhookDeliveries")
-      .withIndex("by_subscriptionId_and_eventKey", (q) => q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey)).unique();
-    if (delivery === null) throw new ConvexError({ code: "WEBHOOK_DELIVERY_NOT_FOUND", message: "Webhook delivery was not found." });
-    if (subscription.status !== "active") throw new ConvexError({ code: "WEBHOOK_REPLAY_DENIED", message: "Only active subscriptions can replay deliveries." });
+    const subscription = await ownedSubscription(
+      ctx,
+      identifier(
+        args.subscriptionKey,
+        "subscriptionKey",
+        MAX_SUBSCRIPTION_KEY_LENGTH,
+      ),
+    );
+    const eventKey = identifier(
+      args.eventKey,
+      "eventKey",
+      MAX_EVENT_KEY_LENGTH,
+    );
+    const delivery = await ctx.db
+      .query("apiWebhookDeliveries")
+      .withIndex("by_subscriptionId_and_eventKey", (q) =>
+        q.eq("subscriptionId", subscription._id).eq("eventKey", eventKey),
+      )
+      .unique();
+    if (delivery === null)
+      throw new ConvexError({
+        code: "WEBHOOK_DELIVERY_NOT_FOUND",
+        message: "Webhook delivery was not found.",
+      });
+    if (subscription.status !== "active")
+      throw new ConvexError({
+        code: "WEBHOOK_REPLAY_DENIED",
+        message: "Only active subscriptions can replay deliveries.",
+      });
     if (delivery.status === "pending" || delivery.status === "in_flight") {
-      throw new ConvexError({ code: "WEBHOOK_REPLAY_IN_PROGRESS", message: "An active webhook delivery cannot be replayed." });
+      throw new ConvexError({
+        code: "WEBHOOK_REPLAY_IN_PROGRESS",
+        message: "An active webhook delivery cannot be replayed.",
+      });
     }
-    if ((delivery.replayCount ?? 0) >= MAX_REPLAY_ATTEMPTS) throw new ConvexError({ code: "WEBHOOK_REPLAY_LIMIT", message: "Webhook replay budget exhausted." });
+    if ((delivery.replayCount ?? 0) >= MAX_REPLAY_ATTEMPTS)
+      throw new ConvexError({
+        code: "WEBHOOK_REPLAY_LIMIT",
+        message: "Webhook replay budget exhausted.",
+      });
     const now = Date.now();
     const replayCount = (delivery.replayCount ?? 0) + 1;
-    const replay = { ...delivery, status: "pending" as const, attempt: 0, replayCount, updatedAt: now };
+    const replay = {
+      ...delivery,
+      status: "pending" as const,
+      attempt: 0,
+      replayCount,
+      updatedAt: now,
+    };
     await ctx.db.patch("apiWebhookDeliveries", delivery._id, {
       status: "pending",
       attempt: 0,
@@ -645,12 +811,12 @@ export const replayDelivery = mutation({
       leaseExpiresAt: undefined,
       updatedAt: now,
     });
-    const claim = await scheduleDeliveryClaim(ctx, replay, 0, now);
+    const scheduled = await scheduleDeliveryAttempt(ctx, replay, 0, now);
     return {
       eventKey: delivery.eventKey,
-      status: "in_flight" as const,
+      status: "pending" as const,
       attempt: 0,
-      nextAttemptAt: claim.nextAttemptAt,
+      nextAttemptAt: scheduled.nextAttemptAt,
       createdAt: delivery.createdAt,
       updatedAt: now,
     };
@@ -662,22 +828,53 @@ export const sendTestEvent = mutation({
   args: { subscriptionKey: v.string(), eventType: eventTypeValidator },
   returns: safeDeliveryValidator,
   handler: async (ctx, args) => {
-    const subscription = await ownedSubscription(ctx, identifier(args.subscriptionKey, "subscriptionKey", MAX_SUBSCRIPTION_KEY_LENGTH));
-    if (subscription.status !== "active" || !subscription.eventTypes.includes(args.eventType)) {
-      throw new ConvexError({ code: "WEBHOOK_TEST_EVENT_DENIED", message: "An active subscription to this event type is required." });
+    const subscription = await ownedSubscription(
+      ctx,
+      identifier(
+        args.subscriptionKey,
+        "subscriptionKey",
+        MAX_SUBSCRIPTION_KEY_LENGTH,
+      ),
+    );
+    if (
+      subscription.status !== "active" ||
+      !subscription.eventTypes.includes(args.eventType)
+    ) {
+      throw new ConvexError({
+        code: "WEBHOOK_TEST_EVENT_DENIED",
+        message: "An active subscription to this event type is required.",
+      });
     }
     const now = Date.now();
     const eventKey = `test:${subscription._id}:${now}:${base64Url(crypto.getRandomValues(new Uint8Array(8)))}`;
     await ctx.db.insert("apiWebhookEvents", {
       provider: "evidence-delivery",
       eventKey,
-      payloadJson: JSON.stringify({ eventType: args.eventType, payloadJson: JSON.stringify({ test: true }) }),
+      payloadJson: JSON.stringify({
+        eventType: args.eventType,
+        payloadJson: JSON.stringify({ test: true }),
+      }),
       receivedAt: now,
     });
-    const deliveryId = await ctx.db.insert("apiWebhookDeliveries", { subscriptionId: subscription._id, eventKey, status: "pending", attempt: 0, createdAt: now, updatedAt: now, nextAttemptAt: now });
+    const deliveryId = await ctx.db.insert("apiWebhookDeliveries", {
+      subscriptionId: subscription._id,
+      eventKey,
+      status: "pending",
+      attempt: 0,
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now,
+    });
     const delivery = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
-    const claim = await scheduleDeliveryClaim(ctx, delivery, 0, now);
-    return { eventKey, status: "in_flight" as const, attempt: 0, nextAttemptAt: claim.nextAttemptAt, createdAt: now, updatedAt: now };
+    const scheduled = await scheduleDeliveryAttempt(ctx, delivery, 0, now);
+    return {
+      eventKey,
+      status: "pending" as const,
+      attempt: 0,
+      nextAttemptAt: scheduled.nextAttemptAt,
+      createdAt: now,
+      updatedAt: now,
+    };
   },
 });
 
@@ -786,7 +983,7 @@ export const enqueueEvent = internalMutation({
         nextAttemptAt: now,
       });
       const inserted = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
-      await scheduleDeliveryClaim(ctx, inserted, 0, now);
+      await scheduleDeliveryAttempt(ctx, inserted, 0, now);
       enqueued += 1;
     }
     return { eventId, enqueued };
@@ -811,7 +1008,11 @@ export const enqueueEventForOwner = internalMutation({
     enqueued: v.number(),
   }),
   handler: async (ctx, args) => {
-    const eventKey = identifier(args.eventKey, "eventKey", MAX_EVENT_KEY_LENGTH);
+    const eventKey = identifier(
+      args.eventKey,
+      "eventKey",
+      MAX_EVENT_KEY_LENGTH,
+    );
     const payloadJson = parseObjectJson(args.payloadJson, MAX_PAYLOAD_LENGTH);
     const subscriptions = await ctx.db
       .query("apiWebhookSubscriptions")
@@ -841,7 +1042,10 @@ export const enqueueEventForOwner = internalMutation({
             .eq("eventType", args.eventType),
         )
         .unique();
-      if (target?.ownerUserId !== args.ownerUserId || target.status !== "active") {
+      if (
+        target?.ownerUserId !== args.ownerUserId ||
+        target.status !== "active"
+      ) {
         continue;
       }
       eligibleSubscriptions.push(subscription);
@@ -883,7 +1087,7 @@ export const enqueueEventForOwner = internalMutation({
         nextAttemptAt: now,
       });
       const inserted = (await ctx.db.get("apiWebhookDeliveries", deliveryId))!;
-      await scheduleDeliveryClaim(ctx, inserted, 0, now);
+      await scheduleDeliveryAttempt(ctx, inserted, 0, now);
       enqueued += 1;
     }
     return { eventId, eligible: eligibleSubscriptions.length, enqueued };
@@ -938,6 +1142,29 @@ export const cleanupOrphanDeliveryEvents = internalMutation({
   },
 });
 
+async function recoverExpiredStartedAttempt(
+  ctx: MutationCtx,
+  row: Doc<"apiWebhookDeliveries">,
+  now: number,
+) {
+  const attempt = row.attempt + 1;
+  // Only an expired lease proves that a worker started and failed to record an
+  // outcome. Scheduler wait time is represented by `pending` and costs no try.
+  if (attempt >= MAX_DELIVERY_ATTEMPTS) {
+    await ctx.db.patch("apiWebhookDeliveries", row._id, {
+      status: "dead_letter",
+      attempt,
+      nextAttemptAt: undefined,
+      leaseExpiresAt: undefined,
+      updatedAt: now,
+    });
+    return "dead_lettered" as const;
+  }
+  await ctx.db.patch("apiWebhookDeliveries", row._id, { attempt });
+  await scheduleDeliveryAttempt(ctx, { ...row, attempt }, 0, now);
+  return "rescheduled" as const;
+}
+
 /** A stale wake-up must never reclaim a newer attempt or a delivered event. */
 export const recoverDeliveryLease = internalMutation({
   args: {
@@ -956,20 +1183,7 @@ export const recoverDeliveryLease = internalMutation({
       row.leaseExpiresAt > now
     )
       return null;
-    const attempt = row.attempt + 1;
-    // A crashed attempt consumes retry budget too; never spin forever on a
-    // worker that repeatedly fails before recording its outcome.
-    await ctx.db.patch("apiWebhookDeliveries", row._id, { attempt });
-    if (attempt >= MAX_DELIVERY_ATTEMPTS) {
-      await ctx.db.patch("apiWebhookDeliveries", row._id, {
-        status: "dead_letter",
-        nextAttemptAt: undefined,
-        leaseExpiresAt: undefined,
-        updatedAt: now,
-      });
-    } else {
-      await scheduleDeliveryClaim(ctx, row, 0, now);
-    }
+    await recoverExpiredStartedAttempt(ctx, row, now);
     return null;
   },
 });
@@ -980,10 +1194,15 @@ export const recoverPendingDeliveries = internalMutation({
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(Math.floor(args.limit ?? 50), 50));
     const now = Date.now();
+    // Give the scheduler the same grace window as an active HTTP lease before
+    // rotating a pending generation. Besides tolerating normal scheduler lag,
+    // this makes concurrent watchdog runs idempotent: the first reschedule
+    // moves nextAttemptAt to `now`, outside the second run's recovery window.
+    const pendingRecoveryCutoff = now - DELIVERY_LEASE_MS;
     const duePending = await ctx.db
       .query("apiWebhookDeliveries")
       .withIndex("by_status_and_nextAttemptAt", (q) =>
-        q.eq("status", "pending").lte("nextAttemptAt", now),
+        q.eq("status", "pending").lte("nextAttemptAt", pendingRecoveryCutoff),
       )
       .order("asc")
       .take(limit);
@@ -999,7 +1218,7 @@ export const recoverPendingDeliveries = internalMutation({
             .take(limit - duePending.length);
     let rescheduled = 0;
     let deadLettered = 0;
-    for (const row of [...duePending, ...expiredInFlight]) {
+    for (const row of duePending) {
       if (row.attempt >= MAX_DELIVERY_ATTEMPTS) {
         await ctx.db.patch("apiWebhookDeliveries", row._id, {
           status: "dead_letter",
@@ -1010,12 +1229,84 @@ export const recoverPendingDeliveries = internalMutation({
         deadLettered += 1;
         continue;
       }
-      await scheduleDeliveryClaim(ctx, row, 0, now);
+      // A scheduler-delayed row never started, so rescheduling rotates its
+      // generation without consuming an attempt.
+      await scheduleDeliveryAttempt(ctx, row, 0, now);
       rescheduled += 1;
+    }
+    for (const row of expiredInFlight) {
+      const result = await recoverExpiredStartedAttempt(ctx, row, now);
+      if (result === "dead_lettered") deadLettered += 1;
+      else rescheduled += 1;
     }
     return { rescheduled, deadLettered };
   },
 });
+
+/** Recheck queued evidence references against current access before any HTTP. */
+async function isDeliveryEvidencePublic(ctx: QueryCtx, payloadJson: string) {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(payloadJson);
+  } catch {
+    return false;
+  }
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload))
+    return false;
+  const data = payload as Record<string, unknown>;
+  const documentRefs = [data.documentId];
+  const claimRefs = [data.claimId];
+  if (data.entityType === "document") documentRefs.push(data.entityId ?? null);
+  if (data.entityType === "claim") claimRefs.push(data.entityId ?? null);
+  for (const value of documentRefs) {
+    if (value === undefined) continue;
+    const id =
+      typeof value === "string"
+        ? ctx.db.normalizeId("evidenceDocuments", value)
+        : null;
+    if (
+      id === null ||
+      !(await isPublicEvidenceDocument(
+        ctx,
+        await ctx.db.get("evidenceDocuments", id),
+      ))
+    )
+      return false;
+  }
+  for (const value of claimRefs) {
+    if (value === undefined) continue;
+    const id =
+      typeof value === "string"
+        ? ctx.db.normalizeId("evidenceClaims", value)
+        : null;
+    if (
+      id === null ||
+      !(await isPublicEvidenceClaim(
+        ctx,
+        await ctx.db.get("evidenceClaims", id),
+      ))
+    )
+      return false;
+  }
+  if (data.documentVersionId !== undefined) {
+    const id =
+      typeof data.documentVersionId === "string"
+        ? ctx.db.normalizeId("evidenceDocumentVersions", data.documentVersionId)
+        : null;
+    const version =
+      id === null ? null : await ctx.db.get("evidenceDocumentVersions", id);
+    if (
+      version === null ||
+      !(await isPublicEvidenceDocument(
+        ctx,
+        await ctx.db.get("evidenceDocuments", version.documentId),
+      ))
+    )
+      return false;
+  }
+  // Usage, job completion, entitlement, and test payloads need no public evidence lookup.
+  return true;
+}
 
 export const getDeliveryInput = internalQuery({
   args: {
@@ -1108,6 +1399,19 @@ export const getDeliveryInput = internalQuery({
         errorMessage: "Stored webhook event envelope is invalid",
       };
     }
+    if (
+      !(await isDeliveryEvidencePublic(
+        ctx,
+        (parsed as { payloadJson: string }).payloadJson,
+      ))
+    ) {
+      return {
+        kind: "invalid" as const,
+        deliveryId: delivery._id,
+        deliveryGeneration: args.deliveryGeneration,
+        errorMessage: "Webhook evidence is no longer publicly available",
+      };
+    }
     return {
       kind: "ready" as const,
       deliveryId: delivery._id,
@@ -1151,8 +1455,7 @@ export const markDelivery = internalMutation({
     const errorMessage = args.errorMessage?.slice(0, 400);
     const attempt = Math.min(delivery.attempt + 1, 10);
     const retry =
-      args.outcome === "transient_failure" &&
-      attempt < MAX_DELIVERY_ATTEMPTS;
+      args.outcome === "transient_failure" && attempt < MAX_DELIVERY_ATTEMPTS;
     const now = Date.now();
     const terminalStatus =
       args.outcome === "delivered" ? "delivered" : "dead_letter";
@@ -1165,7 +1468,7 @@ export const markDelivery = internalMutation({
       updatedAt: now,
     });
     if (retry) {
-      await scheduleDeliveryClaim(
+      await scheduleDeliveryAttempt(
         ctx,
         {
           ...delivery,

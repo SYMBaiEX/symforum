@@ -1,10 +1,17 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { makeFunctionReference } from "convex/server";
+import { describe, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
 import schema from "./schema";
+import {
+  requestUniversalSearchProjectionRebuild,
+  syncForumThreadUniversalSearchProjection,
+  syncPostUniversalSearchProjection,
+  UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY,
+} from "./universalSearchProjection";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -13,6 +20,22 @@ const modules = {
 
 function setup() {
   return convexTest(schema, modules);
+}
+
+const backfillRef = makeFunctionReference<
+  "mutation",
+  { limit?: number },
+  { phase: string; processed: number; totalProcessed: number; done: boolean }
+>("universalSearchProjection:backfill");
+
+async function finishUniversalProjectionBackfill(t: ReturnType<typeof setup>) {
+  vi.useFakeTimers();
+  try {
+    await t.mutation(backfillRef, { limit: 5 });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 type SearchResult = {
@@ -237,6 +260,12 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
     await ctx.db.patch("evidenceDocuments", publicDocumentId, {
       currentVersionId: publicVersionId,
     });
+    await ctx.db.insert("evidenceDocumentEntities", {
+      documentVersionId: publicVersionId,
+      entityId,
+      role: "subject",
+      createdAt: 700,
+    });
     const publicClaimId = await ctx.db.insert("evidenceClaims", {
       claimKey: "alpha-public-claim",
       statement: "Alpha claim is public.",
@@ -264,6 +293,496 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
 }
 
 describe("universal public lexical search", () => {
+  test.each(["missing", "running", "missing-after-completion"] as const)(
+    "waits for a %s forum migration and resumes on dependency completion",
+    async (dependencyStatus) => {
+      const t = setup();
+      await seedPublicCorpus(t);
+      await t.run(async (ctx) => {
+        const marker = await ctx.db
+          .query("forumAgentMaintenanceState")
+          .withIndex("by_key", (q) =>
+            q.eq("key", "forum-search-projections-v1"),
+          )
+          .unique();
+        if (marker !== null) {
+          if (dependencyStatus !== "running")
+            await ctx.db.delete("forumAgentMaintenanceState", marker._id);
+          else
+            await ctx.db.patch("forumAgentMaintenanceState", marker._id, {
+              completedAt: 0,
+            });
+        }
+        for (const row of await ctx.db
+          .query("forumThreadSearchProjections")
+          .take(100)) {
+          await ctx.db.delete("forumThreadSearchProjections", row._id);
+        }
+        await ctx.db.insert("optimizationMigrations", {
+          key: UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY,
+          status:
+            dependencyStatus === "missing-after-completion"
+              ? "completed"
+              : "running",
+          processed: 0,
+          cursor: JSON.stringify({ phase: "forumThreads", cursor: null }),
+          updatedAt: 1,
+        });
+      });
+      vi.useFakeTimers();
+      try {
+        expect(
+          await t.query(internal.universalSearch.searchPublic, {
+            query: "alpha",
+            limit: 50,
+          }),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "forum_thread",
+              title: "Alpha forum thread",
+            }),
+          ]),
+        );
+        await expect(t.mutation(backfillRef, {})).resolves.toMatchObject({
+          done: false,
+          processed: 0,
+        });
+        const marker = await t.run(async (ctx) =>
+          ctx.db
+            .query("optimizationMigrations")
+            .withIndex("by_key", (q) =>
+              q.eq("key", UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY),
+            )
+            .unique(),
+        );
+        expect(marker).toMatchObject({ status: "running" });
+        expect(marker?.scheduledAt).toBeUndefined();
+        const results = await t.query(internal.universalSearch.searchPublic, {
+          query: "alpha",
+          limit: 50,
+        });
+        expect(results).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "forum_thread",
+              title: "Alpha forum thread",
+            }),
+          ]),
+        );
+        await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+        const complete = await t.run(async (ctx) =>
+          ctx.db
+            .query("optimizationMigrations")
+            .withIndex("by_key", (q) =>
+              q.eq("key", UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY),
+            )
+            .unique(),
+        );
+        expect(complete?.status).toBe("completed");
+        expect(
+          await t.query(internal.universalSearch.searchPublic, {
+            query: "alpha",
+            limit: 50,
+          }),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "forum_thread",
+              title: "Alpha forum thread",
+            }),
+          ]),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+  test.each([false, true])(
+    "fails closed for pending forum evidence in search and semantic hydration (projection=%s)",
+    async (projection) => {
+      const t = setup();
+      await seedPublicCorpus(t);
+      const ids = await t.run(async (ctx) => {
+        const document = (
+          await ctx.db.query("evidenceDocuments").collect()
+        ).find((row) => row.externalKey === "alpha-document")!;
+        const thread = (await ctx.db.query("forumThreads").collect()).find(
+          (row) => row.categorySlug === "research",
+        )!;
+        const claim = (await ctx.db.query("evidenceClaims").collect())[0]!;
+        await ctx.db.patch("evidenceSources", document.sourceId, {
+          sourceKey: "symbaiex-first-party-research",
+        });
+        await ctx.db.patch("evidenceDocuments", document._id, {
+          externalKey: `forum-research:${thread._id}`,
+        });
+        await ctx.db.patch("evidenceClaims", claim._id, {
+          claimKey: `symbaiex-forum-claim:${thread._id}:claim`,
+        });
+        await ctx.db.patch("users", thread.authorId, {
+          isAgent: true,
+          agentSlug: "alpha",
+        });
+        await ctx.db.insert("researchQualityAssessments", {
+          threadId: thread._id,
+          categoryId: thread.categoryId,
+          authorUserId: thread.authorId,
+          runKey: "alpha",
+          candidateTitle: thread.title,
+          candidateExcerpt: "Alpha",
+          status: "passed",
+          sourceCount: 1,
+          uniqueSourceDomainCount: 1,
+          claimEstimate: 1,
+          citationCoverageScore: 100,
+          originalityScore: 99,
+          aiAuthorshipDisclosed: true,
+          contentFingerprint: "alpha",
+          normalizedTerms: ["alpha"],
+          flags: [],
+          evaluatedAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+        return { documentId: document._id, threadId: thread._id };
+      });
+      if (projection) await finishUniversalProjectionBackfill(t);
+      const before = await t.query(internal.universalSearch.searchPublic, {
+        query: "alpha",
+        limit: 50,
+      });
+      expect(before.some((row) => row.type === "evidence_document")).toBe(true);
+      expect(before.some((row) => row.type === "evidence_claim")).toBe(true);
+      expect(
+        await t.query(internal.semanticSearch.readPublicDocumentForIndex, {
+          documentId: ids.documentId,
+          embeddingModel: "test",
+        }),
+      ).not.toBeNull();
+      await t.run(async (ctx) => {
+        await ctx.db.insert("evidenceFirstPartySyncQueue", {
+          threadId: ids.threadId,
+          generation: 1,
+          reason: "content_changed",
+          enqueuedAt: 1,
+          updatedAt: 1,
+        });
+      });
+      const after = await t.query(internal.universalSearch.searchPublic, {
+        query: "alpha",
+        limit: 50,
+      });
+      expect(
+        after.some((row) =>
+          ["evidence_document", "evidence_claim", "evidence_entity"].includes(
+            row.type,
+          ),
+        ),
+      ).toBe(false);
+      expect(
+        await t.query(internal.evidence.searchEntities, { search: "alpha" }),
+      ).toEqual([]);
+      expect(
+        await t.query(internal.semanticSearch.readPublicDocumentForIndex, {
+          documentId: ids.documentId,
+          embeddingModel: "test",
+        }),
+      ).toBeNull();
+      expect(
+        await t.query(internal.semanticSearch.readCurrentPublicCandidates, {
+          candidates: [
+            {
+              documentId: ids.documentId,
+              score: 1,
+              fingerprint: "600:600:test",
+            },
+          ],
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  test("revalidates evidence source policy despite stale completed search projections", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+    await finishUniversalProjectionBackfill(t);
+    await t.run(async (ctx) => {
+      const source = (await ctx.db.query("evidenceSources").collect())[0]!;
+      await ctx.db.patch("evidenceSources", source._id, {
+        visibility: "private",
+      });
+    });
+    const result = await t.query(internal.universalSearch.searchPublic, {
+      query: "alpha",
+      limit: 50,
+    });
+    expect(
+      result.some((row) =>
+        ["evidence_document", "evidence_claim", "evidence_entity"].includes(
+          row.type,
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  test("only curated general identities may be exposed without provenance links", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (const entityKey of [
+        "project:symbaiex",
+        "person:austin-hamilton",
+        "agent:private-researcher",
+        "project:orphan",
+      ]) {
+        await ctx.db.insert("evidenceEntities", {
+          entityKey,
+          kind: "project",
+          name: `Alpha ${entityKey}`,
+          aliases: [],
+          visibility: "public",
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      }
+    });
+    const direct = await t.query(internal.evidence.searchEntities, {
+      search: "alpha",
+    });
+    expect(direct.map((row) => row.entityKey).sort()).toEqual([
+      "person:austin-hamilton",
+      "project:symbaiex",
+    ]);
+    await finishUniversalProjectionBackfill(t);
+    const results = await t.query(internal.universalSearch.searchPublic, {
+      query: "alpha",
+      limit: 50,
+    });
+    expect(results).toHaveLength(2);
+    expect(results.every((row) => row.type === "evidence_entity")).toBe(true);
+  });
+
+  test("backfills one compact public-only projection and excludes private corpus rows", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+
+    await finishUniversalProjectionBackfill(t);
+
+    const { state, projections } = await t.run(async (ctx) => ({
+      state: await ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) =>
+          q.eq("key", UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY),
+        )
+        .unique(),
+      projections: await ctx.db.query("universalSearchProjections").take(100),
+    }));
+    expect(state?.status).toBe("completed");
+    expect(projections.map((row) => row.type)).toEqual(
+      expect.arrayContaining([
+        "evidence_document",
+        "evidence_claim",
+        "evidence_entity",
+        "blog_post",
+        "newsletter_issue",
+        "forum_thread",
+      ]),
+    );
+    expect(JSON.stringify(projections)).not.toContain("private");
+
+    const results = await t.query(internal.universalSearch.searchPublic, {
+      query: "alpha",
+      limit: 50,
+    });
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "evidence_document",
+          title: "Alpha evidence document",
+        }),
+        expect.objectContaining({
+          type: "forum_thread",
+          title: "Alpha forum thread",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(results)).not.toContain("private");
+  });
+
+  test("projection search recalls older matching rows outside the legacy recent window", async () => {
+    const t = setup();
+    const targetPostId = await t.run(async (ctx) => {
+      const targetId = await ctx.db.insert("posts", {
+        slug: "needle-archive-post",
+        title: "Needle archive post",
+        excerpt: "A durable historical match",
+        body: "Large body deliberately absent from the search projection.",
+        tags: ["needle"],
+        status: "published",
+        publishedAt: 1,
+        readingMinutes: 1,
+        featured: false,
+      });
+      for (let index = 0; index < 55; index += 1) {
+        await ctx.db.insert("posts", {
+          slug: `newer-filler-${index}`,
+          title: `Newer filler ${index}`,
+          excerpt: "Recent nonmatching filler",
+          body: "Recent body",
+          tags: ["filler"],
+          status: "published",
+          publishedAt: 100 + index,
+          readingMinutes: 1,
+          featured: false,
+        });
+      }
+      return targetId;
+    });
+
+    const beforeBackfill = await t.query(
+      internal.universalSearch.searchPublic,
+      {
+        query: "needle",
+        limit: 20,
+      },
+    );
+    expect(
+      beforeBackfill.some(
+        (row) => row.provenance.recordId === String(targetPostId),
+      ),
+    ).toBe(false);
+
+    await finishUniversalProjectionBackfill(t);
+    const afterBackfill = await t.query(internal.universalSearch.searchPublic, {
+      query: "needle",
+      limit: 20,
+    });
+    expect(afterBackfill).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "blog_post",
+          title: "Needle archive post",
+          provenance: expect.objectContaining({
+            recordId: String(targetPostId),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  test("transactional sync helpers retract content when public visibility changes", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+    await finishUniversalProjectionBackfill(t);
+
+    await t.run(async (ctx) => {
+      const post = await ctx.db
+        .query("posts")
+        .withIndex("by_slug", (q) => q.eq("slug", "alpha-public-post"))
+        .unique();
+      expect(post).not.toBeNull();
+      await ctx.db.patch("posts", post!._id, { status: "draft" });
+      const updatedPost = await ctx.db.get("posts", post!._id);
+      expect(updatedPost).not.toBeNull();
+      await syncPostUniversalSearchProjection(ctx, updatedPost!);
+
+      const forumProjection = await ctx.db
+        .query("forumThreadSearchProjections")
+        .withSearchIndex("search_by_searchText", (q) =>
+          q.search("searchText", "Alpha forum thread").eq("status", "active"),
+        )
+        .first();
+      expect(forumProjection).not.toBeNull();
+      const category = await ctx.db.get(
+        "forumCategories",
+        forumProjection!.categoryId,
+      );
+      expect(category).not.toBeNull();
+      await ctx.db.patch("forumCategories", category!._id, {
+        viewAccess: "members",
+      });
+      await syncForumThreadUniversalSearchProjection(ctx, forumProjection!);
+    });
+
+    const results = await t.query(internal.universalSearch.searchPublic, {
+      query: "alpha",
+      limit: 50,
+    });
+    expect(results.map((row) => row.title)).not.toContain("Alpha blog post");
+    expect(results.map((row) => row.title)).not.toContain("Alpha forum thread");
+  });
+
+  test("policy rebuild immediately falls back and duplicate continuations resume safely", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+    await finishUniversalProjectionBackfill(t);
+
+    await t.run(async (ctx) => {
+      const post = await ctx.db
+        .query("posts")
+        .withIndex("by_slug", (q) => q.eq("slug", "alpha-public-post"))
+        .unique();
+      expect(post).not.toBeNull();
+      await ctx.db.patch("posts", post!._id, {
+        title: "Restart fallback live title",
+      });
+      await requestUniversalSearchProjectionRebuild(ctx);
+    });
+    // A duplicate policy event resets the same persisted cursor and leaves an
+    // older scheduled continuation queued. Both must advance shared state
+    // safely rather than replay a caller-supplied cursor.
+    await t.run(async (ctx) => {
+      await requestUniversalSearchProjectionRebuild(ctx);
+    });
+
+    const runningState = await t.run(async (ctx) =>
+      ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) =>
+          q.eq("key", UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY),
+        )
+        .unique(),
+    );
+    expect(runningState).toMatchObject({ status: "running", processed: 0 });
+    expect(JSON.parse(runningState!.cursor!)).toEqual({
+      phase: "evidenceDocuments",
+      cursor: null,
+    });
+    expect(runningState?.completedAt).toBeUndefined();
+
+    const fallbackResults = await t.query(
+      internal.universalSearch.searchPublic,
+      { query: "restart fallback", limit: 20 },
+    );
+    expect(fallbackResults.map((row) => row.title)).toContain(
+      "Restart fallback live title",
+    );
+
+    vi.useFakeTimers();
+    try {
+      await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    } finally {
+      vi.useRealTimers();
+    }
+    const completedState = await t.run(async (ctx) =>
+      ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) =>
+          q.eq("key", UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY),
+        )
+        .unique(),
+    );
+    expect(completedState?.status).toBe("completed");
+
+    const projectedResults = await t.query(
+      internal.universalSearch.searchPublic,
+      { query: "restart fallback", limit: 20 },
+    );
+    expect(projectedResults.map((row) => row.title)).toContain(
+      "Restart fallback live title",
+    );
+  });
+
   test("falls back to live thread search until the projection backfill completes", async () => {
     const t = setup();
     await seedPublicCorpus(t);

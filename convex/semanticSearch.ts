@@ -1,4 +1,5 @@
 import { RAG } from "@convex-dev/rag";
+import { isPublicEvidenceDocument } from "./evidenceVisibility";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
@@ -200,10 +201,7 @@ const searchSemanticRef = makeFunctionReference<
     semanticAttempted: boolean;
     semanticUsed: boolean;
     outcome:
-      | "completed"
-      | "circuit_paused"
-      | "budget_rejected"
-      | "provider_failed";
+      "completed" | "circuit_paused" | "budget_rejected" | "provider_failed";
   }
 >("semanticSearch:searchPublicSemantic");
 const lexicalSearchRef = makeFunctionReference<
@@ -454,7 +452,8 @@ export const readPublicDocumentForIndex = internalQuery({
   },
   handler: async (ctx, args): Promise<IndexDocument | null> => {
     const document = await ctx.db.get("evidenceDocuments", args.documentId);
-    if (document === null || document.visibility !== "public") return null;
+    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
+      return null;
     const source = await ctx.db.get("evidenceSources", document.sourceId);
     if (
       source === null ||
@@ -742,8 +741,7 @@ export const reserveUsage = internalMutation({
     if (
       spendBuckets.length === MAX_OPENROUTER_SPEND_BUCKETS ||
       spendBuckets.some(
-        (currentSpend) =>
-          !isKnownOpenRouterSpendBucket(currentSpend.bucket),
+        (currentSpend) => !isKnownOpenRouterSpendBucket(currentSpend.bucket),
       )
     ) {
       return { accepted: false, replay: false };
@@ -829,9 +827,11 @@ export const reserveUsage = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(LEASE_MS + 1,
+    await ctx.scheduler.runAfter(
+      LEASE_MS + 1,
       makeFunctionReference<"mutation">("semanticSearch:recoverOperationLease"),
-      { operationId });
+      { operationId },
+    );
     return { accepted: true, replay: false };
   },
 });
@@ -884,8 +884,12 @@ export const recoverOperationLease = internalMutation({
   args: { operationId: v.id("semanticSearchOperations") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const operation = await ctx.db.get("semanticSearchOperations", args.operationId);
-    if (operation !== null) await refundExpiredOperation(ctx, operation, Date.now());
+    const operation = await ctx.db.get(
+      "semanticSearchOperations",
+      args.operationId,
+    );
+    if (operation !== null)
+      await refundExpiredOperation(ctx, operation, Date.now());
     return null;
   },
 });
@@ -948,7 +952,11 @@ export const readCurrentPublicCandidates = internalQuery({
           "evidenceDocuments",
           candidate.documentId,
         );
-        if (document === null || document.visibility !== "public") return null;
+        if (
+          document === null ||
+          !(await isPublicEvidenceDocument(ctx, document))
+        )
+          return null;
         const source = await ctx.db.get("evidenceSources", document.sourceId);
         if (
           source === null ||

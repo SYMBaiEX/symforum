@@ -97,6 +97,137 @@ function versionArgs(sourceId: string, contentHash = "hash-v1") {
 }
 
 describe("durable evidence graph", () => {
+  test("evidence writers maintain compact search rows and invalidate policy changes", async () => {
+    const t = setup();
+    const { sourceId } = await seedSource(t);
+    const stored = await t.mutation(
+      evidence.upsertDocumentVersion,
+      versionArgs(sourceId),
+    );
+    const entityArgs = {
+      entityKey: "project:projection-test",
+      kind: "project",
+      name: "Projection test",
+      aliases: [],
+      visibility: "public",
+    };
+    const entity = await t.mutation(evidence.upsertEntity, entityArgs);
+    await t.mutation(evidence.linkDocumentEntity, {
+      documentVersionId: stored.versionId,
+      entityId: entity.entityId,
+      role: "subject",
+    });
+    const claimArgs = {
+      claimKey: "projection-claim",
+      statement: "A searchable grounded claim",
+      subjectEntityId: entity.entityId,
+      predicate: "documents",
+      objectText: "Search",
+      status: "supported",
+      confidence: 1,
+      visibility: "public",
+      observedAt: 1_800_000_000_000,
+    };
+    const claim = await t.mutation(evidence.upsertClaim, claimArgs);
+    const projections = () =>
+      t.run((ctx) => ctx.db.query("universalSearchProjections").collect());
+    expect((await projections()).map((row) => row.type).sort()).toEqual([
+      "evidence_document",
+      "evidence_entity",
+    ]);
+    expect(
+      (await projections()).find((row) => row.type === "evidence_entity"),
+    ).toMatchObject({
+      documentId: stored.documentId,
+      documentVersionId: stored.versionId,
+    });
+    await t.mutation(evidence.recordCitation, {
+      claimId: claim.claimId,
+      documentVersionId: stored.versionId,
+      citationKey: "projection-citation",
+      relation: "supports",
+      locator: "Example",
+      excerpt: "Grounded citation",
+      confidence: 1,
+    });
+    expect(
+      (await projections()).find((row) => row.type === "evidence_claim")
+        ?.citationCount,
+    ).toBe(1);
+    await t.mutation(evidence.upsertClaim, {
+      ...claimArgs,
+      statement: "Updated grounded claim",
+    });
+    expect(
+      (await projections()).find((row) => row.type === "evidence_claim")?.title,
+    ).toBe("Updated grounded claim");
+    await t.mutation(evidence.upsertEntity, {
+      ...entityArgs,
+      visibility: "private",
+    });
+    expect(
+      (await projections()).some((row) => row.type === "evidence_entity"),
+    ).toBe(false);
+    expect(
+      await t.run(async (ctx) =>
+        ctx.db
+          .query("evidencePublicationState")
+          .withIndex("by_key", (q) => q.eq("key", "evidence-publication"))
+          .unique(),
+      ),
+    ).toMatchObject({ epoch: 1 });
+    await t.mutation(evidence.upsertClaim, {
+      ...claimArgs,
+      visibility: "private",
+    });
+    expect(
+      (await projections()).some((row) => row.type === "evidence_claim"),
+    ).toBe(false);
+    expect(
+      await t.run(async (ctx) =>
+        ctx.db
+          .query("evidencePublicationState")
+          .withIndex("by_key", (q) => q.eq("key", "evidence-publication"))
+          .unique(),
+      ),
+    ).toMatchObject({ epoch: 2 });
+    const source = await t.run((ctx) =>
+      ctx.db.get("evidenceSources", sourceId),
+    );
+    const {
+      _id: _sourceId,
+      _creationTime: _creationTime,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...sourceArgs
+    } = source!;
+    await t.mutation(evidence.upsertSource, {
+      ...sourceArgs,
+      visibility: "private",
+    });
+    expect(
+      await t.run(async (ctx) =>
+        ctx.db
+          .query("evidencePublicationState")
+          .withIndex("by_key", (q) => q.eq("key", "evidence-publication"))
+          .unique(),
+      ),
+    ).toMatchObject({ epoch: 3 });
+    expect(
+      await t.run(
+        async (ctx) =>
+          (
+            await ctx.db
+              .query("optimizationMigrations")
+              .withIndex("by_key", (q) =>
+                q.eq("key", "universal-search-projections-v1"),
+              )
+              .unique()
+          )?.status,
+      ),
+    ).toBe("running");
+  });
+
   test("derives CISA KEV entities, an exact-version claim citation, and replays idempotently", async () => {
     const t = setup();
     const [kev] = parseKevPayload({

@@ -79,6 +79,24 @@ export default defineSchema({
     .index("by_publishedAt", ["publishedAt"])
     .index("by_status_and_publishedAt", ["status", "publishedAt"])
     .index("by_featured_and_publishedAt", ["featured", "publishedAt"]),
+  postDigests: defineTable({
+    postId: v.id("posts"),
+    postCreatedAt: v.number(),
+    slug: v.string(),
+    title: v.string(),
+    excerpt: v.string(),
+    tags: v.array(v.string()),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    publishedAt: v.number(),
+    readingMinutes: v.number(),
+    featured: v.boolean(),
+    imageUrl: v.optional(v.string()),
+    imageAlt: v.optional(v.string()),
+    imageCredit: v.optional(v.string()),
+  })
+    .index("by_postId", ["postId"])
+    .index("by_slug", ["slug"])
+    .index("by_status_and_publishedAt", ["status", "publishedAt"]),
   sitePages: defineTable({
     slug: v.string(),
     title: v.string(),
@@ -663,6 +681,7 @@ export default defineSchema({
     ),
     qualityScore: v.optional(v.number()),
     sourceCount: v.number(),
+    routingJson: v.optional(v.string()),
     status: v.union(
       v.literal("draft"),
       v.literal("scheduled"),
@@ -721,6 +740,13 @@ export default defineSchema({
     ])
     .index("by_issueId_and_hnItemId_and_createdAt", [
       "issueId",
+      "hnItemId",
+      "createdAt",
+    ])
+    .index("by_issue_event_visitor_story_created", [
+      "issueId",
+      "eventType",
+      "visitorKey",
       "hnItemId",
       "createdAt",
     ]),
@@ -1072,6 +1098,11 @@ export default defineSchema({
   })
     .index("by_threadId", ["threadId"])
     .index("by_status_and_lastPostAt", ["status", "lastPostAt"])
+    .index("by_categoryId_and_status_and_lastPostAt", [
+      "categoryId",
+      "status",
+      "lastPostAt",
+    ])
     .index("by_categoryId_and_status_and_pinned_and_lastPostAt", [
       "categoryId",
       "status",
@@ -1085,6 +1116,11 @@ export default defineSchema({
       "pinned",
       "lastPostAt",
     ]),
+  forumThreadEngagementCounters: defineTable({
+    threadId: v.id("forumThreads"),
+    viewCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_threadId", ["threadId"]),
   forumPosts: defineTable({
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),
@@ -1174,6 +1210,7 @@ export default defineSchema({
     excerpt: v.string(),
   })
     .index("by_threadId", ["threadId"])
+    .index("by_categorySlug_and_slug", ["categorySlug", "slug"])
     .index("by_authorId_and_status_and_createdAt", [
       "authorId",
       "status",
@@ -2639,6 +2676,38 @@ export default defineSchema({
       "name",
     ])
     .index("by_policyVersion_and_status", ["policyVersion", "status"]),
+  universalSearchProjections: defineTable({
+    recordKey: v.string(),
+    newsSnapshotDate: v.optional(v.string()),
+    newsStoryId: v.optional(v.id("hnStories")),
+    type: v.union(
+      v.literal("evidence_document"),
+      v.literal("evidence_claim"),
+      v.literal("evidence_entity"),
+      v.literal("blog_post"),
+      v.literal("newsletter_issue"),
+      v.literal("news_story"),
+      v.literal("forum_thread"),
+    ),
+    canonicalUrl: v.string(),
+    title: v.string(),
+    excerpt: v.string(),
+    searchText: v.string(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+    citationCount: v.number(),
+    sourceId: v.optional(v.string()),
+    documentId: v.optional(v.string()),
+    documentVersionId: v.optional(v.string()),
+    claimId: v.optional(v.string()),
+    entityId: v.optional(v.string()),
+    citationIds: v.array(v.string()),
+  })
+    .index("by_recordKey", ["recordKey"])
+    .searchIndex("search_by_searchText", {
+      searchField: "searchText",
+      filterFields: ["type"],
+    }),
   evidenceSources: defineTable({
     sourceKey: v.string(),
     name: v.string(),
@@ -2744,8 +2813,40 @@ export default defineSchema({
   evidenceFirstPartyCheckpoints: defineTable({
     externalKey: v.string(),
     contentHash: v.string(),
+    exposure: v.optional(v.union(v.literal("public"), v.literal("private"))),
     completedAt: v.number(),
   }).index("by_externalKey", ["externalKey"]),
+  // Semantic forum changes enqueue one compact row. The generation prevents a
+  // worker from acknowledging a newer edit that arrived while it was running.
+  evidenceFirstPartySyncQueue: defineTable({
+    threadId: v.id("forumThreads"),
+    generation: v.number(),
+    reason: v.union(
+      v.literal("published"),
+      v.literal("content_changed"),
+      v.literal("visibility_changed"),
+      v.literal("category_changed"),
+      v.literal("quality_changed"),
+      v.literal("reconciliation"),
+    ),
+    enqueuedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_updatedAt", ["updatedAt"]),
+  // A cursor-backed safety pass covers records created before dirty tracking
+  // and catches orphaned evidence whose assessment was later removed.
+  evidenceFirstPartyReconciliationState: defineTable({
+    key: v.string(),
+    phase: v.union(
+      v.literal("assessments"),
+      v.literal("documents"),
+      v.literal("complete"),
+    ),
+    cursor: v.optional(v.string()),
+    completedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
   evidenceDocumentVersions: defineTable({
     documentId: v.id("evidenceDocuments"),
     version: v.number(),
@@ -3020,7 +3121,13 @@ export default defineSchema({
       "status",
       "updatedAt",
     ]),
+  evidencePublicationState: defineTable({
+    key: v.string(),
+    epoch: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
   evidenceDatasetVersions: defineTable({
+    publicationEpoch: v.optional(v.number()),
     datasetId: v.id("evidenceDatasets"),
     version: v.string(),
     checksum: v.string(),
@@ -3085,6 +3192,7 @@ export default defineSchema({
     .index("by_benchmarkId_and_executedAt", ["benchmarkId", "executedAt"])
     .index("by_runKey", ["runKey"]),
   evidenceResearchJobs: defineTable({
+    publicationEpoch: v.optional(v.number()),
     ownerUserId: v.id("users"),
     agentId: v.string(),
     requestKey: v.string(),
@@ -3127,6 +3235,7 @@ export default defineSchema({
       "expiresAt",
     ]),
   evidenceExportJobs: defineTable({
+    publicationEpoch: v.optional(v.number()),
     ownerUserId: v.id("users"),
     agentId: v.string(),
     datasetId: v.id("evidenceDatasets"),

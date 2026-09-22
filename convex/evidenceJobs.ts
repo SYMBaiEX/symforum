@@ -1,4 +1,13 @@
 import { ConvexError, v } from "convex/values";
+import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+  isPublicEvidenceEntity,
+} from "./evidenceVisibility";
+import {
+  isEvidencePublicationEpochCurrent,
+  readEvidencePublicationEpoch,
+} from "./evidencePublicationEpoch";
 import { makeFunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -33,8 +42,17 @@ const enqueueWebhookRef = makeFunctionReference<
 >("evidenceWebhooks:enqueueEvent");
 const readSourceExportPageRef = makeFunctionReference<
   "query",
-  { sourceId: Id<"evidenceSources">; snapshotAt: number; cursor: string | null; limit: number },
-  { documents: Doc<"evidenceDocuments">[]; isDone: boolean; continueCursor: string }
+  {
+    sourceId: Id<"evidenceSources">;
+    snapshotAt: number;
+    cursor: string | null;
+    limit: number;
+  },
+  {
+    documents: Doc<"evidenceDocuments">[];
+    isDone: boolean;
+    continueCursor: string;
+  }
 >("evidenceJobs:readSourceExportPage");
 
 const JOB_STATUS = v.union(
@@ -147,6 +165,7 @@ const EXPORTED_DOCUMENT = v.object({
   }),
 });
 const EXPORT_RECORDS = v.object({
+  publicationEpoch: v.number(),
   dataset: v.object({
     datasetKey: v.string(),
     name: v.string(),
@@ -199,9 +218,14 @@ function decodeExportCursor(
 ): ExportCursor | null {
   if (cursor === undefined) return null;
   if (cursor.length > MAX_EXPORT_CURSOR_LENGTH)
-    throw new ConvexError({ code: "INVALID_EXPORT_CURSOR", message: "Export cursor is too long." });
+    throw new ConvexError({
+      code: "INVALID_EXPORT_CURSOR",
+      message: "Export cursor is too long.",
+    });
   try {
-    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<ExportCursor | LegacyExportCursor>;
+    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<
+      ExportCursor | LegacyExportCursor
+    >;
     if (
       value.v === 1 &&
       value.datasetId === String(datasetId) &&
@@ -234,7 +258,9 @@ function decodeExportCursor(
     const validDoneSourceKeys =
       v2Value.doneSourceKeys === undefined ||
       (Array.isArray(v2Value.doneSourceKeys) &&
-        v2Value.doneSourceKeys.every((key: unknown) => typeof key === "string" && key.length > 0));
+        v2Value.doneSourceKeys.every(
+          (key: unknown) => typeof key === "string" && key.length > 0,
+        ));
     if (
       value.v !== 2 ||
       value.datasetId !== String(datasetId) ||
@@ -255,7 +281,8 @@ function decodeExportCursor(
   } catch {
     throw new ConvexError({
       code: "INVALID_EXPORT_CURSOR",
-      message: "Export cursor is invalid or does not match this dataset and selection strategy.",
+      message:
+        "Export cursor is invalid or does not match this dataset and selection strategy.",
     });
   }
 }
@@ -436,6 +463,7 @@ export const createResearchJob = internalMutation({
     }
     const now = Date.now();
     const jobId = await ctx.db.insert("evidenceResearchJobs", {
+      publicationEpoch: await readEvidencePublicationEpoch(ctx),
       ownerUserId: args.ownerUserId,
       agentId,
       requestKey: `${agentId}:research:${idempotencyKey}`,
@@ -485,7 +513,10 @@ export const createExportJob = internalMutation({
     const recordLimit = args.recordLimit ?? DEFAULT_EXPORT_LIMIT;
     const selectionStrategy = args.selectionStrategy ?? "balanced";
     if ((args.cursor?.length ?? 0) > MAX_EXPORT_CURSOR_LENGTH)
-      throw new ConvexError({ code: "INVALID_EXPORT_CURSOR", message: "Export cursor is too long." });
+      throw new ConvexError({
+        code: "INVALID_EXPORT_CURSOR",
+        message: "Export cursor is too long.",
+      });
     if (
       !Number.isSafeInteger(recordLimit) ||
       recordLimit < 1 ||
@@ -516,6 +547,7 @@ export const createExportJob = internalMutation({
     }
     const now = Date.now();
     const jobId = await ctx.db.insert("evidenceExportJobs", {
+      publicationEpoch: await readEvidencePublicationEpoch(ctx),
       ownerUserId: args.ownerUserId,
       agentId,
       datasetId: args.datasetId,
@@ -545,7 +577,9 @@ export const getResearchJob = internalQuery({
   returns: v.union(v.null(), RESEARCH_JOB_RESULT),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    return job !== null && job.ownerUserId === args.ownerUserId
+    return job !== null &&
+      job.ownerUserId === args.ownerUserId &&
+      (await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch))
       ? publicResearchJob(job)
       : null;
   },
@@ -556,7 +590,9 @@ export const getExportJob = internalQuery({
   returns: v.union(v.null(), EXPORT_JOB_RESULT),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    return job !== null && job.ownerUserId === args.ownerUserId
+    return job !== null &&
+      job.ownerUserId === args.ownerUserId &&
+      (await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch))
       ? publicExportJob(job)
       : null;
   },
@@ -586,6 +622,8 @@ export const getArtifact = internalQuery({
       job === null ||
       job.ownerUserId !== args.ownerUserId ||
       job.resultStorageId === undefined ||
+      job.status !== "completed" ||
+      !(await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch)) ||
       job.expiresAt <= Date.now()
     )
       return null;
@@ -647,6 +685,7 @@ export const resolveArtifactDownload = internalQuery({
       job.ownerUserId !== ownerUserId ||
       job.agentId !== identity.agentId ||
       job.status !== "completed" ||
+      !(await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch)) ||
       job.expiresAt <= Date.now()
     )
       return null;
@@ -682,7 +721,14 @@ export const resolveArtifactDownload = internalQuery({
             .eq("checksum", exportJob.checksum),
         )
         .unique();
-      if (version?.manifestStorageId === undefined) return null;
+      if (
+        version?.manifestStorageId === undefined ||
+        !(await isEvidencePublicationEpochCurrent(
+          ctx,
+          version.publicationEpoch,
+        ))
+      )
+        return null;
       const metadata = await ctx.db.system.get(
         "_storage",
         version.manifestStorageId,
@@ -770,6 +816,10 @@ export const resolveDatasetVersionDownload = internalQuery({
       dataset.status !== "active" ||
       dataset.visibility !== "public" ||
       version === null ||
+      !(await isEvidencePublicationEpochCurrent(
+        ctx,
+        version.publicationEpoch,
+      )) ||
       version.datasetId !== dataset._id
     )
       return null;
@@ -790,10 +840,13 @@ export const resolveDatasetVersionDownload = internalQuery({
         ? explicit.status === "active" &&
           explicit.startsAt <= now &&
           (explicit.expiresAt === undefined || explicit.expiresAt > now)
-        : product.unitPriceMicroUsd === undefined && product.visibility === "public";
+        : product.unitPriceMicroUsd === undefined &&
+          product.visibility === "public";
     if (!entitled) return null;
     const storageId =
-      args.kind === "manifest" ? version.manifestStorageId : version.artifactStorageId;
+      args.kind === "manifest"
+        ? version.manifestStorageId
+        : version.artifactStorageId;
     if (storageId === undefined) return null;
     const metadata = await ctx.db.system.get("_storage", storageId);
     if (metadata === null) return null;
@@ -829,7 +882,9 @@ export const readResearchInput = internalQuery({
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
     // Rolling-deploy guard: a token means the new workflow owns execution, so
     // an already-scheduled legacy action must stop before provider work.
-    return job === null || job.executionToken !== undefined
+    return job === null ||
+      job.executionToken !== undefined ||
+      !(await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch))
       ? null
       : { query: job.query, status: job.status };
   },
@@ -848,7 +903,9 @@ export const readExportInput = internalQuery({
   ),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    return job === null || job.executionToken !== undefined
+    return job === null ||
+      job.executionToken !== undefined ||
+      !(await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch))
       ? null
       : {
           datasetId: job.datasetId,
@@ -878,11 +935,18 @@ export const readSourceExportPage = internalQuery({
     const page = await ctx.db
       .query("evidenceDocuments")
       .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
-        q.eq("sourceId", args.sourceId).eq("visibility", "public").lte("updatedAt", args.snapshotAt),
+        q
+          .eq("sourceId", args.sourceId)
+          .eq("visibility", "public")
+          .lte("updatedAt", args.snapshotAt),
       )
       .order("desc")
       .paginate({ cursor: args.cursor, numItems: args.limit });
-    return { documents: page.page, isDone: page.isDone, continueCursor: page.continueCursor };
+    return {
+      documents: page.page,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 
@@ -890,7 +954,9 @@ export const readExportDocuments = internalQuery({
   args: {
     datasetId: v.id("evidenceDatasets"),
     limit: v.optional(v.number()),
-    selectionStrategy: v.optional(v.union(v.literal("balanced"), v.literal("recent"))),
+    selectionStrategy: v.optional(
+      v.union(v.literal("balanced"), v.literal("recent")),
+    ),
     cursor: v.optional(v.string()),
   },
   returns: EXPORT_RECORDS,
@@ -904,7 +970,11 @@ export const readExportDocuments = internalQuery({
       ),
     );
     const selectionStrategy = args.selectionStrategy ?? "balanced";
-    const parsedCursor = decodeExportCursor(args.cursor, dataset._id, selectionStrategy);
+    const parsedCursor = decodeExportCursor(
+      args.cursor,
+      dataset._id,
+      selectionStrategy,
+    );
     const snapshotAt = parsedCursor?.snapshotAt ?? Date.now();
     const includedKinds = dataset.includedKinds ?? [];
     const includedLicenseClasses = dataset.includedLicenseClasses ?? [
@@ -944,7 +1014,9 @@ export const readExportDocuments = internalQuery({
     const orderedSources = [...sources].sort((left, right) =>
       left.sourceKey.localeCompare(right.sourceKey),
     );
-    const sourceById = new Map(orderedSources.map((source) => [String(source._id), source]));
+    const sourceById = new Map(
+      orderedSources.map((source) => [String(source._id), source]),
+    );
     const cursorState = parsedCursor ?? {
       v: 2 as const,
       datasetId: String(dataset._id),
@@ -955,31 +1027,59 @@ export const readExportDocuments = internalQuery({
     let scannedRecordCount = 0;
     let selectionScanTruncated = false;
     let continueCursor: string | undefined;
-    let sourceScans: Array<{ source: (typeof orderedSources)[number]; documents: Doc<"evidenceDocuments">[] }> = [];
+    let sourceScans: Array<{
+      source: (typeof orderedSources)[number];
+      documents: Doc<"evidenceDocuments">[];
+    }> = [];
     if (selectionStrategy === "balanced") {
       const sourceCount = orderedSources.length;
-      const startOffset = sourceCount === 0
-        ? 0
-        : (cursorState.nextSourceOffset ?? 0) % sourceCount;
-      const rotatedActiveSources = Array.from({ length: sourceCount }, (_, offset) =>
-        orderedSources[(startOffset + offset) % sourceCount]!,
+      const startOffset =
+        sourceCount === 0
+          ? 0
+          : (cursorState.nextSourceOffset ?? 0) % sourceCount;
+      const rotatedActiveSources = Array.from(
+        { length: sourceCount },
+        (_, offset) => orderedSources[(startOffset + offset) % sourceCount]!,
       ).filter((source) => !doneSourceKeys.has(source.sourceKey));
-      const base = rotatedActiveSources.length === 0 ? 0 : Math.floor(limit / rotatedActiveSources.length);
-      const remainder = rotatedActiveSources.length === 0 ? 0 : limit % rotatedActiveSources.length;
+      const base =
+        rotatedActiveSources.length === 0
+          ? 0
+          : Math.floor(limit / rotatedActiveSources.length);
+      const remainder =
+        rotatedActiveSources.length === 0
+          ? 0
+          : limit % rotatedActiveSources.length;
       const pages = await Promise.all(
         rotatedActiveSources.map(async (source, index) => {
-          const requested = Math.min(MAX_EXPORT_SCAN, base + (index < remainder ? 1 : 0));
-          if (requested === 0) return { source, page: null, requested };
-          const page: { documents: Doc<"evidenceDocuments">[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
-            readSourceExportPageRef,
-            { sourceId: source._id, snapshotAt, cursor: cursorState.sourceCursors?.[source.sourceKey] ?? null, limit: requested },
+          const requested = Math.min(
+            MAX_EXPORT_SCAN,
+            base + (index < remainder ? 1 : 0),
           );
+          if (requested === 0) return { source, page: null, requested };
+          const page: {
+            documents: Doc<"evidenceDocuments">[];
+            isDone: boolean;
+            continueCursor: string;
+          } = await ctx.runQuery(readSourceExportPageRef, {
+            sourceId: source._id,
+            snapshotAt,
+            cursor: cursorState.sourceCursors?.[source.sourceKey] ?? null,
+            limit: requested,
+          });
           return { source, page, requested };
         }),
       );
-      sourceScans = pages.flatMap(({ source, page }) => page === null ? [] : [{ source, documents: page.documents }]);
-      scannedRecordCount = pages.reduce((total, entry) => total + (entry.page?.documents.length ?? 0), 0);
-      selectionScanTruncated = pages.some(({ page, requested }) => page !== null && page.documents.length === requested && !page.isDone);
+      sourceScans = pages.flatMap(({ source, page }) =>
+        page === null ? [] : [{ source, documents: page.documents }],
+      );
+      scannedRecordCount = pages.reduce(
+        (total, entry) => total + (entry.page?.documents.length ?? 0),
+        0,
+      );
+      selectionScanTruncated = pages.some(
+        ({ page, requested }) =>
+          page !== null && page.documents.length === requested && !page.isDone,
+      );
       const nextSourceCursors: Record<string, string | null> = {
         ...(cursorState.sourceCursors ?? {}),
       };
@@ -988,8 +1088,8 @@ export const readExportDocuments = internalQuery({
         if (entry.page.isDone) {
           doneSourceKeys.add(entry.source.sourceKey);
           delete nextSourceCursors[entry.source.sourceKey];
-        }
-        else nextSourceCursors[entry.source.sourceKey] = entry.page.continueCursor;
+        } else
+          nextSourceCursors[entry.source.sourceKey] = entry.page.continueCursor;
       }
       if (doneSourceKeys.size < orderedSources.length)
         // Advance from the final source that was allotted a row, even if that
@@ -1003,10 +1103,14 @@ export const readExportDocuments = internalQuery({
             sourceCount === 0 || rotatedActiveSources.length === 0
               ? 0
               : (orderedSources.findIndex(
-                    (source) =>
-                      source.sourceKey ===
-                      rotatedActiveSources[Math.min(rotatedActiveSources.length, limit) - 1]?.sourceKey,
-                  ) + 1) % sourceCount,
+                  (source) =>
+                    source.sourceKey ===
+                    rotatedActiveSources[
+                      Math.min(rotatedActiveSources.length, limit) - 1
+                    ]?.sourceKey,
+                ) +
+                  1) %
+                sourceCount,
           recentCursor: undefined,
         });
     } else {
@@ -1015,9 +1119,14 @@ export const readExportDocuments = internalQuery({
       // is advanced past without being represented in this response.
       const page = await ctx.db
         .query("evidenceDocuments")
-        .withIndex("by_visibility_and_updatedAt", (q) => q.eq("visibility", "public").lte("updatedAt", snapshotAt))
+        .withIndex("by_visibility_and_updatedAt", (q) =>
+          q.eq("visibility", "public").lte("updatedAt", snapshotAt),
+        )
         .order("desc")
-        .paginate({ cursor: cursorState.recentCursor ?? null, numItems: Math.min(MAX_EXPORT_SCAN, limit) });
+        .paginate({
+          cursor: cursorState.recentCursor ?? null,
+          numItems: Math.min(MAX_EXPORT_SCAN, limit),
+        });
       sourceScans = page.page.flatMap((document) => {
         const source = sourceById.get(String(document.sourceId));
         return source === undefined ? [] : [{ source, documents: [document] }];
@@ -1042,20 +1151,28 @@ export const readExportDocuments = internalQuery({
       ),
     }));
     const recent = eligibleBySource
-      .flatMap(({ source, documents }) => documents.map((document) => ({ document, source })))
+      .flatMap(({ source, documents }) =>
+        documents.map((document) => ({ document, source })),
+      )
       .sort(
         (left, right) =>
           right.document.updatedAt - left.document.updatedAt ||
           String(left.document._id).localeCompare(String(right.document._id)),
       );
     const balanced: typeof recent = [];
-    const maximumBucket = Math.max(0, ...eligibleBySource.map(({ documents }) => documents.length));
+    const maximumBucket = Math.max(
+      0,
+      ...eligibleBySource.map(({ documents }) => documents.length),
+    );
     for (let index = 0; index < maximumBucket; index += 1)
       for (const bucket of eligibleBySource) {
         const document = bucket.documents[index];
-        if (document !== undefined) balanced.push({ document, source: bucket.source });
+        if (document !== undefined)
+          balanced.push({ document, source: bucket.source });
       }
-    const selected = (selectionStrategy === "balanced" ? balanced : recent).slice(0, limit);
+    const selected = (
+      selectionStrategy === "balanced" ? balanced : recent
+    ).slice(0, limit);
     const records: Array<{
       schemaVersion: string;
       datasetKey: string;
@@ -1117,6 +1234,7 @@ export const readExportDocuments = internalQuery({
     }> = [];
     for (const candidate of selected) {
       const { document, source } = candidate;
+      if (!(await isPublicEvidenceDocument(ctx, document))) continue;
       const version =
         document.currentVersionId === null
           ? null
@@ -1150,7 +1268,8 @@ export const readExportDocuments = internalQuery({
         await Promise.all(
           entityLinks.map(async (link) => {
             const entity = await ctx.db.get("evidenceEntities", link.entityId);
-            return entity === null || entity.visibility !== "public"
+            return entity === null ||
+              !(await isPublicEvidenceEntity(ctx, entity))
               ? null
               : {
                   entityKey: entity.entityKey,
@@ -1166,7 +1285,7 @@ export const readExportDocuments = internalQuery({
         await Promise.all(
           boundedCitations.map(async (citation) => {
             const claim = await ctx.db.get("evidenceClaims", citation.claimId);
-            return claim === null || claim.visibility !== "public"
+            return claim === null || !(await isPublicEvidenceClaim(ctx, claim))
               ? null
               : {
                   claimKey: claim.claimKey,
@@ -1247,6 +1366,7 @@ export const readExportDocuments = internalQuery({
         exportSchemaVersion:
           dataset.exportSchemaVersion ?? "symbaiex-evidence-document-v3",
       },
+      publicationEpoch: await readEvidencePublicationEpoch(ctx),
       scannedRecordCount,
       selectionScanTruncated,
       selectionStrategy,
@@ -1329,7 +1449,10 @@ export const diffDatasetVersions = internalQuery({
     const current = await ctx.db.get("evidenceDatasetVersions", args.versionId);
     if (current === null || current.datasetId !== args.datasetId) return null;
     const previousId = args.againstVersionId ?? current.parentVersionId;
-    const previous = previousId === undefined ? null : await ctx.db.get("evidenceDatasetVersions", previousId);
+    const previous =
+      previousId === undefined
+        ? null
+        : await ctx.db.get("evidenceDatasetVersions", previousId);
     if (previous !== null && previous.datasetId !== args.datasetId) return null;
     const left = publicDatasetVersion(current);
     const right = previous === null ? null : publicDatasetVersion(previous);
@@ -1338,11 +1461,16 @@ export const diffDatasetVersions = internalQuery({
       previous: right,
       delta: {
         records: left.recordCount - (right?.recordCount ?? 0),
-        artifactBytes: left.artifactByteLength - (right?.artifactByteLength ?? 0),
-        sourceCoverage: left.sourceCoverageScore - (right?.sourceCoverageScore ?? 0),
-        citationCoverage: left.citationCoverageScore - (right?.citationCoverageScore ?? 0),
-        entityCoverage: left.entityCoverageScore - (right?.entityCoverageScore ?? 0),
-        claimCoverage: left.claimCoverageScore - (right?.claimCoverageScore ?? 0),
+        artifactBytes:
+          left.artifactByteLength - (right?.artifactByteLength ?? 0),
+        sourceCoverage:
+          left.sourceCoverageScore - (right?.sourceCoverageScore ?? 0),
+        citationCoverage:
+          left.citationCoverageScore - (right?.citationCoverageScore ?? 0),
+        entityCoverage:
+          left.entityCoverageScore - (right?.entityCoverageScore ?? 0),
+        claimCoverage:
+          left.claimCoverageScore - (right?.claimCoverageScore ?? 0),
       },
     };
   },
@@ -1351,6 +1479,7 @@ export const diffDatasetVersions = internalQuery({
 /** Records a code-owned immutable snapshot without impersonating an enrolled agent. */
 export const recordSystemDatasetSnapshot = internalMutation({
   args: {
+    publicationEpoch: v.optional(v.number()),
     datasetId: v.id("evidenceDatasets"),
     checksum: v.string(),
     recordCount: v.number(),
@@ -1386,6 +1515,15 @@ export const recordSystemDatasetSnapshot = internalMutation({
   }),
   handler: async (ctx, args) => {
     await ownedDataset(ctx, args.datasetId);
+    if (
+      !(await isEvidencePublicationEpochCurrent(ctx, args.publicationEpoch))
+    ) {
+      throw new ConvexError({
+        code: "EVIDENCE_PUBLICATION_CHANGED",
+        message:
+          "Evidence publication policy changed during snapshot generation. Regenerate the snapshot.",
+      });
+    }
     const existing = await ctx.db
       .query("evidenceDatasetVersions")
       .withIndex("by_datasetId_and_checksum", (q) =>
@@ -1393,7 +1531,16 @@ export const recordSystemDatasetSnapshot = internalMutation({
       )
       .unique();
     if (existing !== null) {
+      const refreshed =
+        (existing.publicationEpoch ?? 0) !== (args.publicationEpoch ?? 0);
       await ctx.db.patch("evidenceDatasetVersions", existing._id, {
+        ...(refreshed
+          ? {
+              publicationEpoch: args.publicationEpoch ?? 0,
+              manifestStorageId: args.manifestStorageId,
+              artifactStorageId: args.artifactStorageId,
+            }
+          : {}),
         schemaVersion: args.schemaVersion,
         artifactByteLength: args.artifactByteLength,
         sourceCount: args.sourceCount,
@@ -1416,7 +1563,7 @@ export const recordSystemDatasetSnapshot = internalMutation({
         selectionScanTruncated: args.selectionScanTruncated ?? false,
         continueCursor: args.continueCursor,
       });
-      return { versionId: existing._id, created: false };
+      return { versionId: existing._id, created: refreshed };
     }
     const createdAt = Date.now();
     const parentVersion = await ctx.db
@@ -1428,6 +1575,7 @@ export const recordSystemDatasetSnapshot = internalMutation({
       .first();
     const versionId = await ctx.db.insert("evidenceDatasetVersions", {
       ...args,
+      publicationEpoch: args.publicationEpoch ?? 0,
       version: new Date(createdAt).toISOString(),
       format: "jsonl",
       parentVersionId: parentVersion?._id,
@@ -1443,7 +1591,11 @@ export const markResearchRunning = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    if (job !== null && job.status === "queued")
+    if (
+      job !== null &&
+      job.status === "queued" &&
+      (await publicationStillCurrent(ctx, job, "evidenceResearchJobs"))
+    )
       await ctx.db.patch("evidenceResearchJobs", job._id, {
         status: "running",
         updatedAt: Date.now(),
@@ -1456,7 +1608,11 @@ export const markExportRunning = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    if (job !== null && job.status === "queued")
+    if (
+      job !== null &&
+      job.status === "queued" &&
+      (await publicationStillCurrent(ctx, job, "evidenceExportJobs"))
+    )
       await ctx.db.patch("evidenceExportJobs", job._id, {
         status: "running",
         updatedAt: Date.now(),
@@ -1486,6 +1642,8 @@ export const claimResearchExecution = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
     if (job === null) return null;
+    if (!(await publicationStillCurrent(ctx, job, "evidenceResearchJobs")))
+      return null;
     const now = Date.now();
     if (job.status === "queued") {
       const executionToken = crypto.randomUUID();
@@ -1520,6 +1678,8 @@ export const claimExportExecution = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
     if (job === null) return null;
+    if (!(await publicationStillCurrent(ctx, job, "evidenceExportJobs")))
+      return null;
     const now = Date.now();
     if (job.status === "queued") {
       const executionToken = crypto.randomUUID();
@@ -1563,6 +1723,7 @@ export const beginResearchExecution = internalMutation({
       job === null ||
       job.status !== "running" ||
       job.executionToken !== args.executionToken ||
+      !(await publicationStillCurrent(ctx, job, "evidenceResearchJobs")) ||
       job.externalWorkStartedAt !== undefined
     )
       return null;
@@ -1595,6 +1756,7 @@ export const beginExportExecution = internalMutation({
       job === null ||
       job.status !== "running" ||
       job.executionToken !== args.executionToken ||
+      !(await publicationStillCurrent(ctx, job, "evidenceExportJobs")) ||
       job.externalWorkStartedAt !== undefined
     )
       return null;
@@ -1624,6 +1786,25 @@ function ownsExecution(
     : job.executionToken === executionToken;
 }
 
+/** A publication change fences in-flight external work without publishing its bytes. */
+async function publicationStillCurrent(
+  ctx: MutationCtx,
+  job: Doc<"evidenceResearchJobs"> | Doc<"evidenceExportJobs">,
+  table: "evidenceResearchJobs" | "evidenceExportJobs",
+) {
+  if (await isEvidencePublicationEpochCurrent(ctx, job.publicationEpoch))
+    return true;
+  if (job.status === "queued" || job.status === "running") {
+    await ctx.db.patch(table, job._id, {
+      status: "failed",
+      errorMessage:
+        "Evidence publication policy changed. Create a new job to regenerate this result.",
+      updatedAt: Date.now(),
+    });
+  }
+  return false;
+}
+
 export const completeResearchJob = internalMutation({
   args: {
     jobId: v.id("evidenceResearchJobs"),
@@ -1637,7 +1818,11 @@ export const completeResearchJob = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceResearchJobs", args.jobId);
-    if (job !== null && ownsExecution(job, args.executionToken)) {
+    if (
+      job !== null &&
+      ownsExecution(job, args.executionToken) &&
+      (await publicationStillCurrent(ctx, job, "evidenceResearchJobs"))
+    ) {
       await ctx.db.patch("evidenceResearchJobs", job._id, {
         status: "completed",
         resultJson: args.resultJson.slice(0, 100_000),
@@ -1728,7 +1913,11 @@ export const completeExportJob = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("evidenceExportJobs", args.jobId);
-    if (job !== null && ownsExecution(job, args.executionToken)) {
+    if (
+      job !== null &&
+      ownsExecution(job, args.executionToken) &&
+      (await publicationStillCurrent(ctx, job, "evidenceExportJobs"))
+    ) {
       await ctx.db.patch("evidenceExportJobs", job._id, {
         status: "completed",
         resultJson: args.resultJson.slice(0, 20_000),
@@ -1775,7 +1964,9 @@ export const completeExportJob = internalMutation({
       ) {
         const product = await ctx.db
           .query("apiProducts")
-          .withIndex("by_productKey", (q) => q.eq("productKey", "evidence-export"))
+          .withIndex("by_productKey", (q) =>
+            q.eq("productKey", "evidence-export"),
+          )
           .unique();
         await ctx.db.insert("apiUsageLedger", {
           entryKey: artifactUsageKey,
@@ -1819,6 +2010,7 @@ export const completeExportJob = internalMutation({
           "evidenceDatasetVersions",
           {
             datasetId: job.datasetId,
+            publicationEpoch: job.publicationEpoch ?? 0,
             version,
             checksum: args.checksum,
             recordCount: Math.max(
@@ -1901,6 +2093,16 @@ export const completeExportJob = internalMutation({
             ),
           occurredAt: Date.now(),
           createdAt: Date.now(),
+        });
+      } else if (
+        (existingVersion.publicationEpoch ?? 0) !== (job.publicationEpoch ?? 0)
+      ) {
+        // Identical bytes were regenerated under the current publication policy.
+        // Replace the manifest too; the old manifest may contain revoked metadata.
+        await ctx.db.patch("evidenceDatasetVersions", existingVersion._id, {
+          publicationEpoch: job.publicationEpoch ?? 0,
+          manifestStorageId: args.datasetManifestStorageId,
+          artifactStorageId: args.resultStorageId,
         });
       } else {
         // The canonical snapshot already owns a manifest. This newly generated
@@ -2132,7 +2334,10 @@ export const cleanupDatasetVersions = internalMutation({
         .take(100);
       for (const version of versions.slice(minimum)) {
         if (deletedVersions >= limit || version.createdAt >= cutoff) continue;
-        for (const storageId of [version.manifestStorageId, version.artifactStorageId]) {
+        for (const storageId of [
+          version.manifestStorageId,
+          version.artifactStorageId,
+        ]) {
           if (
             storageId !== undefined &&
             (await ctx.db.system.get("_storage", storageId)) !== null

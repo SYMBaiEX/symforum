@@ -225,6 +225,28 @@ afterEach(() => {
 });
 
 describe("authenticated semantic search transport", () => {
+  test("revalidates completed replay after source privacy changes without another provider call", async () => {
+    vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    expect(await agent.action(dispatch, args())).not.toEqual([]);
+    await t.run(async (ctx) => {
+      const source = (await ctx.db.query("evidenceSources").collect())[0]!;
+      await ctx.db.patch("evidenceSources", source._id, {
+        visibility: "private",
+      });
+    });
+    expect(await agent.action(dispatch, args())).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      await t.run(
+        async (ctx) => await ctx.db.query("agentQuotaUsage").collect(),
+      ),
+    ).toHaveLength(1);
+  });
+
   test("returns lexical fallback and replays without another debit or provider call", async () => {
     vi.stubEnv("SEMANTIC_SEARCH_ENABLED", "false");
     const fetchMock = vi.spyOn(globalThis, "fetch");

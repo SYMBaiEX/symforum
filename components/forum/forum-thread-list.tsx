@@ -33,10 +33,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 
 const ForumCompose = dynamic(
   () =>
@@ -118,6 +118,7 @@ export function ForumThreadList({
 }
 
 function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
+  const convex = useConvex();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -184,24 +185,13 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   const [error, setError] = useState("");
   const [boardActionError, setBoardActionError] = useState("");
   const [authAction, setAuthAction] = useState("post to the forum");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setDebouncedSearchQuery(searchQuery.trim()),
-      450,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [searchQuery]);
-  const searchArgs =
-    debouncedSearchQuery.length >= 3
-      ? {
-          query: debouncedSearchQuery,
-          categorySlug,
-          resultType: "threads" as const,
-          pageSize: 12,
-        }
-      : "skip";
-  const searchResult = useQuery(forumRefs.search, searchArgs);
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
+  const [submittedSearchScope, setSubmittedSearchScope] = useState("");
+  const [searchResult, setSearchResult] = useState<ForumSearchRecord>();
+  const [searchPending, setSearchPending] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const searchRequestId = useRef(0);
+  const searchScope = `${categorySlug}:${isAuthenticated ? "signed-in" : "guest"}`;
   const authRedirectTo = useMemo(
     () =>
       currentForumRedirectTo(pathname, searchParams, forumPath(categorySlug)),
@@ -219,6 +209,58 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
 
   const viewerCanCreatePoll =
     listResult?.category?.viewerCanCreatePoll === true;
+
+  async function submitBoardSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (query.length < 3) {
+      setSearchError("Use at least three characters to search this board.");
+      return;
+    }
+    const requestId = searchRequestId.current + 1;
+    searchRequestId.current = requestId;
+    setSubmittedSearchQuery(query);
+    setSubmittedSearchScope(searchScope);
+    setSearchResult(undefined);
+    setSearchPending(true);
+    setSearchError("");
+    try {
+      const result = await convex.query(forumRefs.search, {
+        query,
+        categorySlug,
+        resultType: "threads",
+        pageSize: 12,
+      });
+      if (searchRequestId.current === requestId) {
+        setSearchResult(result);
+      }
+    } catch (caught) {
+      if (searchRequestId.current !== requestId) return;
+      reportAppError(caught, {
+        scope: "forum",
+        eventType: "category_search_failed",
+        component: "ForumThreadList",
+        action: "forum:search",
+        metadata: { categorySlug },
+        notify: false,
+      });
+      setSearchError(userFacingError(caught, "Could not search this board"));
+    } finally {
+      if (searchRequestId.current === requestId) {
+        setSearchPending(false);
+      }
+    }
+  }
+
+  function clearBoardSearch() {
+    searchRequestId.current += 1;
+    setSearchQuery("");
+    setSubmittedSearchQuery("");
+    setSubmittedSearchScope("");
+    setSearchResult(undefined);
+    setSearchPending(false);
+    setSearchError("");
+  }
 
   async function submitThread() {
     if (!isAuthenticated) {
@@ -376,7 +418,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       params.set("prefix", value);
     }
     const query = params.toString();
-      router.push(asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`));
+    router.push(
+      asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`),
+    );
   }
 
   function updateBoardListParam(
@@ -392,7 +436,9 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       params.set(key, value);
     }
     const query = params.toString();
-      router.push(asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`));
+    router.push(
+      asRoute(`${forumPath(categorySlug)}${query ? `?${query}` : ""}`),
+    );
   }
 
   function resetBoardView() {
@@ -517,16 +563,35 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
       <section>
         <div className="min-w-0 space-y-3">
           <div className="grid gap-2 border-y border-row-border py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">Search this board</span>
-              <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search this board"
-                className="h-10 rounded-none border-row-border font-mono text-xs uppercase lg:h-8"
-                aria-label="Search this board"
-              />
-            </label>
+            <form
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto]"
+              onSubmit={submitBoardSearch}
+              role="search"
+            >
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">Search this board</span>
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search this board"
+                  className="h-10 rounded-none border-row-border font-mono text-xs uppercase lg:h-8"
+                  aria-label="Search this board"
+                />
+              </label>
+              <Button
+                className="min-h-10 rounded-none border-l-0 font-mono text-[10px] uppercase lg:min-h-8"
+                type="submit"
+                variant="outline"
+                disabled={
+                  (searchPending && submittedSearchScope === searchScope) ||
+                  searchQuery.trim().length < 3
+                }
+              >
+                {searchPending && submittedSearchScope === searchScope
+                  ? "Searching..."
+                  : "Search"}
+              </Button>
+            </form>
             <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
               <Button
                 className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
@@ -629,11 +694,19 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
             />
           ) : null}
 
-          {debouncedSearchQuery.length >= 3 ? (
+          {searchError && submittedSearchScope === searchScope ? (
+            <ForumStatusBox title="Search unavailable" body={searchError} />
+          ) : null}
+
+          {submittedSearchScope === searchScope &&
+          submittedSearchQuery.length >= 3 &&
+          !searchError ? (
             <ForumSearchResults
               categorySlug={category.slug}
-              query={debouncedSearchQuery}
+              query={submittedSearchQuery}
               searchResult={searchResult}
+              pending={searchPending}
+              onClear={clearBoardSearch}
             />
           ) : null}
 
@@ -1244,12 +1317,16 @@ function ForumSearchResults({
   categorySlug,
   query,
   searchResult,
+  pending,
+  onClear,
 }: {
   categorySlug: string;
   query: string;
   searchResult: ForumSearchRecord | undefined;
+  pending: boolean;
+  onClear: () => void;
 }) {
-  if (searchResult === undefined) {
+  if (pending || searchResult === undefined) {
     return <ForumLoading label={`Searching ${query}`} />;
   }
 
@@ -1259,7 +1336,12 @@ function ForumSearchResults({
     return (
       <ForumStatusBox
         title="Search"
-        body={`No public matches for “${query}” in this board.`}
+        body={`No visible matches for “${query}” in this board.`}
+        action={
+          <Button type="button" variant="outline" onClick={onClear}>
+            Clear search
+          </Button>
+        }
       />
     );
   }
@@ -1267,9 +1349,19 @@ function ForumSearchResults({
   return (
     <section className="border border-row-border">
       <div className="border-b border-row-border px-4 py-3">
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          Search
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            Search
+          </p>
+          <Button
+            className="h-7 rounded-none font-mono text-[10px] uppercase"
+            onClick={onClear}
+            type="button"
+            variant="ghost"
+          >
+            Clear
+          </Button>
+        </div>
         <h2 className="mt-2 text-xl font-semibold">Matches for “{query}”</h2>
       </div>
       <div className="divide-y divide-row-border">

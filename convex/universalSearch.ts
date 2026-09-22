@@ -1,7 +1,17 @@
 import { v } from "convex/values";
+import {
+  isIndependentPublicEvidenceEntity,
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+  isPublicEvidenceEntity,
+} from "./evidenceVisibility";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, type QueryCtx } from "./_generated/server";
 import { FORUM_SEARCH_PROJECTION_BACKFILL_KEY } from "./forumSearchProjection";
+import {
+  searchUniversalSearchProjections,
+  universalSearchProjectionReady,
+} from "./universalSearchProjection";
 
 const PRIMARY_ORIGIN = "https://www.symbaiex.com";
 const FORUM_ORIGIN = "https://forum.symbaiex.com";
@@ -108,17 +118,29 @@ export const searchPublic = internalQuery({
     // Capture the clock once so recency ranking is deterministic within a
     // response. Scores can legitimately differ on a later request.
     const rankingNow = Date.now();
-    const candidates = (
-      await Promise.all([
-        evidenceCandidates(ctx, query),
-        entityCandidates(ctx),
-        claimCandidates(ctx),
-        postCandidates(ctx),
-        newsletterCandidates(ctx),
-        newsCandidates(ctx),
-        forumCandidates(ctx, query),
-      ])
-    ).flat();
+    const candidates: Candidate[] = (await universalSearchProjectionReady(ctx))
+      ? (
+          await Promise.all(
+            (
+              await searchUniversalSearchProjections(
+                ctx,
+                query.normalized,
+                Math.min(100, Math.max(SOURCE_CANDIDATE_LIMIT, limit * 4)),
+              )
+            ).map((row) => validatedProjectedCandidate(ctx, row)),
+          )
+        ).filter((candidate): candidate is Candidate => candidate !== null)
+      : (
+          await Promise.all([
+            evidenceCandidates(ctx, query),
+            entityCandidates(ctx),
+            claimCandidates(ctx),
+            postCandidates(ctx),
+            newsletterCandidates(ctx),
+            newsCandidates(ctx),
+            forumCandidates(ctx, query),
+          ])
+        ).flat();
 
     return candidates
       .map((candidate) => rankCandidate(candidate, query, rankingNow))
@@ -127,6 +149,118 @@ export const searchPublic = internalQuery({
       .slice(0, limit);
   },
 });
+
+async function validatedProjectedCandidate(
+  ctx: QueryCtx,
+  row: Doc<"universalSearchProjections">,
+): Promise<Candidate | null> {
+  if (row.type === "news_story") {
+    if (row.newsSnapshotDate === undefined || row.newsStoryId === undefined)
+      return null;
+    const story = await ctx.db.get("hnStories", row.newsStoryId);
+    if (
+      story === null ||
+      story.snapshotDate !== row.newsSnapshotDate ||
+      story.fetchedAt !== row.updatedAt ||
+      row.recordKey !== `news_story:${story.hnItemId}`
+    )
+      return null;
+    const snapshot = await ctx.db
+      .query("newsSnapshots")
+      .withIndex("by_snapshotDate", (q) =>
+        q.eq("snapshotDate", row.newsSnapshotDate!),
+      )
+      .first();
+    if (snapshot?.status !== "complete" || snapshot.storyCount === 0)
+      return null;
+  }
+  if (row.type === "evidence_document") {
+    const id = ctx.db.normalizeId("evidenceDocuments", row.documentId ?? "");
+    const document =
+      id === null ? null : await ctx.db.get("evidenceDocuments", id);
+    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
+      return null;
+    const source = await ctx.db.get("evidenceSources", document.sourceId);
+    if (
+      !isCurrentPublicSource(source) ||
+      document.sourceId !== row.sourceId ||
+      document.currentVersionId !== (row.documentVersionId ?? null) ||
+      document.updatedAt !== row.updatedAt ||
+      safeCanonicalUrl(document.canonicalUrl) === null
+    )
+      return null;
+  } else if (row.type === "evidence_claim") {
+    const id = ctx.db.normalizeId("evidenceClaims", row.claimId ?? "");
+    const claim = id === null ? null : await ctx.db.get("evidenceClaims", id);
+    if (claim === null) return null;
+    return await claimCandidate(ctx, claim);
+  } else if (row.type === "evidence_entity") {
+    const id = ctx.db.normalizeId("evidenceEntities", row.entityId ?? "");
+    const entity =
+      id === null ? null : await ctx.db.get("evidenceEntities", id);
+    if (
+      entity === null ||
+      entity.visibility !== "public" ||
+      entity.updatedAt !== row.updatedAt
+    )
+      return null;
+    if (isIndependentPublicEvidenceEntity(entity)) {
+      if (!(await isPublicEvidenceEntity(ctx, entity))) return null;
+    } else {
+      const documentId = ctx.db.normalizeId(
+        "evidenceDocuments",
+        row.documentId ?? "",
+      );
+      const versionId = ctx.db.normalizeId(
+        "evidenceDocumentVersions",
+        row.documentVersionId ?? "",
+      );
+      if (documentId === null || versionId === null) return null;
+      const [document, link] = await Promise.all([
+        ctx.db.get("evidenceDocuments", documentId),
+        ctx.db
+          .query("evidenceDocumentEntities")
+          .withIndex("by_documentVersionId_and_entityId", (q) =>
+            q.eq("documentVersionId", versionId).eq("entityId", entity._id),
+          )
+          .unique(),
+      ]);
+      if (
+        link === null ||
+        document?.currentVersionId !== versionId ||
+        !(await isPublicEvidenceDocument(ctx, document))
+      ) {
+        return null;
+      }
+    }
+  }
+  return projectedCandidate(row);
+}
+
+function projectedCandidate(row: Doc<"universalSearchProjections">): Candidate {
+  return {
+    type: row.type,
+    canonicalUrl: row.canonicalUrl,
+    title: row.title,
+    excerpt: row.excerpt,
+    visibility: "public",
+    updatedAt: row.updatedAt,
+    publishedAt: row.publishedAt ?? null,
+    searchable: row.searchText,
+    citationCount: row.citationCount,
+    provenance: {
+      recordId: row.recordKey.slice(row.type.length + 1),
+      ...(row.sourceId === undefined ? {} : { sourceId: row.sourceId }),
+      ...(row.documentId === undefined ? {} : { documentId: row.documentId }),
+      ...(row.documentVersionId === undefined
+        ? {}
+        : { documentVersionId: row.documentVersionId }),
+      ...(row.claimId === undefined ? {} : { claimId: row.claimId }),
+      ...(row.entityId === undefined ? {} : { entityId: row.entityId }),
+      citationIds: row.citationIds,
+    },
+  };
+}
 
 function normalizeQuery(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
@@ -169,7 +303,11 @@ async function evidenceCandidates(
         // A mutable document is public only while its source is both public
         // and active. Do not return a stale record from a retired/private
         // source even when the document's denormalized visibility is public.
-        if (!isCurrentPublicSource(source) || canonicalUrl === null)
+        if (
+          !(await isPublicEvidenceDocument(ctx, row)) ||
+          !isCurrentPublicSource(source) ||
+          canonicalUrl === null
+        )
           return null;
         return {
           type: "evidence_document",
@@ -204,7 +342,14 @@ async function entityCandidates(ctx: QueryCtx): Promise<Candidate[]> {
     )
     .order("desc")
     .take(SOURCE_CANDIDATE_LIMIT);
-  return rows.map((row) => ({
+  const publicRows = (
+    await Promise.all(
+      rows.map(async (row) =>
+        (await isPublicEvidenceEntity(ctx, row)) ? row : null,
+      ),
+    )
+  ).filter((row) => row !== null);
+  return publicRows.map((row) => ({
     type: "evidence_entity",
     canonicalUrl: `${PRIMARY_ORIGIN}/research`,
     title: row.name,
@@ -244,6 +389,7 @@ async function claimCandidate(
   ctx: QueryCtx,
   row: Doc<"evidenceClaims">,
 ): Promise<Candidate | null> {
+  if (!(await isPublicEvidenceClaim(ctx, row))) return null;
   const citations = await ctx.db
     .query("evidenceClaimCitations")
     .withIndex("by_claimId", (q) => q.eq("claimId", row._id))
@@ -261,7 +407,8 @@ async function claimCandidate(
     );
     if (version === null) continue;
     const document = await ctx.db.get("evidenceDocuments", version.documentId);
-    if (document?.visibility !== "public") continue;
+    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
+      continue;
     const source = await ctx.db.get("evidenceSources", document.sourceId);
     if (!isCurrentPublicSource(source)) continue;
     if (safeCanonicalUrl(document.canonicalUrl) === null) continue;

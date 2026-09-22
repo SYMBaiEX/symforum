@@ -31,6 +31,8 @@ import {
   syncForumPostSearchProjection,
   syncForumThreadSearchProjection,
 } from "./forumSearchProjection";
+import { requestUniversalSearchProjectionRebuild } from "./universalSearchProjection";
+import { bumpEvidencePublicationEpoch } from "./evidencePublicationEpoch";
 import { NYX_PROFILE } from "./nyxProfile";
 import {
   invalidateResearchQualityForThread,
@@ -1038,13 +1040,54 @@ export const routeStatus = query({
       return { exists: false, kind: "missing" as const };
     }
 
-    const thread = await ctx.db
+    const compactThread = await ctx.db
+      .query("forumThreadSearchProjections")
+      .withIndex("by_categorySlug_and_slug", (q) =>
+        q.eq("categorySlug", category.slug).eq("slug", threadSlug),
+      )
+      .unique();
+    if (compactThread !== null) {
+      if (
+        compactThread.categoryId !== category._id ||
+        !isVisibleThreadStatus(compactThread.status)
+      ) {
+        return { exists: false, kind: "missing" as const };
+      }
+      return {
+        exists: true,
+        kind: "thread" as const,
+        categorySlug: category.slug,
+        categoryName: category.name,
+        categoryDescription: category.description,
+        threadSlug: compactThread.slug,
+        threadTitle: compactThread.title,
+        threadExcerpt: forumThreadExcerpt(compactThread.excerpt),
+        createdAt: compactThread.createdAt,
+        updatedAt: compactThread.updatedAt,
+        lastPostAt: compactThread.lastPostAt,
+      };
+    }
+
+    const projectionBackfill = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) =>
+        q.eq("key", FORUM_SEARCH_PROJECTION_BACKFILL_KEY),
+      )
+      .unique();
+    if ((projectionBackfill?.completedAt ?? 0) > 0) {
+      return { exists: false, kind: "missing" as const };
+    }
+
+    // During a new deployment's resumable projection backfill, keep routes
+    // available from the legacy source. Once complete, absence from the compact
+    // table is authoritative and this large-body read is skipped entirely.
+    const legacyThread = await ctx.db
       .query("forumThreads")
       .withIndex("by_categorySlug_and_slug", (q) =>
         q.eq("categorySlug", category.slug).eq("slug", threadSlug),
       )
       .unique();
-    if (thread === null || !isVisibleThreadStatus(thread.status)) {
+    if (legacyThread === null || !isVisibleThreadStatus(legacyThread.status)) {
       return { exists: false, kind: "missing" as const };
     }
 
@@ -1054,12 +1097,12 @@ export const routeStatus = query({
       categorySlug: category.slug,
       categoryName: category.name,
       categoryDescription: category.description,
-      threadSlug: thread.slug,
-      threadTitle: thread.title,
-      threadExcerpt: forumThreadExcerpt(thread.body),
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      lastPostAt: thread.lastPostAt,
+      threadSlug: legacyThread.slug,
+      threadTitle: legacyThread.title,
+      threadExcerpt: forumThreadExcerpt(legacyThread.body),
+      createdAt: legacyThread.createdAt,
+      updatedAt: legacyThread.updatedAt,
+      lastPostAt: legacyThread.lastPostAt,
     };
   },
 });
@@ -4957,6 +5000,10 @@ export const recordThreadView = mutation({
     }
 
     const now = Date.now();
+    const engagementCounter = await ctx.db
+      .query("forumThreadEngagementCounters")
+      .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
+      .unique();
     const existing = await ctx.db
       .query("forumThreadViews")
       .withIndex("by_userId_and_threadId", (q) =>
@@ -4967,10 +5014,14 @@ export const recordThreadView = mutation({
       existing !== null &&
       now - existing.lastViewedAt < THREAD_VIEW_DEDUP_MS
     ) {
-      return { recorded: false, viewCount: thread.viewCount };
+      return {
+        recorded: false,
+        viewCount: engagementCounter?.viewCount ?? thread.viewCount,
+      };
     }
 
-    const nextViewCount = thread.viewCount + 1;
+    const nextViewCount =
+      Math.max(engagementCounter?.viewCount ?? 0, thread.viewCount) + 1;
     if (existing === null) {
       await ctx.db.insert("forumThreadViews", {
         userId: user._id,
@@ -4986,12 +5037,31 @@ export const recordThreadView = mutation({
         updatedAt: now,
       });
     }
-    await ctx.db.patch("forumThreads", thread._id, {
-      viewCount: nextViewCount,
-    });
-    await syncForumThreadSearchProjection(ctx, thread._id);
+    if (engagementCounter === null) {
+      await ctx.db.insert("forumThreadEngagementCounters", {
+        threadId: thread._id,
+        viewCount: nextViewCount,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.patch(
+        "forumThreadEngagementCounters",
+        engagementCounter._id,
+        {
+          viewCount: nextViewCount,
+          updatedAt: now,
+        },
+      );
+    }
     if (nextViewCount === 1 || nextViewCount % 25 === 0) {
+      await ctx.db.patch("forumThreads", thread._id, {
+        viewCount: nextViewCount,
+      });
       await syncForumThreadEditorialDigest(ctx, thread._id);
+      // Views are engagement telemetry, not searchable content. Refresh the
+      // compact counters in coarse batches so view sorting remains eventually
+      // fresh without invalidating search readers for every page impression.
+      await syncForumThreadSearchProjection(ctx, thread._id);
     }
     return { recorded: true, viewCount: nextViewCount };
   },
@@ -6040,6 +6110,10 @@ export const deleteThread = mutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.enqueueForumResearchThread,
+      { threadId: thread._id, reason: "visibility_changed" },
+    );
     await ctx.db.patch("forumCategories", category._id, {
       threadCount: Math.max(0, category.threadCount - 1),
       postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
@@ -7930,6 +8004,20 @@ export const upsertForumCategory = mutation({
           : normalizePosition(args.position),
       updatedAt: now,
     });
+    if (
+      args.status !== category.status ||
+      viewAccess !== categoryViewAccess(category) ||
+      parentCategoryId !== category.parentCategoryId
+    ) {
+      // A section can restrict any descendant. Fence cached artifacts now;
+      // the bounded asynchronous pass repairs the individual documents later.
+      await bumpEvidencePublicationEpoch(ctx);
+      await ctx.runMutation(
+        internal.evidenceFirstParty.requestHistoricalReconciliation,
+        {},
+      );
+      await requestUniversalSearchProjectionRebuild(ctx);
+    }
 
     const updated = await ctx.db.get("forumCategories", category._id);
     if (updated === null) {
@@ -9712,6 +9800,10 @@ export const retractUnsafeForumAgentThread = internalMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.enqueueForumResearchThread,
+      { threadId: thread._id, reason: "visibility_changed" },
+    );
     await ctx.db.patch("forumCategories", category._id, {
       threadCount: Math.max(0, category.threadCount - 1),
       postCount: Math.max(0, category.postCount - (1 + thread.replyCount)),
@@ -10886,13 +10978,26 @@ export const publishSukiForumThread = internalMutation({
         );
       }
     }
-    const recentThreads = await ctx.db
-      .query("forumThreads")
-      .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
-        q.eq("categoryId", category._id).eq("status", "active"),
-      )
-      .order("desc")
-      .take(30);
+    const digestBackfill = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) => q.eq("key", FORUM_THREAD_DIGEST_BACKFILL_KEY))
+      .unique();
+    const recentThreads =
+      (digestBackfill?.completedAt ?? 0) > 0
+        ? await ctx.db
+            .query("forumThreadEditorialDigests")
+            .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
+              q.eq("categoryId", category._id).eq("status", "active"),
+            )
+            .order("desc")
+            .take(30)
+        : await ctx.db
+            .query("forumThreads")
+            .withIndex("by_categoryId_and_status_and_lastPostAt", (q) =>
+              q.eq("categoryId", category._id).eq("status", "active"),
+            )
+            .order("desc")
+            .take(30);
     const normalizedTitle = title.trim().toLowerCase();
     if (
       recentThreads.some(
@@ -11420,6 +11525,10 @@ export const cleanupLegacyAgentPublicationLabels = internalMutation({
         });
         await syncForumThreadEditorialDigest(ctx, thread._id);
         await syncForumThreadSearchProjection(ctx, thread._id);
+        await ctx.runMutation(
+          internal.evidenceFirstParty.enqueueForumResearchThread,
+          { threadId: thread._id, reason: "content_changed" },
+        );
         changed += 1;
       }
     } else {
@@ -12331,6 +12440,10 @@ export const moveForumThread = mutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.enqueueForumResearchThread,
+      { threadId: thread._id, reason: "category_changed" },
+    );
     await scheduleMovedThreadCategoryReferenceSync(ctx, {
       threadId: thread._id,
       targetCategoryId: targetCategory._id,
@@ -13075,6 +13188,10 @@ export const mergeForumThread = mutation({
     await recomputeThreadActivity(ctx, targetThread._id);
     await syncForumThreadSearchProjection(ctx, sourceThread._id);
     await syncForumThreadSearchProjection(ctx, targetThread._id);
+    await ctx.runMutation(
+      internal.evidenceFirstParty.enqueueForumResearchThread,
+      { threadId: sourceThread._id, reason: "visibility_changed" },
+    );
 
     if (sourceCategory._id === targetCategory._id) {
       await ctx.db.patch("forumCategories", sourceCategory._id, {
@@ -13256,6 +13373,12 @@ export const updateForumThreadModeration = mutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    if (nextStatus !== thread.status) {
+      await ctx.runMutation(
+        internal.evidenceFirstParty.enqueueForumResearchThread,
+        { threadId: thread._id, reason: "visibility_changed" },
+      );
+    }
 
     if (wasVisible !== isVisible) {
       await ctx.db.patch("forumCategories", category._id, {
@@ -15502,10 +15625,7 @@ function searchFiltersRecord(
 }
 
 function searchVisibilityFetchLimit(limit: number) {
-  return Math.min(
-    SEARCH_VISIBILITY_SCAN_LIMIT,
-    Math.max(limit * 6, SEARCH_PAGE_SCAN_LIMIT),
-  );
+  return Math.min(SEARCH_VISIBILITY_SCAN_LIMIT, Math.max(limit * 6, 24));
 }
 
 function normalizePosition(value: number) {
@@ -20957,14 +21077,8 @@ async function searchVisibleThreadProjections(
   authorId?: Id<"users">,
   options: SearchThreadOptions = { sortKey: "relevance" },
 ) {
-  const maxFetchLimit =
+  const fetchLimit =
     category === null ? searchVisibilityFetchLimit(limit) : limit;
-  // Relevance pages need only enough visible matches. Expand through private
-  // candidates rather than eagerly reading 120 rows from each status index.
-  let fetchLimit =
-    options.sortKey === "relevance"
-      ? Math.min(limit, maxFetchLimit)
-      : maxFetchLimit;
   const fetchStatus = async (status: "active" | "locked") =>
     await ctx.db
       .query("forumThreadSearchProjections")
@@ -20977,47 +21091,34 @@ async function searchVisibleThreadProjections(
           : scoped.eq("authorId", authorId);
       })
       .take(fetchLimit);
-  for (;;) {
-    const [activeRaw, lockedRaw] = await Promise.all([
-      fetchStatus("active"),
-      fetchStatus("locked"),
-    ]);
-    const visible = await visibleThreadSearchProjections(
-      ctx,
-      [...activeRaw, ...lockedRaw],
-      category,
-      user,
-    );
-    const items = sortProjectedThreads(
-      visible.filter((thread) =>
-        projectedThreadSearchMatches(thread, searchQuery, options),
-      ),
-      options.sortKey,
-    ).slice(0, limit);
-    const exhausted =
-      activeRaw.length < fetchLimit && lockedRaw.length < fetchLimit;
-    const activeMatches = visible.filter(
-      (thread) =>
-        thread.status === "active" &&
-        projectedThreadSearchMatches(thread, searchQuery, options),
-    ).length;
-    const moreActiveMayPrecedeLocked =
-      activeRaw.length === fetchLimit && activeMatches < limit;
-    if (
-      (moreActiveMayPrecedeLocked || (items.length < limit && !exhausted)) &&
-      fetchLimit < maxFetchLimit
-    ) {
-      fetchLimit = Math.min(fetchLimit * 2, maxFetchLimit);
-      continue;
-    }
-    return {
-      items,
-      limited:
-        category === null &&
-        (activeRaw.length >= fetchLimit || lockedRaw.length >= fetchLimit) &&
-        items.length < limit,
-    };
-  }
+  // Each status index is read exactly once. Re-running the same full-text query
+  // at progressively larger limits made the database rescan candidates already
+  // considered on the previous pass. The bounded overscan still protects
+  // global searches from private ancestors; `limited` tells the caller when
+  // that safety cap prevented a complete page.
+  const [activeRaw, lockedRaw] = await Promise.all([
+    fetchStatus("active"),
+    fetchStatus("locked"),
+  ]);
+  const visible = await visibleThreadSearchProjections(
+    ctx,
+    [...activeRaw, ...lockedRaw],
+    category,
+    user,
+  );
+  const items = sortProjectedThreads(
+    visible.filter((thread) =>
+      projectedThreadSearchMatches(thread, searchQuery, options),
+    ),
+    options.sortKey,
+  ).slice(0, limit);
+  return {
+    items,
+    limited:
+      category === null &&
+      (activeRaw.length >= fetchLimit || lockedRaw.length >= fetchLimit) &&
+      items.length < limit,
+  };
 }
 
 async function searchVisibleThreadProjectionsByAuthor(
@@ -21149,50 +21250,32 @@ async function searchVisiblePostProjections(
   authorId?: Id<"users">,
   options: SearchPostOptions = { sortKey: "relevance" },
 ) {
-  const maxFetchLimit =
+  const fetchLimit =
     category === null
       ? searchVisibilityFetchLimit(limit)
       : Math.min(limit * 2, SEARCH_VISIBILITY_SCAN_LIMIT);
-  let fetchLimit =
-    options.sortKey === "relevance"
-      ? Math.min(limit, maxFetchLimit)
-      : maxFetchLimit;
-  for (;;) {
-    const raw = await ctx.db
-      .query("forumPostSearchProjections")
-      .withSearchIndex("search_by_searchText", (q) => {
-        const search = q
-          .search("searchText", searchQuery)
-          .eq("status", "active");
-        const scoped =
-          category === null ? search : search.eq("categoryId", category._id);
-        return authorId === undefined
-          ? scoped
-          : scoped.eq("authorId", authorId);
-      })
-      .take(fetchLimit);
-    const results = await projectedPostResults(
-      ctx,
-      raw.filter((post) =>
-        projectedPostSearchMatches(post, searchQuery, options),
-      ),
-      category,
-      user,
-      fetchLimit,
-    );
-    if (
-      results.length < limit &&
-      raw.length === fetchLimit &&
-      fetchLimit < maxFetchLimit
-    ) {
-      fetchLimit = Math.min(fetchLimit * 2, maxFetchLimit);
-      continue;
-    }
-    return {
-      items: sortProjectedPostHits(results, options.sortKey).slice(0, limit),
-      limited: raw.length >= fetchLimit && results.length < limit,
-    };
-  }
+  const raw = await ctx.db
+    .query("forumPostSearchProjections")
+    .withSearchIndex("search_by_searchText", (q) => {
+      const search = q.search("searchText", searchQuery).eq("status", "active");
+      const scoped =
+        category === null ? search : search.eq("categoryId", category._id);
+      return authorId === undefined ? scoped : scoped.eq("authorId", authorId);
+    })
+    .take(fetchLimit);
+  const results = await projectedPostResults(
+    ctx,
+    raw.filter((post) =>
+      projectedPostSearchMatches(post, searchQuery, options),
+    ),
+    category,
+    user,
+    fetchLimit,
+  );
+  return {
+    items: sortProjectedPostHits(results, options.sortKey).slice(0, limit),
+    limited: raw.length >= fetchLimit && results.length < limit,
+  };
 }
 
 async function searchVisiblePostProjectionsByAuthor(

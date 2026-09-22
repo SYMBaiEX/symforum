@@ -137,6 +137,21 @@ async function seed(t: ReturnType<typeof setup>) {
 }
 
 describe("evidence citation coverage benchmark", () => {
+  test("excludes first-party evidence whose current forum owner cannot be resolved", async () => {
+    const t = setup();
+    await seed(t);
+    await t.run(async (ctx) => {
+      const document = (await ctx.db.query("evidenceDocuments").collect())[0]!;
+      await ctx.db.patch("evidenceDocuments", document._id, {
+        externalKey: "forum-research:missing-thread",
+      });
+    });
+    const result = await t.mutation(benchmark.run, { dayKey: "2026-09-22" });
+    const metrics = JSON.parse(result.metricsJson);
+    expect(metrics.claims.cited).toBe(0);
+    expect(metrics.currentVersionDocumentCoverage.current).toBe(0);
+  });
+
   test("is deterministic, scores public claims, and emits one change/webhook", async () => {
     const t = setup();
     await seed(t);

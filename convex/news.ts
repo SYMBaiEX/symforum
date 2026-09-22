@@ -10,6 +10,10 @@ import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { contentSummary } from "./contentAggregates";
+import {
+  deleteUniversalSearchProjection,
+  syncNewsStoryUniversalSearchProjection,
+} from "./universalSearchProjection";
 
 const HN_TOP_STORIES_URL =
   "https://hacker-news.firebaseio.com/v0/topstories.json";
@@ -119,12 +123,29 @@ async function recentSnapshots(ctx: QueryCtx) {
 }
 
 async function latestIndexedSnapshot(ctx: QueryCtx) {
+  // The normal case is that today's newest snapshot completed with stories.
+  // Read that single indexed row first instead of transferring the entire
+  // 60-snapshot timeline on every homepage/latest-news request. Retain the
+  // bounded historical scan only for an in-progress, failed, or empty latest
+  // refresh so callers keep the existing last-known-good fallback.
+  const [latest] = await ctx.db
+    .query("newsSnapshots")
+    .withIndex("by_snapshotDate")
+    .order("desc")
+    .take(1);
+  if (
+    latest !== undefined &&
+    latest.status === "complete" &&
+    latest.storyCount > 0
+  ) {
+    return latest;
+  }
   const snapshots = await recentSnapshots(ctx);
   return (
     snapshots.find(
       (snapshot) => snapshot.status === "complete" && snapshot.storyCount > 0,
     ) ??
-    snapshots[0] ??
+    latest ??
     null
   );
 }
@@ -396,6 +417,13 @@ export const markSnapshotStarted = internalMutation({
       startedAt: args.startedAt,
       errorMessage: undefined,
     });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.news.reconcileSnapshotProjections,
+      {
+        snapshotDate: args.snapshotDate,
+      },
+    );
     return null;
   },
 });
@@ -434,6 +462,13 @@ export const markSnapshotFailed = internalMutation({
       completedAt: Date.now(),
       errorMessage,
     });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.news.reconcileSnapshotProjections,
+      {
+        snapshotDate: args.snapshotDate,
+      },
+    );
     return null;
   },
 });
@@ -495,7 +530,112 @@ export const storeSnapshot = internalMutation({
       await ctx.db.delete("hnStories", story._id);
     }
     for (const story of args.stories) {
-      await ctx.db.insert("hnStories", story);
+      const storyId = await ctx.db.insert("hnStories", story);
+      const inserted = await ctx.db.get("hnStories", storyId);
+      if (inserted !== null)
+        await syncNewsStoryUniversalSearchProjection(ctx, inserted);
     }
+    const retainedIds = new Set(args.stories.map((story) => story.hnItemId));
+    for (const hnItemId of new Set(current.map((story) => story.hnItemId))) {
+      if (!retainedIds.has(hnItemId)) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.news.reconcileStoryProjection,
+          {
+            hnItemId,
+          },
+        );
+      }
+    }
+  },
+});
+
+// Read gates invalidate the snapshot immediately; physical reconciliation is
+// paginated so a historical snapshot cannot create an unbounded transaction.
+export const reconcileSnapshotProjections = internalMutation({
+  args: { snapshotDate: v.string(), cursor: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("hnStories")
+      .withIndex("by_snapshotDate_and_rank", (q) =>
+        q.eq("snapshotDate", args.snapshotDate),
+      )
+      .paginate({ cursor: args.cursor ?? null, numItems: 16 });
+    for (const story of page.page) {
+      await ctx.scheduler.runAfter(0, internal.news.reconcileStoryProjection, {
+        hnItemId: story.hnItemId,
+      });
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.news.reconcileSnapshotProjections,
+        {
+          snapshotDate: args.snapshotDate,
+          cursor: page.continueCursor,
+        },
+      );
+    }
+    return null;
+  },
+});
+
+// An item can occur in arbitrarily many historical daily snapshots. Reconcile
+// in bounded transactions instead of scanning that history during refresh.
+export const reconcileStoryProjection = internalMutation({
+  args: {
+    hnItemId: v.number(),
+    cursor: v.optional(v.string()),
+    newestStoryId: v.optional(v.id("hnStories")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const newest = await ctx.db
+      .query("hnStories")
+      .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
+      .order("desc")
+      .first();
+    // A concurrent refresh may insert a row before the continuation cursor.
+    // Restart in that case rather than deleting its freshly published result.
+    const cursor =
+      newest?._id === args.newestStoryId ? (args.cursor ?? null) : null;
+    const page = await ctx.db
+      .query("hnStories")
+      .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
+      .order("desc")
+      .paginate({ cursor, numItems: 16 });
+    for (const story of page.page) {
+      const snapshot = await ctx.db
+        .query("newsSnapshots")
+        .withIndex("by_snapshotDate", (q) =>
+          q.eq("snapshotDate", story.snapshotDate),
+        )
+        .first();
+      if (snapshot?.status === "complete" && snapshot.storyCount > 0) {
+        // Replace metadata from the removed snapshot with surviving public data.
+        await deleteUniversalSearchProjection(
+          ctx,
+          "news_story",
+          String(args.hnItemId),
+        );
+        await syncNewsStoryUniversalSearchProjection(ctx, story);
+        return null;
+      }
+    }
+    if (page.isDone) {
+      await deleteUniversalSearchProjection(
+        ctx,
+        "news_story",
+        String(args.hnItemId),
+      );
+    } else {
+      await ctx.scheduler.runAfter(0, internal.news.reconcileStoryProjection, {
+        hnItemId: args.hnItemId,
+        cursor: page.continueCursor,
+        newestStoryId: newest?._id,
+      });
+    }
+    return null;
   },
 });

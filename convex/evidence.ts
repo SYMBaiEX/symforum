@@ -1,10 +1,12 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import { makeFunctionReference } from "convex/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import {
   requireAgentScope,
@@ -12,6 +14,18 @@ import {
   type AgentScope,
 } from "./authz";
 import { sha256Base64Url } from "./agentIdentityCrypto";
+import {
+  isPublicEvidenceDocument,
+  isPublicEvidenceClaim,
+  isPublicEvidenceEntity,
+} from "./evidenceVisibility";
+import { bumpEvidencePublicationEpoch } from "./evidencePublicationEpoch";
+import {
+  requestUniversalSearchProjectionRebuild,
+  syncEvidenceDocumentUniversalSearchProjection,
+  syncEvidenceEntityUniversalSearchProjection,
+  syncEvidenceClaimUniversalSearchProjection,
+} from "./universalSearchProjection";
 
 const visibilityValidator = v.union(v.literal("public"), v.literal("private"));
 const licenseClassValidator = v.union(
@@ -66,6 +80,7 @@ const claimRevisionActorTypeValidator = v.union(
 );
 const CLAIM_REVISION_RETENTION_MS = 7 * 365 * 24 * 60 * 60 * 1_000;
 const MAX_REVISION_CLEANUP = 100;
+const MAX_FIRST_PARTY_CLAIMS = 64;
 
 const documentResultValidator = v.object({
   documentId: v.id("evidenceDocuments"),
@@ -328,7 +343,44 @@ export const upsertSource = internalMutation({
       updatedAt: now,
     };
     if (existing !== null) {
-      await ctx.db.patch("evidenceSources", existing._id, value);
+      const semanticChanged =
+        existing.name !== value.name ||
+        existing.sourceType !== value.sourceType ||
+        existing.ingestionEnabled !== value.ingestionEnabled ||
+        existing.baseUrl !== value.baseUrl ||
+        existing.homepageUrl !== value.homepageUrl ||
+        existing.status !== value.status ||
+        existing.licenseClass !== value.licenseClass ||
+        existing.provenanceClass !== value.provenanceClass ||
+        existing.visibility !== value.visibility ||
+        existing.termsUrl !== value.termsUrl;
+      const operationalChanged =
+        existing.etag !== value.etag ||
+        existing.lastModified !== value.lastModified ||
+        existing.cursor !== value.cursor ||
+        existing.lastFetchedAt !== value.lastFetchedAt ||
+        existing.lastSucceededAt !== value.lastSucceededAt ||
+        existing.lastErrorAt !== value.lastErrorAt ||
+        existing.lastErrorMessage !== value.lastErrorMessage;
+      if (!semanticChanged && !operationalChanged)
+        return { sourceId: existing._id, created: false };
+      // `updatedAt` is the semantic revision used by the vector index. Routine
+      // fetch-success bookkeeping must not invalidate every document embedding
+      // for an otherwise unchanged source.
+      await ctx.db.patch("evidenceSources", existing._id, {
+        ...value,
+        updatedAt: semanticChanged ? now : existing.updatedAt,
+      });
+      if (semanticChanged) {
+        await requestUniversalSearchProjectionRebuild(ctx);
+        if (
+          existing.status === "active" &&
+          existing.visibility === "public" &&
+          (value.status !== "active" || value.visibility !== "public")
+        ) {
+          await bumpEvidencePublicationEpoch(ctx);
+        }
+      }
       return { sourceId: existing._id, created: false };
     }
     const sourceId = await ctx.db.insert("evidenceSources", {
@@ -337,6 +389,179 @@ export const upsertSource = internalMutation({
     });
     return { sourceId, created: true };
   },
+});
+
+/**
+ * Toggle the public read-model for one first-party document without deleting
+ * immutable versions, citations, or claim revisions. Retraction also hides
+ * every claim owned by the thread so direct claim search cannot leak content
+ * after its forum board becomes private.
+ */
+export const setFirstPartyDocumentExposure = internalMutation({
+  args: {
+    sourceId: v.id("evidenceSources"),
+    externalKey: v.string(),
+    visibility: visibilityValidator,
+    claimKeyPrefixes: v.array(v.string()),
+    observedAt: v.number(),
+  },
+  returns: v.object({
+    documentId: v.union(v.id("evidenceDocuments"), v.null()),
+    changed: v.boolean(),
+    claimsChanged: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const externalKey = bounded(args.externalKey, "externalKey", 320);
+    const prefixes = [
+      ...new Set(
+        args.claimKeyPrefixes.map((prefix) =>
+          bounded(prefix, "claimKeyPrefix", 200).toLowerCase(),
+        ),
+      ),
+    ];
+    if (prefixes.length > 4)
+      throw new ConvexError({
+        code: "EVIDENCE_RETRACTION_SCOPE_TOO_LARGE",
+        message: "At most four first-party claim prefixes may be changed.",
+      });
+    const document = await ctx.db
+      .query("evidenceDocuments")
+      .withIndex("by_sourceId_and_externalKey", (q) =>
+        q.eq("sourceId", args.sourceId).eq("externalKey", externalKey),
+      )
+      .unique();
+    if (document === null)
+      return { documentId: null, changed: false, claimsChanged: 0 };
+
+    const now = Date.now();
+    const documentChanged = document.visibility !== args.visibility;
+    if (documentChanged) {
+      if (document.visibility === "public" && args.visibility === "private") {
+        await bumpEvidencePublicationEpoch(ctx);
+      }
+      await ctx.db.patch("evidenceDocuments", document._id, {
+        visibility: args.visibility,
+        updatedAt: now,
+      });
+      const eventKey = `document:${document._id}:visibility:${args.visibility}:version:${document.currentVersionId ?? "none"}`;
+      const existingEvent = await ctx.db
+        .query("evidenceChangeEvents")
+        .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
+        .unique();
+      if (existingEvent === null)
+        await ctx.db.insert("evidenceChangeEvents", {
+          eventKey,
+          entityType: "document",
+          entityId: document._id,
+          kind: "status-changed",
+          visibility: args.visibility,
+          summary:
+            `${args.visibility === "public" ? "Published" : "Retracted"} ${document.title}`.slice(
+              0,
+              1_000,
+            ),
+          changedFields: ["visibility"],
+          occurredAt: args.observedAt,
+          createdAt: now,
+        });
+    }
+
+    if (documentChanged)
+      await refreshDocumentEntityProjections(ctx, document.currentVersionId);
+    let claimsChanged = 0;
+    await syncEvidenceDocumentUniversalSearchProjection(
+      ctx,
+      (await ctx.db.get("evidenceDocuments", document._id))!,
+    );
+    for (const prefix of prefixes) {
+      claimsChanged += await changeFirstPartyClaimBatch(ctx, {
+        documentId: document._id,
+        documentUpdatedAt: documentChanged ? now : document.updatedAt,
+        visibility: args.visibility,
+        prefix,
+      });
+    }
+    return {
+      documentId: document._id,
+      changed: documentChanged || claimsChanged > 0,
+      claimsChanged,
+    };
+  },
+});
+
+const claimExposureBatchArgs = {
+  documentId: v.id("evidenceDocuments"),
+  documentUpdatedAt: v.number(),
+  visibility: visibilityValidator,
+  prefix: v.string(),
+  afterClaimKey: v.optional(v.string()),
+};
+
+async function changeFirstPartyClaimBatch(
+  ctx: MutationCtx,
+  args: {
+    documentId: Id<"evidenceDocuments">;
+    documentUpdatedAt: number;
+    visibility: "public" | "private";
+    prefix: string;
+    afterClaimKey?: string;
+  },
+): Promise<number> {
+  const document = await ctx.db.get("evidenceDocuments", args.documentId);
+  // A queued retraction must not overwrite a subsequent republication.
+  if (
+    document?.visibility !== args.visibility ||
+    document.updatedAt !== args.documentUpdatedAt
+  )
+    return 0;
+  const rows = await ctx.db
+    .query("evidenceClaims")
+    .withIndex("by_claimKey", (q) =>
+      args.afterClaimKey === undefined
+        ? q.gte("claimKey", args.prefix).lt("claimKey", `${args.prefix}\uffff`)
+        : q
+            .gt("claimKey", args.afterClaimKey)
+            .lt("claimKey", `${args.prefix}\uffff`),
+    )
+    .take(MAX_FIRST_PARTY_CLAIMS + 1);
+  const page = rows.slice(0, MAX_FIRST_PARTY_CLAIMS);
+  let changed = 0;
+  const now = Date.now();
+  for (const claim of page) {
+    if (claim.visibility === args.visibility) continue;
+    const updated = { ...claim, visibility: args.visibility, updatedAt: now };
+    await ctx.db.patch("evidenceClaims", claim._id, {
+      visibility: args.visibility,
+      updatedAt: now,
+    });
+    await recordClaimRevision(ctx, {
+      claim: updated,
+      changeKind: "status",
+      actorType: "system",
+      actorId: "first-party-evidence-sync",
+      source: "evidence.firstPartyExposure",
+      createdAt: now,
+    });
+    await syncEvidenceClaimUniversalSearchProjection(ctx, updated);
+    changed += 1;
+  }
+  if (rows.length > MAX_FIRST_PARTY_CLAIMS) {
+    await ctx.scheduler.runAfter(
+      0,
+      makeFunctionReference<"mutation", typeof args, number>(
+        "evidence:continueFirstPartyClaimExposure",
+      ),
+      { ...args, afterClaimKey: page[page.length - 1]!.claimKey },
+    );
+  }
+  return changed;
+}
+
+/** Bounded durable continuation; document authorization changes immediately. */
+export const continueFirstPartyClaimExposure = internalMutation({
+  args: claimExposureBatchArgs,
+  returns: v.number(),
+  handler: changeFirstPartyClaimBatch,
 });
 
 export const upsertDocumentVersion = internalMutation({
@@ -398,6 +623,9 @@ export const upsertDocumentVersion = internalMutation({
       .unique();
     const isNewDocument = document === null;
     if (document !== null) {
+      if (document.visibility === "public" && args.visibility === "private") {
+        await bumpEvidencePublicationEpoch(ctx);
+      }
       const existing = args.requireContentHashMatch
         ? document.currentVersionId === null
           ? null
@@ -411,7 +639,8 @@ export const upsertDocumentVersion = internalMutation({
               q.eq("documentId", document!._id).eq("contentHash", contentHash),
             )
             .unique();
-      if (existing !== null && existing.contentHash === contentHash)
+      if (existing !== null && existing.contentHash === contentHash) {
+        await syncEvidenceDocumentUniversalSearchProjection(ctx, document);
         return {
           documentId: document._id,
           versionId: existing._id,
@@ -419,6 +648,7 @@ export const upsertDocumentVersion = internalMutation({
           idempotent: true,
           changedFields: [],
         };
+      }
       const changedFields = documentChangedFields(document, {
         kind: args.kind,
         visibility: args.visibility,
@@ -434,6 +664,7 @@ export const upsertDocumentVersion = internalMutation({
         changedFields.length === 0 &&
         document.currentVersionId !== null
       ) {
+        await syncEvidenceDocumentUniversalSearchProjection(ctx, document);
         return {
           documentId: document._id,
           versionId: document.currentVersionId,
@@ -513,6 +744,11 @@ export const upsertDocumentVersion = internalMutation({
       publishedAt: args.publishedAt ?? null,
       updatedAt: now,
     });
+    await refreshDocumentEntityProjections(ctx, document.currentVersionId);
+    await syncEvidenceDocumentUniversalSearchProjection(
+      ctx,
+      (await ctx.db.get("evidenceDocuments", document._id))!,
+    );
     const changedFields = isNewDocument
       ? [...DOCUMENT_CHANGE_FIELDS]
       : documentChangedFields(document, {
@@ -591,18 +827,28 @@ export const upsertEntity = internalMutation({
         existing.visibility === value.visibility &&
         sameCanonicalDocumentList(existing.aliases, value.aliases);
       if (unchanged) {
+        await syncEvidenceEntityUniversalSearchProjection(ctx, existing);
         return { entityId: existing._id, created: false };
       }
+      if (existing.visibility === "public" && value.visibility === "private") {
+        await bumpEvidencePublicationEpoch(ctx);
+      }
       await ctx.db.patch("evidenceEntities", existing._id, value);
+      await syncEvidenceEntityUniversalSearchProjection(ctx, {
+        ...existing,
+        ...value,
+      });
       return { entityId: existing._id, created: false };
     }
-    return {
-      entityId: await ctx.db.insert("evidenceEntities", {
-        ...value,
-        createdAt: now,
-      }),
-      created: true,
-    };
+    const entityId = await ctx.db.insert("evidenceEntities", {
+      ...value,
+      createdAt: now,
+    });
+    await syncEvidenceEntityUniversalSearchProjection(
+      ctx,
+      (await ctx.db.get("evidenceEntities", entityId))!,
+    );
+    return { entityId, created: true };
   },
 });
 
@@ -611,6 +857,25 @@ export const upsertEntity = internalMutation({
  * on versions (rather than the mutable document) so a later ingestion cannot
  * rewrite the provenance of an earlier extraction.
  */
+async function refreshDocumentEntityProjections(
+  ctx: MutationCtx,
+  versionId: Id<"evidenceDocumentVersions"> | null,
+) {
+  if (versionId === null) return;
+  const links = await ctx.db
+    .query("evidenceDocumentEntities")
+    .withIndex("by_documentVersionId", (q) =>
+      q.eq("documentVersionId", versionId),
+    )
+    .take(51);
+  for (const link of links.slice(0, 50)) {
+    const entity = await ctx.db.get("evidenceEntities", link.entityId);
+    if (entity !== null)
+      await syncEvidenceEntityUniversalSearchProjection(ctx, entity);
+  }
+  if (links.length > 50) await requestUniversalSearchProjectionRebuild(ctx);
+}
+
 export const linkDocumentEntity = internalMutation({
   args: {
     documentVersionId: v.id("evidenceDocumentVersions"),
@@ -634,7 +899,12 @@ export const linkDocumentEntity = internalMutation({
           .eq("entityId", args.entityId),
       )
       .unique();
-    if (existing !== null) return { linkId: existing._id, created: false };
+    if (existing !== null) {
+      const entity = await ctx.db.get("evidenceEntities", args.entityId);
+      if (entity !== null)
+        await syncEvidenceEntityUniversalSearchProjection(ctx, entity);
+      return { linkId: existing._id, created: false };
+    }
     const [version, entity] = await Promise.all([
       ctx.db.get("evidenceDocumentVersions", args.documentVersionId),
       ctx.db.get("evidenceEntities", args.entityId),
@@ -645,13 +915,12 @@ export const linkDocumentEntity = internalMutation({
         message: "Document version and entity must exist before linking.",
       });
     }
-    return {
-      linkId: await ctx.db.insert("evidenceDocumentEntities", {
-        ...args,
-        createdAt: Date.now(),
-      }),
-      created: true,
-    };
+    const linkId = await ctx.db.insert("evidenceDocumentEntities", {
+      ...args,
+      createdAt: Date.now(),
+    });
+    await syncEvidenceEntityUniversalSearchProjection(ctx, entity);
+    return { linkId, created: true };
   },
 });
 
@@ -723,7 +992,13 @@ export const upsertClaim = internalMutation({
         existing.confidence !== value.confidence ||
         existing.visibility !== value.visibility ||
         existing.observedAt !== value.observedAt;
-      if (!changed) return { claimId: existing._id, created: false };
+      if (!changed) {
+        await syncEvidenceClaimUniversalSearchProjection(ctx, existing);
+        return { claimId: existing._id, created: false };
+      }
+      if (existing.visibility === "public" && value.visibility === "private") {
+        await bumpEvidencePublicationEpoch(ctx);
+      }
     }
     if (
       args.subjectEntityId !== undefined &&
@@ -736,6 +1011,7 @@ export const upsertClaim = internalMutation({
     if (existing !== null) {
       await ctx.db.patch("evidenceClaims", existing._id, value);
       const updated = { ...existing, ...value };
+      await syncEvidenceClaimUniversalSearchProjection(ctx, updated);
       await recordClaimRevision(ctx, {
         claim: updated,
         changeKind: existing.status === value.status ? "semantic" : "status",
@@ -774,6 +1050,7 @@ export const upsertClaim = internalMutation({
       createdAt: now,
     });
     const claim = (await ctx.db.get("evidenceClaims", claimId))!;
+    await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
     await recordClaimRevision(ctx, {
       claim,
       changeKind: "created",
@@ -823,7 +1100,12 @@ export const recordCitation = internalMutation({
       .query("evidenceClaimCitations")
       .withIndex("by_citationKey", (q) => q.eq("citationKey", citationKey))
       .unique();
-    if (existing !== null) return { citationId: existing._id, created: false };
+    if (existing !== null) {
+      const claim = await ctx.db.get("evidenceClaims", existing.claimId);
+      if (claim !== null)
+        await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
+      return { citationId: existing._id, created: false };
+    }
     const [claim, version] = await Promise.all([
       ctx.db.get("evidenceClaims", args.claimId),
       ctx.db.get("evidenceDocumentVersions", args.documentVersionId),
@@ -876,6 +1158,7 @@ export const recordCitation = internalMutation({
       citationId,
       createdAt,
     });
+    await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
     return { citationId, created: true };
   },
 });
@@ -933,8 +1216,7 @@ export const searchPublic = internalQuery({
       .take(limit);
     const visible = await Promise.all(
       rows.map(async (row) => {
-        const source = await ctx.db.get("evidenceSources", row.sourceId);
-        return source?.visibility === "public" ? row : null;
+        return (await isPublicEvidenceDocument(ctx, row)) ? row : null;
       }),
     );
     return visible
@@ -956,7 +1238,8 @@ export const getPublicDocument = internalQuery({
   returns: v.union(v.null(), detailedDocumentResultValidator),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("evidenceDocuments", args.documentId);
-    if (row === null || row.visibility !== "public") return null;
+    if (row === null || !(await isPublicEvidenceDocument(ctx, row)))
+      return null;
     const [source, version] = await Promise.all([
       ctx.db.get("evidenceSources", row.sourceId),
       row.currentVersionId === null
@@ -1049,8 +1332,13 @@ export const listPublicChanges = internalQuery({
         q.eq("visibility", "public"),
       )
       .order("desc")
-      .take(limit);
-    return rows.map(
+      .take(Math.min(200, limit * 4));
+    const visibleRows = [];
+    for (const row of rows) {
+      if (await isCurrentPublicChangeEvent(ctx, row)) visibleRows.push(row);
+      if (visibleRows.length === limit) break;
+    }
+    return visibleRows.map(
       ({ _id, entityType, entityId, kind, summary, occurredAt }) => ({
         eventId: _id,
         entityType,
@@ -1062,6 +1350,41 @@ export const listPublicChanges = internalQuery({
     );
   },
 });
+
+async function isCurrentPublicChangeEvent(
+  ctx: QueryCtx,
+  event: Doc<"evidenceChangeEvents">,
+) {
+  if (event.entityType === "document") {
+    const id = ctx.db.normalizeId("evidenceDocuments", event.entityId);
+    return (
+      id !== null &&
+      (await isPublicEvidenceDocument(
+        ctx,
+        await ctx.db.get("evidenceDocuments", id),
+      ))
+    );
+  }
+  if (event.entityType === "claim") {
+    const id = ctx.db.normalizeId("evidenceClaims", event.entityId);
+    return (
+      id !== null &&
+      (await isPublicEvidenceClaim(ctx, await ctx.db.get("evidenceClaims", id)))
+    );
+  }
+  if (event.entityType === "dataset") {
+    const id = ctx.db.normalizeId("evidenceDatasets", event.entityId);
+    return (
+      id !== null &&
+      (await ctx.db.get("evidenceDatasets", id))?.visibility === "public"
+    );
+  }
+  const id = ctx.db.normalizeId("evidenceBenchmarks", event.entityId);
+  return (
+    id !== null &&
+    (await ctx.db.get("evidenceBenchmarks", id))?.visibility === "public"
+  );
+}
 
 const entityResultValidator = v.object({
   entityId: v.id("evidenceEntities"),
@@ -1110,21 +1433,32 @@ export const searchEntities = internalQuery({
       )
       .order("desc")
       .take(200);
-    return rows
+    const matching = rows
       .filter((row) => {
         const haystack =
           `${row.entityKey} ${row.name} ${row.aliases.join(" ")}`.toLowerCase();
         return haystack.includes(search);
       })
-      .slice(0, limit)
-      .map(({ _id, entityKey, kind, name, aliases, updatedAt }) => ({
+      .slice(0, Math.min(50, limit * 4));
+    const publicRows = (
+      await Promise.all(
+        matching.map(async (row) =>
+          (await isPublicEvidenceEntity(ctx, row)) ? row : null,
+        ),
+      )
+    )
+      .filter((row) => row !== null)
+      .slice(0, limit);
+    return publicRows.map(
+      ({ _id, entityKey, kind, name, aliases, updatedAt }) => ({
         entityId: _id,
         entityKey,
         kind,
         name,
         aliases,
         updatedAt,
-      }));
+      }),
+    );
   },
 });
 
@@ -1147,7 +1481,8 @@ export const listClaimsForDocumentVersion = internalQuery({
     );
     if (version === null) return [];
     const document = await ctx.db.get("evidenceDocuments", version.documentId);
-    if (document === null || document.visibility !== "public") return [];
+    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
+      return [];
     const citations = await ctx.db
       .query("evidenceClaimCitations")
       .withIndex("by_documentVersionId", (q) =>
@@ -1157,7 +1492,7 @@ export const listClaimsForDocumentVersion = internalQuery({
     const results = [];
     for (const citation of citations) {
       const claim = await ctx.db.get("evidenceClaims", citation.claimId);
-      if (claim !== null && claim.visibility === "public") {
+      if (claim !== null && (await isPublicEvidenceClaim(ctx, claim))) {
         results.push({
           claimId: claim._id,
           claimKey: claim.claimKey,
@@ -1225,7 +1560,7 @@ export const listPublicClaimTimeline = internalQuery({
       .query("evidenceClaims")
       .withIndex("by_claimKey", (q) => q.eq("claimKey", claimKey))
       .unique();
-    if (claim === null || claim.visibility !== "public") return [];
+    if (claim === null || !(await isPublicEvidenceClaim(ctx, claim))) return [];
     if (claim.subjectEntityId !== null) {
       const subject = await ctx.db.get(
         "evidenceEntities",
@@ -1283,7 +1618,8 @@ export const listPublicClaimTimeline = internalQuery({
         if (
           storedCitation !== null &&
           version !== null &&
-          document?.visibility === "public" &&
+          document !== null &&
+          (await isPublicEvidenceDocument(ctx, document)) &&
           source?.visibility === "public"
         ) {
           citation = {

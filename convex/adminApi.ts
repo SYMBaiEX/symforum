@@ -8,6 +8,7 @@ import {
   normalizeIssueInput,
 } from "./newsletterModel";
 import { normalizePostInput, postInputValidator } from "./postModel";
+import { deletePostDigest, upsertPostDigest } from "./postDigests";
 import {
   deleteInteractionAggregates,
   replaceCommentAggregate,
@@ -153,11 +154,15 @@ export const upsertPost = mutation({
 
     if (existing === null) {
       const id = await ctx.db.insert("posts", post);
-      return await ctx.db.get("posts", id);
+      const inserted = await ctx.db.get("posts", id);
+      if (inserted !== null) await upsertPostDigest(ctx, inserted);
+      return inserted;
     }
 
     await ctx.db.patch("posts", existing._id, post);
-    return await ctx.db.get("posts", existing._id);
+    const updated = await ctx.db.get("posts", existing._id);
+    if (updated !== null) await upsertPostDigest(ctx, updated);
+    return updated;
   },
 });
 
@@ -172,6 +177,7 @@ export const deletePost = mutation({
     if (existing === null) {
       return { deleted: false };
     }
+    await deletePostDigest(ctx, existing._id);
     await ctx.db.delete("posts", existing._id);
     return { deleted: true };
   },

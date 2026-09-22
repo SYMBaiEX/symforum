@@ -16,7 +16,9 @@ import { enforceAgentScopeIfNeeded, requireSiteAdmin } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 import {
   listPublicNewsletterIssueDigests,
+  parseNewsletterIssueRouting,
   upsertNewsletterIssueDigest,
+  type NewsletterIssueRouting,
 } from "./newsletterDigests";
 import {
   newsletterIssueInputValidator,
@@ -356,31 +358,25 @@ export const resolvePublicDestination = query({
     target: v.string(),
   },
   handler: async (ctx, args) => {
-    const issue = await issueBySlug(ctx, args.slug);
-    if (issue === null || issue.status !== "sent") {
-      return null;
-    }
-    const payload = parseEditorialNewsletterPayload(issue.body);
-    if (payload === null) {
-      return null;
-    }
+    const issue = await publicIssueRoutingBySlug(ctx, args.slug);
+    if (issue === null) return null;
     if (args.target === "forum") {
       return issue.forumCategorySlug && issue.forumThreadSlug
         ? {
-            url: `${payload.siteUrl}/forum/${issue.forumCategorySlug}/${issue.forumThreadSlug}`,
+            url: `${issue.routing.siteUrl}/forum/${issue.forumCategorySlug}/${issue.forumThreadSlug}`,
             eventType: "forum_click" as const,
           }
         : null;
     }
     if (args.target === "news") {
       return {
-        url: payload.newsUrl,
+        url: issue.routing.newsUrl,
         eventType: "news_index_click" as const,
       };
     }
     if (args.target === "archive") {
       return {
-        url: payload.archiveUrl,
+        url: issue.routing.archiveUrl,
         eventType: "archive_click" as const,
       };
     }
@@ -389,7 +385,7 @@ export const resolvePublicDestination = query({
       return null;
     }
     const storyId = Number(match[2]);
-    const story = payload.stories.find(
+    const story = issue.routing.stories.find(
       (candidate) => candidate.hnItemId === storyId,
     );
     if (story === undefined) {
@@ -421,21 +417,15 @@ export const recordPublicEngagement = mutation({
     visitorKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const issue = await issueBySlug(ctx, args.slug);
-    if (issue === null || issue.status !== "sent") {
-      return { recorded: false };
-    }
-    const payload = parseEditorialNewsletterPayload(issue.body);
-    if (payload === null) {
-      return { recorded: false };
-    }
+    const issue = await publicIssueRoutingBySlug(ctx, args.slug);
+    if (issue === null) return { recorded: false };
     const storyEvent =
       args.eventType === "source_click" ||
       args.eventType === "discussion_click";
     if (
       (storyEvent &&
         (args.hnItemId === undefined ||
-          !payload.stories.some(
+          !issue.routing.stories.some(
             (story) => story.hnItemId === args.hnItemId,
           ))) ||
       (!storyEvent && args.hnItemId !== undefined) ||
@@ -447,28 +437,28 @@ export const recordPublicEngagement = mutation({
     const now = Date.now();
     const visitorKey = normalizeVisitorKey(args.visitorKey);
     if (visitorKey) {
-      const recent = await ctx.db
-        .query("newsletterEngagements")
-        .withIndex("by_issueId_and_eventType_and_createdAt", (q) =>
-          q.eq("issueId", issue._id).eq("eventType", args.eventType),
-        )
-        .order("desc")
-        .take(100);
       const dedupeWindow =
         args.eventType === "archive_view" ? 60 * 60 * 1000 : 10 * 1000;
-      if (
-        recent.some(
-          (row) =>
-            row.visitorKey === visitorKey &&
-            row.hnItemId === args.hnItemId &&
-            now - row.createdAt < dedupeWindow,
+      const duplicate = await ctx.db
+        .query("newsletterEngagements")
+        .withIndex(
+        "by_issue_event_visitor_story_created",
+          (q) =>
+            q
+              .eq("issueId", issue.issueId)
+              .eq("eventType", args.eventType)
+              .eq("visitorKey", visitorKey)
+              .eq("hnItemId", args.hnItemId)
+              .gt("createdAt", now - dedupeWindow),
         )
-      ) {
+        .order("desc")
+        .take(1);
+      if (duplicate.length > 0) {
         return { recorded: false };
       }
     }
     await ctx.db.insert("newsletterEngagements", {
-      issueId: issue._id,
+      issueId: issue.issueId,
       eventType: args.eventType,
       hnItemId: args.hnItemId,
       visitorKey,
@@ -1016,6 +1006,62 @@ async function issueBySlug(
     .query("newsletterIssues")
     .withIndex("by_slug", (q) => q.eq("slug", issue.slug))
     .unique();
+}
+
+async function publicIssueRoutingBySlug(
+  ctx: { db: MutationCtx["db"] | QueryCtx["db"] },
+  slug: string,
+): Promise<{
+  issueId: Id<"newsletterIssues">;
+  forumCategorySlug?: string;
+  forumThreadSlug?: string;
+  routing: NewsletterIssueRouting;
+} | null> {
+  const normalizedSlug = normalizeIssueInput({
+    subject: slug,
+    previewText: slug,
+    body: slug,
+    slug,
+  }).slug;
+  const digest = await ctx.db
+    .query("newsletterIssueDigests")
+    .withIndex("by_slug", (q) => q.eq("slug", normalizedSlug))
+    .unique();
+  if (digest !== null) {
+    if (digest.status !== "sent") return null;
+    const routing = parseNewsletterIssueRouting(digest.routingJson);
+    if (routing !== null) {
+      return {
+        issueId: digest.issueId,
+        forumCategorySlug: digest.forumCategorySlug,
+        forumThreadSlug: digest.forumThreadSlug,
+        routing,
+      };
+    }
+  }
+
+  // Rolling-deploy and migration fallback. Once the routing projection is
+  // populated, public redirects and engagement writes never read full bodies.
+  const issue = await issueBySlug(ctx, normalizedSlug);
+  if (issue === null || issue.status !== "sent") return null;
+  const payload = parseEditorialNewsletterPayload(issue.body);
+  if (payload === null) return null;
+  return {
+    issueId: issue._id,
+    forumCategorySlug: issue.forumCategorySlug,
+    forumThreadSlug: issue.forumThreadSlug,
+    routing: {
+      version: 1,
+      siteUrl: payload.siteUrl,
+      newsUrl: payload.newsUrl,
+      archiveUrl: payload.archiveUrl,
+      stories: payload.stories.map((story) => ({
+        hnItemId: story.hnItemId,
+        sourceUrl: story.sourceUrl,
+        discussionUrl: story.discussionUrl,
+      })),
+    },
+  };
 }
 
 function publicIssue(issue: Doc<"newsletterIssues">) {

@@ -34,6 +34,11 @@ const publicAnalyticsRateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 30,
     period: MINUTE,
     capacity: 30,
+    // Anonymous analytics deliberately share one global budget, but a single
+    // rate-limit row caused burst traffic to contend on every write. The
+    // component preserves the aggregate ceiling while spreading consumption
+    // across three rows (10 tokens per shard).
+    shards: 3,
   },
 });
 

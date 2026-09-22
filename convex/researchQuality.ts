@@ -1,3 +1,4 @@
+import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -28,6 +29,22 @@ const HTTP_URL = /https?:\/\/[^\s\]>)"']+/gi;
 const WORD = /[a-z0-9][a-z0-9-]{2,}/gi;
 const QUALITY_GATE_PREFIX = "RESEARCH_QUALITY_BLOCKED:";
 const QUALITY_SCHEMA_VERSION = "research-publication-v2";
+const MAX_CATEGORY_ANCESTORS = 16;
+
+const enqueueEvidenceSyncRef = makeFunctionReference<
+  "mutation",
+  {
+    threadId: Id<"forumThreads">;
+    reason:
+      | "published"
+      | "content_changed"
+      | "visibility_changed"
+      | "category_changed"
+      | "quality_changed"
+      | "reconciliation";
+  },
+  { generation: number }
+>("evidenceFirstParty:enqueueForumResearchThread");
 
 const assessmentStatusValidator = v.union(
   v.literal("passed"),
@@ -455,7 +472,18 @@ export async function recordAutomatedResearchPublication(
   score: AutomatedResearchScore,
   threadId: Id<"forumThreads">,
 ) {
-  return await upsertAssessment(ctx, candidate, score, "passed", threadId);
+  const assessmentId = await upsertAssessment(
+    ctx,
+    candidate,
+    score,
+    "passed",
+    threadId,
+  );
+  await ctx.runMutation(enqueueEvidenceSyncRef, {
+    threadId,
+    reason: "published",
+  });
+  return assessmentId;
 }
 
 /** Any edit makes an earlier automated pass stale until a new assessment. */
@@ -467,7 +495,32 @@ export async function invalidateResearchQualityForThread(
     .query("researchQualityAssessments")
     .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
     .unique();
-  if (assessment === null || assessment.status === "rejected") return;
+  if (assessment === null || assessment.status === "rejected") {
+    // Legacy published evidence can outlive its assessment. Content edits must
+    // still invalidate its artifacts and enqueue retraction in this transaction.
+    // Ordinary human threads have no evidence and should not start sync actions.
+    const source = await ctx.db
+      .query("evidenceSources")
+      .withIndex("by_sourceKey", (q) =>
+        q.eq("sourceKey", "symbaiex-first-party-research"),
+      )
+      .unique();
+    if (source === null) return;
+    const document = await ctx.db
+      .query("evidenceDocuments")
+      .withIndex("by_sourceId_and_externalKey", (q) =>
+        q
+          .eq("sourceId", source._id)
+          .eq("externalKey", `forum-research:${threadId}`),
+      )
+      .unique();
+    if (document?.visibility !== "public") return;
+    await ctx.runMutation(enqueueEvidenceSyncRef, {
+      threadId,
+      reason: "content_changed",
+    });
+    return;
+  }
   const flags = [
     ...new Set([...assessment.flags, "content_changed_requires_reassessment"]),
   ].slice(0, MAX_FLAGS);
@@ -475,6 +528,10 @@ export async function invalidateResearchQualityForThread(
     status: "needs_review",
     flags,
     updatedAt: Date.now(),
+  });
+  await ctx.runMutation(enqueueEvidenceSyncRef, {
+    threadId,
+    reason: "quality_changed",
   });
 }
 
@@ -513,6 +570,10 @@ export const evaluateThread = mutation({
       "needs_review",
       thread._id,
     );
+    await ctx.runMutation(enqueueEvidenceSyncRef, {
+      threadId: thread._id,
+      reason: "quality_changed",
+    });
     return {
       assessmentId,
       status: "needs_review" as const,
@@ -568,6 +629,11 @@ export const review = mutation({
       reason,
       createdAt: now,
     });
+    if (assessment.threadId !== undefined)
+      await ctx.runMutation(enqueueEvidenceSyncRef, {
+        threadId: assessment.threadId,
+        reason: "quality_changed",
+      });
     return { assessmentId: assessment._id, status: args.decision };
   },
 });
@@ -777,6 +843,147 @@ export const publishedResearchEvidenceValidator = v.object({
   ),
 });
 
+const researchRetractionReasonValidator = v.union(
+  v.literal("not_approved"),
+  v.literal("thread_unavailable"),
+  v.literal("category_not_public"),
+  v.literal("author_unavailable"),
+);
+
+export const publishedResearchSyncDecisionValidator = v.union(
+  v.object({
+    state: v.literal("publish"),
+    research: publishedResearchEvidenceValidator,
+  }),
+  v.object({
+    state: v.literal("retract"),
+    threadId: v.id("forumThreads"),
+    reason: researchRetractionReasonValidator,
+  }),
+);
+
+async function explicitlyPublicBoard(
+  ctx: QueryCtx,
+  categoryId: Id<"forumCategories">,
+) {
+  let category = await ctx.db.get("forumCategories", categoryId);
+  if (category === null || (category.kind ?? "board") !== "board") return null;
+  const requested = category;
+  const visited = new Set<Id<"forumCategories">>();
+  for (let depth = 0; depth < MAX_CATEGORY_ANCESTORS; depth += 1) {
+    if (
+      category === null ||
+      category.status !== "active" ||
+      (category.viewAccess ?? "public") !== "public" ||
+      visited.has(category._id)
+    )
+      return null;
+    visited.add(category._id);
+    if (category.parentCategoryId === undefined) return requested;
+    category = await ctx.db.get("forumCategories", category.parentCategoryId);
+  }
+  return null;
+}
+
+async function researchSyncDecision(
+  ctx: QueryCtx,
+  threadId: Id<"forumThreads">,
+): Promise<
+  | {
+      state: "publish";
+      research: typeof publishedResearchEvidenceValidator.type;
+    }
+  | {
+      state: "retract";
+      threadId: Id<"forumThreads">;
+      reason:
+        | "not_approved"
+        | "thread_unavailable"
+        | "category_not_public"
+        | "author_unavailable";
+    }
+> {
+  const assessment = await ctx.db
+    .query("researchQualityAssessments")
+    .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+    .unique();
+  if (
+    assessment === null ||
+    !["passed", "approved", "overridden"].includes(assessment.status)
+  )
+    return { state: "retract", threadId, reason: "not_approved" };
+
+  const thread = await ctx.db.get("forumThreads", threadId);
+  if (
+    thread === null ||
+    (thread.status !== "active" && thread.status !== "locked")
+  )
+    return { state: "retract", threadId, reason: "thread_unavailable" };
+  const category = await explicitlyPublicBoard(ctx, thread.categoryId);
+  if (category === null)
+    return { state: "retract", threadId, reason: "category_not_public" };
+  const author = await ctx.db.get("users", assessment.authorUserId);
+  if (author?.isAgent !== true || !author.agentSlug)
+    return { state: "retract", threadId, reason: "author_unavailable" };
+
+  const [sourceUses, claims] = await Promise.all([
+    ctx.db
+      .query("forumAgentSourceUses")
+      .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+      .take(12),
+    ctx.db
+      .query("forumAgentClaimCitations")
+      .withIndex("by_threadId_and_claimIndex", (q) =>
+        q.eq("threadId", threadId),
+      )
+      .take(12),
+  ]);
+  return {
+    state: "publish",
+    research: {
+      threadId,
+      categorySlug: category.slug,
+      slug: thread.slug,
+      title: thread.title,
+      body: thread.body,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      authorName: author.username ?? author.name ?? author.agentSlug,
+      agentSlug: author.agentSlug,
+      model: assessment.model,
+      promptVersion: assessment.promptVersion,
+      contentFormat: assessment.contentFormat,
+      qualitySchemaVersion: assessment.qualitySchemaVersion,
+      contentQualityScore: assessment.contentQualityScore,
+      citationCoverageScore: assessment.citationCoverageScore,
+      originalityScore: assessment.originalityScore,
+      naturalnessScore: assessment.naturalnessScore,
+      structureScore: assessment.structureScore,
+      sourceDiversityScore: assessment.sourceDiversityScore,
+      sourceDomains: assessment.sourceDomains ?? [],
+      sourceUrls: sourceUses.map((source) => source.sourceUrl),
+      claims: claims.map((claim) => ({
+        claimIndex: claim.claimIndex,
+        claimText: claim.claimText,
+        claimHash: claim.claimHash,
+        bodySpanText: claim.bodySpanText,
+        sourceUrl: claim.sourceUrl,
+        snapshotHash: claim.snapshotHash,
+        supportStatus: claim.supportStatus,
+        supportScore: claim.supportScore,
+      })),
+    },
+  };
+}
+
+/** One dirty thread at a time; private ancestors fail closed before body reads. */
+export const readResearchForEvidenceSync = internalQuery({
+  args: { threadId: v.id("forumThreads") },
+  returns: publishedResearchSyncDecisionValidator,
+  handler: async (ctx, args) => await researchSyncDecision(ctx, args.threadId),
+});
+
+/** Compatibility bridge for bounded operator diagnostics, not the cron path. */
 export const listPublishedResearchForEvidenceSync = internalQuery({
   args: { limit: v.optional(v.number()) },
   returns: v.array(publishedResearchEvidenceValidator),
@@ -806,63 +1013,11 @@ export const listPublishedResearchForEvidenceSync = internalQuery({
           ) === index,
       )
       .slice(0, limit);
-    const results = [];
+    const results: Array<typeof publishedResearchEvidenceValidator.type> = [];
     for (const assessment of assessments) {
       const threadId = assessment.threadId!;
-      const [thread, author, sourceUses, claims] = await Promise.all([
-        ctx.db.get("forumThreads", threadId),
-        ctx.db.get("users", assessment.authorUserId),
-        ctx.db
-          .query("forumAgentSourceUses")
-          .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
-          .take(12),
-        ctx.db
-          .query("forumAgentClaimCitations")
-          .withIndex("by_threadId_and_claimIndex", (q) =>
-            q.eq("threadId", threadId),
-          )
-          .take(12),
-      ]);
-      if (
-        thread === null ||
-        thread.status !== "active" ||
-        author?.isAgent !== true ||
-        !author.agentSlug
-      )
-        continue;
-      results.push({
-        threadId,
-        categorySlug: thread.categorySlug,
-        slug: thread.slug,
-        title: thread.title,
-        body: thread.body,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-        authorName: author.username ?? author.name ?? author.agentSlug,
-        agentSlug: author.agentSlug,
-        model: assessment.model,
-        promptVersion: assessment.promptVersion,
-        contentFormat: assessment.contentFormat,
-        qualitySchemaVersion: assessment.qualitySchemaVersion,
-        contentQualityScore: assessment.contentQualityScore,
-        citationCoverageScore: assessment.citationCoverageScore,
-        originalityScore: assessment.originalityScore,
-        naturalnessScore: assessment.naturalnessScore,
-        structureScore: assessment.structureScore,
-        sourceDiversityScore: assessment.sourceDiversityScore,
-        sourceDomains: assessment.sourceDomains ?? [],
-        sourceUrls: sourceUses.map((source) => source.sourceUrl),
-        claims: claims.map((claim) => ({
-          claimIndex: claim.claimIndex,
-          claimText: claim.claimText,
-          claimHash: claim.claimHash,
-          bodySpanText: claim.bodySpanText,
-          sourceUrl: claim.sourceUrl,
-          snapshotHash: claim.snapshotHash,
-          supportStatus: claim.supportStatus,
-          supportScore: claim.supportScore,
-        })),
-      });
+      const decision = await researchSyncDecision(ctx, threadId);
+      if (decision.state === "publish") results.push(decision.research);
     }
     return results;
   },

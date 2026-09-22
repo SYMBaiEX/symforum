@@ -1,5 +1,68 @@
 # Convex usage optimization
 
+## September 22 projection and lifecycle pass
+
+This release removes the remaining large-document reads from common public
+paths and makes the corresponding compact projections lifecycle-safe:
+
+- Public post lists use `postDigests`, so article bodies are not read merely to
+  render cards. Featured-post selection keeps the existing newest-50 contract.
+- Newsletter click routing is stored in the compact issue digest. Engagement
+  deduplication uses one exact compound-index lookup instead of overlapping
+  scans of the engagement table.
+- Universal search reads one bounded compact projection across evidence, blog,
+  newsletter, news, and forum content instead of loading hundreds of full
+  source records. Every source writer updates the projection transactionally;
+  visibility-policy changes invalidate the projection and start a resumable
+  rebuild. It remains on the live fallback until its forum-search dependency is
+  complete, and full-document migration pages have both row and byte ceilings.
+- News projections retain their exact story and snapshot provenance. Search
+  rejects removed stories and running or failed snapshots immediately, while
+  bounded reconciliation repairs the compact index in the background.
+- Forum search performs one bounded point-in-time pass. Route lookup and agent
+  duplicate-title checks use compact projections, and exact view counters are
+  isolated from subscriber-facing thread rows. Thread/search counters update at
+  view 1 and then every 25 accepted views.
+- First-party forum evidence is dirty-driven. Publication, edits, moderation,
+  moves, category access changes, quality decisions, and deletions enqueue one
+  generation-guarded item. A resumable reconciliation covers historical and
+  orphaned records. Public reads fail closed while retraction is pending, and
+  claim retraction continues in bounded pages after the owning document is
+  hidden. Queue row identity plus generation fences stale workers, including a
+  delete-and-recreate ABA case, before publication, retraction, or acknowledgement.
+- Research jobs, exports, and retained dataset snapshots carry the current
+  publication epoch. Restrictive source or record changes advance that epoch,
+  so previously generated artifacts fail closed until regenerated against the
+  current visibility policy.
+- Webhook attempts acquire a lease only when the delivery action actually
+  starts. Scheduler delay no longer consumes retry attempts.
+- The analytics write limiter keeps the existing global budget but uses three
+  contention shards, reducing optimistic-concurrency retries under bursts.
+
+The existing-table indexes added here were measured before rollout: 5,143
+newsletter engagement rows and 642 rows in each affected forum projection
+table. They are intentionally enabled in the release rather than staged; these
+are bounded, small backfills, while staged indexes cannot be queried by the new
+functions until a second schema deploy.
+
+### One-time production rollout
+
+Deploy functions first. These reads retain their legacy fallbacks until the
+matching marker is complete. Start each migration once; it stores its own
+cursor and schedules bounded continuations:
+
+```sh
+bunx convex run postDigests:backfillPostDigests '{}' --deployment strong-bee-384
+bunx convex run newsletterDigests:backfillNewsletterIssueDigests '{}' --deployment strong-bee-384
+bunx convex run universalSearchProjection:backfill '{}' --deployment strong-bee-384
+bunx convex run evidenceFirstParty:requestHistoricalReconciliation '{}' --deployment strong-bee-384
+bunx convex run evidenceFirstParty:syncForumResearch '{}' --deployment strong-bee-384
+```
+
+Do not loop these commands from cron. Each migration persists progress and
+self-schedules; the evidence sync queue is then maintained by writer hooks and
+the existing low-frequency safety job.
+
 ## September 22 read-cost follow-up
 
 The bounded production sample preceding this release contained about 18 MB of

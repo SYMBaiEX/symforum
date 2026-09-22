@@ -1,5 +1,10 @@
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+  isPublicEvidenceEntity,
+} from "./evidenceVisibility";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -311,8 +316,7 @@ function parseReservation(command: Doc<"apiCommands">) {
   }
   return {
     organizationUsageId: organizationUsageId as
-      | Id<"organizationUsageLedger">
-      | undefined,
+      Id<"organizationUsageLedger"> | undefined,
   };
 }
 
@@ -392,7 +396,82 @@ export const prepare = internalMutation({
       }
       return {
         commandId: stored._id,
-        replayResult: parseStoredResult(stored),
+        replayResult: (
+          await Promise.all(
+            parseStoredResult(stored).map(async (result) => {
+              if (result.type === "evidence_document") {
+                const id = ctx.db.normalizeId(
+                  "evidenceDocuments",
+                  result.provenance.documentId ?? "",
+                );
+                const document =
+                  id === null
+                    ? null
+                    : await ctx.db.get("evidenceDocuments", id);
+                if (
+                  document === null ||
+                  document.updatedAt !== result.updatedAt ||
+                  !(await isPublicEvidenceDocument(ctx, document))
+                )
+                  return null;
+              }
+              if (result.type === "evidence_claim") {
+                const id = ctx.db.normalizeId(
+                  "evidenceClaims",
+                  result.provenance.claimId ?? "",
+                );
+                const claim =
+                  id === null ? null : await ctx.db.get("evidenceClaims", id);
+                if (
+                  claim === null ||
+                  claim.updatedAt !== result.updatedAt ||
+                  !(await isPublicEvidenceClaim(ctx, claim))
+                )
+                  return null;
+                for (const citationId of result.provenance.citationIds) {
+                  const id = ctx.db.normalizeId(
+                    "evidenceClaimCitations",
+                    citationId,
+                  );
+                  const citation =
+                    id === null
+                      ? null
+                      : await ctx.db.get("evidenceClaimCitations", id);
+                  if (citation === null || citation.claimId !== claim._id)
+                    return null;
+                  const version = await ctx.db.get(
+                    "evidenceDocumentVersions",
+                    citation.documentVersionId,
+                  );
+                  const document =
+                    version === null
+                      ? null
+                      : await ctx.db.get(
+                          "evidenceDocuments",
+                          version.documentId,
+                        );
+                  if (!(await isPublicEvidenceDocument(ctx, document)))
+                    return null;
+                }
+              }
+              if (result.type === "evidence_entity") {
+                const id = ctx.db.normalizeId(
+                  "evidenceEntities",
+                  result.provenance.entityId ?? "",
+                );
+                const entity =
+                  id === null ? null : await ctx.db.get("evidenceEntities", id);
+                if (
+                  entity === null ||
+                  !(await isPublicEvidenceEntity(ctx, entity)) ||
+                  entity.updatedAt !== result.updatedAt
+                )
+                  return null;
+              }
+              return result;
+            }),
+          )
+        ).filter((result) => result !== null),
       };
     }
 

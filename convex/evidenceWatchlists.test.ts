@@ -499,6 +499,29 @@ describe("watchlist outbox", () => {
       targetKey: "public-claim",
       deliveryPreference: "none",
     });
+    const originalExternalKey = await t.run(async (ctx) => {
+      const document = await ctx.db.get(
+        "evidenceDocuments",
+        fixtureIds.documentId,
+      );
+      await ctx.db.patch("evidenceDocuments", fixtureIds.documentId, {
+        externalKey: "forum-research:missing-thread",
+      });
+      return document!.externalKey;
+    });
+    await expect(
+      owner.mutation(watchlists.create, {
+        watchlistKey: "unresolved-forum-claim",
+        targetType: "claim",
+        targetKey: "public-claim",
+        deliveryPreference: "none",
+      }),
+    ).rejects.toThrow(/current public evidence targets/i);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("evidenceDocuments", fixtureIds.documentId, {
+        externalKey: originalExternalKey,
+      });
+    });
     await t.run(async (ctx) => {
       await ctx.db.patch("evidenceDocuments", fixtureIds.documentId, {
         visibility: "private",
@@ -778,20 +801,34 @@ describe("watchlist webhook bridge", () => {
   test("never fans a watchlist event across owners", async () => {
     const t = setup();
     const ids = await enqueuePublicWebhookMatch(t);
-    const scheduled = await t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.some(job => job.name === "evidenceWatchlists:dispatchWebhookOutbox")).toBe(true);
+    const scheduled = await t.run((ctx) =>
+      ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    expect(
+      scheduled.some(
+        (job) => job.name === "evidenceWatchlists:dispatchWebhookOutbox",
+      ),
+    ).toBe(true);
     const ownerSubscription = await addTarget(t, ids.owner);
     await addTarget(t, ids.otherOwner);
 
     await expect(
       t.mutation(watchlists.dispatchWebhookOutbox, { limit: 1 }),
     ).resolves.toMatchObject({ processed: 1, dispatched: 1, enqueued: 1 });
-    const continued = await t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
-    expect(continued.filter(job => job.name === "evidenceWatchlists:dispatchWebhookOutbox").length).toBeGreaterThan(scheduled.length);
+    const continued = await t.run((ctx) =>
+      ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    expect(
+      continued.filter(
+        (job) => job.name === "evidenceWatchlists:dispatchWebhookOutbox",
+      ).length,
+    ).toBeGreaterThan(scheduled.length);
     await t.run(async (ctx) => {
       const deliveries = await ctx.db
         .query("apiWebhookDeliveries")
-        .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+        .withIndex("by_eventKey", (q) =>
+          q.eq("eventKey", "document:webhook-release"),
+        )
         .collect();
       expect(deliveries).toHaveLength(1);
       expect(deliveries[0]?.subscriptionId).toBe(ownerSubscription);
@@ -822,12 +859,19 @@ describe("watchlist webhook bridge", () => {
     await t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 });
     await expect(
       t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
-    ).resolves.toEqual({ processed: 0, dispatched: 0, discarded: 0, enqueued: 0 });
+    ).resolves.toEqual({
+      processed: 0,
+      dispatched: 0,
+      discarded: 0,
+      enqueued: 0,
+    });
     await t.run(async (ctx) => {
       expect(
         await ctx.db
           .query("apiWebhookDeliveries")
-          .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+          .withIndex("by_eventKey", (q) =>
+            q.eq("eventKey", "document:webhook-release"),
+          )
           .collect(),
       ).toHaveLength(1);
     });
@@ -881,7 +925,9 @@ describe("watchlist webhook bridge", () => {
       expect(
         await ctx.db
           .query("apiWebhookDeliveries")
-          .withIndex("by_eventKey", (q) => q.eq("eventKey", "document:webhook-release"))
+          .withIndex("by_eventKey", (q) =>
+            q.eq("eventKey", "document:webhook-release"),
+          )
           .collect(),
       ).toHaveLength(2);
     });

@@ -1,4 +1,9 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
+import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+  isPublicEvidenceEntity,
+} from "./evidenceVisibility";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -28,9 +33,7 @@ const enqueueEventForOwnerRef = makeFunctionReference<
   {
     ownerUserId: Id<"users">;
     eventKey: string;
-    eventType:
-      | "evidence.document.changed"
-      | "evidence.claim.verified";
+    eventType: "evidence.document.changed" | "evidence.claim.verified";
     payloadJson: string;
   },
   { eventId: Id<"apiWebhookEvents"> | null; eligible: number; enqueued: number }
@@ -78,12 +81,7 @@ function identifier(value: string, name: string, maximum: number) {
 
 function targetIdentifier(
   targetType:
-    | "source"
-    | "entity"
-    | "claim"
-    | "document"
-    | "topic"
-    | "repository",
+    "source" | "entity" | "claim" | "document" | "topic" | "repository",
   value: string,
 ) {
   if (targetType === "document") {
@@ -166,12 +164,7 @@ async function evidencePrincipal(ctx: DatabaseCtx): Promise<Principal> {
 async function requirePublicTarget(
   ctx: DatabaseCtx,
   targetType:
-    | "source"
-    | "entity"
-    | "claim"
-    | "document"
-    | "topic"
-    | "repository",
+    "source" | "entity" | "claim" | "document" | "topic" | "repository",
   targetKey: string,
 ) {
   if (targetType === "source") {
@@ -220,7 +213,7 @@ async function isCurrentPublicDocument(
   ctx: DatabaseCtx,
   document: Doc<"evidenceDocuments">,
 ) {
-  if (document.visibility !== "public") return false;
+  if (!(await isPublicEvidenceDocument(ctx, document))) return false;
   const source = await ctx.db.get("evidenceSources", document.sourceId);
   return source?.visibility === "public" && source.status === "active";
 }
@@ -229,31 +222,17 @@ async function hasCurrentPublicEntityReference(
   ctx: DatabaseCtx,
   entityId: Id<"evidenceEntities">,
 ) {
-  const links = await ctx.db
-    .query("evidenceDocumentEntities")
-    .withIndex("by_entityId", (q) => q.eq("entityId", entityId))
-    .take(MAX_ENTITY_LINKS_PER_DOCUMENT);
-  for (const link of links) {
-    const version = await ctx.db.get(
-      "evidenceDocumentVersions",
-      link.documentVersionId,
-    );
-    if (version === null) continue;
-    const document = await ctx.db.get("evidenceDocuments", version.documentId);
-    if (
-      document?.currentVersionId === version._id &&
-      (await isCurrentPublicDocument(ctx, document))
-    )
-      return true;
-  }
-  return false;
+  return await isPublicEvidenceEntity(
+    ctx,
+    await ctx.db.get("evidenceEntities", entityId),
+  );
 }
 
 async function isCurrentPublicClaim(
   ctx: DatabaseCtx,
   claim: Doc<"evidenceClaims">,
 ) {
-  if (claim.visibility !== "public") return false;
+  if (!(await isPublicEvidenceClaim(ctx, claim))) return false;
   if (claim.subjectEntityId !== null) {
     const subject = await ctx.db.get("evidenceEntities", claim.subjectEntityId);
     if (subject?.visibility !== "public") return false;
@@ -553,9 +532,13 @@ async function drain(ctx: MutationCtx, watchlist: Doc<"evidenceWatchlists">) {
     }
   }
   if (enqueued > 0) {
-    await ctx.scheduler.runAfter(1_000,
-      makeFunctionReference<"mutation">("evidenceWatchlists:dispatchWebhookOutbox"),
-      { limit: MAX_WEBHOOK_OUTBOX_BATCH });
+    await ctx.scheduler.runAfter(
+      1_000,
+      makeFunctionReference<"mutation">(
+        "evidenceWatchlists:dispatchWebhookOutbox",
+      ),
+      { limit: MAX_WEBHOOK_OUTBOX_BATCH },
+    );
   }
   // Never move an opaque cursor past events left unprocessed by a future cap
   // change. With the current equal caps this branch is unreachable, but it
@@ -673,7 +656,8 @@ export const drainOutbox = internalMutation({
 });
 
 function webhookEventType(event: Doc<"evidenceChangeEvents">) {
-  if (event.entityType === "document") return "evidence.document.changed" as const;
+  if (event.entityType === "document")
+    return "evidence.document.changed" as const;
   if (event.entityType === "claim") return "evidence.claim.verified" as const;
   return null;
 }
@@ -699,7 +683,10 @@ export const dispatchWebhookOutbox = internalMutation({
   handler: async (ctx, args) => {
     const limit = Math.max(
       1,
-      Math.min(Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_BATCH), MAX_WEBHOOK_OUTBOX_BATCH),
+      Math.min(
+        Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_BATCH),
+        MAX_WEBHOOK_OUTBOX_BATCH,
+      ),
     );
     const rows = await ctx.db
       .query("evidenceWatchlistOutbox")
@@ -747,7 +734,9 @@ export const dispatchWebhookOutbox = internalMutation({
       });
       await ctx.db.patch("evidenceWatchlistOutbox", row._id, {
         status: result.eligible === 0 ? "discarded" : "dispatched",
-        ...(result.eligible === 0 ? { discardedAt: now } : { dispatchedAt: now }),
+        ...(result.eligible === 0
+          ? { discardedAt: now }
+          : { dispatchedAt: now }),
       });
       if (result.eligible === 0) {
         discarded += 1;
@@ -757,9 +746,13 @@ export const dispatchWebhookOutbox = internalMutation({
       }
     }
     if (rows.length === limit) {
-      await ctx.scheduler.runAfter(1_000,
-        makeFunctionReference<"mutation">("evidenceWatchlists:dispatchWebhookOutbox"),
-        { limit });
+      await ctx.scheduler.runAfter(
+        1_000,
+        makeFunctionReference<"mutation">(
+          "evidenceWatchlists:dispatchWebhookOutbox",
+        ),
+        { limit },
+      );
     }
     return { processed: rows.length, dispatched, discarded, enqueued };
   },
@@ -772,7 +765,10 @@ export const cleanupWebhookOutbox = internalMutation({
   handler: async (ctx, args) => {
     const limit = Math.max(
       1,
-      Math.min(Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH), MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH),
+      Math.min(
+        Math.floor(args.limit ?? MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH),
+        MAX_WEBHOOK_OUTBOX_CLEANUP_BATCH,
+      ),
     );
     const cutoff = Date.now() - MAX_WEBHOOK_OUTBOX_RETENTION_MS;
     let removed = 0;

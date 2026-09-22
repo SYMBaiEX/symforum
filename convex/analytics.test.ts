@@ -27,13 +27,14 @@ function setup() {
 describe("analytics retention", () => {
   test("exposes only aggregate capture health in the admin summary", async () => {
     const t = setup();
-    const adminId = await t.run(async (ctx) =>
-      await ctx.db.insert("users", {
-        name: "Admin",
-        username: "admin",
-        usernameNormalized: "admin",
-        role: "admin",
-      }),
+    const adminId = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("users", {
+          name: "Admin",
+          username: "admin",
+          usernameNormalized: "admin",
+          role: "admin",
+        }),
     );
     await t.run(async (ctx) => {
       await ctx.db.insert("analyticsDailyMetrics", {
@@ -85,34 +86,38 @@ describe("analytics retention", () => {
 
   test("enforces one anonymous global budget despite varied visitor IDs", async () => {
     const t = setup();
-    for (let index = 0; index < 30; index += 1) {
-      await expect(
-        t.mutation(api.analytics.record, {
+    const results = [];
+    for (let index = 0; index < 60; index += 1) {
+      results.push(
+        await t.mutation(api.analytics.record, {
           name: "page_view",
           visitorId: `visitor-${index}`,
           sessionId: `session-${index}`,
           path: `/path-${index}`,
         }),
-      ).resolves.toMatchObject({ recorded: true });
+      );
     }
 
-    await expect(
-      t.mutation(api.analytics.record, {
-        name: "page_view",
-        visitorId: "different-visitor",
-        sessionId: "different-session",
-        path: "/must-not-write",
-      }),
-    ).resolves.toMatchObject({
-      recorded: false,
-      deduped: false,
-      reason: "RATE_LIMITED",
-    });
+    const captured = results.filter((result) => result.recorded).length;
+    const dropped = results.length - captured;
+    expect(captured).toBeGreaterThan(0);
+    expect(captured).toBeLessThanOrEqual(30);
+    expect(dropped).toBeGreaterThan(0);
+    expect(
+      results.some(
+        (result) =>
+          !result.recorded &&
+          "reason" in result &&
+          result.reason === "RATE_LIMITED",
+      ),
+    ).toBe(true);
     await t.run(async (ctx) => {
-      expect(await ctx.db.query("analyticsEvents").collect()).toHaveLength(30);
-      expect(await ctx.db.query("analyticsDailyMetrics").collect()).toMatchObject([
-        { captured: 30, droppedRateLimited: 1 },
-      ]);
+      expect(await ctx.db.query("analyticsEvents").collect()).toHaveLength(
+        captured,
+      );
+      expect(
+        await ctx.db.query("analyticsDailyMetrics").collect(),
+      ).toMatchObject([{ captured, droppedRateLimited: dropped }]);
     });
   });
 });

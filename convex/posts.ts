@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import {
+  featuredPublishedPostId,
+  listPublishedPostDigests,
+} from "./postDigests";
 
 export const listPublished = query({
   args: {},
@@ -21,29 +25,14 @@ export const listPublished = query({
  */
 export const listPublishedSummaries = query({
   args: {},
-  handler: async (ctx) => {
-    const posts = await ctx.db
-      .query("posts")
-      .withIndex("by_status_and_publishedAt", (q) =>
-        q.eq("status", "published"),
-      )
-      .order("desc")
-      .take(50);
-    return posts.map(({ body: _body, ...post }) => post);
-  },
+  handler: async (ctx) => await listPublishedPostDigests(ctx, 50),
 });
 
 export const featured = query({
   args: {},
   handler: async (ctx) => {
-    const posts = await ctx.db
-      .query("posts")
-      .withIndex("by_status_and_publishedAt", (q) =>
-        q.eq("status", "published"),
-      )
-      .order("desc")
-      .take(50);
-    return posts.find((post) => post.featured) ?? null;
+    const postId = await featuredPublishedPostId(ctx);
+    return postId === null ? null : await ctx.db.get("posts", postId);
   },
 });
 

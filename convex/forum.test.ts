@@ -1063,6 +1063,12 @@ describe("forum notification preferences", () => {
     expect(second.createdCategoryIds).toHaveLength(0);
     expect(second.createdPrefixIds).toHaveLength(0);
 
+    const digestBackfill = await t.mutation(
+      internal.forumThreadDigestBackfill.run,
+      {},
+    );
+    expect(digestBackfill.done).toBe(true);
+
     const context = await t.query(internal.forum.readSukiForumContext, {});
     expect(context.agent).toMatchObject({
       dailyPostTarget: 4,
@@ -4204,6 +4210,26 @@ describe("forum privacy regressions", () => {
       threadExcerpt:
         "Trusted launch Trusted members can read this lunar launch discussion.",
     });
+
+    await completeForumSearchProjectionBackfill(t);
+    await expect(
+      asTrusted.query(api.forum.routeStatus, {
+        categorySlug: "trusted-lab",
+        threadSlug: "trusted-lunar-brief",
+      }),
+    ).resolves.toMatchObject({
+      exists: true,
+      kind: "thread",
+      threadTitle: "Trusted lunar brief",
+      threadExcerpt:
+        "Trusted launch Trusted members can read this lunar launch discussion.",
+    });
+    await expect(
+      t.query(api.forum.routeStatus, {
+        categorySlug: "trusted-lab",
+        threadSlug: "trusted-lunar-brief",
+      }),
+    ).resolves.toMatchObject({ exists: false, kind: "missing" });
   });
 
   test("overview hydrates real latest-thread metadata without UI placeholders", async () => {
@@ -4334,14 +4360,107 @@ describe("forum privacy regressions", () => {
     const threadBefore = await t.run((ctx) =>
       ctx.db.get("forumThreads", seed.publicThreadId),
     );
-    await t
+    const firstView = await t
       .withIdentity({ subject: seed.trustedUserId })
       .mutation(api.forum.recordThreadView, { threadId: seed.publicThreadId });
+    expect(firstView).toEqual({ recorded: true, viewCount: 1 });
     const threadAfter = await t.run((ctx) =>
       ctx.db.get("forumThreads", seed.publicThreadId),
     );
     expect(threadAfter?.viewCount).toBe(threadBefore!.viewCount + 1);
     expect(threadAfter?.updatedAt).toBe(threadBefore!.updatedAt);
+    const projectionAfterFirstView = await t.run((ctx) =>
+      ctx.db
+        .query("forumThreadSearchProjections")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .unique(),
+    );
+    expect(projectionAfterFirstView?.viewCount).toBe(1);
+    const secondView = await t
+      .withIdentity({ subject: seed.otherTrustedUserId })
+      .mutation(api.forum.recordThreadView, { threadId: seed.publicThreadId });
+    expect(secondView).toEqual({ recorded: true, viewCount: 2 });
+    await expect(
+      t
+        .withIdentity({ subject: seed.otherTrustedUserId })
+        .mutation(api.forum.recordThreadView, {
+          threadId: seed.publicThreadId,
+        }),
+    ).resolves.toEqual({ recorded: false, viewCount: 2 });
+    const [
+      threadAfterSecondView,
+      projectionAfterSecondView,
+      counterAfterSecondView,
+    ] = await t.run(
+      async (ctx) =>
+        await Promise.all([
+          ctx.db.get("forumThreads", seed.publicThreadId),
+          ctx.db
+            .query("forumThreadSearchProjections")
+            .withIndex("by_threadId", (q) =>
+              q.eq("threadId", seed.publicThreadId),
+            )
+            .unique(),
+          ctx.db
+            .query("forumThreadEngagementCounters")
+            .withIndex("by_threadId", (q) =>
+              q.eq("threadId", seed.publicThreadId),
+            )
+            .unique(),
+        ]),
+    );
+    expect(counterAfterSecondView?.viewCount).toBe(2);
+    // Search/list counters and the main content row refresh at 1 and every 25
+    // views; the engagement counter and mutation result remain exact.
+    expect(threadAfterSecondView?.viewCount).toBe(1);
+    expect(projectionAfterSecondView?.viewCount).toBe(1);
+
+    const additionalViewerIds = await t.run(async (ctx) => {
+      const userIds: Array<Id<"users">> = [];
+      for (let index = 0; index < 23; index += 1) {
+        userIds.push(
+          await ctx.db.insert("users", {
+            name: `View tester ${index}`,
+            username: `viewtester${index}`,
+            usernameNormalized: `viewtester${index}`,
+            forumTrustedAt: 1_800_000_000_000,
+          }),
+        );
+      }
+      return userIds;
+    });
+    let checkpointViewCount = 2;
+    for (const userId of additionalViewerIds) {
+      const result = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.forum.recordThreadView, {
+          threadId: seed.publicThreadId,
+        });
+      checkpointViewCount = result.viewCount ?? checkpointViewCount;
+    }
+    expect(checkpointViewCount).toBe(25);
+    const [threadAtCheckpoint, projectionAtCheckpoint, digestAtCheckpoint] =
+      await t.run(
+        async (ctx) =>
+          await Promise.all([
+            ctx.db.get("forumThreads", seed.publicThreadId),
+            ctx.db
+              .query("forumThreadSearchProjections")
+              .withIndex("by_threadId", (q) =>
+                q.eq("threadId", seed.publicThreadId),
+              )
+              .unique(),
+            ctx.db
+              .query("forumThreadEditorialDigests")
+              .withIndex("by_threadId", (q) =>
+                q.eq("threadId", seed.publicThreadId),
+              )
+              .unique(),
+          ]),
+      );
+    expect(threadAtCheckpoint?.viewCount).toBe(25);
+    expect(projectionAtCheckpoint?.viewCount).toBe(25);
+    expect(digestAtCheckpoint?.viewCount).toBe(25);
     expect(
       (await t.query(api.forum.listCategories, {})).some(
         (category) => category.slug === "trusted-lab",
@@ -5639,7 +5758,6 @@ describe("forum privacy regressions", () => {
         (attachment: ForumAttachmentResult) => attachment._id,
       ),
     ).toEqual([attachmentIds.rootKeep]);
-
     const replyEdit = await asTrusted.mutation(api.forum.updatePostContent, {
       postId: seed.publicPostId,
       body: "Public reply about lunar launch logs.",
@@ -5975,6 +6093,10 @@ describe("forum privacy regressions", () => {
             q.eq("userId", seed.otherTrustedUserId),
           )
           .unique(),
+        evidenceQueue: await ctx.db
+          .query("evidenceFirstPartySyncQueue")
+          .withIndex("by_threadId", (q) => q.eq("threadId", thread.threadId))
+          .unique(),
         thread: await ctx.db.get("forumThreads", thread.threadId),
       };
     });
@@ -5983,6 +6105,9 @@ describe("forum privacy regressions", () => {
       status: "deleted",
       deletedBy: seed.otherTrustedUserId,
       deletedAt: expect.any(Number),
+    });
+    expect(snapshot.evidenceQueue).toMatchObject({
+      reason: "visibility_changed",
     });
     expect(snapshot.category).toMatchObject({
       threadCount: Math.max(0, (before.category?.threadCount ?? 0) - 1),

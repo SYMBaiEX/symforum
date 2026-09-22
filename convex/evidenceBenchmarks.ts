@@ -1,4 +1,8 @@
 import { makeFunctionReference } from "convex/server";
+import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+} from "./evidenceVisibility";
 import { ConvexError, v } from "convex/values";
 import {
   internalMutation,
@@ -77,7 +81,15 @@ async function countPublicCurrentDocuments(ctx: MutationCtx) {
     .order("desc")
     .take(DOCUMENT_CAP + 1);
   const truncated = docs.length > DOCUMENT_CAP;
-  const rows = docs.slice(0, DOCUMENT_CAP);
+  const rows = (
+    await Promise.all(
+      docs
+        .slice(0, DOCUMENT_CAP)
+        .map(async (doc) =>
+          (await isPublicEvidenceDocument(ctx, doc)) ? doc : null,
+        ),
+    )
+  ).filter((doc) => doc !== null);
   return {
     scanned: rows.length,
     current: rows.filter((doc) => doc.currentVersionId !== null).length,
@@ -117,7 +129,15 @@ export const runDailyCitationCoverage = internalMutation({
       .order("desc")
       .take(CLAIM_CAP + 1);
     const claimsTruncated = claims.length > CLAIM_CAP;
-    const publicClaims = claims.slice(0, CLAIM_CAP);
+    const publicClaims = (
+      await Promise.all(
+        claims
+          .slice(0, CLAIM_CAP)
+          .map(async (claim) =>
+            (await isPublicEvidenceClaim(ctx, claim)) ? claim : null,
+          ),
+      )
+    ).filter((claim) => claim !== null);
     let citedClaims = 0;
     let citationRowsScanned = 0;
     for (const claim of publicClaims) {
@@ -141,7 +161,7 @@ export const runDailyCitationCoverage = internalMutation({
           "evidenceDocuments",
           version.documentId,
         );
-        if (document?.visibility === "public") {
+        if (await isPublicEvidenceDocument(ctx, document)) {
           supported = true;
           break;
         }

@@ -6,6 +6,10 @@ import type { AgentQuotaConsumeResult } from "./agentQuota";
 import { requireAgentScope, requireAuthenticatedUser } from "./authz";
 import { listPublicEvidenceSourceRegistry } from "./evidenceSourceRegistry";
 import {
+  isPublicEvidenceClaim,
+  isPublicEvidenceDocument,
+} from "./evidenceVisibility";
+import {
   configuredWebhookKek,
   decryptWebhookSecret,
   encryptWebhookSecret,
@@ -674,7 +678,8 @@ export const dispatch = internalMutation({
         };
       case "verify": {
         const claim = await ctx.db.get("evidenceClaims", claimId!);
-        if (claim === null || claim.visibility !== "public") return null;
+        if (claim === null || !(await isPublicEvidenceClaim(ctx, claim)))
+          return null;
         const citations = await ctx.db
           .query("evidenceClaimCitations")
           .withIndex("by_claimId", (q) => q.eq("claimId", claim._id))
@@ -690,7 +695,8 @@ export const dispatch = internalMutation({
             "evidenceDocuments",
             version.documentId,
           );
-          if (document?.visibility === "public") publicCitations.push(citation);
+          if (await isPublicEvidenceDocument(ctx, document))
+            publicCitations.push(citation);
         }
         return {
           claimId: claim._id,
@@ -763,13 +769,11 @@ export const dispatch = internalMutation({
             ownerUserId: principal.ownerUserId,
             agentId: principal.agentId,
             datasetId: datasetId!,
-            format:
-              input.format === "parquet" ? "parquet" : "jsonl",
+            format: input.format === "parquet" ? "parquet" : "jsonl",
             recordLimit: requestedExportRecordLimit!,
             selectionStrategy:
               input.selectionStrategy === "recent" ? "recent" : "balanced",
-            cursor:
-              typeof input.cursor === "string" ? input.cursor : undefined,
+            cursor: typeof input.cursor === "string" ? input.cursor : undefined,
             idempotencyKey: args.idempotencyKey,
             requestFingerprint: args.requestFingerprint,
             quotaUnits: requestedUnits,

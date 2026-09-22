@@ -4,6 +4,10 @@ import { makeFunctionReference } from "convex/server";
 import { describe, expect, test, vi } from "vitest";
 import { WORKOS_GRANT_CLAIM } from "../lib/workos-config";
 import schema from "./schema";
+import {
+  bumpEvidencePublicationEpoch,
+  readEvidencePublicationEpoch,
+} from "./evidencePublicationEpoch";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -138,6 +142,241 @@ async function completeOwnedExport(
   });
 }
 describe("evidence jobs", () => {
+  test("revokes old research downloads and inline results while allowing newly generated results", async () => {
+    const t = setup();
+    const { owner, agent } = await fixture(t);
+    await t.mutation(jobs.catalog, {});
+    const createAndComplete = async (key: string) => {
+      const job = await t.mutation(jobs.createResearch, {
+        ownerUserId: owner,
+        agentId: "agent",
+        query: "public research",
+        idempotencyKey: key,
+        requestFingerprint: key,
+        quotaUnits: 1,
+      });
+      const claim = await t.mutation(jobs.claimResearch, { jobId: job.jobId });
+      const storageId = await t.run((ctx) =>
+        ctx.storage.store(new Blob(["{}"], { type: "application/json" })),
+      );
+      await t.mutation(jobs.completeResearch, {
+        jobId: job.jobId,
+        executionToken: claim.executionToken,
+        resultJson: "{}",
+        resultStorageId: storageId,
+        artifactContentType: "application/json",
+        artifactByteLength: 2,
+        artifactSha256: "hash",
+      });
+      return job.jobId;
+    };
+    const oldJobId = await createAndComplete("old");
+    // Legacy unstamped results remain valid at epoch zero.
+    await t.run((ctx) =>
+      ctx.db.patch("evidenceResearchJobs", oldJobId, {
+        publicationEpoch: undefined,
+      }),
+    );
+    expect(
+      await t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "research",
+        researchJobId: oldJobId,
+      }),
+    ).not.toBeNull();
+    expect(await t.run((ctx) => bumpEvidencePublicationEpoch(ctx))).toBe(1);
+    expect(
+      await t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "research",
+        researchJobId: oldJobId,
+      }),
+    ).toBeNull();
+    expect(
+      await t.query(jobs.artifact, {
+        ownerUserId: owner,
+        researchJobId: oldJobId,
+      }),
+    ).toBeNull();
+    expect(
+      await t.query(jobs.research, { ownerUserId: owner, jobId: oldJobId }),
+    ).toBeNull();
+    const newJobId = await createAndComplete("new");
+    expect(
+      await t.query(jobs.resolveArtifact, {
+        agentUserId: agent,
+        kind: "research",
+        researchJobId: newJobId,
+      }),
+    ).not.toBeNull();
+  });
+
+  test("fences queued and running jobs across publication changes", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const research = await t.mutation(jobs.createResearch, {
+      ownerUserId: owner,
+      agentId: "agent",
+      query: "research",
+      idempotencyKey: "race-research",
+      requestFingerprint: "race-research",
+      quotaUnits: 1,
+    });
+    const exporting = await t.mutation(jobs.createExport, {
+      ownerUserId: owner,
+      agentId: "agent",
+      datasetId: catalog.datasetId,
+      format: "jsonl",
+      idempotencyKey: "race-export",
+      requestFingerprint: "race-export",
+      quotaUnits: 1,
+    });
+    const queued = await t.mutation(jobs.createResearch, {
+      ownerUserId: owner,
+      agentId: "agent",
+      query: "queued",
+      idempotencyKey: "queued",
+      requestFingerprint: "queued",
+      quotaUnits: 1,
+    });
+    const researchClaim = await t.mutation(jobs.claimResearch, {
+      jobId: research.jobId,
+    });
+    const exportClaim = await t.mutation(jobs.claimExport, {
+      jobId: exporting.jobId,
+    });
+    await t.mutation(jobs.beginResearch, {
+      jobId: research.jobId,
+      executionToken: researchClaim.executionToken,
+    });
+    await t.mutation(jobs.beginExport, {
+      jobId: exporting.jobId,
+      executionToken: exportClaim.executionToken,
+    });
+    await t.run((ctx) => bumpEvidencePublicationEpoch(ctx));
+    expect(
+      await t.mutation(jobs.claimResearch, { jobId: queued.jobId }),
+    ).toBeNull();
+    await t.mutation(jobs.completeResearch, {
+      jobId: research.jobId,
+      executionToken: researchClaim.executionToken,
+      resultJson: '{"private":"must not publish"}',
+    });
+    const staleBlob = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob(["private"], { type: "application/x-ndjson" }),
+      ),
+    );
+    await t.mutation(jobs.completeExport, {
+      jobId: exporting.jobId,
+      executionToken: exportClaim.executionToken,
+      resultJson: "{}",
+      resultStorageId: staleBlob,
+      datasetManifestStorageId: staleBlob,
+      checksum: "stale",
+      recordCount: 1,
+      artifactContentType: "application/x-ndjson",
+      artifactByteLength: 7,
+    });
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db.get("evidenceResearchJobs", research.jobId),
+      ).toMatchObject({ status: "failed", resultJson: "" });
+      expect(
+        await ctx.db.get("evidenceResearchJobs", queued.jobId),
+      ).toMatchObject({ status: "failed" });
+      expect(
+        await ctx.db.get("evidenceExportJobs", exporting.jobId),
+      ).toMatchObject({ status: "failed" });
+      expect(await ctx.storage.get(staleBlob)).toBeNull();
+      expect(await ctx.db.query("evidenceDatasetVersions").take(1)).toEqual([]);
+    });
+  });
+
+  test("revokes historical dataset downloads and renews only freshly materialized snapshots", async () => {
+    const t = setup();
+    const { agent } = await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const first = await t.action(jobs.materializeSnapshot, {
+      datasetId: catalog.datasetId,
+    });
+    const resolveVersion = makeFunctionReference<"query", any, any>(
+      "evidenceJobs:resolveDatasetVersionDownload",
+    );
+    const download = {
+      agentUserId: agent,
+      datasetId: catalog.datasetId,
+      versionId: first.versionId,
+      kind: "artifact",
+    };
+    expect(await t.query(resolveVersion, download)).not.toBeNull();
+    await t.run((ctx) => bumpEvidencePublicationEpoch(ctx));
+    expect(await t.query(resolveVersion, download)).toBeNull();
+    expect(
+      await t.query(resolveVersion, { ...download, kind: "manifest" }),
+    ).toBeNull();
+    const refreshed = await t.action(jobs.materializeSnapshot, {
+      datasetId: catalog.datasetId,
+    });
+    expect(refreshed.created).toBe(true);
+    expect(
+      await t.query(resolveVersion, {
+        ...download,
+        versionId: refreshed.versionId,
+      }),
+    ).not.toBeNull();
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db.get("evidenceDatasetVersions", refreshed.versionId),
+      ).toMatchObject({
+        publicationEpoch: await readEvidencePublicationEpoch(ctx),
+      });
+    });
+  });
+
+  test("rejects system snapshot completion if publication changed after its read", async () => {
+    const t = setup();
+    await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const input = await t.query(jobs.records, { datasetId: catalog.datasetId });
+    const blob = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["{}"], { type: "application/json" })),
+    );
+    await t.run((ctx) => bumpEvidencePublicationEpoch(ctx));
+    const record = makeFunctionReference<"mutation", any, any>(
+      "evidenceJobs:recordSystemDatasetSnapshot",
+    );
+    await expect(
+      t.mutation(record, {
+        publicationEpoch: input.publicationEpoch,
+        datasetId: catalog.datasetId,
+        checksum: "stale",
+        recordCount: 0,
+        schemaVersion: "v3",
+        artifactByteLength: 2,
+        sourceCount: 0,
+        configuredSourceCount: 0,
+        sourceCoverageScore: 0,
+        missingSourceKeys: [],
+        citationCount: 0,
+        citationCoverageScore: 0,
+        entityCount: 0,
+        entityCoverageScore: 0,
+        claimCount: 0,
+        claimCoverageScore: 0,
+        completenessScore: 0,
+        freshnessScore: 0,
+        qualityMetricsJson: "{}",
+        manifestStorageId: blob,
+        artifactStorageId: blob,
+      }),
+    ).rejects.toThrow("EVIDENCE_PUBLICATION_CHANGED");
+    expect(
+      await t.run((ctx) => ctx.db.query("evidenceDatasetVersions").take(1)),
+    ).toEqual([]);
+  });
+
   test("materializes idempotent code-owned dataset snapshots", async () => {
     const t = setup();
     await fixture(t);
@@ -482,6 +721,19 @@ describe("evidence jobs", () => {
     ).toEqual(["release"]);
     expect(releases.scannedRecordCount).toBe(1);
     expect(releases.selectionScanTruncated).toBe(false);
+    await t.run(async (ctx) => {
+      const document = (await ctx.db.query("evidenceDocuments").collect()).find(
+        (row) => row.externalKey === "release-1",
+      )!;
+      await ctx.db.patch("evidenceDocuments", document._id, {
+        externalKey: "forum-research:missing-thread",
+      });
+    });
+    const gated = await t.query(jobs.records, {
+      datasetId: datasetIds["software-release-intelligence"],
+      limit: 100,
+    });
+    expect(gated.records).toEqual([]);
   });
 
   test("balances sources with a pinned native cursor and exposes lineage diffs", async () => {
@@ -529,7 +781,11 @@ describe("evidence jobs", () => {
           }),
         );
       }
-      for (const [index, sourceId] of [sourceIds[0], sourceIds[0], sourceIds[1]].entries())
+      for (const [index, sourceId] of [
+        sourceIds[0],
+        sourceIds[0],
+        sourceIds[1],
+      ].entries())
         await ctx.db.insert("evidenceDocuments", {
           sourceId: sourceId!,
           externalKey: `row-${index}`,
@@ -623,35 +879,84 @@ describe("evidence jobs", () => {
         createdAt: now,
         updatedAt: now,
       });
-      const sourceIds = await Promise.all(["deep-a", "deep-b"].map((sourceKey) =>
-        ctx.db.insert("evidenceSources", {
-          sourceKey, name: sourceKey, sourceType: "api", ingestionEnabled: true,
-          baseUrl: `https://${sourceKey}.example.com`, homepageUrl: `https://${sourceKey}.example.com`,
-          status: "active", licenseClass: "open", provenanceClass: "official", visibility: "public",
-          termsUrl: `https://${sourceKey}.example.com/terms`, etag: "", lastModified: "", cursor: "",
-          lastFetchedAt: now, lastSucceededAt: now, lastErrorAt: 0, lastErrorMessage: "", createdAt: now, updatedAt: now,
-        }),
-      ));
+      const sourceIds = await Promise.all(
+        ["deep-a", "deep-b"].map((sourceKey) =>
+          ctx.db.insert("evidenceSources", {
+            sourceKey,
+            name: sourceKey,
+            sourceType: "api",
+            ingestionEnabled: true,
+            baseUrl: `https://${sourceKey}.example.com`,
+            homepageUrl: `https://${sourceKey}.example.com`,
+            status: "active",
+            licenseClass: "open",
+            provenanceClass: "official",
+            visibility: "public",
+            termsUrl: `https://${sourceKey}.example.com/terms`,
+            etag: "",
+            lastModified: "",
+            cursor: "",
+            lastFetchedAt: now,
+            lastSucceededAt: now,
+            lastErrorAt: 0,
+            lastErrorMessage: "",
+            createdAt: now,
+            updatedAt: now,
+          }),
+        ),
+      );
       for (let index = 0; index <= 500; index += 1)
         for (const [sourceIndex, sourceId] of sourceIds.entries())
           await ctx.db.insert("evidenceDocuments", {
-            sourceId, externalKey: `deep-${sourceIndex}-${index}`,
+            sourceId,
+            externalKey: `deep-${sourceIndex}-${index}`,
             canonicalUrl: `https://example.com/deep/${sourceIndex}/${index}`,
-            canonicalUrlHash: `deep-${sourceIndex}-${index}`, kind: "document", visibility: "public",
-            title: `Deep ${sourceIndex} ${index}`, excerpt: "Evidence row", searchText: "Evidence row",
-            tags: [], authors: [], licenseClass: "open", currentVersionId: null, publishedAt: null,
-            firstSeenAt: now - index, updatedAt: now - index,
+            canonicalUrlHash: `deep-${sourceIndex}-${index}`,
+            kind: "document",
+            visibility: "public",
+            title: `Deep ${sourceIndex} ${index}`,
+            excerpt: "Evidence row",
+            searchText: "Evidence row",
+            tags: [],
+            authors: [],
+            licenseClass: "open",
+            currentVersionId: null,
+            publishedAt: null,
+            firstSeenAt: now - index,
+            updatedAt: now - index,
           });
       return datasetId;
     });
-    const first = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced" });
+    const first = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 500,
+      selectionStrategy: "balanced",
+    });
     expect(first.records).toHaveLength(500);
-    expect(first.records.slice(0, 4).map((row: any) => row.source.sourceKey)).toEqual(["deep-a", "deep-b", "deep-a", "deep-b"]);
-    const second = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced", cursor: first.continueCursor });
+    expect(
+      first.records.slice(0, 4).map((row: any) => row.source.sourceKey),
+    ).toEqual(["deep-a", "deep-b", "deep-a", "deep-b"]);
+    const second = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 500,
+      selectionStrategy: "balanced",
+      cursor: first.continueCursor,
+    });
     expect(second.records).toHaveLength(500);
-    const final = await t.query(jobs.records, { datasetId: seeded, limit: 500, selectionStrategy: "balanced", cursor: second.continueCursor });
-    expect(final.records.map((row: any) => row.title)).toEqual(["Deep 0 500", "Deep 1 500"]);
-    expect(final.records.map((row: any) => row.source.sourceKey)).toEqual(["deep-a", "deep-b"]);
+    const final = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 500,
+      selectionStrategy: "balanced",
+      cursor: second.continueCursor,
+    });
+    expect(final.records.map((row: any) => row.title)).toEqual([
+      "Deep 0 500",
+      "Deep 1 500",
+    ]);
+    expect(final.records.map((row: any) => row.source.sourceKey)).toEqual([
+      "deep-a",
+      "deep-b",
+    ]);
   });
 
   test("rotates balanced allocation when a page is smaller than its source set", async () => {
@@ -661,34 +966,92 @@ describe("evidence jobs", () => {
       const now = Date.now();
       const sourceKeys = ["rotate-a", "rotate-b", "rotate-c"];
       const datasetId = await ctx.db.insert("evidenceDatasets", {
-        datasetKey: "rotate-balanced-test", name: "Rotate balanced test", description: "Fair sparse pages",
-        visibility: "public", licenseClass: "open", includedKinds: [], includedLicenseClasses: ["open"],
-        sourceKeys, status: "active", createdAt: now, updatedAt: now,
+        datasetKey: "rotate-balanced-test",
+        name: "Rotate balanced test",
+        description: "Fair sparse pages",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
       });
       for (const sourceKey of sourceKeys) {
         const sourceId = await ctx.db.insert("evidenceSources", {
-          sourceKey, name: sourceKey, sourceType: "api", ingestionEnabled: true,
-          baseUrl: `https://${sourceKey}.example.com`, homepageUrl: `https://${sourceKey}.example.com`,
-          status: "active", licenseClass: "open", provenanceClass: "official", visibility: "public",
-          termsUrl: `https://${sourceKey}.example.com/terms`, etag: "", lastModified: "", cursor: "",
-          lastFetchedAt: now, lastSucceededAt: now, lastErrorAt: 0, lastErrorMessage: "", createdAt: now, updatedAt: now,
+          sourceKey,
+          name: sourceKey,
+          sourceType: "api",
+          ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: now,
+          lastSucceededAt: now,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
         });
         for (let index = 0; index < 2; index += 1)
           await ctx.db.insert("evidenceDocuments", {
-            sourceId, externalKey: `${sourceKey}-${index}`, canonicalUrl: `https://example.com/${sourceKey}/${index}`,
-            canonicalUrlHash: `${sourceKey}-${index}`, kind: "document", visibility: "public", title: `${sourceKey}-${index}`,
-            excerpt: "Evidence row", searchText: "Evidence row", tags: [], authors: [], licenseClass: "open",
-            currentVersionId: null, publishedAt: null, firstSeenAt: now - index, updatedAt: now - index,
+            sourceId,
+            externalKey: `${sourceKey}-${index}`,
+            canonicalUrl: `https://example.com/${sourceKey}/${index}`,
+            canonicalUrlHash: `${sourceKey}-${index}`,
+            kind: "document",
+            visibility: "public",
+            title: `${sourceKey}-${index}`,
+            excerpt: "Evidence row",
+            searchText: "Evidence row",
+            tags: [],
+            authors: [],
+            licenseClass: "open",
+            currentVersionId: null,
+            publishedAt: null,
+            firstSeenAt: now - index,
+            updatedAt: now - index,
           });
       }
       return datasetId;
     });
-    const first = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced" });
-    const second = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced", cursor: first.continueCursor });
-    const third = await t.query(jobs.records, { datasetId: seeded, limit: 2, selectionStrategy: "balanced", cursor: second.continueCursor });
-    expect(first.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-a", "rotate-b"]);
-    expect(second.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-c", "rotate-a"]);
-    expect(third.records.map((row: any) => row.source.sourceKey)).toEqual(["rotate-b", "rotate-c"]);
+    const first = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 2,
+      selectionStrategy: "balanced",
+    });
+    const second = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 2,
+      selectionStrategy: "balanced",
+      cursor: first.continueCursor,
+    });
+    const third = await t.query(jobs.records, {
+      datasetId: seeded,
+      limit: 2,
+      selectionStrategy: "balanced",
+      cursor: second.continueCursor,
+    });
+    expect(first.records.map((row: any) => row.source.sourceKey)).toEqual([
+      "rotate-a",
+      "rotate-b",
+    ]);
+    expect(second.records.map((row: any) => row.source.sourceKey)).toEqual([
+      "rotate-c",
+      "rotate-a",
+    ]);
+    expect(third.records.map((row: any) => row.source.sourceKey)).toEqual([
+      "rotate-b",
+      "rotate-c",
+    ]);
   });
 
   test("applies configured snapshot retention while preserving the minimum", async () => {
@@ -709,7 +1072,9 @@ describe("evidence jobs", () => {
           createdAt: Date.now() - (10 + index) * 86_400_000,
         });
     });
-    await expect(t.mutation(jobs.cleanupVersions, { limit: 10 })).resolves.toEqual({
+    await expect(
+      t.mutation(jobs.cleanupVersions, { limit: 10 }),
+    ).resolves.toEqual({
       deletedVersions: 2,
       deletedBytes: 0,
     });

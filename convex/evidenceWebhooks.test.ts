@@ -40,6 +40,9 @@ const webhooks = {
   recover: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:recoverPendingDeliveries",
   ),
+  start: makeFunctionReference<"mutation", any, any>(
+    "evidenceWebhooks:startDeliveryAttempt",
+  ),
   mark: makeFunctionReference<"mutation", any, any>(
     "evidenceWebhooks:markDelivery",
   ),
@@ -123,10 +126,7 @@ const subscriptionArgs = {
   eventTypes: ["evidence.research.completed"] as const,
 };
 
-function webhookCallsForEvent(
-  fetchMock: any,
-  eventKey: string,
-) {
+function webhookCallsForEvent(fetchMock: any, eventKey: string) {
   return fetchMock.mock.calls.filter(
     ([url, init]: [string | URL | Request, RequestInit | undefined]) => {
       const headers = new Headers((init as RequestInit | undefined)?.headers);
@@ -149,7 +149,10 @@ async function enqueueFixtureDelivery(
   await t.mutation(webhooks.enqueue, {
     eventKey,
     eventType: "evidence.research.completed",
-    payloadJson: JSON.stringify({ researchJobId: eventKey, status: "completed" }),
+    payloadJson: JSON.stringify({
+      researchJobId: eventKey,
+      status: "completed",
+    }),
   });
   return await t.run(async (ctx) => {
     const delivery = await ctx.db
@@ -211,6 +214,24 @@ async function insertClaimedDeliveryFixture(
   });
 }
 
+async function insertScheduledDeliveryFixture(
+  t: ReturnType<typeof setup>,
+  eventKey: string,
+) {
+  const delivery = await insertClaimedDeliveryFixture(t, eventKey);
+  await t.run((ctx) =>
+    ctx.db.patch("apiWebhookDeliveries", delivery._id, {
+      status: "pending",
+      leaseExpiresAt: undefined,
+    }),
+  );
+  return {
+    ...delivery,
+    status: "pending" as const,
+    leaseExpiresAt: undefined,
+  };
+}
+
 describe("evidence webhooks", () => {
   test("deduplicates owner-scoped usage threshold events without sensitive fields", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
@@ -246,7 +267,9 @@ describe("evidence webhooks", () => {
     expect(replay.enqueued).toBe(0);
     await t.run(async (ctx) => {
       expect(await ctx.db.query("apiWebhookEvents").collect()).toHaveLength(1);
-      expect(await ctx.db.query("apiWebhookDeliveries").collect()).toHaveLength(1);
+      expect(await ctx.db.query("apiWebhookDeliveries").collect()).toHaveLength(
+        1,
+      );
       const event = await ctx.db.query("apiWebhookEvents").unique();
       expect(event?.payloadJson).not.toMatch(/token|secret|price|request/i);
     });
@@ -314,15 +337,29 @@ describe("evidence webhooks", () => {
     });
     expect(global.enqueued).toBe(2);
     await t.run(async (ctx) => {
-      const subscriptions = await ctx.db.query("apiWebhookSubscriptions").collect();
+      const subscriptions = await ctx.db
+        .query("apiWebhookSubscriptions")
+        .collect();
       const deliveries = await ctx.db.query("apiWebhookDeliveries").collect();
-      const aSubscription = subscriptions.find((item) => item.ownerUserId === a.owner);
-      const bSubscription = subscriptions.find((item) => item.ownerUserId === b.owner);
+      const aSubscription = subscriptions.find(
+        (item) => item.ownerUserId === a.owner,
+      );
+      const bSubscription = subscriptions.find(
+        (item) => item.ownerUserId === b.owner,
+      );
       expect(aSubscription).toBeDefined();
       expect(bSubscription).toBeDefined();
-      expect(deliveries.filter((item) => item.subscriptionId === aSubscription!._id)).toHaveLength(3);
-      expect(deliveries.filter((item) => item.subscriptionId === bSubscription!._id)).toHaveLength(1);
-      expect(deliveries.filter((item) => item.eventKey === "usage:owner-a:threshold")).toHaveLength(1);
+      expect(
+        deliveries.filter((item) => item.subscriptionId === aSubscription!._id),
+      ).toHaveLength(3);
+      expect(
+        deliveries.filter((item) => item.subscriptionId === bSubscription!._id),
+      ).toHaveLength(1);
+      expect(
+        deliveries.filter(
+          (item) => item.eventKey === "usage:owner-a:threshold",
+        ),
+      ).toHaveLength(1);
     });
   });
 
@@ -334,20 +371,34 @@ describe("evidence webhooks", () => {
     await t.withIdentity({ subject: ids.agent }).mutation(webhooks.create, {
       subscriptionKey: "usage-events",
       url: subscriptionArgs.url,
-      eventTypes: ["evidence.usage.threshold_reached", "evidence.research.completed"],
+      eventTypes: [
+        "evidence.usage.threshold_reached",
+        "evidence.research.completed",
+      ],
     });
-    const payloadJson = JSON.stringify({ scope: "account", period: "2026-08", usedUnits: 80, hardCapUnits: 100, remainingUnits: 20, thresholdPercent: 80 });
-    await expect(t.mutation(webhooks.enqueue, {
-      eventKey: "usage:missing-owner",
-      eventType: "evidence.usage.threshold_reached",
-      payloadJson,
-    })).rejects.toThrow(/owner scope/i);
-    await expect(t.mutation(webhooks.enqueue, {
-      eventKey: "research:owner-supplied",
-      eventType: "evidence.research.completed",
-      payloadJson: JSON.stringify({ status: "completed" }),
-      ownerUserId: ids.owner,
-    })).rejects.toThrow(/global webhook events/i);
+    const payloadJson = JSON.stringify({
+      scope: "account",
+      period: "2026-08",
+      usedUnits: 80,
+      hardCapUnits: 100,
+      remainingUnits: 20,
+      thresholdPercent: 80,
+    });
+    await expect(
+      t.mutation(webhooks.enqueue, {
+        eventKey: "usage:missing-owner",
+        eventType: "evidence.usage.threshold_reached",
+        payloadJson,
+      }),
+    ).rejects.toThrow(/owner scope/i);
+    await expect(
+      t.mutation(webhooks.enqueue, {
+        eventKey: "research:owner-supplied",
+        eventType: "evidence.research.completed",
+        payloadJson: JSON.stringify({ status: "completed" }),
+        ownerUserId: ids.owner,
+      }),
+    ).rejects.toThrow(/global webhook events/i);
   });
 
   test("does not persist delivery events when no subscriber can receive them", async () => {
@@ -481,7 +532,11 @@ describe("evidence webhooks", () => {
         limit: 1,
       });
       expect(history).toHaveLength(1);
-      expect(await agent.query(webhooks.health, { subscriptionKey: "research-events" })).toMatchObject({ pending: 1 });
+      expect(
+        await agent.query(webhooks.health, {
+          subscriptionKey: "research-events",
+        }),
+      ).toMatchObject({ pending: 1 });
       const queued = await t.run(async (ctx) =>
         ctx.db
           .query("apiWebhookDeliveries")
@@ -489,6 +544,12 @@ describe("evidence webhooks", () => {
           .unique(),
       );
       if (queued === null) throw new Error("Expected queued webhook delivery");
+      await expect(
+        t.mutation(webhooks.start, {
+          deliveryId: queued._id,
+          deliveryGeneration: queued.deliveryGeneration,
+        }),
+      ).resolves.toBe(true);
       await t.mutation(webhooks.mark, {
         deliveryId: queued._id,
         deliveryGeneration: queued.deliveryGeneration,
@@ -499,9 +560,11 @@ describe("evidence webhooks", () => {
         subscriptionKey: "research-events",
         eventKey: "research:one",
       });
-      await expect(t.withIdentity({ subject: ids.other }).query(webhooks.history, {
-        subscriptionKey: "research-events",
-      })).rejects.toThrow(/not found/i);
+      await expect(
+        t.withIdentity({ subject: ids.other }).query(webhooks.history, {
+          subscriptionKey: "research-events",
+        }),
+      ).rejects.toThrow(/not found/i);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -533,7 +596,7 @@ describe("evidence webhooks", () => {
           eventKey: "research:recover-once",
           status: "pending",
           attempt: 0,
-          nextAttemptAt: Date.now() - 1,
+          nextAttemptAt: Date.now() - 30_001,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -543,15 +606,95 @@ describe("evidence webhooks", () => {
         t.mutation(webhooks.recover, { limit: 10 }),
         t.mutation(webhooks.recover, { limit: 10 }),
       ]);
-      expect(results.reduce((sum, result) => sum + result.rescheduled, 0)).toBe(1);
+      expect(results.reduce((sum, result) => sum + result.rescheduled, 0)).toBe(
+        1,
+      );
       await t.run(async (ctx) => {
-        expect(await ctx.db.get("apiWebhookDeliveries", deliveryId)).toMatchObject({
-          status: "in_flight",
+        expect(
+          await ctx.db.get("apiWebhookDeliveries", deliveryId),
+        ).toMatchObject({
+          status: "pending",
           deliveryGeneration: 1,
+          attempt: 0,
         });
+        expect(
+          (await ctx.db.get("apiWebhookDeliveries", deliveryId))
+            ?.leaseExpiresAt,
+        ).toBeUndefined();
       });
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  test("scheduler delay rotates pending work without consuming delivery attempts", async () => {
+    vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+    vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T18:05:00.000Z"));
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    try {
+      const t = setup();
+      const initial = await enqueueFixtureDelivery(
+        t,
+        "research:scheduler-delayed",
+      );
+      expect(initial).toMatchObject({
+        status: "pending",
+        attempt: 0,
+        deliveryGeneration: 1,
+      });
+      expect(initial.leaseExpiresAt).toBeUndefined();
+
+      for (let delayed = 0; delayed < 5; delayed += 1) {
+        vi.setSystemTime(Date.now() + 31_000);
+        await expect(
+          t.mutation(webhooks.recover, { limit: 10 }),
+        ).resolves.toMatchObject({ rescheduled: 1, deadLettered: 0 });
+        const pending = await t.run((ctx) =>
+          ctx.db.get("apiWebhookDeliveries", initial._id),
+        );
+        expect(pending).toMatchObject({
+          status: "pending",
+          attempt: 0,
+          deliveryGeneration: delayed + 2,
+        });
+        expect(pending?.leaseExpiresAt).toBeUndefined();
+      }
+
+      const current = await t.run((ctx) =>
+        ctx.db.get("apiWebhookDeliveries", initial._id),
+      );
+      // An action that was delayed past a recovery generation cannot claim the
+      // row or issue a duplicate HTTP request when it finally wakes up.
+      await t.action(webhooks.deliver, {
+        deliveryId: initial._id,
+        deliveryGeneration: initial.deliveryGeneration,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", initial._id)),
+      ).toMatchObject({
+        status: "pending",
+        attempt: 0,
+        deliveryGeneration: current!.deliveryGeneration,
+      });
+      await t.action(webhooks.deliver, {
+        deliveryId: initial._id,
+        deliveryGeneration: current!.deliveryGeneration,
+      });
+      expect(
+        await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", initial._id)),
+      ).toMatchObject({ status: "delivered", attempt: 1 });
+      expect(
+        webhookCallsForEvent(fetchMock, "research:scheduler-delayed"),
+      ).toHaveLength(1);
+    } finally {
+      fetchMock.mockRestore();
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
     }
   });
 
@@ -581,7 +724,7 @@ describe("evidence webhooks", () => {
           eventKey: "research:due",
           status: "pending",
           attempt: 0,
-          nextAttemptAt: Date.now(),
+          nextAttemptAt: Date.now() - 30_001,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -608,18 +751,26 @@ describe("evidence webhooks", () => {
         return { due, expired, future };
       });
 
-      await expect(t.mutation(webhooks.recover, { limit: 10 })).resolves.toEqual({
+      await expect(
+        t.mutation(webhooks.recover, { limit: 10 }),
+      ).resolves.toEqual({
         rescheduled: 2,
         deadLettered: 0,
       });
       await t.run(async (ctx) => {
-        expect(await ctx.db.get("apiWebhookDeliveries", ids.due)).toMatchObject({
-          status: "in_flight",
-          deliveryGeneration: 1,
-        });
-        expect(await ctx.db.get("apiWebhookDeliveries", ids.expired)).toMatchObject({
-          status: "in_flight",
+        expect(await ctx.db.get("apiWebhookDeliveries", ids.due)).toMatchObject(
+          {
+            status: "pending",
+            deliveryGeneration: 1,
+            attempt: 0,
+          },
+        );
+        expect(
+          await ctx.db.get("apiWebhookDeliveries", ids.expired),
+        ).toMatchObject({
+          status: "pending",
           deliveryGeneration: 8,
+          attempt: 2,
         });
         const future = await ctx.db.get("apiWebhookDeliveries", ids.future);
         expect(future).toMatchObject({ status: "pending" });
@@ -627,17 +778,66 @@ describe("evidence webhooks", () => {
       });
       const recoverLease = internal.evidenceWebhooks.recoverDeliveryLease;
       // An old scheduled wake-up cannot steal the current attempt.
-      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 7 });
-      expect((await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired)))?.deliveryGeneration).toBe(8);
-      // Nor can a current wake-up run before the lease actually expires.
-      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 8 });
-      expect((await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired)))?.deliveryGeneration).toBe(8);
-      await t.run(ctx => ctx.db.patch("apiWebhookDeliveries", ids.expired, { leaseExpiresAt: Date.now() - 1 }));
-      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 8 });
-      expect(await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired))).toMatchObject({ deliveryGeneration: 9, attempt: 2 });
-      await t.run(ctx => ctx.db.patch("apiWebhookDeliveries", ids.expired, { attempt: 3, leaseExpiresAt: Date.now() - 1 }));
-      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 9 });
-      expect(await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired))).toMatchObject({ status: "dead_letter", attempt: 4 });
+      await t.mutation(recoverLease, {
+        deliveryId: ids.expired,
+        deliveryGeneration: 7,
+      });
+      expect(
+        (await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", ids.expired)))
+          ?.deliveryGeneration,
+      ).toBe(8);
+      // Starting the worker, not scheduling it, creates the current lease.
+      await expect(
+        t.mutation(webhooks.start, {
+          deliveryId: ids.expired,
+          deliveryGeneration: 8,
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        t.mutation(webhooks.start, {
+          deliveryId: ids.expired,
+          deliveryGeneration: 8,
+        }),
+      ).resolves.toBe(false);
+      // Nor can a current wake-up run before the started lease expires.
+      await t.mutation(recoverLease, {
+        deliveryId: ids.expired,
+        deliveryGeneration: 8,
+      });
+      expect(
+        (await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", ids.expired)))
+          ?.deliveryGeneration,
+      ).toBe(8);
+      await t.run((ctx) =>
+        ctx.db.patch("apiWebhookDeliveries", ids.expired, {
+          leaseExpiresAt: Date.now() - 1,
+        }),
+      );
+      await t.mutation(recoverLease, {
+        deliveryId: ids.expired,
+        deliveryGeneration: 8,
+      });
+      expect(
+        await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", ids.expired)),
+      ).toMatchObject({ status: "pending", deliveryGeneration: 9, attempt: 3 });
+      await expect(
+        t.mutation(webhooks.start, {
+          deliveryId: ids.expired,
+          deliveryGeneration: 9,
+        }),
+      ).resolves.toBe(true);
+      await t.run((ctx) =>
+        ctx.db.patch("apiWebhookDeliveries", ids.expired, {
+          leaseExpiresAt: Date.now() - 1,
+        }),
+      );
+      await t.mutation(recoverLease, {
+        deliveryId: ids.expired,
+        deliveryGeneration: 9,
+      });
+      expect(
+        await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", ids.expired)),
+      ).toMatchObject({ status: "dead_letter", attempt: 4 });
     } finally {
       vi.useRealTimers();
     }
@@ -665,10 +865,11 @@ describe("evidence webhooks", () => {
         ctx.db.get("apiWebhookDeliveries", initial._id),
       );
       expect(claimed).toMatchObject({
-        status: "in_flight",
+        status: "pending",
         attempt: 1,
         deliveryGeneration: 2,
       });
+      expect(claimed?.leaseExpiresAt).toBeUndefined();
 
       await t.mutation(webhooks.mark, {
         deliveryId: initial._id,
@@ -693,7 +894,7 @@ describe("evidence webhooks", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     try {
       const t = setup();
-      const delivery = await insertClaimedDeliveryFixture(
+      const delivery = await insertScheduledDeliveryFixture(
         t,
         "research:invalid-kek",
       );
@@ -721,6 +922,163 @@ describe("evidence webhooks", () => {
     }
   });
 
+  test.each([
+    "public",
+    "private",
+    "inactive-source",
+    "watchlist",
+    "claim-owner",
+    "pending-sync",
+  ] as const)(
+    "checks current evidence visibility before delivery: %s",
+    async (scenario) => {
+      vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
+      vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(null, { status: 204 }));
+      const t = setup();
+      const eventKey = `visibility:${scenario}`;
+      const delivery = await insertScheduledDeliveryFixture(t, eventKey);
+      await t.run(async (ctx) => {
+        const sourceId = await ctx.db.insert("evidenceSources", {
+          sourceKey: "symbaiex-first-party-research",
+          name: "Research",
+          sourceType: "manual",
+          ingestionEnabled: true,
+          baseUrl: "https://example.com",
+          homepageUrl: "https://example.com",
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "research",
+          visibility: "public",
+          termsUrl: "",
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: 0,
+          lastSucceededAt: 0,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: 1,
+          updatedAt: 1,
+        });
+        const documentId = await ctx.db.insert("evidenceDocuments", {
+          sourceId,
+          externalKey:
+            scenario === "claim-owner"
+              ? "forum-research:missing-thread"
+              : "public-page",
+          canonicalUrl: "https://example.com/research",
+          canonicalUrlHash: "hash",
+          kind: "paper",
+          visibility: "public",
+          title: "Research",
+          excerpt: "Public research",
+          searchText: "research",
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: 1,
+          firstSeenAt: 1,
+          updatedAt: 1,
+        });
+        let payload: Record<string, unknown> = { documentId };
+        if (scenario === "watchlist")
+          payload = { entityType: "document", entityId: documentId };
+        if (scenario === "claim-owner") {
+          const claimId = await ctx.db.insert("evidenceClaims", {
+            claimKey: "symbaiex-forum-claim:missing-thread:historical",
+            statement: "Claim",
+            subjectEntityId: null,
+            predicate: "is",
+            objectText: "claim",
+            status: "supported",
+            confidence: 1,
+            visibility: "public",
+            observedAt: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          });
+          payload = { entityType: "claim", entityId: claimId };
+        }
+        const event = await ctx.db
+          .query("apiWebhookEvents")
+          .withIndex("by_provider_and_eventKey", (q) =>
+            q.eq("provider", "evidence-delivery").eq("eventKey", eventKey),
+          )
+          .unique();
+        await ctx.db.patch("apiWebhookEvents", event!._id, {
+          payloadJson: JSON.stringify({
+            eventType: "evidence.document.changed",
+            payloadJson: JSON.stringify(payload),
+          }),
+        });
+        // The evidence was public when queued; access can change before the worker runs.
+        if (["private", "watchlist", "claim-owner"].includes(scenario))
+          await ctx.db.patch("evidenceDocuments", documentId, {
+            visibility: "private",
+          });
+        if (scenario === "inactive-source")
+          await ctx.db.patch("evidenceSources", sourceId, { status: "paused" });
+        if (scenario === "pending-sync") {
+          const categoryId = await ctx.db.insert("forumCategories", {
+            name: "Research",
+            slug: "research",
+            description: "",
+            position: 1,
+            status: "active",
+            threadCount: 0,
+            postCount: 0,
+            createdAt: 1,
+            updatedAt: 1,
+          });
+          const authorUserId = await ctx.db.insert("users", { name: "Agent" });
+          const threadId = await ctx.db.insert("forumThreads", {
+            categoryId,
+            categorySlug: "research",
+            authorId: authorUserId,
+            lastPostUserId: authorUserId,
+            title: "Research",
+            slug: "research",
+            body: "Research",
+            searchText: "research",
+            status: "active",
+            pinned: false,
+            createdAt: 1,
+            updatedAt: 1,
+            lastPostAt: 1,
+            replyCount: 0,
+            viewCount: 0,
+          });
+          await ctx.db.patch("evidenceDocuments", documentId, {
+            externalKey: `forum-research:${threadId}`,
+          });
+          await ctx.db.insert("evidenceFirstPartySyncQueue", {
+            threadId,
+            generation: 1,
+            reason: "content_changed",
+            enqueuedAt: 1,
+            updatedAt: 1,
+          });
+        }
+      });
+      await t.action(webhooks.deliver, {
+        deliveryId: delivery._id,
+        deliveryGeneration: delivery.deliveryGeneration,
+      });
+      expect(webhookCallsForEvent(fetchMock, eventKey)).toHaveLength(
+        scenario === "public" ? 1 : 0,
+      );
+      expect(
+        await t.run((ctx) => ctx.db.get("apiWebhookDeliveries", delivery._id)),
+      ).toMatchObject({
+        status: scenario === "public" ? "delivered" : "dead_letter",
+      });
+    },
+  );
+
   test("retries only transient responses with 1, 2, and 4 second backoff", async () => {
     vi.stubEnv("EVIDENCE_WEBHOOK_ALLOWED_HOSTS", "hooks.example.test");
     vi.stubEnv("EVIDENCE_WEBHOOK_KEK", "test_webhook_kek_0123456789abcdef");
@@ -732,7 +1090,7 @@ describe("evidence webhooks", () => {
       .mockResolvedValue(new Response("temporary", { status: 503 }));
     try {
       const t = setup();
-      const delivery = await insertClaimedDeliveryFixture(
+      const delivery = await insertScheduledDeliveryFixture(
         t,
         "research:transient-backoff",
       );
@@ -752,14 +1110,14 @@ describe("evidence webhooks", () => {
           ctx.db.get("apiWebhookDeliveries", delivery._id),
         );
         expect(row).toMatchObject({
-          status: "in_flight",
+          status: "pending",
           attempt,
           deliveryGeneration: generation + 1,
         });
         expect(row!.nextAttemptAt! - row!.updatedAt).toBe(
           expectedBackoffs[attempt - 1],
         );
-        expect(row!.leaseExpiresAt! - row!.nextAttemptAt!).toBe(30_000);
+        expect(row?.leaseExpiresAt).toBeUndefined();
         vi.clearAllTimers();
         generation += 1;
         vi.setSystemTime(row!.nextAttemptAt!);

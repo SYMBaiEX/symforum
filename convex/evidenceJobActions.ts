@@ -86,6 +86,7 @@ type ExportRecord = {
   }>;
 };
 type ExportBundle = {
+  publicationEpoch: number;
   dataset: {
     datasetKey: string;
     name: string;
@@ -137,6 +138,7 @@ const refs = {
   recordSystemSnapshot: makeFunctionReference<
     "mutation",
     {
+      publicationEpoch: number;
       datasetId: Id<"evidenceDatasets">;
       checksum: string;
       recordCount: number;
@@ -187,10 +189,7 @@ async function checksum(value: string | Uint8Array) {
     typeof value === "string"
       ? new TextEncoder().encode(value)
       : new Uint8Array(value);
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    bytes.buffer,
-  );
+  const digest = await crypto.subtle.digest("SHA-256", bytes.buffer);
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
@@ -390,7 +389,9 @@ export const runExport = internalAction({
             },
     }));
     const serialized = serializeEvidenceExport(input.format, records);
-    const artifact = new Blob([serialized.bytes], { type: serialized.contentType });
+    const artifact = new Blob([serialized.bytes], {
+      type: serialized.contentType,
+    });
     const resultChecksum = await checksum(serialized.bytes);
     const generatedAt = new Date().toISOString();
     const manifest = buildEvidenceDatasetManifest({
@@ -540,34 +541,43 @@ export const materializeDatasetSnapshot = internalAction({
     const manifestStorageId = await ctx.storage.store(
       new Blob([JSON.stringify(manifest)], { type: "application/json" }),
     );
-    const recorded = await ctx.runMutation(refs.recordSystemSnapshot, {
-      datasetId: args.datasetId,
-      checksum: resultChecksum,
-      recordCount: manifest.artifact.recordCount,
-      schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
-      artifactByteLength: manifest.artifact.byteLength,
-      sourceCount: manifest.coverage.sourceCount,
-      configuredSourceCount: manifest.coverage.configuredSourceCount,
-      sourceCoverageScore: manifest.coverage.sourceCoverageScore,
-      missingSourceKeys: manifest.coverage.missingSourceKeys,
-      citationCount: manifest.coverage.citationCount,
-      citationCoverageScore: manifest.coverage.citationCoverageScore,
-      entityCount: manifest.coverage.entityCount,
-      entityCoverageScore: manifest.coverage.entityCoverageScore,
-      claimCount: manifest.coverage.claimCount,
-      claimCoverageScore: manifest.coverage.claimCoverageScore,
-      completenessScore: manifest.coverage.completenessScore,
-      freshnessScore: manifest.coverage.freshnessScore,
-      earliestObservedAt: manifest.coverage.earliestObservedAt ?? undefined,
-      latestObservedAt: manifest.coverage.latestObservedAt ?? undefined,
-      qualityMetricsJson,
-      manifestStorageId,
-      artifactStorageId,
-      selectionStrategy: bundle.selectionStrategy,
-      scannedRecordCount: bundle.scannedRecordCount,
-      selectionScanTruncated: bundle.selectionScanTruncated,
-      continueCursor: bundle.continueCursor,
-    });
+    const recorded = await ctx
+      .runMutation(refs.recordSystemSnapshot, {
+        publicationEpoch: bundle.publicationEpoch,
+        datasetId: args.datasetId,
+        checksum: resultChecksum,
+        recordCount: manifest.artifact.recordCount,
+        schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+        artifactByteLength: manifest.artifact.byteLength,
+        sourceCount: manifest.coverage.sourceCount,
+        configuredSourceCount: manifest.coverage.configuredSourceCount,
+        sourceCoverageScore: manifest.coverage.sourceCoverageScore,
+        missingSourceKeys: manifest.coverage.missingSourceKeys,
+        citationCount: manifest.coverage.citationCount,
+        citationCoverageScore: manifest.coverage.citationCoverageScore,
+        entityCount: manifest.coverage.entityCount,
+        entityCoverageScore: manifest.coverage.entityCoverageScore,
+        claimCount: manifest.coverage.claimCount,
+        claimCoverageScore: manifest.coverage.claimCoverageScore,
+        completenessScore: manifest.coverage.completenessScore,
+        freshnessScore: manifest.coverage.freshnessScore,
+        earliestObservedAt: manifest.coverage.earliestObservedAt ?? undefined,
+        latestObservedAt: manifest.coverage.latestObservedAt ?? undefined,
+        qualityMetricsJson,
+        manifestStorageId,
+        artifactStorageId,
+        selectionStrategy: bundle.selectionStrategy,
+        scannedRecordCount: bundle.scannedRecordCount,
+        selectionScanTruncated: bundle.selectionScanTruncated,
+        continueCursor: bundle.continueCursor,
+      })
+      .catch(async (error: unknown) => {
+        await Promise.all([
+          ctx.storage.delete(artifactStorageId),
+          ctx.storage.delete(manifestStorageId),
+        ]);
+        throw error;
+      });
     if (!recorded.created) {
       await Promise.all([
         ctx.storage.delete(artifactStorageId),
