@@ -437,7 +437,7 @@ describe("critical cron watchdog", () => {
         }),
         expect.objectContaining({
           jobKey: "evidence-webhook-recovery",
-          status: "stale",
+          status: "healthy",
         }),
       ]),
     });

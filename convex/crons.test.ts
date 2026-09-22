@@ -4,6 +4,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 describe("evidence retention cron", () => {
+  test("completed migrations are not polled and idle recovery is hourly", () => {
+    const source = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
+    expect(source).not.toContain("internal.forumSearchProjection.backfill");
+    expect(source).not.toContain("internal.forumAgentMemory.backfillForumMemory");
+    for (const name of ["recover pending webhook deliveries", "dispatch pending watchlist webhooks", "cleanup semantic search operations"]) {
+      expect(source).toContain(`"${name}",\n  { hours: 1 }`);
+    }
+  });
   test("schedules bounded claim revision cleanup", () => {
     const source = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
     expect(source).toContain('"cleanup expired claim revisions"');

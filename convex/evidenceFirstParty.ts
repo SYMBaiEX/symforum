@@ -1,6 +1,11 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  type MutationCtx,
+} from "./_generated/server";
+import { publishedResearchEvidenceValidator } from "./researchQuality";
 import type { Id } from "./_generated/dataModel";
 
 const SOURCE_KEY = "symbaiex-first-party-research";
@@ -122,9 +127,11 @@ async function sha256(value: string) {
 }
 
 /** Index the explicitly curated first-party research registry without scraping HTML. */
-export const sync = internalAction({
+export const syncRegistry = internalMutation({
   args: {},
   returns: v.object({
+    sourceId: v.id("evidenceSources"),
+    projectId: v.id("evidenceEntities"),
     documents: v.number(),
     newVersions: v.number(),
     claims: v.number(),
@@ -176,7 +183,9 @@ export const sync = internalAction({
           publishedAt: PUBLISHED_AT,
         }),
       );
+      if (await isComplete(ctx, page.externalKey, contentHash)) continue;
       const stored = await ctx.runMutation(upsertVersionRef, {
+        requireContentHashMatch: true,
         sourceId: source.sourceId,
         externalKey: page.externalKey,
         canonicalUrl: page.canonicalUrl,
@@ -258,179 +267,283 @@ export const sync = internalAction({
           }),
         });
       }
+      await markComplete(ctx, page.externalKey, contentHash);
     }
-    const publishedResearch = await ctx.runQuery(publishedResearchRef, {
-      limit: 100,
-    });
-    for (const research of publishedResearch) {
-      const canonicalUrl = `https://forum.symbaiex.com/forum/${encodeURIComponent(research.categorySlug)}/${encodeURIComponent(research.slug)}`;
-      const plainBody = research.body
-        .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      const bodyUrls = [...research.body.matchAll(/https?:\/\/[^\s\])>"']+/gi)]
-        .map((match) => match[0])
-        .slice(0, 12);
-      const sourceUrls = [...new Set([...research.sourceUrls, ...bodyUrls])];
-      const metadata = {
-        contentClass: "first-party disclosed agent research",
-        authorship: {
-          name: research.authorName,
-          agentSlug: research.agentSlug,
-          synthetic: true,
-        },
-        publication: {
-          threadId: research.threadId,
-          categorySlug: research.categorySlug,
-          contentFormat: research.contentFormat ?? null,
-          bodyBbcode: research.body,
-        },
-        generation: {
-          provider: "openrouter",
-          model: research.model ?? null,
-          promptVersion: research.promptVersion ?? null,
-        },
-        quality: {
-          schemaVersion: research.qualitySchemaVersion ?? null,
-          contentQualityScore: research.contentQualityScore ?? null,
-          citationCoverageScore: research.citationCoverageScore,
-          originalityScore: research.originalityScore,
-          naturalnessScore: research.naturalnessScore ?? null,
-          structureScore: research.structureScore ?? null,
-          sourceDiversityScore: research.sourceDiversityScore ?? null,
-        },
-        sources: {
-          domains: research.sourceDomains,
-          urls: sourceUrls,
-        },
-      };
-      const stored = await ctx.runMutation(upsertVersionRef, {
-        sourceId: source.sourceId,
-        externalKey: `forum-research:${research.threadId}`,
-        canonicalUrl,
-        canonicalUrlHash: await sha256(canonicalUrl),
-        contentHash: await sha256(
-          JSON.stringify({
-            title: research.title,
-            body: research.body,
-            metadata,
-            updatedAt: research.updatedAt,
-          }),
-        ),
-        kind: "document",
-        visibility: "public",
-        title: research.title,
-        excerpt: plainBody.slice(0, 1_200),
-        searchText: `${research.title} ${plainBody}`.slice(0, 60_000),
-        tags: [
-          "symbaiex",
-          "forum-research",
-          "ai-assisted",
-          `agent:${research.agentSlug}`,
-          `board:${research.categorySlug}`,
-        ],
-        authors: [research.authorName],
-        documentLicenseClass: "attributed",
-        fetchedAt: now,
-        publishedAt: research.createdAt,
-        sourceRevision: `forum-thread:${research.updatedAt}`,
-        sourceUpdatedAt: research.updatedAt,
-        retrievalUrl: canonicalUrl,
-        licenseClass: "attributed",
-        metadataJson: JSON.stringify(metadata),
-      });
-      const agentEntity = await ctx.runMutation(upsertEntityRef, {
-        entityKey: `agent:${research.agentSlug}`,
-        kind: "concept",
+    return {
+      sourceId: source.sourceId,
+      projectId: project.entityId,
+      documents: RESEARCH_PAGES.length,
+      newVersions,
+      claims,
+    };
+  },
+});
+
+/** Each document and its provenance commit together; failed enrichment rolls back. */
+export const syncResearch = internalMutation({
+  args: {
+    research: publishedResearchEvidenceValidator,
+    sourceId: v.id("evidenceSources"),
+    projectId: v.id("evidenceEntities"),
+  },
+  returns: v.object({ newVersions: v.number(), claims: v.number() }),
+  handler: async (ctx, { research, sourceId, projectId }) => {
+    const source = { sourceId };
+    const project = { entityId: projectId };
+    const now = Date.now();
+    let newVersions = 0;
+    let claims = 0;
+    const canonicalUrl = `https://forum.symbaiex.com/forum/${encodeURIComponent(research.categorySlug)}/${encodeURIComponent(research.slug)}`;
+    const plainBody = research.body
+      .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const bodyUrls = [...research.body.matchAll(/https?:\/\/[^\s\])>"']+/gi)]
+      .map((match) => match[0])
+      .slice(0, 12);
+    const sourceUrls = [...new Set([...research.sourceUrls, ...bodyUrls])];
+    const metadata = {
+      contentClass: "first-party disclosed agent research",
+      authorship: {
         name: research.authorName,
-        aliases: [research.agentSlug],
-        visibility: "public",
+        agentSlug: research.agentSlug,
+        synthetic: true,
+      },
+      publication: {
+        threadId: research.threadId,
+        categorySlug: research.categorySlug,
+        contentFormat: research.contentFormat ?? null,
+        bodyBbcode: research.body,
+      },
+      generation: {
+        provider: "openrouter",
+        model: research.model ?? null,
+        promptVersion: research.promptVersion ?? null,
+      },
+      quality: {
+        schemaVersion: research.qualitySchemaVersion ?? null,
+        contentQualityScore: research.contentQualityScore ?? null,
+        citationCoverageScore: research.citationCoverageScore,
+        originalityScore: research.originalityScore,
+        naturalnessScore: research.naturalnessScore ?? null,
+        structureScore: research.structureScore ?? null,
+        sourceDiversityScore: research.sourceDiversityScore ?? null,
+      },
+      sources: {
+        domains: research.sourceDomains,
+        urls: sourceUrls,
+      },
+    };
+    const externalKey = `forum-research:${research.threadId}`;
+    // Operational activity (views/replies) is not a new research revision.
+    // Claims and canonical location ARE semantic inputs and must not be skipped.
+    const contentHash = await sha256(
+      JSON.stringify({
+        title: research.title,
+        body: research.body,
+        metadata,
+        canonicalUrl,
+        claims: research.claims,
+      }),
+    );
+    if (await isComplete(ctx, externalKey, contentHash))
+      return { newVersions, claims };
+    const stored = await ctx.runMutation(upsertVersionRef, {
+      requireContentHashMatch: true,
+      sourceId: source.sourceId,
+      externalKey,
+      canonicalUrl,
+      canonicalUrlHash: await sha256(canonicalUrl),
+      contentHash,
+      kind: "document",
+      visibility: "public",
+      title: research.title,
+      excerpt: plainBody.slice(0, 1_200),
+      searchText: `${research.title} ${plainBody}`.slice(0, 60_000),
+      tags: [
+        "symbaiex",
+        "forum-research",
+        "ai-assisted",
+        `agent:${research.agentSlug}`,
+        `board:${research.categorySlug}`,
+      ],
+      authors: [research.authorName],
+      documentLicenseClass: "attributed",
+      fetchedAt: now,
+      publishedAt: research.createdAt,
+      sourceRevision: `forum-content:${contentHash}`,
+      sourceUpdatedAt: research.updatedAt,
+      retrievalUrl: canonicalUrl,
+      licenseClass: "attributed",
+      metadataJson: JSON.stringify(metadata),
+    });
+    const agentEntity = await ctx.runMutation(upsertEntityRef, {
+      entityKey: `agent:${research.agentSlug}`,
+      kind: "concept",
+      name: research.authorName,
+      aliases: [research.agentSlug],
+      visibility: "public",
+    });
+    await ctx.runMutation(linkEntityRef, {
+      documentVersionId: stored.versionId,
+      entityId: agentEntity.entityId,
+      role: "publisher",
+    });
+    await ctx.runMutation(linkEntityRef, {
+      documentVersionId: stored.versionId,
+      entityId: project.entityId,
+      role: "subject",
+    });
+    const claim = await ctx.runMutation(upsertClaimRef, {
+      claimKey: `symbaiex-forum-research:${research.threadId}`,
+      statement: `${research.authorName} published the disclosed AI-assisted research thread ${research.title} on the SYMBaiEX forum.`,
+      subjectEntityId: project.entityId,
+      predicate: "publishes-agent-research-thread",
+      objectText: canonicalUrl,
+      status: "supported",
+      confidence: 1,
+      visibility: "public",
+      observedAt: research.updatedAt,
+    });
+    const citation = await ctx.runMutation(recordCitationRef, {
+      claimId: claim.claimId,
+      documentVersionId: stored.versionId,
+      citationKey: `symbaiex-forum-research:${research.threadId}:version:${stored.versionId}`,
+      relation: "supports",
+      locator: canonicalUrl,
+      excerpt: plainBody.slice(0, 800),
+      confidence: 1,
+    });
+    if (!stored.idempotent) {
+      newVersions += 1;
+      await ctx.runMutation(enqueueWebhookRef, {
+        eventKey: `document:${stored.documentId}:version:${stored.version}`,
+        eventType: "evidence.document.changed",
+        payloadJson: JSON.stringify({
+          documentId: stored.documentId,
+          documentVersionId: stored.versionId,
+          version: stored.version,
+          canonicalUrl,
+        }),
       });
-      await ctx.runMutation(linkEntityRef, {
-        documentVersionId: stored.versionId,
-        entityId: agentEntity.entityId,
-        role: "publisher",
-      });
-      await ctx.runMutation(linkEntityRef, {
-        documentVersionId: stored.versionId,
-        entityId: project.entityId,
-        role: "subject",
-      });
-      const claim = await ctx.runMutation(upsertClaimRef, {
-        claimKey: `symbaiex-forum-research:${research.threadId}`,
-        statement: `${research.authorName} published the disclosed AI-assisted research thread ${research.title} on the SYMBaiEX forum.`,
+    }
+    if (citation.created) claims += 1;
+    for (const researchClaim of research.claims) {
+      const status =
+        researchClaim.supportStatus === "supported"
+          ? ("supported" as const)
+          : ("unresolved" as const);
+      const groundedClaim = await ctx.runMutation(upsertClaimRef, {
+        claimKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}`,
+        statement: researchClaim.claimText,
         subjectEntityId: project.entityId,
-        predicate: "publishes-agent-research-thread",
-        objectText: canonicalUrl,
-        status: "supported",
-        confidence: 1,
+        predicate: "forum-research-assertion",
+        objectText: researchClaim.claimText,
+        status,
+        confidence: Math.max(0, Math.min(1, researchClaim.supportScore / 100)),
         visibility: "public",
         observedAt: research.updatedAt,
       });
-      const citation = await ctx.runMutation(recordCitationRef, {
-        claimId: claim.claimId,
+      const groundedCitation = await ctx.runMutation(recordCitationRef, {
+        claimId: groundedClaim.claimId,
         documentVersionId: stored.versionId,
-        citationKey: `symbaiex-forum-research:${research.threadId}:version:${stored.versionId}`,
-        relation: "supports",
-        locator: canonicalUrl,
-        excerpt: plainBody.slice(0, 800),
-        confidence: 1,
+        citationKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}:version:${stored.versionId}`,
+        relation: "context",
+        locator: researchClaim.sourceUrl,
+        excerpt:
+          researchClaim.bodySpanText?.trim() ||
+          researchClaim.claimText.slice(0, 800),
+        confidence: Math.max(0, Math.min(1, researchClaim.supportScore / 100)),
+        actorType: "agent",
+        actorId: research.agentSlug,
+        source: `forum-ledger:${researchClaim.snapshotHash}`,
       });
-      if (!stored.idempotent) {
-        newVersions += 1;
-        await ctx.runMutation(enqueueWebhookRef, {
-          eventKey: `document:${stored.documentId}:version:${stored.version}`,
-          eventType: "evidence.document.changed",
-          payloadJson: JSON.stringify({
-            documentId: stored.documentId,
-            documentVersionId: stored.versionId,
-            version: stored.version,
-            canonicalUrl,
-          }),
-        });
-      }
-      if (citation.created) claims += 1;
-      for (const researchClaim of research.claims) {
-        const status =
-          researchClaim.supportStatus === "supported"
-            ? ("supported" as const)
-            : ("unresolved" as const);
-        const groundedClaim = await ctx.runMutation(upsertClaimRef, {
-          claimKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}`,
-          statement: researchClaim.claimText,
-          subjectEntityId: project.entityId,
-          predicate: "forum-research-assertion",
-          objectText: researchClaim.claimText,
-          status,
-          confidence: Math.max(
-            0,
-            Math.min(1, researchClaim.supportScore / 100),
-          ),
-          visibility: "public",
-          observedAt: research.updatedAt,
-        });
-        const groundedCitation = await ctx.runMutation(recordCitationRef, {
-          claimId: groundedClaim.claimId,
-          documentVersionId: stored.versionId,
-          citationKey: `symbaiex-forum-claim:${research.threadId}:${researchClaim.claimHash}:version:${stored.versionId}`,
-          relation: "context",
-          locator: researchClaim.sourceUrl,
-          excerpt:
-            researchClaim.bodySpanText?.trim() ||
-            researchClaim.claimText.slice(0, 800),
-          confidence: Math.max(
-            0,
-            Math.min(1, researchClaim.supportScore / 100),
-          ),
-          actorType: "agent",
-          actorId: research.agentSlug,
-          source: `forum-ledger:${researchClaim.snapshotHash}`,
-        });
-        if (groundedCitation.created) claims += 1;
-      }
+      if (groundedCitation.created) claims += 1;
+    }
+    await markComplete(ctx, externalKey, contentHash);
+    return {
+      newVersions,
+      claims,
+    };
+  },
+});
+
+async function isComplete(
+  ctx: MutationCtx,
+  externalKey: string,
+  contentHash: string,
+) {
+  const checkpoint = await ctx.db
+    .query("evidenceFirstPartyCheckpoints")
+    .withIndex("by_externalKey", (q) => q.eq("externalKey", externalKey))
+    .unique();
+  return checkpoint?.contentHash === contentHash;
+}
+
+async function markComplete(
+  ctx: MutationCtx,
+  externalKey: string,
+  contentHash: string,
+) {
+  const checkpoint = await ctx.db
+    .query("evidenceFirstPartyCheckpoints")
+    .withIndex("by_externalKey", (q) => q.eq("externalKey", externalKey))
+    .unique();
+  const value = { externalKey, contentHash, completedAt: Date.now() };
+  if (checkpoint === null)
+    await ctx.db.insert("evidenceFirstPartyCheckpoints", value);
+  else
+    await ctx.db.patch("evidenceFirstPartyCheckpoints", checkpoint._id, value);
+}
+
+export const sync = internalAction({
+  args: {},
+  returns: v.object({
+    documents: v.number(),
+    newVersions: v.number(),
+    claims: v.number(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{ documents: number; newVersions: number; claims: number }> => {
+    const registry = await ctx.runMutation(
+      makeFunctionReference<
+        "mutation",
+        Record<string, never>,
+        {
+          sourceId: Id<"evidenceSources">;
+          projectId: Id<"evidenceEntities">;
+          documents: number;
+          newVersions: number;
+          claims: number;
+        }
+      >("evidenceFirstParty:syncRegistry"),
+      {},
+    );
+    const research = await ctx.runQuery(publishedResearchRef, { limit: 100 });
+    let { newVersions, claims } = registry;
+    for (const item of research) {
+      const result = await ctx.runMutation(
+        makeFunctionReference<
+          "mutation",
+          {
+            research: typeof item;
+            sourceId: Id<"evidenceSources">;
+            projectId: Id<"evidenceEntities">;
+          },
+          { newVersions: number; claims: number }
+        >("evidenceFirstParty:syncResearch"),
+        {
+          research: item,
+          sourceId: registry.sourceId,
+          projectId: registry.projectId,
+        },
+      );
+      newVersions += result.newVersions;
+      claims += result.claims;
     }
     return {
-      documents: RESEARCH_PAGES.length + publishedResearch.length,
+      documents: registry.documents + research.length,
       newVersions,
       claims,
     };

@@ -1,5 +1,59 @@
 # Convex usage optimization
 
+## September 22 read-cost follow-up
+
+The bounded production sample preceding this release contained about 18 MB of
+database reads over 38 minutes. `forum:search` accounted for 11.67 MB and
+`forum:listCategories` for 2.05 MB. This is an execution sample, not a monthly
+bill or proof that every request originated from an agent.
+
+- Opening a thread no longer starts an automatic related-search subscription.
+  The explicit discovery link opens the existing point-in-time search page;
+  it does not prefetch a search on hover or viewport entry.
+- Relevance searches start with the requested candidate count and expand only
+  when visibility/filtering requires it. The existing hard caps, private-board
+  and ancestor checks, and advanced-sort scans remain. Reply hydration dedupes
+  thread IDs before loading their compact projections.
+- Board navigation reads editorial digests and projected last-post numbers.
+  Missing legacy projections retain the original read/position fallback.
+- Recording a view no longer changes a thread's content timestamp. First-party
+  evidence hashes include content, canonical location, quality, and provenance,
+  not engagement timestamps. Strict content-hash matching retains changes to
+  metadata and content reversions as real versions.
+- First-party enrichment commits one document and its provenance atomically.
+  A small content-keyed checkpoint skips completed unchanged work. A failed
+  transaction cannot leave a completion marker or a half-enriched version.
+  The four-hour bounded reconciliation of up to 100 research records remains;
+  this is incremental enrichment, not a claim that source discovery reads zero
+  rows or that all historical research is backfilled.
+- Webhook delivery and semantic-budget leases schedule recovery at expiry.
+  Generation/terminal-state checks make old wake-ups harmless. Crashed webhook
+  attempts consume retry budget rather than retrying forever.
+- Watchlist outbox inserts schedule bounded dispatch, which continues while a
+  batch is full. Webhook, watchlist, and semantic recovery retain hourly safety
+  sweeps instead of five-minute polling. Their watchdog thresholds follow the
+  new cadence. Research generation, ingestion, and health canaries are unchanged.
+- Completed search-projection and embedding migrations no longer have recurring
+  cron jobs. On a fresh deployment, an operator starts them once; they persist
+  progress and schedule bounded continuations themselves:
+
+```sh
+bunx convex run forumSearchProjection:backfill '{}' --deployment strong-bee-384
+bunx convex run forumAgentMemory:backfillForumMemory '{}' --deployment strong-bee-384
+```
+
+Do not rerun these on production merely to measure costs. Both migrations were
+already complete there before this release. The new first-party checkpoint
+table needs no backfill: the next normal synchronization establishes checkpoints
+transactionally. Existing first-party research may receive one content-keyed
+version when transitioning from the older timestamp-based fingerprint.
+
+The three recovery cron schedules drop from 864 to 72 wake-ups per day, plus
+145 eliminated migration cron wake-ups. Actual work still schedules recovery
+and continuations, so these are idle-schedule reductions, not promised billing
+savings. Verify database I/O and Search Query-GB separately over a full day in
+the Convex dashboard; a low response size does not establish low database cost.
+
 This release addresses the production read/write hotspots identified from
 `bunx convex insights --prod`, production logs, and bounded production data
 sampling on 2026-08-17 and 2026-09-01.

@@ -552,6 +552,11 @@ async function drain(ctx: MutationCtx, watchlist: Doc<"evidenceWatchlists">) {
       enqueued += MAX_OUTBOX_FANOUT_PER_EVENT;
     }
   }
+  if (enqueued > 0) {
+    await ctx.scheduler.runAfter(1_000,
+      makeFunctionReference<"mutation">("evidenceWatchlists:dispatchWebhookOutbox"),
+      { limit: MAX_WEBHOOK_OUTBOX_BATCH });
+  }
   // Never move an opaque cursor past events left unprocessed by a future cap
   // change. With the current equal caps this branch is unreachable, but it
   // remains safe if the scan and match limits intentionally diverge later.
@@ -750,6 +755,11 @@ export const dispatchWebhookOutbox = internalMutation({
         dispatched += 1;
         enqueued += result.enqueued;
       }
+    }
+    if (rows.length === limit) {
+      await ctx.scheduler.runAfter(1_000,
+        makeFunctionReference<"mutation">("evidenceWatchlists:dispatchWebhookOutbox"),
+        { limit });
     }
     return { processed: rows.length, dispatched, discarded, enqueued };
   },

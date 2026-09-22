@@ -341,6 +341,7 @@ export const upsertSource = internalMutation({
 
 export const upsertDocumentVersion = internalMutation({
   args: {
+    requireContentHashMatch: v.optional(v.boolean()),
     sourceId: v.id("evidenceSources"),
     externalKey: v.string(),
     canonicalUrl: v.string(),
@@ -397,13 +398,20 @@ export const upsertDocumentVersion = internalMutation({
       .unique();
     const isNewDocument = document === null;
     if (document !== null) {
-      const existing = await ctx.db
-        .query("evidenceDocumentVersions")
-        .withIndex("by_documentId_and_contentHash", (q) =>
-          q.eq("documentId", document!._id).eq("contentHash", contentHash),
-        )
-        .unique();
-      if (existing !== null)
+      const existing = args.requireContentHashMatch
+        ? document.currentVersionId === null
+          ? null
+          : await ctx.db.get(
+              "evidenceDocumentVersions",
+              document.currentVersionId,
+            )
+        : await ctx.db
+            .query("evidenceDocumentVersions")
+            .withIndex("by_documentId_and_contentHash", (q) =>
+              q.eq("documentId", document!._id).eq("contentHash", contentHash),
+            )
+            .unique();
+      if (existing !== null && existing.contentHash === contentHash)
         return {
           documentId: document._id,
           versionId: existing._id,
@@ -421,7 +429,11 @@ export const upsertDocumentVersion = internalMutation({
         publishedAt: args.publishedAt ?? null,
         licenseClass: args.documentLicenseClass,
       });
-      if (changedFields.length === 0 && document.currentVersionId !== null) {
+      if (
+        !args.requireContentHashMatch &&
+        changedFields.length === 0 &&
+        document.currentVersionId !== null
+      ) {
         return {
           documentId: document._id,
           versionId: document.currentVersionId,

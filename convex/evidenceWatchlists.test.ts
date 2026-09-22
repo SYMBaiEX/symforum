@@ -778,12 +778,16 @@ describe("watchlist webhook bridge", () => {
   test("never fans a watchlist event across owners", async () => {
     const t = setup();
     const ids = await enqueuePublicWebhookMatch(t);
+    const scheduled = await t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.some(job => job.name === "evidenceWatchlists:dispatchWebhookOutbox")).toBe(true);
     const ownerSubscription = await addTarget(t, ids.owner);
     await addTarget(t, ids.otherOwner);
 
     await expect(
-      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 5 }),
+      t.mutation(watchlists.dispatchWebhookOutbox, { limit: 1 }),
     ).resolves.toMatchObject({ processed: 1, dispatched: 1, enqueued: 1 });
+    const continued = await t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+    expect(continued.filter(job => job.name === "evidenceWatchlists:dispatchWebhookOutbox").length).toBeGreaterThan(scheduled.length);
     await t.run(async (ctx) => {
       const deliveries = await ctx.db
         .query("apiWebhookDeliveries")

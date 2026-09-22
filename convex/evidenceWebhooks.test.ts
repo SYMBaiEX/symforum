@@ -5,6 +5,7 @@ import { makeFunctionReference } from "convex/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import schema from "./schema";
+import { internal } from "./_generated/api";
 import { parseAllowedHosts, validateWebhookUrl } from "./evidenceWebhooks";
 
 const modules = {
@@ -624,6 +625,19 @@ describe("evidence webhooks", () => {
         expect(future).toMatchObject({ status: "pending" });
         expect(future?.deliveryGeneration).toBeUndefined();
       });
+      const recoverLease = internal.evidenceWebhooks.recoverDeliveryLease;
+      // An old scheduled wake-up cannot steal the current attempt.
+      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 7 });
+      expect((await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired)))?.deliveryGeneration).toBe(8);
+      // Nor can a current wake-up run before the lease actually expires.
+      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 8 });
+      expect((await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired)))?.deliveryGeneration).toBe(8);
+      await t.run(ctx => ctx.db.patch("apiWebhookDeliveries", ids.expired, { leaseExpiresAt: Date.now() - 1 }));
+      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 8 });
+      expect(await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired))).toMatchObject({ deliveryGeneration: 9, attempt: 2 });
+      await t.run(ctx => ctx.db.patch("apiWebhookDeliveries", ids.expired, { attempt: 3, leaseExpiresAt: Date.now() - 1 }));
+      await t.mutation(recoverLease, { deliveryId: ids.expired, deliveryGeneration: 9 });
+      expect(await t.run(ctx => ctx.db.get("apiWebhookDeliveries", ids.expired))).toMatchObject({ status: "dead_letter", attempt: 4 });
     } finally {
       vi.useRealTimers();
     }

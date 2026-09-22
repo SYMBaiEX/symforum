@@ -4284,6 +4284,71 @@ describe("forum privacy regressions", () => {
     ).toEqual(["public-square", "trusted-lab"]);
   });
 
+  test("small relevance pages expand past private candidates without exposing them", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 20; index += 1) {
+        await insertThread(ctx, {
+          categoryId: seed.trustedCategoryId,
+          categorySlug: "trusted-lab",
+          slug: `private-needle-${index}`,
+          title: "needle",
+          body: "needle",
+          authorId: seed.trustedUserId,
+          now: 1_800_000_000_100 + index,
+        });
+      }
+      for (let index = 0; index < 3; index += 1) {
+        await insertThread(ctx, {
+          categoryId: seed.publicCategoryId,
+          categorySlug: "public-square",
+          slug: `public-needle-${index}`,
+          title: `needle public ${index}`,
+          body: "needle public discussion",
+          authorId: seed.trustedUserId,
+          now: 1_800_000_000_200 + index,
+        });
+      }
+    });
+    await completeForumSearchProjectionBackfill(t);
+    const result = await t.query(api.forum.search, {
+      query: "needle",
+      resultType: "threads",
+      pageSize: 2,
+    });
+    expect(result.threads).toHaveLength(2);
+    expect(
+      result.threads.every((thread) => thread.categorySlug === "public-square"),
+    ).toBe(true);
+    expect(result.limited).toBe(false);
+  });
+
+  test("navigation summaries preserve legacy results and views do not change content timestamps", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const before = await t.query(api.forum.listCategories, {});
+    await t.mutation(internal.forumThreadDigestBackfill.run, {});
+    await completeForumSearchProjectionBackfill(t);
+    expect(await t.query(api.forum.listCategories, {})).toEqual(before);
+    const threadBefore = await t.run((ctx) =>
+      ctx.db.get("forumThreads", seed.publicThreadId),
+    );
+    await t
+      .withIdentity({ subject: seed.trustedUserId })
+      .mutation(api.forum.recordThreadView, { threadId: seed.publicThreadId });
+    const threadAfter = await t.run((ctx) =>
+      ctx.db.get("forumThreads", seed.publicThreadId),
+    );
+    expect(threadAfter?.viewCount).toBe(threadBefore!.viewCount + 1);
+    expect(threadAfter?.updatedAt).toBe(threadBefore!.updatedAt);
+    expect(
+      (await t.query(api.forum.listCategories, {})).some(
+        (category) => category.slug === "trusted-lab",
+      ),
+    ).toBe(false);
+  });
+
   test("compact search projections backfill once and recheck live board visibility", async () => {
     const t = setup();
     const seed = await seedForum(t);

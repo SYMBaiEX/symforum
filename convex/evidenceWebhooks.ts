@@ -612,6 +612,10 @@ async function scheduleDeliveryClaim(
     deliveryId: delivery._id,
     deliveryGeneration,
   });
+  await ctx.scheduler.runAfter(boundedDelayMs + DELIVERY_LEASE_MS + 1,
+    makeFunctionReference<"mutation">("evidenceWebhooks:recoverDeliveryLease"), {
+      deliveryId: delivery._id, deliveryGeneration,
+    });
   return { deliveryGeneration, leaseExpiresAt, nextAttemptAt };
 }
 
@@ -931,6 +935,42 @@ export const cleanupOrphanDeliveryEvents = internalMutation({
       done: events.length < limit,
       blocked: false,
     };
+  },
+});
+
+/** A stale wake-up must never reclaim a newer attempt or a delivered event. */
+export const recoverDeliveryLease = internalMutation({
+  args: {
+    deliveryId: v.id("apiWebhookDeliveries"),
+    deliveryGeneration: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("apiWebhookDeliveries", args.deliveryId);
+    const now = Date.now();
+    if (
+      row === null ||
+      row.status !== "in_flight" ||
+      row.deliveryGeneration !== args.deliveryGeneration ||
+      row.leaseExpiresAt === undefined ||
+      row.leaseExpiresAt > now
+    )
+      return null;
+    const attempt = row.attempt + 1;
+    // A crashed attempt consumes retry budget too; never spin forever on a
+    // worker that repeatedly fails before recording its outcome.
+    await ctx.db.patch("apiWebhookDeliveries", row._id, { attempt });
+    if (attempt >= MAX_DELIVERY_ATTEMPTS) {
+      await ctx.db.patch("apiWebhookDeliveries", row._id, {
+        status: "dead_letter",
+        nextAttemptAt: undefined,
+        leaseExpiresAt: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await scheduleDeliveryClaim(ctx, row, 0, now);
+    }
+    return null;
   },
 });
 

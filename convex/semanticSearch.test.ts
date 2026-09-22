@@ -7,6 +7,7 @@ import {
   recordSpendBucket,
 } from "./aiRoutingControlData";
 import schema from "./schema";
+import { internal } from "./_generated/api";
 import {
   dayKey,
   isCircuitAvailable,
@@ -317,6 +318,22 @@ describe("semantic search safety controls", () => {
         .unique();
       expect(spend).toMatchObject({ spentMicroUsd: 4, inputTokens: 4, requests: 2 });
     });
+  });
+
+  test("lease wakeups ignore unexpired and completed reservations and refund expired ones once", async () => {
+    const t = setup();
+    await t.mutation(reserveUsageRef, reservationArgs("semantic:query:wakeup"));
+    const row = await t.run(ctx => ctx.db.query("semanticSearchOperations").unique());
+    const args = { operationId: row!._id };
+    await t.mutation(internal.semanticSearch.recoverOperationLease, args);
+    expect((await t.run(ctx => ctx.db.get("semanticSearchOperations", row!._id)))?.status).toBe("leased");
+    await t.run(ctx => ctx.db.patch("semanticSearchOperations", row!._id, { leaseExpiresAt: 1 }));
+    await t.mutation(internal.semanticSearch.recoverOperationLease, args);
+    await t.mutation(internal.semanticSearch.recoverOperationLease, args);
+    expect((await t.run(ctx => ctx.db.query("aiSpendBuckets").unique()))?.spentMicroUsd).toBe(0);
+    await t.run(ctx => ctx.db.patch("semanticSearchOperations", row!._id, { status: "completed" }));
+    await t.mutation(internal.semanticSearch.recoverOperationLease, args);
+    expect((await t.run(ctx => ctx.db.get("semanticSearchOperations", row!._id)))?.status).toBe("completed");
   });
 
   test("refunds a crashed reservation only once", async () => {

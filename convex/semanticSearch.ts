@@ -814,7 +814,7 @@ export const reserveUsage = internalMutation({
         updatedAt: now,
       });
     }
-    await ctx.db.insert("semanticSearchOperations", {
+    const operationId = await ctx.db.insert("semanticSearchOperations", {
       operationKey: args.operationKey,
       kind: args.kind,
       fingerprint: args.fingerprint,
@@ -829,6 +829,9 @@ export const reserveUsage = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(LEASE_MS + 1,
+      makeFunctionReference<"mutation">("semanticSearch:recoverOperationLease"),
+      { operationId });
     return { accepted: true, replay: false };
   },
 });
@@ -877,7 +880,17 @@ async function refundExpiredOperation(
   return true;
 }
 
-/** Reclaims crashed reservations, then prunes only short-lived query records. */
+export const recoverOperationLease = internalMutation({
+  args: { operationId: v.id("semanticSearchOperations") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const operation = await ctx.db.get("semanticSearchOperations", args.operationId);
+    if (operation !== null) await refundExpiredOperation(ctx, operation, Date.now());
+    return null;
+  },
+});
+
+/** Hourly safety net for legacy leases and bounded query-record retention. */
 export const cleanupExpiredOperations = internalMutation({
   args: { now: v.optional(v.number()) },
   handler: async (ctx, args) => {

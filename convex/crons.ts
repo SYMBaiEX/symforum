@@ -98,13 +98,13 @@ crons.interval(
 );
 crons.interval(
   "recover pending webhook deliveries",
-  { minutes: 5 },
+  { hours: 1 },
   runWatchdogMutationRef,
   { jobKey: "evidence-webhook-recovery" },
 );
 crons.interval(
   "dispatch pending watchlist webhooks",
-  { minutes: 5 },
+  { hours: 1 },
   internal.evidenceWatchlists.dispatchWebhookOutbox,
   { limit: 5 },
 );
@@ -159,15 +159,7 @@ crons.interval(
   internal.forum.cleanupForumAttachmentStorage,
   {},
 );
-// Bounded to one thread or one 100-reply page per run. Once the persisted
-// completion marker exists this internal mutation is a no-op, so it does not
-// repeatedly rescan the forum after the one-time migration finishes.
-crons.interval(
-  "backfill compact forum search projections",
-  { minutes: 10 },
-  internal.forumSearchProjection.backfill,
-  {},
-);
+// One-time migrations are operator-started and schedule their own continuation.
 crons.interval(
   "cleanup expired analytics",
   { hours: 24 },
@@ -188,7 +180,7 @@ crons.interval(
 );
 crons.interval(
   "cleanup semantic search operations",
-  { minutes: 5 },
+  { hours: 1 },
   runWatchdogMutationRef,
   { jobKey: "semantic-cleanup" },
 );
@@ -308,13 +300,6 @@ crons.cron(
   "verify forum agent embeddings",
   "17 */6 * * *",
   internal.forumAgentMemory.checkEmbeddingHealth,
-  {},
-);
-
-crons.cron(
-  "backfill forum agent embeddings",
-  "40 7 * * *",
-  internal.forumAgentMemory.backfillForumMemory,
   {},
 );
 

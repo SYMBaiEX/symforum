@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 
@@ -165,6 +166,7 @@ export const backfill = internalMutation({
       } else {
         await ctx.db.patch("forumAgentMaintenanceState", state._id, values);
       }
+      await ctx.scheduler.runAfter(1_000, internal.forumSearchProjection.backfill, {});
     };
 
     if (cursor.threadId !== null) {

@@ -2739,6 +2739,13 @@ export default defineSchema({
       searchField: "searchText",
       filterFields: ["visibility", "sourceId"],
     }),
+  // Committed atomically with first-party enrichment. Small replay checks avoid
+  // re-reading large versions and re-writing their entire provenance graph.
+  evidenceFirstPartyCheckpoints: defineTable({
+    externalKey: v.string(),
+    contentHash: v.string(),
+    completedAt: v.number(),
+  }).index("by_externalKey", ["externalKey"]),
   evidenceDocumentVersions: defineTable({
     documentId: v.id("evidenceDocuments"),
     version: v.number(),

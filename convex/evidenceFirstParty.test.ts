@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
+import { internal } from "./_generated/api";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -163,5 +164,81 @@ describe("first-party research evidence", () => {
       expect(version?.metadataJson).toContain("https://example.com/benchmark");
       expect(version?.metadataJson).toContain("bodyBbcode");
     });
+
+    const checkpointBefore = await t.run((ctx) =>
+      ctx.db.query("evidenceFirstPartyCheckpoints").collect(),
+    );
+    await t.run(async (ctx) => {
+      const thread = (await ctx.db.query("forumThreads").collect())[0]!;
+      await ctx.db.patch("forumThreads", thread._id, {
+        viewCount: 400,
+        updatedAt: thread.updatedAt + 1_000,
+      });
+    });
+    await expect(t.action(sync, {})).resolves.toMatchObject({
+      newVersions: 0,
+      claims: 0,
+    });
+    expect(
+      await t.run((ctx) =>
+        ctx.db.query("evidenceFirstPartyCheckpoints").collect(),
+      ),
+    ).toEqual(checkpointBefore);
+
+    await t.run(async (ctx) => {
+      const assessment = (
+        await ctx.db.query("researchQualityAssessments").collect()
+      )[0]!;
+      await ctx.db.patch("researchQualityAssessments", assessment._id, {
+        contentQualityScore: 95,
+      });
+    });
+    await expect(t.action(sync, {})).resolves.toMatchObject({ newVersions: 1 });
+    // Returning to previously seen content must restore it as the current version.
+    await t.run(async (ctx) => {
+      const assessment = (
+        await ctx.db.query("researchQualityAssessments").collect()
+      )[0]!;
+      await ctx.db.patch("researchQualityAssessments", assessment._id, {
+        contentQualityScore: 91,
+      });
+    });
+    await expect(t.action(sync, {})).resolves.toMatchObject({ newVersions: 1 });
+
+    const registry = await t.mutation(
+      internal.evidenceFirstParty.syncRegistry,
+      {},
+    );
+    const research = (
+      await t.query(
+        internal.researchQuality.listPublishedResearchForEvidenceSync,
+        {},
+      )
+    )[0]!;
+    const before = await t.run((ctx) =>
+      ctx.db.query("evidenceDocumentVersions").collect(),
+    );
+    // Failure after the version upsert rolls back the document and checkpoint.
+    await expect(
+      t.mutation(internal.evidenceFirstParty.syncResearch, {
+        sourceId: registry.sourceId,
+        projectId: registry.projectId,
+        research: {
+          ...research,
+          title: "Updated research",
+          authorName: "x".repeat(10_000),
+        },
+      }),
+    ).rejects.toThrow();
+    expect(
+      await t.run((ctx) => ctx.db.query("evidenceDocumentVersions").collect()),
+    ).toEqual(before);
+    await expect(
+      t.mutation(internal.evidenceFirstParty.syncResearch, {
+        sourceId: registry.sourceId,
+        projectId: registry.projectId,
+        research: { ...research, title: "Updated research" },
+      }),
+    ).resolves.toMatchObject({ newVersions: 1 });
   });
 });

@@ -176,10 +176,10 @@ const STALENESS_MS: Record<JobKey, number> = {
   "evidence-claim-revision-cleanup": 30 * 60 * 60 * 1_000,
   "evidence-health": 2 * 60 * 60 * 1_000,
   "evidence-citation-benchmark": 30 * 60 * 60 * 1_000,
-  "semantic-cleanup": 15 * 60 * 1_000,
+  "semantic-cleanup": 3 * 60 * 60 * 1_000,
   "web-vitals-slo": 2 * 60 * 60 * 1_000,
   "newsletter-schedule": 30 * 60 * 1_000,
-  "evidence-webhook-recovery": 15 * 60 * 1_000,
+  "evidence-webhook-recovery": 3 * 60 * 60 * 1_000,
   "forum-suki-reply-recovery": 2 * 60 * 60 * 1_000,
   "forum-belle-reply-recovery": 2 * 60 * 60 * 1_000,
 };

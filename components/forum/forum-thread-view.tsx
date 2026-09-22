@@ -29,7 +29,6 @@ import {
   type ForumPostRecord,
   type ForumPollRecord,
   type ForumReportTarget,
-  type ForumSearchRecord,
   type ForumThreadRecord,
   type ForumThreadPrefixRecord,
 } from "@/components/forum/forum-refs";
@@ -169,17 +168,6 @@ function LiveForumThreadView({
   const relatedSearchQuery = useMemo(
     () => relatedThreadSearchQuery(detail?.thread?.title),
     [detail?.thread?.title],
-  );
-  const relatedSearch = useQuery(
-    forumRefs.search,
-    relatedSearchQuery === null
-      ? "skip"
-      : {
-          query: relatedSearchQuery,
-          resultType: "threads",
-          sortKey: "relevance",
-          pageSize: 5,
-        },
   );
   const reply = useMutation(forumRefs.reply);
   const recordThreadView = useMutation(forumRefs.recordThreadView);
@@ -1328,11 +1316,15 @@ function LiveForumThreadView({
         />
       ) : null}
 
-      <RelatedThreadsPanel
-        categorySlug={categorySlug}
-        currentThreadId={thread._id}
-        result={relatedSearch}
-      />
+      {relatedSearchQuery !== null ? (
+        <ForumLink
+          className="text-sm text-muted-foreground hover:text-foreground"
+          href={`/forum/search?q=${encodeURIComponent(relatedSearchQuery)}`}
+          prefetch={false}
+        >
+          Find related discussions →
+        </ForumLink>
+      ) : null}
 
       <section className="space-y-3">
         <ForumPaginationBar
@@ -1914,76 +1906,6 @@ function ForumPollPanel({
   );
 }
 
-function RelatedThreadsPanel({
-  categorySlug,
-  currentThreadId,
-  result,
-}: {
-  categorySlug: string;
-  currentThreadId: string;
-  result: ForumSearchRecord | undefined;
-}) {
-  if (result === undefined) {
-    return null;
-  }
-  const threads = result.threads
-    .filter(
-      (candidate) => (candidate.threadId ?? candidate._id) !== currentThreadId,
-    )
-    .slice(0, 4);
-  if (threads.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="border-y border-row-border py-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Discovery
-          </p>
-          <h2 className="mt-1 text-base font-semibold">Related discussions</h2>
-        </div>
-        <ForumLink
-          className="font-mono text-[10px] uppercase text-muted-foreground hover:text-foreground"
-          href={`/forum/search?q=${encodeURIComponent(
-            relatedThreadSearchQuery(threads[0]?.title) ?? categorySlug,
-          )}`}
-          prefetch
-        >
-          Open search →
-        </ForumLink>
-      </div>
-      <div className="mt-2 grid gap-2 md:grid-cols-2">
-        {threads.map((candidate) => (
-          <ForumLink
-            className="border border-row-border p-2.5 hover:border-primary/60 hover:bg-muted/20"
-            href={forumPath(
-              candidate.categorySlug ?? categorySlug,
-              candidate.slug,
-            )}
-            key={candidate.threadId ?? candidate._id ?? candidate.slug}
-            prefetch
-          >
-            <span className="block text-sm font-semibold leading-5">
-              {candidate.title}
-            </span>
-            <span className="mt-1 block font-mono text-[10px] uppercase text-muted-foreground">
-              {candidate.categorySlug ?? categorySlug} ·{" "}
-              {candidate.replyCount ?? 0} replies · {candidate.viewCount ?? 0}{" "}
-              views
-            </span>
-            {candidate.excerpt ? (
-              <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted-foreground">
-                {candidate.excerpt}
-              </span>
-            ) : null}
-          </ForumLink>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 function ForumPollEditor({
   error,

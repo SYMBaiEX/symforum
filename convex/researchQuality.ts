@@ -737,49 +737,49 @@ export const benchmarkSummary = query({
 });
 
 /** Bounded bridge from approved forum research into first-party evidence. */
-export const listPublishedResearchForEvidenceSync = internalQuery({
-  args: { limit: v.optional(v.number()) },
-  returns: v.array(
+export const publishedResearchEvidenceValidator = v.object({
+  threadId: v.id("forumThreads"),
+  categorySlug: v.string(),
+  slug: v.string(),
+  title: v.string(),
+  body: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  authorName: v.string(),
+  agentSlug: v.string(),
+  model: v.optional(v.string()),
+  promptVersion: v.optional(v.string()),
+  contentFormat: v.optional(v.string()),
+  qualitySchemaVersion: v.optional(v.string()),
+  contentQualityScore: v.optional(v.number()),
+  citationCoverageScore: v.number(),
+  originalityScore: v.number(),
+  naturalnessScore: v.optional(v.number()),
+  structureScore: v.optional(v.number()),
+  sourceDiversityScore: v.optional(v.number()),
+  sourceDomains: v.array(v.string()),
+  sourceUrls: v.array(v.string()),
+  claims: v.array(
     v.object({
-      threadId: v.id("forumThreads"),
-      categorySlug: v.string(),
-      slug: v.string(),
-      title: v.string(),
-      body: v.string(),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-      authorName: v.string(),
-      agentSlug: v.string(),
-      model: v.optional(v.string()),
-      promptVersion: v.optional(v.string()),
-      contentFormat: v.optional(v.string()),
-      qualitySchemaVersion: v.optional(v.string()),
-      contentQualityScore: v.optional(v.number()),
-      citationCoverageScore: v.number(),
-      originalityScore: v.number(),
-      naturalnessScore: v.optional(v.number()),
-      structureScore: v.optional(v.number()),
-      sourceDiversityScore: v.optional(v.number()),
-      sourceDomains: v.array(v.string()),
-      sourceUrls: v.array(v.string()),
-      claims: v.array(
-        v.object({
-          claimIndex: v.number(),
-          claimText: v.string(),
-          claimHash: v.string(),
-          bodySpanText: v.optional(v.string()),
-          sourceUrl: v.string(),
-          snapshotHash: v.string(),
-          supportStatus: v.union(
-            v.literal("supported"),
-            v.literal("partial"),
-            v.literal("unsupported"),
-          ),
-          supportScore: v.number(),
-        }),
+      claimIndex: v.number(),
+      claimText: v.string(),
+      claimHash: v.string(),
+      bodySpanText: v.optional(v.string()),
+      sourceUrl: v.string(),
+      snapshotHash: v.string(),
+      supportStatus: v.union(
+        v.literal("supported"),
+        v.literal("partial"),
+        v.literal("unsupported"),
       ),
+      supportScore: v.number(),
     }),
   ),
+});
+
+export const listPublishedResearchForEvidenceSync = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(publishedResearchEvidenceValidator),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 100)));
     const statuses: Assessment["status"][] = [
