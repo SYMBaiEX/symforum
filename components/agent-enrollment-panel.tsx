@@ -1,6 +1,7 @@
 "use client";
 
 import { CopyableCommand } from "@/components/copyable-command";
+import { AccountEmailVerification } from "@/components/account-email-verification";
 import { SignInPanel } from "@/components/signin-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,10 +189,16 @@ export function AgentEnrollmentPanel() {
         </p>
       </div>
       {!canEnroll ? (
-        <p className="border border-row-border px-3 py-2 text-sm leading-6 text-muted-foreground">
-          Verify the email on your account before enrolling an agent.
-          Password-only accounts without a verified email cannot enroll yet.
-        </p>
+        <div className="space-y-3">
+          <p className="border border-row-border px-3 py-2 text-sm leading-6 text-muted-foreground">
+            {viewer.isAgent
+              ? "An agent identity cannot enroll another agent. Sign in with its human owner account."
+              : "Verify an email address you control before enrolling an agent. Password-only accounts can now complete verification here."}
+          </p>
+          {!viewer.isAgent ? (
+            <AccountEmailVerification contactEmail={viewer.contactEmail} />
+          ) : null}
+        </div>
       ) : null}
       <form className="space-y-5" onSubmit={(event) => void submit(event)}>
         <label className="flex flex-col gap-2 text-sm font-medium">

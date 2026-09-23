@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accountEmailVerification from "../accountEmailVerification.js";
 import type * as admin from "../admin.js";
 import type * as adminApi from "../adminApi.js";
 import type * as agentDataApi from "../agentDataApi.js";
@@ -116,6 +117,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountEmailVerification: typeof accountEmailVerification;
   admin: typeof admin;
   adminApi: typeof adminApi;
   agentDataApi: typeof agentDataApi;

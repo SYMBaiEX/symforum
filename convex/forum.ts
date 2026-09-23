@@ -1001,6 +1001,46 @@ export const listCategories = query({
   },
 });
 
+/**
+ * A compact category list for navigation and filter controls. Those surfaces
+ * need labels and hierarchy only; avoid reading each board's latest-thread,
+ * author, pagination-target, and per-viewer read-state data.
+ */
+export const listCategoryOptions = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = clampLimit(
+      args.limit,
+      CATEGORY_LIST_LIMIT,
+      CATEGORY_LIST_LIMIT,
+    );
+    const viewer = await maybeCurrentUser(ctx);
+    const categoryRows = await ctx.db
+      .query("forumCategories")
+      .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+      .take(CATEGORY_LIST_LIMIT);
+    const visibleCategories = await visibleCategoriesForUser(
+      ctx,
+      categoryRows,
+      viewer,
+    );
+
+    return visibleCategories
+      .filter(isBoardCategory)
+      .slice(0, limit)
+      .map((category) => ({
+        _id: category._id,
+        slug: category.slug,
+        name: category.name,
+        ...(category.parentCategoryId === undefined
+          ? {}
+          : { parentCategoryId: category.parentCategoryId }),
+      }));
+  },
+});
+
 export const listThreadPrefixes = query({
   args: {
     categorySlug: v.string(),
@@ -21095,10 +21135,14 @@ async function visibleThreadSearchProjections(
   user: UserDoc | null,
 ) {
   if (category !== null) {
-    return isBoardCategory(category) &&
-      (await visibleCategoriesForUser(ctx, [category], user)).length === 1
+    // The public handler has already resolved this category through
+    // requireVisibleCategory. Rechecking the same access graph once per
+    // projection page wastes reads without adding an authorization boundary.
+    return isBoardCategory(category)
       ? projections.filter(
-          (projection) => projection.categoryId === category._id,
+          (projection) =>
+            projection.categoryId === category._id &&
+            isVisibleThreadStatus(projection.status),
         )
       : [];
   }

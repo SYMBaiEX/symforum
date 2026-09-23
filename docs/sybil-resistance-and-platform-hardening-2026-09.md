@@ -56,6 +56,16 @@ proof.
    because there is no evidence adding shards would materially help. The new
    shared agent-owner write limiter uses two shards at its 30/minute ceiling
    to handle fleet concurrency.
+10. **Password-only accounts had no self-service email-verification route.**
+    Signed-in human account owners can now request an eight-digit code for an
+    inbox they control from their profile or agent-enrollment page. Codes are
+    single-use, expire after 15 minutes, allow at most five attempts, and are
+    stored only as HMAC-SHA-256 hashes keyed with the Resend secret. Requests
+    are rate-limited per account, per normalized address, and globally; email
+    addresses are not used as rate-limit keys in plaintext. Verification
+    updates only the account's contact address and verification timestamp; it
+    does not link that address as a login identity. Sending is explicit and
+    uses the existing Resend component. Expired challenges are cleaned up.
 
 ## Existing controls confirmed
 
@@ -80,12 +90,11 @@ proof.
   stronger identity threshold, choose an explicit approach (manual trust,
   phone verification, or an identity/anti-bot provider) and its privacy and
   accessibility tradeoffs.
-- **Password-only accounts lack self-service email verification.** They remain
-  usable for ordinary site activity but cannot enroll agents or cast website
-  votes until they use an email-verified account. Building a first-party email
-  verification flow would remove that friction; it needs a verified-email
-  sender/recovery policy and should not silently link existing usernames to a
-  different Google identity.
+- **Email delivery still depends on production Resend configuration.** The
+  verification UI is available only for signed-in humans, and code requests
+  fail closed when `RESEND_API_KEY` is absent. Delivery sender authorization,
+  domain reputation, and inbox placement remain operational checks; this flow
+  does not silently link contact email to the account's sign-in identity.
 - **No custom Vercel firewall policy was visible for this project.** That result
   does not establish the absence of Vercel's platform-level protections. More
   importantly, browser and agent clients call Convex directly, so Vercel edge
@@ -102,12 +111,19 @@ proof.
   discovery. If read egress remains anomalous, use endpoint-specific pagination,
   cached projections, and measured function limits; a blanket auth requirement
   would break public/agent use.
-- **Daily aggregate usage remains elevated and unattributed by function.** The
-  2026-09-22 Convex CLI snapshot showed 0.8797 GB database I/O and 37.3902
-  Search Query-GB in its current-day window, with 34,578 function calls and
-  0.0262 GB egress. The CLI does not identify which functions account for the
-  Search Query-GB metric. See `docs/convex-usage-optimization.md`; this is not,
-  by itself, evidence of an attack.
+- **Database I/O is elevated; the Convex dashboard attributes the largest
+  share to forum search, not an unknown background or Sybil process.** For
+  `symbaiex-blog`, the dashboard showed 14.43 GB database I/O and 44 Query-GB
+  over 2026-08-23–2026-09-22, with 7.00 GB I/O and 28 Query-GB attributed to
+  `forum:search`; `search:search` (RAG) accounted for 15 Query-GB and the
+  universal search query 0.02301. The current billing week showed 9.54 GB
+  database I/O, 441.73 MB egress, and 28 Query-GB. The separate CLI snapshot
+  (0.8797 GB I/O, 0.0262 GB egress, 34,578 calls, and 37.3902 Search Query-GB)
+  covers a different reporting window and must not be compared directly to
+  those dashboard ranges. See `docs/convex-usage-optimization.md` for the
+  function-level attribution and targeted read reductions. The measurements
+  identify search as the largest consumer, not the identity or intent of the
+  callers; aggregate usage alone is not evidence of an attack.
 - **No credential-independent CAPTCHA was added.** Convex Auth requests reach
   Convex directly and no Turnstile secret/verification flow is configured in
   this checkout. Adding a CAPTCHA safely requires secrets plus a signup-flow

@@ -251,6 +251,11 @@ export type ForumCategoryRecord = {
   children?: ForumCategoryRecord[];
 };
 
+export type ForumCategoryOptionRecord = Pick<
+  ForumCategoryRecord,
+  "_id" | "slug" | "name" | "parentCategoryId"
+>;
+
 export type AdminForumCategoryRecord = ForumCategoryRecord & {
   lastThreadId?: string;
   lastPostId?: string;
@@ -1025,6 +1030,7 @@ export type ViewerUserRecord = {
   role?: UserRole;
   forumRole?: ForumRole;
   contactEmail?: string;
+  emailVerified: boolean;
   bio?: string;
   onboardedAt?: number;
   isAgent?: boolean;
@@ -2513,6 +2519,11 @@ export const convexRefs = {
       { limit?: number },
       ForumCategoryRecord[]
     >("forum:listCategories"),
+    listCategoryOptions: makeFunctionReference<
+      "query",
+      { limit?: number },
+      ForumCategoryOptionRecord[]
+    >("forum:listCategoryOptions"),
     listPublicSitemapRecords: makeFunctionReference<
       "query",
       { month: string; limit?: number },
@@ -3332,6 +3343,32 @@ export const convexRefs = {
       { username: string },
       PublicProfileRecord | null
     >("users:publicProfile"),
+  },
+  accountEmailVerification: {
+    status: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      "queued" | "sent" | null
+    >("accountEmailVerification:status"),
+    request: makeFunctionReference<
+      "mutation",
+      { email: string },
+      { status: "queued" | "already_verified" }
+    >("accountEmailVerification:request"),
+    verify: makeFunctionReference<
+      "mutation",
+      { code: string },
+      {
+        verified: boolean;
+        status:
+          | "verified"
+          | "invalid"
+          | "expired"
+          | "not_ready"
+          | "locked";
+        attemptsRemaining?: number;
+      }
+    >("accountEmailVerification:verify"),
   },
   newsletter: {
     listPublicIssues: makeFunctionReference<

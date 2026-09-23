@@ -112,7 +112,7 @@ function LiveForumSearchPage() {
   const [sortKey, setSortKey] = useState<ForumSearchSortKey>(submittedSortKey);
   const [days, setDays] = useState(submittedDays);
   const [pageSize, setPageSize] = useState(String(submittedPageSize));
-  const categories = useQuery(forumRefs.listCategories, {
+  const categories = useQuery(forumRefs.listCategoryOptions, {
     limit: CATEGORY_SELECT_LIMIT,
   });
   const searchArgs = useMemo(

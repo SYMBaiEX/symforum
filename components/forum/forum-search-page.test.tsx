@@ -29,7 +29,7 @@ describe("ForumSearchPage request ownership", () => {
 
     expect(mocks.cachedUseQuery).toHaveBeenCalledTimes(1);
     expect(mocks.cachedUseQuery).toHaveBeenCalledWith(
-      forumRefs.listCategories,
+      forumRefs.listCategoryOptions,
       { limit: 200 },
     );
     expect(mocks.cachedUseQuery).not.toHaveBeenCalledWith(

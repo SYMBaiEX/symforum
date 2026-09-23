@@ -640,7 +640,6 @@ export const upsertDocumentVersion = internalMutation({
             )
             .unique();
       if (existing !== null && existing.contentHash === contentHash) {
-        await syncEvidenceDocumentUniversalSearchProjection(ctx, document);
         return {
           documentId: document._id,
           versionId: existing._id,
@@ -664,7 +663,6 @@ export const upsertDocumentVersion = internalMutation({
         changedFields.length === 0 &&
         document.currentVersionId !== null
       ) {
-        await syncEvidenceDocumentUniversalSearchProjection(ctx, document);
         return {
           documentId: document._id,
           versionId: document.currentVersionId,
@@ -827,7 +825,6 @@ export const upsertEntity = internalMutation({
         existing.visibility === value.visibility &&
         sameCanonicalDocumentList(existing.aliases, value.aliases);
       if (unchanged) {
-        await syncEvidenceEntityUniversalSearchProjection(ctx, existing);
         return { entityId: existing._id, created: false };
       }
       if (existing.visibility === "public" && value.visibility === "private") {
@@ -900,9 +897,6 @@ export const linkDocumentEntity = internalMutation({
       )
       .unique();
     if (existing !== null) {
-      const entity = await ctx.db.get("evidenceEntities", args.entityId);
-      if (entity !== null)
-        await syncEvidenceEntityUniversalSearchProjection(ctx, entity);
       return { linkId: existing._id, created: false };
     }
     const [version, entity] = await Promise.all([
@@ -993,7 +987,6 @@ export const upsertClaim = internalMutation({
         existing.visibility !== value.visibility ||
         existing.observedAt !== value.observedAt;
       if (!changed) {
-        await syncEvidenceClaimUniversalSearchProjection(ctx, existing);
         return { claimId: existing._id, created: false };
       }
       if (existing.visibility === "public" && value.visibility === "private") {
@@ -1101,9 +1094,6 @@ export const recordCitation = internalMutation({
       .withIndex("by_citationKey", (q) => q.eq("citationKey", citationKey))
       .unique();
     if (existing !== null) {
-      const claim = await ctx.db.get("evidenceClaims", existing.claimId);
-      if (claim !== null)
-        await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
       return { citationId: existing._id, created: false };
     }
     const [claim, version] = await Promise.all([

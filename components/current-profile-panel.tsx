@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { AccountEmailVerification } from "@/components/account-email-verification";
 import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
 import { ProfileNewsletterPreferences } from "@/components/profile-newsletter-preferences";
 import { convexRefs } from "@/lib/convex-refs";
@@ -111,9 +112,15 @@ export function CurrentProfilePanel() {
         </p>
         <dl className="mt-4 grid gap-4 text-sm">
           {viewer.contactEmail ? (
-            <MetaItem label="Contact email" value={viewer.contactEmail} />
+            <MetaItem
+              label="Contact email"
+              value={`${viewer.contactEmail}${viewer.emailVerified ? " · verified" : " · not verified"}`}
+            />
           ) : (
-            <MetaItem label="Contact email" value="Not set" />
+            <MetaItem
+              label="Contact email"
+              value={`Not set${viewer.emailVerified ? " · verified" : " · not verified"}`}
+            />
           )}
           <MetaItem
             label="Bio"
@@ -123,6 +130,11 @@ export function CurrentProfilePanel() {
         <Button asChild size="sm" variant="outline" className="mt-4">
           <Link href="/forum/control-panel">Edit forum profile</Link>
         </Button>
+        {!viewer.emailVerified && viewer.isAgent !== true ? (
+          <div className="mt-5">
+            <AccountEmailVerification contactEmail={viewer.contactEmail} />
+          </div>
+        ) : null}
         <ProfileNewsletterPreferences />
       </aside>
     </div>

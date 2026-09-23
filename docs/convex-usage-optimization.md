@@ -139,6 +139,70 @@ was 735.8888 even though the live daily rate was small. Convex's CLI does not
 expose a per-day or per-function breakdown for that monthly metric, so the
 exact historical spike is intentionally left unattributed.
 
+The latest bounded successful-execution sample, collected on 2026-09-22, had
+1,000 function completions over 65 minutes and 45 seconds. It recorded
+7,009,773 database-read bytes and 871,550 database-write bytes. Its text-search
+read-byte field was zero and its text-search write-byte field was 84,275. This
+is a recent sample, not the full-day window in the usage snapshot; it must not
+be extrapolated into a daily or monthly total. In that sample, evidence
+`linkDocumentEntity`, `upsertEntity`, `recordCitation`, and
+`upsertDocumentVersion` were the largest repeat read paths. Recent Insights
+also showed five search-index metadata OCC signals during the universal-search
+backfill, with zero retries; analytics had 94 OCC signals in the wider view,
+also with zero retries. No read-limit insight was reported.
+
+The Convex dashboard was then checked read-only for `symbaiex-blog`. For
+2026-08-23 through 2026-09-22 it showed 14.43 GB database I/O, 1.60 GB data
+egress, 75.57 MB search storage, and 44 Query-GB. For the current billing week
+(2026-09-15 through 2026-09-22), it showed 9.54 GB database I/O, 441.73 MB
+egress, and 28 Query-GB. The function breakdown attributes 7.00 GB of the
+30-day database I/O to `forum:search`; the next largest were
+`forum:listCategories` (858.24 MB), `forum:routeStatus` (835.47 MB),
+`evidence:recordCitation` (548.58 MB), `evidence:upsertDocumentVersion`
+(534.52 MB), and the completed universal-search backfill (469.96 MB).
+
+Search attribution is now concrete for that dashboard window: 28 Query-GB of
+the 44 total came from `forum:search`, 15 from `search:search` (RAG), and
+0.02301 from `universalSearch:searchPublic` (rounded dashboard figures may not
+sum exactly). That makes forum search the leading search and database-I/O
+consumer, while the universal index is not a material source in this period.
+The CLI's separate 37.3902 Search Query-GB snapshot and the dashboard's
+different time windows should not be compared as if they were the same bucket.
+Convex documents that text-search queries are billed against the full size of
+the search index, even when few results match or filter fields narrow the
+returned set ([text search pricing](https://docs.convex.dev/search/text-search)).
+
+The universal index intentionally serves a single cross-corpus request across
+evidence, claims, entities, editorial content, news, and forum threads. A type
+filter does not make a full-text query cheap by itself. Splitting it into
+several per-type searches would not reduce total index bytes for an all-types
+query and could increase them. Do not trim research text or change default
+search semantics without a retrieval-quality comparison. The measured forum
+search path instead received two bounded read reductions: navigation/filter
+surfaces now request compact category options rather than full board summaries,
+and a category-scoped search no longer reloads the same authorization graph
+after the handler has already authorized that category. Neither changes public
+search semantics or visibility checks.
+
+The follow-up implementation removes projection synchronization from
+idempotent evidence-write retries. Those retries previously re-read an
+entity's linked document graph (up to 50 links) or revalidated citations and
+search-index rows even though the source record had not changed. Real document,
+entity, claim, link, and citation changes still update projections in the same
+transaction. When an entity does change, its current projection's live public
+document reference is checked first; only a stale or revoked reference falls
+back to the complete bounded relation scan. This keeps visibility fail-closed
+while avoiding the historical-link walk for the normal update.
+
+The new compact `forum:listCategoryOptions` query serves only navigation and
+search filters. It preserves active-board and per-viewer category visibility,
+but omits latest-thread summaries, author hydration, pagination targets, and
+per-viewer read markers that those controls never render. The full
+`forum:listCategories` endpoint remains unchanged for board views that need
+those fields. The measured dashboard contribution (858.24 MB over 30 days)
+supports this targeted split; verify the next billing-week breakdown before
+claiming a realized savings amount.
+
 A bounded successful-execution sample did identify one active database-read
 defect: `forum:listRecentThreads` accounted for 118,371,552 bytes across 22
 sampled calls, about 5.38 MB per call and roughly 97% of all sampled database

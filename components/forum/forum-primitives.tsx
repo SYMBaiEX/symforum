@@ -702,7 +702,7 @@ function ForumUtilityLinkRow({ className }: { className?: string }) {
 }
 
 function LiveForumUtilityLinkRow({ className }: { className?: string }) {
-  const categories = useQuery(forumRefs.listCategories, { limit: 200 });
+  const categories = useQuery(forumRefs.listCategoryOptions, { limit: 200 });
 
   return <ForumUtilityLinks categories={categories} className={className} />;
 }

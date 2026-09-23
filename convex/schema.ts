@@ -603,6 +603,20 @@ export default defineSchema({
     eventType: v.string(),
     receivedAt: v.number(),
   }).index("by_eventId", ["eventId"]),
+  accountEmailVerificationChallenges: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sent"),
+    ),
+    codeHash: v.optional(v.string()),
+    expiresAt: v.number(),
+    attempts: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
   newsletterSubscribers: defineTable({
     email: v.string(),
     emailNormalized: v.string(),

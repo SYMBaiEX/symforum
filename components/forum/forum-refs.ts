@@ -10,6 +10,7 @@ import {
   type ForumCalendarEventRecord as ConvexForumCalendarEventRecord,
   type ForumCalendarEventSummaryRecord as ConvexForumCalendarEventSummaryRecord,
   type ForumCategoryRecord as ConvexForumCategoryRecord,
+  type ForumCategoryOptionRecord as ConvexForumCategoryOptionRecord,
   type ForumCategorySectionRecord as ConvexForumCategorySectionRecord,
   type ForumContentReportEntityType,
   type ForumMemberRecord as ConvexForumMemberRecord,
@@ -168,6 +169,7 @@ export type ForumCategoryRecord = Partial<ConvexForumCategoryRecord> & {
   ancestors?: ForumCategoryRecord[];
   children?: ForumCategoryRecord[];
 };
+export type ForumCategoryOptionRecord = ConvexForumCategoryOptionRecord;
 
 export type ForumCategorySectionRecord = Omit<
   ConvexForumCategorySectionRecord,
@@ -254,6 +256,7 @@ export const forumRefs = {
   overview: convexRefs.forum.overview,
   onlineSummary: convexRefs.forum.onlineSummary,
   listCategories: convexRefs.forum.listCategories,
+  listCategoryOptions: convexRefs.forum.listCategoryOptions,
   listThreadPrefixes: convexRefs.forum.listThreadPrefixes,
   listAnnouncements: convexRefs.forum.listAnnouncements,
   getAnnouncement: convexRefs.forum.getAnnouncement,

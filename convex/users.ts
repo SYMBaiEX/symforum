@@ -302,6 +302,7 @@ export const maybeViewer = query({
       role: user.role,
       forumRole: user.forumRole,
       contactEmail: user.contactEmail,
+      emailVerified: user.emailVerificationTime !== undefined,
       ...(args.includeBio
         ? { bio: user.bio ?? forumProfile?.bio }
         : {}),

@@ -239,18 +239,29 @@ export async function syncEvidenceEntityUniversalSearchProjection(
   entity: Doc<"evidenceEntities">,
 ) {
   const type = "evidence_entity" as const;
+  const entityRecordKey = recordKey(type, entity._id);
+  const existing = await projectionByRecordKey(ctx, entityRecordKey);
+  if (entity.visibility !== "public") {
+    if (existing !== null) {
+      await ctx.db.delete("universalSearchProjections", existing._id);
+    }
+    return;
+  }
   const independent = isIndependentPublicEvidenceEntity(entity);
   const reference = independent
     ? null
-    : await publicEvidenceEntityReference(ctx, entity, {
+    : (await currentPublicEvidenceEntityReference(ctx, entity, existing)) ??
+      (await publicEvidenceEntityReference(ctx, entity, {
         ignorePendingSync: true,
-      });
-  if (entity.visibility !== "public" || (!independent && reference === null)) {
-    await deleteUniversalSearchProjection(ctx, type, entity._id);
+      }));
+  if (!independent && reference === null) {
+    if (existing !== null) {
+      await ctx.db.delete("universalSearchProjections", existing._id);
+    }
     return;
   }
   await upsertProjection(ctx, {
-    recordKey: recordKey(type, entity._id),
+    recordKey: entityRecordKey,
     type,
     canonicalUrl: `${PRIMARY_ORIGIN}/research`,
     title: normalized(entity.name, TITLE_LIMIT),
@@ -270,7 +281,55 @@ export async function syncEvidenceEntityUniversalSearchProjection(
       reference === null ? undefined : String(reference.version._id),
     entityId: String(entity._id),
     citationIds: [],
-  });
+  }, existing);
+}
+
+/**
+ * Reuse a still-current public citation already stored on the compact search
+ * projection. Entity metadata changes are common, while discovering a valid
+ * reference by walking up to 50 historical links can be expensive. If that
+ * cached reference is stale or revoked, the caller falls back to the complete
+ * bounded visibility scan so another public document can still keep the entity
+ * discoverable.
+ */
+async function currentPublicEvidenceEntityReference(
+  ctx: MutationCtx,
+  entity: Doc<"evidenceEntities">,
+  projection: Doc<"universalSearchProjections"> | null,
+) {
+  if (projection?.entityId !== String(entity._id)) return null;
+  const documentId = ctx.db.normalizeId(
+    "evidenceDocuments",
+    projection.documentId ?? "",
+  );
+  const versionId = ctx.db.normalizeId(
+    "evidenceDocumentVersions",
+    projection.documentVersionId ?? "",
+  );
+  if (documentId === null || versionId === null) return null;
+  const [document, version, link] = await Promise.all([
+    ctx.db.get("evidenceDocuments", documentId),
+    ctx.db.get("evidenceDocumentVersions", versionId),
+    ctx.db
+      .query("evidenceDocumentEntities")
+      .withIndex("by_documentVersionId_and_entityId", (q) =>
+        q.eq("documentVersionId", versionId).eq("entityId", entity._id),
+      )
+      .unique(),
+  ]);
+  if (
+    document === null ||
+    version === null ||
+    link === null ||
+    version.documentId !== document._id ||
+    document.currentVersionId !== version._id ||
+    !(await isPublicEvidenceDocument(ctx, document, {
+      ignorePendingSync: true,
+    }))
+  ) {
+    return null;
+  }
+  return { document, version };
 }
 
 export async function syncEvidenceClaimUniversalSearchProjection(
@@ -774,8 +833,15 @@ async function publicForumBoard(
   return null;
 }
 
-async function upsertProjection(ctx: MutationCtx, values: ProjectionValues) {
-  const existing = await projectionByRecordKey(ctx, values.recordKey);
+async function upsertProjection(
+  ctx: MutationCtx,
+  values: ProjectionValues,
+  knownExisting?: Doc<"universalSearchProjections"> | null,
+) {
+  const existing =
+    knownExisting !== undefined
+      ? knownExisting
+      : await projectionByRecordKey(ctx, values.recordKey);
   if (existing === null) {
     await ctx.db.insert("universalSearchProjections", values);
     return;

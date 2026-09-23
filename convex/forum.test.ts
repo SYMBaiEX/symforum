@@ -4232,6 +4232,38 @@ describe("forum privacy regressions", () => {
     ).resolves.toMatchObject({ exists: false, kind: "missing" });
   });
 
+  test("category option lists stay compact and respect board visibility", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+
+    await expect(t.query(api.forum.listCategoryOptions, {})).resolves.toEqual([
+      {
+        _id: seed.publicCategoryId,
+        slug: "public-square",
+        name: "Public Square",
+      },
+    ]);
+
+    const asTrusted = t.withIdentity({
+      subject: seed.trustedUserId,
+      name: "Trusted Author",
+    });
+    await expect(
+      asTrusted.query(api.forum.listCategoryOptions, {}),
+    ).resolves.toEqual([
+      {
+        _id: seed.publicCategoryId,
+        slug: "public-square",
+        name: "Public Square",
+      },
+      {
+        _id: seed.trustedCategoryId,
+        slug: "trusted-lab",
+        name: "Trusted Lab",
+      },
+    ]);
+  });
+
   test("overview hydrates real latest-thread metadata without UI placeholders", async () => {
     const t = setup();
     const seed = await seedForum(t);
