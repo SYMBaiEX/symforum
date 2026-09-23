@@ -172,6 +172,38 @@ Convex documents that text-search queries are billed against the full size of
 the search index, even when few results match or filter fields narrow the
 returned set ([text search pricing](https://docs.convex.dev/search/text-search)).
 
+The next read-only dashboard check for the current cycle showed 9.56 GB of
+database I/O, of which 9.32 GB was reads and 238.98 MB writes. `forum:search`
+accounted for 6.42 GB, followed by `forum:routeStatus` at 629.16 MB and
+`universalSearchProjection:backfill` at 469.96 MB. The backfill's migration
+marker is complete and no continuation was pending, so it is historical
+one-time work rather than an active poll. The completed search migration,
+combined with the high read share and forum-search attribution, makes repeated
+status-index reads the actionable live path.
+
+Relevance forum searches now query active candidates first, apply visibility
+and user filters, and skip the locked-status text search when active matches
+already fill the requested result window. If the window is short, they query
+only its remaining capacity (with bounded visibility overscan for global
+search). Advanced sorts still fetch both statuses because locked rows can
+change their ordering. This preserves active-before-locked relevance order,
+private-category and ancestor filtering, result paging, and the bounded
+`limited` signal while avoiding an unneeded search-index scan on full relevance
+pages. When a short page needs the locked pass, category visibility results
+from the active pass are reused for categories already checked. Regression
+tests cover legacy and projected searches, private visibility, and continuation
+to locked rows on later pages.
+Recheck `forum:search` DB I/O and Search Query-GB after the change is deployed;
+the source snapshot is a baseline, not a measured savings claim.
+
+`forum:routeStatus` was the next live read consumer (629.16 MB in the same
+window). Its shared ancestor-visibility helper performed the target board's
+moderator-assignment lookup twice for each authenticated, non-staff request.
+The helper now reuses that result; ancestor checks and board-level moderator
+overrides are unchanged. This avoids one redundant indexed assignment read per
+such route check. The route-visibility suite still covers public, trusted, and
+assigned-moderator access.
+
 The universal index intentionally serves a single cross-corpus request across
 evidence, claims, entities, editorial content, news, and forum threads. A type
 filter does not make a full-text query cheap by itself. Splitting it into

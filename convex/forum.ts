@@ -14164,15 +14164,7 @@ async function canViewCategoryWithAncestors(
   user: UserDoc | null | undefined,
   category: ForumCategoryDoc | null | undefined,
 ) {
-  if (
-    category === null ||
-    category === undefined ||
-    !canViewCategory(
-      user,
-      category,
-      await canModerateCategory(ctx, user, category),
-    )
-  ) {
+  if (category === null || category === undefined) {
     return false;
   }
 
@@ -14181,6 +14173,9 @@ async function canViewCategoryWithAncestors(
     user,
     category,
   );
+  if (!canViewCategory(user, category, targetModeratorOverride)) {
+    return false;
+  }
 
   let parentCategoryId = category.parentCategoryId;
   for (
@@ -20900,7 +20895,19 @@ async function searchVisibleThreads(
     category,
     user,
   );
-  const remainingLimit = Math.max(1, limit - active.length);
+  // Relevance search preserves the established active-before-locked ordering.
+  // Once visible, matching active rows fill the requested window, locked rows
+  // cannot affect that page and there is no reason to pay for a second text
+  // index scan. Apply date/target filters before making that decision.
+  const activeRelevanceItems =
+    options.sortKey === "relevance"
+      ? applySearchThreadOptions(active, searchQuery, options)
+      : null;
+  if (activeRelevanceItems !== null && activeRelevanceItems.length >= limit) {
+    return { items: activeRelevanceItems.slice(0, limit), limited: false };
+  }
+  const activeMatchCount = activeRelevanceItems?.length ?? active.length;
+  const remainingLimit = Math.max(1, limit - activeMatchCount);
   const lockedFetchLimit =
     category === null
       ? searchVisibilityFetchLimit(remainingLimit)
@@ -20936,16 +20943,19 @@ async function searchVisibleThreads(
     category,
     user,
   );
-  const items = applySearchThreadOptions(
-    [...active, ...locked],
-    searchQuery,
-    options,
+  const items = (
+    activeRelevanceItems === null
+      ? applySearchThreadOptions([...active, ...locked], searchQuery, options)
+      : [
+          ...activeRelevanceItems,
+          ...applySearchThreadOptions(locked, searchQuery, options),
+        ]
   ).slice(0, limit);
   return {
     items,
     limited:
       category === null &&
-      ((activeRaw.length >= activeFetchLimit && active.length < limit) ||
+      ((activeRaw.length >= activeFetchLimit && activeMatchCount < limit) ||
         (lockedRaw.length >= lockedFetchLimit && items.length < limit)),
   };
 }
@@ -21089,6 +21099,10 @@ async function searchVisiblePostsByAuthor(
 
 type ForumThreadSearchProjectionDoc = Doc<"forumThreadSearchProjections">;
 type ForumPostSearchProjectionDoc = Doc<"forumPostSearchProjections">;
+type ForumThreadSearchVisibilityCache = Map<
+  Id<"forumCategories">,
+  boolean
+>;
 
 function projectedThreadSearchMatches(
   thread: ForumThreadSearchProjectionDoc,
@@ -21133,6 +21147,7 @@ async function visibleThreadSearchProjections(
   projections: ForumThreadSearchProjectionDoc[],
   category: ForumCategoryDoc | null,
   user: UserDoc | null,
+  visibilityCache?: ForumThreadSearchVisibilityCache,
 ) {
   if (category !== null) {
     // The public handler has already resolved this category through
@@ -21146,22 +21161,37 @@ async function visibleThreadSearchProjections(
         )
       : [];
   }
-  const categoriesById = await loadCategoriesById(
-    ctx,
-    projections.map((projection) => projection.categoryId),
+  const categoryIds = [
+    ...new Set(projections.map((projection) => projection.categoryId)),
+  ];
+  const uncachedCategoryIds = categoryIds.filter(
+    (categoryId) => !visibilityCache?.has(categoryId),
   );
-  const visibleCategoryIds = new Set(
-    (
-      await visibleCategoriesForUser(
-        ctx,
-        Array.from(categoriesById.values()).filter(isBoardCategory),
-        user,
-      )
-    ).map((row) => row._id),
-  );
+  if (uncachedCategoryIds.length > 0) {
+    const categoriesById = await loadCategoriesById(ctx, uncachedCategoryIds);
+    const visibleCategoryIds = new Set(
+      (
+        await visibleCategoriesForUser(
+          ctx,
+          Array.from(categoriesById.values()).filter(isBoardCategory),
+          user,
+        )
+      ).map((row) => row._id),
+    );
+    for (const categoryId of uncachedCategoryIds) {
+      visibilityCache?.set(categoryId, visibleCategoryIds.has(categoryId));
+    }
+    if (visibilityCache === undefined) {
+      return projections.filter(
+        (projection) =>
+          visibleCategoryIds.has(projection.categoryId) &&
+          isVisibleThreadStatus(projection.status),
+      );
+    }
+  }
   return projections.filter(
     (projection) =>
-      visibleCategoryIds.has(projection.categoryId) &&
+      visibilityCache?.get(projection.categoryId) === true &&
       isVisibleThreadStatus(projection.status),
   );
 }
@@ -21177,7 +21207,10 @@ async function searchVisibleThreadProjections(
 ) {
   const fetchLimit =
     category === null ? searchVisibilityFetchLimit(limit) : limit;
-  const fetchStatus = async (status: "active" | "locked") =>
+  const fetchStatus = async (
+    status: "active" | "locked",
+    statusFetchLimit = fetchLimit,
+  ) =>
     await ctx.db
       .query("forumThreadSearchProjections")
       .withSearchIndex("search_by_searchText", (q) => {
@@ -21188,7 +21221,53 @@ async function searchVisibleThreadProjections(
           ? scoped
           : scoped.eq("authorId", authorId);
       })
-      .take(fetchLimit);
+      .take(statusFetchLimit);
+  const matches = (threads: ForumThreadSearchProjectionDoc[]) =>
+    threads.filter((thread) =>
+      projectedThreadSearchMatches(thread, searchQuery, options),
+    );
+
+  if (options.sortKey === "relevance") {
+    const activeRaw = await fetchStatus("active");
+    const visibilityCache: ForumThreadSearchVisibilityCache = new Map();
+    const activeVisible = await visibleThreadSearchProjections(
+      ctx,
+      activeRaw,
+      category,
+      user,
+      visibilityCache,
+    );
+    const activeItems = matches(activeVisible).slice(0, limit);
+    if (activeItems.length >= limit) {
+      return { items: activeItems, limited: false };
+    }
+
+    // The public-category scan overscans because candidates can belong to
+    // private boards or private ancestors. A board-filtered scan has no such
+    // visibility loss, so only request the remaining page capacity there.
+    const remainingLimit = Math.max(1, limit - activeItems.length);
+    const lockedFetchLimit =
+      category === null
+        ? searchVisibilityFetchLimit(remainingLimit)
+        : remainingLimit;
+    const lockedRaw = await fetchStatus("locked", lockedFetchLimit);
+    const lockedVisible = await visibleThreadSearchProjections(
+      ctx,
+      lockedRaw,
+      category,
+      user,
+      visibilityCache,
+    );
+    const items = [...activeItems, ...matches(lockedVisible)].slice(0, limit);
+    return {
+      items,
+      limited:
+        category === null &&
+        ((activeRaw.length >= fetchLimit && activeItems.length < limit) ||
+          (lockedRaw.length >= lockedFetchLimit && items.length < limit)),
+    };
+  }
+
   // Each status index is read exactly once. Re-running the same full-text query
   // at progressively larger limits made the database rescan candidates already
   // considered on the previous pass. The bounded overscan still protects
@@ -21205,9 +21284,7 @@ async function searchVisibleThreadProjections(
     user,
   );
   const items = sortProjectedThreads(
-    visible.filter((thread) =>
-      projectedThreadSearchMatches(thread, searchQuery, options),
-    ),
+    matches(visible),
     options.sortKey,
   ).slice(0, limit);
   return {

@@ -506,7 +506,6 @@ describe("forum notification preferences", () => {
         moderators: [{ userId: boardModeratorId }],
       },
     });
-
     await expect(
       asBoardModerator.query(api.forum.getMyForumNavState, {}),
     ).resolves.toMatchObject({
@@ -516,7 +515,15 @@ describe("forum notification preferences", () => {
       canAdmin: false,
       canManageBoards: false,
     });
-
+    await expect(
+      asBoardModerator.query(api.forum.routeStatus, {
+        categorySlug: "public-square",
+      }),
+    ).resolves.toMatchObject({
+      exists: true,
+      kind: "category",
+      categorySlug: "public-square",
+    });
     await expect(
       asBoardModerator.mutation(api.forum.updateForumThreadModeration, {
         threadId: seed.publicThreadId,
@@ -4380,6 +4387,60 @@ describe("forum privacy regressions", () => {
       result.threads.every((thread) => thread.categorySlug === "public-square"),
     ).toBe(true);
     expect(result.limited).toBe(false);
+  });
+
+  test("relevance search skips unnecessary locked scans but still pages locked threads", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.run(async (ctx) => {
+      const lockedThreadId = await insertThread(ctx, {
+        categoryId: seed.publicCategoryId,
+        categorySlug: "public-square",
+        slug: "needle-locked-thread",
+        title: "Needle locked thread",
+        body: "A locked thread with the shared search marker.",
+        authorId: seed.trustedUserId,
+        now: 1_800_000_000_300,
+      });
+      await ctx.db.patch("forumThreads", lockedThreadId, { status: "locked" });
+      for (let index = 0; index < 2; index += 1) {
+        await insertThread(ctx, {
+          categoryId: seed.publicCategoryId,
+          categorySlug: "public-square",
+          slug: `needle-active-${index}`,
+          title: `Needle active ${index}`,
+          body: "An active thread with the shared search marker.",
+          authorId: seed.trustedUserId,
+          now: 1_800_000_000_200 + index,
+        });
+      }
+    });
+    const readPages = async () =>
+      await Promise.all(
+        [1, 2, 3].map(async (page) =>
+          await t.query(api.forum.search, {
+            query: "needle",
+            resultType: "threads",
+            page,
+            pageSize: 1,
+          }),
+        ),
+      );
+    const legacyPages = await readPages();
+    await completeForumSearchProjectionBackfill(t);
+    const projectedPages = await readPages();
+
+    for (const pages of [legacyPages, projectedPages]) {
+      expect(
+        pages
+          .slice(0, 2)
+          .flatMap((result) => result.threads.map((thread) => thread.slug))
+          .sort(),
+      ).toEqual(["needle-active-0", "needle-active-1"]);
+      expect(pages[2].threads.map((thread) => thread.slug)).toEqual([
+        "needle-locked-thread",
+      ]);
+    }
   });
 
   test("navigation summaries preserve legacy results and views do not change content timestamps", async () => {
