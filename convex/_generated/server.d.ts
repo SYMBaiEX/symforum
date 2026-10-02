@@ -28,6 +28,7 @@ import type { DataModel } from "./dataModel.js";
  * `convex.config.ts`.
  */
 type Env = {
+  readonly AI_USAGE_SETTLEMENT_SECRET: string | undefined;
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENT_SEMANTIC_RELAY_SECRET: string | undefined;
@@ -57,6 +58,7 @@ type Env = {
   readonly OWNER_BOOTSTRAP_TOKEN: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
+  readonly SEMANTIC_SEARCH_AUTO_INDEX_ENABLED: string | undefined;
   readonly SEMANTIC_SEARCH_DAILY_BUDGET_USD: string | undefined;
   readonly SEMANTIC_SEARCH_EMBEDDING_MODEL: string | undefined;
   readonly SEMANTIC_SEARCH_ENABLED: string | undefined;

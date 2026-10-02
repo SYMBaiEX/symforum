@@ -79,6 +79,7 @@ import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
+import type * as migrations from "../migrations.js";
 import type * as modelRouting from "../modelRouting.js";
 import type * as news from "../news.js";
 import type * as newsletter from "../newsletter.js";
@@ -188,6 +189,7 @@ declare const fullApi: ApiFromModules<{
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;
   interactions: typeof interactions;
+  migrations: typeof migrations;
   modelRouting: typeof modelRouting;
   news: typeof news;
   newsletter: typeof newsletter;
@@ -256,4 +258,5 @@ export declare const components: {
   interactionScores: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"interactionScores">;
   interactionSaves: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"interactionSaves">;
   commentCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"commentCounts">;
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
 };

@@ -177,7 +177,8 @@ export default defineSchema({
     fetchedAt: v.number(),
   })
     .index("by_snapshotDate_and_rank", ["snapshotDate", "rank"])
-    .index("by_hnItemId", ["hnItemId"]),
+    .index("by_hnItemId", ["hnItemId"])
+    .index("by_hnItemId_and_fetchedAt", ["hnItemId", "fetchedAt"]),
   comments: defineTable({
     userId: v.id("users"),
     entityType: v.union(
@@ -606,10 +607,7 @@ export default defineSchema({
   accountEmailVerificationChallenges: defineTable({
     userId: v.id("users"),
     email: v.string(),
-    status: v.union(
-      v.literal("queued"),
-      v.literal("sent"),
-    ),
+    status: v.union(v.literal("queued"), v.literal("sent")),
     codeHash: v.optional(v.string()),
     expiresAt: v.number(),
     attempts: v.number(),
@@ -1612,8 +1610,13 @@ export default defineSchema({
       v.literal("revision"),
       v.literal("reply"),
       v.literal("embedding"),
+      v.literal("research"),
+      v.literal("canary"),
+      v.literal("owner-console"),
     ),
     model: v.string(),
+    requestedModel: v.optional(v.string()),
+    servedModel: v.optional(v.string()),
     categorySlug: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
@@ -1622,10 +1625,7 @@ export default defineSchema({
     qualityAfter: v.optional(v.number()),
     durationMs: v.number(),
     createdAt: v.number(),
-  })
-    .index("by_runKey_and_createdAt", ["runKey", "createdAt"])
-    .index("by_agentSlug_and_createdAt", ["agentSlug", "createdAt"])
-    .index("by_createdAt", ["createdAt"]),
+  }).index("by_createdAt", ["createdAt"]),
   aiRouteEvents: defineTable({
     correlationId: v.string(),
     feature: v.string(),
@@ -1644,13 +1644,12 @@ export default defineSchema({
     outcome: v.union(v.literal("completed"), v.literal("failed")),
     fallback: v.boolean(),
     durationMs: v.number(),
+    // Estimate held in the shared daily budget for this provider attempt.
+    // Failed attempts remain conservative reservations until the day rolls.
+    estimatedCostMicroUsd: v.optional(v.number()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
-  })
-    .index("by_createdAt", ["createdAt"])
-    .index("by_correlationId_and_createdAt", ["correlationId", "createdAt"])
-    .index("by_feature_and_createdAt", ["feature", "createdAt"])
-    .index("by_outcome_and_createdAt", ["outcome", "createdAt"]),
+  }).index("by_createdAt", ["createdAt"]),
   aiProviderCircuits: defineTable({
     model: v.string(),
     consecutiveFailures: v.number(),
@@ -1684,6 +1683,30 @@ export default defineSchema({
       "bucket",
     ])
     .index("by_updatedAt", ["updatedAt"]),
+  aiModelCallReservations: defineTable({
+    reservationKey: v.string(),
+    model: v.string(),
+    dayKey: v.string(),
+    bucket: v.number(),
+    estimatedMicroUsd: v.number(),
+    estimatedInputTokens: v.number(),
+    estimatedOutputTokens: v.number(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("failed"),
+      v.literal("settled"),
+    ),
+    settledMicroUsd: v.optional(v.number()),
+    settledInputTokens: v.optional(v.number()),
+    settledOutputTokens: v.optional(v.number()),
+    // Links a conservative usage-unknown receipt so later token telemetry can
+    // update the same event instead of double-counting a provider call.
+    usageEventId: v.optional(v.id("forumAgentUsageEvents")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_reservationKey", ["reservationKey"])
+    .index("by_createdAt", ["createdAt"]),
   aiOperationalStates: defineTable({
     key: v.string(),
     healthy: v.boolean(),
@@ -1704,6 +1727,7 @@ export default defineSchema({
     status: v.union(
       v.literal("leased"),
       v.literal("completed"),
+      v.literal("failed"),
       v.literal("refunded"),
     ),
     holder: v.string(),
@@ -1717,6 +1741,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
     refundedAt: v.optional(v.number()),
   })
     .index("by_operationKey", ["operationKey"])
@@ -2450,6 +2475,22 @@ export default defineSchema({
       "status",
       "updatedAt",
     ]),
+  // Export visibility needs only these fields; keep the private, larger
+  // review record off the repeated public-export validation path.
+  researchQualityAssessmentVisibilityDigests: defineTable({
+    assessmentId: v.id("researchQualityAssessments"),
+    threadId: v.id("forumThreads"),
+    authorUserId: v.id("users"),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("needs_review"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    ),
+  })
+    .index("by_assessmentId", ["assessmentId"])
+    .index("by_threadId", ["threadId"]),
   researchQualityReviews: defineTable({
     assessmentId: v.id("researchQualityAssessments"),
     threadId: v.optional(v.id("forumThreads")),
@@ -2886,6 +2927,59 @@ export default defineSchema({
   })
     .index("by_documentId_and_version", ["documentId", "version"])
     .index("by_documentId_and_contentHash", ["documentId", "contentHash"]),
+  // Compact export metadata avoids reading the duplicated title, excerpt, and
+  // searchText fields from version rows on large dataset exports. Canonical
+  // version rows remain the fallback until the migration backfills each ID.
+  evidenceDocumentVersionExportDigests: defineTable({
+    versionId: v.id("evidenceDocumentVersions"),
+    documentId: v.id("evidenceDocuments"),
+    version: v.number(),
+    contentHash: v.string(),
+    fetchedAt: v.number(),
+    sourceRevision: v.string(),
+    sourceUpdatedAt: v.number(),
+    retrievalUrl: v.string(),
+    metadataJson: v.string(),
+  }).index("by_versionId", ["versionId"]),
+  // Export selection reads only this compact public-facing document metadata;
+  // canonical rows keep searchText and URL hashes for sibling APIs.
+  evidenceDocumentExportDigests: defineTable({
+    documentId: v.id("evidenceDocuments"),
+    sourceId: v.id("evidenceSources"),
+    externalKey: v.string(),
+    canonicalUrl: v.string(),
+    kind: v.union(
+      v.literal("document"),
+      v.literal("advisory"),
+      v.literal("release"),
+      v.literal("paper"),
+      v.literal("dataset"),
+      v.literal("benchmark"),
+    ),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    title: v.string(),
+    excerpt: v.string(),
+    tags: v.array(v.string()),
+    authors: v.array(v.string()),
+    licenseClass: v.union(
+      v.literal("public-domain"),
+      v.literal("open"),
+      v.literal("attributed"),
+      v.literal("restricted"),
+      v.literal("unknown"),
+    ),
+    currentVersionId: v.union(v.id("evidenceDocumentVersions"), v.null()),
+    publishedAt: v.union(v.number(), v.null()),
+    firstSeenAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_documentId", ["documentId"])
+    .index("by_sourceId_and_visibility_and_updatedAt", [
+      "sourceId",
+      "visibility",
+      "updatedAt",
+    ])
+    .index("by_visibility_and_updatedAt", ["visibility", "updatedAt"]),
   evidenceEntities: defineTable({
     entityKey: v.string(),
     kind: v.union(
