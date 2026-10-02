@@ -7,9 +7,11 @@ import resend from "@convex-dev/resend/convex.config.js";
 import workflow from "@convex-dev/workflow/convex.config.js";
 import presence from "@convex-dev/presence/convex.config.js";
 import aggregate from "@convex-dev/aggregate/convex.config.js";
+import migrations from "@convex-dev/migrations/convex.config.js";
 
 const app = defineApp({
   env: {
+    AI_USAGE_SETTLEMENT_SECRET: v.optional(v.string()),
     AGENT_SERVICE_AUTH_ENABLED: v.optional(v.string()),
     AGENT_SERVICE_AUTH_PRIVATE_JWK: v.optional(v.string()),
     AGENT_SERVICE_AUTH_PUBLIC_JWKS: v.optional(v.string()),
@@ -23,6 +25,9 @@ const app = defineApp({
     // editorial agent routing so an operator can stop all semantic indexing
     // without changing public lexical search.
     SEMANTIC_SEARCH_ENABLED: v.optional(v.string()),
+    // Background re-embedding has a separate switch so enabling semantic
+    // reads or a manual backfill never implicitly starts ingestion spend.
+    SEMANTIC_SEARCH_AUTO_INDEX_ENABLED: v.optional(v.string()),
     SEMANTIC_SEARCH_DAILY_BUDGET_USD: v.optional(v.string()),
     SEMANTIC_SEARCH_EMBEDDING_MODEL: v.optional(v.string()),
     // Shared only by the first-party Next relay and Convex. Semantic transport
@@ -70,5 +75,7 @@ app.use(presence);
 app.use(aggregate, { name: "interactionScores" });
 app.use(aggregate, { name: "interactionSaves" });
 app.use(aggregate, { name: "commentCounts" });
+app.use(aggregate, { name: "newsletterMetrics" });
+app.use(migrations);
 
 export default app;
