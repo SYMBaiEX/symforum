@@ -25,12 +25,13 @@ import {
   ForumThreadPrefixBadge,
   ForumThreadStateBadges,
 } from "@/components/forum/forum-primitives";
+import { useForegroundSnapshot } from "@/components/forum/use-foreground-snapshot";
 import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 export function ForumIndex({ enabled }: { enabled: boolean }) {
@@ -48,9 +49,29 @@ export function ForumIndex({ enabled }: { enabled: boolean }) {
 }
 
 function LiveForumIndex() {
-  const [presenceNow] = useState(() => Date.now());
+  const convex = useConvex();
   const overview = useQuery(forumRefs.overview, {});
-  const online = useQuery(forumRefs.onlineSummary, { now: presenceNow });
+  const loadOnlineSummary = useCallback(
+    () => convex.query(forumRefs.onlineSummary, { now: Date.now() }),
+    [convex],
+  );
+  const handleOnlineSummaryError = useCallback((error: unknown) => {
+    reportAppError(error, {
+      scope: "forum",
+      eventType: "forum_online_summary_failed",
+      component: "ForumIndex",
+      action: "forum:onlineSummary",
+      notify: false,
+    });
+  }, []);
+  const {
+    snapshot: onlineSnapshot,
+    refreshError: onlineRefreshError,
+    refreshNow: refreshOnlineSummary,
+  } = useForegroundSnapshot("forum-index-online-summary", loadOnlineSummary, {
+    onError: handleOnlineSummaryError,
+  });
+  const online = onlineSnapshot?.data;
 
   if (overview === undefined) {
     return (
@@ -67,14 +88,9 @@ function LiveForumIndex() {
 
   return (
     <ForumIndexContent
-      online={
-        online ?? {
-          activeSince: presenceNow - 15 * 60 * 1_000,
-          registeredCount: 0,
-          registeredCountLimited: false,
-          members: [],
-        }
-      }
+      online={online}
+      onlineRefreshError={onlineRefreshError}
+      refreshOnlineSummary={refreshOnlineSummary}
       overview={overview}
     />
   );
@@ -83,9 +99,13 @@ function LiveForumIndex() {
 function ForumIndexContent({
   overview,
   online,
+  onlineRefreshError,
+  refreshOnlineSummary,
 }: {
   overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord;
+  online: ForumOnlineSummaryRecord | undefined;
+  onlineRefreshError: boolean;
+  refreshOnlineSummary: () => void;
 }) {
   const [markAllReadPending, setMarkAllReadPending] = useState(false);
   const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
@@ -155,7 +175,12 @@ function ForumIndexContent({
 
       <ForumAnnouncementPanel announcements={overview.announcements} />
 
-      <ForumIndexPulse online={online} overview={overview} />
+      <ForumIndexPulse
+        online={online}
+        onlineRefreshError={onlineRefreshError}
+        refreshOnlineSummary={refreshOnlineSummary}
+        overview={overview}
+      />
     </div>
   );
 }
@@ -182,15 +207,24 @@ function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
 function ForumIndexPulse({
   overview,
   online,
+  onlineRefreshError,
+  refreshOnlineSummary,
 }: {
   overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord;
+  online: ForumOnlineSummaryRecord | undefined;
+  onlineRefreshError: boolean;
+  refreshOnlineSummary: () => void;
 }) {
   return (
     <section className="border-y border-row-border py-2">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.65fr)]">
         <ForumIndexThreadPreview threads={overview.newestThreads} />
-        <ForumPulseSummary online={online} overview={overview} />
+        <ForumPulseSummary
+          online={online}
+          onlineRefreshError={onlineRefreshError}
+          refreshOnlineSummary={refreshOnlineSummary}
+          overview={overview}
+        />
       </div>
     </section>
   );
@@ -280,14 +314,20 @@ function ForumIndexThreadPreview({
 function ForumPulseSummary({
   overview,
   online,
+  onlineRefreshError,
+  refreshOnlineSummary,
 }: {
   overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord;
+  online: ForumOnlineSummaryRecord | undefined;
+  onlineRefreshError: boolean;
+  refreshOnlineSummary: () => void;
 }) {
   const { statistics, totals } = overview;
-  const countLabel = `${formatForumCount(online.registeredCount)}${
-    online.registeredCountLimited ? "+" : ""
-  }`;
+  const countLabel = online
+    ? `${formatForumCount(online.registeredCount)}${
+        online.registeredCountLimited ? "+" : ""
+      }`
+    : "—";
   const memberCount = `${formatForumCount(statistics.memberCount)}${
     statistics.memberCountLimited ? "+" : ""
   }`;
@@ -301,9 +341,11 @@ function ForumPulseSummary({
   const topPoster = statistics.topPoster ?? null;
   const reputationLeader = statistics.reputationLeader ?? null;
   const newestIsOnline =
+    online !== undefined &&
     newestMember !== null &&
     online.members.some((member) => member.username === newestMember.username);
-  const showNewestMember = newestMember !== null && !newestIsOnline;
+  const showNewestMember =
+    online !== undefined && newestMember !== null && !newestIsOnline;
   const hasMemberHighlights =
     showNewestMember || topPoster !== null || reputationLeader !== null;
 
@@ -323,7 +365,49 @@ function ForumPulseSummary({
         ))}
       </dl>
 
-      {online.members.length > 0 ? (
+      {online === undefined ? (
+        <div
+          aria-live="polite"
+          className="mt-3 flex flex-wrap items-center gap-2 border-t border-row-border pt-3 text-sm text-muted-foreground"
+          role="status"
+        >
+          <span>
+            {onlineRefreshError
+              ? "Online status unavailable."
+              : "Checking online status…"}
+          </span>
+          {onlineRefreshError ? (
+            <Button
+              className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+              onClick={refreshOnlineSummary}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Retry
+            </Button>
+          ) : null}
+        </div>
+      ) : onlineRefreshError ? (
+        <div
+          aria-live="polite"
+          className="mt-3 flex flex-wrap items-center gap-2 border-t border-row-border pt-3 text-xs text-muted-foreground"
+          role="status"
+        >
+          <span>Refresh failed; showing the previous snapshot.</span>
+          <Button
+            className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+            onClick={refreshOnlineSummary}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {online && online.members.length > 0 ? (
         <div className="mt-3 border-t border-row-border pt-3">
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Active since {formatForumDateTime(online.activeSince)}

@@ -773,6 +773,8 @@ const FORUM_REPLY_SWEEP_TELEMETRY_RETENTION_MS = 35 * 24 * 60 * 60 * 1_000;
 const FORUM_REPLY_SWEEP_TELEMETRY_BATCH_SIZE = 100;
 const FORUM_REPLY_STRUCTURED_CANARY_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
+const FORUM_AGENT_SOURCE_KEY_CHECK_BATCH_SIZE = 32;
+const FORUM_AGENT_SOURCE_KEY_CHECK_MAX = 512;
 const FORUM_THREAD_DIGEST_BACKFILL_KEY = "forum-thread-digests-v2";
 
 type UserDoc = Doc<"users">;
@@ -4731,6 +4733,11 @@ export const createReply = mutation({
         lastAssignedPostNumber: postNumber,
         updatedAt: now,
       });
+      await upsertForumThreadEditorialDigest(ctx, {
+        ...thread,
+        lastAssignedPostNumber: postNumber,
+        updatedAt: now,
+      });
       await syncForumThreadSearchProjection(ctx, thread._id);
       await recordModerationLog(ctx, {
         actorUserId: user._id,
@@ -5582,6 +5589,7 @@ export const updatePollContent = mutation({
       ),
       updatedAt: now,
     });
+    await upsertForumThreadEditorialDigest(ctx, { ...thread, updatedAt: now });
     await syncForumThreadSearchProjection(ctx, thread._id);
 
     const updatedPoll = await ctx.db.get("forumPolls", poll._id);
@@ -5793,6 +5801,11 @@ export const rateThread = mutation({
     );
     const nextTotal = Math.max(0, previousTotal - previousScore + nextScore);
     await ctx.db.patch("forumThreads", thread._id, {
+      ratingCount: nextCount,
+      ratingTotal: nextTotal,
+    });
+    await upsertForumThreadEditorialDigest(ctx, {
+      ...thread,
       ratingCount: nextCount,
       ratingTotal: nextTotal,
     });
@@ -9519,35 +9532,61 @@ async function forumAgentContext(ctx: QueryCtx, agentSlug: string) {
   };
 }
 
-export const readUsedSukiSourceKeys = internalQuery({
+export const selectAvailableForumAgentSourceKeys = internalQuery({
   args: {
     sourceKeys: v.array(v.string()),
+    maxAvailable: v.number(),
+    now: v.number(),
   },
   handler: async (ctx, args) => {
-    const sourceKeys = [...new Set(args.sourceKeys.slice(0, 80))];
-    const reuseCutoff = Date.now() - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
-    const rows = await Promise.all(
-      sourceKeys.map(async (sourceKey) => {
-        const [used, reservation] = await Promise.all([
-          ctx.db
-            .query("forumAgentSourceUses")
-            .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
-            .unique(),
-          ctx.db
-            .query("forumAgentSourceReservations")
-            .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
-            .unique(),
-        ]);
-        const recentlyUsed = used !== null && used.usedAt >= reuseCutoff;
-        const activelyReserved =
-          reservation !== null &&
-          reservation.expiresAt > Date.now() &&
-          (reservation.status === "reserved" ||
-            reservation.status === "published");
-        return recentlyUsed || activelyReserved ? sourceKey : null;
-      }),
-    );
-    return rows.filter((sourceKey): sourceKey is string => sourceKey !== null);
+    if (
+      args.sourceKeys.length > FORUM_AGENT_SOURCE_KEY_CHECK_MAX ||
+      !Number.isSafeInteger(args.maxAvailable) ||
+      args.maxAvailable < 1 ||
+      args.maxAvailable > 80 ||
+      !Number.isSafeInteger(args.now)
+    ) {
+      throw new Error("Invalid forum research source availability request");
+    }
+    const sourceKeys = [...new Set(args.sourceKeys)];
+    const reuseCutoff = args.now - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
+    const available: string[] = [];
+    for (
+      let offset = 0;
+      offset < sourceKeys.length && available.length < args.maxAvailable;
+      offset += FORUM_AGENT_SOURCE_KEY_CHECK_BATCH_SIZE
+    ) {
+      const batch = sourceKeys.slice(
+        offset,
+        offset + FORUM_AGENT_SOURCE_KEY_CHECK_BATCH_SIZE,
+      );
+      const rows = await Promise.all(
+        batch.map(async (sourceKey) => {
+          const [used, reservation] = await Promise.all([
+            ctx.db
+              .query("forumAgentSourceUses")
+              .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+              .unique(),
+            ctx.db
+              .query("forumAgentSourceReservations")
+              .withIndex("by_sourceKey", (q) => q.eq("sourceKey", sourceKey))
+              .unique(),
+          ]);
+          const recentlyUsed = used !== null && used.usedAt >= reuseCutoff;
+          const activelyReserved =
+            reservation !== null &&
+            reservation.expiresAt > args.now &&
+            (reservation.status === "reserved" ||
+              reservation.status === "published");
+          return recentlyUsed || activelyReserved ? null : sourceKey;
+        }),
+      );
+      for (const sourceKey of rows) {
+        if (sourceKey !== null) available.push(sourceKey);
+        if (available.length === args.maxAvailable) break;
+      }
+    }
+    return available;
   },
 });
 
@@ -9602,6 +9641,33 @@ async function recordForumReplySweepEvent(
         : compactForumText(args.detail, 160),
     createdAt: args.now ?? Date.now(),
   });
+}
+
+function forumReplySweepOutcomeForClaimFailure(
+  reason: string,
+): ForumReplySweepOutcome {
+  if (reason === "daily-limit") return "daily-limit";
+  if (reason === "canary-blocked") return "canary-blocked";
+  return "no-candidate";
+}
+
+async function recordUnclaimedForumReplyCandidate(
+  ctx: MutationCtx,
+  args: {
+    agentSlug: string;
+    runDate: string;
+    runId?: Id<"forumAgentReplyRuns">;
+  },
+  reason: string,
+) {
+  await recordForumReplySweepEvent(ctx, {
+    agentSlug: args.agentSlug,
+    runDate: args.runDate,
+    outcome: forumReplySweepOutcomeForClaimFailure(reason),
+    runId: args.runId,
+    detail: reason,
+  });
+  return { claimed: false as const, reason };
 }
 
 /** Private action-facing record; never exposed through a public query. */
@@ -9926,7 +9992,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
       .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
       .unique();
     if (agent === null || !agent.enabled) {
-      return { claimed: false as const, reason: "disabled" };
+      return recordUnclaimedForumReplyCandidate(
+        ctx,
+        { agentSlug, runDate: args.runDate, runId: args.runId },
+        "disabled",
+      );
     }
     const agentUser = await ctx.db.get("users", agent.userId);
     if (
@@ -9965,7 +10035,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
           });
         }
       }
-      return { claimed: false as const, reason: "daily-limit" };
+      return recordUnclaimedForumReplyCandidate(
+        ctx,
+        { agentSlug, runDate: args.runDate, runId: args.runId },
+        "daily-limit",
+      );
     }
 
     const now = Date.now();
@@ -9979,13 +10053,21 @@ export const claimSukiForumReplyCandidate = internalMutation({
         run.status === "ignored" ||
         args.attempt <= run.attempt
       ) {
-        return { claimed: false as const, reason: "retry-unavailable" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate, runId: args.runId },
+          "retry-unavailable",
+        );
       }
       if (
         run.status === "running" &&
         now - run.updatedAt < SUKI_REPLY_STALE_RUN_MS
       ) {
-        return { claimed: false as const, reason: "already-running" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate, runId: args.runId },
+          "already-running",
+        );
       }
       const candidate = await loadSukiReplyCandidate(ctx, run, agent.userId);
       if (candidate === null) {
@@ -9995,7 +10077,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
           completedAt: now,
           updatedAt: now,
         });
-        return { claimed: false as const, reason: "source-unavailable" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate, runId: args.runId },
+          "source-unavailable",
+        );
       }
       if (
         candidate.authorIsAgent &&
@@ -10008,10 +10094,18 @@ export const claimSukiForumReplyCandidate = internalMutation({
           completedAt: now,
           updatedAt: now,
         });
-        return { claimed: false as const, reason: "daily-limit" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate, runId: args.runId },
+          "daily-limit",
+        );
       }
       if (await isForumReplyCanaryBlocked(ctx, now)) {
-        return { claimed: false as const, reason: "canary-blocked" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate, runId: args.runId },
+          "canary-blocked",
+        );
       }
       const conversationId = await ensureForumAgentConversation(ctx, {
         forumThreadId: candidate.threadId,
@@ -10093,7 +10187,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
         continue;
       }
       if (await isForumReplyCanaryBlocked(ctx, now)) {
-        return { claimed: false as const, reason: "canary-blocked" };
+        return recordUnclaimedForumReplyCandidate(
+          ctx,
+          { agentSlug, runDate: args.runDate },
+          "canary-blocked",
+        );
       }
       const conversationId = await ensureForumAgentConversation(ctx, {
         forumThreadId: candidate.threadId,
@@ -10119,7 +10217,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
       };
     }
 
-    return { claimed: false as const, reason: "no-candidate" };
+    return recordUnclaimedForumReplyCandidate(
+      ctx,
+      { agentSlug, runDate: args.runDate },
+      "no-candidate",
+    );
   },
 });
 
@@ -10127,6 +10229,9 @@ export const markSukiForumReplyIgnored = internalMutation({
   args: {
     agentSlug: v.optional(v.string()),
     runId: v.id("forumAgentReplyRuns"),
+    runDate: v.string(),
+    sourceKind: v.union(v.literal("thread"), v.literal("reply")),
+    threadId: v.id("forumThreads"),
     reason: v.string(),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
@@ -10134,23 +10239,32 @@ export const markSukiForumReplyIgnored = internalMutation({
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
     const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
-    if (
-      run === null ||
-      run.agentSlug !== agentSlug ||
-      run.status !== "running"
-    ) {
-      return { updated: false };
-    }
+    const updated =
+      run === null || run.agentSlug !== agentSlug || run.status !== "running"
+        ? false
+        : true;
     const now = Date.now();
-    await ctx.db.patch("forumAgentReplyRuns", run._id, {
-      status: "ignored",
-      reason: compactForumText(args.reason, 160),
-      inputTokens: args.inputTokens,
-      outputTokens: args.outputTokens,
-      completedAt: now,
-      updatedAt: now,
+    if (updated && run !== null) {
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
+        status: "ignored",
+        reason: compactForumText(args.reason, 160),
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+    await recordForumReplySweepEvent(ctx, {
+      agentSlug,
+      runDate: args.runDate,
+      outcome: "ignored",
+      runId: args.runId,
+      sourceKind: args.sourceKind,
+      threadId: args.threadId,
+      detail: args.reason,
+      now,
     });
-    return { updated: true };
+    return { updated };
   },
 });
 
@@ -10158,26 +10272,38 @@ export const markSukiForumReplyFailed = internalMutation({
   args: {
     agentSlug: v.optional(v.string()),
     runId: v.id("forumAgentReplyRuns"),
+    runDate: v.string(),
+    sourceKind: v.union(v.literal("thread"), v.literal("reply")),
+    threadId: v.id("forumThreads"),
     reason: v.string(),
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
     const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
-    if (
-      run === null ||
-      run.agentSlug !== agentSlug ||
-      run.status !== "running"
-    ) {
-      return { updated: false };
-    }
+    const updated =
+      run === null || run.agentSlug !== agentSlug || run.status !== "running"
+        ? false
+        : true;
     const now = Date.now();
-    await ctx.db.patch("forumAgentReplyRuns", run._id, {
-      status: "failed",
-      reason: compactForumText(args.reason, 160),
-      completedAt: now,
-      updatedAt: now,
+    if (updated && run !== null) {
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
+        status: "failed",
+        reason: compactForumText(args.reason, 160),
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+    await recordForumReplySweepEvent(ctx, {
+      agentSlug,
+      runDate: args.runDate,
+      outcome: "route-failed",
+      runId: args.runId,
+      sourceKind: args.sourceKind,
+      threadId: args.threadId,
+      detail: args.reason,
+      now,
     });
-    return { updated: true };
+    return { updated };
   },
 });
 
@@ -10239,6 +10365,16 @@ export const publishSukiForumReply = internalMutation({
         completedAt: now,
         updatedAt: now,
       });
+      await recordForumReplySweepEvent(ctx, {
+        agentSlug,
+        runDate: run.runDate,
+        outcome: "ignored",
+        runId: run._id,
+        sourceKind: run.sourceKind,
+        threadId: run.threadId,
+        detail: "source-unavailable",
+        now,
+      });
       return { status: "ignored" as const, reason: "source-unavailable" };
     }
     const thread = await ctx.db.get("forumThreads", candidate.threadId);
@@ -10255,6 +10391,16 @@ export const publishSukiForumReply = internalMutation({
         reason: "thread-unavailable",
         completedAt: now,
         updatedAt: now,
+      });
+      await recordForumReplySweepEvent(ctx, {
+        agentSlug,
+        runDate: run.runDate,
+        outcome: "ignored",
+        runId: run._id,
+        sourceKind: run.sourceKind,
+        threadId: run.threadId,
+        detail: "thread-unavailable",
+        now,
       });
       return { status: "ignored" as const, reason: "thread-unavailable" };
     }
@@ -10315,6 +10461,15 @@ export const publishSukiForumReply = internalMutation({
       outputTokens: args.outputTokens,
       completedAt: now,
       updatedAt: now,
+    });
+    await recordForumReplySweepEvent(ctx, {
+      agentSlug,
+      runDate: run.runDate,
+      outcome: "replied",
+      runId: run._id,
+      sourceKind: run.sourceKind,
+      threadId: run.threadId,
+      now,
     });
 
     return {
@@ -16458,6 +16613,7 @@ async function syncThreadsForPrefixUpdate(
         ? threadPrefixSnapshot(prefix)
         : threadPrefixSnapshot(null);
     const author = displayName(await ctx.db.get("users", thread.authorId));
+    const updatedAt = Date.now();
     await ctx.db.patch("forumThreads", thread._id, {
       ...nextSnapshot,
       searchText: await movedThreadSearchText(
@@ -16467,7 +16623,12 @@ async function syncThreadsForPrefixUpdate(
         author,
         nextSnapshot.prefixLabel,
       ),
-      updatedAt: Date.now(),
+      updatedAt,
+    });
+    await upsertForumThreadEditorialDigest(ctx, {
+      ...thread,
+      ...nextSnapshot,
+      updatedAt,
     });
     await syncForumThreadSearchProjection(ctx, thread._id);
   }
@@ -21099,10 +21260,7 @@ async function searchVisiblePostsByAuthor(
 
 type ForumThreadSearchProjectionDoc = Doc<"forumThreadSearchProjections">;
 type ForumPostSearchProjectionDoc = Doc<"forumPostSearchProjections">;
-type ForumThreadSearchVisibilityCache = Map<
-  Id<"forumCategories">,
-  boolean
->;
+type ForumThreadSearchVisibilityCache = Map<Id<"forumCategories">, boolean>;
 
 function projectedThreadSearchMatches(
   thread: ForumThreadSearchProjectionDoc,
@@ -21283,10 +21441,10 @@ async function searchVisibleThreadProjections(
     category,
     user,
   );
-  const items = sortProjectedThreads(
-    matches(visible),
-    options.sortKey,
-  ).slice(0, limit);
+  const items = sortProjectedThreads(matches(visible), options.sortKey).slice(
+    0,
+    limit,
+  );
   return {
     items,
     limited:

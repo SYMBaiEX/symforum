@@ -1,9 +1,11 @@
 /// <reference types="vite/client" />
 
 import aggregateTest from "@convex-dev/aggregate/test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
+import { contentSummaries, interactionSaveCounts } from "./contentAggregates";
 import schema from "./schema";
 
 const modules = {
@@ -16,10 +18,102 @@ function setup() {
   aggregateTest.register(t, "interactionScores");
   aggregateTest.register(t, "interactionSaves");
   aggregateTest.register(t, "commentCounts");
+  registerRateLimiter(t);
   return t;
 }
 
 describe("content aggregates", () => {
+  test("uses the save aggregate after backfill and preserves the bounded fallback", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        name: "Reader",
+        username: "reader",
+        usernameNormalized: "reader",
+        role: "reader",
+      });
+      for (const [entityId, saved] of [
+        ["123", true],
+        ["123", false],
+        ["456", true],
+      ] as const) {
+        await ctx.db.insert("interactions", {
+          userId,
+          entityType: "hnStory",
+          entityId,
+          vote: 0,
+          saved,
+          updatedAt: 1,
+        });
+      }
+      await ctx.db.insert("comments", {
+        userId,
+        entityType: "hnStory",
+        entityId: "123",
+        body: "An active comment",
+        status: "active",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+    });
+
+    const expected = [
+      ["123", 1],
+      ["456", 1],
+      ["789", 0],
+    ];
+    const expectedSummaries = [
+      ["123", { score: 0, saves: 1, comments: 1 }],
+      ["456", { score: 0, saves: 1, comments: 0 }],
+      ["789", { score: 0, saves: 0, comments: 0 }],
+    ];
+    await expect(
+      t.run(async (ctx) =>
+        Array.from(
+          await contentSummaries(ctx, "hnStory", ["123", "456", "789", "123"]),
+        ),
+      ),
+    ).resolves.toEqual(expectedSummaries);
+    await expect(
+      t.run(async (ctx) =>
+        Array.from(
+          await interactionSaveCounts(ctx, "hnStory", [
+            "123",
+            "456",
+            "789",
+            "123",
+          ]),
+        ),
+      ),
+    ).resolves.toEqual(expected);
+
+    await t.mutation(internal.contentAggregates.backfillContentAggregates, {
+      phase: "interactions",
+    });
+    await t.mutation(internal.contentAggregates.backfillContentAggregates, {
+      phase: "comments",
+    });
+    await expect(
+      t.run(async (ctx) =>
+        Array.from(
+          await interactionSaveCounts(ctx, "hnStory", [
+            "123",
+            "456",
+            "789",
+            "123",
+          ]),
+        ),
+      ),
+    ).resolves.toEqual(expected);
+    await expect(
+      t.run(async (ctx) =>
+        Array.from(
+          await contentSummaries(ctx, "hnStory", ["123", "456", "789", "123"]),
+        ),
+      ),
+    ).resolves.toEqual(expectedSummaries);
+  });
+
   test("checkpoints and schedules the next phase without replaying a cursor", async () => {
     const t = setup();
     await t.run(async (ctx) => {
@@ -28,6 +122,7 @@ describe("content aggregates", () => {
         username: "reader",
         usernameNormalized: "reader",
         role: "reader",
+        emailVerificationTime: 1_800_000_000_000,
       });
       for (let index = 0; index < 2; index += 1) {
         await ctx.db.insert("interactions", {
@@ -88,6 +183,7 @@ describe("content aggregates", () => {
         username: "reader",
         usernameNormalized: "reader",
         role: "reader",
+        emailVerificationTime: 1_800_000_000_000,
       });
       await ctx.db.insert("posts", {
         slug: "aggregate-test",
@@ -151,5 +247,18 @@ describe("content aggregates", () => {
         entityId: "aggregate-test",
       }),
     ).toMatchObject({ comments: 0, saves: 0, score: -1 });
+    await expect(
+      asReader.query(api.interactions.summaries, {
+        entityType: "post",
+        entityIds: ["aggregate-test", "aggregate-test"],
+      }),
+    ).resolves.toMatchObject({
+      "aggregate-test": {
+        comments: 0,
+        saves: 0,
+        score: -1,
+        viewer: { vote: -1, saved: false },
+      },
+    });
   });
 });

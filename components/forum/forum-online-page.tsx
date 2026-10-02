@@ -15,9 +15,12 @@ import {
   ForumPaginationBar,
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
-import { useQuery } from "convex-helpers/react/cache/hooks";
+import { Button } from "@/components/ui/button";
+import { reportAppError } from "@/components/app-error-surface";
+import { useConvex } from "convex/react";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback } from "react";
+import { useForegroundSnapshot } from "@/components/forum/use-foreground-snapshot";
 
 const ONLINE_PAGE_SIZE = 25;
 
@@ -39,23 +42,73 @@ export function ForumOnlinePage({ enabled }: { enabled: boolean }) {
 }
 
 function LiveForumOnlinePage() {
-  const [presenceNow] = useState(() => Date.now());
+  const convex = useConvex();
   const searchParams = useSearchParams();
   const page = parseOnlinePage(searchParams.get("page"));
-  const online = useQuery(forumRefs.listOnlineMembers, {
-    now: presenceNow,
-    page,
-    pageSize: ONLINE_PAGE_SIZE,
-  });
+  const loadRoster = useCallback(
+    () =>
+      convex.query(forumRefs.listOnlineMembers, {
+        now: Date.now(),
+        page,
+        pageSize: ONLINE_PAGE_SIZE,
+      }),
+    [convex, page],
+  );
+  const handleRosterError = useCallback((error: unknown) => {
+    reportAppError(error, {
+      scope: "forum",
+      eventType: "forum_online_roster_failed",
+      component: "ForumOnlinePage",
+      action: "forum:listOnlineMembers",
+      notify: false,
+    });
+  }, []);
+  const {
+    snapshot: currentSnapshot,
+    refreshError,
+    refreshNow,
+  } = useForegroundSnapshot(page, loadRoster, { onError: handleRosterError });
 
-  if (online === undefined) {
+  if (currentSnapshot === undefined) {
+    if (refreshError) {
+      return (
+        <ForumStatusBox
+          title="Online roster unavailable"
+          body="The current member snapshot could not be loaded. Try again."
+          action={
+            <Button
+              onClick={refreshNow}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Retry
+            </Button>
+          }
+        />
+      );
+    }
     return <ForumLoading label="Checking who's online" variant="index" />;
   }
 
-  return <ForumOnlineRoster online={online} />;
+  return (
+    <ForumOnlineRoster
+      online={currentSnapshot.data}
+      refreshedAt={currentSnapshot.refreshedAt}
+      refreshError={refreshError}
+    />
+  );
 }
 
-function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
+function ForumOnlineRoster({
+  online,
+  refreshedAt,
+  refreshError,
+}: {
+  online: ForumOnlineMembersRecord;
+  refreshedAt: number;
+  refreshError: boolean;
+}) {
   const countLabel = `${formatForumCount(online.registeredCount)}${
     online.registeredCountLimited ? "+" : ""
   }`;
@@ -80,6 +133,14 @@ function ForumOnlineRoster({ online }: { online: ForumOnlineMembersRecord }) {
           <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
             Registered forum members active since{" "}
             {formatForumDateTime(online.activeSince)}.
+          </p>
+          <p aria-live="polite" className="mt-1 text-xs text-muted-foreground">
+            {refreshError
+              ? "Refresh failed; showing the previous snapshot."
+              : null}
+            {!refreshError
+              ? `Snapshot updated ${formatForumDateTime(refreshedAt)}; refreshes about every two minutes while visible.`
+              : null}
           </p>
         </div>
         <ForumMetricBar

@@ -6,6 +6,7 @@ import { enforceAgentScopeIfNeeded } from "./authz";
 import { consumeAgentQuotaIfNeeded } from "./agentQuota";
 import {
   contentSummary,
+  contentSummaries,
   insertInteractionAggregates,
   replaceInteractionAggregates,
 } from "./contentAggregates";
@@ -49,21 +50,15 @@ export const summaries = query({
   handler: async (ctx, args) => {
     const viewerId = await getAuthUserId(ctx);
     const entityIds = [...new Set(args.entityIds)].slice(0, 50);
-    const summariesByEntityId: Record<
-      string,
-      {
-        comments: number;
-        score: number;
-        saves: number;
-        viewer: { vote: number; saved: boolean } | null;
-      }
-    > = {};
-
-    const rows = await Promise.all(
-      entityIds.map(async (entityId) => {
-        await requirePublicEntity(ctx, args.entityType, entityId);
-        const [totals, viewer] = await Promise.all([
-          contentSummary(ctx, args.entityType, entityId),
+    await Promise.all(
+      entityIds.map((entityId) =>
+        requirePublicEntity(ctx, args.entityType, entityId),
+      ),
+    );
+    const [totalsByEntityId, viewers] = await Promise.all([
+      contentSummaries(ctx, args.entityType, entityIds),
+      Promise.all(
+        entityIds.map((entityId) =>
           viewerId === null
             ? null
             : ctx.db
@@ -75,10 +70,27 @@ export const summaries = query({
                     .eq("entityId", entityId),
                 )
                 .unique(),
-        ]);
-        return [entityId, { ...totals, viewer }] as const;
-      }),
-    );
+        ),
+      ),
+    ]);
+    const summariesByEntityId: Record<
+      string,
+      {
+        comments: number;
+        score: number;
+        saves: number;
+        viewer: { vote: number; saved: boolean } | null;
+      }
+    > = {};
+
+    const rows = entityIds.map((entityId, index) => {
+      const totals = totalsByEntityId.get(entityId) ?? {
+        score: 0,
+        saves: 0,
+        comments: 0,
+      };
+      return [entityId, { ...totals, viewer: viewers[index] ?? null }] as const;
+    });
     for (const [entityId, row] of rows) {
       summariesByEntityId[entityId] = row;
     }

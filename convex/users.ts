@@ -71,20 +71,25 @@ function forumThreadPrefixRecord(thread: Doc<"forumThreads">) {
 }
 
 async function publicForumProfile(ctx: QueryCtx, user: UserDoc) {
+  const trusted = isTrustedForumUser(user);
   const [profile, presence, liveRooms] = await Promise.all([
     ctx.db
       .query("forumUserProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .unique(),
-    ctx.db
-      .query("forumPresence")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .unique(),
-    forumPresenceComponent.listUser(ctx, String(user._id), true, 5),
+    trusted
+      ? ctx.db
+          .query("forumPresence")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .unique()
+      : Promise.resolve(null),
+    trusted
+      ? forumPresenceComponent.listUser(ctx, String(user._id), true, 5)
+      : Promise.resolve([]),
   ]);
   const postCount = profile?.postCount ?? 0;
   const online =
-    isTrustedForumUser(user) &&
+    trusted &&
     liveRooms.some(
       (room) => room.roomId === FORUM_PRESENCE_ROOM && room.online,
     );
@@ -102,7 +107,7 @@ async function publicForumProfile(ctx: QueryCtx, user: UserDoc) {
     postCount,
     reputationScore: forumReputationScore(profile),
     rank: forumRankForPostCount(postCount),
-    trusted: isTrustedForumUser(user),
+    trusted,
     avatarUrl: profile?.avatarUrl ?? user.image,
     websiteUrl: profile?.websiteUrl,
     joinedAt: user._creationTime,

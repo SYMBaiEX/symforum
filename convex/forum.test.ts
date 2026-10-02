@@ -19,6 +19,7 @@ import {
   FORUM_REPLY_BODY_MAX_LENGTH,
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
+import { forumPresenceComponent } from "./forumPresenceComponent";
 import {
   deterministicForumClaimHash,
   FORUM_AGENT_CLAIM_SNAPSHOT_VERSION,
@@ -1588,28 +1589,35 @@ describe("forum notification preferences", () => {
     });
 
     const stored = await t.run(async (ctx) => {
-      const [thread, category, run, profile, projection] = await Promise.all([
-        ctx.db.get("forumThreads", seeded.threadId),
-        ctx.db.get("forumCategories", seeded.categoryId),
-        ctx.db.get("forumAgentReplyRuns", claim.runId),
-        ctx.db
-          .query("forumUserProfiles")
-          .withIndex("by_userId", (q) =>
-            q.eq("userId", infrastructure.agentUserId),
-          )
-          .unique(),
-        ctx.db
-          .query("forumThreadSearchProjections")
-          .withIndex("by_threadId", (q) => q.eq("threadId", seeded.threadId))
-          .unique(),
-      ]);
+      const [thread, category, run, profile, projection, replyEvents] =
+        await Promise.all([
+          ctx.db.get("forumThreads", seeded.threadId),
+          ctx.db.get("forumCategories", seeded.categoryId),
+          ctx.db.get("forumAgentReplyRuns", claim.runId),
+          ctx.db
+            .query("forumUserProfiles")
+            .withIndex("by_userId", (q) =>
+              q.eq("userId", infrastructure.agentUserId),
+            )
+            .unique(),
+          ctx.db
+            .query("forumThreadSearchProjections")
+            .withIndex("by_threadId", (q) => q.eq("threadId", seeded.threadId))
+            .unique(),
+          ctx.db
+            .query("forumAgentReplySweepEvents")
+            .withIndex("by_runDate_and_agentSlug", (q) =>
+              q.eq("runDate", "2026-07-28").eq("agentSlug", "suki"),
+            )
+            .collect(),
+        ]);
       const posts = await ctx.db
         .query("forumPosts")
         .withIndex("by_threadId_and_status_and_postNumber", (q) =>
           q.eq("threadId", seeded.threadId).eq("status", "active"),
         )
         .collect();
-      return { category, posts, profile, projection, run, thread };
+      return { category, posts, profile, projection, replyEvents, run, thread };
     });
     expect(stored.thread).toMatchObject({
       lastPostUserId: infrastructure.agentUserId,
@@ -1630,6 +1638,15 @@ describe("forum notification preferences", () => {
       replyPostId: stored.posts[0]?._id,
       status: "replied",
     });
+    expect(stored.replyEvents).toContainEqual(
+      expect.objectContaining({
+        agentSlug: "suki",
+        outcome: "replied",
+        runId: claim.runId,
+        sourceKind: "thread",
+        threadId: seeded.threadId,
+      }),
+    );
 
     const secondRunId = await t.run(async (ctx) => {
       const now = Date.now() + 1;
@@ -1714,6 +1731,110 @@ describe("forum notification preferences", () => {
       claimed: false,
       reason: "no-candidate",
     });
+    await t.run(async (ctx) => {
+      const events = await ctx.db
+        .query("forumAgentReplySweepEvents")
+        .withIndex("by_runDate_and_agentSlug", (q) =>
+          q.eq("runDate", "2026-07-28").eq("agentSlug", "suki"),
+        )
+        .collect();
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          detail: "no-candidate",
+          outcome: "no-candidate",
+        }),
+      );
+    });
+  });
+
+  test("terminal reply state and sweep outcome are recorded together", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const now = Date.now();
+    const runs = await t.run(async (ctx) => {
+      const insertRunningRun = (runKey: string, conversationId: string) =>
+        ctx.db.insert("forumAgentReplyRuns", {
+          runKey,
+          agentSlug: "suki",
+          runDate: "2026-10-02",
+          sourceKind: "thread" as const,
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          attempt: 0,
+          status: "running" as const,
+          model: "test/model",
+          admittedAt: now,
+          conversationId,
+          startedAt: now,
+          updatedAt: now,
+        });
+
+      const ignoredRunId = await insertRunningRun(
+        "reply-terminal-ignored",
+        "conversation:ignored",
+      );
+      const failedRunId = await insertRunningRun(
+        "reply-terminal-failed",
+        "conversation:failed",
+      );
+      return { failedRunId, ignoredRunId };
+    });
+
+    await t.mutation(internal.forum.markSukiForumReplyIgnored, {
+      agentSlug: "suki",
+      runId: runs.ignoredRunId,
+      runDate: "2026-10-02",
+      sourceKind: "thread",
+      threadId: seed.publicThreadId,
+      reason: "low-confidence",
+      inputTokens: 123,
+      outputTokens: 45,
+    });
+    await t.mutation(internal.forum.markSukiForumReplyFailed, {
+      agentSlug: "suki",
+      runId: runs.failedRunId,
+      runDate: "2026-10-02",
+      sourceKind: "thread",
+      threadId: seed.publicThreadId,
+      reason: "provider-unavailable",
+    });
+
+    const terminal = await t.run(async (ctx) => ({
+      failed: await ctx.db.get("forumAgentReplyRuns", runs.failedRunId),
+      ignored: await ctx.db.get("forumAgentReplyRuns", runs.ignoredRunId),
+      events: await ctx.db
+        .query("forumAgentReplySweepEvents")
+        .withIndex("by_runDate_and_agentSlug", (q) =>
+          q.eq("runDate", "2026-10-02").eq("agentSlug", "suki"),
+        )
+        .collect(),
+    }));
+
+    expect(terminal.ignored).toMatchObject({
+      status: "ignored",
+      reason: "low-confidence",
+      inputTokens: 123,
+      outputTokens: 45,
+    });
+    expect(terminal.failed).toMatchObject({
+      status: "failed",
+      reason: "provider-unavailable",
+    });
+    expect(terminal.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          outcome: "ignored",
+          runId: runs.ignoredRunId,
+          detail: "low-confidence",
+        }),
+        expect.objectContaining({
+          outcome: "route-failed",
+          runId: runs.failedRunId,
+          detail: "provider-unavailable",
+        }),
+      ]),
+    );
   });
 
   test("bounds AI research replies while leaving human reply admission intact", async () => {
@@ -1906,11 +2027,6 @@ describe("forum notification preferences", () => {
     await t.mutation(internal.forum.recordForumReplySweepOutcome, {
       agentSlug: "belle",
       runDate: "2026-07-30",
-      outcome: "no-candidate",
-    });
-    await t.mutation(internal.forum.recordForumReplySweepOutcome, {
-      agentSlug: "belle",
-      runDate: "2026-07-30",
       outcome: "route-failed",
       detail: "provider timeout",
     });
@@ -1922,9 +2038,44 @@ describe("forum notification preferences", () => {
         )
         .collect();
       expect(events.map((event) => event.outcome).sort()).toEqual([
+        "daily-limit",
         "no-candidate",
+        "no-candidate",
+        "replied",
         "route-failed",
       ]);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          detail: "daily-limit",
+          outcome: "daily-limit",
+          runId: dailyLimitedRunId,
+        }),
+      );
+      for (const runId of [blocked.duplicateSourceRun, blocked.chainRun]) {
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            detail: "source-unavailable",
+            outcome: "no-candidate",
+            runId,
+          }),
+        );
+      }
+      const sukiEvents = await ctx.db
+        .query("forumAgentReplySweepEvents")
+        .withIndex("by_runDate_and_agentSlug", (q) =>
+          q.eq("runDate", "2026-07-30").eq("agentSlug", "suki"),
+        )
+        .collect();
+      expect(sukiEvents).toContainEqual(
+        expect.objectContaining({
+          detail: "source-unavailable",
+          outcome: "no-candidate",
+          runId: blocked.selfRun,
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({ outcome: "replied", runId: claim.runId }),
+      );
     });
     await expect(
       t.mutation(internal.forum.retractUnsafeForumAgentReply, {
@@ -2171,7 +2322,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
     }
   });
 
-  test("forum research excludes active source reservations before topic generation", async () => {
+  test("forum research filters recent source uses and active reservations", async () => {
     const t = setup();
     const now = Date.now();
     await t.run(async (ctx) => {
@@ -2194,10 +2345,45 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
         updatedAt: now - 60_000,
       });
     });
-    const unavailable = await t.query(internal.forum.readUsedSukiSourceKeys, {
-      sourceKeys: ["reserved-source", "expired-source", "free-source"],
+    const available = await t.query(
+      internal.forum.selectAvailableForumAgentSourceKeys,
+      {
+        sourceKeys: ["reserved-source", "expired-source", "free-source"],
+        maxAvailable: 3,
+        now,
+      },
+    );
+    expect(available).toEqual(["expired-source", "free-source"]);
+  });
+
+  test("checks source keys beyond eighty and stops at the requested count", async () => {
+    const t = setup();
+    const now = Date.now();
+    const sourceKeys = Array.from(
+      { length: 82 },
+      (_, index) => `source-${index}`,
+    );
+    await t.run(async (ctx) => {
+      for (const sourceKey of sourceKeys.slice(0, 81)) {
+        await ctx.db.insert("forumAgentSourceReservations", {
+          sourceKey,
+          runKey: `other:${sourceKey}`,
+          agentSlug: "other",
+          status: "reserved",
+          reservedAt: now,
+          expiresAt: now + 60_000,
+          updatedAt: now,
+        });
+      }
     });
-    expect(unavailable).toEqual(["reserved-source"]);
+
+    await expect(
+      t.query(internal.forum.selectAvailableForumAgentSourceKeys, {
+        sourceKeys,
+        maxAvailable: 1,
+        now,
+      }),
+    ).resolves.toEqual(["source-81"]);
   });
 
   test("Belle infrastructure targets two aligned daily publication slots", async () => {
@@ -4417,13 +4603,14 @@ describe("forum privacy regressions", () => {
     });
     const readPages = async () =>
       await Promise.all(
-        [1, 2, 3].map(async (page) =>
-          await t.query(api.forum.search, {
-            query: "needle",
-            resultType: "threads",
-            page,
-            pageSize: 1,
-          }),
+        [1, 2, 3].map(
+          async (page) =>
+            await t.query(api.forum.search, {
+              query: "needle",
+              resultType: "threads",
+              page,
+              pageSize: 1,
+            }),
         ),
       );
     const legacyPages = await readPages();
@@ -6949,6 +7136,25 @@ describe("forum privacy regressions", () => {
     });
   });
 
+  test("public profiles skip presence lookups for untrusted users", async () => {
+    const t = setup();
+    await seedForum(t);
+    const listUser = vi.spyOn(forumPresenceComponent, "listUser");
+
+    try {
+      const profile = await t.query(api.users.publicProfile, {
+        username: "newmember",
+      });
+
+      expect(profile?.forumProfile).toMatchObject({ isOnline: false });
+      expect(profile?.forumProfile).not.toHaveProperty("lastSeenAt");
+      expect(profile?.forumProfile).not.toHaveProperty("onlineLocation");
+      expect(listUser).not.toHaveBeenCalled();
+    } finally {
+      listUser.mockRestore();
+    }
+  });
+
   test("private messages stay scoped to sender and recipient", async () => {
     const t = setup();
     const seed = await seedForum(t);
@@ -7224,6 +7430,7 @@ describe("forum privacy regressions", () => {
   test("trusted members can rate visible threads once and update or clear their rating", async () => {
     const t = setup();
     const seed = await seedForum(t);
+    await t.mutation(internal.forumThreadDigestBackfill.run, {});
     const asOtherTrusted = t.withIdentity({
       subject: seed.otherTrustedUserId,
       name: "Other Trusted",
@@ -7240,6 +7447,14 @@ describe("forum privacy regressions", () => {
       ratingCount: 1,
       ratingAverage: 5,
     });
+    let listed = await t.query(api.forum.listThreads, {
+      categorySlug: "public-square",
+      pageSize: 5,
+      sortKey: "rating",
+    });
+    expect(
+      listed.threads.find((thread) => thread._id === seed.publicThreadId),
+    ).toMatchObject({ ratingCount: 1, ratingAverage: 5 });
 
     let detail = await asOtherTrusted.query(api.forum.getThread, {
       categorySlug: "public-square",
@@ -7274,6 +7489,14 @@ describe("forum privacy regressions", () => {
       ratingAverage: 3,
       viewerRating: 3,
     });
+    listed = await t.query(api.forum.listThreads, {
+      categorySlug: "public-square",
+      pageSize: 5,
+      sortKey: "rating",
+    });
+    expect(
+      listed.threads.find((thread) => thread._id === seed.publicThreadId),
+    ).toMatchObject({ ratingCount: 1, ratingAverage: 3 });
 
     await expect(
       asOtherTrusted.mutation(api.forum.rateThread, {
@@ -7300,7 +7523,58 @@ describe("forum privacy regressions", () => {
       ratingCount: 0,
       ratingTotal: 0,
     });
+    const digest = await t.run((ctx) =>
+      ctx.db
+        .query("forumThreadEditorialDigests")
+        .withIndex("by_threadId", (q) => q.eq("threadId", seed.publicThreadId))
+        .unique(),
+    );
+    expect(digest).toMatchObject({ ratingCount: 0, ratingTotal: 0 });
     expect(snapshot.ratings).toEqual([]);
+  });
+
+  test("thread prefix edits refresh the digest-backed list projection", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const prefix = await t.run(async (ctx) => {
+      const prefixId = await ctx.db.insert("forumThreadPrefixes", {
+        categoryId: seed.publicCategoryId,
+        key: `category:${seed.publicCategoryId}:launch-notes`,
+        slug: "launch-notes",
+        label: "Original label",
+        status: "active",
+        position: 1,
+        createdAt: 1_800_000_000_000,
+        updatedAt: 1_800_000_000_000,
+      });
+      await ctx.db.patch("forumThreads", seed.publicThreadId, {
+        prefixId,
+        prefixSlug: "launch-notes",
+        prefixLabel: "Original label",
+      });
+      return prefixId;
+    });
+    await t.mutation(internal.forumThreadDigestBackfill.run, {});
+
+    await t
+      .withIdentity({ subject: seed.ownerId, name: "Owner" })
+      .mutation(api.forum.upsertThreadPrefixAdmin, {
+        prefixId: prefix,
+        categoryId: seed.publicCategoryId,
+        slug: "launch-notes",
+        label: "Updated label",
+        status: "active",
+      });
+
+    const listed = await t.query(api.forum.listThreads, {
+      categorySlug: "public-square",
+      pageSize: 5,
+    });
+    expect(
+      listed.threads.find((thread) => thread._id === seed.publicThreadId),
+    ).toMatchObject({
+      prefix: { label: "Updated label", slug: "launch-notes" },
+    });
   });
 
   test("thread ratings require trusted non-author participation", async () => {
