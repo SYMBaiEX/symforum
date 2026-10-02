@@ -37,7 +37,52 @@ async function seedFailedDailyRuns(
   });
 }
 
-describe("forum agent run claims", () => {
+describe("forum agent run claims and feed caching", () => {
+  test("reads and upserts bounded research-feed cache batches", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const cacheEntry = (
+      cacheKey: string,
+      payloadJson: string,
+      expiresAt: number,
+    ) => ({
+      cacheKey,
+      sourceName: "Test feed",
+      feedUrl: "https://example.com/feed.xml",
+      payloadJson,
+      fetchedAt: now,
+      expiresAt,
+    });
+
+    await expect(
+      t.mutation(internal.sukiForumAgentData.writeResearchCaches, {
+        entries: [
+          cacheEntry("active", "first", now + 60_000),
+          cacheEntry("expired", "old", now - 1),
+        ],
+      }),
+    ).resolves.toEqual({ written: 2 });
+
+    await expect(
+      t.query(internal.sukiForumAgentData.readResearchCaches, {
+        cacheKeys: ["active", "expired", "missing"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ cacheKey: "active", payloadJson: "first" }),
+    ]);
+
+    await t.mutation(internal.sukiForumAgentData.writeResearchCaches, {
+      entries: [cacheEntry("active", "updated", now + 120_000)],
+    });
+    await expect(
+      t.query(internal.sukiForumAgentData.readResearchCaches, {
+        cacheKeys: ["active"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ cacheKey: "active", payloadJson: "updated" }),
+    ]);
+  });
+
   test("allows failures below the guard without consuming publication capacity", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});

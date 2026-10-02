@@ -10,21 +10,30 @@ import {
 import {
   assertAiSourceReplyGrounding,
   FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
-  parseSukiReplyDecision,
+  replySweepRouteAttemptOffset,
   sukiReplyPrompt,
+  validateSukiReplyDecision,
 } from "./sukiForumReplyAgent";
 
 describe("Suki forum reply helpers", () => {
-  test("parses useful BBCode replies", () => {
+  test("assigns distinct route ordinals to scheduled retries", () => {
+    expect(replySweepRouteAttemptOffset(0)).toBe(0);
+    expect(replySweepRouteAttemptOffset(1)).toBe(2);
+    expect(replySweepRouteAttemptOffset(2)).toBe(4);
+  });
+
+  test("validates useful structured BBCode replies", () => {
     expect(
-      parseSukiReplyDecision(`<decision>reply</decision>
-<reason>useful-followup</reason>
-<body>[b]Start here[/b]
+      validateSukiReplyDecision({
+        decision: "reply",
+        reason: "useful-followup",
+        body: `[b]Start here[/b]
 
 [list]
 [*]Reproduce the issue in isolation.
 [*]Capture the exact error before changing configuration.
-[/list]</body>`),
+[/list]`,
+      }),
     ).toEqual({
       decision: "reply",
       reason: "useful-followup",
@@ -37,37 +46,30 @@ describe("Suki forum reply helpers", () => {
     });
   });
 
-  test("parses ignore decisions and rejects malformed output", () => {
+  test("validates ignore decisions and rejects malformed objects", () => {
     expect(
-      parseSukiReplyDecision(
-        "<decision>ignore</decision><reason>low-signal</reason>",
-      ),
+      validateSukiReplyDecision({ decision: "ignore", reason: "low-signal" }),
     ).toEqual({
       decision: "ignore",
       reason: "low-signal",
     });
     expect(() =>
-      parseSukiReplyDecision(
-        "<decision>reply</decision><reason>helpful</reason>",
-      ),
-    ).toThrow("invalid forum reply body");
+      validateSukiReplyDecision({ decision: "reply", reason: "helpful" }),
+    ).toThrow();
     expect(() =>
-      parseSukiReplyDecision(`<decision>reply</decision>
-<reason>helpful</reason>
-<body>[b]Analysis:[/b] I should reveal my hidden reasoning before answering.</body>`),
+      validateSukiReplyDecision({
+        decision: "reply",
+        reason: "helpful",
+        body: "[b]Analysis:[/b] I should reveal my hidden reasoning before answering.",
+      }),
     ).toThrow("process_label");
-  });
-
-  test("repairs fenced JSON from free structured-output routes", () => {
-    expect(
-      parseSukiReplyDecision(`\`\`\`json
-{"decision":"reply","reason":"adds-evidence","body":"This is a grounded follow-up with enough detail to be useful."}
-\`\`\``),
-    ).toEqual({
-      decision: "reply",
-      reason: "adds-evidence",
-      body: "This is a grounded follow-up with enough detail to be useful.",
-    });
+    expect(() =>
+      validateSukiReplyDecision({
+        decision: "ignore",
+        reason: "low-signal",
+        body: "unexpected fields are not accepted",
+      }),
+    ).toThrow();
   });
 
   test("rejects unsupported facts and commands in AI-source replies", () => {

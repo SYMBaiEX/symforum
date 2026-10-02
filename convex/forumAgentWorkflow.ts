@@ -31,6 +31,7 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
 });
 const STRUCTURED_CANARY_MAX_AGE_MS = 2 * HOUR;
 const MAX_FAILED_RUNS_PER_DAY = 12;
+const MAX_AGENT_RUNS_PER_DAY_READ = 40;
 
 type StructuredCanaryState = {
   healthy: boolean;
@@ -57,6 +58,32 @@ type PublicationResult =
     }
   | { status: "skipped"; reason: string }
   | { status: "failed"; error: string };
+
+type ExistingRunRangeResult<T> =
+  { complete: true; existing: T | null } | { complete: false };
+
+function existingRunFromAgentDayRange<T extends { runKey: string }>(
+  runs: T[],
+  runKey: string,
+): ExistingRunRangeResult<T> {
+  if (runs.length >= MAX_AGENT_RUNS_PER_DAY_READ) return { complete: false };
+
+  const matchingRuns = runs.filter((run) => run.runKey === runKey);
+  if (matchingRuns.length > 1) return { complete: false };
+
+  return { complete: true, existing: matchingRuns[0] ?? null };
+}
+
+export async function resolveExistingRunFromAgentDayRange<
+  T extends { runKey: string },
+>(
+  runs: T[],
+  runKey: string,
+  loadByRunKey: () => Promise<T | null>,
+): Promise<T | null> {
+  const result = existingRunFromAgentDayRange(runs, runKey);
+  return result.complete ? result.existing : await loadByRunKey();
+}
 
 export const publishForumSlot = workflow
   .define({
@@ -152,6 +179,17 @@ async function publicationPreflight(
   args: { agentSlug: string; runDate: string; slot: number },
 ) {
   const now = Date.now();
+  const agent = await ctx.db
+    .query("forumAgents")
+    .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
+    .unique();
+  // Roster slots stay statically scheduled so an admin can enable an agent
+  // without redeploying crons. Skip dormant slots before reading the shared
+  // canary state, which they cannot affect or use.
+  if (agent === null || !agent.enabled || agent.dailyPostTarget < 1) {
+    return { ok: false as const, reason: "agent-disabled" };
+  }
+
   const dailyLimit = forumDailyPublicationLimit(
     env.FORUM_AGENT_DAILY_PUBLICATION_LIMIT,
   );
@@ -173,19 +211,22 @@ async function publicationPreflight(
     return { ok: false as const, reason: "adaptive-cadence" };
   }
 
-  const agent = await ctx.db
-    .query("forumAgents")
-    .withIndex("by_slug", (q) => q.eq("slug", args.agentSlug))
-    .unique();
-  if (agent === null || !agent.enabled || agent.dailyPostTarget < 1) {
-    return { ok: false as const, reason: "agent-disabled" };
-  }
-
   const runKey = `${args.agentSlug}:${args.runDate}:${args.slot}`;
-  const existing = await ctx.db
+  const todayRuns = await ctx.db
     .query("forumAgentRuns")
-    .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
-    .unique();
+    .withIndex("by_agentSlug_and_runDate_and_slot", (q) =>
+      q.eq("agentSlug", args.agentSlug).eq("runDate", args.runDate),
+    )
+    .take(MAX_AGENT_RUNS_PER_DAY_READ);
+  const existing = await resolveExistingRunFromAgentDayRange(
+    todayRuns,
+    runKey,
+    () =>
+      ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
+        .unique(),
+  );
   if (existing?.status === "published") {
     return { ok: false as const, reason: "already-published" };
   }
@@ -196,12 +237,6 @@ async function publicationPreflight(
     return { ok: false as const, reason: "already-running" };
   }
 
-  const todayRuns = await ctx.db
-    .query("forumAgentRuns")
-    .withIndex("by_agentSlug_and_runDate_and_slot", (q) =>
-      q.eq("agentSlug", args.agentSlug).eq("runDate", args.runDate),
-    )
-    .take(40);
   if (
     todayRuns.filter(
       (run) => run.status === "running" || run.status === "published",

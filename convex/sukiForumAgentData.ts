@@ -5,6 +5,7 @@ import { env, internalMutation, internalQuery } from "./_generated/server";
 const SUKI_AGENT_SLUG = "suki";
 const SUKI_RUN_STALE_MS = 30 * 60 * 1_000;
 const SUKI_CACHE_CLEANUP_BATCH_SIZE = 100;
+const MAX_RESEARCH_CACHE_BATCH_SIZE = 20;
 const FORUM_AGENT_RESERVATION_TTL_MS = 20 * 60 * 1_000;
 const FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS = 72 * 60 * 60 * 1_000;
 const MAX_FAILED_RUNS_PER_DAY = 12;
@@ -168,9 +169,10 @@ export const releaseResearchReservations = internalMutation({
     ]);
     for (const row of [...sources, ...topics]) {
       if (row.status === "reserved") {
-        const table = "sourceKey" in row
-          ? "forumAgentSourceReservations"
-          : "forumAgentTopicReservations";
+        const table =
+          "sourceKey" in row
+            ? "forumAgentSourceReservations"
+            : "forumAgentTopicReservations";
         await ctx.db.patch(table, row._id, {
           status: "released",
           expiresAt: now,
@@ -333,7 +335,9 @@ export const readRun = internalQuery({
       return null;
     }
     const thread =
-      run.threadId === undefined ? null : await ctx.db.get("forumThreads", run.threadId);
+      run.threadId === undefined
+        ? null
+        : await ctx.db.get("forumThreads", run.threadId);
     return {
       run,
       thread:
@@ -398,41 +402,64 @@ export const markRunSkipped = internalMutation({
   },
 });
 
-export const readResearchCache = internalQuery({
+export const readResearchCaches = internalQuery({
   args: {
-    cacheKey: v.string(),
+    cacheKeys: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const cached = await ctx.db
-      .query("forumAgentResearchCache")
-      .withIndex("by_cacheKey", (q) => q.eq("cacheKey", args.cacheKey))
-      .unique();
-    if (cached === null || cached.expiresAt <= Date.now()) {
-      return null;
+    const cacheKeys = [...new Set(args.cacheKeys)];
+    if (cacheKeys.length > MAX_RESEARCH_CACHE_BATCH_SIZE) {
+      throw new Error("Research cache read batch exceeds its bound");
     }
-    return cached;
+    const now = Date.now();
+    const cached = await Promise.all(
+      cacheKeys.map((cacheKey) =>
+        ctx.db
+          .query("forumAgentResearchCache")
+          .withIndex("by_cacheKey", (q) => q.eq("cacheKey", cacheKey))
+          .unique(),
+      ),
+    );
+    return cached.flatMap((row) =>
+      row === null || row.expiresAt <= now ? [] : [row],
+    );
   },
 });
 
-export const writeResearchCache = internalMutation({
+export const writeResearchCaches = internalMutation({
   args: {
-    cacheKey: v.string(),
-    sourceName: v.string(),
-    feedUrl: v.string(),
-    payloadJson: v.string(),
-    fetchedAt: v.number(),
-    expiresAt: v.number(),
+    entries: v.array(
+      v.object({
+        cacheKey: v.string(),
+        sourceName: v.string(),
+        feedUrl: v.string(),
+        payloadJson: v.string(),
+        fetchedAt: v.number(),
+        expiresAt: v.number(),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("forumAgentResearchCache")
-      .withIndex("by_cacheKey", (q) => q.eq("cacheKey", args.cacheKey))
-      .unique();
-    if (existing === null) {
-      return await ctx.db.insert("forumAgentResearchCache", args);
+    if (args.entries.length > MAX_RESEARCH_CACHE_BATCH_SIZE) {
+      throw new Error("Research cache write batch exceeds its bound");
     }
-    await ctx.db.patch("forumAgentResearchCache", existing._id, args);
-    return existing._id;
+    const cacheKeys = new Set<string>();
+    for (const entry of args.entries) {
+      if (cacheKeys.has(entry.cacheKey)) {
+        throw new Error("Research cache batch contains duplicate keys");
+      }
+      cacheKeys.add(entry.cacheKey);
+      const existing = await ctx.db
+        .query("forumAgentResearchCache")
+        .withIndex("by_cacheKey", (q) => q.eq("cacheKey", entry.cacheKey))
+        .unique();
+      if (existing === null) {
+        await ctx.db.insert("forumAgentResearchCache", entry);
+      } else {
+        await ctx.db.patch("forumAgentResearchCache", existing._id, entry);
+      }
+    }
+    return { written: args.entries.length };
   },
 });
 

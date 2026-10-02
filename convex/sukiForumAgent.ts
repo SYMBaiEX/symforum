@@ -1,6 +1,6 @@
 "use node";
 
-import { APICallError, tool, ToolLoopAgent } from "ai";
+import { APICallError, Output, ToolLoopAgent } from "ai";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { v } from "convex/values";
@@ -9,9 +9,9 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   OPENROUTER_FORUM_MODEL,
-  OPENROUTER_GENERATION_MODELS,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
+import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
@@ -61,7 +61,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v19-structured-route-rescue-budget";
+const PROMPT_VERSION = "suki-forum-v20-json-schema-output";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
 // One focused correction pass is the measured sweet spot. A second full-model
 // rewrite more than doubled token usage while rarely rescuing a rejected post.
@@ -249,11 +249,41 @@ export type ResearchCandidate = {
   boardSlugs: string[];
 };
 
+type RecentThreadForOverlap<ThreadId extends string = string> = {
+  id: ThreadId;
+  title: string;
+  ownedByAgent: boolean;
+};
+
+export function findRecentLexicalOverlap<ThreadId extends string>(
+  candidates: readonly Pick<ResearchCandidate, "title">[],
+  recentThreads: readonly RecentThreadForOverlap<ThreadId>[],
+) {
+  return recentThreads.find((thread) =>
+    candidates.some(
+      (candidate) => lexicalSimilarity(candidate.title, thread.title) >= 0.45,
+    ),
+  );
+}
+
 export type ArticleSnapshot = ResearchCandidate & {
   articleTitle: string;
   articleDescription: string;
   articleText: string;
   imageCredit: string;
+  /** Whether these article fields came from a successful page fetch, not candidate fallbacks. */
+  sourceFetchSucceeded?: boolean;
+  imageAlt?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+};
+
+type FetchedArticleContent = {
+  title?: string;
+  description?: string;
+  text: string;
+  imageUrl?: string;
+  imageCredit?: string;
   imageAlt?: string;
   imageWidth?: number;
   imageHeight?: number;
@@ -392,18 +422,23 @@ export async function runForumResearchSlot(
     }
 
     const candidates = await collectResearchCandidates(ctx);
-    // Exclude both recently published and actively reserved sources before the
-    // topic model runs. This lets it choose a different candidate instead of
-    // spending a full generation only to discover a reservation conflict.
-    const usedSourceKeys = new Set(
-      await ctx.runQuery(internal.forum.readUsedSukiSourceKeys, {
-        sourceKeys: candidates.map((candidate) => candidate.sourceKey),
+    const sourceSelectionNow = Date.now();
+    const recentCandidates = candidates.filter((candidate) =>
+      isRecentEnough(candidate.publishedAt, sourceSelectionNow),
+    );
+    // Exclude recently used and reserved sources before paid model work. The
+    // query checks bounded key batches and stops after finding the existing
+    // candidate target, avoiding needless lookups across the full feed union.
+    const availableSourceKeys = new Set(
+      await ctx.runQuery(internal.forum.selectAvailableForumAgentSourceKeys, {
+        sourceKeys: recentCandidates.map((candidate) => candidate.sourceKey),
+        maxAvailable: MAX_RESEARCH_CANDIDATES,
+        now: sourceSelectionNow,
       }),
     );
-    const unusedCandidates = candidates
-      .filter((candidate) => !usedSourceKeys.has(candidate.sourceKey))
-      .filter((candidate) => isRecentEnough(candidate.publishedAt))
-      .slice(0, MAX_RESEARCH_CANDIDATES);
+    const unusedCandidates = recentCandidates.filter((candidate) =>
+      availableSourceKeys.has(candidate.sourceKey),
+    );
     if (unusedCandidates.length < 1) {
       await markSkippedAndMaybeRetry(ctx, {
         config,
@@ -476,17 +511,14 @@ export async function runForumResearchSlot(
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: 150_000,
+        estimatedInputTokens: estimatePromptInputTokens(topicPrompt),
+        maxOutputTokens: (candidate: RoutedModel) =>
+          openRouterStructuredOutputBudget(candidate.modelId, 3_000),
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
             model: candidate.model,
-            tools: {
-              selectTopic: tool({
-                description: `Submit the single forum topic and board ${config.name} selected from the research packet.`,
-                inputSchema: topicSelectionSchema,
-              }),
-            },
-            toolChoice: "required",
+            output: Output.object({ schema: topicSelectionSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(candidate.provider, "topic-selection"),
             maxOutputTokens: openRouterStructuredOutputBudget(
@@ -503,11 +535,7 @@ export async function runForumResearchSlot(
             prompt: topicPrompt,
             abortSignal: signal,
           });
-          const call = result.staticToolCalls[0];
-          if (call?.toolName !== "selectTopic") {
-            throw missingStructuredToolCallError("topic scout", result);
-          }
-          return { result, selection: call.input };
+          return { result, selection: result.output };
         },
       },
     );
@@ -518,11 +546,12 @@ export async function runForumResearchSlot(
     };
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: claim.runKey,
+      reservationKey: selectionGeneration.route.reservationKey,
+      reservationModel: selectionGeneration.route.reservationModel,
       agentSlug: config.slug,
       stage: "topic",
-      model:
-        selectionResult.response.modelId ||
-        selectionGeneration.route.persistedModel,
+      model: selectionGeneration.route.persistedModel,
+      servedModel: selectionResult.response.modelId,
       inputTokens: selectionResult.usage.inputTokens,
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
@@ -553,6 +582,26 @@ export async function runForumResearchSlot(
     if (category === undefined) {
       throw new Error(`${config.name} has no available forum board`);
     }
+    // The local title guard already rejects obvious member-discussion overlap.
+    // Run paid vector retrieval only when this inexpensive deterministic test
+    // cannot decide whether the selected sources repeat a recent discussion.
+    const overlappingThread = findRecentLexicalOverlap(
+      selectedCandidates,
+      context.recentThreads,
+    );
+    if (overlappingThread !== undefined && !overlappingThread.ownedByAgent) {
+      await markSkippedAndMaybeRetry(ctx, {
+        config,
+        attempt: RETRY_DELAYS_MS.length,
+        runDate,
+        runKey: claim.runKey,
+        slot: args.slot,
+        reason: "A closely matching forum discussion already exists.",
+        candidateCount: shortlistedCandidates.length,
+        workflowManaged: args.workflowManaged,
+      });
+      return { status: "skipped" as const, reason: "topic-covered" };
+    }
     const semanticMemory = await searchEditorialMemory(ctx, {
       agentSlug: config.slug,
       query: [
@@ -582,26 +631,6 @@ export async function runForumResearchSlot(
         });
         return { status: "skipped" as const, reason: "topic-covered" };
       }
-    }
-    const overlappingThread = context.recentThreads.find(
-      (thread: (typeof context.recentThreads)[number]) =>
-        selectedCandidates.some(
-          (candidate) =>
-            lexicalSimilarity(candidate.title, thread.title) >= 0.45,
-        ),
-    );
-    if (overlappingThread !== undefined && !overlappingThread.ownedByAgent) {
-      await markSkippedAndMaybeRetry(ctx, {
-        config,
-        attempt: RETRY_DELAYS_MS.length,
-        runDate,
-        runKey: claim.runKey,
-        slot: args.slot,
-        reason: "A closely matching forum discussion already exists.",
-        candidateCount: shortlistedCandidates.length,
-        workflowManaged: args.workflowManaged,
-      });
-      return { status: "skipped" as const, reason: "topic-covered" };
     }
     const topicFingerprint =
       overlappingThread === undefined
@@ -650,9 +679,7 @@ export async function runForumResearchSlot(
       followUpThreadId === undefined
         ? selection
         : { ...selection, contentFormat: "brief" as const, includePoll: false };
-    const snapshots = await Promise.all(
-      selectedCandidates.map(fetchArticleSnapshot),
-    );
+    const snapshots = await fetchArticleSnapshots(selectedCandidates);
     await ctx.runMutation(
       internal.forumAgentResearchPackets.beginResearchPacket,
       {
@@ -687,34 +714,27 @@ export async function runForumResearchSlot(
       prompt: string,
       options?: {
         lightRevision?: boolean;
-        modelIds?: readonly string[];
-        revisionPass?: number;
-        validateDraft?: (draft: z.infer<typeof forumDraftSchema>) => void;
       },
     ) => {
-      const revisionPassSuffix =
-        stage === "revision" && (options?.revisionPass ?? 1) > 1
-          ? `-pass-${options?.revisionPass}`
-          : "";
       const routeArgs = {
-        stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}${revisionPassSuffix}`,
+        stage: `${config.slug}:forum-${stage}${options?.lightRevision ? "-light" : ""}`,
         correlationId: claim.runKey,
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
         totalTimeoutMs: stage === "revision" ? 210_000 : 270_000,
+        estimatedInputTokens: estimatePromptInputTokens(prompt),
+        maxOutputTokens: (candidate: RoutedModel) =>
+          forumWriterMaxOutputTokens(
+            stage,
+            options?.lightRevision ?? false,
+            candidate.modelId,
+          ),
         run: async (candidate: RoutedModel, signal: AbortSignal) => {
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
             model: candidate.model,
-            tools: {
-              submitForumDraft: tool({
-                description:
-                  "Submit the complete forum-ready topic draft, optional poll, and selected image candidate.",
-                inputSchema: forumDraftSchema,
-              }),
-            },
-            toolChoice: "required",
+            output: Output.object({ schema: forumDraftSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(
               candidate.provider,
@@ -737,19 +757,13 @@ export async function runForumResearchSlot(
             prompt,
             abortSignal: signal,
           });
-          const call = result.staticToolCalls[0];
-          if (call?.toolName !== "submitForumDraft") {
-            throw missingStructuredToolCallError(`forum ${stage}`, result);
-          }
-          options?.validateDraft?.(call.input);
-          return { result, draft: call.input };
+          return { result, draft: result.output };
         },
       };
       return await runWithModelFallback(
         effectiveRoutingConfig,
         writerRequestContext,
         routeArgs,
-        options?.modelIds,
       );
     };
     const draftStartedAt = Date.now();
@@ -779,10 +793,12 @@ export async function runForumResearchSlot(
     });
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: claim.runKey,
+      reservationKey: draftGeneration.route.reservationKey,
+      reservationModel: draftGeneration.route.reservationModel,
       agentSlug: config.slug,
       stage: "draft",
-      model:
-        draftResult.response.modelId || draftGeneration.route.persistedModel,
+      model: draftGeneration.route.persistedModel,
+      servedModel: draftResult.response.modelId,
       categorySlug: category.slug,
       inputTokens: draftResult.usage.inputTokens,
       outputTokens: draftResult.usage.outputTokens,
@@ -812,7 +828,6 @@ export async function runForumResearchSlot(
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
       const revisionTier = forumRevisionTier(quality);
-      const qualityRescue = revisionPass > 1;
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -826,37 +841,6 @@ export async function runForumResearchSlot(
         }),
         {
           lightRevision: revisionTier === "nano",
-          modelIds: qualityRescue ? forumEditorialRescueModels() : undefined,
-          revisionPass,
-          validateDraft: qualityRescue
-            ? (candidateDraft) => {
-                const candidate = repairForumDraftForReview(
-                  candidateDraft,
-                  snapshots,
-                );
-                const candidateQuality = evaluateForumDraft({
-                  draft: candidate,
-                  selection: effectiveSelection,
-                  snapshots,
-                  recentThreadTitles: context.recentThreadTitles,
-                });
-                if (
-                  forumDraftNeedsRevision(
-                    candidateQuality,
-                    config.qualityThreshold,
-                  )
-                ) {
-                  throw new ForumEditorialQualityError(
-                    `Editorial rescue candidate scored ${candidateQuality.qualityScore}/100: ${[
-                      ...new Set([
-                        ...candidateQuality.blockingIssues,
-                        ...candidateQuality.feedback,
-                      ]),
-                    ].join("; ")}`,
-                  );
-                }
-              }
-            : undefined,
         },
       );
       const revision = revisionGeneration.value.result;
@@ -880,10 +864,12 @@ export async function runForumResearchSlot(
       });
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
         runKey: claim.runKey,
+        reservationKey: revisionGeneration.route.reservationKey,
+        reservationModel: revisionGeneration.route.reservationModel,
         agentSlug: config.slug,
         stage: "revision",
-        model:
-          revision.response.modelId || revisionGeneration.route.persistedModel,
+        model: revisionGeneration.route.persistedModel,
+        servedModel: revision.response.modelId,
         categorySlug: category.slug,
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,
@@ -1153,16 +1139,26 @@ export const runDailySlot = internalAction({
 export async function collectResearchCandidates(
   ctx: ActionCtx,
 ): Promise<ResearchCandidate[]> {
-  const groups: ResearchCandidate[][] = await Promise.all(
-    RESEARCH_FEEDS.map(async (feed): Promise<ResearchCandidate[]> => {
-      const cacheKey = hashKey(feed.url);
-      const cached = await ctx.runQuery(
-        internal.sukiForumAgentData.readResearchCache,
-        { cacheKey },
-      );
-      if (cached !== null) {
+  const feedCacheEntries = RESEARCH_FEEDS.map((feed) => ({
+    feed,
+    cacheKey: hashKey(feed.url),
+  }));
+  const cachedRows = await ctx.runQuery(
+    internal.sukiForumAgentData.readResearchCaches,
+    { cacheKeys: feedCacheEntries.map((entry) => entry.cacheKey) },
+  );
+  const cachedByKey = new Map(
+    cachedRows.map((cached) => [cached.cacheKey, cached]),
+  );
+  const groups = await Promise.all(
+    feedCacheEntries.map(async ({ feed, cacheKey }) => {
+      const cached = cachedByKey.get(cacheKey);
+      if (cached !== undefined) {
         try {
-          return parseCachedCandidates(cached.payloadJson);
+          return {
+            candidates: parseCachedCandidates(cached.payloadJson),
+            cacheWrite: undefined,
+          };
         } catch {
           // Refetch malformed or stale cache payloads.
         }
@@ -1185,23 +1181,38 @@ export async function collectResearchCandidates(
           sourceName: feed.name,
         });
         const now = Date.now();
-        await ctx.runMutation(internal.sukiForumAgentData.writeResearchCache, {
-          cacheKey,
-          sourceName: feed.name,
-          feedUrl: feed.url,
-          payloadJson: JSON.stringify(candidates),
-          fetchedAt: now,
-          expiresAt: now + RESEARCH_CACHE_TTL_MS,
-        });
-        return candidates;
+        return {
+          candidates,
+          cacheWrite: {
+            cacheKey,
+            sourceName: feed.name,
+            feedUrl: feed.url,
+            payloadJson: JSON.stringify(candidates),
+            fetchedAt: now,
+            expiresAt: now + RESEARCH_CACHE_TTL_MS,
+          },
+        };
       } catch {
-        return [] as ResearchCandidate[];
+        return { candidates: [] as ResearchCandidate[], cacheWrite: undefined };
       }
     }),
   );
+  const cacheWrites = groups.flatMap((group) =>
+    group.cacheWrite === undefined ? [] : [group.cacheWrite],
+  );
+  if (cacheWrites.length > 0) {
+    try {
+      await ctx.runMutation(internal.sukiForumAgentData.writeResearchCaches, {
+        entries: cacheWrites,
+      });
+    } catch {
+      // Cache writes are opportunistic; keep the successfully fetched feeds.
+      console.warn("Research feed cache batch write failed.");
+    }
+  }
   const seen = new Set<string>();
   return groups
-    .flat()
+    .flatMap((group) => group.candidates)
     .sort((left, right) => (right.publishedAt ?? 0) - (left.publishedAt ?? 0))
     .filter((candidate) => {
       if (seen.has(candidate.sourceKey)) {
@@ -1409,6 +1420,66 @@ function feedItemImageUrl(row: Record<string, unknown>, articleUrl: string) {
 export async function fetchArticleSnapshot(
   candidate: ResearchCandidate,
 ): Promise<ArticleSnapshot> {
+  const content = await fetchArticleContent(candidate);
+  return articleSnapshotForCandidate(candidate, content);
+}
+
+/** Fetch each canonical URL once within a run while preserving per-story identity. */
+export async function fetchArticleSnapshots(
+  candidates: ResearchCandidate[],
+  reusableSnapshots: readonly ArticleSnapshot[] = [],
+): Promise<ArticleSnapshot[]> {
+  const contentByUrl = new Map<
+    string,
+    Promise<FetchedArticleContent | null> | FetchedArticleContent | null
+  >();
+  for (const snapshot of reusableSnapshots) {
+    if (snapshot.sourceFetchSucceeded === undefined) {
+      continue;
+    }
+    let canonical: string;
+    try {
+      canonical = canonicalUrl(snapshot.url);
+    } catch {
+      canonical = snapshot.url;
+    }
+    contentByUrl.set(
+      canonical,
+      snapshot.sourceFetchSucceeded
+        ? {
+            title: snapshot.articleTitle,
+            description: snapshot.articleDescription,
+            text: snapshot.articleText,
+            imageUrl: snapshot.imageUrl,
+            imageCredit: snapshot.imageCredit,
+            imageAlt: snapshot.imageAlt,
+            imageWidth: snapshot.imageWidth,
+            imageHeight: snapshot.imageHeight,
+          }
+        : null,
+    );
+  }
+  return await Promise.all(
+    candidates.map(async (candidate) => {
+      let canonical: string;
+      try {
+        canonical = canonicalUrl(candidate.url);
+      } catch {
+        canonical = candidate.url;
+      }
+      let contentPromise = contentByUrl.get(canonical);
+      if (contentPromise === undefined) {
+        contentPromise = fetchArticleContent(candidate);
+        contentByUrl.set(canonical, contentPromise);
+      }
+      return articleSnapshotForCandidate(candidate, await contentPromise);
+    }),
+  );
+}
+
+async function fetchArticleContent(
+  candidate: ResearchCandidate,
+): Promise<FetchedArticleContent | null> {
   try {
     const response = await fetchPublicUrl(candidate.url, {
       headers: {
@@ -1422,28 +1493,39 @@ export async function fetchArticleSnapshot(
     const html = await readBoundedText(response, MAX_ARTICLE_BYTES);
     const metadata = htmlMetadata(html, candidate.url);
     return {
-      ...candidate,
-      articleTitle: metadata.title || candidate.title,
-      articleDescription: metadata.description || candidate.summary,
-      articleText: compactText(stripArticleHtml(html), 6_000),
+      title: metadata.title || undefined,
+      description: metadata.description || undefined,
+      text: compactText(stripArticleHtml(html), 6_000),
       imageUrl:
         metadata.imageUrl && isSafePublicUrl(metadata.imageUrl)
           ? metadata.imageUrl
-          : candidate.imageUrl,
-      imageCredit: metadata.author || metadata.siteName || candidate.sourceName,
+          : undefined,
+      imageCredit: metadata.author || metadata.siteName || undefined,
       imageAlt: metadata.imageAlt,
       imageWidth: metadata.imageWidth,
       imageHeight: metadata.imageHeight,
     };
   } catch {
-    return {
-      ...candidate,
-      articleTitle: candidate.title,
-      articleDescription: candidate.summary,
-      articleText: candidate.summary,
-      imageCredit: candidate.sourceName,
-    };
+    return null;
   }
+}
+
+function articleSnapshotForCandidate(
+  candidate: ResearchCandidate,
+  content: FetchedArticleContent | null,
+): ArticleSnapshot {
+  return {
+    ...candidate,
+    articleTitle: content?.title ?? candidate.title,
+    articleDescription: content?.description ?? candidate.summary,
+    articleText: content?.text ?? candidate.summary,
+    imageUrl: content?.imageUrl ?? candidate.imageUrl,
+    imageCredit: content?.imageCredit ?? candidate.sourceName,
+    sourceFetchSucceeded: content !== null,
+    imageAlt: content?.imageAlt,
+    imageWidth: content?.imageWidth,
+    imageHeight: content?.imageHeight,
+  };
 }
 
 export async function cacheResearchImage(
@@ -1655,8 +1737,14 @@ function forumDraftPrompt(args: {
   followUp?: boolean;
 }) {
   if (args.revisionFeedback !== undefined && args.previousDraft !== undefined) {
+    const claimsBySource = new Map<string, string[]>();
+    for (const claim of args.previousDraft.claims) {
+      const sourceClaims = claimsBySource.get(claim.sourceCandidateId) ?? [];
+      sourceClaims.push(claim.claim);
+      claimsBySource.set(claim.sourceCandidateId, sourceClaims);
+    }
     return [
-      "Revise the supplied forum draft. Return one complete replacement draft using the required tool schema.",
+      "Revise the supplied forum draft. Return one complete replacement matching the structured output schema.",
       "Fix every deterministic gate failure. Preserve supported facts and source IDs; delete any unsupported number or claim rather than improvising evidence.",
       "Improve the reading experience too: use a concise opening hook, descriptive headings when useful, short phone-friendly paragraphs, and one practical evidence block that helps a reader decide or act.",
       "Selected board and angle:",
@@ -1671,7 +1759,10 @@ function forumDraftPrompt(args: {
           source: snapshot.sourceName,
           title: snapshot.articleTitle,
           description: snapshot.articleDescription,
-          articleText: compactText(snapshot.articleText, 6_000),
+          evidence: forumRevisionEvidenceExcerpt(
+            snapshot.articleText,
+            claimsBySource.get(snapshot.id) ?? [],
+          ),
           hasCacheableImage: Boolean(snapshot.imageUrl),
         })),
       ),
@@ -1718,6 +1809,115 @@ function forumDraftPrompt(args: {
         ]),
     "Write the actual forum topic now. Do not write a generic news article.",
   ].join("\n\n");
+}
+
+/**
+ * Source excerpts are repeated in the revision request alongside the complete
+ * first-pass draft. Keep the smallest source passages that cover its linked
+ * claims; the deterministic quality gate still validates against the complete
+ * snapshots after generation.
+ */
+export function forumRevisionEvidenceExcerpt(
+  sourceText: string,
+  claims: readonly string[],
+  maximumCharacters = 1_800,
+) {
+  const limit = Number.isSafeInteger(maximumCharacters)
+    ? Math.max(1, maximumCharacters)
+    : 1_800;
+  const normalized = sourceText.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+
+  const claimTokens = new Set(claims.flatMap(significantTokens));
+  if (claimTokens.size === 0) return compactText(normalized, limit);
+
+  const maximumSegmentCharacters = Math.max(
+    1,
+    Math.min(900, Math.floor(limit / 3)),
+  );
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((sentence) =>
+      sentence.length <= maximumSegmentCharacters
+        ? [sentence]
+        : splitLongEvidenceText(sentence, maximumSegmentCharacters),
+    )
+    .map((text, index) => ({ index, text: text.trim() }))
+    .filter((sentence) => sentence.text.length > 0);
+  const sentenceTokens = sentences.map(
+    (sentence) => new Set(significantTokens(sentence.text)),
+  );
+  const selected = new Set<number>();
+  const coveredTokens = new Set<string>();
+  let usedCharacters = 0;
+
+  while (usedCharacters < limit) {
+    let bestIndex = -1;
+    let bestNewTokens = 0;
+    let bestTotalTokens = 0;
+    for (let index = 0; index < sentences.length; index += 1) {
+      if (selected.has(index)) continue;
+      const sentence = sentences[index];
+      const separatorLength = selected.size === 0 ? 0 : 1;
+      if (sentence.text.length + separatorLength > limit - usedCharacters) {
+        continue;
+      }
+      let newTokens = 0;
+      let totalTokens = 0;
+      for (const token of sentenceTokens[index]) {
+        if (!claimTokens.has(token)) continue;
+        totalTokens += 1;
+        if (!coveredTokens.has(token)) newTokens += 1;
+      }
+      if (
+        newTokens > bestNewTokens ||
+        (newTokens === bestNewTokens && totalTokens > bestTotalTokens)
+      ) {
+        bestIndex = index;
+        bestNewTokens = newTokens;
+        bestTotalTokens = totalTokens;
+      }
+    }
+    if (bestIndex < 0 || bestNewTokens === 0) break;
+    selected.add(bestIndex);
+    usedCharacters +=
+      sentences[bestIndex].text.length + (selected.size > 1 ? 1 : 0);
+    for (const token of sentenceTokens[bestIndex]) {
+      if (claimTokens.has(token)) coveredTokens.add(token);
+    }
+  }
+
+  if (selected.size === 0) return compactText(normalized, limit);
+  return compactText(
+    sentences
+      .filter((sentence) => selected.has(sentence.index))
+      .map((sentence) => sentence.text)
+      .join(" "),
+    limit,
+  );
+}
+
+function splitLongEvidenceText(value: string, maximumLength: number) {
+  const chunks: string[] = [];
+  let chunk = "";
+  for (const word of value.split(/\s+/)) {
+    if (word.length > maximumLength) {
+      if (chunk) chunks.push(chunk);
+      chunk = "";
+      chunks.push(
+        ...(word.match(new RegExp(`.{1,${maximumLength}}`, "g")) ?? [word]),
+      );
+      continue;
+    }
+    if (chunk && chunk.length + word.length + 1 > maximumLength) {
+      chunks.push(chunk);
+      chunk = word;
+    } else {
+      chunk = chunk ? `${chunk} ${word}` : word;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
 }
 
 const SUKI_TOPIC_SCOUT_INSTRUCTIONS = `You are Suki, the SYMBaiEX forum's adult waifu space pirate and research scout.
@@ -1785,7 +1985,7 @@ Safety:
 Return only the requested structured draft.`;
 
 const FORUM_REVISION_INSTRUCTIONS = `You are a precise forum copy editor.
-Return one complete replacement through submitForumDraft and nothing else.
+Return one complete replacement as structured output and nothing else.
 ${PUBLICATION_VOICE_GUARDRAILS}
 - Fix every supplied gate item; do not merely explain it.
 - Treat the supplied gate feedback as authoritative. If a previous sentence, number, version, heading, list item, or ledger claim conflicts with it, rewrite or delete that material instead of preserving it.
@@ -1875,6 +2075,33 @@ export function finalizeForumBody(
   return finalizedBody;
 }
 
+type ForumDraftClaim = z.infer<typeof forumDraftSchema>["claims"][number];
+
+function forumSnapshotText(snapshot: ArticleSnapshot) {
+  return `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`;
+}
+
+function forumBodyStatementHasSupportedClaim(
+  statement: string,
+  claims: readonly ForumDraftClaim[],
+  snapshotsById: ReadonlyMap<string, ArticleSnapshot>,
+) {
+  return claims.some((claim) => {
+    const matchesClaim =
+      lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
+      lexicalEvidenceCoverage(claim.claim, statement) >= 0.7;
+    if (!matchesClaim) return false;
+
+    const snapshot = snapshotsById.get(claim.sourceCandidateId);
+    if (snapshot === undefined) return false;
+    const sourceText = forumSnapshotText(snapshot);
+    return (
+      lexicalEvidenceCoverage(statement, sourceText) >= 0.45 &&
+      unsupportedVerifiableTokens(statement, sourceText).length === 0
+    );
+  });
+}
+
 export function repairForumDraftForReview(
   draft: z.infer<typeof forumDraftSchema>,
   snapshots: ArticleSnapshot[],
@@ -1888,33 +2115,38 @@ export function repairForumDraftForReview(
   );
 
   const claims = [...draft.claims];
+  const snapshotsById = new Map(
+    snapshots.map((snapshot) => [snapshot.id, snapshot]),
+  );
   const statements = forumBodyFactualStatements(body);
   for (const statement of statements) {
-    const covered = claims.some(
-      (claim) =>
-        lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
-        lexicalEvidenceCoverage(claim.claim, statement) >= 0.7,
+    const covered = forumBodyStatementHasSupportedClaim(
+      statement,
+      claims,
+      snapshotsById,
     );
     if (covered) continue;
 
     const source = snapshots
       .map((snapshot) => ({
-        id: snapshot.id,
-        coverage: lexicalEvidenceCoverage(
-          statement,
-          `${snapshot.articleTitle} ${snapshot.articleDescription} ${snapshot.articleText}`,
-        ),
+        snapshot,
+        sourceText: forumSnapshotText(snapshot),
       }))
+      .map((candidate) => ({
+        ...candidate,
+        coverage: lexicalEvidenceCoverage(statement, candidate.sourceText),
+      }))
+      .filter(
+        (candidate) =>
+          candidate.coverage >= 0.45 &&
+          unsupportedVerifiableTokens(statement, candidate.sourceText)
+            .length === 0,
+      )
       .sort((left, right) => right.coverage - left.coverage)[0];
-    if (
-      source &&
-      source.coverage >= 0.45 &&
-      statement.length <= 400 &&
-      claims.length < 12
-    ) {
+    if (source && statement.length <= 400 && claims.length < 12) {
       claims.push({
         claim: statement,
-        sourceCandidateId: source.id,
+        sourceCandidateId: source.snapshot.id,
         confidence: "medium",
         kind: "fact",
       });
@@ -2054,12 +2286,6 @@ export function forumDraftPassesGate(
   );
 }
 
-export function forumEditorialRescueModels() {
-  // A second editorial pass may still be valuable even with one canonical
-  // alias: OpenRouter can select a different compatible free model per call.
-  return OPENROUTER_GENERATION_MODELS;
-}
-
 export function forumRevisionTier(quality: EvaluatedForumDraft) {
   return quality.blockingIssues.some((issue) =>
     /ground|claim|source|unsupported|evidence/i.test(issue),
@@ -2176,21 +2402,21 @@ export function evaluateForumDraft(args: {
 
   const bodyStatements = forumBodyFactualStatements(args.draft.body);
   const ledgerCoveredStatements = bodyStatements.filter((statement) =>
-    args.draft.claims.some(
-      (claim) =>
-        lexicalEvidenceCoverage(statement, claim.claim) >= 0.34 ||
-        lexicalEvidenceCoverage(claim.claim, statement) >= 0.7,
+    forumBodyStatementHasSupportedClaim(
+      statement,
+      args.draft.claims,
+      snapshotsById,
     ),
   );
   const bodyClaimCoverage =
     bodyStatements.length === 0
       ? 0
       : ledgerCoveredStatements.length / bodyStatements.length;
-  if (bodyClaimCoverage < 0.8) {
+  if (bodyClaimCoverage < 1) {
     const uncovered = bodyStatements.filter(
       (statement) => !ledgerCoveredStatements.includes(statement),
     );
-    const issue = `Add every consequential body claim to the claim ledger, including: ${uncovered
+    const issue = `Ensure every consequential body claim has a ledger claim whose cited source supports its details, including: ${uncovered
       .slice(0, 2)
       .join(" / ")}`;
     feedback.push(issue);
@@ -2301,7 +2527,7 @@ export function evaluateForumDraft(args: {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
   }
   if (
-    bodyClaimCoverage < 0.8 ||
+    bodyClaimCoverage < 1 ||
     unsupportedBodyTokens.length > 0 ||
     originalValueCoverage < 0.6 ||
     questions.length !== 1 ||
@@ -2808,11 +3034,11 @@ function parseTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
-function isRecentEnough(timestamp: number | undefined) {
+function isRecentEnough(timestamp: number | undefined, now = Date.now()) {
   if (timestamp === undefined) {
     return true;
   }
-  const age = Date.now() - timestamp;
+  const age = now - timestamp;
   return age >= -24 * 60 * 60 * 1_000 && age <= 21 * 24 * 60 * 60 * 1_000;
 }
 

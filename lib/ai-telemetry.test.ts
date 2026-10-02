@@ -43,6 +43,13 @@ describe("owner admin AI telemetry", () => {
     );
     expect(routeSource).toContain("abortSignal: request.signal");
     expect(routeSource).toContain("timeout: OWNER_ADMIN_AI_STREAM_TIMEOUT");
+    expect(routeSource).toContain(
+      "prepareStep: async ({ messages, stepNumber })",
+    );
+    expect(routeSource).toContain("reserveOwnerConsoleStep");
+    expect(routeSource).toContain(
+      "maxOutputTokens: OWNER_ADMIN_AI_MAX_OUTPUT_TOKENS",
+    );
   });
 
   test("registers AI telemetry with the existing OpenTelemetry provider", () => {

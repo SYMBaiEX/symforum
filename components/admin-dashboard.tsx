@@ -29,7 +29,7 @@ import {
 } from "@/lib/admin-sections";
 import { cn } from "@/lib/utils";
 import { asRoute } from "@/lib/typed-route";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   Activity,
   BarChart3,
@@ -43,6 +43,7 @@ import {
   MousePointer2,
   PanelsTopLeft,
   Plus,
+  RefreshCw,
   Save,
   ShieldCheck,
   Trash2,
@@ -55,6 +56,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useMemo,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -159,8 +161,7 @@ type AdminTab = {
 };
 
 type AdminEntityType =
-  | AdminCommentRecord["entityType"]
-  | AdminInteractionRecord["entityType"];
+  AdminCommentRecord["entityType"] | AdminInteractionRecord["entityType"];
 
 const blankPost: PostForm = {
   slug: "",
@@ -362,7 +363,51 @@ function SiteAdminDashboard({
     !isOwner && ownerOnlyAdminSections.has(initialTab)
       ? "overview"
       : initialTab;
-  const overview = useQuery(convexRefs.admin.overview, {});
+  const convex = useConvex();
+  const [overview, setOverview] = useState<AdminOverviewRecord>();
+  const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
+  const [overviewLoadedAt, setOverviewLoadedAt] = useState<number>();
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  useEffect(() => {
+    if (activeTab !== "overview") {
+      return;
+    }
+
+    let cancelled = false;
+    setOverviewLoading(true);
+    setOverviewError(null);
+    void convex
+      .query(convexRefs.admin.overview, {})
+      .then(
+        (snapshot) => {
+          if (cancelled) return;
+          setOverview(snapshot);
+          setOverviewLoadedAt(Date.now());
+        },
+        (error: unknown) => {
+          if (cancelled) return;
+          reportAppError(error, {
+            scope: "admin",
+            eventType: "admin_overview_snapshot_failed",
+            component: "AdminDashboard",
+            action: "admin:overview",
+            notify: false,
+          });
+          setOverviewError("Overview snapshot could not be loaded. Try again.");
+        },
+      )
+      .finally(() => {
+        if (!cancelled) {
+          setOverviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, convex, overviewRefreshKey]);
+  const refreshOverview = () => setOverviewRefreshKey((key) => key + 1);
   const forumOverview = useQuery(
     convexRefs.admin.forumOverview,
     activeTab === "forum" ? {} : "skip",
@@ -429,6 +474,10 @@ function SiteAdminDashboard({
         (left, right) => right.publishedAt - left.publishedAt,
       ),
     [posts],
+  );
+  const publishedPostCount = useMemo(
+    () => sortedPosts.filter((post) => post.status === "published").length,
+    [sortedPosts],
   );
   const activity = useMemo(
     () => adminInteractions ?? overview?.recentInteractions ?? [],
@@ -513,8 +562,8 @@ function SiteAdminDashboard({
         {
           id: "overview",
           label: "Overview",
-          note: "Command desk",
-          count: overview?.totals.openSystemLogs ?? 0,
+          note: "Sample snapshot",
+          count: overview?.sampleCounts.openSystemLogs ?? 0,
           icon: PanelsTopLeft,
         },
         {
@@ -532,7 +581,7 @@ function SiteAdminDashboard({
           id: "posts",
           label: "Posts",
           note: "Write archive",
-          count: overview?.totals.posts ?? sortedPosts.length,
+          count: posts?.length,
           icon: FileText,
         },
         {
@@ -559,45 +608,45 @@ function SiteAdminDashboard({
         {
           id: "analytics",
           label: "Analytics",
-          note: "Convex events",
-          count: overview?.totals.analyticsEventsSample ?? 0,
+          note: "Recent sample",
+          count: overview?.sampleCounts.analyticsEvents ?? 0,
           icon: BarChart3,
         },
         {
           id: "users",
           label: "Users",
-          note: "Roles",
-          count: overview?.totals.users ?? 0,
+          note: "Roles sample",
+          count: overview?.sampleCounts.users ?? 0,
           icon: UsersRound,
         },
         {
           id: "logs",
           label: "Logs",
-          note: "Errors",
-          count: overview?.totals.openSystemLogs ?? 0,
+          note: "Open sample",
+          count: overview?.sampleCounts.openSystemLogs ?? 0,
           icon: Activity,
         },
         {
           id: "newsletter",
           label: "Newsletter",
-          note: "Issues + subs",
-          count: overview?.totals.confirmedSubscribers ?? 0,
+          note: "Subscriber sample",
+          count: overview?.sampleCounts.confirmedSubscribers ?? 0,
           icon: Mail,
         },
         {
           id: "contact",
           label: "Contact",
-          note: "Inbound",
-          count: overview?.totals.openContactRequests ?? 0,
+          note: "Open sample",
+          count: overview?.sampleCounts.openContactRequests ?? 0,
           icon: Mail,
         },
         {
           id: "content",
           label: "Content",
-          note: "Pages + projects",
+          note: "Inventory sample",
           count:
-            (overview?.totals.sitePages ?? 0) +
-            (overview?.totals.portfolioProjects ?? 0),
+            (overview?.sampleCounts.sitePages ?? 0) +
+            (overview?.sampleCounts.portfolioProjects ?? 0),
           icon: Wrench,
         },
         {
@@ -629,7 +678,7 @@ function SiteAdminDashboard({
       forumOverview,
       isOwner,
       overview,
-      sortedPosts.length,
+      posts?.length,
     ],
   );
 
@@ -847,10 +896,14 @@ function SiteAdminDashboard({
           <AdminOverviewPanel
             activeApiKeys={activeApiKeys.length}
             overview={overview}
+            overviewError={overviewError}
+            overviewLoadedAt={overviewLoadedAt}
+            overviewLoading={overviewLoading}
             onCreatePost={() => {
               setForm(blankPost);
               navigateToTab("posts");
             }}
+            onRefresh={refreshOverview}
             tabs={tabs}
             onChange={navigateToTab}
           />
@@ -867,8 +920,9 @@ function SiteAdminDashboard({
                     Posts
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {overview?.totals.publishedPosts ?? 0} published /{" "}
-                    {overview?.totals.posts ?? sortedPosts.length} total
+                    {posts === undefined
+                      ? "Loading post counts…"
+                      : `${publishedPostCount} published / ${sortedPosts.length} total`}
                   </p>
                 </div>
                 <Button
@@ -894,8 +948,7 @@ function SiteAdminDashboard({
                     onChange={(event) =>
                       setPostStatusFilter(
                         event.target.value as
-                          | "all"
-                          | ConvexPostRecord["status"],
+                          "all" | ConvexPostRecord["status"],
                       )
                     }
                   >
@@ -1296,8 +1349,7 @@ function SiteAdminDashboard({
                   onChange={(event) =>
                     setCommentEntityFilter(
                       event.target.value as
-                        | "all"
-                        | AdminCommentRecord["entityType"],
+                        "all" | AdminCommentRecord["entityType"],
                     )
                   }
                 >
@@ -1313,8 +1365,7 @@ function SiteAdminDashboard({
                   onChange={(event) =>
                     setCommentStatusFilter(
                       event.target.value as
-                        | "all"
-                        | NonNullable<AdminCommentRecord["status"]>,
+                        "all" | NonNullable<AdminCommentRecord["status"]>,
                     )
                   }
                 >
@@ -1438,8 +1489,7 @@ function SiteAdminDashboard({
                   onChange={(event) =>
                     setInteractionEntityFilter(
                       event.target.value as
-                        | "all"
-                        | AdminInteractionRecord["entityType"],
+                        "all" | AdminInteractionRecord["entityType"],
                     )
                   }
                 >
@@ -1568,18 +1618,38 @@ function AdminCommandCenter({
 }: {
   overview: AdminOverviewRecord | undefined;
 }) {
-  const totals = overview?.totals;
+  const sampleCounts = overview?.sampleCounts;
   const rows = [
-    ["Posts", totals?.publishedPosts ?? 0, `${totals?.posts ?? 0} total`],
-    ["Users", totals?.users ?? 0, `${totals?.owners ?? 0} owner`],
+    [
+      "Posts",
+      sampleCounts?.publishedPosts ?? 0,
+      `${sampleCounts?.posts ?? 0} recent rows sampled`,
+    ],
+    [
+      "Users",
+      sampleCounts?.users ?? 0,
+      `${sampleCounts?.owners ?? 0} owner rows; max 100 per role`,
+    ],
     [
       "Newsletter",
-      totals?.confirmedSubscribers ?? 0,
-      `${totals?.newsletterSubscribers ?? 0} subscribers`,
+      sampleCounts?.confirmedSubscribers ?? 0,
+      `${sampleCounts?.newsletterSubscribers ?? 0} newest subscribers sampled`,
     ],
-    ["Analytics", totals?.analyticsEventsSample ?? 0, "recent events"],
-    ["Logs", totals?.openSystemLogs ?? 0, "open issues"],
-    ["Projects", totals?.portfolioProjects ?? 0, "portfolio rows"],
+    [
+      "Analytics",
+      sampleCounts?.analyticsEvents ?? 0,
+      "newest events sampled (max 100)",
+    ],
+    [
+      "Logs",
+      sampleCounts?.openSystemLogs ?? 0,
+      "newest open issues sampled (max 100)",
+    ],
+    [
+      "Projects",
+      sampleCounts?.portfolioProjects ?? 0,
+      "portfolio rows sampled (max 100)",
+    ],
   ] as const;
 
   return (
@@ -1700,22 +1770,31 @@ function AdminTabChrome({
 function AdminOverviewPanel({
   activeApiKeys,
   overview,
+  overviewError,
+  overviewLoadedAt,
+  overviewLoading,
   onCreatePost,
+  onRefresh,
   onChange,
   tabs,
 }: {
   activeApiKeys: number;
   overview: AdminOverviewRecord | undefined;
+  overviewError: string | null;
+  overviewLoadedAt: number | undefined;
+  overviewLoading: boolean;
   onCreatePost: () => void;
+  onRefresh: () => void;
   onChange: (tab: AdminTabId) => void;
   tabs: AdminTab[];
 }) {
-  const totals = overview?.totals;
+  const sampleCounts = overview?.sampleCounts;
   const healthRows = [
     {
       label: "Publishing",
-      status: (totals?.publishedPosts ?? 0) > 0 ? "Ready" : "Needs post",
-      note: `${totals?.publishedPosts ?? 0} published of ${totals?.posts ?? 0}`,
+      status:
+        (sampleCounts?.publishedPosts ?? 0) > 0 ? "In sample" : "Not in sample",
+      note: `${sampleCounts?.publishedPosts ?? 0} published among ${sampleCounts?.posts ?? 0} recent post rows`,
       tab: "posts" as const,
     },
     {
@@ -1740,19 +1819,42 @@ function AdminOverviewPanel({
     },
     {
       label: "System logs",
-      status: (totals?.openSystemLogs ?? 0) > 0 ? "Review" : "Clear",
+      status:
+        (sampleCounts?.openSystemLogs ?? 0) > 0 ? "Review" : "Clear in sample",
       note:
-        (totals?.openSystemLogs ?? 0) > 0
-          ? `${totals?.openSystemLogs ?? 0} open issue${
-              totals?.openSystemLogs === 1 ? "" : "s"
+        (sampleCounts?.openSystemLogs ?? 0) > 0
+          ? `${sampleCounts?.openSystemLogs ?? 0} open issue${
+              sampleCounts?.openSystemLogs === 1 ? "" : "s"
             }`
-          : "No open issues in the current sample",
+          : "No open issues in the current 100-row sample",
       tab: "logs" as const,
     },
   ] as const;
 
   return (
     <section>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-row-border py-3">
+        <div aria-live="polite" className="text-xs text-muted-foreground">
+          {overviewLoading
+            ? "Refreshing overview snapshot…"
+            : overviewLoadedAt !== undefined
+              ? `Snapshot refreshed ${formatDate(overviewLoadedAt)}`
+              : "Overview snapshot not loaded yet"}
+          {overviewError ? (
+            <span className="ml-2 text-destructive">{overviewError}</span>
+          ) : null}
+        </div>
+        <Button
+          disabled={overviewLoading}
+          onClick={onRefresh}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <RefreshCw />
+          {overviewLoading ? "Refreshing…" : "Refresh snapshot"}
+        </Button>
+      </div>
       <AdminCommandCenter overview={overview} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
         <section className="border-y border-row-border py-4">

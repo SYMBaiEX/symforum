@@ -3,12 +3,15 @@
 import { Agent } from "@convex-dev/agent";
 import { APICallError, type LanguageModel } from "ai";
 import { v } from "convex/values";
+import { z } from "zod";
+import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   runWithModelFallback,
   type OpenRouterRequestContext,
 } from "../lib/ai-model-routing";
+import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   AgentPublicationQualityError,
   assertAgentPublicationHygiene,
@@ -43,16 +46,23 @@ export const FORUM_REPLY_AGENT_MESSAGE_OPTIONS = {
   },
 } as const;
 
-type SukiReplyDecision =
-  | {
-      decision: "ignore";
-      reason: string;
-    }
-  | {
-      decision: "reply";
-      reason: string;
-      body: string;
-    };
+const sukiReplyDecisionSchema = z.discriminatedUnion("decision", [
+  z
+    .object({
+      decision: z.literal("ignore"),
+      reason: z.string().trim().min(1).max(160),
+    })
+    .strict(),
+  z
+    .object({
+      decision: z.literal("reply"),
+      reason: z.string().trim().min(1).max(160),
+      body: z.string().trim().min(20).max(6_000),
+    })
+    .strict(),
+]);
+
+type SukiReplyDecision = z.infer<typeof sukiReplyDecisionSchema>;
 
 type SukiReplyRunResult =
   | {
@@ -144,13 +154,6 @@ async function runReplySweepForAgent(
     },
   );
   if (!claim.claimed) {
-    await ctx.runMutation(internal.forum.recordForumReplySweepOutcome, {
-      agentSlug,
-      runDate,
-      runId: args.runId,
-      outcome: replySweepOutcomeForClaimReason(claim.reason),
-      detail: claim.reason,
-    });
     return { status: "skipped", reason: claim.reason };
   }
 
@@ -180,6 +183,7 @@ async function runReplySweepForAgent(
       ],
     } satisfies OpenRouterRequestContext;
     const generationStartedAt = Date.now();
+    const prompt = sukiReplyPrompt(claim.candidate, agentName);
     const generation = await runWithModelFallback(
       routingConfig,
       requestContext,
@@ -189,7 +193,10 @@ async function runReplySweepForAgent(
         feature: "forum-reply",
         agent: agentSlug,
         onAttempt: recordRouteAttempt,
+        attemptOffset: replySweepRouteAttemptOffset(attempt),
         totalTimeoutMs: 120_000,
+        estimatedInputTokens: estimatePromptInputTokens(prompt),
+        maxOutputTokens: 1_400,
         run: async (candidate, signal) => {
           const replyAgent = new Agent(components.agent, {
             name: agentName,
@@ -204,18 +211,19 @@ async function runReplySweepForAgent(
             ),
             ...FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
           });
-          const result = await replyAgent.generateText(
+          const result = await replyAgent.generateObject(
             ctx,
             { threadId: claim.conversationId },
             {
-              prompt: sukiReplyPrompt(claim.candidate, agentName),
+              prompt,
+              schema: sukiReplyDecisionSchema,
               maxOutputTokens: 1_400,
               ...modelGenerationSettings(candidate.provider, "reply"),
               providerOptions: candidate.providerOptions,
               abortSignal: signal,
             },
           );
-          const decision = parseSukiReplyDecision(result.text);
+          const decision = validateSukiReplyDecision(result.object);
           if (claim.candidate.authorIsAgent && decision.decision === "reply") {
             assertAiSourceReplyGrounding(
               decision.body,
@@ -229,9 +237,12 @@ async function runReplySweepForAgent(
     const { result, decision } = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: replyRunKey,
+      reservationKey: generation.route.reservationKey,
+      reservationModel: generation.route.reservationModel,
       agentSlug,
       stage: "reply",
-      model: result.response.modelId || generation.route.persistedModel,
+      model: generation.route.persistedModel,
+      servedModel: result.response.modelId,
       categorySlug: claim.candidate.categorySlug,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
@@ -241,18 +252,12 @@ async function runReplySweepForAgent(
       await ctx.runMutation(internal.forum.markSukiForumReplyIgnored, {
         agentSlug,
         runId: claim.runId,
+        runDate,
+        sourceKind: claim.candidate.sourceKind,
+        threadId: claim.candidate.threadId,
         reason: decision.reason,
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
-      });
-      await ctx.runMutation(internal.forum.recordForumReplySweepOutcome, {
-        agentSlug,
-        runDate,
-        runId: claim.runId,
-        sourceKind: claim.candidate.sourceKind,
-        threadId: claim.candidate.threadId,
-        outcome: "ignored",
-        detail: decision.reason,
       });
       return { status: "skipped", reason: decision.reason };
     }
@@ -269,25 +274,8 @@ async function runReplySweepForAgent(
       },
     );
     if (published.status === "ignored") {
-      await ctx.runMutation(internal.forum.recordForumReplySweepOutcome, {
-        agentSlug,
-        runDate,
-        runId: claim.runId,
-        sourceKind: claim.candidate.sourceKind,
-        threadId: claim.candidate.threadId,
-        outcome: "ignored",
-        detail: published.reason,
-      });
       return { status: "skipped", reason: published.reason };
     }
-    await ctx.runMutation(internal.forum.recordForumReplySweepOutcome, {
-      agentSlug,
-      runDate,
-      runId: claim.runId,
-      sourceKind: claim.candidate.sourceKind,
-      threadId: claim.candidate.threadId,
-      outcome: "replied",
-    });
     return {
       status: "replied",
       categorySlug: published.categorySlug,
@@ -299,16 +287,10 @@ async function runReplySweepForAgent(
     await ctx.runMutation(internal.forum.markSukiForumReplyFailed, {
       agentSlug,
       runId: claim.runId,
-      reason: message,
-    });
-    await ctx.runMutation(internal.forum.recordForumReplySweepOutcome, {
-      agentSlug,
       runDate,
-      runId: claim.runId,
       sourceKind: claim.candidate.sourceKind,
       threadId: claim.candidate.threadId,
-      outcome: "route-failed",
-      detail: message,
+      reason: message,
     });
     if (attempt < RETRY_DELAYS_MS.length && isRetryableSukiReplyError(error)) {
       if (agentSlug === "belle") {
@@ -340,59 +322,23 @@ async function runReplySweepForAgent(
   }
 }
 
-function replySweepOutcomeForClaimReason(reason: string) {
-  if (reason === "daily-limit") return "daily-limit" as const;
-  if (reason === "canary-blocked") return "canary-blocked" as const;
-  return "no-candidate" as const;
+export function replySweepRouteAttemptOffset(retryIndex: number) {
+  return (
+    Math.max(0, Math.floor(retryIndex)) * OPENROUTER_GENERATION_MODELS.length
+  );
 }
 
-export function parseSukiReplyDecision(output: string): SukiReplyDecision {
-  const repaired = repairedDecisionFields(output);
-  const decision = repaired.decision?.toLowerCase();
-  const reason = compactText(repaired.reason ?? "", 160);
-  if (decision !== "reply" && decision !== "ignore") {
-    throw new Error("Suki returned an invalid reply decision.");
-  }
-  if (!reason) {
-    throw new Error("Suki returned a reply decision without a reason.");
-  }
-  if (decision === "ignore") {
-    return { decision, reason };
-  }
-  const body = repaired.body?.replace(/\u0000/g, "").trim() ?? "";
+export function validateSukiReplyDecision(value: unknown): SukiReplyDecision {
+  const parsed = sukiReplyDecisionSchema.parse(value);
+  const reason = compactText(parsed.reason, 160);
+  if (parsed.decision === "ignore") return { decision: "ignore", reason };
+
+  const body = parsed.body.replace(/\u0000/g, "").trim();
   if (body.length < 20 || body.length > 6_000) {
     throw new Error("Suki returned an invalid forum reply body.");
   }
   assertAgentPublicationHygiene(body);
-  return { decision, reason, body };
-}
-
-/** Accepts the strict XML contract plus deterministic JSON emitted by weaker routes. */
-function repairedDecisionFields(output: string) {
-  const tagged = {
-    decision: tagValue(output, "decision"),
-    reason: tagValue(output, "reason"),
-    body: tagValue(output, "body"),
-  };
-  if (tagged.decision !== undefined) return tagged;
-  const candidate = output
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
-  try {
-    const value: unknown = JSON.parse(candidate);
-    if (value === null || typeof value !== "object" || Array.isArray(value))
-      return tagged;
-    const record = value as Record<string, unknown>;
-    return {
-      decision:
-        typeof record.decision === "string" ? record.decision : undefined,
-      reason: typeof record.reason === "string" ? record.reason : undefined,
-      body: typeof record.body === "string" ? record.body : undefined,
-    };
-  } catch {
-    return tagged;
-  }
+  return { decision: "reply", reason, body };
 }
 
 export function assertAiSourceReplyGrounding(body: string, sourceBody: string) {
@@ -527,14 +473,7 @@ Ignore spam, advertising, suspicious link drops, off-topic posts, repetitive pos
 
 If replying, enter mid-conversation and respond to one concrete point before adding a useful consequence, example, or next move. Write 60-350 useful words in natural forum style. Keep the space-pirate personality to one light touch at most; never call members a crew or sign off in character. Use supported BBCode when it improves scanning: [b], [i], [quote=name], [list][*]item[/list], [code], [note], [warning], [kbd], and [mark]. Do not use Markdown. Do not fabricate citations, links, benchmarks, commands, or personal experience.
 
-Return exactly one of these formats and nothing else:
-<decision>ignore</decision>
-<reason>short machine-readable reason</reason>
-
-or:
-<decision>reply</decision>
-<reason>short machine-readable reason</reason>
-<body>complete BBCode forum reply</body>`;
+Return one structured decision matching the supplied schema. Use "ignore" for a short machine-readable reason when no reply is warranted. Use "reply" only with a short machine-readable reason and the complete BBCode reply body.`;
 
 const BELLE_REPLY_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's warm, sharp neko correspondent.
 Your job is to improve reported-news and scene conversations, not to maximize reply count.
@@ -551,14 +490,7 @@ Ignore spam, promotion, suspicious links, off-topic content, hostile bait, react
 
 If replying, enter mid-conversation and address one specific observation before adding a consequence or precise follow-up. Write 60-300 useful words in natural forum style. Keep the neko personality to one subtle observational beat at most; no feline catchphrases or sign-off. Use [b], [i], [quote=name], [list][*]item[/list], [note], [warning], [kbd], or [mark] only when helpful. Do not use Markdown. Distinguish reporting from interpretation. Never fabricate links, quotes, numbers, commands, or personal experience.
 
-Return exactly one of these formats and nothing else:
-<decision>ignore</decision>
-<reason>short machine-readable reason</reason>
-
-or:
-<decision>reply</decision>
-<reason>short machine-readable reason</reason>
-<body>complete BBCode forum reply</body>`;
+Return one structured decision matching the supplied schema. Use "ignore" for a short machine-readable reason when no reply is warranted. Use "reply" only with a short machine-readable reason and the complete BBCode reply body.`;
 
 function replyInstructions(agentSlug: string) {
   if (agentSlug === "belle") return BELLE_REPLY_INSTRUCTIONS;
@@ -584,10 +516,6 @@ or:
 <decision>reply</decision>
 <reason>short machine-readable reason</reason>
 <body>complete BBCode forum reply</body>`;
-}
-
-function tagValue(output: string, tag: string) {
-  return output.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"))?.[1];
 }
 
 function forumDateForTimestamp(timestamp: number) {

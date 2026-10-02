@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { selectCurrentPublicMemoryEntries } from "./forumAgentMemory";
 import schema from "./schema";
@@ -125,6 +126,23 @@ describe("forum agent memory backfill", () => {
       }),
     ).resolves.toBeNull();
     await expect(
+      t.query(internal.forumAgentEditorialData.readThreadsForMemory, {
+        threadIds: [
+          ids.public,
+          ids.members,
+          ids.trusted,
+          ids.staff,
+          ids.nestedPublicThreadId,
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ title: "public thread" }),
+      null,
+      null,
+      null,
+      null,
+    ]);
+    await expect(
       t.query(internal.forumAgentEditorialData.readForumThreadsForBackfill, {}),
     ).resolves.toMatchObject({ threadIds: [ids.public] });
   });
@@ -146,6 +164,50 @@ describe("forum agent memory backfill", () => {
 });
 
 describe("forum agent memory retrieval", () => {
+  test("validates candidates in bounded batches and stops after enough public threads", async () => {
+    const entries = Array.from({ length: 12 }, (_, index) => ({
+      entryId: `entry-${index}`,
+      metadata: { threadId: `thread-${index}` },
+    }));
+    const visibleThreadId = entries[8]!.metadata.threadId as Id<"forumThreads">;
+    const readThreads = vi.fn(
+      async (threadIds: readonly Id<"forumThreads">[]) =>
+        threadIds.map((threadId) =>
+          threadId === visibleThreadId
+            ? {
+                threadId,
+                categorySlug: "public",
+                agentSlug: "suki",
+                title: "Current public thread",
+                body: "Current public body",
+              }
+            : null,
+        ),
+    );
+
+    await expect(
+      selectCurrentPublicMemoryEntries(
+        entries,
+        new Map([[entries[8]!.entryId, 0.8]]),
+        readThreads,
+        1,
+      ),
+    ).resolves.toEqual([
+      {
+        threadId: visibleThreadId,
+        categorySlug: "public",
+        agentSlug: "suki",
+        title: "Current public thread",
+        text: "Current public body",
+        score: 0.8,
+      },
+    ]);
+    expect(readThreads).toHaveBeenCalledTimes(2);
+    expect(
+      readThreads.mock.calls.map(([threadIds]) => threadIds.length),
+    ).toEqual([8, 4]);
+  });
+
   test("fails closed when an already-indexed thread becomes private, inactive, or inherits a private ancestor", async () => {
     const t = convexTest(schema, modules);
     const ids = await t.run(async (ctx) => {
@@ -206,15 +268,25 @@ describe("forum agent memory retrieval", () => {
       text: "Stale embedding body",
       metadata: { threadId: ids.threadId },
     };
-    const resolveCurrentThread = async (threadId: typeof ids.threadId) =>
-      await t.query(internal.forumAgentEditorialData.readThreadForMemory, {
-        threadId,
-      });
+    const resolveCurrentThreads = async (
+      threadIds: readonly Id<"forumThreads">[],
+    ) =>
+      await Promise.all(
+        threadIds.map(
+          async (threadId) =>
+            await t.query(
+              internal.forumAgentEditorialData.readThreadForMemory,
+              {
+                threadId,
+              },
+            ),
+        ),
+      );
     const searchCurrent = async () =>
       await selectCurrentPublicMemoryEntries(
         [candidate],
         new Map([[candidate.entryId, 0.9]]),
-        resolveCurrentThread,
+        resolveCurrentThreads,
       );
 
     await expect(searchCurrent()).resolves.toMatchObject([

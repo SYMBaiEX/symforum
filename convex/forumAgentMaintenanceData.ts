@@ -99,31 +99,34 @@ export const cleanupExpiredOperationalData = internalMutation({
         )
         .take(BATCH_SIZE),
     ]);
-    const [usageEvents, routeEvents, sourceUses, spendBuckets] =
-      await Promise.all([
-        ctx.db
-          .query("forumAgentUsageEvents")
-          .withIndex("by_createdAt", (q) =>
-            q.lt("createdAt", operationalCutoff),
-          )
-          .take(BATCH_SIZE),
-        ctx.db
-          .query("aiRouteEvents")
-          .withIndex("by_createdAt", (q) =>
-            q.lt("createdAt", operationalCutoff),
-          )
-          .take(BATCH_SIZE),
-        ctx.db
-          .query("forumAgentSourceUses")
-          .withIndex("by_usedAt", (q) => q.lt("usedAt", sourceUseCutoff))
-          .take(BATCH_SIZE),
-        ctx.db
-          .query("aiSpendBuckets")
-          .withIndex("by_updatedAt", (q) =>
-            q.lt("updatedAt", operationalCutoff),
-          )
-          .take(BATCH_SIZE),
-      ]);
+    const [
+      usageEvents,
+      routeEvents,
+      sourceUses,
+      spendBuckets,
+      modelCallReservations,
+    ] = await Promise.all([
+      ctx.db
+        .query("forumAgentUsageEvents")
+        .withIndex("by_createdAt", (q) => q.lt("createdAt", operationalCutoff))
+        .take(BATCH_SIZE),
+      ctx.db
+        .query("aiRouteEvents")
+        .withIndex("by_createdAt", (q) => q.lt("createdAt", operationalCutoff))
+        .take(BATCH_SIZE),
+      ctx.db
+        .query("forumAgentSourceUses")
+        .withIndex("by_usedAt", (q) => q.lt("usedAt", sourceUseCutoff))
+        .take(BATCH_SIZE),
+      ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_updatedAt", (q) => q.lt("updatedAt", operationalCutoff))
+        .take(BATCH_SIZE),
+      ctx.db
+        .query("aiModelCallReservations")
+        .withIndex("by_createdAt", (q) => q.lt("createdAt", operationalCutoff))
+        .take(BATCH_SIZE),
+    ]);
     const reservationGroups = await Promise.all(
       (["reserved", "published", "released"] as const).flatMap((status) => [
         ctx.db
@@ -161,6 +164,7 @@ export const cleanupExpiredOperationalData = internalMutation({
       ...routeEvents,
       ...sourceUses,
       ...spendBuckets,
+      ...modelCallReservations,
       ...reservations,
     ];
     for (const row of agentRuns) await ctx.db.delete("forumAgentRuns", row._id);
@@ -174,6 +178,8 @@ export const cleanupExpiredOperationalData = internalMutation({
       await ctx.db.delete("forumAgentSourceUses", row._id);
     for (const row of spendBuckets)
       await ctx.db.delete("aiSpendBuckets", row._id);
+    for (const row of modelCallReservations)
+      await ctx.db.delete("aiModelCallReservations", row._id);
     for (const row of [
       ...reservedSources,
       ...publishedSources,
@@ -212,6 +218,7 @@ export const cleanupExpiredOperationalData = internalMutation({
         routeEvents,
         sourceUses,
         spendBuckets,
+        modelCallReservations,
         ...reservationGroups,
       ].some((batch) => batch.length >= BATCH_SIZE);
     if (needsContinuation) {
@@ -226,7 +233,7 @@ export const cleanupExpiredOperationalData = internalMutation({
       deletedAgentRuns: agentRuns.length,
       deletedReplyRuns: replyRuns.length,
       deletedTelemetry: usageEvents.length + routeEvents.length,
-      deletedReservations: reservations.length,
+      deletedReservations: reservations.length + modelCallReservations.length,
       deletedSourceUses: sourceUses.length,
       deletedSpendBuckets: spendBuckets.length,
       continuing: needsContinuation,

@@ -1,6 +1,7 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { recordSystemLog, requestLogContext } from "@/lib/system-log-server";
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { createHmac } from "node:crypto";
 import {
   ToolLoopAgent,
   createAgentUIStreamResponse,
@@ -10,14 +11,21 @@ import {
 } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
-import { selectStreamingModel } from "@/lib/ai-model-routing";
+import {
+  ModelSpendBudgetExceededError,
+  openRouterSettlementRoute,
+  selectStreamingModel,
+} from "@/lib/ai-model-routing";
+import { estimatePromptInputTokens } from "@/lib/ai-model-costs";
 import {
   modelGenerationSettings,
   modelInstructions,
 } from "@/lib/openrouter-model-profile";
+import { ownerConsoleSettlementPayload } from "@/lib/ai-usage-settlement";
 import { after } from "next/server";
 import {
   OWNER_ADMIN_AI_STREAM_TIMEOUT,
+  OWNER_ADMIN_AI_MAX_OUTPUT_TOKENS,
   OWNER_ADMIN_AI_TELEMETRY,
   ownerAdminAiRuntimeContext,
 } from "@/lib/ai-telemetry";
@@ -52,6 +60,8 @@ export async function POST(request: Request) {
         agent: "owner-console",
       },
     );
+    const reservationsByStep = new Map<number, string>();
+    const stepStartedAt = new Map<number, number>();
     const agent = new ToolLoopAgent({
       model: routedModel.model,
       instructions: modelInstructions(
@@ -61,6 +71,7 @@ export async function POST(request: Request) {
           "You are the owner-only SYMBaiEX admin agent.",
           "You help operate a personal blog, Hacker News index, portfolio, comments, analytics, system logs, and newsletter platform.",
           "Use tools for platform facts. Do not claim live platform state unless a tool returned it.",
+          "Use newsletterState for routine subscriber, issue, and automation questions. Load newsletter editorial performance only when the owner specifically asks about newsletter quality or delivery/open/click/reply/save metrics.",
           "Mutating tools are available only for explicit owner requests in the current conversation. If the owner asks generally, inspect first and explain the proposed change before using a mutating tool.",
           "Keep answers concise, operational, and specific. Mention which platform area you inspected.",
           "Never reveal secrets, raw auth tokens, private keys, or sensitive environment values.",
@@ -68,6 +79,90 @@ export async function POST(request: Request) {
       ),
       tools: adminAgentTools(convex),
       stopWhen: isStepCount(8),
+      maxOutputTokens: OWNER_ADMIN_AI_MAX_OUTPUT_TOKENS,
+      onStepEnd: async ({ stepNumber, usage, response }) => {
+        const reservationKey = reservationsByStep.get(stepNumber);
+        const inputTokens = usage.inputTokens;
+        const outputTokens = usage.outputTokens;
+        if (
+          reservationKey === undefined ||
+          !Number.isSafeInteger(inputTokens) ||
+          (inputTokens ?? -1) < 0 ||
+          !Number.isSafeInteger(outputTokens) ||
+          (outputTokens ?? -1) < 0
+        ) {
+          // Keep the full reservation when the provider omits exact usage.
+          return;
+        }
+        try {
+          const settlementArgs = {
+            reservationKey,
+            runKey: `${correlationId}:step:${stepNumber}`,
+            inputTokens: inputTokens!,
+            outputTokens: outputTokens!,
+            durationMs: Math.max(
+              0,
+              Date.now() - (stepStartedAt.get(stepNumber) ?? Date.now()),
+            ),
+            servedRoute: openRouterSettlementRoute(response.modelId),
+            servedModel: response.modelId,
+          };
+          const settlementSecret =
+            process.env.AI_USAGE_SETTLEMENT_SECRET?.trim();
+          if (settlementSecret === undefined || settlementSecret.length < 32) {
+            console.warn("Owner AI usage settlement secret is unavailable", {
+              correlationId,
+              stepNumber,
+            });
+            return;
+          }
+          const settlementSignature = createHmac("sha256", settlementSecret)
+            .update(ownerConsoleSettlementPayload(settlementArgs))
+            .digest("hex");
+          const settlement = await convex.mutation(
+            convexRefs.admin.settleOwnerConsoleStep,
+            {
+              ...settlementArgs,
+              settlementSignature,
+            },
+          );
+          if (!settlement.settled) {
+            console.warn("Owner AI step usage settlement was rejected", {
+              correlationId,
+              stepNumber,
+            });
+            return;
+          }
+          reservationsByStep.delete(stepNumber);
+          stepStartedAt.delete(stepNumber);
+        } catch {
+          // Settlement is a reporting/budget reconciliation step. If the
+          // database is unavailable, the conservative reservation remains.
+          console.warn("Owner AI step usage settlement failed", {
+            correlationId,
+            stepNumber,
+          });
+        }
+      },
+      prepareStep: async ({ messages, stepNumber }) => {
+        const reservationKey = `${correlationId}:step:${stepNumber}:${crypto.randomUUID()}`;
+        const reservation = await convex.mutation(
+          convexRefs.admin.reserveOwnerConsoleStep,
+          {
+            reservationKey,
+            estimatedInputTokens: estimatePromptInputTokens(
+              JSON.stringify(messages),
+              8_000,
+            ),
+          },
+        );
+        if (!reservation.accepted) {
+          throw new ModelSpendBudgetExceededError(reservation.reason);
+        }
+        reservationsByStep.set(stepNumber, reservationKey);
+        stepStartedAt.set(stepNumber, Date.now());
+        return undefined;
+      },
       providerOptions: routedModel.providerOptions,
       runtimeContext: ownerAdminAiRuntimeContext(correlationId),
       telemetry: OWNER_ADMIN_AI_TELEMETRY,
@@ -79,6 +174,10 @@ export async function POST(request: Request) {
       uiMessages: messages,
       abortSignal: request.signal,
       timeout: OWNER_ADMIN_AI_STREAM_TIMEOUT,
+      onError: (error) =>
+        error instanceof ModelSpendBudgetExceededError
+          ? "The shared daily AI budget is exhausted. Try again after it resets."
+          : "The admin AI request could not be completed.",
     });
   } catch (error) {
     after(() =>
@@ -118,7 +217,7 @@ function adminAgentTools(convex: ConvexHttpClient) {
   return {
     platformOverview: tool({
       description:
-        "Read the admin platform overview: totals, recent comments, and recent interaction sample.",
+        "Read the admin platform overview: bounded sample counts, recent comments, and recent interactions.",
       inputSchema: z.object({}),
       execute: async () => convex.query(convexRefs.admin.overview, {}),
     }),
@@ -162,30 +261,29 @@ function adminAgentTools(convex: ConvexHttpClient) {
         "Read newsletter subscribers, issues, daily automation settings, recent runs, and recent send logs.",
       inputSchema: z.object({}),
       execute: async () => {
-        const [
-          subscribers,
-          issues,
-          dailySettings,
-          dailyRuns,
-          sendLogs,
-          editorialAnalytics,
-        ] = await Promise.all([
-          convex.query(convexRefs.admin.listNewsletterSubscribers, {}),
-          convex.query(convexRefs.admin.listNewsletterIssues, {}),
-          convex.query(convexRefs.admin.dailyNewsletterSettings, {}),
-          convex.query(convexRefs.admin.listDailyNewsletterRuns, {}),
-          convex.query(convexRefs.admin.listNewsletterSendLogs, {}),
-          convex.query(convexRefs.admin.newsletterEditorialAnalytics, {}),
-        ]);
+        const [subscribers, issues, dailySettings, dailyRuns, sendLogs] =
+          await Promise.all([
+            convex.query(convexRefs.admin.listNewsletterSubscribers, {}),
+            convex.query(convexRefs.admin.listNewsletterIssues, {}),
+            convex.query(convexRefs.admin.dailyNewsletterSettings, {}),
+            convex.query(convexRefs.admin.listDailyNewsletterRuns, {}),
+            convex.query(convexRefs.admin.listNewsletterSendLogs, {}),
+          ]);
         return {
           subscribers,
           issues,
           dailySettings,
           recentDailyRuns: dailyRuns.slice(0, 12),
           recentSendLogs: sendLogs.slice(0, 24),
-          editorialAnalytics: editorialAnalytics.slice(0, 20),
         };
       },
+    }),
+    newsletterEditorialPerformance: tool({
+      description:
+        "Read recent newsletter quality, delivery, open, click, reply, and story-save metrics. Call only when the owner specifically asks about newsletter performance or engagement; this is a separate, heavier report than routine newsletter state.",
+      inputSchema: z.object({}),
+      execute: async () =>
+        convex.query(convexRefs.admin.newsletterEditorialAnalytics, {}),
     }),
     queueWeeklyFieldNote: tool({
       description:

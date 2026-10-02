@@ -1268,6 +1268,17 @@ export type PublicNewsletterIssueSummaryRecord = Omit<
   sourceCount: number;
 };
 
+export type PublicNewsletterDestinationRecord = {
+  url: string;
+  eventType:
+    | "source_click"
+    | "discussion_click"
+    | "forum_click"
+    | "archive_click"
+    | "news_index_click";
+  hnItemId?: number;
+};
+
 export type NewsletterEditorialAnalyticsRecord = {
   issueId: string;
   slug: string;
@@ -1455,11 +1466,11 @@ export type GithubPortfolioSnapshotRecord = {
 
 export type AdminOverviewRecord = {
   user: AdminUserRecord;
-  totals: {
+  sampleCounts: {
     posts: number;
     publishedPosts: number;
-    commentsSample: number;
-    interactionsSample: number;
+    comments: number;
+    interactions: number;
     users: number;
     owners: number;
     admins: number;
@@ -1470,10 +1481,10 @@ export type AdminOverviewRecord = {
     portfolioProjects: number;
     sitePages: number;
     newsSnapshots: number;
-    contactRequestsSample: number;
+    contactRequests: number;
     openContactRequests: number;
     openSystemLogs: number;
-    analyticsEventsSample: number;
+    analyticsEvents: number;
   };
   recentComments: AdminCommentRecord[];
   recentInteractions: AdminInteractionRecord[];
@@ -1499,20 +1510,29 @@ export type AiTelemetrySnapshotRecord = {
     p95DurationMs: number;
     averageQuality: number;
     estimatedSpendUsd: number;
+    failedAttemptReserveUsd: number;
     revisionRate: number;
     averageRevisionGain: number;
+    revisionSamples: number;
+    revisionImprovementRate: number;
     averagePresentation: number;
+  };
+  costCoverage: {
+    unpricedRouteAttempts: number;
+    unpricedUsageEvents: number;
   };
   models: Array<{
     model: string;
     attempts: number;
     failures: number;
     fallbacks: number;
+    fallbackFailures: number;
     stages: number;
     inputTokens: number;
     outputTokens: number;
     durationMs: number;
     estimatedCostMicroUsd: number;
+    failedAttemptReserveMicroUsd: number;
   }>;
   agents: Array<{
     agentSlug: string;
@@ -1526,6 +1546,9 @@ export type AiTelemetrySnapshotRecord = {
     outputTokens: number;
     averageQuality: number;
     qualitySamples: number;
+    averageRevisionGain: number;
+    revisionSamples: number;
+    revisionImprovementRate: number;
     estimatedCostMicroUsd: number;
   }>;
   stages: Array<{
@@ -1544,6 +1567,7 @@ export type AiTelemetrySnapshotRecord = {
     inputTokens: number;
     outputTokens: number;
     estimatedCostMicroUsd: number;
+    failedAttemptReserveMicroUsd: number;
   }>;
   recent: Array<{
     kind: "route" | "publication" | "reply" | "newsletter" | "usage";
@@ -1552,9 +1576,12 @@ export type AiTelemetrySnapshotRecord = {
     agentSlug?: string;
     stage: string;
     model?: string;
+    requestedModel?: string;
+    servedModel?: string;
     status: string;
     detail?: string;
     durationMs?: number;
+    estimatedCostMicroUsd?: number;
     inputTokens?: number;
     outputTokens?: number;
   }>;
@@ -1705,6 +1732,30 @@ export const convexRefs = {
     >("evidenceAdmin:backfillEvidence"),
   },
   admin: {
+    reserveOwnerConsoleStep: makeFunctionReference<
+      "mutation",
+      { reservationKey: string; estimatedInputTokens: number },
+      | { accepted: false; reason: string }
+      | {
+          accepted: true;
+          reservationKey: string;
+          estimatedMicroUsd: number;
+        }
+    >("adminAiBudget:reserveOwnerConsoleStep"),
+    settleOwnerConsoleStep: makeFunctionReference<
+      "mutation",
+      {
+        reservationKey: string;
+        runKey: string;
+        inputTokens: number;
+        outputTokens: number;
+        durationMs: number;
+        servedRoute: "free" | "paid";
+        servedModel: string;
+        settlementSignature: string;
+      },
+      { settled: boolean }
+    >("adminAiBudget:settleOwnerConsoleStep"),
     viewer: makeFunctionReference<
       "query",
       Record<string, never>,
@@ -3360,12 +3411,7 @@ export const convexRefs = {
       { code: string },
       {
         verified: boolean;
-        status:
-          | "verified"
-          | "invalid"
-          | "expired"
-          | "not_ready"
-          | "locked";
+        status: "verified" | "invalid" | "expired" | "not_ready" | "locked";
         attemptsRemaining?: number;
       }
     >("accountEmailVerification:verify"),
@@ -3384,17 +3430,16 @@ export const convexRefs = {
     resolvePublicDestination: makeFunctionReference<
       "query",
       { slug: string; target: string },
-      {
-        url: string;
-        eventType:
-          | "source_click"
-          | "discussion_click"
-          | "forum_click"
-          | "archive_click"
-          | "news_index_click";
-        hnItemId?: number;
-      } | null
+      PublicNewsletterDestinationRecord | null
     >("newsletter:resolvePublicDestination"),
+    resolveAndRecordPublicEngagement: makeFunctionReference<
+      "mutation",
+      { slug: string; target: string; visitorKey?: string },
+      {
+        destination: PublicNewsletterDestinationRecord | null;
+        recorded: boolean;
+      }
+    >("newsletter:resolveAndRecordPublicEngagement"),
     recordPublicEngagement: makeFunctionReference<
       "mutation",
       {
