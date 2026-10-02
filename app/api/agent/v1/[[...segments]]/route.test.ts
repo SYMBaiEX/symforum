@@ -230,6 +230,43 @@ describe("agent evidence REST endpoint", () => {
     expect(invalid.status).toBe(400);
   });
 
+  test("starts bounded read relays concurrently while preserving input order", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
+    const pending: Array<(response: Response) => void> = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      () => new Promise<Response>((resolve) => pending.push(resolve)),
+    );
+    const responsePromise = POST(
+      new Request("https://www.symbaiex.com/api/agent/v1/batch", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer agent-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          operations: [
+            { id: "status", path: "/v1/status" },
+            { id: "sources", path: "/v1/sources?limit=2" },
+          ],
+        }),
+      }),
+      context(["batch"]),
+    );
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    pending[1]!(Response.json([{ sourceKey: "example" }]));
+    pending[0]!(Response.json({ ok: true }));
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      results: [
+        { id: "status", status: 200, body: { ok: true } },
+        { id: "sources", status: 200, body: [{ sourceKey: "example" }] },
+      ],
+    });
+  });
+
   test("streams artifacts through the authenticated first-party relay", async () => {
     vi.stubEnv("CONVEX_SITE_URL", "https://strong-bee-384.convex.site");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
