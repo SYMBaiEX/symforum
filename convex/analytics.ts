@@ -1,4 +1,5 @@
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
+import { ANALYTICS_DEDUPE_WINDOW_MS } from "../lib/analytics-attempt-throttle";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
@@ -23,7 +24,7 @@ const PATH_LIMIT = 220;
 const SHORT_LIMIT = 180;
 const USER_AGENT_LIMIT = 420;
 const METADATA_LIMIT = 2_000;
-const DEDUPE_WINDOW_MS = 1_500;
+const DEDUPE_WINDOW_MS = ANALYTICS_DEDUPE_WINDOW_MS;
 const ADMIN_EVENT_LIMIT = 2_500;
 const ANALYTICS_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 const ANALYTICS_CLEANUP_BATCH = 200;
@@ -35,7 +36,7 @@ const publicAnalyticsRateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 30,
     // All actors share one global budget; caller-controlled account, visitor,
-    // and session IDs must not split it. Six shards preserve the same 30/min
+    // and session IDs must not split it. Three shards preserve the same 30/min
     // ceiling while reducing contention on the limiter component.
     shards: 3,
   },
