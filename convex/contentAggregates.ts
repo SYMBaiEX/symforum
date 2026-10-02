@@ -100,26 +100,136 @@ export async function contentSummary(
   entityType: "post" | "hnStory",
   entityId: string,
 ) {
-  const namespace = entityNamespace({ entityType, entityId });
-  const [interactionReady, commentReady] = await Promise.all([
-    migrationComplete(ctx, INTERACTION_MIGRATION_KEY),
-    migrationComplete(ctx, COMMENT_MIGRATION_KEY),
+  const readiness = await contentAggregateReadiness(ctx);
+  return await contentSummaryWithReadiness(
+    ctx,
+    entityType,
+    entityId,
+    readiness,
+  );
+}
+
+/** Reuse migration readiness when a single query summarizes several entities. */
+export async function contentSummaries(
+  ctx: QueryCtx,
+  entityType: "post" | "hnStory",
+  entityIds: readonly string[],
+) {
+  const uniqueEntityIds = [...new Set(entityIds)];
+  if (uniqueEntityIds.length === 0) return new Map();
+  const readiness = await contentAggregateReadiness(ctx);
+  const aggregateQueries = uniqueEntityIds.map((entityId) => ({
+    namespace: entityNamespace({ entityType, entityId }),
+  }));
+  const [interactionCounts, comments] = await Promise.all([
+    readiness.interactionReady
+      ? Promise.all([
+          interactionScores.sumBatch(ctx, aggregateQueries),
+          interactionSaves.sumBatch(ctx, aggregateQueries),
+        ]).then(([scores, saves]) =>
+          uniqueEntityIds.map((_, index) => ({
+            score: scores[index] ?? 0,
+            saves: saves[index] ?? 0,
+          })),
+        )
+      : Promise.all(
+          uniqueEntityIds.map(async (entityId) => {
+            const [score, saves] = await legacyInteractions(
+              ctx,
+              entityType,
+              entityId,
+            );
+            return { score, saves };
+          }),
+        ),
+    readiness.commentReady
+      ? commentCounts.sumBatch(ctx, aggregateQueries)
+      : Promise.all(
+          uniqueEntityIds.map((entityId) =>
+            legacyComments(ctx, entityType, entityId),
+          ),
+        ),
   ]);
-  const [score, saves] = interactionReady
+  return new Map(
+    uniqueEntityIds.map((entityId, index) => [
+      entityId,
+      {
+        score: interactionCounts[index]?.score ?? 0,
+        saves: interactionCounts[index]?.saves ?? 0,
+        comments: comments[index] ?? 0,
+      },
+    ]),
+  );
+}
+
+async function contentSummaryWithReadiness(
+  ctx: QueryCtx,
+  entityType: "post" | "hnStory",
+  entityId: string,
+  readiness: { interactionReady: boolean; commentReady: boolean },
+) {
+  const namespace = entityNamespace({ entityType, entityId });
+  const [score, saves] = readiness.interactionReady
     ? await Promise.all([
         interactionScores.sum(ctx, { namespace }),
         interactionSaves.sum(ctx, { namespace }),
       ])
     : await legacyInteractions(ctx, entityType, entityId);
-  const comments = commentReady
+  const comments = readiness.commentReady
     ? await commentCounts.sum(ctx, { namespace })
     : await legacyComments(ctx, entityType, entityId);
   return { score, saves, comments };
 }
 
+async function contentAggregateReadiness(ctx: QueryCtx) {
+  const [interactionReady, commentReady] = await Promise.all([
+    migrationComplete(ctx, INTERACTION_MIGRATION_KEY),
+    migrationComplete(ctx, COMMENT_MIGRATION_KEY),
+  ]);
+  return { interactionReady, commentReady };
+}
+
+/** Read multiple save counts through the existing aggregate when backfilled. */
+export async function interactionSaveCounts(
+  ctx: QueryCtx,
+  entityType: "hnStory",
+  entityIds: readonly string[],
+) {
+  const uniqueEntityIds = [...new Set(entityIds)];
+  if (uniqueEntityIds.length === 0) return new Map<string, number>();
+
+  const aggregateReady = await migrationComplete(
+    ctx,
+    INTERACTION_MIGRATION_KEY,
+  );
+  const counts = aggregateReady
+    ? await interactionSaves.sumBatch(
+        ctx,
+        uniqueEntityIds.map((entityId) => ({
+          namespace: entityNamespace({ entityType, entityId }),
+        })),
+      )
+    : await Promise.all(
+        uniqueEntityIds.map(async (entityId) => {
+          const rows = await ctx.db
+            .query("interactions")
+            .withIndex("by_entityType_and_entityId", (q) =>
+              q.eq("entityType", entityType).eq("entityId", entityId),
+            )
+            .take(1_000);
+          return rows.filter((row) => row.saved).length;
+        }),
+      );
+  return new Map(
+    uniqueEntityIds.map((entityId, index) => [entityId, counts[index] ?? 0]),
+  );
+}
+
 export const backfillContentAggregates = internalMutation({
   args: {
-    phase: v.optional(v.union(v.literal("interactions"), v.literal("comments"))),
+    phase: v.optional(
+      v.union(v.literal("interactions"), v.literal("comments")),
+    ),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
@@ -186,17 +296,25 @@ export const backfillContentAggregates = internalMutation({
       await ctx.db.patch("optimizationMigrations", state._id, fields);
     }
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.contentAggregates.backfillContentAggregates, {
-        phase,
-        limit,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.contentAggregates.backfillContentAggregates,
+        {
+          phase,
+          limit,
+        },
+      );
     } else if (phase === "interactions") {
       // Move to the next phase without requiring a human to notice the first
       // phase completed. Existing callers may still invoke either phase.
-      await ctx.scheduler.runAfter(0, internal.contentAggregates.backfillContentAggregates, {
-        phase: "comments",
-        limit,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.contentAggregates.backfillContentAggregates,
+        {
+          phase: "comments",
+          limit,
+        },
+      );
     }
     return {
       phase,
@@ -212,7 +330,9 @@ async function nextBackfillPhase(ctx: MutationCtx) {
     .query("optimizationMigrations")
     .withIndex("by_key", (q) => q.eq("key", INTERACTION_MIGRATION_KEY))
     .unique();
-  return interactions?.status === "completed" ? ("comments" as const) : ("interactions" as const);
+  return interactions?.status === "completed"
+    ? ("comments" as const)
+    : ("interactions" as const);
 }
 
 async function migrationComplete(ctx: QueryCtx, key: string) {

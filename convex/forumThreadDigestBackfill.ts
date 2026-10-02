@@ -1,9 +1,12 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx } from "./_generated/server";
-
-const BACKFILL_KEY = "forum-thread-digests-v2";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
+import { FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY } from "./forumSearchProjectionConstants";
 
 function digestValues(thread: Doc<"forumThreads">) {
   return {
@@ -51,6 +54,18 @@ async function upsertDigest(ctx: MutationCtx, thread: Doc<"forumThreads">) {
 export const run = internalMutation({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ processed: number; done: boolean }> => {
+    let completionState: Doc<"forumAgentMaintenanceState"> | null | undefined;
+    if (args.cursor === undefined) {
+      completionState = await ctx.db
+        .query("forumAgentMaintenanceState")
+        .withIndex("by_key", (q) =>
+          q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
+        )
+        .unique();
+      if (completionState !== null && completionState.completedAt > 0)
+        return { processed: 0, done: true };
+    }
+
     const page = await ctx.db
       .query("forumThreads")
       .order("desc")
@@ -62,20 +77,50 @@ export const run = internalMutation({
       });
       return { processed: page.page.length, done: false };
     }
-    const existing = await ctx.db
-      .query("forumAgentMaintenanceState")
-      .withIndex("by_key", (q) => q.eq("key", BACKFILL_KEY))
-      .unique();
+    const existing =
+      completionState !== undefined
+        ? completionState
+        : await ctx.db
+            .query("forumAgentMaintenanceState")
+            .withIndex("by_key", (q) =>
+              q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
+            )
+            .unique();
     const now = Date.now();
     if (existing === null) {
       await ctx.db.insert("forumAgentMaintenanceState", {
-        key: BACKFILL_KEY,
+        key: FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY,
         completedAt: now,
         updatedAt: now,
       });
     } else {
-      await ctx.db.patch("forumAgentMaintenanceState", existing._id, { completedAt: now, updatedAt: now });
+      await ctx.db.patch("forumAgentMaintenanceState", existing._id, {
+        completedAt: now,
+        updatedAt: now,
+      });
     }
     return { processed: page.page.length, done: true };
+  },
+});
+
+/** Read-only operator check for the background digest backfill. */
+export const status = internalQuery({
+  args: {},
+  returns: v.object({
+    complete: v.boolean(),
+    completedAt: v.union(v.number(), v.null()),
+  }),
+  handler: async (ctx) => {
+    const state = await ctx.db
+      .query("forumAgentMaintenanceState")
+      .withIndex("by_key", (q) =>
+        q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
+      )
+      .unique();
+    const completedAt = state?.completedAt ?? null;
+    return {
+      complete: completedAt !== null && completedAt > 0,
+      completedAt,
+    };
   },
 });
