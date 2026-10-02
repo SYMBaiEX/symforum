@@ -206,6 +206,36 @@ export const readIndexedSnapshot = internalQuery({
   },
 });
 
+/** Read only snapshot metadata when orchestration needs no story payload. */
+export const readIndexedSnapshotSummary = internalQuery({
+  args: {
+    snapshotDate: v.optional(v.string()),
+    completedAfter: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const snapshot = args.snapshotDate
+      ? await snapshotForDate(ctx, args.snapshotDate)
+      : await latestIndexedSnapshot(ctx);
+    if (
+      snapshot === null ||
+      snapshot.status !== "complete" ||
+      snapshot.storyCount <= 0 ||
+      (args.completedAfter !== undefined &&
+        (snapshot.completedAt === undefined ||
+          snapshot.completedAt < args.completedAfter))
+    ) {
+      return null;
+    }
+    return {
+      snapshotDate: snapshot.snapshotDate,
+      storyCount: snapshot.storyCount,
+      ...(snapshot.completedAt === undefined
+        ? {}
+        : { completedAt: snapshot.completedAt }),
+    };
+  },
+});
+
 export const readRecentStoryCorpus = internalQuery({
   args: {
     days: v.optional(v.number()),
@@ -289,16 +319,16 @@ export const getStory = query({
     hnItemId: v.number(),
   },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
+    const story = await ctx.db
       .query("hnStories")
-      .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
-      .take(50);
-    if (rows.length === 0) {
+      .withIndex("by_hnItemId_and_fetchedAt", (q) =>
+        q.eq("hnItemId", args.hnItemId),
+      )
+      .order("desc")
+      .first();
+    if (story === null) {
       return null;
     }
-    const story = rows.sort(
-      (left, right) => right.fetchedAt - left.fetchedAt,
-    )[0];
     return await withPlatformStats(ctx, story);
   },
 });
@@ -306,6 +336,7 @@ export const getStory = query({
 export const refreshTopStories = internalAction({
   args: {
     limit: v.optional(v.number()),
+    scheduleForumDigest: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const date = snapshotDate();
@@ -368,13 +399,15 @@ export const refreshTopStories = internalAction({
         startedAt,
         stories: cleanStories,
       });
-      await ctx.scheduler.runAfter(
-        60_000,
-        internal.belleForumAgent.runDailyHackerNewsDigest,
-        {
-          snapshotDate: date,
-        },
-      );
+      if (args.scheduleForumDigest !== false) {
+        await ctx.scheduler.runAfter(
+          60_000,
+          internal.belleForumAgent.runDailyHackerNewsDigest,
+          {
+            snapshotDate: date,
+          },
+        );
+      }
       return { snapshotDate: date, storyCount: cleanStories.length };
     } catch (error) {
       await ctx.runMutation(markSnapshotFailedRef, {
@@ -531,9 +564,11 @@ export const storeSnapshot = internalMutation({
     }
     for (const story of args.stories) {
       const storyId = await ctx.db.insert("hnStories", story);
-      const inserted = await ctx.db.get("hnStories", storyId);
-      if (inserted !== null)
-        await syncNewsStoryUniversalSearchProjection(ctx, inserted);
+      await syncNewsStoryUniversalSearchProjection(
+        ctx,
+        { ...story, _id: storyId },
+        { snapshotIsComplete: true },
+      );
     }
     const retainedIds = new Set(args.stories.map((story) => story.hnItemId));
     for (const hnItemId of new Set(current.map((story) => story.hnItemId))) {
@@ -614,11 +649,9 @@ export const reconcileStoryProjection = internalMutation({
         .first();
       if (snapshot?.status === "complete" && snapshot.storyCount > 0) {
         // Replace metadata from the removed snapshot with surviving public data.
-        await deleteUniversalSearchProjection(
-          ctx,
-          "news_story",
-          String(args.hnItemId),
-        );
+        // The sync helper updates an existing row only when its values differ.
+        // Deleting first would create an unnecessary delete+insert pair and
+        // contend with concurrent snapshot refreshes for the same story.
         await syncNewsStoryUniversalSearchProjection(ctx, story);
         return null;
       }

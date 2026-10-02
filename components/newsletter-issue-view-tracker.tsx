@@ -2,6 +2,10 @@
 
 import { convexRefs } from "@/lib/convex-refs";
 import { getBrowserStorage } from "@/lib/browser-storage";
+import {
+  claimNewsletterViewAttempt,
+  releaseNewsletterViewAttempt,
+} from "@/lib/newsletter-view-throttle";
 import { useMutation } from "convex/react";
 import { useEffect } from "react";
 
@@ -12,6 +16,9 @@ export function NewsletterIssueViewTracker({ slug }: { slug: string }) {
 
   useEffect(() => {
     const storage = getBrowserStorage("localStorage");
+    const attemptedAt = Date.now();
+    if (!claimNewsletterViewAttempt(storage, slug, attemptedAt)) return;
+
     let visitorKey: string | null = null;
     try {
       visitorKey = storage?.getItem(VISITOR_KEY) ?? null;
@@ -26,7 +33,9 @@ export function NewsletterIssueViewTracker({ slug }: { slug: string }) {
       slug,
       eventType: "archive_view",
       visitorKey,
-    }).catch(() => undefined);
+    }).catch(() => {
+      releaseNewsletterViewAttempt(storage, slug, attemptedAt);
+    });
   }, [record, slug]);
 
   return null;

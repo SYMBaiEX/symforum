@@ -1,7 +1,7 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
   env,
@@ -15,7 +15,9 @@ import {
 } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
 import type { EditorialNewsletterPayload } from "./newsletterPayload";
+import type { ReusableDailyDigestStory } from "./newsDigestTypes";
 import { upsertNewsletterIssueDigest } from "./newsletterDigests";
+import { readNewsletterSettings } from "./newsletterSettings";
 
 type DailyRunStart =
   | {
@@ -38,25 +40,24 @@ type EditorialGenerationResult = {
   topStoryIds: number[];
   inputTokens?: number;
   outputTokens?: number;
-};
-
-type IndexedNewsSnapshot = {
-  snapshot: Doc<"newsSnapshots"> | null;
-  stories: Doc<"hnStories">[];
+  articleSnapshots: import("./sukiForumAgent").ArticleSnapshot[];
+  reusableDigestStories?: ReusableDailyDigestStory[];
+  reusableDigestSnapshotCompletedAt?: number;
 };
 
 const DEFAULT_TIME_ZONE = "America/Chicago";
 const DEFAULT_SEND_TIME_LOCAL = "07:15";
 const DEFAULT_MAX_INDEXED_ARTICLES = 40;
 const DEFAULT_NEWSLETTER_STORIES = 8;
+const DAILY_NEWS_SNAPSHOT_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_AUTOMATED_DAILY_ATTEMPTS = 3;
 const AUTOMATED_RETRY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
-const readIndexedSnapshotRef = makeFunctionReference<
+const readIndexedSnapshotSummaryRef = makeFunctionReference<
   "query",
-  { snapshotDate?: string; limit?: number },
-  IndexedNewsSnapshot
->("news:readIndexedSnapshot");
+  { snapshotDate?: string; completedAfter?: number },
+  { snapshotDate: string; storyCount: number; completedAt?: number } | null
+>("news:readIndexedSnapshotSummary");
 
 const getSettingsRef = makeFunctionReference<
   "query",
@@ -321,7 +322,12 @@ export const checkDailyNewsletterSchedule = internalAction({
 export const readDailyScheduleState = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, args): Promise<DailyScheduleState> => {
-    const rows = await ctx.db.query("newsletterSettings").take(100);
+    const rows = await readNewsletterSettings(ctx, [
+      "dailyNewsletter.timeZone",
+      "dailyNewsletter.enabled",
+      "dailyNewsletter.testMode",
+      "dailyNewsletter.sendTimeLocal",
+    ]);
     const settings = new Map(rows.map((row) => [row.key, row.value]));
     const timeZone = normalizeTimeZone(
       settings.get("dailyNewsletter.timeZone") ?? DEFAULT_TIME_ZONE,
@@ -447,43 +453,64 @@ export const runDailyNewsletter = internalAction({
     }
 
     try {
-      let indexed: IndexedNewsSnapshot | null = null;
       const currentRunDate = dateInTimeZone(startedAt, config.timeZone);
+      let snapshotDate: string | undefined;
 
       if (runDate !== currentRunDate) {
-        indexed = await ctx.runQuery(readIndexedSnapshotRef, {
+        const indexed = await ctx.runQuery(readIndexedSnapshotSummaryRef, {
           snapshotDate: runDate,
-          limit: config.maxIndexedArticles,
         });
+        snapshotDate = indexed?.snapshotDate;
       }
 
+      // The scheduled HN refresh runs before the newsletter. Reuse its same-day
+      // snapshot only for non-forced cron runs and only inside this freshness
+      // window; manual/test runs and stale/missing snapshots still refresh.
       if (
-        indexed === null ||
-        indexed.snapshot === null ||
-        indexed.stories.length === 0
+        runDate === currentRunDate &&
+        mode === "cron" &&
+        !(args.force ?? false)
       ) {
+        const recentSnapshot = await ctx.runQuery(
+          readIndexedSnapshotSummaryRef,
+          {
+            snapshotDate: runDate,
+            completedAfter: startedAt - DAILY_NEWS_SNAPSHOT_MAX_AGE_MS,
+          },
+        );
+        snapshotDate = recentSnapshot?.snapshotDate;
+      }
+
+      if (snapshotDate === undefined) {
         const refreshed: { snapshotDate: string; storyCount: number } =
           await ctx.runAction(internal.news.refreshTopStories, {
             limit: config.maxIndexedArticles,
+            // Belle runs below with the exact article snapshots generated for
+            // this edition, so don't enqueue a second snapshot-only digest.
+            scheduleForumDigest: false,
           });
-        indexed = await ctx.runQuery(readIndexedSnapshotRef, {
-          snapshotDate: refreshed.snapshotDate,
-          limit: config.maxIndexedArticles,
-        });
-      }
-
-      if (indexed.snapshot === null || indexed.stories.length === 0) {
-        throw new Error("No indexed Hacker News stories were available");
+        snapshotDate = refreshed.snapshotDate;
       }
 
       const generated = await ctx.runAction(generateDailySignalRef, {
         runDate,
-        snapshotDate: indexed.snapshot.snapshotDate,
+        snapshotDate,
         siteUrl: config.siteUrl,
       });
       const forum = await ctx.runAction(
         internal.belleForumAgent.runDailyHackerNewsDigest,
-        { snapshotDate: indexed.snapshot.snapshotDate },
+        {
+          snapshotDate,
+          reusableArticleSnapshots: generated.articleSnapshots,
+          ...(generated.reusableDigestStories === undefined ||
+          generated.reusableDigestSnapshotCompletedAt === undefined
+            ? {}
+            : {
+                reusableDigestStories: generated.reusableDigestStories,
+                reusableDigestSnapshotCompletedAt:
+                  generated.reusableDigestSnapshotCompletedAt,
+              }),
+        },
       );
       const payload = generated.payload;
       if (forum.status === "published") {
@@ -494,7 +521,7 @@ export const runDailyNewsletter = internalAction({
         runDate,
         slug: `daily-signal-${runDate}`,
         edition: "daily-signal",
-        snapshotDate: indexed.snapshot.snapshotDate,
+        snapshotDate,
         subject: generated.subject,
         previewText: generated.previewText,
         payloadJson: JSON.stringify(payload),
@@ -517,7 +544,7 @@ export const runDailyNewsletter = internalAction({
           runId: start.runId,
           issueId: issue.issueId,
           runDate,
-          snapshotDate: indexed.snapshot.snapshotDate,
+          snapshotDate,
           storyCount: generated.storyCount,
           topStoryIds: generated.topStoryIds,
           reason: config.reviewRequired ? "review-required" : "send-disabled",
@@ -531,7 +558,7 @@ export const runDailyNewsletter = internalAction({
         runId: start.runId,
         issueId: issue.issueId,
         runDate,
-        snapshotDate: indexed.snapshot.snapshotDate,
+        snapshotDate,
         storyCount: generated.storyCount,
         topStoryIds: generated.topStoryIds,
         sent: true,
@@ -588,7 +615,10 @@ export const runWeeklyFieldNote = internalAction({
       });
       const forum = await ctx.runAction(
         internal.belleForumAgent.runDailyHackerNewsDigest,
-        { snapshotDate: generated.payload.snapshotDate },
+        {
+          snapshotDate: generated.payload.snapshotDate,
+          reusableArticleSnapshots: generated.articleSnapshots,
+        },
       );
       if (forum.status === "published") {
         generated.payload.discussion.forumUrl = `${config.siteUrl}/forum/${forum.categorySlug}/${forum.threadSlug}`;

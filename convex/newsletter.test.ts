@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
+import aggregateTest from "@convex-dev/aggregate/test";
+import migrationsTest from "@convex-dev/migrations/test";
+import type { EmailId } from "@convex-dev/resend";
 import { describe, expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
@@ -13,7 +17,11 @@ const modules = {
 };
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  aggregateTest.register(t, "newsletterMetrics");
+  migrationsTest.register(t);
+  return t;
 }
 
 function editorialBody() {
@@ -99,6 +107,32 @@ async function insertSentIssue(t: ReturnType<typeof setup>) {
 }
 
 describe("newsletter email link origin", () => {
+  test("loads only distinct requested newsletter settings by key", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 25; index += 1) {
+        await ctx.db.insert("newsletterSettings", {
+          key: `newsletter.setting.${index}`,
+          value: String(index),
+          updatedAt: index,
+        });
+      }
+    });
+
+    const settings = await t.query(internal.newsletter.getSettings, {
+      keys: [
+        "newsletter.setting.18",
+        "newsletter.setting.2",
+        "newsletter.setting.18",
+      ],
+    });
+
+    expect(settings).toEqual([
+      { key: "newsletter.setting.18", value: "18" },
+      { key: "newsletter.setting.2", value: "2" },
+    ]);
+  });
+
   test("uses the configured newsletter origin instead of a caller-controlled origin", () => {
     const trusted = trustedNewsletterSiteUrl(
       "https://news.symbaiex.com/path-that-must-not-be-in-links",
@@ -256,6 +290,46 @@ describe("newsletter public engagement projections", () => {
     });
   });
 
+  test("resolves and records a redirect from one validated issue snapshot", async () => {
+    const t = setup();
+    const issueId = await insertSentIssue(t);
+    const args = {
+      slug: "routing-test",
+      target: "source-42",
+      visitorKey: "redirect-visitor",
+    };
+
+    await expect(
+      t.mutation(api.newsletter.resolveAndRecordPublicEngagement, args),
+    ).resolves.toEqual({
+      destination: {
+        url: "https://example.com/source",
+        eventType: "source_click",
+        hnItemId: 42,
+      },
+      recorded: true,
+    });
+    await expect(
+      t.mutation(api.newsletter.resolveAndRecordPublicEngagement, args),
+    ).resolves.toEqual({
+      destination: {
+        url: "https://example.com/source",
+        eventType: "source_click",
+        hnItemId: 42,
+      },
+      recorded: false,
+    });
+    await t.run(async (ctx) => {
+      const events = await ctx.db
+        .query("newsletterEngagements")
+        .withIndex("by_issue_event_visitor_story_created", (q) =>
+          q.eq("issueId", issueId).eq("eventType", "source_click"),
+        )
+        .take(3);
+      expect(events).toHaveLength(1);
+    });
+  });
+
   test("deduplicates by the exact visitor and story beyond noisy events", async () => {
     const now = 1_800_000_000_000;
     vi.useFakeTimers({ now });
@@ -318,5 +392,341 @@ describe("newsletter public engagement projections", () => {
       }),
     ).resolves.toEqual({ recorded: false });
     vi.useRealTimers();
+  });
+
+  test("does not spend shared rate-limit capacity on a duplicate event", async () => {
+    const now = 1_800_000_000_000;
+    vi.useFakeTimers({ now });
+    try {
+      const t = setup();
+      const issueId = await insertSentIssue(t);
+      await t.run(async (ctx) => {
+        await ctx.db.insert("newsletterEngagements", {
+          issueId,
+          eventType: "archive_view",
+          visitorKey: "existing-reader",
+          createdAt: now - 5_000,
+        });
+      });
+
+      let exhausted = false;
+      for (let index = 0; index < 200; index += 1) {
+        const result = await t.mutation(api.newsletter.recordPublicEngagement, {
+          slug: "routing-test",
+          eventType: "archive_view",
+          visitorKey: `reader-${index}`,
+        });
+        if ("reason" in result && result.reason === "RATE_LIMITED") {
+          exhausted = true;
+          break;
+        }
+        expect(result).toEqual({ recorded: true });
+      }
+      expect(exhausted).toBe(true);
+
+      await expect(
+        t.mutation(api.newsletter.recordPublicEngagement, {
+          slug: "routing-test",
+          eventType: "archive_view",
+          visitorKey: "existing-reader",
+        }),
+      ).resolves.toEqual({ recorded: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps a concurrent engagement burst within the shared global capacity", async () => {
+    const now = 1_800_000_000_000;
+    vi.useFakeTimers({ now });
+    try {
+      const t = setup();
+      const issueId = await insertSentIssue(t);
+      const results = await Promise.all(
+        Array.from({ length: 240 }, (_, index) =>
+          t.mutation(api.newsletter.recordPublicEngagement, {
+            slug: "routing-test",
+            eventType: "archive_view",
+            visitorKey: `burst-reader-${index}`,
+          }),
+        ),
+      );
+      const recorded = results.filter((result) => result.recorded).length;
+      const rateLimited = results.filter(
+        (result) => "reason" in result && result.reason === "RATE_LIMITED",
+      ).length;
+      const persisted = await t.run(async (ctx) =>
+        ctx.db
+          .query("newsletterEngagements")
+          .withIndex("by_issue_event_visitor_story_created", (q) =>
+            q.eq("issueId", issueId).eq("eventType", "archive_view"),
+          )
+          .take(240),
+      );
+
+      // Sharding may reject early when sampled buckets are exhausted, but must
+      // never admit more than the configured total token-bucket capacity.
+      expect(recorded).toBeLessThanOrEqual(120);
+      expect(rateLimited).toBe(240 - recorded);
+      expect(persisted).toHaveLength(recorded);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("newsletter provider event storage", () => {
+  test("stores normalized fields without retaining the raw provider payload", async () => {
+    const t = setup();
+    const callback = {
+      id: "component-email-opened-1" as EmailId,
+      event: {
+        type: "email.opened" as const,
+        created_at: "2026-10-02T12:00:00.000Z",
+        data: {
+          created_at: "2026-10-02T12:00:00.000Z",
+          email_id: "provider-email-opened-1",
+          from: "SYMBaiEX <newsletter@symbaiex.com>",
+          to: "reader@example.com",
+          subject: "Daily signal",
+          open: {
+            ipAddress: "203.0.113.7",
+            timestamp: "2026-10-02T12:00:00.000Z",
+            userAgent: "Example Mail Client",
+          },
+        },
+      },
+    };
+
+    await t.mutation(internal.newsletter.handleEmailEvent, callback);
+
+    const events = await t.run(
+      async (ctx) => await ctx.db.query("newsletterEvents").collect(),
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      provider: "resend",
+      eventId: "component-email-opened-1:email.opened:2026-10-02T12:00:00.000Z",
+      eventType: "email.opened",
+      email: "reader@example.com",
+      resendEmailId: "provider-email-opened-1",
+    });
+    expect(events[0]).not.toHaveProperty("metadataJson");
+    expect(JSON.stringify(events[0])).not.toContain("203.0.113.7");
+    expect(JSON.stringify(events[0])).not.toContain("Example Mail Client");
+  });
+
+  test("uses a known broadcast issue instead of probing contact notifications", async () => {
+    const t = setup();
+    const componentEmailId = "shared-component-email-id";
+    const { issueId, contactRequestId } = await t.run(async (ctx) => {
+      const issueId = await ctx.db.insert("newsletterIssues", {
+        slug: "broadcast-event",
+        subject: "Broadcast event",
+        previewText: "Broadcast event test",
+        body: "{}",
+        status: "sent",
+        resendBroadcastId: "broadcast-event-1",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const contactRequestId = await ctx.db.insert("contactRequests", {
+        name: "Person",
+        email: "person@example.com",
+        emailNormalized: "person@example.com",
+        subject: "Question",
+        description: "A sufficiently detailed contact request.",
+        status: "new",
+        resendEmailId: componentEmailId,
+        emailDeliveryStatus: "queued",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return { issueId, contactRequestId };
+    });
+    const callback = {
+      id: componentEmailId as EmailId,
+      event: {
+        type: "email.opened" as const,
+        created_at: "2026-10-02T12:00:00.000Z",
+        data: {
+          created_at: "2026-10-02T12:00:00.000Z",
+          broadcast_id: "broadcast-event-1",
+          email_id: "provider-broadcast-email-1",
+          from: "SYMBaiEX <newsletter@symbaiex.com>",
+          to: "reader@example.com",
+          subject: "Broadcast event",
+          open: {
+            ipAddress: "203.0.113.8",
+            timestamp: "2026-10-02T12:00:00.000Z",
+            userAgent: "Example Mail Client",
+          },
+        },
+      },
+    };
+
+    await t.mutation(internal.newsletter.handleEmailEvent, callback);
+
+    await t.run(async (ctx) => {
+      const events = await ctx.db.query("newsletterEvents").collect();
+      const contactEvents = await ctx.db.query("contactEmailEvents").collect();
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ issueId, eventType: "email.opened" });
+      expect(contactEvents).toHaveLength(0);
+      expect(
+        await ctx.db.get("contactRequests", contactRequestId),
+      ).toMatchObject({ emailDeliveryStatus: "queued" });
+    });
+  });
+});
+
+describe("newsletter editorial analytics query fan-out", () => {
+  test("skips impossible draft metrics while retaining failed-send metrics", async () => {
+    const t = setup();
+    const ownerId = await t.run(
+      async (ctx) =>
+        await ctx.db.insert("users", {
+          name: "Owner",
+          username: "analytics-owner",
+          usernameNormalized: "analytics-owner",
+          role: "owner",
+        }),
+    );
+    const issueIds = await t.run(async (ctx) => {
+      const draftIssueId = await ctx.db.insert("newsletterIssues", {
+        slug: "analytics-draft",
+        subject: "Analytics draft",
+        previewText: "Draft",
+        body: "{}",
+        status: "draft",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const scheduledIssueId = await ctx.db.insert("newsletterIssues", {
+        slug: "analytics-scheduled",
+        subject: "Analytics scheduled",
+        previewText: "Scheduled",
+        body: "{}",
+        status: "scheduled",
+        createdAt: 2,
+        updatedAt: 2,
+      });
+      const cancelledIssueId = await ctx.db.insert("newsletterIssues", {
+        slug: "analytics-cancelled",
+        subject: "Analytics cancelled",
+        previewText: "Cancelled",
+        body: "{}",
+        status: "cancelled",
+        createdAt: 3,
+        updatedAt: 3,
+      });
+      const failedIssueId = await ctx.db.insert("newsletterIssues", {
+        slug: "analytics-failed",
+        subject: "Analytics failed send",
+        previewText: "Failed after provider attempt",
+        body: "{}",
+        status: "failed",
+        resendBroadcastId: "analytics-broadcast",
+        createdAt: 4,
+        updatedAt: 4,
+      });
+      await ctx.db.insert("newsletterEvents", {
+        provider: "resend",
+        eventId: "failed-send-delivery-event",
+        eventType: "email.delivered",
+        issueId: failedIssueId,
+        receivedAt: 3,
+      });
+      await ctx.db.insert("newsletterEngagements", {
+        issueId: failedIssueId,
+        eventType: "archive_view",
+        visitorKey: "reader",
+        createdAt: 4,
+      });
+      return {
+        draftIssueId,
+        scheduledIssueId,
+        cancelledIssueId,
+        failedIssueId,
+      };
+    });
+
+    const recordOpenedEvent = async (id: string) =>
+      await t.mutation(internal.newsletter.handleEmailEvent, {
+        id: id as EmailId,
+        event: {
+          type: "email.opened" as const,
+          created_at: `2026-10-02T12:00:${id.endsWith("2") ? "02" : "01"}.000Z`,
+          data: {
+            created_at: "2026-10-02T12:00:01.000Z",
+            email_id: `provider-${id}`,
+            broadcast_id: "analytics-broadcast",
+            from: "SYMBaiEX <newsletter@symbaiex.com>",
+            to: "reader@example.com",
+            subject: "Analytics issue",
+            open: {
+              ipAddress: "203.0.113.9",
+              timestamp: "2026-10-02T12:00:01.000Z",
+              userAgent: "Example Mail Client",
+            },
+          },
+        },
+      });
+
+    // This event is written through the new aggregate before backfill. The
+    // migration must recognize it rather than count it a second time.
+    await recordOpenedEvent("analytics-pre-backfill-open-1");
+
+    const admin = t.withIdentity({ subject: ownerId, name: "Owner" });
+    const rows = await admin.query(api.newsletter.adminEditorialAnalytics, {});
+
+    for (const [issueId, status] of [
+      [issueIds.draftIssueId, "draft"],
+      [issueIds.scheduledIssueId, "scheduled"],
+      [issueIds.cancelledIssueId, "cancelled"],
+    ] as const) {
+      expect(rows.find((row) => row.issueId === issueId)).toMatchObject({
+        status,
+        delivered: 0,
+        archiveViews: 0,
+      });
+    }
+    expect(
+      rows.find((row) => row.issueId === issueIds.failedIssueId),
+    ).toMatchObject({
+      status: "failed",
+      delivered: 1,
+      opened: 1,
+      archiveViews: 1,
+    });
+
+    await t.mutation(internal.migrations.backfillNewsletterEventMetrics, {});
+    await t.mutation(
+      internal.migrations.backfillNewsletterEngagementMetrics,
+      {},
+    );
+    await expect(
+      admin.query(api.newsletter.adminEditorialAnalytics, {}),
+    ).resolves.toEqual(rows);
+
+    await recordOpenedEvent("analytics-post-backfill-open-2");
+    const routedIssueId = await insertSentIssue(t);
+    await t.mutation(api.newsletter.recordPublicEngagement, {
+      slug: "routing-test",
+      eventType: "source_click",
+      hnItemId: 42,
+      visitorKey: "analytics-after-backfill",
+    });
+
+    const aggregatedRows = await admin.query(
+      api.newsletter.adminEditorialAnalytics,
+      {},
+    );
+    expect(
+      aggregatedRows.find((row) => row.issueId === issueIds.failedIssueId),
+    ).toMatchObject({ opened: 2, delivered: 1, archiveViews: 1 });
+    expect(
+      aggregatedRows.find((row) => row.issueId === routedIssueId),
+    ).toMatchObject({ sourceClicks: 1, clicked: 1 });
   });
 });

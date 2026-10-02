@@ -24,14 +24,39 @@ describe("getNewsPageData", () => {
 
   test("uses a bounded live fallback when the indexed timeline is empty", async () => {
     const fallback = [{ hnItemId: 2, title: "Live story" }] as never;
+    const emptyTimeline = {
+      snapshot: null,
+      snapshots: [],
+      stories: [],
+    } as never;
     const getFallback = vi.fn(async () => fallback);
 
     await expect(
       getNewsPageData(12, {
-        getTimeline: async () => null,
+        getTimeline: async () => emptyTimeline,
         getFallback,
       }),
-    ).resolves.toEqual({ initialTimeline: null, initialStories: fallback });
+    ).resolves.toEqual({
+      initialTimeline: emptyTimeline,
+      initialStories: fallback,
+    });
     expect(getFallback).toHaveBeenCalledWith(12);
+  });
+
+  test("keeps the empty timeline when the live fallback is unavailable", async () => {
+    const emptyTimeline = {
+      snapshot: null,
+      snapshots: [],
+      stories: [],
+    } as never;
+
+    await expect(
+      getNewsPageData(12, {
+        getTimeline: async () => emptyTimeline,
+        getFallback: async () => {
+          throw new Error("HN unavailable");
+        },
+      }),
+    ).resolves.toEqual({ initialTimeline: emptyTimeline, initialStories: [] });
   });
 });

@@ -20,7 +20,7 @@ import {
 } from "@/convex/newsletterPayload";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { CalendarClock, Send, TestTube2 } from "lucide-react";
 import {
   useEffect,
@@ -74,10 +74,6 @@ export function AdminNewsletter() {
   const dailySettings = useQuery(convexRefs.admin.dailyNewsletterSettings, {});
   const dailyRuns = useQuery(convexRefs.admin.listDailyNewsletterRuns, {});
   const dailySendLogs = useQuery(convexRefs.admin.listNewsletterSendLogs, {});
-  const editorialAnalytics = useQuery(
-    convexRefs.admin.newsletterEditorialAnalytics,
-    {},
-  );
   const upsertIssue = useMutation(convexRefs.admin.upsertNewsletterIssue);
   const sendTest = useMutation(convexRefs.admin.sendNewsletterIssueTest);
   const sendNow = useMutation(convexRefs.admin.sendNewsletterIssueNow);
@@ -411,7 +407,7 @@ export function AdminNewsletter() {
         value={dailyForm}
         onChange={setDailyForm}
       />
-      <EditorialAnalyticsPanel rows={editorialAnalytics ?? []} />
+      <LazyEditorialAnalyticsPanel />
       <section className="mt-6 grid gap-6 xl:grid-cols-12">
         <div className="xl:col-span-4">
           <div className="rounded-xl border bg-background p-4 sm:p-5">
@@ -676,9 +672,79 @@ export function AdminNewsletter() {
   );
 }
 
+function LazyEditorialAnalyticsPanel() {
+  const convex = useConvex();
+  const [rows, setRows] = useState<NewsletterEditorialAnalyticsRecord[] | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+
+  async function loadSnapshot() {
+    if (loading) return;
+
+    setLoading(true);
+    try {
+      setRows(
+        await convex.query(convexRefs.admin.newsletterEditorialAnalytics, {}),
+      );
+    } catch (error) {
+      reportAppError(error, {
+        scope: "admin-newsletter",
+        eventType: "analytics_load_failed",
+        component: "LazyEditorialAnalyticsPanel",
+        action: "newsletter:adminEditorialAnalytics",
+        notify: false,
+      });
+      toast.error("Could not load newsletter analytics");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (rows === null) {
+    return (
+      <section className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-4 sm:p-5">
+        <div>
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            Editorial performance
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Load a snapshot of delivery and reader metrics when you need it.
+          </p>
+          {loading ? (
+            <div className="mt-2">
+              <StatusLine>Loading editorial analytics…</StatusLine>
+            </div>
+          ) : null}
+        </div>
+        <Button
+          disabled={loading}
+          onClick={() => void loadSnapshot()}
+          size="sm"
+          variant="outline"
+        >
+          {loading ? "Loading analytics…" : "Load performance snapshot"}
+        </Button>
+      </section>
+    );
+  }
+
+  return (
+    <EditorialAnalyticsPanel
+      loading={loading}
+      onRefresh={() => void loadSnapshot()}
+      rows={rows}
+    />
+  );
+}
+
 function EditorialAnalyticsPanel({
+  loading,
+  onRefresh,
   rows,
 }: {
+  loading: boolean;
+  onRefresh: () => void;
   rows: NewsletterEditorialAnalyticsRecord[];
 }) {
   const sent = rows.filter((row) => row.status === "sent");
@@ -700,8 +766,17 @@ function EditorialAnalyticsPanel({
         </div>
         <p className="max-w-xl text-xs leading-5 text-muted-foreground">
           Opens are provider-reported and can be incomplete. On-site clicks,
-          archive reads, and forum replies are first-party signals.
+          archive reads, and forum replies are first-party signals. This is a
+          snapshot; refresh it when you want updated metrics.
         </p>
+        <Button
+          disabled={loading}
+          onClick={onRefresh}
+          size="sm"
+          variant="outline"
+        >
+          {loading ? "Refreshing…" : "Refresh snapshot"}
+        </Button>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
         <MetricTile label="Delivered" value={delivered} />
@@ -732,7 +807,11 @@ function EditorialAnalyticsPanel({
             <AnalyticsFact label="Saves" value={row.saves} />
           </div>
         ))}
-        {rows.length === 0 ? (
+        {loading ? (
+          <div className="py-5">
+            <StatusLine>Loading editorial analytics…</StatusLine>
+          </div>
+        ) : rows.length === 0 ? (
           <div className="py-5">
             <StatusLine>No editorial analytics yet</StatusLine>
           </div>

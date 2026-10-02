@@ -19,9 +19,189 @@ function setup() {
   return convexTest(schema, modules);
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("news search projection refresh", () => {
+  test("reads fresh snapshot metadata without returning story rows", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("newsSnapshots", {
+        snapshotDate: "2026-10-02",
+        status: "complete",
+        startedAt: 1_000,
+        completedAt: 2_000,
+        storyCount: 2,
+      });
+      await ctx.db.insert("hnStories", {
+        hnItemId: 41,
+        snapshotDate: "2026-10-02",
+        rank: 1,
+        title: "A story that orchestration does not need to load",
+        text: "x".repeat(20_000),
+        fetchedAt: 2_000,
+      });
+    });
+
+    await expect(
+      t.query(internal.news.readIndexedSnapshotSummary, {
+        snapshotDate: "2026-10-02",
+        completedAfter: 1_500,
+      }),
+    ).resolves.toEqual({
+      snapshotDate: "2026-10-02",
+      storyCount: 2,
+      completedAt: 2_000,
+    });
+    await expect(
+      t.query(internal.news.readIndexedSnapshotSummary, {
+        snapshotDate: "2026-10-02",
+        completedAfter: 2_001,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  test("does not reuse incomplete or empty snapshot metadata", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("newsSnapshots", {
+        snapshotDate: "2026-10-02",
+        status: "running",
+        startedAt: 1_000,
+        storyCount: 5,
+      });
+      await ctx.db.insert("newsSnapshots", {
+        snapshotDate: "2026-10-01",
+        status: "complete",
+        startedAt: 1_000,
+        completedAt: 2_000,
+        storyCount: 0,
+      });
+    });
+
+    await expect(
+      t.query(internal.news.readIndexedSnapshotSummary, {
+        snapshotDate: "2026-10-02",
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      t.query(internal.news.readIndexedSnapshotSummary, {
+        snapshotDate: "2026-10-01",
+      }),
+    ).resolves.toBeNull();
+  });
+
+  test.each([
+    { scheduleForumDigest: undefined, expectedJobs: 1 },
+    { scheduleForumDigest: false, expectedJobs: 0 },
+  ])(
+    "schedules the standalone digest only when requested (%s)",
+    async ({ scheduleForumDigest, expectedJobs }) => {
+      const t = setup();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input).endsWith("/topstories.json")) {
+            return new Response(JSON.stringify([42]), { status: 200 });
+          }
+          return new Response(
+            JSON.stringify({
+              id: 42,
+              title: "Bounded snapshot story",
+              url: "https://example.com/story",
+            }),
+            { status: 200 },
+          );
+        }),
+      );
+
+      if (scheduleForumDigest === undefined) {
+        await t.action(internal.news.refreshTopStories, { limit: 1 });
+      } else {
+        await t.action(internal.news.refreshTopStories, {
+          limit: 1,
+          scheduleForumDigest,
+        });
+      }
+
+      const digestJobs = await t.run(async (ctx) =>
+        (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+          (job) => job.name === "belleForumAgent:runDailyHackerNewsDigest",
+        ),
+      );
+      expect(digestJobs).toHaveLength(expectedJobs);
+    },
+  );
+
+  test("uses each inserted story ID in its search projection", async () => {
+    const t = setup();
+    await t.mutation(internal.news.storeSnapshot, {
+      snapshotDate: "2026-09-22",
+      startedAt: 1,
+      stories: [
+        {
+          hnItemId: 42,
+          snapshotDate: "2026-09-22",
+          rank: 1,
+          title: "Inserted signal",
+          fetchedAt: 2,
+        },
+      ],
+    });
+
+    const { story, projection } = await t.run(async (ctx) => ({
+      story: await ctx.db
+        .query("hnStories")
+        .withIndex("by_hnItemId", (q) => q.eq("hnItemId", 42))
+        .unique(),
+      projection: await ctx.db
+        .query("universalSearchProjections")
+        .withIndex("by_recordKey", (q) => q.eq("recordKey", "news_story:42"))
+        .unique(),
+    }));
+
+    expect(story).not.toBeNull();
+    expect(projection).toMatchObject({
+      newsStoryId: story?._id,
+      newsSnapshotDate: "2026-09-22",
+      title: "Inserted signal",
+      updatedAt: 2,
+    });
+  });
+
+  test("gets the newest fetched story version without scanning old snapshots", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 55; index++) {
+        await ctx.db.insert("hnStories", {
+          hnItemId: 42,
+          snapshotDate: `snapshot-${index}`,
+          rank: 1,
+          title: `Story version ${index}`,
+          fetchedAt: index + 1,
+        });
+      }
+      // A later commit can contain an older fetch when refreshes overlap.
+      await ctx.db.insert("hnStories", {
+        hnItemId: 42,
+        snapshotDate: "late-commit",
+        rank: 1,
+        title: "Stale late commit",
+        fetchedAt: 2,
+      });
+    });
+
+    const story = await t.query(api.news.getStory, { hnItemId: 42 });
+
+    expect(story).toMatchObject({
+      hnItemId: 42,
+      title: "Story version 54",
+      fetchedAt: 55,
+    });
+  });
+
   test("hides a removed story before cleanup while its snapshot remains complete", async () => {
     vi.useFakeTimers();
     const t = setup();
@@ -156,18 +336,25 @@ describe("news search projection refresh", () => {
         stories: [{ hnItemId: 42, snapshotDate, rank: 1, title, fetchedAt }],
       });
     }
+    const projectionBeforeInvalidation = await t.run((ctx) =>
+      ctx.db
+        .query("universalSearchProjections")
+        .withIndex("by_recordKey", (q) => q.eq("recordKey", "news_story:42"))
+        .unique(),
+    );
+    expect(projectionBeforeInvalidation).not.toBeNull();
     await t.mutation(internal.news.markSnapshotStarted, {
       snapshotDate: "2026-09-22",
       startedAt: 5,
     });
     await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-    expect(
-      await t.run((ctx) =>
-        ctx.db.query("universalSearchProjections").collect(),
-      ),
-    ).toMatchObject([
+    const projections = await t.run((ctx) =>
+      ctx.db.query("universalSearchProjections").collect(),
+    );
+    expect(projections).toMatchObject([
       { title: "Surviving signal", newsSnapshotDate: "2026-09-21" },
     ]);
+    expect(projections[0]?._id).toBe(projectionBeforeInvalidation?._id);
   });
 
   test("removes a dropped item when no public snapshot still contains it", async () => {
