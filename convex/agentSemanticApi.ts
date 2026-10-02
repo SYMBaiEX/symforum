@@ -4,6 +4,7 @@ import {
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
   isPublicEvidenceEntity,
+  publicEvidenceDocumentIdForVersion,
 } from "./evidenceVisibility";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -439,17 +440,14 @@ export const prepare = internalMutation({
                       : await ctx.db.get("evidenceClaimCitations", id);
                   if (citation === null || citation.claimId !== claim._id)
                     return null;
-                  const version = await ctx.db.get(
-                    "evidenceDocumentVersions",
+                  const documentId = await publicEvidenceDocumentIdForVersion(
+                    ctx,
                     citation.documentVersionId,
                   );
                   const document =
-                    version === null
+                    documentId === null
                       ? null
-                      : await ctx.db.get(
-                          "evidenceDocuments",
-                          version.documentId,
-                        );
+                      : await ctx.db.get("evidenceDocuments", documentId);
                   if (!(await isPublicEvidenceDocument(ctx, document)))
                     return null;
                 }

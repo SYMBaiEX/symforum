@@ -11,12 +11,33 @@ import {
   isEvidencePublicationEpochCurrent,
 } from "./evidencePublicationEpoch";
 
+const workflowTest = vi.hoisted(() => ({
+  start: vi.fn().mockResolvedValue("workflow-id"),
+}));
+
+vi.mock("@convex-dev/workflow", () => ({
+  WorkflowManager: class {
+    constructor(_component: unknown, _options?: unknown) {}
+
+    define() {
+      return { handler: (handler: unknown) => handler };
+    }
+
+    start(...args: unknown[]) {
+      return workflowTest.start(...args);
+    }
+  },
+}));
+
 const modules = {
   ...import.meta.glob("./**/*.ts"),
   ...import.meta.glob("./**/*.tsx"),
 };
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  workflowTest.start.mockClear();
+});
 const sync = makeFunctionReference<
   "action",
   Record<string, never>,
@@ -986,6 +1007,15 @@ describe("first-party research evidence", () => {
       };
     });
     expect(before.document?.visibility).toBe("public");
+    const initialDigest = await t.run(async (ctx) =>
+      ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_documentId", (q) =>
+          q.eq("documentId", before.document!._id),
+        )
+        .unique(),
+    );
+    expect(initialDigest?.visibility).toBe("public");
 
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", seeded.parentCategoryId, {
@@ -996,6 +1026,7 @@ describe("first-party research evidence", () => {
       internal.evidenceFirstParty.requestHistoricalReconciliation,
       {},
     );
+    workflowTest.start.mockClear();
     await t.action(sync, {});
     await t.run(async (ctx) => {
       const document = await ctx.db.get(
@@ -1003,6 +1034,13 @@ describe("first-party research evidence", () => {
         before.document!._id,
       );
       expect(document?.visibility).toBe("private");
+      const digest = await ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_documentId", (q) =>
+          q.eq("documentId", before.document!._id),
+        )
+        .unique();
+      expect(digest?.visibility).toBe("private");
       expect(
         (await ctx.db.query("evidenceClaims").collect())
           .filter((claim) => claim.claimKey.includes(String(seeded.threadId)))
@@ -1018,6 +1056,10 @@ describe("first-party research evidence", () => {
     expect(
       publicChanges.some((event) => event.summary.includes("visibility-cycle")),
     ).toBe(false);
+    expect(workflowTest.start).toHaveBeenCalledTimes(1);
+    expect(workflowTest.start.mock.calls[0]?.[2]).toEqual({
+      documentId: before.document!._id,
+    });
 
     await t.run(async (ctx) => {
       await ctx.db.patch("forumCategories", seeded.parentCategoryId, {
@@ -1034,6 +1076,13 @@ describe("first-party research evidence", () => {
         (await ctx.db.get("evidenceDocuments", before.document!._id))
           ?.visibility,
       ).toBe("public");
+      const digest = await ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_documentId", (q) =>
+          q.eq("documentId", before.document!._id),
+        )
+        .unique();
+      expect(digest?.visibility).toBe("public");
       expect(
         (await ctx.db.query("evidenceClaims").collect())
           .filter((claim) => claim.claimKey.includes(String(seeded.threadId)))

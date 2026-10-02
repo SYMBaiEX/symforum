@@ -2,10 +2,29 @@
 
 import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import schema from "./schema";
 import { deriveEvidence, parseKevPayload } from "./evidenceIngestion";
+import { ensureEvidenceVersionExportDigest } from "./evidenceVersionExportDigest";
+
+const workflowTest = vi.hoisted(() => ({
+  start: vi.fn().mockResolvedValue("workflow-id"),
+}));
+
+vi.mock("@convex-dev/workflow", () => ({
+  WorkflowManager: class {
+    constructor(_component: unknown, _options?: unknown) {}
+
+    define() {
+      return { handler: (handler: unknown) => handler };
+    }
+
+    start(...args: unknown[]) {
+      return workflowTest.start(...args);
+    }
+  },
+}));
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -353,6 +372,58 @@ describe("durable evidence graph", () => {
       documentId: first.documentId,
     });
     await t.run(async (ctx) => {
+      const documentDigest = await ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_documentId", (q) => q.eq("documentId", first.documentId))
+        .unique();
+      expect(documentDigest).toMatchObject({
+        documentId: first.documentId,
+        currentVersionId: second.versionId,
+        title: "September release",
+      });
+      expect(documentDigest).not.toHaveProperty("searchText");
+      const firstDigestBeforeBackfill = await ctx.db
+        .query("evidenceDocumentVersionExportDigests")
+        .withIndex("by_versionId", (q) => q.eq("versionId", first.versionId))
+        .unique();
+      expect(firstDigestBeforeBackfill).not.toBeNull();
+      await ctx.db.delete(
+        "evidenceDocumentVersionExportDigests",
+        firstDigestBeforeBackfill!._id,
+      );
+      const firstVersion = await ctx.db.get(
+        "evidenceDocumentVersions",
+        first.versionId,
+      );
+      expect(firstVersion).not.toBeNull();
+      expect(await ensureEvidenceVersionExportDigest(ctx, firstVersion!)).toBe(
+        true,
+      );
+      expect(await ensureEvidenceVersionExportDigest(ctx, firstVersion!)).toBe(
+        false,
+      );
+      const firstDigest = await ctx.db
+        .query("evidenceDocumentVersionExportDigests")
+        .withIndex("by_versionId", (q) => q.eq("versionId", first.versionId))
+        .unique();
+      const secondDigest = await ctx.db
+        .query("evidenceDocumentVersionExportDigests")
+        .withIndex("by_versionId", (q) => q.eq("versionId", second.versionId))
+        .unique();
+      expect(firstDigest).toMatchObject({
+        documentId: first.documentId,
+        versionId: first.versionId,
+        version: 1,
+        contentHash: "hash-v1",
+        sourceRevision: "hash-v1",
+      });
+      expect(secondDigest).toMatchObject({
+        documentId: first.documentId,
+        versionId: second.versionId,
+        version: 2,
+        contentHash: "hash-v2",
+        sourceRevision: "hash-v2",
+      });
       const events = await ctx.db
         .query("evidenceChangeEvents")
         .withIndex("by_visibility_and_occurredAt", (q) =>

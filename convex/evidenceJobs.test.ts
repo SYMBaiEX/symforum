@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import { register as registerMigrationsComponent } from "@convex-dev/migrations/test";
 import { makeFunctionReference } from "convex/server";
 import { describe, expect, test, vi } from "vitest";
 import { WORKOS_GRANT_CLAIM } from "../lib/workos-config";
@@ -13,6 +14,17 @@ const modules = {
   ...import.meta.glob("./**/*.ts"),
   ...import.meta.glob("./**/*.tsx"),
 };
+
+function decodeExportCursorForTest(cursor: string) {
+  const encoded = cursor
+    .slice("e2.".length)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const binary = atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="));
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+}
+
 const jobs = {
   createResearch: makeFunctionReference<"mutation", any, any>(
     "evidenceJobs:createResearchJob",
@@ -86,9 +98,25 @@ const jobs = {
   materializeAllSnapshots: makeFunctionReference<"action", any, any>(
     "evidenceJobActions:materializeAllDatasetSnapshots",
   ),
+  backfillExportDigests: makeFunctionReference<"mutation", any, any>(
+    "migrations:backfillEvidenceDocumentExportDigests",
+  ),
+  backfillVersionExportDigests: makeFunctionReference<"mutation", any, any>(
+    "migrations:backfillEvidenceDocumentVersionExportDigests",
+  ),
+  backfillEvidenceExportReadModels: makeFunctionReference<"mutation", any, any>(
+    "migrations:backfillEvidenceExportReadModels",
+  ),
+  backfillAssessmentVisibilityDigests: makeFunctionReference<
+    "mutation",
+    any,
+    any
+  >("migrations:backfillResearchQualityAssessmentVisibilityDigests"),
 } as const;
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerMigrationsComponent(t);
+  return t;
 }
 async function fixture(t: ReturnType<typeof setup>) {
   return t.run(async (ctx) => {
@@ -584,6 +612,15 @@ describe("evidence jobs", () => {
         ],
       }),
     );
+    expect(bundle.records[0]?.version).toEqual({
+      version: 1,
+      contentHash: "content-hash",
+      fetchedAt: 1,
+      sourceRevision: "revision-1",
+      sourceUpdatedAt: 1,
+      retrievalUrl: "https://example.com/one",
+      metadataJson: "{}",
+    });
     expect(JSON.stringify(bundle.records[0])).not.toContain("rawStorageId");
     await expect(
       t.mutation(jobs.createExport, {
@@ -644,9 +681,514 @@ describe("evidence jobs", () => {
     });
   });
 
-  test("keeps commercial dataset selections distinct", async () => {
+  test("pins export cursors to their read model across digest backfill", async () => {
     const t = setup();
     await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const documents = await t.run(async (ctx) => {
+      const sourceId = await ctx.db.insert("evidenceSources", {
+        sourceKey: "cursor-source",
+        name: "Cursor source",
+        sourceType: "manual",
+        ingestionEnabled: false,
+        baseUrl: "https://cursor.example.com",
+        homepageUrl: "https://cursor.example.com",
+        status: "active",
+        licenseClass: "open",
+        provenanceClass: "official",
+        visibility: "public",
+        termsUrl: "https://cursor.example.com/terms",
+        etag: "",
+        lastModified: "",
+        cursor: "",
+        lastFetchedAt: 0,
+        lastSucceededAt: 0,
+        lastErrorAt: 0,
+        lastErrorMessage: "",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return await Promise.all(
+        ["First", "Second"].map((title) =>
+          ctx.db
+            .insert("evidenceDocuments", {
+              sourceId,
+              externalKey: title.toLowerCase(),
+              canonicalUrl: `https://cursor.example.com/${title.toLowerCase()}`,
+              canonicalUrlHash: title.toLowerCase(),
+              kind: "document",
+              visibility: "public",
+              title,
+              excerpt: `${title} excerpt`,
+              searchText: `${title} large searchable body`.repeat(200),
+              tags: [],
+              authors: [],
+              licenseClass: "open",
+              currentVersionId: null,
+              publishedAt: null,
+              firstSeenAt: 1,
+              updatedAt: 1,
+            })
+            .then((documentId) => ({ documentId, title })),
+        ),
+      );
+    });
+
+    const firstPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 1,
+    });
+    const firstRecentPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 1,
+      selectionStrategy: "recent",
+    });
+    expect(firstPage.records).toHaveLength(1);
+    expect(firstPage.continueCursor).toBeTypeOf("string");
+    expect(firstRecentPage.continueCursor).toBeTypeOf("string");
+    expect(decodeExportCursorForTest(firstPage.continueCursor!)).toMatchObject({
+      documentReadModel: "canonical",
+      compactForumAssessment: false,
+    });
+    expect(
+      decodeExportCursorForTest(firstRecentPage.continueCursor!),
+    ).toMatchObject({
+      documentReadModel: "canonical",
+      compactForumAssessment: false,
+    });
+
+    // Complete backfill and alter a test-only digest sentinel to prove the
+    // old cursor still reads its original canonical index, then new exports
+    // switch to the compact projection.
+    await t.mutation(jobs.backfillExportDigests, {});
+    const secondDocument = documents.find(
+      ({ documentId }) => documentId !== firstPage.records[0]?.documentId,
+    )!;
+    const secondDocumentId = secondDocument.documentId;
+    await t.run(async (ctx) => {
+      const digest = await ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_documentId", (q) => q.eq("documentId", secondDocumentId))
+        .unique();
+      expect(digest).not.toBeNull();
+      await ctx.db.patch("evidenceDocumentExportDigests", digest!._id, {
+        title: "Digest-only sentinel",
+      });
+    });
+
+    const continuedPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 1,
+      cursor: firstPage.continueCursor,
+    });
+    expect(continuedPage.records).toMatchObject([
+      { documentId: secondDocumentId, title: secondDocument.title },
+    ]);
+    const continuedRecentPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 1,
+      selectionStrategy: "recent",
+      cursor: firstRecentPage.continueCursor,
+    });
+    expect(continuedRecentPage.records).toMatchObject([
+      { documentId: secondDocumentId, title: secondDocument.title },
+    ]);
+
+    const freshPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 2,
+    });
+    expect(
+      freshPage.records.find(
+        (record: { documentId: typeof secondDocumentId }) =>
+          record.documentId === secondDocumentId,
+      )?.title,
+    ).toBe("Digest-only sentinel");
+    const freshRecentPage = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 2,
+      selectionStrategy: "recent",
+    });
+    expect(
+      freshRecentPage.records.find(
+        (record: { documentId: typeof secondDocumentId }) =>
+          record.documentId === secondDocumentId,
+      )?.title,
+    ).toBe("Digest-only sentinel");
+  });
+
+  test("backfills and prefers compact version export digests for legacy rows", async () => {
+    const t = setup();
+    await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    const versionId = await t.run(async (ctx) => {
+      const sourceId = await ctx.db.insert("evidenceSources", {
+        sourceKey: "digest-source",
+        name: "Digest source",
+        sourceType: "manual",
+        ingestionEnabled: false,
+        baseUrl: "https://digest.example.com",
+        homepageUrl: "https://digest.example.com",
+        status: "active",
+        licenseClass: "open",
+        provenanceClass: "official",
+        visibility: "public",
+        termsUrl: "https://digest.example.com/terms",
+        etag: "",
+        lastModified: "",
+        cursor: "",
+        lastFetchedAt: 0,
+        lastSucceededAt: 0,
+        lastErrorAt: 0,
+        lastErrorMessage: "",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const documentId = await ctx.db.insert("evidenceDocuments", {
+        sourceId,
+        externalKey: "digest-record",
+        canonicalUrl: "https://digest.example.com/record",
+        canonicalUrlHash: "digest-record",
+        kind: "document",
+        visibility: "public",
+        title: "Digest record",
+        excerpt: "The compact document excerpt.",
+        searchText: "digest searchable text",
+        tags: [],
+        authors: [],
+        licenseClass: "open",
+        currentVersionId: null,
+        publishedAt: null,
+        firstSeenAt: 1,
+        updatedAt: 1,
+      });
+      const versionId = await ctx.db.insert("evidenceDocumentVersions", {
+        documentId,
+        version: 3,
+        contentHash: "canonical-hash",
+        title: "Digest record",
+        excerpt: "The compact document excerpt.",
+        searchText: "large canonical search text",
+        fetchedAt: 10,
+        publishedAt: null,
+        sourceRevision: "canonical-revision",
+        sourceUpdatedAt: 11,
+        rawStorageId: null,
+        retrievalUrl: "https://digest.example.com/record",
+        licenseClass: "open",
+        metadataJson: "canonical-metadata",
+        createdAt: 12,
+      });
+      await ctx.db.patch("evidenceDocuments", documentId, {
+        currentVersionId: versionId,
+      });
+      return versionId;
+    });
+
+    await t.mutation(jobs.backfillEvidenceExportReadModels, {});
+    await t.run(async (ctx) => {
+      // Make canonical fallback observable: once the migration has materialized
+      // the compact row, export should keep reading that stable projection.
+      const version = await ctx.db.get("evidenceDocumentVersions", versionId);
+      expect(version).not.toBeNull();
+      await ctx.db.patch("evidenceDocumentVersions", version!._id, {
+        metadataJson: "canonical-only-sentinel",
+      });
+    });
+
+    const bundle = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 10,
+    });
+
+    expect(bundle.records).toHaveLength(1);
+    expect(bundle.records[0]?.version).toEqual({
+      version: 3,
+      contentHash: "canonical-hash",
+      fetchedAt: 10,
+      sourceRevision: "canonical-revision",
+      sourceUpdatedAt: 11,
+      retrievalUrl: "https://digest.example.com/record",
+      metadataJson: "canonical-metadata",
+    });
+  });
+
+  test("exports shared claims and entities from repeated source links", async () => {
+    const t = setup();
+    await fixture(t);
+    const catalog = await t.mutation(jobs.catalog, {});
+    await t.run(async (ctx) => {
+      const sourceId = await ctx.db.insert("evidenceSources", {
+        sourceKey: "shared-source",
+        name: "Shared source",
+        sourceType: "manual",
+        ingestionEnabled: false,
+        baseUrl: "https://example.com",
+        homepageUrl: "https://example.com",
+        status: "active",
+        licenseClass: "open",
+        provenanceClass: "official",
+        visibility: "public",
+        termsUrl: "https://example.com/terms",
+        etag: "",
+        lastModified: "",
+        cursor: "",
+        lastFetchedAt: 0,
+        lastSucceededAt: 0,
+        lastErrorAt: 0,
+        lastErrorMessage: "",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const entityId = await ctx.db.insert("evidenceEntities", {
+        entityKey: "concept:shared-public-test",
+        kind: "concept",
+        name: "Shared public test",
+        aliases: [],
+        visibility: "public",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const privateEntityId = await ctx.db.insert("evidenceEntities", {
+        entityKey: "concept:private-export-test",
+        kind: "concept",
+        name: "Private export test",
+        aliases: [],
+        visibility: "private",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const claimId = await ctx.db.insert("evidenceClaims", {
+        claimKey: "claim:shared-public-test",
+        statement: "The shared public test exists.",
+        subjectEntityId: entityId,
+        predicate: "exists",
+        objectText: "true",
+        status: "supported",
+        confidence: 1,
+        visibility: "public",
+        observedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      for (const name of ["First", "Second"]) {
+        const documentId = await ctx.db.insert("evidenceDocuments", {
+          sourceId,
+          externalKey: name.toLowerCase(),
+          canonicalUrl: `https://example.com/${name.toLowerCase()}`,
+          canonicalUrlHash: name.toLowerCase(),
+          kind: "document",
+          visibility: "public",
+          title: name,
+          excerpt: "Shared evidence",
+          searchText: name,
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: null,
+          firstSeenAt: 1,
+          updatedAt: name === "First" ? 2 : 1,
+        });
+        const versionId = await ctx.db.insert("evidenceDocumentVersions", {
+          documentId,
+          version: 1,
+          contentHash: `${name}-hash`,
+          title: name,
+          excerpt: "Shared evidence",
+          searchText: name,
+          fetchedAt: 1,
+          publishedAt: null,
+          sourceRevision: "revision-1",
+          sourceUpdatedAt: 1,
+          rawStorageId: null,
+          retrievalUrl: `https://example.com/${name.toLowerCase()}`,
+          licenseClass: "open",
+          metadataJson: "{}",
+          createdAt: 1,
+        });
+        await ctx.db.patch("evidenceDocuments", documentId, {
+          currentVersionId: versionId,
+        });
+        await ctx.db.insert("evidenceDocumentEntities", {
+          documentVersionId: versionId,
+          entityId,
+          role: "subject",
+          createdAt: 1,
+        });
+        await ctx.db.insert("evidenceDocumentEntities", {
+          documentVersionId: versionId,
+          entityId: privateEntityId,
+          role: "mentioned",
+          createdAt: 1,
+        });
+        await ctx.db.insert("evidenceClaimCitations", {
+          claimId,
+          documentVersionId: versionId,
+          citationKey: `claim:shared-public-test:${name.toLowerCase()}`,
+          relation: "supports",
+          locator: `https://example.com/${name.toLowerCase()}`,
+          excerpt: "Shared evidence",
+          confidence: 1,
+          createdAt: 1,
+        });
+      }
+    });
+
+    const bundle = await t.query(jobs.records, {
+      datasetId: catalog.datasetId,
+      limit: 10,
+    });
+
+    expect(bundle.records).toHaveLength(2);
+    expect(bundle.records.map((record: any) => record.title)).toEqual([
+      "First",
+      "Second",
+    ]);
+    for (const record of bundle.records) {
+      expect(record.entities).toMatchObject([
+        { entityKey: "concept:shared-public-test", role: "subject" },
+      ]);
+      expect(
+        record.entities.map(
+          (entity: { entityKey: string }) => entity.entityKey,
+        ),
+      ).toEqual(["concept:shared-public-test"]);
+      expect(record.claims).toMatchObject([
+        {
+          claimKey: "claim:shared-public-test",
+          relation: "supports",
+        },
+      ]);
+    }
+  });
+
+  test("chunks large exports under per-query read budgets without losing cursor continuity", async () => {
+    const t = setup();
+    const { owner } = await fixture(t);
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "chunked-export-test",
+        name: "Chunked export test",
+        description: "Dataset for bounded export-query pages",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: ["document"],
+        includedLicenseClasses: ["open"],
+        sourceKeys: ["chunked-export-source"],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const sourceId = await ctx.db.insert("evidenceSources", {
+        sourceKey: "chunked-export-source",
+        name: "Chunked export source",
+        sourceType: "manual",
+        ingestionEnabled: false,
+        baseUrl: "https://example.com",
+        homepageUrl: "https://example.com",
+        status: "active",
+        licenseClass: "open",
+        provenanceClass: "official",
+        visibility: "public",
+        termsUrl: "https://example.com/terms",
+        etag: "",
+        lastModified: "",
+        cursor: "",
+        lastFetchedAt: 0,
+        lastSucceededAt: 0,
+        lastErrorAt: 0,
+        lastErrorMessage: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (let index = 0; index < 250; index += 1)
+        await ctx.db.insert("evidenceDocuments", {
+          sourceId,
+          externalKey: `chunked-${index}`,
+          canonicalUrl: `https://example.com/chunked/${index}`,
+          canonicalUrlHash: `chunked-${index}`,
+          kind: "document",
+          visibility: "public",
+          title: `Chunked ${index}`,
+          excerpt: "Bounded export fixture",
+          searchText: `Chunked ${index}`,
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: null,
+          firstSeenAt: now - index,
+          updatedAt: now - index,
+        });
+      return datasetId;
+    });
+
+    const runPage = async (cursor: string | undefined, recordLimit: number) => {
+      const job = await t.mutation(jobs.createExport, {
+        ownerUserId: owner,
+        agentId: "agent",
+        datasetId: seeded,
+        format: "jsonl",
+        recordLimit,
+        selectionStrategy: "recent",
+        ...(cursor === undefined ? {} : { cursor }),
+        idempotencyKey:
+          cursor === undefined ? "chunked-export-first" : "chunked-export-next",
+        requestFingerprint:
+          cursor === undefined ? "chunked-export-first" : "chunked-export-next",
+        quotaUnits: 1,
+      });
+      const claim = await t.mutation(jobs.claimExport, { jobId: job.jobId });
+      expect(claim).toMatchObject({ executionToken: expect.any(String) });
+      const result = await t.action(jobs.runExport, {
+        jobId: job.jobId,
+        executionToken: claim!.executionToken,
+      });
+      expect(result).toMatchObject({ started: true });
+      if (!result.started) throw new Error("Export unexpectedly did not start");
+      const artifact = await t.run(
+        async (ctx) =>
+          (await ctx.storage.get(result.resultStorageId))?.text() ?? null,
+      );
+      expect(artifact).not.toBeNull();
+      const records = artifact!
+        .trim()
+        .split("\n")
+        .map(
+          (line) => JSON.parse(line) as { documentId: string; title: string },
+        );
+      return { result, records };
+    };
+
+    const first = await runPage(undefined, 205);
+    expect(first.result).toMatchObject({
+      recordCount: 205,
+      scannedRecordCount: 205,
+      selectionScanTruncated: true,
+      continueCursor: expect.any(String),
+    });
+    expect(first.records).toHaveLength(205);
+
+    const next = await runPage(first.result.continueCursor, 100);
+    expect(next.result).toMatchObject({
+      recordCount: 45,
+      scannedRecordCount: 45,
+      selectionScanTruncated: false,
+    });
+    expect(next.result).not.toHaveProperty("continueCursor");
+    expect(next.records).toHaveLength(45);
+    const allRecords = [...first.records, ...next.records];
+    expect(new Set(allRecords.map((record) => record.documentId)).size).toBe(
+      250,
+    );
+    expect(allRecords.map((record) => record.title)).toContain("Chunked 249");
+  });
+
+  test("keeps commercial dataset selections distinct", async () => {
+    const t = setup();
+    const { agent } = await fixture(t);
     await t.mutation(jobs.catalog, {});
     const datasetIds = await t.run(async (ctx) => {
       const now = 1;
@@ -725,15 +1267,133 @@ describe("evidence jobs", () => {
       const document = (await ctx.db.query("evidenceDocuments").collect()).find(
         (row) => row.externalKey === "release-1",
       )!;
+      const categoryId = await ctx.db.insert("forumCategories", {
+        slug: "export-research",
+        name: "Export research",
+        description: "Export research test category",
+        kind: "board",
+        status: "active",
+        viewAccess: "public",
+        position: 1,
+        threadCount: 0,
+        postCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const threadId = await ctx.db.insert("forumThreads", {
+        categoryId,
+        categorySlug: "export-research",
+        slug: "visible-export-thread",
+        title: "Visible export thread",
+        body: "A large forum body not needed for visibility validation.".repeat(
+          100,
+        ),
+        authorId: agent,
+        status: "active",
+        pinned: false,
+        replyCount: 0,
+        viewCount: 0,
+        lastPostAt: 1,
+        lastPostUserId: agent,
+        searchText: "visible export thread",
+        createdAt: 1,
+        updatedAt: 1,
+      });
       await ctx.db.patch("evidenceDocuments", document._id, {
-        externalKey: "forum-research:missing-thread",
+        externalKey: `forum-research:${threadId}`,
+      });
+      await ctx.db.insert("researchQualityAssessments", {
+        threadId,
+        categoryId,
+        authorUserId: agent,
+        candidateTitle: "Visible export thread",
+        candidateExcerpt:
+          "A large private excerpt not needed for visibility.".repeat(50),
+        status: "passed",
+        sourceCount: 2,
+        uniqueSourceDomainCount: 2,
+        claimEstimate: 3,
+        citationCoverageScore: 80,
+        originalityScore: 90,
+        aiAuthorshipDisclosed: true,
+        contentFingerprint: "fixture-fingerprint",
+        normalizedTerms: ["visibility", "export"],
+        flags: [],
+        evaluatedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
       });
     });
-    const gated = await t.query(jobs.records, {
+    // Before backfill completion the canonical assessment remains authoritative.
+    const canonicalFallback = await t.query(jobs.records, {
       datasetId: datasetIds["software-release-intelligence"],
       limit: 100,
     });
-    expect(gated.records).toEqual([]);
+    expect(canonicalFallback.records).toHaveLength(1);
+
+    await t.mutation(jobs.backfillAssessmentVisibilityDigests, {});
+    const assessmentId = await t.run(async (ctx) => {
+      const assessment = await ctx.db
+        .query("researchQualityAssessments")
+        .withIndex("by_threadId")
+        .first();
+      expect(assessment).not.toBeNull();
+      const digest = await ctx.db
+        .query("researchQualityAssessmentVisibilityDigests")
+        .withIndex("by_assessmentId", (q) =>
+          q.eq("assessmentId", assessment!._id),
+        )
+        .unique();
+      expect(digest).toMatchObject({
+        threadId: assessment!.threadId,
+        authorUserId: agent,
+        status: "passed",
+      });
+      await ctx.db.patch("researchQualityAssessments", assessment!._id, {
+        status: "rejected",
+      });
+      return assessment!._id;
+    });
+    // A sentinel canonical change proves that the ready projection is read.
+    const compactPath = await t.query(jobs.records, {
+      datasetId: datasetIds["software-release-intelligence"],
+      limit: 100,
+    });
+    expect(compactPath.records).toHaveLength(1);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("researchQualityAssessments", assessmentId, {
+        status: "passed",
+      });
+    });
+    await t.run(async (ctx) => {
+      const digest = await ctx.db
+        .query("researchQualityAssessmentVisibilityDigests")
+        .withIndex("by_assessmentId", (q) => q.eq("assessmentId", assessmentId))
+        .unique();
+      expect(digest).not.toBeNull();
+      await ctx.db.delete(
+        "researchQualityAssessmentVisibilityDigests",
+        digest!._id,
+      );
+    });
+    // Missing projections fall back to canonical policy instead of treating
+    // absence as approval or silently losing an otherwise public row.
+    const missingDigestFallback = await t.query(jobs.records, {
+      datasetId: datasetIds["software-release-intelligence"],
+      limit: 100,
+    });
+    expect(missingDigestFallback.records).toHaveLength(1);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("researchQualityAssessments", assessmentId, {
+        status: "rejected",
+      });
+    });
+    const missingRejectedDigestFallback = await t.query(jobs.records, {
+      datasetId: datasetIds["software-release-intelligence"],
+      limit: 100,
+    });
+    expect(missingRejectedDigestFallback.records).toEqual([]);
   });
 
   test("balances sources with a pinned native cursor and exposes lineage diffs", async () => {
@@ -859,6 +1519,274 @@ describe("evidence jobs", () => {
       previous: { versionId: seeded.firstVersionId },
       delta: { records: 2, artifactBytes: 20, sourceCoverage: 50 },
     });
+  });
+
+  test("round-trips balanced continuation cursors at the 100-source limit", async () => {
+    const t = setup();
+    await fixture(t);
+    const datasetId = await t.run(async (ctx) => {
+      const now = Date.now();
+      const sourceKeys = Array.from(
+        { length: 100 },
+        (_, index) => `cursor-source-${String(index).padStart(3, "0")}`,
+      );
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "maximum-cursor-sources",
+        name: "Maximum cursor sources",
+        description: "One cursor per active source",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (const sourceKey of sourceKeys) {
+        const sourceId = await ctx.db.insert("evidenceSources", {
+          sourceKey,
+          name: sourceKey,
+          sourceType: "api",
+          ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: now,
+          lastSucceededAt: now,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+        for (let index = 0; index < 2; index += 1)
+          await ctx.db.insert("evidenceDocuments", {
+            sourceId,
+            externalKey: `${sourceKey}-${index}`,
+            canonicalUrl: `https://${sourceKey}.example.com/${index}`,
+            canonicalUrlHash: `${sourceKey}-${index}`,
+            kind: "document",
+            visibility: "public",
+            title: `${sourceKey} document ${index}`,
+            excerpt: "Export cursor test row",
+            searchText: "Export cursor test row",
+            tags: [],
+            authors: [],
+            licenseClass: "open",
+            currentVersionId: null,
+            publishedAt: null,
+            firstSeenAt: now - index,
+            updatedAt: now - index,
+          });
+      }
+      return datasetId;
+    });
+
+    const first = await t.query(jobs.records, {
+      datasetId,
+      limit: 100,
+      selectionStrategy: "balanced",
+    });
+    expect(first.records).toHaveLength(100);
+    expect(first.continueCursor).toEqual(expect.any(String));
+
+    const legacyCursor = encodeURIComponent(
+      JSON.stringify({
+        v: 2,
+        datasetId: String(datasetId),
+        selectionStrategy: "balanced",
+        snapshotAt: Date.now(),
+        documentReadModel: "canonical",
+      }),
+    );
+    const legacyPage = await t.query(jobs.records, {
+      datasetId,
+      limit: 1,
+      selectionStrategy: "balanced",
+      cursor: legacyCursor,
+    });
+    expect(legacyPage.records).toHaveLength(1);
+    expect(legacyPage.continueCursor).toMatch(/^e2\./);
+
+    const second = await t.query(jobs.records, {
+      datasetId,
+      limit: 100,
+      selectionStrategy: "balanced",
+      cursor: first.continueCursor,
+    });
+    expect(second.records).toHaveLength(100);
+    expect(second.continueCursor).toBeUndefined();
+    expect(
+      new Set([
+        ...first.records.map((record: any) => record.title),
+        ...second.records.map((record: any) => record.title),
+      ]).size,
+    ).toBe(200);
+  });
+
+  test("rejects configured export datasets beyond the bounded source fan-out", async () => {
+    const t = setup();
+    await fixture(t);
+    const datasetId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "too-many-export-sources",
+        name: "Too many export sources",
+        description: "Invalid oversized source selection",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys: Array.from(
+          { length: 101 },
+          (_, index) => `source-${index}`,
+        ),
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    await expect(
+      t.query(jobs.records, {
+        datasetId,
+        selectionStrategy: "balanced",
+      }),
+    ).rejects.toThrow(/supported export source limit/i);
+  });
+
+  test("rejects implicit all-source exports when the public catalog exceeds its bound", async () => {
+    const t = setup();
+    const datasetId = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "implicit-all-sources-over-limit",
+        name: "All public sources",
+        description: "Must not silently omit sources after the export bound",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys: [],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (let index = 0; index < 101; index += 1) {
+        const sourceKey = `implicit-source-${String(index).padStart(3, "0")}`;
+        await ctx.db.insert("evidenceSources", {
+          sourceKey,
+          name: sourceKey,
+          sourceType: "api",
+          ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: now,
+          lastSucceededAt: now,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      return datasetId;
+    });
+
+    await expect(
+      t.query(jobs.records, {
+        datasetId,
+        selectionStrategy: "balanced",
+      }),
+    ).rejects.toThrow(/active public source catalog exceeds/i);
+  });
+
+  test("recent exports resolve only sources used by a bounded page", async () => {
+    const t = setup();
+    await fixture(t);
+    const datasetId = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "recent-large-source-catalog",
+        name: "Recent export across a large source catalog",
+        description: "Recent pages should not scan unused sources",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: [],
+        includedLicenseClasses: ["open"],
+        sourceKeys: [],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (let index = 0; index < 101; index += 1) {
+        const sourceKey = `recent-source-${String(index).padStart(3, "0")}`;
+        const sourceId = await ctx.db.insert("evidenceSources", {
+          sourceKey,
+          name: sourceKey,
+          sourceType: "api",
+          ingestionEnabled: true,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: now,
+          lastSucceededAt: now,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+        await ctx.db.insert("evidenceDocuments", {
+          sourceId,
+          externalKey: `${sourceKey}-document`,
+          canonicalUrl: `https://${sourceKey}.example.com/document`,
+          canonicalUrlHash: `${sourceKey}-document`,
+          kind: "document",
+          visibility: "public",
+          title: sourceKey,
+          excerpt: "Recent export source fixture",
+          searchText: sourceKey,
+          tags: [],
+          authors: [],
+          licenseClass: "open",
+          currentVersionId: null,
+          publishedAt: null,
+          firstSeenAt: now - (101 - index),
+          updatedAt: now - (101 - index),
+        });
+      }
+      return datasetId;
+    });
+
+    const page = await t.query(jobs.records, {
+      datasetId,
+      limit: 1,
+      selectionStrategy: "recent",
+    });
+
+    expect(page.records).toHaveLength(1);
+    expect(page.records[0]?.source.sourceKey).toBe("recent-source-100");
   });
 
   test("keeps balanced exports reachable beyond the former 500-row source prefix", async () => {

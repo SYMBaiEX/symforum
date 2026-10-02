@@ -1,10 +1,13 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
+  getPublicEvidenceSourceWithKnownSource,
   isIndependentPublicEvidenceEntity,
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
+  publicEvidenceDocumentIdForVersion,
   publicEvidenceEntityReference,
+  type PublicEvidenceDocumentRef,
 } from "./evidenceVisibility";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -32,6 +35,20 @@ const SEARCH_TEXT_LIMIT = 4_096;
 const TITLE_LIMIT = 500;
 const EXCERPT_LIMIT = 320;
 const MAX_FORUM_CATEGORY_DEPTH = 16;
+
+type EvidenceDocumentProjectionInput = PublicEvidenceDocumentRef &
+  Pick<
+    Doc<"evidenceDocuments">,
+    | "canonicalUrl"
+    | "title"
+    | "excerpt"
+    | "searchText"
+    | "tags"
+    | "authors"
+    | "updatedAt"
+    | "publishedAt"
+    | "currentVersionId"
+  >;
 
 const projectionTypeValidator = v.union(
   v.literal("evidence_document"),
@@ -195,19 +212,28 @@ export async function deleteUniversalSearchProjection(
 
 export async function syncEvidenceDocumentUniversalSearchProjection(
   ctx: MutationCtx,
-  document: Doc<"evidenceDocuments">,
+  document: EvidenceDocumentProjectionInput,
+  options: { knownSource?: Doc<"evidenceSources"> | null } = {},
 ) {
   const type = "evidence_document" as const;
-  const source = await ctx.db.get("evidenceSources", document.sourceId);
   const canonicalUrl = safeCanonicalUrl(document.canonicalUrl);
-  if (
-    !(await isPublicEvidenceDocument(ctx, document, {
+  if (document.visibility !== "public" || canonicalUrl === null) {
+    await deleteUniversalSearchProjection(ctx, type, document._id);
+    return;
+  }
+  const sourceRow =
+    options.knownSource === undefined
+      ? await ctx.db.get("evidenceSources", document.sourceId)
+      : options.knownSource;
+  const source = await getPublicEvidenceSourceWithKnownSource(
+    ctx,
+    document,
+    sourceRow,
+    {
       ignorePendingSync: true,
-    })) ||
-    source?.status !== "active" ||
-    source.visibility !== "public" ||
-    canonicalUrl === null
-  ) {
+    },
+  );
+  if (source === null) {
     await deleteUniversalSearchProjection(ctx, type, document._id);
     return;
   }
@@ -250,38 +276,43 @@ export async function syncEvidenceEntityUniversalSearchProjection(
   const independent = isIndependentPublicEvidenceEntity(entity);
   const reference = independent
     ? null
-    : (await currentPublicEvidenceEntityReference(ctx, entity, existing)) ??
+    : ((await currentPublicEvidenceEntityReference(ctx, entity, existing)) ??
       (await publicEvidenceEntityReference(ctx, entity, {
         ignorePendingSync: true,
-      }));
+      })));
   if (!independent && reference === null) {
     if (existing !== null) {
       await ctx.db.delete("universalSearchProjections", existing._id);
     }
     return;
   }
-  await upsertProjection(ctx, {
-    recordKey: entityRecordKey,
-    type,
-    canonicalUrl: `${PRIMARY_ORIGIN}/research`,
-    title: normalized(entity.name, TITLE_LIMIT),
-    excerpt: normalized(
-      `${entity.kind} entity${entity.aliases.length > 0 ? ` · aliases: ${entity.aliases.join(", ")}` : ""}`,
-      EXCERPT_LIMIT,
-    ),
-    searchText: normalized(
-      `${entity.entityKey} ${entity.name} ${entity.aliases.join(" ")}`,
-      SEARCH_TEXT_LIMIT,
-    ),
-    updatedAt: entity.updatedAt,
-    publishedAt: entity.createdAt,
-    citationCount: 0,
-    documentId: reference === null ? undefined : String(reference.document._id),
-    documentVersionId:
-      reference === null ? undefined : String(reference.version._id),
-    entityId: String(entity._id),
-    citationIds: [],
-  }, existing);
+  await upsertProjection(
+    ctx,
+    {
+      recordKey: entityRecordKey,
+      type,
+      canonicalUrl: `${PRIMARY_ORIGIN}/research`,
+      title: normalized(entity.name, TITLE_LIMIT),
+      excerpt: normalized(
+        `${entity.kind} entity${entity.aliases.length > 0 ? ` · aliases: ${entity.aliases.join(", ")}` : ""}`,
+        EXCERPT_LIMIT,
+      ),
+      searchText: normalized(
+        `${entity.entityKey} ${entity.name} ${entity.aliases.join(" ")}`,
+        SEARCH_TEXT_LIMIT,
+      ),
+      updatedAt: entity.updatedAt,
+      publishedAt: entity.createdAt,
+      citationCount: 0,
+      documentId:
+        reference === null ? undefined : String(reference.document._id),
+      documentVersionId:
+        reference === null ? undefined : String(reference.versionId),
+      entityId: String(entity._id),
+      citationIds: [],
+    },
+    existing,
+  );
 }
 
 /**
@@ -307,9 +338,9 @@ async function currentPublicEvidenceEntityReference(
     projection.documentVersionId ?? "",
   );
   if (documentId === null || versionId === null) return null;
-  const [document, version, link] = await Promise.all([
+  const [document, versionDocumentId, link] = await Promise.all([
     ctx.db.get("evidenceDocuments", documentId),
-    ctx.db.get("evidenceDocumentVersions", versionId),
+    publicEvidenceDocumentIdForVersion(ctx, versionId),
     ctx.db
       .query("evidenceDocumentEntities")
       .withIndex("by_documentVersionId_and_entityId", (q) =>
@@ -319,17 +350,16 @@ async function currentPublicEvidenceEntityReference(
   ]);
   if (
     document === null ||
-    version === null ||
+    versionDocumentId !== document._id ||
     link === null ||
-    version.documentId !== document._id ||
-    document.currentVersionId !== version._id ||
+    document.currentVersionId !== versionId ||
     !(await isPublicEvidenceDocument(ctx, document, {
       ignorePendingSync: true,
     }))
   ) {
     return null;
   }
-  return { document, version };
+  return { document, versionId };
 }
 
 export async function syncEvidenceClaimUniversalSearchProjection(
@@ -351,27 +381,26 @@ export async function syncEvidenceClaimUniversalSearchProjection(
     documentVersionId: Id<"evidenceDocumentVersions">;
   }> = [];
   for (const citation of citations) {
-    const version = await ctx.db.get(
-      "evidenceDocumentVersions",
+    const documentId = await publicEvidenceDocumentIdForVersion(
+      ctx,
       citation.documentVersionId,
     );
-    if (version === null) continue;
-    const document = await ctx.db.get("evidenceDocuments", version.documentId);
-    if (
-      document === null ||
-      !(await isPublicEvidenceDocument(ctx, document, {
-        ignorePendingSync: true,
-      })) ||
-      safeCanonicalUrl(document.canonicalUrl) === null
-    ) {
+    if (documentId === null) continue;
+    const document = await ctx.db.get("evidenceDocuments", documentId);
+    if (document === null || safeCanonicalUrl(document.canonicalUrl) === null) {
       continue;
     }
-    const source = await ctx.db.get("evidenceSources", document.sourceId);
-    if (source?.status !== "active" || source.visibility !== "public") continue;
+    const sourceRow = await ctx.db.get("evidenceSources", document.sourceId);
+    if (
+      (await getPublicEvidenceSourceWithKnownSource(ctx, document, sourceRow, {
+        ignorePendingSync: true,
+      })) === null
+    )
+      continue;
     publicCitations.push({
       citationId: citation._id,
       documentId: document._id,
-      documentVersionId: version._id,
+      documentVersionId: citation.documentVersionId,
     });
   }
   const firstCitation = publicCitations[0];
@@ -460,20 +489,38 @@ export async function syncNewsletterIssueUniversalSearchProjection(
   });
 }
 
+type NewsStoryProjectionSource = Pick<
+  Doc<"hnStories">,
+  | "_id"
+  | "hnItemId"
+  | "snapshotDate"
+  | "fetchedAt"
+  | "title"
+  | "host"
+  | "text"
+  | "timePosted"
+>;
+
 export async function syncNewsStoryUniversalSearchProjection(
   ctx: MutationCtx,
-  story: Doc<"hnStories">,
+  story: NewsStoryProjectionSource,
+  options?: { snapshotIsComplete?: true },
 ) {
   const type = "news_story" as const;
   const recordId = String(story.hnItemId);
   const key = recordKey(type, recordId);
-  const snapshot = await ctx.db
-    .query("newsSnapshots")
-    .withIndex("by_snapshotDate", (q) =>
-      q.eq("snapshotDate", story.snapshotDate),
-    )
-    .first();
-  if (snapshot?.status !== "complete" || snapshot.storyCount === 0) {
+  let snapshotIsComplete = options?.snapshotIsComplete === true;
+  if (!snapshotIsComplete) {
+    const snapshot = await ctx.db
+      .query("newsSnapshots")
+      .withIndex("by_snapshotDate", (q) =>
+        q.eq("snapshotDate", story.snapshotDate),
+      )
+      .first();
+    snapshotIsComplete =
+      snapshot?.status === "complete" && snapshot.storyCount > 0;
+  }
+  if (!snapshotIsComplete) {
     const stale = await projectionByRecordKey(ctx, key);
     if (
       stale !== null &&

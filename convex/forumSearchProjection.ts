@@ -6,6 +6,8 @@ import {
   resumeUniversalSearchAfterForumBackfill,
   syncForumThreadUniversalSearchProjection,
 } from "./universalSearchProjection";
+import { FORUM_SEARCH_PROJECTION_BACKFILL_KEY } from "./forumSearchProjectionConstants";
+export { FORUM_SEARCH_PROJECTION_BACKFILL_KEY } from "./forumSearchProjectionConstants";
 
 /**
  * A deliberately small search representation.  These limits are in characters
@@ -14,8 +16,6 @@ import {
  */
 export const FORUM_SEARCH_TEXT_MAX_LENGTH = 4_096;
 export const FORUM_SEARCH_EXCERPT_MAX_LENGTH = 220;
-export const FORUM_SEARCH_PROJECTION_BACKFILL_KEY =
-  "forum-search-projections-v1";
 const BACKFILL_POST_PAGE_SIZE = 100;
 
 type BackfillCursor = {

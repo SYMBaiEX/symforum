@@ -3,8 +3,9 @@
 import { generateText } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalAction } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
 import { convexModelRoutingConfig } from "./modelRouting";
 import {
   buildEvidenceDatasetManifest,
@@ -15,8 +16,20 @@ import {
   runWithModelFallback,
   type RoutedModel,
 } from "../lib/ai-model-routing";
+import { estimatePromptInputTokens } from "../lib/ai-model-costs";
+import {
+  buildEvidenceResearchPrompt,
+  buildExtractiveEvidenceDigest,
+  compactEvidenceResearchSources,
+  hasGroundedEvidenceResearchCitations,
+} from "../lib/evidence-research-prompt";
 
 const MAX_SOURCES = 10;
+// Production Insights showed repeated ~17 MB reads in this export query,
+// close to the 16 MiB transaction ceiling. Keep per-query fan-out conservative;
+// the action still assembles the same overall export across more pages.
+const EXPORT_QUERY_PAGE_SIZE = 25;
+const DATASET_SNAPSHOT_RECORD_LIMIT = 100;
 type Source = {
   documentId: string;
   currentVersionId: string | null;
@@ -103,6 +116,69 @@ type ExportBundle = {
   continueCursor?: string;
   records: ExportRecord[];
 };
+
+async function readExportPages(
+  ctx: ActionCtx,
+  args: {
+    datasetId: Id<"evidenceDatasets">;
+    recordLimit: number;
+    selectionStrategy: "balanced" | "recent";
+    cursor?: string;
+  },
+): Promise<ExportBundle> {
+  const pageCount = Math.ceil(args.recordLimit / EXPORT_QUERY_PAGE_SIZE);
+  const records: ExportRecord[] = [];
+  let scannedRecordCount = 0;
+  let cursor = args.cursor;
+  let firstPage: ExportBundle | undefined;
+  let lastPage: ExportBundle | undefined;
+
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    const remainingScanBudget = args.recordLimit - scannedRecordCount;
+    if (remainingScanBudget <= 0) break;
+    const page: ExportBundle = await ctx.runQuery(refs.exportDocuments, {
+      datasetId: args.datasetId,
+      limit: Math.min(EXPORT_QUERY_PAGE_SIZE, remainingScanBudget),
+      selectionStrategy: args.selectionStrategy,
+      cursor,
+    });
+    if (firstPage === undefined) {
+      firstPage = page;
+    } else if (
+      page.publicationEpoch !== firstPage.publicationEpoch ||
+      page.snapshotAt !== firstPage.snapshotAt ||
+      page.selectionStrategy !== firstPage.selectionStrategy ||
+      JSON.stringify(page.dataset) !== JSON.stringify(firstPage.dataset)
+    ) {
+      throw new Error(
+        "Evidence dataset changed while its export pages were being read. Retry with a fresh export job.",
+      );
+    }
+    records.push(...page.records);
+    scannedRecordCount += page.scannedRecordCount;
+    lastPage = page;
+    if (
+      records.length >= args.recordLimit ||
+      scannedRecordCount >= args.recordLimit ||
+      page.continueCursor === undefined
+    )
+      break;
+    cursor = page.continueCursor;
+  }
+
+  if (firstPage === undefined || lastPage === undefined)
+    throw new Error("The evidence export did not read any dataset pages.");
+  return {
+    ...firstPage,
+    scannedRecordCount,
+    selectionScanTruncated: lastPage.selectionScanTruncated,
+    ...(lastPage.continueCursor === undefined
+      ? { continueCursor: undefined }
+      : { continueCursor: lastPage.continueCursor }),
+    records,
+  };
+}
+
 const refs = {
   beginResearch: makeFunctionReference<
     "mutation",
@@ -117,6 +193,7 @@ const refs = {
       format: "jsonl" | "parquet";
       recordLimit: number;
       selectionStrategy: "balanced" | "recent";
+      publicationEpoch: number;
       cursor?: string;
     } | null
   >("evidenceJobs:beginExportExecution"),
@@ -208,19 +285,6 @@ function metadata(value: string) {
   }
 }
 
-function extractiveDigest(
-  query: string,
-  sources: Array<{ title: string; excerpt: string; canonicalUrl: string }>,
-) {
-  const citations = sources
-    .map(
-      (source, index) =>
-        `- [${index + 1}] ${source.title}: ${source.excerpt} (${source.canonicalUrl})`,
-    )
-    .join("\n");
-  return `# Evidence digest\n\nQuery: ${query}\n\nRouting unavailable; this is a deterministic extractive digest, not generated analysis.\n\n${citations}`;
-}
-
 export const runResearch = internalAction({
   args: {
     jobId: v.id("evidenceResearchJobs"),
@@ -256,13 +320,37 @@ export const runResearch = internalAction({
       kind: source.kind,
       updatedAt: source.updatedAt,
     }));
-    let markdown = extractiveDigest(input.query, cited);
+    const promptSources = compactEvidenceResearchSources(input.query, cited);
+    let markdown = buildExtractiveEvidenceDigest(input.query, promptSources);
     let route: { provider: string; model: string } | null = null;
+    let acceptedGeneratedOutput = false;
+    let fallback:
+      "deterministic-extractive" | "invalid-model-citations" | null =
+      "deterministic-extractive";
+    const generationStartedAt = Date.now();
+    const researchPrompt = buildEvidenceResearchPrompt(
+      input.query,
+      promptSources,
+    );
+    let generationResult: {
+      route: {
+        provider: string;
+        persistedModel: string;
+        reservationKey?: string;
+        reservationModel?: string;
+      };
+      value: {
+        text: string;
+        modelId: string;
+        inputTokens?: number;
+        outputTokens?: number;
+      };
+    } | null = null;
     try {
       const config = await convexModelRoutingConfig(ctx, {
         correlationId: `evidence-research:${args.jobId}`,
       });
-      const generated = await runWithModelFallback(
+      generationResult = await runWithModelFallback(
         config,
         { user: "evidence-research", tags: ["feature:evidence-research"] },
         {
@@ -270,10 +358,12 @@ export const runResearch = internalAction({
           correlationId: `evidence-research:${args.jobId}`,
           feature: "evidence-research",
           totalTimeoutMs: 120_000,
+          estimatedInputTokens: estimatePromptInputTokens(researchPrompt),
+          maxOutputTokens: 1_200,
           run: async (candidate: RoutedModel, signal: AbortSignal) => {
             const result = await generateText({
               model: candidate.model,
-              prompt: `Write a concise cited Markdown evidence brief for the query ${JSON.stringify(input.query)}. Use only the supplied source excerpts. Do not infer claims not present in them. Cite each factual statement with [n].\n\nSources:\n${cited.map((source, index) => `[${index + 1}] ${source.title}\n${source.excerpt}\n${source.canonicalUrl}`).join("\n\n")}`,
+              prompt: researchPrompt,
               maxOutputTokens: 1_200,
               temperature: 0,
               reasoning: "low",
@@ -284,25 +374,55 @@ export const runResearch = internalAction({
             return {
               text: result.text.trim(),
               modelId: result.response.modelId,
+              inputTokens: result.usage.inputTokens,
+              outputTokens: result.usage.outputTokens,
             };
           },
         },
       );
-      markdown = generated.value.text || markdown;
-      route = {
-        provider: generated.route.provider,
-        model: generated.value.modelId || generated.route.persistedModel,
-      };
     } catch {
-      /* Explicit deterministic fallback is persisted below. */
+      /* Preserve the deterministic extractive fallback when routing fails. */
+    }
+
+    if (generationResult !== null) {
+      const candidateMarkdown = generationResult.value.text.trim();
+      route = {
+        provider: generationResult.route.provider,
+        model:
+          generationResult.value.modelId ||
+          generationResult.route.persistedModel,
+      };
+      if (
+        candidateMarkdown &&
+        hasGroundedEvidenceResearchCitations(candidateMarkdown, promptSources)
+      ) {
+        markdown = candidateMarkdown;
+        acceptedGeneratedOutput = true;
+        fallback = null;
+      } else {
+        fallback = "invalid-model-citations";
+        markdown = buildExtractiveEvidenceDigest(input.query, promptSources);
+      }
+      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+        runKey: `evidence-research:${args.jobId}`,
+        reservationKey: generationResult.route.reservationKey,
+        reservationModel: generationResult.route.reservationModel,
+        agentSlug: "evidence-research",
+        stage: "research",
+        model: generationResult.route.persistedModel,
+        servedModel: generationResult.value.modelId,
+        inputTokens: generationResult.value.inputTokens,
+        outputTokens: generationResult.value.outputTokens,
+        durationMs: Date.now() - generationStartedAt,
+      });
     }
     const resultJson = JSON.stringify({
       query: input.query,
       markdown,
       sources: cited,
-      generated: route !== null,
+      generated: acceptedGeneratedOutput,
       route,
-      fallback: route === null ? "deterministic-extractive" : null,
+      fallback,
     });
     const artifact = new Blob([resultJson], { type: "application/json" });
     let resultStorageId: Id<"_storage"> | undefined;
@@ -371,12 +491,16 @@ export const runExport = internalAction({
       executionToken: args.executionToken,
     });
     if (input === null) return { started: false as const };
-    const bundle = await ctx.runQuery(refs.exportDocuments, {
+    const bundle = await readExportPages(ctx, {
       datasetId: input.datasetId,
-      limit: input.recordLimit,
+      recordLimit: input.recordLimit,
       selectionStrategy: input.selectionStrategy,
       cursor: input.cursor,
     });
+    if (bundle.publicationEpoch !== input.publicationEpoch)
+      throw new Error(
+        "Evidence publication policy changed while the export was starting. Create a new export job.",
+      );
     const records = bundle.records.map((record) => ({
       ...record,
       version:
@@ -495,9 +619,10 @@ export const materializeDatasetSnapshot = internalAction({
     checksum: v.string(),
   }),
   handler: async (ctx, args) => {
-    const bundle = await ctx.runQuery(refs.exportDocuments, {
+    const bundle = await readExportPages(ctx, {
       datasetId: args.datasetId,
-      limit: 100,
+      recordLimit: DATASET_SNAPSHOT_RECORD_LIMIT,
+      selectionStrategy: "balanced",
     });
     const records = bundle.records.map((record) => ({
       ...record,

@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import {
+  getPublicEvidenceSource,
   isIndependentPublicEvidenceEntity,
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
   isPublicEvidenceEntity,
+  publicEvidenceDocumentIdForVersion,
 } from "./evidenceVisibility";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, type QueryCtx } from "./_generated/server";
@@ -16,6 +18,7 @@ import {
 const PRIMARY_ORIGIN = "https://www.symbaiex.com";
 const FORUM_ORIGIN = "https://forum.symbaiex.com";
 const SOURCE_CANDIDATE_LIMIT = 50;
+const MAX_FORUM_CATEGORY_ANCESTORS = 10;
 const MAX_RESULTS = 50;
 const MAX_QUERY_LENGTH = 300;
 const CLAIM_STATUSES = [
@@ -178,11 +181,10 @@ async function validatedProjectedCandidate(
     const id = ctx.db.normalizeId("evidenceDocuments", row.documentId ?? "");
     const document =
       id === null ? null : await ctx.db.get("evidenceDocuments", id);
-    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
-      return null;
-    const source = await ctx.db.get("evidenceSources", document.sourceId);
+    if (document === null) return null;
+    const source = await getPublicEvidenceSource(ctx, document);
     if (
-      !isCurrentPublicSource(source) ||
+      source === null ||
       document.sourceId !== row.sourceId ||
       document.currentVersionId !== (row.documentVersionId ?? null) ||
       document.updatedAt !== row.updatedAt ||
@@ -298,17 +300,12 @@ async function evidenceCandidates(
   return (
     await Promise.all(
       rows.map(async (row): Promise<Candidate | null> => {
-        const source = await ctx.db.get("evidenceSources", row.sourceId);
+        const source = await getPublicEvidenceSource(ctx, row);
         const canonicalUrl = safeCanonicalUrl(row.canonicalUrl);
         // A mutable document is public only while its source is both public
         // and active. Do not return a stale record from a retired/private
         // source even when the document's denormalized visibility is public.
-        if (
-          !(await isPublicEvidenceDocument(ctx, row)) ||
-          !isCurrentPublicSource(source) ||
-          canonicalUrl === null
-        )
-          return null;
+        if (source === null || canonicalUrl === null) return null;
         return {
           type: "evidence_document",
           canonicalUrl,
@@ -401,21 +398,20 @@ async function claimCandidate(
     }
   >;
   for (const citation of citations) {
-    const version = await ctx.db.get(
-      "evidenceDocumentVersions",
+    const documentId = await publicEvidenceDocumentIdForVersion(
+      ctx,
       citation.documentVersionId,
     );
-    if (version === null) continue;
-    const document = await ctx.db.get("evidenceDocuments", version.documentId);
-    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
-      continue;
-    const source = await ctx.db.get("evidenceSources", document.sourceId);
-    if (!isCurrentPublicSource(source)) continue;
+    if (documentId === null) continue;
+    const document = await ctx.db.get("evidenceDocuments", documentId);
+    if (document === null) continue;
+    const source = await getPublicEvidenceSource(ctx, document);
+    if (source === null) continue;
     if (safeCanonicalUrl(document.canonicalUrl) === null) continue;
     publicCitations.push({
       ...citation,
       documentId: document._id,
-      documentVersionId: version._id,
+      documentVersionId: citation.documentVersionId,
     });
   }
   // Claims are only federated when a currently public, active-source citation
@@ -576,14 +572,12 @@ async function forumCandidates(
       )
       .take(SOURCE_CANDIDATE_LIMIT),
   ]);
-  const categoryRows = await ctx.db
-    .query("forumCategories")
-    .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
-    .take(200);
-  const categories = new Map(
-    categoryRows.map((category) => [category._id, category]),
+  const threads = [...active, ...locked];
+  const categories = await loadForumCategoryTree(
+    ctx,
+    threads.map((thread) => thread.categoryId),
   );
-  const visibleThreads = [...active, ...locked]
+  const visibleThreads = threads
     .map((thread) => ({
       thread,
       category: publicBoardCategory(thread.categoryId, categories),
@@ -637,14 +631,12 @@ async function legacyForumCandidates(
       )
       .take(SOURCE_CANDIDATE_LIMIT),
   ]);
-  const categoryRows = await ctx.db
-    .query("forumCategories")
-    .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
-    .take(200);
-  const categories = new Map(
-    categoryRows.map((category) => [category._id, category]),
+  const threads = [...active, ...locked];
+  const categories = await loadForumCategoryTree(
+    ctx,
+    threads.map((thread) => thread.categoryId),
   );
-  return [...active, ...locked]
+  return threads
     .map((thread) => ({
       thread,
       category: publicBoardCategory(thread.categoryId, categories),
@@ -680,18 +672,65 @@ async function legacyForumCandidates(
     );
 }
 
+/**
+ * Load only the candidate boards and their public ancestors. A fixed first-200
+ * scan both wasted reads on unrelated categories and silently hid boards past
+ * that position; candidate search is already bounded to at most 100 threads.
+ */
+async function loadForumCategoryTree(
+  ctx: QueryCtx,
+  categoryIds: Id<"forumCategories">[],
+) {
+  const categories = new Map<
+    Id<"forumCategories">,
+    Doc<"forumCategories"> | null
+  >();
+  let frontier = [...new Set(categoryIds)];
+  for (
+    let depth = 0;
+    frontier.length > 0 && depth <= MAX_FORUM_CATEGORY_ANCESTORS;
+    depth += 1
+  ) {
+    const missing = frontier.filter(
+      (categoryId) => !categories.has(categoryId),
+    );
+    const rows = await Promise.all(
+      missing.map(async (categoryId) => ({
+        categoryId,
+        category: await ctx.db.get("forumCategories", categoryId),
+      })),
+    );
+    const next = new Set<Id<"forumCategories">>();
+    for (const { categoryId, category } of rows) {
+      categories.set(categoryId, category);
+      if (
+        category === null ||
+        category.status !== "active" ||
+        (category.viewAccess ?? "public") !== "public" ||
+        (depth === 0 && (category.kind ?? "board") !== "board") ||
+        depth === MAX_FORUM_CATEGORY_ANCESTORS
+      ) {
+        continue;
+      }
+      if (category.parentCategoryId !== undefined)
+        next.add(category.parentCategoryId);
+    }
+    frontier = [...next];
+  }
+  return categories;
+}
+
 function publicBoardCategory(
   categoryId: Id<"forumCategories">,
-  categories: Map<Id<"forumCategories">, Doc<"forumCategories">>,
+  categories: Map<Id<"forumCategories">, Doc<"forumCategories"> | null>,
 ): Doc<"forumCategories"> | null {
   const requested = categories.get(categoryId);
   // A thread can be hosted only by a board. Its ancestors may be public
   // sections or boards; each is checked independently below.
-  if (requested === undefined || (requested.kind ?? "board") !== "board")
-    return null;
+  if (requested == null || (requested.kind ?? "board") !== "board") return null;
   const visited = new Set<Id<"forumCategories">>();
-  let current: Doc<"forumCategories"> | undefined = requested;
-  while (current !== undefined) {
+  let current: Doc<"forumCategories"> | null | undefined = requested;
+  while (current != null) {
     if (
       current.status !== "active" ||
       (current.viewAccess ?? "public") !== "public" ||
@@ -703,10 +742,6 @@ function publicBoardCategory(
     current = categories.get(current.parentCategoryId);
   }
   return null;
-}
-
-function isCurrentPublicSource(source: Doc<"evidenceSources"> | null) {
-  return source?.status === "active" && source.visibility === "public";
 }
 
 /**

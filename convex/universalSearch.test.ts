@@ -8,6 +8,8 @@ import { internal } from "./_generated/api";
 import schema from "./schema";
 import {
   requestUniversalSearchProjectionRebuild,
+  syncEvidenceClaimUniversalSearchProjection,
+  syncEvidenceDocumentUniversalSearchProjection,
   syncForumThreadUniversalSearchProjection,
   syncPostUniversalSearchProjection,
   UNIVERSAL_SEARCH_PROJECTION_MIGRATION_KEY,
@@ -293,6 +295,62 @@ async function seedPublicCorpus(t: ReturnType<typeof setup>) {
 }
 
 describe("universal public lexical search", () => {
+  test("evidence projections share the current source publication check", async () => {
+    const t = setup();
+    await seedPublicCorpus(t);
+
+    await t.run(async (ctx) => {
+      const documents = await ctx.db.query("evidenceDocuments").take(10);
+      const document = documents.find(
+        (row) => row.externalKey === "alpha-document",
+      )!;
+      const claims = await ctx.db.query("evidenceClaims").take(10);
+      const claim = claims.find(
+        (row) => row.claimKey === "alpha-public-claim",
+      )!;
+
+      await syncEvidenceDocumentUniversalSearchProjection(ctx, document);
+      await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
+
+      let projections = await ctx.db
+        .query("universalSearchProjections")
+        .take(100);
+      expect(
+        projections.some(
+          (row) => row.recordKey === `evidence_document:${document._id}`,
+        ),
+      ).toBe(true);
+      expect(
+        projections.some(
+          (row) => row.recordKey === `evidence_claim:${claim._id}`,
+        ),
+      ).toBe(true);
+
+      await ctx.db.patch("evidenceSources", document.sourceId, {
+        status: "paused",
+      });
+      const pausedDocument = await ctx.db.get(
+        "evidenceDocuments",
+        document._id,
+      );
+      expect(pausedDocument).not.toBeNull();
+      await syncEvidenceDocumentUniversalSearchProjection(ctx, pausedDocument!);
+      await syncEvidenceClaimUniversalSearchProjection(ctx, claim);
+
+      projections = await ctx.db.query("universalSearchProjections").take(100);
+      expect(
+        projections.some(
+          (row) => row.recordKey === `evidence_document:${document._id}`,
+        ),
+      ).toBe(false);
+      expect(
+        projections.some(
+          (row) => row.recordKey === `evidence_claim:${claim._id}`,
+        ),
+      ).toBe(false);
+    });
+  });
+
   test.each(["missing", "running", "missing-after-completion"] as const)(
     "waits for a %s forum migration and resumes on dependency completion",
     async (dependencyStatus) => {
@@ -870,6 +928,125 @@ describe("universal public lexical search", () => {
     await expect(
       t.query(internal.universalSearch.searchPublic, { query: "!!!" }),
     ).rejects.toThrow(/searchable/i);
+  });
+
+  test("finds public forum boards beyond the former 200-category scan", async () => {
+    for (const useProjection of [true, false]) {
+      const t = setup();
+      await seedPublicCorpus(t);
+      const target = await t.run(async (ctx) => {
+        if (!useProjection) {
+          const state = await ctx.db
+            .query("forumAgentMaintenanceState")
+            .withIndex("by_key", (q) =>
+              q.eq("key", "forum-search-projections-v1"),
+            )
+            .unique();
+          if (state !== null)
+            await ctx.db.delete("forumAgentMaintenanceState", state._id);
+        }
+        const author = await ctx.db
+          .query("users")
+          .withIndex("by_usernameNormalized", (q) =>
+            q.eq("usernameNormalized", "public-author"),
+          )
+          .unique();
+        expect(author).not.toBeNull();
+        for (let position = 0; position < 200; position += 1) {
+          await ctx.db.insert("forumCategories", {
+            slug: `unrelated-${useProjection ? "projection" : "legacy"}-${position}`,
+            name: `Unrelated category ${position}`,
+            description: "Public category not used by this search result",
+            kind: "board",
+            status: "active",
+            viewAccess: "public",
+            position: 10 + position,
+            threadCount: 0,
+            postCount: 0,
+            createdAt: 100,
+            updatedAt: 100,
+          });
+        }
+        const parentCategoryId = await ctx.db.insert("forumCategories", {
+          slug: `search-overflow-section-${useProjection}`,
+          name: "Overflow test section",
+          description: "Public parent outside the former scan cap",
+          kind: "section",
+          status: "active",
+          viewAccess: "public",
+          position: 1_000,
+          threadCount: 0,
+          postCount: 0,
+          createdAt: 100,
+          updatedAt: 100,
+        });
+        const categoryId = await ctx.db.insert("forumCategories", {
+          slug: `search-overflow-${useProjection}`,
+          name: "Search overflow board",
+          description: "Public board outside the former scan cap",
+          kind: "board",
+          parentCategoryId,
+          status: "active",
+          viewAccess: "public",
+          position: 1_001,
+          threadCount: 1,
+          postCount: 1,
+          createdAt: 100,
+          updatedAt: 200,
+        });
+        const slug = `alpha-overflow-${useProjection}`;
+        const title = "Alpha forum thread beyond category scan";
+        const threadId = await ctx.db.insert("forumThreads", {
+          categoryId,
+          categorySlug: `search-overflow-${useProjection}`,
+          slug,
+          title,
+          body: "Alpha body",
+          authorId: author!._id,
+          status: "active",
+          pinned: false,
+          replyCount: 0,
+          viewCount: 0,
+          lastPostAt: 300,
+          lastPostUserId: author!._id,
+          searchText: `${title} alpha`,
+          createdAt: 250,
+          updatedAt: 300,
+        });
+        await ctx.db.insert("forumThreadSearchProjections", {
+          threadId,
+          categoryId,
+          categorySlug: `search-overflow-${useProjection}`,
+          slug,
+          title,
+          authorId: author!._id,
+          lastPostUserId: author!._id,
+          status: "active",
+          pinned: false,
+          replyCount: 0,
+          viewCount: 0,
+          createdAt: 250,
+          updatedAt: 300,
+          lastPostAt: 300,
+          searchText: `${title} alpha`,
+          excerpt: "Alpha body",
+        });
+        return { slug };
+      });
+
+      const results = await t.query(internal.universalSearch.searchPublic, {
+        query: "alpha",
+        limit: 50,
+      });
+      expect(results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "forum_thread",
+            canonicalUrl: `https://forum.symbaiex.com/search-overflow-${useProjection}/${target.slug}`,
+          }),
+        ]),
+      );
+    }
   });
 
   test("fails closed for retired/private sources and unsafe URLs, and uses the live forum slug", async () => {

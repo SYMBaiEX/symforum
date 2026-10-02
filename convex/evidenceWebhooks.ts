@@ -14,6 +14,7 @@ import { requireAgentScope, requireAuthenticatedUser } from "./authz";
 import {
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
+  publicEvidenceDocumentIdForVersion,
 } from "./evidenceVisibility";
 
 const MAX_SUBSCRIPTION_KEY_LENGTH = 96;
@@ -1293,13 +1294,13 @@ async function isDeliveryEvidencePublic(ctx: QueryCtx, payloadJson: string) {
       typeof data.documentVersionId === "string"
         ? ctx.db.normalizeId("evidenceDocumentVersions", data.documentVersionId)
         : null;
-    const version =
-      id === null ? null : await ctx.db.get("evidenceDocumentVersions", id);
+    const documentId =
+      id === null ? null : await publicEvidenceDocumentIdForVersion(ctx, id);
     if (
-      version === null ||
+      documentId === null ||
       !(await isPublicEvidenceDocument(
         ctx,
-        await ctx.db.get("evidenceDocuments", version.documentId),
+        await ctx.db.get("evidenceDocuments", documentId),
       ))
     )
       return false;

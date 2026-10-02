@@ -1,8 +1,9 @@
 import { ConvexError, v } from "convex/values";
 import {
+  cachePublicEvidenceSource,
+  firstPartyForumClaimMatchesEvidenceDocument,
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
-  isPublicEvidenceEntity,
 } from "./evidenceVisibility";
 import {
   isEvidencePublicationEpochCurrent,
@@ -10,6 +11,15 @@ import {
 } from "./evidencePublicationEpoch";
 import { makeFunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import {
+  evidenceVersionExportDigestFromVersion,
+  type EvidenceVersionExportDigest,
+} from "./evidenceVersionExportDigest";
+import {
+  evidenceDocumentExportDataFromDigest,
+  type EvidenceDocumentExportData,
+} from "./evidenceDocumentExportDigest";
+import { migrations } from "./migrations";
 import {
   internalMutation,
   internalQuery,
@@ -22,15 +32,36 @@ export const DEFAULT_EXPORT_LIMIT = 100;
 export const MAX_EXPORT_LIMIT = 500;
 const MAX_EXPORT_SCAN = 500;
 const MAX_EXPORT_CITATIONS_PER_RECORD = 50;
-// Convex pagination cursors are opaque and can be longer than a small numeric
-// offset. Keep this bounded while leaving enough room for one native cursor.
-const MAX_EXPORT_CURSOR_LENGTH = 4_096;
+// Balanced exports carry one native cursor per active source. The outer
+// envelope is base64url encoded, so it stays ASCII and remains under Convex's
+// per-value and function-argument limits even at the 100-source ceiling.
+const MAX_EXPORT_CURSOR_LENGTH = 768 * 1_024;
+const MAX_NATIVE_EXPORT_CURSOR_LENGTH = 4_096;
+const MAX_EXPORT_SOURCE_COUNT = 100;
+const EXPORT_CURSOR_ENCODING_PREFIX = "e2.";
 const JOB_TTL_MS = 24 * 60 * 60 * 1_000;
 // Provider calls are bounded to two minutes. A much wider lease avoids
 // declaring healthy work stale while still giving duplicate workflow starts a
 // deterministic way to terminally fail abandoned executions without rerunning
 // paid/non-idempotent external work.
 const EXECUTION_STALE_MS = 30 * 60 * 1_000;
+
+async function exportVersionDigest(
+  ctx: QueryCtx,
+  document: Pick<EvidenceDocumentExportData, "_id" | "currentVersionId">,
+): Promise<EvidenceVersionExportDigest | null> {
+  const versionId = document.currentVersionId;
+  if (versionId === null) return null;
+  const digest = await ctx.db
+    .query("evidenceDocumentVersionExportDigests")
+    .withIndex("by_versionId", (q) => q.eq("versionId", versionId))
+    .unique();
+  if (digest?.documentId === document._id) return digest;
+  const version = await ctx.db.get("evidenceDocumentVersions", versionId);
+  return version === null
+    ? null
+    : evidenceVersionExportDigestFromVersion(version);
+}
 const enqueueWebhookRef = makeFunctionReference<
   "mutation",
   {
@@ -47,9 +78,10 @@ const readSourceExportPageRef = makeFunctionReference<
     snapshotAt: number;
     cursor: string | null;
     limit: number;
+    documentReadModel: "canonical" | "exportDigest";
   },
   {
-    documents: Doc<"evidenceDocuments">[];
+    documents: EvidenceDocumentExportData[];
     isDone: boolean;
     continueCursor: string;
   }
@@ -209,6 +241,10 @@ type ExportCursor = {
   nextSourceOffset?: number;
   /** Native cursor on the global public-documents index for recent order. */
   recentCursor?: string | null;
+  /** Pin each export continuation to the index that issued its cursors. */
+  documentReadModel?: "canonical" | "exportDigest";
+  /** Pin compact assessment visibility with the same cursor snapshot. */
+  compactForumAssessment?: boolean;
 };
 
 function decodeExportCursor(
@@ -223,7 +259,10 @@ function decodeExportCursor(
       message: "Export cursor is too long.",
     });
   try {
-    const value = JSON.parse(decodeURIComponent(cursor)) as Partial<
+    const decodedCursor = cursor.startsWith(EXPORT_CURSOR_ENCODING_PREFIX)
+      ? decodeBase64Url(cursor.slice(EXPORT_CURSOR_ENCODING_PREFIX.length))
+      : decodeURIComponent(cursor);
+    const value = JSON.parse(decodedCursor) as Partial<
       ExportCursor | LegacyExportCursor
     >;
     if (
@@ -241,6 +280,7 @@ function decodeExportCursor(
         datasetId: String(datasetId),
         selectionStrategy: strategy,
         snapshotAt: value.snapshotAt!,
+        documentReadModel: "canonical",
       };
     }
     const v2Value = value as Partial<ExportCursor>;
@@ -250,16 +290,22 @@ function decodeExportCursor(
       (typeof sourceCursors === "object" &&
         sourceCursors !== null &&
         !Array.isArray(sourceCursors) &&
+        Object.keys(sourceCursors).length <= MAX_EXPORT_SOURCE_COUNT &&
         Object.entries(sourceCursors).every(
           ([key, sourceCursor]) =>
             key.length > 0 &&
-            (sourceCursor === null || typeof sourceCursor === "string"),
+            key.length <= 160 &&
+            (sourceCursor === null ||
+              (typeof sourceCursor === "string" &&
+                sourceCursor.length <= MAX_NATIVE_EXPORT_CURSOR_LENGTH)),
         ));
     const validDoneSourceKeys =
       v2Value.doneSourceKeys === undefined ||
       (Array.isArray(v2Value.doneSourceKeys) &&
+        v2Value.doneSourceKeys.length <= MAX_EXPORT_SOURCE_COUNT &&
         v2Value.doneSourceKeys.every(
-          (key: unknown) => typeof key === "string" && key.length > 0,
+          (key: unknown) =>
+            typeof key === "string" && key.length > 0 && key.length <= 160,
         ));
     if (
       value.v !== 2 ||
@@ -269,15 +315,24 @@ function decodeExportCursor(
       (value.snapshotAt ?? 0) <= 0 ||
       !validSourceCursors ||
       !validDoneSourceKeys ||
+      (v2Value.documentReadModel !== undefined &&
+        v2Value.documentReadModel !== "canonical" &&
+        v2Value.documentReadModel !== "exportDigest") ||
+      (v2Value.compactForumAssessment !== undefined &&
+        typeof v2Value.compactForumAssessment !== "boolean") ||
       (v2Value.recentCursor !== undefined &&
         v2Value.recentCursor !== null &&
-        typeof v2Value.recentCursor !== "string") ||
+        (typeof v2Value.recentCursor !== "string" ||
+          v2Value.recentCursor.length > MAX_NATIVE_EXPORT_CURSOR_LENGTH)) ||
       (v2Value.nextSourceOffset !== undefined &&
         (!Number.isSafeInteger(v2Value.nextSourceOffset) ||
           v2Value.nextSourceOffset < 0))
     )
       throw new Error("mismatch");
-    return value as ExportCursor;
+    return {
+      ...(value as ExportCursor),
+      documentReadModel: v2Value.documentReadModel ?? "canonical",
+    };
   } catch {
     throw new ConvexError({
       code: "INVALID_EXPORT_CURSOR",
@@ -288,7 +343,82 @@ function decodeExportCursor(
 }
 
 function encodeExportCursor(value: ExportCursor) {
-  return encodeURIComponent(JSON.stringify(value));
+  const sourceCursors = Object.entries(value.sourceCursors ?? {});
+  if (
+    sourceCursors.length > MAX_EXPORT_SOURCE_COUNT ||
+    sourceCursors.some(
+      ([key, cursor]) =>
+        key.length === 0 ||
+        key.length > 160 ||
+        (cursor !== null && cursor.length > MAX_NATIVE_EXPORT_CURSOR_LENGTH),
+    ) ||
+    (value.doneSourceKeys?.length ?? 0) > MAX_EXPORT_SOURCE_COUNT ||
+    value.doneSourceKeys?.some((key) => key.length === 0 || key.length > 160) ||
+    (value.recentCursor !== undefined &&
+      value.recentCursor !== null &&
+      value.recentCursor.length > MAX_NATIVE_EXPORT_CURSOR_LENGTH)
+  )
+    throw new ConvexError({
+      code: "INVALID_EXPORT_CURSOR",
+      message: "Export continuation state exceeds the supported limit.",
+    });
+  const encoded = `${EXPORT_CURSOR_ENCODING_PREFIX}${encodeBase64Url(
+    JSON.stringify(value),
+  )}`;
+  if (encoded.length > MAX_EXPORT_CURSOR_LENGTH)
+    throw new ConvexError({
+      code: "INVALID_EXPORT_CURSOR",
+      message: "Export continuation state exceeds the supported limit.",
+    });
+  return encoded;
+}
+
+function encodeBase64Url(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+async function evidenceExportReadModels(ctx: QueryCtx) {
+  const statuses = await migrations.getStatus(ctx, {
+    migrations: [
+      "migrations:backfillEvidenceDocumentExportDigests",
+      "migrations:backfillResearchQualityAssessmentVisibilityDigests",
+    ],
+  });
+  const documentDigest = statuses.find(
+    (status) =>
+      status.name === "migrations:backfillEvidenceDocumentExportDigests",
+  );
+  const assessmentVisibilityDigest = statuses.find(
+    (status) =>
+      status.name ===
+      "migrations:backfillResearchQualityAssessmentVisibilityDigests",
+  );
+  return {
+    // Completion is the handoff invariant: the migration covers legacy rows,
+    // and every post-deploy evidenceDocuments writer updates its digest in the
+    // same mutation. Do not add a per-row canonical fallback after this gate;
+    // that would reintroduce the export's large-row reads and complicate native
+    // pagination cursors. Keep new document writers paired with the digest.
+    documentReadModel:
+      documentDigest?.isDone === true
+        ? ("exportDigest" as const)
+        : ("canonical" as const),
+    compactForumAssessment: assessmentVisibilityDigest?.isDone === true,
+  };
 }
 const ARTIFACT_DOWNLOAD = v.object({
   storageId: v.id("_storage"),
@@ -925,6 +1055,10 @@ export const readSourceExportPage = internalQuery({
     snapshotAt: v.number(),
     cursor: v.union(v.string(), v.null()),
     limit: v.number(),
+    documentReadModel: v.union(
+      v.literal("canonical"),
+      v.literal("exportDigest"),
+    ),
   },
   returns: v.object({
     documents: v.array(v.any()),
@@ -932,6 +1066,25 @@ export const readSourceExportPage = internalQuery({
     continueCursor: v.string(),
   }),
   handler: async (ctx, args) => {
+    if (args.documentReadModel === "exportDigest") {
+      const page = await ctx.db
+        .query("evidenceDocumentExportDigests")
+        .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
+          q
+            .eq("sourceId", args.sourceId)
+            .eq("visibility", "public")
+            .lte("updatedAt", args.snapshotAt),
+        )
+        .order("desc")
+        .paginate({ cursor: args.cursor, numItems: args.limit });
+      return {
+        documents: page.page.map((digest) =>
+          evidenceDocumentExportDataFromDigest(digest),
+        ),
+        isDone: page.isDone,
+        continueCursor: page.continueCursor,
+      };
+    }
     const page = await ctx.db
       .query("evidenceDocuments")
       .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
@@ -982,12 +1135,26 @@ export const readExportDocuments = internalQuery({
       "open",
       "attributed",
     ];
-    const sourceKeys = dataset.sourceKeys ?? [];
+    const sourceKeys = [...new Set(dataset.sourceKeys ?? [])];
+    if (sourceKeys.length > MAX_EXPORT_SOURCE_COUNT)
+      throw new ConvexError({
+        code: "EVIDENCE_EXPORT_SOURCE_LIMIT_EXCEEDED",
+        message: "This dataset exceeds the supported export source limit.",
+      });
     const allowedKinds = new Set(includedKinds);
     const allowedLicenses = new Set(includedLicenseClasses);
     const allowedSources = new Set(sourceKeys);
-    const sources =
-      sourceKeys.length > 0
+    // Recent ordering is a global document-index read, so small pages do not
+    // need the full active-source catalog. Resolve only sources referenced by
+    // that page; the lookup count stays within the same 100-source bound used
+    // by balanced cursor state. Larger direct reads retain the catalog bound.
+    const resolveRecentSourcesFromPage =
+      selectionStrategy === "recent" &&
+      sourceKeys.length === 0 &&
+      limit <= MAX_EXPORT_SOURCE_COUNT;
+    const sources: Doc<"evidenceSources">[] = resolveRecentSourcesFromPage
+      ? []
+      : sourceKeys.length > 0
         ? (
             await Promise.all(
               sourceKeys.map((sourceKey) =>
@@ -1010,26 +1177,56 @@ export const readExportDocuments = internalQuery({
             .withIndex("by_status_and_visibility", (q) =>
               q.eq("status", "active").eq("visibility", "public"),
             )
-            .take(100);
+            .take(MAX_EXPORT_SOURCE_COUNT + 1);
+    if (
+      !resolveRecentSourcesFromPage &&
+      sourceKeys.length === 0 &&
+      sources.length > MAX_EXPORT_SOURCE_COUNT
+    )
+      throw new ConvexError({
+        code: "EVIDENCE_EXPORT_SOURCE_LIMIT_EXCEEDED",
+        message:
+          "The active public source catalog exceeds the supported export source limit; configure at most 100 sources.",
+      });
     const orderedSources = [...sources].sort((left, right) =>
       left.sourceKey.localeCompare(right.sourceKey),
     );
+    for (const source of orderedSources) cachePublicEvidenceSource(ctx, source);
     const sourceById = new Map(
       orderedSources.map((source) => [String(source._id), source]),
     );
-    const cursorState = parsedCursor ?? {
-      v: 2 as const,
-      datasetId: String(dataset._id),
-      selectionStrategy,
-      snapshotAt,
-    };
+    // Migration status is needed for the first page and legacy cursors that
+    // predate assessment-mode pinning. New cursors carry both read-model flags,
+    // so continuation pages avoid re-reading component migration state.
+    const exportReadModels =
+      parsedCursor === null || parsedCursor.compactForumAssessment === undefined
+        ? await evidenceExportReadModels(ctx)
+        : null;
+    const documentReadModel =
+      parsedCursor?.documentReadModel ??
+      exportReadModels?.documentReadModel ??
+      "canonical";
+    const compactForumAssessment =
+      parsedCursor?.compactForumAssessment ??
+      exportReadModels?.compactForumAssessment ??
+      false;
+    const cursorState = parsedCursor
+      ? { ...parsedCursor, compactForumAssessment }
+      : {
+          v: 2 as const,
+          datasetId: String(dataset._id),
+          selectionStrategy,
+          snapshotAt,
+          documentReadModel,
+          compactForumAssessment,
+        };
     const doneSourceKeys = new Set(cursorState.doneSourceKeys ?? []);
     let scannedRecordCount = 0;
     let selectionScanTruncated = false;
     let continueCursor: string | undefined;
     let sourceScans: Array<{
       source: (typeof orderedSources)[number];
-      documents: Doc<"evidenceDocuments">[];
+      documents: EvidenceDocumentExportData[];
     }> = [];
     if (selectionStrategy === "balanced") {
       const sourceCount = orderedSources.length;
@@ -1057,7 +1254,7 @@ export const readExportDocuments = internalQuery({
           );
           if (requested === 0) return { source, page: null, requested };
           const page: {
-            documents: Doc<"evidenceDocuments">[];
+            documents: EvidenceDocumentExportData[];
             isDone: boolean;
             continueCursor: string;
           } = await ctx.runQuery(readSourceExportPageRef, {
@@ -1065,6 +1262,7 @@ export const readExportDocuments = internalQuery({
             snapshotAt,
             cursor: cursorState.sourceCursors?.[source.sourceKey] ?? null,
             limit: requested,
+            documentReadModel,
           });
           return { source, page, requested };
         }),
@@ -1117,17 +1315,63 @@ export const readExportDocuments = internalQuery({
       // Recent order can use the global native index directly. The fetched raw
       // page is exactly the maximum returned record count, so no eligible row
       // is advanced past without being represented in this response.
-      const page = await ctx.db
-        .query("evidenceDocuments")
-        .withIndex("by_visibility_and_updatedAt", (q) =>
-          q.eq("visibility", "public").lte("updatedAt", snapshotAt),
-        )
-        .order("desc")
-        .paginate({
-          cursor: cursorState.recentCursor ?? null,
-          numItems: Math.min(MAX_EXPORT_SCAN, limit),
-        });
-      sourceScans = page.page.flatMap((document) => {
+      let page: {
+        page: EvidenceDocumentExportData[];
+        isDone: boolean;
+        continueCursor: string;
+      };
+      if (documentReadModel === "exportDigest") {
+        const digestPage = await ctx.db
+          .query("evidenceDocumentExportDigests")
+          .withIndex("by_visibility_and_updatedAt", (q) =>
+            q.eq("visibility", "public").lte("updatedAt", snapshotAt),
+          )
+          .order("desc")
+          .paginate({
+            cursor: cursorState.recentCursor ?? null,
+            numItems: Math.min(MAX_EXPORT_SCAN, limit),
+          });
+        page = {
+          ...digestPage,
+          page: digestPage.page.map((digest) =>
+            evidenceDocumentExportDataFromDigest(digest),
+          ),
+        };
+      } else {
+        page = await ctx.db
+          .query("evidenceDocuments")
+          .withIndex("by_visibility_and_updatedAt", (q) =>
+            q.eq("visibility", "public").lte("updatedAt", snapshotAt),
+          )
+          .order("desc")
+          .paginate({
+            cursor: cursorState.recentCursor ?? null,
+            numItems: Math.min(MAX_EXPORT_SCAN, limit),
+          });
+      }
+      const pageDocuments = page.page;
+      if (resolveRecentSourcesFromPage) {
+        const sourceIds = [
+          ...new Set(pageDocuments.map((row) => row.sourceId)),
+        ];
+        const pageSources = (
+          await Promise.all(
+            sourceIds.map((sourceId) =>
+              ctx.db.get("evidenceSources", sourceId),
+            ),
+          )
+        ).filter(
+          (source): source is Doc<"evidenceSources"> =>
+            source !== null &&
+            source.status === "active" &&
+            source.visibility === "public",
+        );
+        for (const source of pageSources) {
+          cachePublicEvidenceSource(ctx, source);
+          sourceById.set(String(source._id), source);
+        }
+      }
+      sourceScans = pageDocuments.flatMap((document) => {
         const source = sourceById.get(String(document.sourceId));
         return source === undefined ? [] : [{ source, documents: [document] }];
       });
@@ -1173,6 +1417,55 @@ export const readExportDocuments = internalQuery({
     const selected = (
       selectionStrategy === "balanced" ? balanced : recent
     ).slice(0, limit);
+    // A single export page can contain many citations and entity links that
+    // point to the same source records. Resolve visibility once per ID in
+    // this query transaction; publication policy is snapshot-consistent here,
+    // and reusing the result avoids walking the same provenance graph again.
+    const publicEntityCache = new Map<
+      Id<"evidenceEntities">,
+      Promise<Doc<"evidenceEntities"> | null>
+    >();
+    const publicClaimCache = new Map<
+      Id<"evidenceClaims">,
+      Promise<Doc<"evidenceClaims"> | null>
+    >();
+    const getPublicEntity = (entityId: Id<"evidenceEntities">) => {
+      let entityPromise = publicEntityCache.get(entityId);
+      if (entityPromise === undefined) {
+        entityPromise = (async () => {
+          const entity = await ctx.db.get("evidenceEntities", entityId);
+          // The link is indexed by this candidate's current version, and the
+          // candidate passed isPublicEvidenceDocument immediately above. That
+          // exact public document is already a live reference for the entity,
+          // so walking the global reference graph again only rereads unrelated
+          // evidence documents and versions.
+          return entity?.visibility === "public" ? entity : null;
+        })();
+        publicEntityCache.set(entityId, entityPromise);
+      }
+      return entityPromise;
+    };
+    const getPublicClaim = (
+      claimId: Id<"evidenceClaims">,
+      document: Pick<EvidenceDocumentExportData, "externalKey">,
+    ) => {
+      let claimPromise = publicClaimCache.get(claimId);
+      if (claimPromise === undefined) {
+        claimPromise = (async () => {
+          const claim = await ctx.db.get("evidenceClaims", claimId);
+          if (claim === null || claim.visibility !== "public") return null;
+          // Citations were loaded from this document's current version, and
+          // the document passed its full publication check above. When the
+          // claim key names this same first-party document, its own reference
+          // proves publication; avoid rewalking the same thread/assessment ACL.
+          if (firstPartyForumClaimMatchesEvidenceDocument(claim, document))
+            return claim;
+          return (await isPublicEvidenceClaim(ctx, claim)) ? claim : null;
+        })();
+        publicClaimCache.set(claimId, claimPromise);
+      }
+      return claimPromise;
+    };
     const records: Array<{
       schemaVersion: string;
       datasetKey: string;
@@ -1234,21 +1527,21 @@ export const readExportDocuments = internalQuery({
     }> = [];
     for (const candidate of selected) {
       const { document, source } = candidate;
-      if (!(await isPublicEvidenceDocument(ctx, document))) continue;
-      const version =
-        document.currentVersionId === null
-          ? null
-          : await ctx.db.get(
-              "evidenceDocumentVersions",
-              document.currentVersionId,
-            );
+      if (
+        !(await isPublicEvidenceDocument(ctx, document, {
+          preferCompactForumThread: true,
+          preferCompactForumAssessment: compactForumAssessment,
+        }))
+      )
+        continue;
+      const version = await exportVersionDigest(ctx, document);
       const citations =
         version === null
           ? []
           : await ctx.db
               .query("evidenceClaimCitations")
               .withIndex("by_documentVersionId", (q) =>
-                q.eq("documentVersionId", version._id),
+                q.eq("documentVersionId", version.versionId),
               )
               .take(MAX_EXPORT_CITATIONS_PER_RECORD + 1);
       const boundedCitations = citations.slice(
@@ -1261,15 +1554,14 @@ export const readExportDocuments = internalQuery({
           : await ctx.db
               .query("evidenceDocumentEntities")
               .withIndex("by_documentVersionId", (q) =>
-                q.eq("documentVersionId", version._id),
+                q.eq("documentVersionId", version.versionId),
               )
               .take(50);
       const entities = (
         await Promise.all(
           entityLinks.map(async (link) => {
-            const entity = await ctx.db.get("evidenceEntities", link.entityId);
-            return entity === null ||
-              !(await isPublicEvidenceEntity(ctx, entity))
+            const entity = await getPublicEntity(link.entityId);
+            return entity === null
               ? null
               : {
                   entityKey: entity.entityKey,
@@ -1284,8 +1576,8 @@ export const readExportDocuments = internalQuery({
       const claims = (
         await Promise.all(
           boundedCitations.map(async (citation) => {
-            const claim = await ctx.db.get("evidenceClaims", citation.claimId);
-            return claim === null || !(await isPublicEvidenceClaim(ctx, claim))
+            const claim = await getPublicClaim(citation.claimId, document);
+            return claim === null
               ? null
               : {
                   claimKey: claim.claimKey,
@@ -1747,6 +2039,7 @@ export const beginExportExecution = internalMutation({
       format: v.union(v.literal("jsonl"), v.literal("parquet")),
       recordLimit: v.number(),
       selectionStrategy: v.union(v.literal("balanced"), v.literal("recent")),
+      publicationEpoch: v.number(),
       cursor: v.optional(v.string()),
     }),
   ),
@@ -1769,6 +2062,7 @@ export const beginExportExecution = internalMutation({
       format: job.format,
       recordLimit: job.recordLimit ?? DEFAULT_EXPORT_LIMIT,
       selectionStrategy: job.selectionStrategy ?? "balanced",
+      publicationEpoch: job.publicationEpoch ?? 0,
       cursor: job.cursor,
     };
   },

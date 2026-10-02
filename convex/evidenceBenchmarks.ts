@@ -2,6 +2,7 @@ import { makeFunctionReference } from "convex/server";
 import {
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
+  publicEvidenceDocumentIdForVersion,
 } from "./evidenceVisibility";
 import { ConvexError, v } from "convex/values";
 import {
@@ -152,15 +153,12 @@ export const runDailyCitationCoverage = internalMutation({
       let supported = false;
       for (const citation of citations.slice(0, CITATIONS_PER_CLAIM_CAP)) {
         if (citation.relation !== "supports") continue;
-        const version = await ctx.db.get(
-          "evidenceDocumentVersions",
+        const documentId = await publicEvidenceDocumentIdForVersion(
+          ctx,
           citation.documentVersionId,
         );
-        if (!version) continue;
-        const document = await ctx.db.get(
-          "evidenceDocuments",
-          version.documentId,
-        );
+        if (documentId === null) continue;
+        const document = await ctx.db.get("evidenceDocuments", documentId);
         if (await isPublicEvidenceDocument(ctx, document)) {
           supported = true;
           break;
