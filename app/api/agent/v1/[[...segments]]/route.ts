@@ -242,25 +242,26 @@ async function handleBatch(
     );
   }
 
-  const results = [];
-  for (const entry of mapped) {
-    const response = await relayAgentData(
-      request,
-      entry!.operation,
-      entry!.input,
-      authorization,
-      `batch:${entry!.index}:${crypto.randomUUID()}`,
-    );
-    const responseBody = await response.json().catch(() => ({
-      error: "Agent API returned a non-JSON batch response.",
-      code: "AGENT_BATCH_RESPONSE_INVALID",
-    }));
-    results.push({
-      id: entry!.id,
-      status: response.status,
-      body: responseBody,
-    });
-  }
+  const results = await Promise.all(
+    mapped.map(async (entry) => {
+      const response = await relayAgentData(
+        request,
+        entry!.operation,
+        entry!.input,
+        authorization,
+        `batch:${entry!.index}:${crypto.randomUUID()}`,
+      );
+      const responseBody = await response.json().catch(() => ({
+        error: "Agent API returned a non-JSON batch response.",
+        code: "AGENT_BATCH_RESPONSE_INVALID",
+      }));
+      return {
+        id: entry!.id,
+        status: response.status,
+        body: responseBody,
+      };
+    }),
+  );
   return agentDataJson(request, { results }, 200);
 }
 
