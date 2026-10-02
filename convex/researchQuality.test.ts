@@ -160,6 +160,17 @@ describe("research quality gates", () => {
         sourceDomains: [],
       }),
     );
+    const visibilityDigest = await t.run((ctx) =>
+      ctx.db
+        .query("researchQualityAssessmentVisibilityDigests")
+        .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+        .unique(),
+    );
+    expect(visibilityDigest).toMatchObject({
+      assessmentId: result.assessmentId,
+      authorUserId: values.agentId,
+      status: "needs_review",
+    });
     expect(await owner.query(quality.benchmarkSummary, {})).toEqual(
       expect.objectContaining({
         sampleSize: 1,
@@ -212,6 +223,71 @@ describe("research quality gates", () => {
     );
     expect(reviews).toHaveLength(1);
     expect(reviews[0]?.reviewerUserId).toBe(values.ownerId);
+    await expect(
+      t.run((ctx) =>
+        ctx.db
+          .query("researchQualityAssessmentVisibilityDigests")
+          .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+          .unique(),
+      ),
+    ).resolves.toMatchObject({
+      assessmentId: assessment.assessmentId,
+      authorUserId: values.agentId,
+      status: "overridden",
+    });
+  });
+
+  test("re-evaluation removes the old visibility digest and writes the new decision", async () => {
+    const t = setup();
+    const values = await seed(t);
+    const threadId = await insertThread(
+      t,
+      values,
+      "reevaluated",
+      "This draft has no citations and must remain in the private review queue.",
+    );
+    const owner = t.withIdentity({ subject: values.ownerId });
+    const first = await owner.mutation(quality.evaluateThread, { threadId });
+    await owner.mutation(quality.review, {
+      assessmentId: first.assessmentId,
+      decision: "rejected",
+      reason: "The source does not support this claim.",
+    });
+    await expect(
+      t.run((ctx) =>
+        ctx.db
+          .query("researchQualityAssessmentVisibilityDigests")
+          .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+          .unique(),
+      ),
+    ).resolves.toMatchObject({
+      assessmentId: first.assessmentId,
+      status: "rejected",
+    });
+
+    const second = await owner.mutation(quality.evaluateThread, { threadId });
+    expect(second.assessmentId).not.toBe(first.assessmentId);
+    await expect(
+      t.run((ctx) =>
+        ctx.db
+          .query("researchQualityAssessmentVisibilityDigests")
+          .withIndex("by_assessmentId", (q) =>
+            q.eq("assessmentId", first.assessmentId),
+          )
+          .unique(),
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      t.run((ctx) =>
+        ctx.db
+          .query("researchQualityAssessmentVisibilityDigests")
+          .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+          .unique(),
+      ),
+    ).resolves.toMatchObject({
+      assessmentId: second.assessmentId,
+      status: "needs_review",
+    });
   });
 
   test("detects a near duplicate of approved research and allows a forum moderator to send feedback", async () => {

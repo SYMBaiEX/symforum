@@ -1,13 +1,18 @@
 import { RAG } from "@convex-dev/rag";
-import { isPublicEvidenceDocument } from "./evidenceVisibility";
+import { embedRagQuery, embedRagText } from "./ragEmbeddings";
+import { getPublicEvidenceSource } from "./evidenceVisibility";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import {
+  forumDayKey,
   estimatedModelCostMicroUsd,
   openRouterDailyBudgetMicroUsd,
 } from "../lib/ai-model-costs";
-import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
+import {
+  semanticSearchConfig,
+  type SemanticSearchConfig,
+} from "../lib/semantic-search-config";
 import {
   isKnownOpenRouterSpendBucket,
   OPENROUTER_SPEND_BUCKETS,
@@ -20,6 +25,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 
 /**
@@ -37,9 +43,9 @@ const MAX_SOURCE_TEXT_CHARS = 6_000;
 const MAX_QUERY_CHARS = 300;
 const MAX_SEMANTIC_CANDIDATES = 25;
 const MAX_BACKFILL_PAGE = 5;
+const MAX_LEGACY_INDEX_MARKERS = 50;
 const BACKFILL_KEY = "semantic-search-public-evidence-v1";
 const SEMANTIC_HEALTH_KEY = "semantic-search-public-evidence";
-const DEFAULT_DAILY_BUDGET_USD = 0.05;
 const PAUSE_AFTER_FAILURE_MS = 15 * 60_000;
 const PROVIDER_TIMEOUT_MS = 12_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
@@ -68,6 +74,7 @@ type IndexDocument = {
   updatedAt: number;
   sourceUpdatedAt: number;
   alreadyIndexed: boolean;
+  legacyMarkerId?: Id<"aiOperationalStates">;
 };
 
 type SemanticCandidate = {
@@ -111,11 +118,20 @@ type UniversalResult = {
   };
 };
 
-const readDocumentRef = makeFunctionReference<
+const readIndexPreflightRef = makeFunctionReference<
   "query",
-  { documentId: Id<"evidenceDocuments">; embeddingModel: string },
-  IndexDocument | null
->("semanticSearch:readPublicDocumentForIndex");
+  {
+    documentId: Id<"evidenceDocuments">;
+    embeddingModel: string;
+    now: number;
+    allowPriorSourceRevision?: boolean;
+  },
+  {
+    available: boolean;
+    reason?: string;
+    document: IndexDocument | null;
+  }
+>("semanticSearch:readIndexPreflight");
 const readBackfillPageRef = makeFunctionReference<
   "query",
   { cursor?: string },
@@ -144,9 +160,20 @@ const recordUsageRef = makeFunctionReference<
     model: string;
     outcome: "completed" | "failed";
     detail: string;
+    indexMarker?: { key: string; detail: string };
   },
   null
 >("semanticSearch:recordUsage");
+const migrateLegacyIndexMarkerRef = makeFunctionReference<
+  "mutation",
+  {
+    markerId: Id<"aiOperationalStates">;
+    documentId: Id<"evidenceDocuments">;
+    documentUpdatedAt: number;
+    model: string;
+  },
+  null
+>("semanticSearch:migrateLegacyIndexMarker");
 const reserveUsageRef = makeFunctionReference<
   "mutation",
   {
@@ -175,9 +202,22 @@ const readCandidatesRef = makeFunctionReference<
     score: number;
   }>
 >("semanticSearch:readCurrentPublicCandidates");
+const readCleanupEligibilityRef = makeFunctionReference<
+  "query",
+  { documentIds: Id<"evidenceDocuments">[] },
+  { eligibleDocumentIds: Id<"evidenceDocuments">[] }
+>("semanticSearch:readEvidenceVectorCleanupEligibility");
+const invalidateIndexMarkersRef = makeFunctionReference<
+  "mutation",
+  { documentIds: Id<"evidenceDocuments">[]; model: string },
+  null
+>("semanticSearch:invalidateEvidenceVectorMarkers");
 const indexDocumentRef = makeFunctionReference<
   "action",
-  { documentId: Id<"evidenceDocuments"> },
+  {
+    documentId: Id<"evidenceDocuments">;
+    allowPriorSourceRevision?: boolean;
+  },
   { status: string; reason?: string; created?: boolean; inputTokens?: number }
 >("semanticSearch:indexPublicEvidenceDocument");
 const backfillRef = makeFunctionReference<
@@ -212,7 +252,7 @@ const lexicalSearchRef = makeFunctionReference<
 const cleanupRef = makeFunctionReference<
   "mutation",
   { now?: number },
-  { refunded: number; deleted: number; hasMore: boolean }
+  { failed: number; deleted: number; hasMore: boolean }
 >("semanticSearch:cleanupExpiredOperations");
 const availabilityRef = makeFunctionReference<
   "query",
@@ -220,58 +260,8 @@ const availabilityRef = makeFunctionReference<
   { available: boolean; reason?: string }
 >("semanticSearch:readAvailability");
 
-export type SemanticSearchConfig = {
-  enabled: boolean;
-  model: string;
-  dailyBudgetMicroUsd: number;
-  reason?: string;
-};
-
-export function semanticSearchConfig(values: {
-  enabled?: string;
-  dailyBudgetUsd?: string;
-  embeddingModel?: string;
-}): SemanticSearchConfig {
-  if (values.enabled?.trim().toLowerCase() !== "true") {
-    return {
-      enabled: false,
-      model: OPENROUTER_EMBEDDING_MODEL,
-      dailyBudgetMicroUsd: 0,
-      reason: "SEMANTIC_SEARCH_ENABLED is not true.",
-    };
-  }
-  const configuredModel =
-    values.embeddingModel?.trim() || OPENROUTER_EMBEDDING_MODEL;
-  // Pricing and vector dimensions are a security boundary: do not silently
-  // route to an unpriced model or mix incompatible vectors in one namespace.
-  if (configuredModel !== OPENROUTER_EMBEDDING_MODEL) {
-    return {
-      enabled: false,
-      model: configuredModel,
-      dailyBudgetMicroUsd: 0,
-      reason:
-        "The configured embedding model has no approved price/dimension profile.",
-    };
-  }
-  const rawBudget = values.dailyBudgetUsd?.trim();
-  const budgetUsd =
-    rawBudget === undefined || rawBudget === ""
-      ? DEFAULT_DAILY_BUDGET_USD
-      : Number(rawBudget);
-  if (!Number.isFinite(budgetUsd) || budgetUsd <= 0 || budgetUsd > 5) {
-    return {
-      enabled: false,
-      model: configuredModel,
-      dailyBudgetMicroUsd: 0,
-      reason: "SEMANTIC_SEARCH_DAILY_BUDGET_USD must be between 0 and 5.",
-    };
-  }
-  return {
-    enabled: true,
-    model: configuredModel,
-    dailyBudgetMicroUsd: Math.round(budgetUsd * 1_000_000),
-  };
-}
+export { semanticSearchConfig };
+export type { SemanticSearchConfig };
 
 function config() {
   // Generated environment bindings update at deployment time. The cast keeps
@@ -361,11 +351,13 @@ function platform(apiKey: string, model: string) {
       });
     },
   });
-  return new RAG<Record<string, never>, SemanticMetadata>(components.rag, {
+  const embeddingModel = openRouter.embeddingModel(model);
+  const rag = new RAG<Record<string, never>, SemanticMetadata>(components.rag, {
     embeddingDimension: 1536,
-    textEmbeddingModel: openRouter.embeddingModel(model),
+    textEmbeddingModel: embeddingModel,
     filterNames: [],
   });
+  return { rag, embeddingModel };
 }
 
 function normalizedText(value: string, maximum: number) {
@@ -378,12 +370,25 @@ function fingerprint(
   return `${document.updatedAt}:${document.sourceUpdatedAt}`;
 }
 
+function contentIndexMarkerKey(
+  documentId: Id<"evidenceDocuments">,
+  documentUpdatedAt: number,
+  model: string,
+) {
+  return `semantic-index-content:${documentId}:${documentUpdatedAt}:${model}`;
+}
+
 export function isCurrentFingerprint(
   candidateFingerprint: string,
   documentUpdatedAt: number,
-  sourceUpdatedAt: number,
 ) {
-  return candidateFingerprint === `${documentUpdatedAt}:${sourceUpdatedAt}`;
+  // Source visibility/status is rechecked against primary records below.
+  // Source metadata does not change the embedded document text; accepting an
+  // older source revision also keeps vectors written by the previous format.
+  return (
+    candidateFingerprint === `${documentUpdatedAt}` ||
+    candidateFingerprint.startsWith(`${documentUpdatedAt}:`)
+  );
 }
 
 function estimatedInputTokens(text: string) {
@@ -394,7 +399,9 @@ function estimatedInputTokens(text: string) {
 }
 
 export function dayKey(timestamp = Date.now()) {
-  return new Date(timestamp).toISOString().slice(0, 10);
+  // Semantic embeddings and routed model calls share one OpenRouter budget
+  // window; using UTC here would let the same local day spend into two buckets.
+  return forumDayKey(timestamp);
 }
 
 function safeError(error: unknown) {
@@ -445,44 +452,64 @@ function hasValidSpendCounters(spend: Doc<"aiSpendBuckets">) {
   );
 }
 
+async function publicDocumentForIndex(
+  ctx: QueryCtx,
+  args: {
+    documentId: Id<"evidenceDocuments">;
+    embeddingModel: string;
+    allowPriorSourceRevision?: boolean;
+  },
+): Promise<IndexDocument | null> {
+  const document = await ctx.db.get("evidenceDocuments", args.documentId);
+  if (document === null) return null;
+  const source = await getPublicEvidenceSource(ctx, document);
+  if (source === null) return null;
+  const contentMarkerKey = contentIndexMarkerKey(
+    document._id,
+    document.updatedAt,
+    args.embeddingModel,
+  );
+  const contentMarker = await ctx.db
+    .query("aiOperationalStates")
+    .withIndex("by_key", (q) => q.eq("key", contentMarkerKey))
+    .unique();
+  let legacyMarker: Doc<"aiOperationalStates"> | undefined;
+  if (contentMarker?.healthy !== true && args.allowPriorSourceRevision) {
+    const legacyPrefix = `semantic-index:${document._id}:${document.updatedAt}:`;
+    const legacyMarkers = await ctx.db
+      .query("aiOperationalStates")
+      .withIndex("by_key", (q) =>
+        q.gte("key", legacyPrefix).lt("key", `${legacyPrefix}\uffff`),
+      )
+      .order("desc")
+      .take(MAX_LEGACY_INDEX_MARKERS);
+    legacyMarker = legacyMarkers.find(
+      (marker) =>
+        marker.healthy && marker.key.endsWith(`:${args.embeddingModel}`),
+    );
+  }
+  return {
+    documentId: document._id,
+    sourceId: document.sourceId,
+    title: document.title,
+    excerpt: document.excerpt,
+    searchText: document.searchText,
+    tags: document.tags,
+    authors: document.authors,
+    updatedAt: document.updatedAt,
+    sourceUpdatedAt: source.updatedAt,
+    alreadyIndexed:
+      contentMarker?.healthy === true || legacyMarker !== undefined,
+    ...(legacyMarker === undefined ? {} : { legacyMarkerId: legacyMarker._id }),
+  };
+}
+
 export const readPublicDocumentForIndex = internalQuery({
   args: {
     documentId: v.id("evidenceDocuments"),
     embeddingModel: v.string(),
   },
-  handler: async (ctx, args): Promise<IndexDocument | null> => {
-    const document = await ctx.db.get("evidenceDocuments", args.documentId);
-    if (document === null || !(await isPublicEvidenceDocument(ctx, document)))
-      return null;
-    const source = await ctx.db.get("evidenceSources", document.sourceId);
-    if (
-      source === null ||
-      source.visibility !== "public" ||
-      source.status !== "active"
-    )
-      return null;
-    const indexed = await ctx.db
-      .query("aiOperationalStates")
-      .withIndex("by_key", (q) =>
-        q.eq(
-          "key",
-          `semantic-index:${document._id}:${document.updatedAt}:${source.updatedAt}:${args.embeddingModel}`,
-        ),
-      )
-      .unique();
-    return {
-      documentId: document._id,
-      sourceId: document.sourceId,
-      title: document.title,
-      excerpt: document.excerpt,
-      searchText: document.searchText,
-      tags: document.tags,
-      authors: document.authors,
-      updatedAt: document.updatedAt,
-      sourceUpdatedAt: source.updatedAt,
-      alreadyIndexed: indexed?.healthy === true,
-    };
-  },
+  handler: publicDocumentForIndex,
 });
 
 export const readPublicBackfillPage = internalQuery({
@@ -500,6 +527,180 @@ export const readPublicBackfillPage = internalQuery({
       continueCursor: page.isDone ? undefined : page.continueCursor,
       done: page.isDone,
     };
+  },
+});
+
+/** Source-scoped pages let a reactivated public source catch up without scanning the corpus. */
+export const readPublicSourceBackfillPage = internalQuery({
+  args: {
+    sourceId: v.id("evidenceSources"),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get("evidenceSources", args.sourceId);
+    if (source?.status !== "active" || source.visibility !== "public") {
+      return { documentIds: [], continueCursor: undefined, done: true };
+    }
+
+    const page = await ctx.db
+      .query("evidenceDocuments")
+      .withIndex("by_sourceId_and_visibility_and_updatedAt", (q) =>
+        q.eq("sourceId", args.sourceId).eq("visibility", "public"),
+      )
+      .order("asc")
+      .paginate({ numItems: MAX_BACKFILL_PAGE, cursor: args.cursor ?? null });
+    return {
+      documentIds: page.page.map((document) => document._id),
+      continueCursor: page.isDone ? undefined : page.continueCursor,
+      done: page.isDone,
+    };
+  },
+});
+
+/** Source-scoped cleanup reads IDs only and remains bounded after a source is hidden. */
+export const readNonPublicSourceVectorCleanupPage = internalQuery({
+  args: {
+    sourceId: v.id("evidenceSources"),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("evidenceDocuments")
+      .withIndex("by_sourceId_and_externalKey", (q) =>
+        q.eq("sourceId", args.sourceId),
+      )
+      .order("asc")
+      .paginate({ numItems: MAX_BACKFILL_PAGE, cursor: args.cursor ?? null });
+    return {
+      documentIds: page.page.map((document) => document._id),
+      continueCursor: page.isDone ? undefined : page.continueCursor,
+      done: page.isDone,
+    };
+  },
+});
+
+/** One-time bounded scan that selects only rows whose vector must no longer be searchable. */
+export const readStalePublicEvidenceVectorCleanupPage = internalQuery({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("evidenceDocuments")
+      .order("asc")
+      .paginate({ numItems: MAX_BACKFILL_PAGE, cursor: args.cursor ?? null });
+    const sources = new Map<
+      Id<"evidenceSources">,
+      Promise<Doc<"evidenceSources"> | null>
+    >();
+    const documentIds = (
+      await Promise.all(
+        page.page.map(async (document) => {
+          if (document.visibility !== "public") return document._id;
+          let source = sources.get(document.sourceId);
+          if (source === undefined) {
+            source = ctx.db.get("evidenceSources", document.sourceId);
+            sources.set(document.sourceId, source);
+          }
+          const currentSource = await source;
+          return currentSource?.status === "active" &&
+            currentSource.visibility === "public"
+            ? null
+            : document._id;
+        }),
+      )
+    ).filter(
+      (documentId): documentId is Id<"evidenceDocuments"> =>
+        documentId !== null,
+    );
+    return {
+      documentIds,
+      continueCursor: page.isDone ? undefined : page.continueCursor,
+      done: page.isDone,
+    };
+  },
+});
+
+export const readEvidenceVectorCleanupEligibility = internalQuery({
+  args: {
+    documentIds: v.array(v.id("evidenceDocuments")),
+  },
+  handler: async (ctx, args) => {
+    if (args.documentIds.length > MAX_BACKFILL_PAGE) {
+      throw new ConvexError({
+        code: "INVALID_REQUEST",
+        message: `At most ${MAX_BACKFILL_PAGE} evidence vectors may be checked at once.`,
+      });
+    }
+    const sources = new Map<
+      Id<"evidenceSources">,
+      Promise<Doc<"evidenceSources"> | null>
+    >();
+    const eligibleDocumentIds = (
+      await Promise.all(
+        args.documentIds.map(async (documentId) => {
+          const document = await ctx.db.get("evidenceDocuments", documentId);
+          if (document === null || document.visibility !== "public")
+            return null;
+          let source = sources.get(document.sourceId);
+          if (source === undefined) {
+            source = ctx.db.get("evidenceSources", document.sourceId);
+            sources.set(document.sourceId, source);
+          }
+          const currentSource = await source;
+          return currentSource?.status === "active" &&
+            currentSource.visibility === "public"
+            ? documentId
+            : null;
+        }),
+      )
+    ).filter(
+      (documentId): documentId is Id<"evidenceDocuments"> =>
+        documentId !== null,
+    );
+    return { eligibleDocumentIds };
+  },
+});
+
+export const invalidateEvidenceVectorMarkers = internalMutation({
+  args: {
+    documentIds: v.array(v.id("evidenceDocuments")),
+    model: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.documentIds.length > MAX_BACKFILL_PAGE) {
+      throw new ConvexError({
+        code: "INVALID_REQUEST",
+        message: `At most ${MAX_BACKFILL_PAGE} evidence-vector markers may be invalidated at once.`,
+      });
+    }
+    for (const documentId of args.documentIds) {
+      const document = await ctx.db.get("evidenceDocuments", documentId);
+      if (document === null) continue;
+      const currentMarkerKey = contentIndexMarkerKey(
+        document._id,
+        document.updatedAt,
+        args.model,
+      );
+      const currentMarker = await ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) => q.eq("key", currentMarkerKey))
+        .unique();
+      if (currentMarker !== null)
+        await ctx.db.delete("aiOperationalStates", currentMarker._id);
+
+      const legacyPrefix = `semantic-index:${document._id}:${document.updatedAt}:`;
+      const legacyMarkers = await ctx.db
+        .query("aiOperationalStates")
+        .withIndex("by_key", (q) =>
+          q.gte("key", legacyPrefix).lt("key", `${legacyPrefix}\uffff`),
+        )
+        .order("desc")
+        .take(MAX_LEGACY_INDEX_MARKERS);
+      for (const marker of legacyMarkers) {
+        if (marker.key.endsWith(`:${args.model}`))
+          await ctx.db.delete("aiOperationalStates", marker._id);
+      }
+    }
+    return null;
   },
 });
 
@@ -580,20 +781,125 @@ export function isCircuitAvailable(
   return pauseUntil === undefined || pauseUntil <= now;
 }
 
+async function readAvailabilityState(
+  ctx: QueryCtx,
+  args: { model: string; now: number },
+) {
+  const state = await ctx.db
+    .query("aiOperationalStates")
+    .withIndex("by_key", (q) =>
+      q.eq("key", `${SEMANTIC_HEALTH_KEY}:${args.model}`),
+    )
+    .unique();
+  return isCircuitAvailable(state?.pauseUntil, args.now)
+    ? { available: true as const }
+    : {
+        available: false as const,
+        reason: "Semantic OpenRouter circuit is paused.",
+      };
+}
+
 export const readAvailability = internalQuery({
   args: { model: v.string(), now: v.number() },
+  handler: readAvailabilityState,
+});
+
+/** Combine the index action's circuit and document preflight into one call. */
+export const readIndexPreflight = internalQuery({
+  args: {
+    documentId: v.id("evidenceDocuments"),
+    embeddingModel: v.string(),
+    now: v.number(),
+    allowPriorSourceRevision: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
-    const state = await ctx.db
-      .query("aiOperationalStates")
-      .withIndex("by_key", (q) =>
-        q.eq("key", `${SEMANTIC_HEALTH_KEY}:${args.model}`),
-      )
-      .unique();
-    return isCircuitAvailable(state?.pauseUntil, args.now)
-      ? { available: true }
-      : { available: false, reason: "Semantic OpenRouter circuit is paused." };
+    const availability = await readAvailabilityState(ctx, {
+      model: args.embeddingModel,
+      now: args.now,
+    });
+    if (!availability.available) {
+      return { ...availability, document: null };
+    }
+    return {
+      ...availability,
+      document: await publicDocumentForIndex(ctx, args),
+    };
   },
 });
+
+/** Promote a valid old source-revision marker without another embedding call. */
+export const migrateLegacyIndexMarker = internalMutation({
+  args: {
+    markerId: v.id("aiOperationalStates"),
+    documentId: v.id("evidenceDocuments"),
+    documentUpdatedAt: v.number(),
+    model: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const marker = await ctx.db.get("aiOperationalStates", args.markerId);
+    const legacyPrefix = `semantic-index:${args.documentId}:${args.documentUpdatedAt}:`;
+    if (
+      marker === null ||
+      !marker.healthy ||
+      !marker.key.startsWith(legacyPrefix) ||
+      !marker.key.endsWith(`:${args.model}`)
+    )
+      return null;
+
+    const key = contentIndexMarkerKey(
+      args.documentId,
+      args.documentUpdatedAt,
+      args.model,
+    );
+    const existing = await ctx.db
+      .query("aiOperationalStates")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (existing === null)
+      await ctx.db.patch("aiOperationalStates", marker._id, {
+        key,
+        provider: "openrouter",
+        model: args.model,
+        detail: "Current public evidence content embedded.",
+        updatedAt: Date.now(),
+      });
+    else if (!existing.healthy)
+      await ctx.db.patch("aiOperationalStates", existing._id, {
+        healthy: true,
+        provider: "openrouter",
+        model: args.model,
+        detail: "Current public evidence content embedded.",
+        checkedAt: marker.checkedAt,
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
+    return null;
+  },
+});
+
+async function recordSuccessfulIndexMarker(
+  ctx: MutationCtx,
+  marker: { key: string; detail: string },
+  model: string,
+  now: number,
+) {
+  const indexed = await ctx.db
+    .query("aiOperationalStates")
+    .withIndex("by_key", (q) => q.eq("key", marker.key))
+    .unique();
+  const indexState = {
+    key: marker.key,
+    healthy: true,
+    provider: "openrouter",
+    model,
+    detail: marker.detail.slice(0, 240),
+    checkedAt: now,
+    pauseUntil: 0,
+    updatedAt: now,
+  };
+  if (indexed === null) await ctx.db.insert("aiOperationalStates", indexState);
+  else await ctx.db.patch("aiOperationalStates", indexed._id, indexState);
+}
 
 export const recordUsage = internalMutation({
   args: {
@@ -603,6 +909,7 @@ export const recordUsage = internalMutation({
     model: v.string(),
     outcome: v.union(v.literal("completed"), v.literal("failed")),
     detail: v.string(),
+    indexMarker: v.optional(v.object({ key: v.string(), detail: v.string() })),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -612,9 +919,27 @@ export const recordUsage = internalMutation({
         q.eq("operationKey", args.operationKey),
       )
       .unique();
-    // A settled operation is immutable. This prevents duplicate action retries
-    // from refunding or charging the same reservation twice.
-    if (operation === null || operation.status !== "leased") return null;
+    // A terminal operation is immutable. This prevents duplicate action retries
+    // from settling or charging the same reservation twice.
+    if (operation === null || operation.status !== "leased") {
+      // The provider action can finish after its lease-recovery mutation has
+      // conservatively closed the reservation. Its successful RAG write is
+      // still a valid completion marker, so don't make it pay for another
+      // embedding on the next enqueue.
+      if (
+        args.outcome === "completed" &&
+        operation?.kind === "index" &&
+        args.indexMarker !== undefined
+      ) {
+        await recordSuccessfulIndexMarker(
+          ctx,
+          args.indexMarker,
+          args.model,
+          now,
+        );
+      }
+      return null;
+    }
     const actualMicroUsd = Math.max(0, args.settledMicroUsd);
     const delta = settlementDelta(operation.reservedMicroUsd, actualMicroUsd);
     const { dayKey: day, bucket } = settlementLocation(operation);
@@ -636,12 +961,12 @@ export const recordUsage = internalMutation({
       });
     }
     await ctx.db.patch("semanticSearchOperations", operation._id, {
-      status: args.outcome === "completed" ? "completed" : "refunded",
+      status: args.outcome === "completed" ? "completed" : "failed",
       leaseExpiresAt: undefined,
       settledMicroUsd: actualMicroUsd,
       settledInputTokens: args.inputTokens,
       completedAt: args.outcome === "completed" ? now : undefined,
-      refundedAt: args.outcome === "failed" ? now : undefined,
+      failedAt: args.outcome === "failed" ? now : undefined,
       updatedAt: now,
     });
     const key = `${SEMANTIC_HEALTH_KEY}:${args.model}`;
@@ -662,6 +987,12 @@ export const recordUsage = internalMutation({
     };
     if (existing === null) await ctx.db.insert("aiOperationalStates", next);
     else await ctx.db.patch("aiOperationalStates", existing._id, next);
+    if (
+      args.outcome === "completed" &&
+      operation.kind === "index" &&
+      args.indexMarker !== undefined
+    )
+      await recordSuccessfulIndexMarker(ctx, args.indexMarker, args.model, now);
     return null;
   },
 });
@@ -836,7 +1167,7 @@ export const reserveUsage = internalMutation({
   },
 });
 
-async function refundExpiredOperation(
+async function failExpiredOperation(
   ctx: MutationCtx,
   operation: Doc<"semanticSearchOperations">,
   now: number,
@@ -847,34 +1178,14 @@ async function refundExpiredOperation(
     operation.leaseExpiresAt > now
   )
     return false;
-  const spend = await ctx.db
-    .query("aiSpendBuckets")
-    .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
-      q
-        .eq("dayKey", operation.reservationDayKey)
-        .eq("provider", "openrouter")
-        .eq("bucket", operation.reservationBucket),
-    )
-    .unique();
-  if (spend !== null)
-    await ctx.db.patch("aiSpendBuckets", spend._id, {
-      spentMicroUsd: Math.max(
-        0,
-        spend.spentMicroUsd - operation.reservedMicroUsd,
-      ),
-      inputTokens: Math.max(
-        0,
-        spend.inputTokens - operation.reservedInputTokens,
-      ),
-      requests: Math.max(0, spend.requests - 1),
-      updatedAt: now,
-    });
   await ctx.db.patch("semanticSearchOperations", operation._id, {
-    status: "refunded",
+    // An interrupted action may already have reached the provider. Retain the
+    // estimate rather than refunding an ambiguous, potentially billable call.
+    status: "failed",
     leaseExpiresAt: undefined,
-    settledMicroUsd: 0,
-    settledInputTokens: 0,
-    refundedAt: now,
+    settledMicroUsd: operation.reservedMicroUsd,
+    settledInputTokens: operation.reservedInputTokens,
+    failedAt: now,
     updatedAt: now,
   });
   return true;
@@ -889,7 +1200,7 @@ export const recoverOperationLease = internalMutation({
       args.operationId,
     );
     if (operation !== null)
-      await refundExpiredOperation(ctx, operation, Date.now());
+      await failExpiredOperation(ctx, operation, Date.now());
     return null;
   },
 });
@@ -906,11 +1217,11 @@ export const cleanupExpiredOperations = internalMutation({
       )
       .order("asc")
       .take(OPERATION_CLEANUP_LIMIT);
-    let refunded = 0;
+    let failed = 0;
     for (const operation of expired)
-      if (await refundExpiredOperation(ctx, operation, now)) refunded += 1;
+      if (await failExpiredOperation(ctx, operation, now)) failed += 1;
     let deleted = 0;
-    for (const status of ["completed", "refunded"] as const) {
+    for (const status of ["completed", "failed", "refunded"] as const) {
       const rows = await ctx.db
         .query("semanticSearchOperations")
         .withIndex("by_kind_and_status_and_updatedAt", (q) =>
@@ -931,7 +1242,7 @@ export const cleanupExpiredOperations = internalMutation({
       expired.length === OPERATION_CLEANUP_LIMIT ||
       deleted === OPERATION_CLEANUP_LIMIT;
     if (hasMore) await ctx.scheduler.runAfter(1_000, cleanupRef, { now });
-    return { refunded, deleted, hasMore };
+    return { failed, deleted, hasMore };
   },
 });
 
@@ -952,25 +1263,10 @@ export const readCurrentPublicCandidates = internalQuery({
           "evidenceDocuments",
           candidate.documentId,
         );
-        if (
-          document === null ||
-          !(await isPublicEvidenceDocument(ctx, document))
-        )
-          return null;
-        const source = await ctx.db.get("evidenceSources", document.sourceId);
-        if (
-          source === null ||
-          source.visibility !== "public" ||
-          source.status !== "active"
-        )
-          return null;
-        if (
-          !isCurrentFingerprint(
-            candidate.fingerprint,
-            document.updatedAt,
-            source.updatedAt,
-          )
-        )
+        if (document === null) return null;
+        const source = await getPublicEvidenceSource(ctx, document);
+        if (source === null) return null;
+        if (!isCurrentFingerprint(candidate.fingerprint, document.updatedAt))
           return null;
         try {
           const url = new URL(document.canonicalUrl);
@@ -993,25 +1289,100 @@ export const readCurrentPublicCandidates = internalQuery({
   },
 });
 
+export const hasPublicEvidenceIndexNamespace = internalAction({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const settings = config();
+    const { rag } = platform(
+      env.OPENROUTER_API_KEY?.trim() || "semantic-index-cleanup-only",
+      settings.model,
+    );
+    return (await rag.getNamespace(ctx, { namespace: NAMESPACE })) !== null;
+  },
+});
+
+/** Recheck live authorization before deleting stale vector entries. */
+export const removeNonPublicEvidenceDocuments = internalAction({
+  args: { documentIds: v.array(v.id("evidenceDocuments")) },
+  returns: v.object({ attempted: v.number(), skipped: v.number() }),
+  handler: async (ctx, args) => {
+    const documentIds = [...new Set(args.documentIds)];
+    if (documentIds.length > MAX_BACKFILL_PAGE) {
+      throw new ConvexError({
+        code: "INVALID_REQUEST",
+        message: `At most ${MAX_BACKFILL_PAGE} evidence vectors may be removed at once.`,
+      });
+    }
+    if (documentIds.length === 0) return { attempted: 0, skipped: 0 };
+
+    const { eligibleDocumentIds } = await ctx.runQuery(
+      readCleanupEligibilityRef,
+      { documentIds },
+    );
+    const eligible = new Set(eligibleDocumentIds);
+    const ineligibleDocumentIds = documentIds.filter(
+      (documentId) => !eligible.has(documentId),
+    );
+    if (ineligibleDocumentIds.length === 0)
+      return { attempted: 0, skipped: documentIds.length };
+
+    const settings = config();
+    const { rag } = platform(
+      env.OPENROUTER_API_KEY?.trim() || "semantic-index-cleanup-only",
+      settings.model,
+    );
+    const namespace = await rag.getNamespace(ctx, { namespace: NAMESPACE });
+    if (namespace !== null) {
+      for (const documentId of ineligibleDocumentIds) {
+        await rag.deleteByKey(ctx, {
+          namespaceId: namespace.namespaceId,
+          key: `evidence-document:${documentId}`,
+        });
+      }
+    }
+    // Source pauses preserve document revisions, so clear a matching marker to
+    // ensure reactivation queues a fresh embedding instead of skipping it.
+    await ctx.runMutation(invalidateIndexMarkersRef, {
+      documentIds: ineligibleDocumentIds,
+      model: settings.model,
+    });
+    return {
+      attempted: namespace === null ? 0 : ineligibleDocumentIds.length,
+      skipped: documentIds.length - ineligibleDocumentIds.length,
+    };
+  },
+});
+
 export const indexPublicEvidenceDocument = internalAction({
-  args: { documentId: v.id("evidenceDocuments") },
+  args: {
+    documentId: v.id("evidenceDocuments"),
+    allowPriorSourceRevision: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const settings = requireEnabledConfig();
-    const availability = await ctx.runQuery(availabilityRef, {
-      model: settings.model,
-      now: Date.now(),
-    });
-    if (!availability.available) {
-      return { status: "skipped" as const, reason: "circuit_paused" };
-    }
-    const document = await ctx.runQuery(readDocumentRef, {
+    const preflight = await ctx.runQuery(readIndexPreflightRef, {
       documentId: args.documentId,
       embeddingModel: settings.model,
+      now: Date.now(),
+      allowPriorSourceRevision: args.allowPriorSourceRevision,
     });
+    if (!preflight.available) {
+      return { status: "skipped" as const, reason: "circuit_paused" };
+    }
+    const document = preflight.document;
     if (document === null)
       return { status: "skipped" as const, reason: "not_public" };
-    if (document.alreadyIndexed)
+    if (document.alreadyIndexed) {
+      if (document.legacyMarkerId !== undefined)
+        await ctx.runMutation(migrateLegacyIndexMarkerRef, {
+          markerId: document.legacyMarkerId,
+          documentId: document.documentId,
+          documentUpdatedAt: document.updatedAt,
+          model: settings.model,
+        });
       return { status: "skipped" as const, reason: "idempotent" };
+    }
 
     const text = normalizedText(
       [
@@ -1032,19 +1403,17 @@ export const indexPublicEvidenceDocument = internalAction({
       reservedTokens,
       0,
     );
-    const controls = await ctx.runQuery(
-      internal.aiRoutingControlData.readRoutingControl,
-      {
-        dayKey: dayKey(),
-        budgetLimitMicroUsd: Math.min(
-          settings.dailyBudgetMicroUsd,
-          openRouterDailyBudgetMicroUsd(env.OPENROUTER_DAILY_BUDGET_USD),
-        ),
-        now: Date.now(),
-      },
+    const globalDailyBudgetMicroUsd = openRouterDailyBudgetMicroUsd(
+      env.OPENROUTER_DAILY_BUDGET_USD,
     );
-    if (controls.paidBudgetExceeded) {
-      return { status: "skipped" as const, reason: "budget" };
+    if (
+      reservedMicroUsd > settings.dailyBudgetMicroUsd ||
+      reservedMicroUsd > globalDailyBudgetMicroUsd
+    ) {
+      return {
+        status: "skipped" as const,
+        reason: "request_exceeds_budget" as const,
+      };
     }
     const reservation = await ctx.runMutation(reserveUsageRef, {
       operationKey: operationKey(
@@ -1059,9 +1428,7 @@ export const indexPublicEvidenceDocument = internalAction({
       inputTokens: reservedTokens,
       model: settings.model,
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
-      globalDailyBudgetMicroUsd: openRouterDailyBudgetMicroUsd(
-        env.OPENROUTER_DAILY_BUDGET_USD,
-      ),
+      globalDailyBudgetMicroUsd,
     });
     if (!reservation.accepted)
       return {
@@ -1073,14 +1440,21 @@ export const indexPublicEvidenceDocument = internalAction({
       `${document.documentId}:${fingerprint(document)}`,
       settings.model,
     );
-    const rag = platform(settings.apiKey, settings.model);
+    const { rag, embeddingModel } = platform(settings.apiKey, settings.model);
     const key = `evidence-document:${document.documentId}`;
+    let inputTokens = 0;
     try {
+      const embedded = await embedRagText(
+        embeddingModel,
+        text,
+        AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      );
+      inputTokens = embedded.inputTokens;
       const result = await rag.add(ctx, {
         namespace: NAMESPACE,
         key,
         title: document.title.slice(0, 500),
-        text,
+        chunks: embedded.chunks,
         metadata: {
           documentId: document.documentId,
           sourceId: document.sourceId,
@@ -1088,7 +1462,6 @@ export const indexPublicEvidenceDocument = internalAction({
         },
         filterValues: [],
       });
-      const inputTokens = result.usage.tokens;
       await ctx.runMutation(recordUsageRef, {
         operationKey: indexOperationKey,
         inputTokens,
@@ -1100,24 +1473,21 @@ export const indexPublicEvidenceDocument = internalAction({
         model: settings.model,
         outcome: "completed",
         detail: `Indexed public evidence ${document.documentId}.`,
-      });
-      await ctx.runMutation(
-        internal.aiRoutingControlData.recordOperationalState,
-        {
-          key: `semantic-index:${document.documentId}:${document.updatedAt}:${document.sourceUpdatedAt}:${settings.model}`,
-          healthy: true,
-          provider: "openrouter",
-          model: settings.model,
-          detail: "Current public evidence document embedded.",
-          pauseUntil: 0,
+        indexMarker: {
+          key: contentIndexMarkerKey(
+            document.documentId,
+            document.updatedAt,
+            settings.model,
+          ),
+          detail: "Current public evidence content embedded.",
         },
-      );
+      });
       return { status: result.status, created: result.created, inputTokens };
     } catch (error) {
       await ctx.runMutation(recordUsageRef, {
         operationKey: indexOperationKey,
-        inputTokens: 0,
-        settledMicroUsd: 0,
+        inputTokens: reservedTokens,
+        settledMicroUsd: reservedMicroUsd,
         model: settings.model,
         outcome: "failed",
         detail: safeError(error),
@@ -1152,7 +1522,10 @@ export const backfillPublicEvidence = internalAction({
     );
     let indexed = 0;
     for (const documentId of page.documentIds) {
-      const result = await ctx.runAction(indexDocumentRef, { documentId });
+      const result = await ctx.runAction(indexDocumentRef, {
+        documentId,
+        allowPriorSourceRevision: true,
+      });
       if (result.status === "created" || result.status === "updated")
         indexed += 1;
     }
@@ -1203,8 +1576,13 @@ export const searchPublicSemantic = internalAction({
         message: "limit must be an integer between 1 and 20.",
       });
     }
-    const rag = platform(settings.apiKey, settings.model);
+    const { rag, embeddingModel } = platform(settings.apiKey, settings.model);
     const reservedTokens = estimatedInputTokens(query);
+    const reservedMicroUsd = estimatedModelCostMicroUsd(
+      settings.model,
+      reservedTokens,
+      0,
+    );
     const queryOperationKey = operationKey(
       "query",
       `${query}:${operationHolder()}`,
@@ -1215,11 +1593,7 @@ export const searchPublicSemantic = internalAction({
       kind: "query",
       fingerprint: query,
       holder: operationHolder(),
-      estimatedMicroUsd: estimatedModelCostMicroUsd(
-        settings.model,
-        reservedTokens,
-        0,
-      ),
+      estimatedMicroUsd: reservedMicroUsd,
       inputTokens: reservedTokens,
       model: settings.model,
       dailyBudgetMicroUsd: settings.dailyBudgetMicroUsd,
@@ -1235,14 +1609,19 @@ export const searchPublicSemantic = internalAction({
         outcome: "budget_rejected" as const,
       };
     try {
+      const embedded = await embedRagQuery(
+        embeddingModel,
+        query,
+        AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      );
       const result = await rag.search(ctx, {
         namespace: NAMESPACE,
-        query,
+        query: embedded.embedding,
         limit: Math.min(MAX_SEMANTIC_CANDIDATES, limit * 3),
         vectorScoreThreshold: 0.58,
         searchType: "vector",
       });
-      const inputTokens = result.usage.tokens;
+      const inputTokens = embedded.inputTokens;
       await ctx.runMutation(recordUsageRef, {
         operationKey: queryOperationKey,
         inputTokens,
@@ -1285,8 +1664,8 @@ export const searchPublicSemantic = internalAction({
     } catch (error) {
       await ctx.runMutation(recordUsageRef, {
         operationKey: queryOperationKey,
-        inputTokens: 0,
-        settledMicroUsd: 0,
+        inputTokens: reservedTokens,
+        settledMicroUsd: reservedMicroUsd,
         model: settings.model,
         outcome: "failed",
         detail: safeError(error),

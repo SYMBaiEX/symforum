@@ -15,11 +15,19 @@ import {
 } from "./authz";
 import { sha256Base64Url } from "./agentIdentityCrypto";
 import {
+  enqueueNonPublicEvidenceDocumentCleanup,
+  enqueueNonPublicEvidenceSourceCleanup,
+  enqueuePublicEvidenceIndex,
+  enqueuePublicEvidenceSourceIndex,
+} from "./semanticSearchIndexWorkflow";
+import {
   isPublicEvidenceDocument,
   isPublicEvidenceClaim,
   isPublicEvidenceEntity,
 } from "./evidenceVisibility";
 import { bumpEvidencePublicationEpoch } from "./evidencePublicationEpoch";
+import { evidenceVersionExportDigestFromVersion } from "./evidenceVersionExportDigest";
+import { upsertEvidenceDocumentExportDigest } from "./evidenceDocumentExportDigest";
 import {
   requestUniversalSearchProjectionRebuild,
   syncEvidenceDocumentUniversalSearchProjection,
@@ -343,6 +351,10 @@ export const upsertSource = internalMutation({
       updatedAt: now,
     };
     if (existing !== null) {
+      const becamePublicAndActive =
+        value.status === "active" &&
+        value.visibility === "public" &&
+        (existing.status !== "active" || existing.visibility !== "public");
       const semanticChanged =
         existing.name !== value.name ||
         existing.sourceType !== value.sourceType ||
@@ -380,6 +392,16 @@ export const upsertSource = internalMutation({
         ) {
           await bumpEvidencePublicationEpoch(ctx);
         }
+        if (
+          existing.status === "active" &&
+          existing.visibility === "public" &&
+          (value.status !== "active" || value.visibility !== "public")
+        ) {
+          await enqueueNonPublicEvidenceSourceCleanup(ctx, existing._id);
+        }
+      }
+      if (becamePublicAndActive) {
+        await enqueuePublicEvidenceSourceIndex(ctx, existing._id);
       }
       return { sourceId: existing._id, created: false };
     }
@@ -468,10 +490,25 @@ export const setFirstPartyDocumentExposure = internalMutation({
 
     if (documentChanged)
       await refreshDocumentEntityProjections(ctx, document.currentVersionId);
+    if (documentChanged)
+      await upsertEvidenceDocumentExportDigest(ctx, {
+        ...document,
+        visibility: args.visibility,
+        updatedAt: now,
+      });
     let claimsChanged = 0;
+    const sourceForPublication =
+      documentChanged && args.visibility === "public"
+        ? await ctx.db.get("evidenceSources", document.sourceId)
+        : undefined;
     await syncEvidenceDocumentUniversalSearchProjection(
       ctx,
-      (await ctx.db.get("evidenceDocuments", document._id))!,
+      documentChanged
+        ? { ...document, visibility: args.visibility, updatedAt: now }
+        : document,
+      sourceForPublication === undefined
+        ? {}
+        : { knownSource: sourceForPublication },
     );
     for (const prefix of prefixes) {
       claimsChanged += await changeFirstPartyClaimBatch(ctx, {
@@ -481,6 +518,13 @@ export const setFirstPartyDocumentExposure = internalMutation({
         prefix,
       });
     }
+    if (
+      sourceForPublication?.status === "active" &&
+      sourceForPublication.visibility === "public"
+    )
+      await enqueuePublicEvidenceIndex(ctx, document._id);
+    if (documentChanged && args.visibility === "private")
+      await enqueueNonPublicEvidenceDocumentCleanup(ctx, document._id);
     return {
       documentId: document._id,
       changed: documentChanged || claimsChanged > 0,
@@ -615,7 +659,7 @@ export const upsertDocumentVersion = internalMutation({
     const now = Date.now();
     const tags = canonicalDocumentList(args.tags, 40);
     const authors = canonicalDocumentList(args.authors, 80);
-    let document = await ctx.db
+    const document = await ctx.db
       .query("evidenceDocuments")
       .withIndex("by_sourceId_and_externalKey", (q) =>
         q.eq("sourceId", args.sourceId).eq("externalKey", externalKey),
@@ -675,16 +719,19 @@ export const upsertDocumentVersion = internalMutation({
         };
       }
     }
-    if (document === null) {
-      const documentId = await ctx.db.insert("evidenceDocuments", {
+    const canonicalUrl = bounded(args.canonicalUrl, "canonicalUrl", 2_000);
+    const canonicalUrlHash = bounded(
+      args.canonicalUrlHash,
+      "canonicalUrlHash",
+      256,
+    );
+    const documentId =
+      document?._id ??
+      (await ctx.db.insert("evidenceDocuments", {
         sourceId: args.sourceId,
         externalKey,
-        canonicalUrl: bounded(args.canonicalUrl, "canonicalUrl", 2_000),
-        canonicalUrlHash: bounded(
-          args.canonicalUrlHash,
-          "canonicalUrlHash",
-          256,
-        ),
+        canonicalUrl,
+        canonicalUrlHash,
         kind: args.kind,
         visibility: args.visibility,
         title,
@@ -697,21 +744,20 @@ export const upsertDocumentVersion = internalMutation({
         currentVersionId: null,
         firstSeenAt: args.fetchedAt,
         updatedAt: now,
-      });
-      document = (await ctx.db.get("evidenceDocuments", documentId))!;
-    }
+      }));
+    const previousVersionId = document?.currentVersionId ?? null;
     const version =
-      document.currentVersionId === null
+      previousVersionId === null
         ? 1
         : (await ctx.db
             .query("evidenceDocumentVersions")
             .withIndex("by_documentId_and_version", (q) =>
-              q.eq("documentId", document!._id),
+              q.eq("documentId", documentId),
             )
             .order("desc")
             .first())!.version + 1;
-    const versionId = await ctx.db.insert("evidenceDocumentVersions", {
-      documentId: document._id,
+    const versionData = {
+      documentId,
       version,
       contentHash,
       title,
@@ -726,10 +772,21 @@ export const upsertDocumentVersion = internalMutation({
       licenseClass: args.licenseClass,
       metadataJson: args.metadataJson ?? "",
       createdAt: now,
-    });
-    await ctx.db.patch("evidenceDocuments", document._id, {
-      canonicalUrl: bounded(args.canonicalUrl, "canonicalUrl", 2_000),
-      canonicalUrlHash: bounded(args.canonicalUrlHash, "canonicalUrlHash", 256),
+    };
+    const versionId = await ctx.db.insert(
+      "evidenceDocumentVersions",
+      versionData,
+    );
+    await ctx.db.insert(
+      "evidenceDocumentVersionExportDigests",
+      evidenceVersionExportDigestFromVersion({
+        ...versionData,
+        _id: versionId,
+      }),
+    );
+    await ctx.db.patch("evidenceDocuments", documentId, {
+      canonicalUrl,
+      canonicalUrlHash,
       kind: args.kind,
       visibility: args.visibility,
       title,
@@ -742,14 +799,33 @@ export const upsertDocumentVersion = internalMutation({
       publishedAt: args.publishedAt ?? null,
       updatedAt: now,
     });
-    await refreshDocumentEntityProjections(ctx, document.currentVersionId);
+    const exportDocument = {
+      _id: documentId,
+      sourceId: args.sourceId,
+      externalKey,
+      canonicalUrl,
+      kind: args.kind,
+      visibility: args.visibility,
+      title,
+      excerpt,
+      tags,
+      authors,
+      licenseClass: args.documentLicenseClass,
+      currentVersionId: versionId,
+      publishedAt: args.publishedAt ?? null,
+      firstSeenAt: document?.firstSeenAt ?? args.fetchedAt,
+      updatedAt: now,
+    };
+    await upsertEvidenceDocumentExportDigest(ctx, exportDocument);
+    await refreshDocumentEntityProjections(ctx, previousVersionId);
     await syncEvidenceDocumentUniversalSearchProjection(
       ctx,
-      (await ctx.db.get("evidenceDocuments", document._id))!,
+      { ...exportDocument, searchText },
+      { knownSource: source },
     );
     const changedFields = isNewDocument
       ? [...DOCUMENT_CHANGE_FIELDS]
-      : documentChangedFields(document, {
+      : documentChangedFields(document!, {
           kind: args.kind,
           visibility: args.visibility,
           title,
@@ -760,9 +836,9 @@ export const upsertDocumentVersion = internalMutation({
           licenseClass: args.documentLicenseClass,
         });
     await ctx.db.insert("evidenceChangeEvents", {
-      eventKey: `document:${document._id}:${version}`,
+      eventKey: `document:${documentId}:${version}`,
       entityType: "document",
-      entityId: document._id,
+      entityId: documentId,
       kind: version === 1 ? "created" : "updated",
       visibility: args.visibility,
       summary: `${version === 1 ? "Added" : "Updated"} ${title}`.slice(
@@ -773,8 +849,20 @@ export const upsertDocumentVersion = internalMutation({
       occurredAt: args.fetchedAt,
       createdAt: now,
     });
+    if (
+      document?.visibility === "public" &&
+      args.visibility === "private"
+    ) {
+      await enqueueNonPublicEvidenceDocumentCleanup(ctx, documentId);
+    } else if (
+      args.visibility === "public" &&
+      source.visibility === "public" &&
+      source.status === "active"
+    ) {
+      await enqueuePublicEvidenceIndex(ctx, documentId);
+    }
     return {
-      documentId: document._id,
+      documentId,
       versionId,
       version,
       idempotent: false,

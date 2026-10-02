@@ -3,6 +3,7 @@ import {
   isPublicEvidenceClaim,
   isPublicEvidenceDocument,
   isPublicEvidenceEntity,
+  publicEvidenceDocumentIdForVersion,
 } from "./evidenceVisibility";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
@@ -242,12 +243,12 @@ async function isCurrentPublicClaim(
     .withIndex("by_claimId", (q) => q.eq("claimId", claim._id))
     .take(MAX_CITATIONS_PER_CLAIM);
   for (const citation of citations) {
-    const version = await ctx.db.get(
-      "evidenceDocumentVersions",
+    const documentId = await publicEvidenceDocumentIdForVersion(
+      ctx,
       citation.documentVersionId,
     );
-    if (version === null) continue;
-    const document = await ctx.db.get("evidenceDocuments", version.documentId);
+    if (documentId === null) continue;
+    const document = await ctx.db.get("evidenceDocuments", documentId);
     if (document && (await isCurrentPublicDocument(ctx, document))) return true;
   }
   return false;

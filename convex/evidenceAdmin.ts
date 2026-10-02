@@ -8,6 +8,12 @@ import {
   type ActionCtx,
 } from "./_generated/server";
 import { requireSiteAdmin } from "./authz";
+import { bumpEvidencePublicationEpoch } from "./evidencePublicationEpoch";
+import {
+  enqueueNonPublicEvidenceSourceCleanup,
+  enqueuePublicEvidenceSourceIndex,
+} from "./semanticSearchIndexWorkflow";
+import { requestUniversalSearchProjectionRebuild } from "./universalSearchProjection";
 
 const sourceStatusValidator = v.union(v.literal("active"), v.literal("paused"));
 const adapterValidator = v.union(
@@ -265,7 +271,9 @@ export const dashboard = query({
         .unique(),
       ctx.db
         .query("evidenceExportJobs")
-        .withIndex("by_status_and_updatedAt", (q) => q.eq("status", "completed"))
+        .withIndex("by_status_and_updatedAt", (q) =>
+          q.eq("status", "completed"),
+        )
         .order("desc")
         .take(50),
       ctx.db
@@ -389,8 +397,11 @@ export const dashboard = query({
           (sum, job) => sum + job.quotaUnits,
           0,
         ),
-        forumReplies: forumReplies.filter((run) => run.status === "replied").length,
-        forumReplyFailures: forumReplies.filter((run) => run.status === "failed").length,
+        forumReplies: forumReplies.filter((run) => run.status === "replied")
+          .length,
+        forumReplyFailures: forumReplies.filter(
+          (run) => run.status === "failed",
+        ).length,
         routeFallbackRate:
           routeEvents.length === 0
             ? 0
@@ -420,12 +431,39 @@ export const setSourceStatus = mutation({
         code: "NOT_FOUND",
         message: "Evidence source was not found.",
       });
+    const ingestionEnabled = args.status === "active";
+    const statusChanged = source.status !== args.status;
+    const ingestionChanged = source.ingestionEnabled !== ingestionEnabled;
+    if (!statusChanged && !ingestionChanged)
+      return {
+        sourceId: source._id,
+        status: args.status,
+        updatedAt: source.updatedAt,
+      };
     const now = Date.now();
     await ctx.db.patch("evidenceSources", source._id, {
       status: args.status,
-      ingestionEnabled: args.status === "active",
+      ingestionEnabled,
       updatedAt: now,
     });
+    if (
+      statusChanged &&
+      source.visibility === "public" &&
+      source.status === "active" &&
+      args.status !== "active"
+    ) {
+      await bumpEvidencePublicationEpoch(ctx);
+      await enqueueNonPublicEvidenceSourceCleanup(ctx, source._id);
+    }
+    if (statusChanged && source.visibility === "public")
+      await requestUniversalSearchProjectionRebuild(ctx);
+    if (
+      source.status !== "active" &&
+      args.status === "active" &&
+      source.visibility === "public"
+    ) {
+      await enqueuePublicEvidenceSourceIndex(ctx, source._id);
+    }
     return { sourceId: source._id, status: args.status, updatedAt: now };
   },
 });

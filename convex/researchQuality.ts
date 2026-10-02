@@ -15,6 +15,10 @@ import {
   forumAgentEditorialCohortKey,
   forumAgentModerationOutcomeScore,
 } from "./forumAgentEditorialPolicy";
+import {
+  deleteResearchQualityAssessmentVisibilityDigest,
+  upsertResearchQualityAssessmentVisibilityDigest,
+} from "./researchQualityAssessmentVisibilityDigest";
 
 const MAX_QUEUE_RESULTS = 100;
 const MAX_COMPARISON_CANDIDATES = 80;
@@ -434,13 +438,25 @@ async function upsertAssessment(
     evaluatedAt: now,
     updatedAt: now,
   };
-  return current === null
-    ? await ctx.db.insert("researchQualityAssessments", {
-        ...values,
-        createdAt: now,
-      })
-    : (await ctx.db.patch("researchQualityAssessments", current._id, values),
-      current._id);
+  const assessmentId =
+    current === null
+      ? await ctx.db.insert("researchQualityAssessments", {
+          ...values,
+          createdAt: now,
+        })
+      : (await ctx.db.patch("researchQualityAssessments", current._id, values),
+        current._id);
+  if (threadId === undefined && current?.threadId !== undefined) {
+    await deleteResearchQualityAssessmentVisibilityDigest(ctx, assessmentId);
+  } else {
+    await upsertResearchQualityAssessmentVisibilityDigest(ctx, {
+      _id: assessmentId,
+      threadId,
+      authorUserId: candidate.authorUserId,
+      status,
+    });
+  }
+  return assessmentId;
 }
 
 /**
@@ -529,6 +545,10 @@ export async function invalidateResearchQualityForThread(
     flags,
     updatedAt: Date.now(),
   });
+  await upsertResearchQualityAssessmentVisibilityDigest(ctx, {
+    ...assessment,
+    status: "needs_review",
+  });
   await ctx.runMutation(enqueueEvidenceSyncRef, {
     threadId,
     reason: "quality_changed",
@@ -554,8 +574,10 @@ export const evaluateThread = mutation({
       .query("researchQualityAssessments")
       .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
       .unique();
-    if (current !== null)
+    if (current !== null) {
+      await deleteResearchQualityAssessmentVisibilityDigest(ctx, current._id);
       await ctx.db.delete("researchQualityAssessments", current._id);
+    }
     const assessmentId = await upsertAssessment(
       ctx,
       {
@@ -620,6 +642,10 @@ export const review = mutation({
     await ctx.db.patch("researchQualityAssessments", assessment._id, {
       status: args.decision,
       updatedAt: now,
+    });
+    await upsertResearchQualityAssessmentVisibilityDigest(ctx, {
+      ...assessment,
+      status: args.decision,
     });
     await ctx.db.insert("researchQualityReviews", {
       assessmentId: assessment._id,
