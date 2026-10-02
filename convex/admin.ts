@@ -364,12 +364,12 @@ export const overview = query({
       ctx.db
         .query("users")
         .withIndex("by_role", (q) => q.eq("role", "reader"))
-        .take(500),
+        .take(100),
       ctx.db
         .query("newsletterSubscribers")
         .withIndex("by_createdAt")
         .order("desc")
-        .take(500),
+        .take(100),
       ctx.db
         .query("newsletterIssues")
         .withIndex("by_updatedAt")
@@ -401,17 +401,17 @@ export const overview = query({
         .query("analyticsEvents")
         .withIndex("by_createdAt")
         .order("desc")
-        .take(500),
+        .take(100),
     ]);
 
     return {
       user,
-      totals: {
+      sampleCounts: {
         posts: posts.length,
         publishedPosts: posts.filter((post) => post.status === "published")
           .length,
-        commentsSample: recentComments.length,
-        interactionsSample: recentInteractions.length,
+        comments: recentComments.length,
+        interactions: recentInteractions.length,
         users: owners.length + admins.length + readers.length,
         owners: owners.length,
         admins: admins.length,
@@ -424,10 +424,10 @@ export const overview = query({
         portfolioProjects: portfolioProjects.length,
         sitePages: sitePages.length,
         newsSnapshots: newsSnapshots.length,
-        contactRequestsSample: contactRequests.length,
+        contactRequests: contactRequests.length,
         openContactRequests: openContactRequests.length,
         openSystemLogs: openLogs.length,
-        analyticsEventsSample: analyticsEvents.length,
+        analyticsEvents: analyticsEvents.length,
       },
       recentComments: await Promise.all(
         recentComments.map(async (comment) => ({

@@ -1,6 +1,6 @@
 "use node";
 
-import { APICallError, tool, ToolLoopAgent } from "ai";
+import { APICallError, isStepCount, Output, ToolLoopAgent } from "ai";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -14,6 +14,7 @@ import {
   runWithModelFallback,
   type OpenRouterRequestContext,
 } from "../lib/ai-model-routing";
+import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   AgentPublicationQualityError,
   assertAgentPublicationHygiene,
@@ -26,7 +27,7 @@ import {
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   cacheResearchImage,
-  fetchArticleSnapshot,
+  fetchArticleSnapshots,
   imageRelevanceScore,
   runForumResearchSlot,
   type ArticleSnapshot,
@@ -36,11 +37,19 @@ import {
 } from "./sukiForumAgent";
 import { convexModelRoutingConfig } from "./modelRouting";
 import { routeTelemetry } from "./aiTelemetryHelpers";
-import { buildForumAgentClaimCitations } from "./forumAgentClaimProvenance";
+import {
+  buildForumAgentClaimCitations,
+  forumAgentClaimCitationsPassPublicationGate,
+} from "./forumAgentClaimProvenance";
 import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
+import { evaluateBelleDigestGrounding } from "../lib/belle-digest-quality";
+import {
+  BELLE_DAILY_DIGEST_STORY_LIMIT,
+  type ReusableDailyDigestStory,
+} from "./newsDigestTypes";
 
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
-const BELLE_DIGEST_STORY_LIMIT = 12;
+const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
 const BELLE_PROMPT_VERSION = "belle-forum-v14-structured-route-rescue-budget";
 
@@ -142,8 +151,40 @@ type BelleDigestResult =
 
 type IndexedHackerNewsSnapshot = {
   snapshot: Pick<Doc<"newsSnapshots">, "snapshotDate" | "status"> | null;
-  stories: Doc<"hnStories">[];
+  stories: Array<Doc<"hnStories"> | ReusableDailyDigestStory>;
 };
+
+export function canReuseDailyDigestStories(args: {
+  stories: readonly ReusableDailyDigestStory[];
+  snapshotDate: string;
+  snapshotStoryCount: number;
+  snapshotCompletedAt?: number;
+  expectedCompletedAt?: number;
+}): boolean {
+  if (
+    args.stories.length !== BELLE_DIGEST_STORY_LIMIT ||
+    args.snapshotStoryCount < BELLE_DIGEST_STORY_LIMIT ||
+    args.expectedCompletedAt === undefined ||
+    args.snapshotCompletedAt !== args.expectedCompletedAt
+  ) {
+    return false;
+  }
+
+  const seen = new Set<number>();
+  let previousRank = -Infinity;
+  for (const story of args.stories) {
+    if (
+      story.snapshotDate !== args.snapshotDate ||
+      seen.has(story.hnItemId) ||
+      story.rank <= previousRank
+    ) {
+      return false;
+    }
+    seen.add(story.hnItemId);
+    previousRank = story.rank;
+  }
+  return true;
+}
 
 export const runDailySlot = internalAction({
   args: {
@@ -161,17 +202,88 @@ export const runDailyHackerNewsDigest = internalAction({
   args: {
     snapshotDate: v.optional(v.string()),
     attempt: v.optional(v.number()),
+    reusableDigestStories: v.optional(
+      v.array(
+        v.object({
+          hnItemId: v.number(),
+          snapshotDate: v.string(),
+          rank: v.number(),
+          title: v.string(),
+          url: v.optional(v.string()),
+          host: v.optional(v.string()),
+          summary: v.string(),
+          score: v.optional(v.number()),
+          descendants: v.optional(v.number()),
+          timePosted: v.optional(v.number()),
+        }),
+      ),
+    ),
+    reusableDigestSnapshotCompletedAt: v.optional(v.number()),
+    reusableArticleSnapshots: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          sourceKey: v.string(),
+          sourceName: v.string(),
+          sourceFeedUrl: v.string(),
+          title: v.string(),
+          url: v.string(),
+          summary: v.string(),
+          publishedAt: v.optional(v.number()),
+          imageUrl: v.optional(v.string()),
+          boardSlugs: v.array(v.string()),
+          articleTitle: v.string(),
+          articleDescription: v.string(),
+          articleText: v.string(),
+          imageCredit: v.string(),
+          sourceFetchSucceeded: v.optional(v.boolean()),
+          imageAlt: v.optional(v.string()),
+          imageWidth: v.optional(v.number()),
+          imageHeight: v.optional(v.number()),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args): Promise<BelleDigestResult> => {
     const attempt = args.attempt ?? 0;
     await ctx.runMutation(internal.forum.ensureBelleForumInfrastructure, {});
-    const indexed: IndexedHackerNewsSnapshot = await ctx.runQuery(
-      internal.news.readIndexedSnapshot,
-      {
+    let indexed: IndexedHackerNewsSnapshot;
+    if (args.reusableDigestStories !== undefined) {
+      const summary = await ctx.runQuery(
+        internal.news.readIndexedSnapshotSummary,
+        { snapshotDate: args.snapshotDate },
+      );
+      if (summary === null) {
+        return { status: "skipped", reason: "news-snapshot-unavailable" };
+      }
+      if (summary.storyCount < BELLE_DIGEST_STORY_LIMIT) {
+        return { status: "skipped", reason: "news-snapshot-unavailable" };
+      }
+      if (
+        canReuseDailyDigestStories({
+          stories: args.reusableDigestStories,
+          snapshotDate: summary.snapshotDate,
+          snapshotStoryCount: summary.storyCount,
+          snapshotCompletedAt: summary.completedAt,
+          expectedCompletedAt: args.reusableDigestSnapshotCompletedAt,
+        })
+      ) {
+        indexed = {
+          snapshot: { snapshotDate: summary.snapshotDate, status: "complete" },
+          stories: args.reusableDigestStories,
+        };
+      } else {
+        indexed = await ctx.runQuery(internal.news.readIndexedSnapshot, {
+          snapshotDate: summary.snapshotDate,
+          limit: BELLE_DIGEST_STORY_LIMIT,
+        });
+      }
+    } else {
+      indexed = await ctx.runQuery(internal.news.readIndexedSnapshot, {
         snapshotDate: args.snapshotDate,
         limit: BELLE_DIGEST_STORY_LIMIT,
-      },
-    );
+      });
+    }
     if (
       indexed.snapshot === null ||
       indexed.snapshot.status !== "complete" ||
@@ -231,13 +343,11 @@ export const runDailyHackerNewsDigest = internalAction({
       }
 
       const candidates: ResearchCandidate[] = indexed.stories.map(
-        (story: Doc<"hnStories">, index: number) =>
-          hackerNewsCandidate(story, index),
+        (story, index) => hackerNewsCandidate(story, index),
       );
-      const snapshots: ArticleSnapshot[] = await Promise.all(
-        candidates.map((candidate: ResearchCandidate) =>
-          fetchArticleSnapshot(candidate),
-        ),
+      const snapshots: ArticleSnapshot[] = await fetchArticleSnapshots(
+        candidates,
+        args.reusableArticleSnapshots,
       );
       const requestContext = {
         user: "belle",
@@ -248,6 +358,8 @@ export const runDailyHackerNewsDigest = internalAction({
           `prompt:${BELLE_PROMPT_VERSION}`,
         ],
       } satisfies OpenRouterRequestContext;
+      const generationStartedAt = Date.now();
+      const prompt = digestPrompt(runDate, indexed.stories, snapshots);
       const generation = await runWithModelFallback(
         routingConfig,
         requestContext,
@@ -258,18 +370,16 @@ export const runDailyHackerNewsDigest = internalAction({
           agent: "belle",
           onAttempt: recordRouteAttempt,
           totalTimeoutMs: 300_000,
+          estimatedInputTokens: estimatePromptInputTokens(prompt),
+          maxOutputTokens: (candidate) =>
+            openRouterStructuredOutputBudget(candidate.modelId, 5_500),
           run: async (candidate, signal) => {
             const writer = new ToolLoopAgent({
               id: `belle-hacker-news-desk-${candidate.provider}`,
               model: candidate.model,
-              tools: {
-                submitDigest: tool({
-                  description:
-                    "Submit Belle's complete daily Hacker News editorial package.",
-                  inputSchema: digestDraftSchema,
-                }),
-              },
-              toolChoice: "required",
+              output: Output.object({ schema: digestDraftSchema }),
+              // The digest is a single structured response, not a tool loop.
+              stopWhen: isStepCount(1),
               providerOptions: candidate.providerOptions,
               ...modelGenerationSettings(candidate.provider, "digest"),
               maxOutputTokens: openRouterStructuredOutputBudget(
@@ -283,21 +393,27 @@ export const runDailyHackerNewsDigest = internalAction({
               ),
             });
             const result = await writer.generate({
-              prompt: digestPrompt(runDate, indexed.stories, snapshots),
+              prompt,
               abortSignal: signal,
             });
-            const call = result.staticToolCalls[0];
-            if (call?.toolName !== "submitDigest") {
-              throw new Error(
-                `Belle's digest writer did not submit structured copy (${result.finishReason}).`,
-              );
-            }
-            return { result, draft: call.input };
+            return { result, draft: digestDraftSchema.parse(result.output) };
           },
         },
       );
       const result = generation.value.result;
       const draft = generation.value.draft;
+      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+        runKey: claim.runKey,
+        reservationKey: generation.route.reservationKey,
+        reservationModel: generation.route.reservationModel,
+        agentSlug: "belle",
+        stage: "draft",
+        model: generation.route.persistedModel,
+        servedModel: result.response.modelId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        durationMs: Date.now() - generationStartedAt,
+      });
       const body = buildDigestBody({
         closing: draft.closing,
         date: runDate,
@@ -313,14 +429,37 @@ export const runDailyHackerNewsDigest = internalAction({
           (left: ArticleSnapshot, right: ArticleSnapshot) =>
             imageRelevanceScore(right) - imageRelevanceScore(left),
         )[0];
-      const cachedImage =
-        imageSnapshot === undefined
-          ? undefined
-          : await cacheResearchImage(ctx, imageSnapshot);
       const title = `${displayDate(runDate)} — ${normalizeGeneratedHeadline(
         draft.headline,
       )}`;
       assertAgentPublicationHygiene([title, body]);
+      const grounding = evaluateBelleDigestGrounding({
+        expectedStoryIds: indexed.stories.map((story) => story.hnItemId),
+        briefs: draft.briefs,
+        sources: snapshots.map((snapshot, index) => {
+          const story = indexed.stories[index]!;
+          return {
+            hnItemId: story.hnItemId,
+            sourceText: [
+              snapshot.articleTitle,
+              snapshot.articleDescription,
+              snapshot.articleText,
+              `Hacker News rank ${story.rank}, ${story.score ?? 0} points, ${story.descendants ?? 0} comments.`,
+            ].join(" "),
+          };
+        }),
+        editorialText: [
+          { field: "headline", text: draft.headline },
+          { field: "opening", text: draft.opening },
+          { field: "closing", text: draft.closing },
+        ],
+      });
+      if (!grounding.passed) {
+        const reason = grounding.issues.map((issue) => issue.code).join(", ");
+        throw new AgentPublicationQualityError(
+          `Belle's digest failed deterministic source checks: ${reason}.`,
+        );
+      }
       const provenanceSnapshots = snapshots.map((snapshot, index) => ({
         ...snapshot,
         sourceKey: `belle-hn-${indexed.stories[index]!.hnItemId}-${runDate}`,
@@ -333,12 +472,21 @@ export const runDailyHackerNewsDigest = internalAction({
         snapshots: provenanceSnapshots,
         body,
       });
+      if (!forumAgentClaimCitationsPassPublicationGate(claimCitations)) {
+        throw new AgentPublicationQualityError(
+          "Belle's digest contains a claim without sufficient source support.",
+        );
+      }
       const digestQualityScore = Math.round(
         claimCitations.reduce(
           (total, citation) => total + citation.supportScore,
           0,
         ) / claimCitations.length,
       );
+      const cachedImage =
+        imageSnapshot === undefined
+          ? undefined
+          : await cacheResearchImage(ctx, imageSnapshot);
       await ctx.runMutation(
         internal.forumAgentResearchPackets.beginResearchPacket,
         {
@@ -394,7 +542,7 @@ export const runDailyHackerNewsDigest = internalAction({
           prefixSlug: "news",
           title,
           body,
-          sources: indexed.stories.map((story: Doc<"hnStories">) => ({
+          sources: indexed.stories.map((story) => ({
             sourceKey: `belle-hn-${story.hnItemId}-${runDate}`,
             sourceUrl:
               story.url ??
@@ -464,6 +612,7 @@ function hackerNewsCandidate(
     url?: string;
     host?: string;
     text?: string;
+    summary?: string;
     timePosted?: number;
   },
   index: number,
@@ -476,7 +625,7 @@ function hackerNewsCandidate(
     sourceFeedUrl: "https://news.ycombinator.com/",
     title: story.title,
     url: story.url ?? discussionUrl,
-    summary: plainForumText(story.text ?? "", 1_100),
+    summary: plainForumText(story.text ?? story.summary ?? "", 1_100),
     publishedAt:
       story.timePosted === undefined ? undefined : story.timePosted * 1_000,
     boardSlugs: ["news-hacker-news"],

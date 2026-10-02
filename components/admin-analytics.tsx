@@ -4,21 +4,26 @@ import { Button } from "@/components/ui/button";
 import {
   convexRefs,
   type AnalyticsEventRecord,
+  type AnalyticsSummaryRecord,
   type AnalyticsSource,
+  type WebVitalSloSummaryRecord,
+  type WebVitalSummaryRecord,
 } from "@/lib/convex-refs";
 import { compactNumber, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useQuery } from "convex/react";
+import { reportAppError } from "@/components/app-error-surface";
+import { useConvex } from "convex/react";
 import {
   Activity,
   BarChart3,
   ExternalLink,
   Eye,
   MousePointer2,
+  RefreshCw,
   ScanSearch,
   UserRound,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 const windows = [7, 14, 30, 90] as const;
 const eventFilterLimit = 6;
@@ -28,27 +33,140 @@ type WindowDays = (typeof windows)[number];
 type EventSourceFilter = AnalyticsSource | "all";
 
 export function AdminAnalytics() {
-  const [queryNow] = useState(() => Date.now());
+  const convex = useConvex();
+  const [queryNow, setQueryNow] = useState(() => Date.now());
   const [days, setDays] = useState<WindowDays>(14);
   const [sourceFilter, setSourceFilter] = useState<EventSourceFilter>("all");
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [searchValue, setSearchValue] = useState("");
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<AnalyticsSummaryRecord>();
+  const [events, setEvents] = useState<AnalyticsEventRecord[]>();
+  const [webVitals, setWebVitals] = useState<WebVitalSummaryRecord>();
+  const [webVitalSlo, setWebVitalSlo] = useState<WebVitalSloSummaryRecord>();
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [sloError, setSloError] = useState<string | null>(null);
+  const [reportLoadedAt, setReportLoadedAt] = useState<number>();
+  const [loadedReportKey, setLoadedReportKey] = useState<string | null>(null);
+  const [loadedEventsKey, setLoadedEventsKey] = useState<string | null>(null);
+  const [loadedSloKey, setLoadedSloKey] = useState<string | null>(null);
+  const reportKey = `${days}:${queryNow}`;
+  const eventsKey = `${queryNow}:${sourceFilter}:${eventFilter}`;
+  const sloKey = String(queryNow);
+  const reportLoading = loadedReportKey !== reportKey;
+  const eventsLoading = loadedEventsKey !== eventsKey;
+  const sloLoading = loadedSloKey !== sloKey;
 
-  const summary = useQuery(convexRefs.admin.analyticsSummary, {
-    days,
-    now: queryNow,
-  });
-  const events = useQuery(convexRefs.admin.analyticsEvents, {
-    ...(eventFilter !== "all" ? { name: eventFilter } : {}),
-    ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
-    limit: streamLimit,
-  });
-  const webVitals = useQuery(convexRefs.admin.webVitalsSummary, {
-    days,
-    now: queryNow,
-  });
-  const webVitalSlo = useQuery(convexRefs.admin.webVitalSloSummary, {});
+  useEffect(() => {
+    let cancelled = false;
+    setReportError(null);
+    void Promise.all([
+      convex.query(convexRefs.admin.analyticsSummary, { days, now: queryNow }),
+      convex.query(convexRefs.admin.webVitalsSummary, { days, now: queryNow }),
+    ])
+      .then(
+        ([nextSummary, nextWebVitals]) => {
+          if (cancelled) return;
+          setSummary(nextSummary);
+          setWebVitals(nextWebVitals);
+          setReportLoadedAt(Date.now());
+        },
+        (error: unknown) => {
+          if (cancelled) return;
+          reportAppError(error, {
+            scope: "admin",
+            eventType: "analytics_snapshot_failed",
+            component: "AdminAnalytics",
+            action: "admin:analyticsSnapshot",
+            notify: false,
+          });
+          setReportError(
+            "Analytics snapshot could not be refreshed. Last successful data remains visible.",
+          );
+        },
+      )
+      .finally(() => {
+        if (!cancelled) setLoadedReportKey(reportKey);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, days, queryNow, reportKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSloError(null);
+    void convex
+      .query(convexRefs.admin.webVitalSloSummary, {})
+      .then(
+        (nextSlo) => {
+          if (!cancelled) setWebVitalSlo(nextSlo);
+        },
+        (error: unknown) => {
+          if (!cancelled) {
+            reportAppError(error, {
+              scope: "admin",
+              eventType: "web_vital_slo_snapshot_failed",
+              component: "AdminAnalytics",
+              action: "admin:webVitalSloSummary",
+              notify: false,
+            });
+            setSloError("SLO snapshot could not be refreshed.");
+          }
+        },
+      )
+      .finally(() => {
+        if (!cancelled) setLoadedSloKey(sloKey);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, sloKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEvents(undefined);
+    setEventsError(null);
+    void convex
+      .query(convexRefs.admin.analyticsEvents, {
+        ...(eventFilter !== "all" ? { name: eventFilter } : {}),
+        ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
+        limit: streamLimit,
+      })
+      .then(
+        (nextEvents) => {
+          if (!cancelled) setEvents(nextEvents);
+        },
+        (error: unknown) => {
+          if (!cancelled) {
+            reportAppError(error, {
+              scope: "admin",
+              eventType: "analytics_event_snapshot_failed",
+              component: "AdminAnalytics",
+              action: "admin:analyticsEvents",
+              notify: false,
+            });
+            setEventsError(
+              "Recent events could not be loaded. Refresh to retry.",
+            );
+          }
+        },
+      )
+      .finally(() => {
+        if (!cancelled) setLoadedEventsKey(eventsKey);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, eventFilter, eventsKey, sourceFilter]);
+
+  const refreshSnapshot = () => {
+    setQueryNow((current) => Math.max(Date.now(), current + 1));
+  };
 
   const maxDaily = useMemo(
     () =>
@@ -119,25 +237,61 @@ export function AdminAnalytics() {
             Analytics
           </p>
           <h2 className="mt-1 text-2xl font-semibold">Signal desk</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            On-demand snapshot; incoming events do not keep this report live.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-1 font-mono text-[10px] uppercase">
-          {windows.map((windowDays) => (
-            <Button
-              key={windowDays}
+        <div className="flex flex-wrap items-center gap-3">
+          <p
+            aria-live="polite"
+            className="font-mono text-[10px] uppercase text-muted-foreground"
+          >
+            {reportLoadedAt
+              ? `Snapshot ${formatDate(reportLoadedAt)}`
+              : reportLoading
+                ? "Loading snapshot"
+                : "Snapshot unavailable"}
+          </p>
+          <Button
+            disabled={reportLoading || eventsLoading || sloLoading}
+            onClick={refreshSnapshot}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw
+              aria-hidden="true"
               className={cn(
-                "h-7 rounded-none px-2 font-mono text-[10px] uppercase",
-                days === windowDays ? "bg-foreground text-background" : null,
+                (reportLoading || eventsLoading || sloLoading) &&
+                  "animate-spin",
               )}
-              onClick={() => setDays(windowDays)}
-              size="sm"
-              type="button"
-              variant={days === windowDays ? "default" : "outline"}
-            >
-              {windowDays}d
-            </Button>
-          ))}
+            />
+            Refresh snapshot
+          </Button>
+          <div className="flex flex-wrap gap-1 font-mono text-[10px] uppercase">
+            {windows.map((windowDays) => (
+              <Button
+                key={windowDays}
+                className={cn(
+                  "h-7 rounded-none px-2 font-mono text-[10px] uppercase",
+                  days === windowDays ? "bg-foreground text-background" : null,
+                )}
+                onClick={() => setDays(windowDays)}
+                size="sm"
+                type="button"
+                variant={days === windowDays ? "default" : "outline"}
+              >
+                {windowDays}d
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
+      {reportError ? (
+        <p className="mt-3 text-sm text-destructive" role="status">
+          {reportError}
+        </p>
+      ) : null}
 
       <section className="mt-6 border-y border-row-border py-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -189,7 +343,10 @@ export function AdminAnalytics() {
               {webVitals === undefined ? (
                 <tr>
                   <td className="px-2 py-4 text-muted-foreground" colSpan={6}>
-                    Loading field samples
+                    {reportError ??
+                      (reportLoading
+                        ? "Loading field samples"
+                        : "Field sample snapshot unavailable")}
                   </td>
                 </tr>
               ) : null}
@@ -268,7 +425,8 @@ export function AdminAnalytics() {
         ) : (
           <StatusLine>
             {webVitalSlo === undefined
-              ? "Loading SLO state"
+              ? (sloError ??
+                (sloLoading ? "Loading SLO state" : "SLO snapshot unavailable"))
               : "No SLO evaluation has run"}
           </StatusLine>
         )}
@@ -308,7 +466,7 @@ export function AdminAnalytics() {
         <Metric
           icon={<Eye />}
           label="Today"
-          note={`${days}d live window`}
+          note={`${days}d snapshot window`}
           value={summary?.totals.todayEvents ?? 0}
         />
       </div>
@@ -363,7 +521,12 @@ export function AdminAnalytics() {
               </div>
             ))}
             {summary === undefined ? (
-              <StatusLine>Loading analytics</StatusLine>
+              <StatusLine>
+                {reportError ??
+                  (reportLoading
+                    ? "Loading analytics"
+                    : "Analytics snapshot unavailable")}
+              </StatusLine>
             ) : null}
             {summary?.daily.length === 0 ? (
               <StatusLine>No daily activity in this window</StatusLine>
@@ -496,9 +659,11 @@ export function AdminAnalytics() {
               </p>
             </div>
             <div className="font-mono text-[10px] uppercase text-muted-foreground">
-              {events === undefined
-                ? "Loading stream"
-                : `${filteredEvents.length} visible / ${events.length} fetched`}
+              {eventsLoading
+                ? "Refreshing stream"
+                : events === undefined
+                  ? "Loading stream"
+                  : `${filteredEvents.length} visible / ${events.length} fetched`}
             </div>
           </div>
 
@@ -559,9 +724,21 @@ export function AdminAnalytics() {
           <p className="font-mono text-xs uppercase text-muted-foreground">
             Recent stream
           </p>
+          {eventsError ? (
+            <p className="mt-2 text-sm text-destructive" role="status">
+              {eventsError}
+            </p>
+          ) : null}
           <div className="mt-3 divide-y divide-row-border border-y border-row-border">
             {events === undefined ? (
-              <StatusLine>Loading event stream</StatusLine>
+              <StatusLine>
+                {eventsError ??
+                  (eventsLoading
+                    ? "Loading event stream"
+                    : "Event snapshot unavailable")}
+              </StatusLine>
+            ) : eventsLoading ? (
+              <StatusLine>Refreshing event stream</StatusLine>
             ) : filteredEvents.length === 0 ? (
               <StatusLine>No events in this filtered view</StatusLine>
             ) : (

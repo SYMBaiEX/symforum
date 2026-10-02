@@ -2,12 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   estimatedModelCostMicroUsd,
   forumDayKey,
+  hasModelPrice,
   openRouterDailyBudgetMicroUsd,
   spendBucketForKey,
 } from "./ai-model-costs";
 import {
   OPENROUTER_EMBEDDING_MODEL,
   OPENROUTER_FREE_GENERATION_MODELS,
+  OPENROUTER_GENERATION_MODELS,
   OPENROUTER_PAID_FALLBACK_MODEL,
 } from "./ai-models";
 
@@ -21,20 +23,50 @@ describe("AI model cost controls", () => {
     ).toBe(0);
   });
 
+  test("every configured generation and embedding route has explicit pricing", () => {
+    for (const model of [
+      ...OPENROUTER_GENERATION_MODELS,
+      OPENROUTER_EMBEDDING_MODEL,
+    ]) {
+      expect(hasModelPrice(model), `${model} must have a price policy`).toBe(
+        true,
+      );
+    }
+    expect(hasModelPrice("unknown/model")).toBe(false);
+  });
+
   test("accounts for OpenRouter embedding input tokens in the budget", () => {
     expect(
       estimatedModelCostMicroUsd(OPENROUTER_EMBEDDING_MODEL, 1_000_000, 999),
     ).toBe(20_000);
   });
 
+  test("rounds positive sub-micro-dollar usage up instead of undercounting it", () => {
+    expect(estimatedModelCostMicroUsd(OPENROUTER_EMBEDDING_MODEL, 1, 0)).toBe(
+      1,
+    );
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_PAID_FALLBACK_MODEL, 1, 0),
+    ).toBe(1);
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_FREE_GENERATION_MODELS[0], 1, 1),
+    ).toBe(0);
+  });
+
   test("accounts for the OpenRouter paid fallback in the shared budget", () => {
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_PAID_FALLBACK_MODEL, 1_000_000, 0),
+    ).toBe(5_775);
+    expect(
+      estimatedModelCostMicroUsd(OPENROUTER_PAID_FALLBACK_MODEL, 0, 1_000_000),
+    ).toBe(1_600_000);
     expect(
       estimatedModelCostMicroUsd(
         OPENROUTER_PAID_FALLBACK_MODEL,
         1_000_000,
         1_000_000,
       ),
-    ).toBe(210_000);
+    ).toBe(1_605_775);
   });
 
   test("uses a bounded default budget and stable spend shards", () => {

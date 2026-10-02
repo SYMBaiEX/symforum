@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { describe, expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
@@ -20,7 +21,9 @@ const modules = {
 };
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  registerRateLimiter(t);
+  return t;
 }
 
 async function keyPair() {
@@ -43,6 +46,7 @@ async function seedOwner(t: ReturnType<typeof setup>) {
       username: "owner",
       usernameNormalized: "owner",
       role: "owner",
+      emailVerificationTime: 1_800_000_000_000,
     });
   });
 }
@@ -54,6 +58,7 @@ async function seedReader(t: ReturnType<typeof setup>, username: string) {
       username,
       usernameNormalized: username,
       role: "reader",
+      emailVerificationTime: 1_800_000_000_000,
     });
   });
 }

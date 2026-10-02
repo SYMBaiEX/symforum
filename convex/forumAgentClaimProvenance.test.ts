@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildForumAgentClaimCitations,
   deterministicForumClaimHash,
+  forumAgentClaimCitationsPassPublicationGate,
   resolveForumClaimBodySpan,
 } from "./forumAgentClaimProvenance";
 
@@ -99,5 +100,56 @@ describe("forum agent claim provenance", () => {
         ],
       }),
     ).toThrow(/missing snapshot/i);
+  });
+
+  test("marks unsupported analysis as partial without overstating confidence", () => {
+    const [citation] = buildForumAgentClaimCitations({
+      body: "This could reduce deployment friction.",
+      snapshots: [snapshot],
+      claims: [
+        {
+          claim: "This could reduce deployment friction.",
+          sourceCandidateId: snapshot.id,
+          confidence: "medium",
+          kind: "analysis",
+        },
+      ],
+    });
+
+    expect(citation).toMatchObject({
+      supportScore: 0,
+      supportStatus: "partial",
+    });
+    expect(forumAgentClaimCitationsPassPublicationGate([citation!])).toBe(true);
+  });
+
+  test("does not let partial facts or unsupported analysis pass publication", () => {
+    const [partialFact, unsupportedAnalysis] = buildForumAgentClaimCitations({
+      body: "Release improves provenance in version 9.9.",
+      snapshots: [snapshot],
+      claims: [
+        {
+          claim: "Release improves provenance in version 9.9.",
+          sourceCandidateId: snapshot.id,
+          confidence: "high",
+          kind: "fact",
+        },
+        {
+          claim: "Release improves provenance in version 9.9.",
+          sourceCandidateId: snapshot.id,
+          confidence: "medium",
+          kind: "analysis",
+        },
+      ],
+    });
+
+    expect(partialFact?.supportStatus).toBe("unsupported");
+    expect(unsupportedAnalysis?.supportStatus).toBe("unsupported");
+    expect(
+      forumAgentClaimCitationsPassPublicationGate([
+        partialFact!,
+        unsupportedAnalysis!,
+      ]),
+    ).toBe(false);
   });
 });

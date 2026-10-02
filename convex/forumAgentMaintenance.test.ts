@@ -154,6 +154,36 @@ describe("forum agent maintenance", () => {
         durationMs: 500,
         createdAt: fresh,
       });
+      const oldModelReservationId = await ctx.db.insert(
+        "aiModelCallReservations",
+        {
+          reservationKey: "old-ai-reservation",
+          model: "test/model",
+          dayKey: "2026-01-01",
+          bucket: 0,
+          estimatedMicroUsd: 1,
+          estimatedInputTokens: 1,
+          estimatedOutputTokens: 1,
+          status: "failed",
+          createdAt: old,
+          updatedAt: old,
+        },
+      );
+      const freshModelReservationId = await ctx.db.insert(
+        "aiModelCallReservations",
+        {
+          reservationKey: "fresh-ai-reservation",
+          model: "test/model",
+          dayKey: "2026-10-01",
+          bucket: 0,
+          estimatedMicroUsd: 1,
+          estimatedInputTokens: 1,
+          estimatedOutputTokens: 1,
+          status: "reserved",
+          createdAt: fresh,
+          updatedAt: fresh,
+        },
+      );
       const oldRunId = await ctx.db.insert("forumAgentRuns", {
         runKey: "suki:old:1",
         agentSlug: "suki",
@@ -183,8 +213,10 @@ describe("forum agent maintenance", () => {
       });
       return {
         freshUsageId,
+        freshModelReservationId,
         oldRunId,
         oldUsageId,
+        oldModelReservationId,
         referencedRunId,
         threadId,
       };
@@ -196,9 +228,10 @@ describe("forum agent maintenance", () => {
     );
 
     expect(result).toMatchObject({
-      deleted: 2,
+      deleted: 3,
       deletedAgentRuns: 1,
       deletedTelemetry: 1,
+      deletedReservations: 1,
       continuing: false,
     });
     await t.run(async (ctx) => {
@@ -208,6 +241,15 @@ describe("forum agent maintenance", () => {
       expect(await ctx.db.get("forumAgentRuns", ids.oldRunId)).toBeNull();
       expect(
         await ctx.db.get("forumAgentUsageEvents", ids.freshUsageId),
+      ).not.toBeNull();
+      expect(
+        await ctx.db.get("aiModelCallReservations", ids.oldModelReservationId),
+      ).toBeNull();
+      expect(
+        await ctx.db.get(
+          "aiModelCallReservations",
+          ids.freshModelReservationId,
+        ),
       ).not.toBeNull();
       expect(
         await ctx.db.get("forumAgentRuns", ids.referencedRunId),

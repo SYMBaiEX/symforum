@@ -23,6 +23,22 @@ export type ForumAgentClaimCitationInput = {
   supportScore: number;
 };
 
+const MIN_SUPPORTED_CLAIM_COVERAGE = 0.45;
+
+/**
+ * Analysis may be published as a clearly partial inference when it adds no
+ * unsupported verifiable detail. Facts require the normal support threshold.
+ */
+export function forumAgentClaimCitationsPassPublicationGate(
+  citations: readonly ForumAgentClaimCitationInput[],
+) {
+  return citations.every(
+    (citation) =>
+      citation.supportStatus === "supported" ||
+      (citation.kind === "analysis" && citation.supportStatus === "partial"),
+  );
+}
+
 type ClaimInput = {
   claim: string;
   sourceCandidateId: string;
@@ -177,12 +193,13 @@ export function buildForumAgentClaimCitations(args: {
       Math.min(100, Math.round(coverage * 100) - unsupported.length * 25),
     );
     const supportStatus =
-      unsupported.length === 0 &&
-      (claim.kind === "analysis" || coverage >= 0.45)
-        ? ("supported" as const)
-        : supportScore > 0
-          ? ("partial" as const)
-          : ("unsupported" as const);
+      unsupported.length > 0
+        ? ("unsupported" as const)
+        : coverage >= MIN_SUPPORTED_CLAIM_COVERAGE
+          ? ("supported" as const)
+          : supportScore > 0 || claim.kind === "analysis"
+            ? ("partial" as const)
+            : ("unsupported" as const);
     const snapshotHash = deterministicForumClaimHash(
       JSON.stringify({
         id: snapshot.id,

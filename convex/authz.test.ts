@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import aggregateTest from "@convex-dev/aggregate/test";
 import presenceTest from "@convex-dev/presence/test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
@@ -18,6 +19,7 @@ function setup() {
   aggregateTest.register(t, "interactionScores");
   aggregateTest.register(t, "interactionSaves");
   aggregateTest.register(t, "commentCounts");
+  registerRateLimiter(t);
   presenceTest.register(t);
   return t;
 }
@@ -42,6 +44,7 @@ async function seedAccessFixture(t: ReturnType<typeof setup>) {
       username: "reader",
       usernameNormalized: "reader",
       role: "reader",
+      emailVerificationTime: 1_800_000_000_000,
     });
     const publishedFeaturedId = await ctx.db.insert("posts", {
       slug: "published-featured",

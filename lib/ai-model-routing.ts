@@ -1,5 +1,17 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { generateText, LanguageModel } from "ai";
+import { APICallError, type generateText, type LanguageModel } from "ai";
+import {
+  estimatedModelCostMicroUsd,
+  isOpenRouterFreeModel,
+  openRouterReservationModel,
+} from "./ai-model-costs";
+export {
+  openRouterBillingModel,
+  openRouterReservationModel,
+  openRouterSettlementModel,
+  openRouterSettlementRoute,
+} from "./ai-model-costs";
+export type { OpenRouterSettlementRoute } from "./ai-model-costs";
 import {
   OPENROUTER_GENERATION_MODELS,
   OPENROUTER_IDEATION_MODELS,
@@ -10,7 +22,23 @@ export type ModelRoute = {
   provider: "openrouter";
   modelId: string;
   persistedModel: string;
+  reservationKey?: string;
+  reservationModel?: string;
 };
+
+export type ModelUsageEstimate = {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedMicroUsd: number;
+};
+
+export type ModelAttemptCompletion = {
+  succeeded: boolean;
+  reservationKey?: string;
+};
+
+type RouteEstimateInput =
+  number | ((candidate: RoutedModel) => number) | undefined;
 
 type ProviderOptions = Parameters<typeof generateText>[0]["providerOptions"];
 
@@ -22,9 +50,22 @@ export type RoutedModel = ModelRoute & {
 export type ModelRoutingConfig = {
   openRouterApiKey?: string;
   disabledModelIds?: readonly string[];
-  beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
-  afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
+  beforeAttempt?: (
+    candidate: RoutedModel,
+    estimate: ModelUsageEstimate,
+  ) => string | undefined | Promise<string | undefined>;
+  afterAttempt?: (
+    candidate: RoutedModel,
+    completion: ModelAttemptCompletion,
+  ) => void | Promise<void>;
 };
+
+export class ModelSpendBudgetExceededError extends Error {
+  constructor(reason: string) {
+    super(`OpenRouter daily spend reservation rejected: ${reason}`);
+    this.name = "ModelSpendBudgetExceededError";
+  }
+}
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_SITE_URL = "https://forum.symbaiex.com";
@@ -40,6 +81,7 @@ export type ModelRouteAttempt = {
   outcome: "completed" | "failed";
   fallback: boolean;
   durationMs: number;
+  estimatedCostMicroUsd: number;
   errorMessage?: string;
 };
 
@@ -58,10 +100,12 @@ export type RouteRunArgs<T> = RouteTelemetryContext & {
   stage: string;
   totalTimeoutMs: number;
   attemptOffset?: number;
+  estimatedInputTokens?: RouteEstimateInput;
+  maxOutputTokens?: RouteEstimateInput;
   run: (candidate: RoutedModel, signal: AbortSignal) => Promise<T>;
   onAttempt?: (event: ModelRouteAttempt) => void | Promise<void>;
-  beforeAttempt?: (candidate: RoutedModel) => void | Promise<void>;
-  afterAttempt?: (candidate: RoutedModel) => void | Promise<void>;
+  beforeAttempt?: ModelRoutingConfig["beforeAttempt"];
+  afterAttempt?: ModelRoutingConfig["afterAttempt"];
 };
 
 function clean(value: string | undefined) {
@@ -80,6 +124,7 @@ function openRouterModel(
     apiKey,
     baseURL: OPENROUTER_BASE_URL,
     includeUsage: true,
+    supportsStructuredOutputs: true,
     headers: {
       "HTTP-Referer": OPENROUTER_SITE_URL,
       "X-OpenRouter-Title": OPENROUTER_APP_NAME,
@@ -154,6 +199,17 @@ function safeError(error: unknown) {
   return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
+function shouldAttemptModelFallback(error: unknown) {
+  // These OpenRouter responses are account-level failures. Sending the same
+  // request to another model with the same credentials cannot repair invalid
+  // authentication or missing payment, and can turn one failure into a paid
+  // retry. Keep model-specific 4xx errors eligible for a different candidate.
+  return !(
+    APICallError.isInstance(error) &&
+    (error.statusCode === 401 || error.statusCode === 402)
+  );
+}
+
 export function routedAttemptTimeoutMs({
   remainingMs,
   remainingFallbacks,
@@ -196,13 +252,48 @@ export async function runRoutedCandidates<T>(
     });
     const attemptStartedAt = Date.now();
     let attemptStarted = false;
+    let attemptSucceeded = false;
+    let reservationKey: string | undefined;
+    let estimatedCostMicroUsd = 0;
     try {
-      await args.beforeAttempt?.(candidate);
+      const estimatedInputTokens = resolveEstimate(
+        args.estimatedInputTokens,
+        candidate,
+      );
+      const estimatedOutputTokens = resolveEstimate(
+        args.maxOutputTokens,
+        candidate,
+      );
+      // This runner sends the free router as a standalone request; its paid
+      // rescue is another candidate and has its own preflight reservation.
+      // Do not transiently charge free calls against the paid daily budget.
+      const isFreeRoute =
+        candidate.provider === "openrouter" &&
+        isOpenRouterFreeModel(candidate.persistedModel);
+      const reservationModel = isFreeRoute
+        ? undefined
+        : openRouterReservationModel(candidate.persistedModel);
+      estimatedCostMicroUsd =
+        reservationModel === undefined
+          ? 0
+          : estimatedModelCostMicroUsd(
+              reservationModel,
+              estimatedInputTokens,
+              estimatedOutputTokens,
+            );
+      if (reservationModel !== undefined) {
+        reservationKey = await args.beforeAttempt?.(candidate, {
+          inputTokens: estimatedInputTokens,
+          outputTokens: estimatedOutputTokens,
+          estimatedMicroUsd: estimatedCostMicroUsd,
+        });
+      }
       attemptStarted = true;
       const value = await args.run(
         candidate,
         AbortSignal.timeout(attemptTimeout),
       );
+      attemptSucceeded = true;
       console.info("AI model route completed", {
         stage: args.stage,
         provider: candidate.provider,
@@ -217,8 +308,9 @@ export async function runRoutedCandidates<T>(
         provider: candidate.provider,
         model: candidate.persistedModel,
         outcome: "completed",
-        fallback: index + attemptOffset > 0,
+        fallback: index > 0,
         durationMs: Date.now() - attemptStartedAt,
+        estimatedCostMicroUsd,
       });
       return {
         value,
@@ -226,9 +318,14 @@ export async function runRoutedCandidates<T>(
           provider: candidate.provider,
           modelId: candidate.modelId,
           persistedModel: candidate.persistedModel,
+          ...(reservationModel === undefined ? {} : { reservationModel }),
+          ...(reservationKey === undefined ? {} : { reservationKey }),
         },
       };
     } catch (error) {
+      // A failed preflight (especially a rejected spend reservation) is not a
+      // provider failure and must never fall through to a paid candidate.
+      if (!attemptStarted) throw error;
       const failure = `${candidate.persistedModel}: ${safeError(error)}`;
       failures.push(failure);
       console.warn("AI model route failed", {
@@ -246,14 +343,19 @@ export async function runRoutedCandidates<T>(
         provider: candidate.provider,
         model: candidate.persistedModel,
         outcome: "failed",
-        fallback: index + attemptOffset > 0,
+        fallback: index > 0,
         durationMs: Date.now() - attemptStartedAt,
+        estimatedCostMicroUsd,
         errorMessage: safeError(error),
       });
+      if (!shouldAttemptModelFallback(error)) throw error;
     } finally {
       if (attemptStarted && args.afterAttempt) {
         try {
-          await args.afterAttempt(candidate);
+          await args.afterAttempt(candidate, {
+            succeeded: attemptSucceeded,
+            reservationKey,
+          });
         } catch (error) {
           console.warn("AI model attempt cleanup failed", {
             stage: args.stage,
@@ -268,6 +370,11 @@ export async function runRoutedCandidates<T>(
   throw new Error(
     `AI generation failed for ${args.stage} after ${failures.length} route attempt${failures.length === 1 ? "" : "s"}: ${failures.join(" | ")}`,
   );
+}
+
+function resolveEstimate(estimate: RouteEstimateInput, candidate: RoutedModel) {
+  const value = typeof estimate === "function" ? estimate(candidate) : estimate;
+  return Number.isSafeInteger(value) && (value ?? 0) > 0 ? value! : 0;
 }
 
 async function emitRouteAttempt<T>(

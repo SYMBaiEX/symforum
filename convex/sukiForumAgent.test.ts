@@ -1,13 +1,16 @@
 // @vitest-environment node
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   contentFormatGuidance,
+  collectResearchCandidates,
   evaluateForumDraft,
   finalizeForumBody,
-  forumEditorialRescueModels,
+  findRecentLexicalOverlap,
+  fetchArticleSnapshots,
+  forumRevisionEvidenceExcerpt,
   ForumEditorialQualityError,
   forumWriterMaxOutputTokens,
   imageRelevanceScore,
@@ -20,9 +23,371 @@ import {
 } from "./sukiForumAgent";
 import { ResearchQualityGateError } from "./researchQuality";
 import { validateForumAgentMarkup } from "../lib/editorial-quality";
-import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 
 describe("Suki forum research helpers", () => {
+  test("reads the research-feed cache in one batch and fetches no fresh feeds", async () => {
+    const cachedCandidate = (cacheKey: string) => ({
+      id: cacheKey,
+      sourceKey: cacheKey,
+      sourceName: "Cached source",
+      sourceFeedUrl: "https://example.com/feed.xml",
+      title: `Cached story ${cacheKey}`,
+      url: `https://example.com/${cacheKey}`,
+      summary: "Cached evidence summary.",
+      boardSlugs: ["research-papers"],
+    });
+    let readBatchSize = 0;
+    const runQuery = vi.fn(
+      async (_reference, args: { cacheKeys: string[] }) => {
+        readBatchSize = args.cacheKeys.length;
+        return args.cacheKeys.map((cacheKey) => ({
+          cacheKey,
+          payloadJson: JSON.stringify([cachedCandidate(cacheKey)]),
+        }));
+      },
+    );
+    const runMutation = vi.fn(async () => ({ written: 0 }));
+    const context = { runQuery, runMutation } as unknown as Parameters<
+      typeof collectResearchCandidates
+    >[0];
+    const fetchMock = vi.fn(async () => {
+      throw new Error("Cached feeds should not trigger fetches");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const candidates = await collectResearchCandidates(context);
+
+      expect(candidates).toHaveLength(14);
+      expect(runQuery).toHaveBeenCalledTimes(1);
+      expect(readBatchSize).toBe(14);
+      expect(runMutation).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("keeps refreshed feed data when its single batched cache write fails", async () => {
+    const runQuery = vi.fn(async () => []);
+    let writeBatchSize = 0;
+    const runMutation = vi.fn(
+      async (_reference, args: { entries: unknown[] }) => {
+        writeBatchSize = args.entries.length;
+        throw new Error("Cache unavailable");
+      },
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const context = { runQuery, runMutation } as unknown as Parameters<
+      typeof collectResearchCandidates
+    >[0];
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          `<rss version="2.0"><channel><item><title>Shared release</title><link>https://example.com/release</link><description>Verified release detail.</description></item></channel></rss>`,
+          { headers: { "content-type": "application/rss+xml; charset=utf-8" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const candidates = await collectResearchCandidates(context);
+
+      expect(candidates).toHaveLength(1);
+      expect(runQuery).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(14);
+      expect(runMutation).toHaveBeenCalledTimes(1);
+      expect(writeBatchSize).toBe(14);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "Research feed cache batch write failed.",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test("fetches a canonical article once and preserves each story identity", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          `<html><head><title>Shared article</title><meta name="description" content="Shared page context"></head><body><main>Verified article details.</main></body></html>`,
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const snapshots = await fetchArticleSnapshots([
+        {
+          id: "hn-1",
+          sourceKey: "story-1",
+          sourceName: "First source",
+          sourceFeedUrl: "https://news.ycombinator.com/",
+          title: "First HN title",
+          url: "https://example.com/story?utm_source=first",
+          summary: "First HN summary",
+          boardSlugs: ["research-papers"],
+        },
+        {
+          id: "hn-2",
+          sourceKey: "story-2",
+          sourceName: "Second source",
+          sourceFeedUrl: "https://news.ycombinator.com/",
+          title: "Second HN title",
+          url: "https://example.com/story?utm_source=second",
+          summary: "Second HN summary",
+          boardSlugs: ["ai-frameworks"],
+        },
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(snapshots).toMatchObject([
+        {
+          id: "hn-1",
+          sourceKey: "story-1",
+          sourceName: "First source",
+          title: "First HN title",
+          summary: "First HN summary",
+          articleTitle: "Shared article",
+          articleDescription: "Shared page context",
+          articleText: "Verified article details.",
+        },
+        {
+          id: "hn-2",
+          sourceKey: "story-2",
+          sourceName: "Second source",
+          title: "Second HN title",
+          summary: "Second HN summary",
+          articleTitle: "Shared article",
+          articleDescription: "Shared page context",
+          articleText: "Verified article details.",
+        },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("reuses article content across actions without reusing candidate identity", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          `<html><head><title>Shared article</title></head><body><main>Verified article details.</main></body></html>`,
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const source = {
+        sourceFeedUrl: "https://news.ycombinator.com/",
+        boardSlugs: ["news-hacker-news"],
+      };
+      const first = await fetchArticleSnapshots([
+        {
+          ...source,
+          id: "newsletter-42-0",
+          sourceKey: "newsletter-hn-42",
+          sourceName: "example.com",
+          title: "Newsletter candidate title",
+          url: "https://example.com/story?utm_source=newsletter",
+          summary: "Newsletter fallback summary",
+        },
+      ]);
+      const second = await fetchArticleSnapshots(
+        [
+          {
+            ...source,
+            id: "hn-42-0",
+            sourceKey: "hn-42",
+            sourceName: "example.com",
+            title: "Forum candidate title",
+            url: "https://example.com/story?utm_source=forum",
+            summary: "Forum fallback summary",
+          },
+        ],
+        first,
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(second[0]).toMatchObject({
+        id: "hn-42-0",
+        title: "Forum candidate title",
+        summary: "Forum fallback summary",
+        articleTitle: "Shared article",
+        articleText: "Verified article details.",
+        sourceFetchSucceeded: true,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("reuses an unavailable result without replacing candidate fallbacks", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const shared = {
+        sourceFeedUrl: "https://news.ycombinator.com/",
+        boardSlugs: ["news-hacker-news"],
+      };
+      const first = await fetchArticleSnapshots([
+        {
+          ...shared,
+          id: "newsletter-55-0",
+          sourceKey: "newsletter-hn-55",
+          sourceName: "example.com",
+          title: "Newsletter title",
+          url: "https://example.com/unavailable?utm_source=newsletter",
+          summary: "Newsletter-specific source text",
+        },
+      ]);
+      const second = await fetchArticleSnapshots(
+        [
+          {
+            ...shared,
+            id: "hn-55-0",
+            sourceKey: "hn-55",
+            sourceName: "example.com",
+            title: "Forum title",
+            url: "https://example.com/unavailable?utm_source=forum",
+            summary: "Forum-specific source text",
+          },
+        ],
+        first,
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(second[0]).toMatchObject({
+        articleTitle: "Forum title",
+        articleDescription: "Forum-specific source text",
+        articleText: "Forum-specific source text",
+        sourceFetchSucceeded: false,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("shares failed fetches but applies each candidate's own fallback", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const snapshots = await fetchArticleSnapshots([
+        {
+          id: "hn-1",
+          sourceKey: "story-1",
+          sourceName: "First source",
+          sourceFeedUrl: "https://news.ycombinator.com/",
+          title: "First HN title",
+          url: "https://example.com/story?utm_source=first",
+          summary: "First fallback",
+          boardSlugs: ["research-papers"],
+        },
+        {
+          id: "hn-2",
+          sourceKey: "story-2",
+          sourceName: "Second source",
+          sourceFeedUrl: "https://news.ycombinator.com/",
+          title: "Second HN title",
+          url: "https://example.com/story?utm_source=second",
+          summary: "Second fallback",
+          boardSlugs: ["ai-frameworks"],
+        },
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(
+        snapshots.map((snapshot) => [
+          snapshot.articleTitle,
+          snapshot.articleDescription,
+          snapshot.articleText,
+          snapshot.imageCredit,
+        ]),
+      ).toEqual([
+        ["First HN title", "First fallback", "First fallback", "First source"],
+        [
+          "Second HN title",
+          "Second fallback",
+          "Second fallback",
+          "Second source",
+        ],
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("uses deterministic recent-title overlap before semantic retrieval", () => {
+    const candidate = { title: "Open-source agents for research workflows" };
+    const memberThread = {
+      id: "member-thread",
+      title: "Research workflows with open-source agents",
+      ownedByAgent: false,
+    };
+
+    expect(findRecentLexicalOverlap([candidate], [memberThread])).toBe(
+      memberThread,
+    );
+    expect(
+      findRecentLexicalOverlap(
+        [candidate],
+        [{ ...memberThread, title: "A local compiler cache for TypeScript" }],
+      ),
+    ).toBeUndefined();
+    expect(
+      findRecentLexicalOverlap(
+        [candidate],
+        [{ ...memberThread, ownedByAgent: true }],
+      ),
+    ).toMatchObject({ ownedByAgent: true });
+  });
+
+  test("keeps revision evidence focused on source-linked claims", () => {
+    const unrelated =
+      "A long unrelated deployment history describes dashboards and general release process. ".repeat(
+        12,
+      );
+    const sourceText = [
+      unrelated,
+      "Version 2.4 adds checkpoint recovery for interrupted synchronization jobs, reducing replay after restart.",
+      "The recovery manifest records the latest completed batch and checksum for validation.",
+    ].join(" ");
+
+    const excerpt = forumRevisionEvidenceExcerpt(
+      sourceText,
+      [
+        "Checkpoint recovery reduces replay after interruption in synchronization jobs.",
+        "The recovery manifest records the latest completed batch and checksum.",
+      ],
+      300,
+    );
+
+    expect(excerpt).toContain("checkpoint recovery");
+    expect(excerpt).toContain("recovery manifest");
+    expect(excerpt).not.toContain("dashboards");
+    expect(excerpt.length).toBeLessThanOrEqual(300);
+  });
+
+  test("finds claim evidence inside unusually long source paragraphs", () => {
+    const sourceText = `${"background details without claim matches ".repeat(30)}checkpoint recovery restores interrupted synchronization jobs`;
+    const excerpt = forumRevisionEvidenceExcerpt(
+      sourceText,
+      ["Checkpoint recovery restores interrupted synchronization jobs."],
+      180,
+    );
+
+    expect(excerpt).toContain("checkpoint recovery");
+    expect(excerpt.length).toBeLessThanOrEqual(180);
+  });
+
   test("does not retry a deterministic research-quality hold", () => {
     expect(
       isRetryableError(new ResearchQualityGateError(["near_duplicate"])),
@@ -186,7 +551,7 @@ Where would your team pilot this first?`,
     ).toBeGreaterThanOrEqual(55);
   });
 
-  test("checks factual numbers against the claim's cited source", () => {
+  test("checks body precision against its ledger claim's cited source", () => {
     const snapshots = [
       {
         articleDescription: "Release 2.4 adds checkpoint recovery.",
@@ -219,34 +584,35 @@ Where would your team pilot this first?`,
     ];
     const discussionQuestion =
       "Where would checkpoint recovery remove the most operational pain for you?";
-    const body = `${"Checkpoint recovery changes how teams resume interrupted synchronization work. ".repeat(45)}\n\n[steps=Recovery check]\n1|Verify|Inspect the checkpoint\n[/steps]\n\n${discussionQuestion}`;
+    const body = `${"Checkpoint recovery changes how teams resume interrupted synchronization work. ".repeat(45)}\n\nVersion 9.9 adds checkpoint recovery to sync jobs.\n\n[steps=Recovery check]\n1|Verify|Inspect the checkpoint\n[/steps]\n\n${discussionQuestion}`;
+    const draft: Parameters<typeof repairForumDraftForReview>[0] = {
+      title: "Checkpoint recovery changes the sync failure playbook",
+      body,
+      poll: null,
+      imageCandidateId: null,
+      claims: [
+        {
+          claim: "Version 2.4 adds checkpoint recovery to sync jobs.",
+          sourceCandidateId: "source-a",
+          confidence: "high",
+          kind: "fact",
+        },
+        {
+          claim:
+            "Checkpoint recovery can reduce repeated synchronization work.",
+          sourceCandidateId: "source-a",
+          confidence: "medium",
+          kind: "analysis",
+        },
+      ],
+      originalValue: [
+        "A verification step before resuming work",
+        "A bounded way to reason about interrupted jobs",
+      ],
+      discussionQuestion,
+    };
     const result = evaluateForumDraft({
-      draft: {
-        title: "Checkpoint recovery changes the sync failure playbook",
-        body,
-        poll: null,
-        imageCandidateId: null,
-        claims: [
-          {
-            claim: "Version 9.9 adds checkpoint recovery to sync jobs.",
-            sourceCandidateId: "source-a",
-            confidence: "high",
-            kind: "fact",
-          },
-          {
-            claim:
-              "Checkpoint recovery can reduce repeated synchronization work.",
-            sourceCandidateId: "source-a",
-            confidence: "medium",
-            kind: "analysis",
-          },
-        ],
-        originalValue: [
-          "A verification step before resuming work",
-          "A bounded way to reason about interrupted jobs",
-        ],
-        discussionQuestion,
-      },
+      draft,
       selection: {
         angle: "How checkpoint recovery changes synchronization operations",
         candidateIds: ["source-a"],
@@ -260,12 +626,17 @@ Where would your team pilot this first?`,
       recentThreadTitles: [],
     });
 
-    expect(result.groundingScore).toBeLessThan(100);
-    expect(result.feedback.join(" ")).toContain(
-      "source-a but that source does not contain: 9.9",
+    expect(result.blockingIssues.join(" ")).toContain(
+      "Ensure every consequential body claim has a ledger claim whose cited source supports its details",
+    );
+    expect(result.blockingIssues.join(" ")).toContain(
+      "Version 9.9 adds checkpoint recovery to sync jobs",
     );
     expect(result.blockingIssues).not.toContain(
       "The post must end with exactly one focused question",
+    );
+    expect(repairForumDraftForReview(draft, snapshots).body).not.toContain(
+      "Version 9.9 adds checkpoint recovery to sync jobs.",
     );
   });
 
@@ -512,7 +883,6 @@ What would you verify first?`,
     expect(forumWriterMaxOutputTokens("revision", false)).toBe(8_250);
     expect(forumWriterMaxOutputTokens("revision", true)).toBe(4_200);
     expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(1);
-    expect(forumEditorialRescueModels()).toEqual(OPENROUTER_GENERATION_MODELS);
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {

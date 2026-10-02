@@ -2,17 +2,25 @@
 
 import { RAG } from "@convex-dev/rag";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { randomUUID } from "node:crypto";
 import { v } from "convex/values";
+import {
+  forumDayKey,
+  openRouterDailyBudgetMicroUsd,
+} from "../lib/ai-model-costs";
 import { OPENROUTER_EMBEDDING_MODEL } from "../lib/ai-models";
+import { embedRagQuery, embedRagText } from "./ragEmbeddings";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { EMBEDDING_HEALTH_KEY } from "./aiRoutingControlData";
 
 const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
+const EMBEDDING_TIMEOUT_MS = 12_000;
 const MEMORY_NAMESPACE = "forum-editorial-v1";
 const EMBEDDING_RETRY_DELAYS_MS = [30_000, 120_000] as const;
 const MAX_EDITORIAL_MEMORY_RESULTS = 8;
+const EDITORIAL_MEMORY_VALIDATION_BATCH_SIZE = 8;
 // RAG entries are retained independently of forum moderation. Fetch more than
 // the caller needs, then fail closed against the current forum visibility.
 const EDITORIAL_MEMORY_CANDIDATE_LIMIT = 32;
@@ -54,7 +62,9 @@ type MemorySearchEntry = {
 export async function selectCurrentPublicMemoryEntries(
   entries: readonly MemorySearchEntry[],
   scores: ReadonlyMap<string, number>,
-  readThread: (threadId: Id<"forumThreads">) => Promise<CurrentMemoryThread | null>,
+  readThreads: (
+    threadIds: readonly Id<"forumThreads">[],
+  ) => Promise<(CurrentMemoryThread | null)[]>,
   limit = MAX_EDITORIAL_MEMORY_RESULTS,
 ) {
   const seenThreadIds = new Set<string>();
@@ -64,30 +74,45 @@ export async function selectCurrentPublicMemoryEntries(
     seenThreadIds.add(threadId);
     return [{ entry, threadId: threadId as Id<"forumThreads"> }];
   });
-  const currentThreads = await Promise.all(
-    candidates.map(async ({ entry, threadId }) => ({
-      entry,
-      thread: await readThread(threadId),
-    })),
+  const selected: {
+    threadId: Id<"forumThreads">;
+    categorySlug: string;
+    agentSlug: string;
+    title: string;
+    text: string;
+    score: number;
+  }[] = [];
+  const boundedCandidates = candidates.slice(
+    0,
+    EDITORIAL_MEMORY_CANDIDATE_LIMIT,
   );
-  return currentThreads
-    .flatMap(({ entry, thread }) =>
-      thread === null
-        ? []
-        : [
-            {
-              threadId: thread.threadId,
-              categorySlug: thread.categorySlug,
-              agentSlug: thread.agentSlug,
-              // Return the live primary-record content rather than the stored
-              // embedding chunk: edits and moderation take effect immediately.
-              title: thread.title,
-              text: thread.body,
-              score: scores.get(entry.entryId) ?? 0,
-            },
-          ],
-    )
-    .slice(0, limit);
+  for (
+    let offset = 0;
+    offset < boundedCandidates.length && selected.length < limit;
+    offset += EDITORIAL_MEMORY_VALIDATION_BATCH_SIZE
+  ) {
+    const batch = boundedCandidates.slice(
+      offset,
+      offset + EDITORIAL_MEMORY_VALIDATION_BATCH_SIZE,
+    );
+    const threads = await readThreads(batch.map(({ threadId }) => threadId));
+    for (const [index, { entry }] of batch.entries()) {
+      const thread = threads[index] ?? null;
+      if (thread === null) continue;
+      // Return the live primary-record content rather than the stored
+      // embedding chunk: edits and moderation take effect immediately.
+      selected.push({
+        threadId: thread.threadId,
+        categorySlug: thread.categorySlug,
+        agentSlug: thread.agentSlug,
+        title: thread.title,
+        text: thread.body,
+        score: scores.get(entry.entryId) ?? 0,
+      });
+      if (selected.length >= limit) break;
+    }
+  }
+  return selected;
 }
 
 function platform(apiKey: string) {
@@ -106,7 +131,7 @@ function platform(apiKey: string) {
     textEmbeddingModel: embeddingModel,
     filterNames: ["category", "authorKind", "categoryAndAuthor"],
   });
-  return { rag };
+  return { rag, embeddingModel };
 }
 
 function requireApiKey() {
@@ -125,12 +150,21 @@ export async function searchEditorialMemory(
   },
 ) {
   const startedAt = Date.now();
-  const { rag } = platform(requireApiKey());
+  const { rag, embeddingModel } = platform(requireApiKey());
+  const reservation = await reserveEmbeddingCall(ctx, args.query);
+  if (!reservation.accepted) return [];
   let result: Awaited<ReturnType<typeof rag.search>>;
+  let inputTokens = 0;
   try {
+    const embedded = await embedRagQuery(
+      embeddingModel,
+      args.query,
+      AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+    );
+    inputTokens = embedded.inputTokens;
     result = await rag.search(ctx, {
       namespace: MEMORY_NAMESPACE,
-      query: args.query,
+      query: embedded.embedding,
       filters:
         args.categorySlug === undefined
           ? []
@@ -151,6 +185,7 @@ export async function searchEditorialMemory(
       },
     );
   } catch (error) {
+    await markEmbeddingCallFailed(ctx, reservation.reservationKey);
     await recordEmbeddingFailure(ctx, error);
     return [];
   }
@@ -163,20 +198,22 @@ export async function searchEditorialMemory(
   }
   await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
     runKey: args.runKey,
+    reservationKey: reservation.reservationKey,
     agentSlug: args.agentSlug,
     stage: "embedding",
     model: EMBEDDING_MODEL,
     categorySlug: args.categorySlug,
-    inputTokens: result.usage.tokens,
+    inputTokens,
     durationMs: Date.now() - startedAt,
   });
   return await selectCurrentPublicMemoryEntries(
     result.entries,
     scores,
-    async (threadId) =>
-      await ctx.runQuery(internal.forumAgentEditorialData.readThreadForMemory, {
-        threadId,
-      }),
+    async (threadIds) =>
+      await ctx.runQuery(
+        internal.forumAgentEditorialData.readThreadsForMemory,
+        { threadIds: [...threadIds] },
+      ),
   );
 }
 
@@ -192,15 +229,25 @@ async function indexThread(
   if (source === null) return { status: "skipped" as const };
   const agentSlug = source.agentSlug === "human" ? "suki" : source.agentSlug;
   const startedAt = Date.now();
-  const { rag } = platform(requireApiKey());
+  const { rag, embeddingModel } = platform(requireApiKey());
   const text = [source.title, source.body].join("\n\n");
+  const reservation = await reserveEmbeddingCall(ctx, text);
+  if (!reservation.accepted)
+    return { status: "skipped" as const, reason: "budget" as const };
   let result: Awaited<ReturnType<typeof rag.add>>;
+  let inputTokens = 0;
   try {
+    const embedded = await embedRagText(
+      embeddingModel,
+      text,
+      AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+    );
+    inputTokens = embedded.inputTokens;
     result = await rag.add(ctx, {
       namespace: MEMORY_NAMESPACE,
       key: `forum-thread:${source.threadId}`,
       title: source.title,
-      text,
+      chunks: embedded.chunks,
       metadata: {
         threadId: source.threadId,
         categorySlug: source.categorySlug,
@@ -221,6 +268,7 @@ async function indexThread(
       importance: source.agentSlug === "human" ? 1.15 : 1,
     });
   } catch (error) {
+    await markEmbeddingCallFailed(ctx, reservation.reservationKey);
     await recordEmbeddingFailure(ctx, error);
     if (attempt < EMBEDDING_RETRY_DELAYS_MS.length) {
       await ctx.scheduler.runAfter(
@@ -243,11 +291,12 @@ async function indexThread(
   });
   await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
     runKey: `index:${source.threadId}`,
+    reservationKey: reservation.reservationKey,
     agentSlug,
     stage: "embedding",
     model: EMBEDDING_MODEL,
     categorySlug: source.categorySlug,
-    inputTokens: result.usage.tokens,
+    inputTokens,
     durationMs: Date.now() - startedAt,
   });
   return { status: result.status, created: result.created };
@@ -265,15 +314,27 @@ export const indexForumThread = internalAction({
 export const checkEmbeddingHealth = internalAction({
   args: {},
   handler: async (ctx) => {
+    const startedAt = Date.now();
+    let reservationKey: string | undefined;
     try {
-      const { rag } = platform(requireApiKey());
+      const { rag, embeddingModel } = platform(requireApiKey());
       await rag.getOrCreateNamespace(ctx, {
         namespace: MEMORY_NAMESPACE,
         status: "ready",
       });
+      const query = "forum editorial semantic retrieval health check";
+      const reservation = await reserveEmbeddingCall(ctx, query);
+      if (!reservation.accepted)
+        return { healthy: false, skipped: "daily_budget" };
+      reservationKey = reservation.reservationKey;
+      const embedded = await embedRagQuery(
+        embeddingModel,
+        query,
+        AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+      );
       const result = await rag.search(ctx, {
         namespace: MEMORY_NAMESPACE,
-        query: "forum editorial semantic retrieval health check",
+        query: embedded.embedding,
         limit: 1,
         vectorScoreThreshold: 0,
         searchType: "vector",
@@ -288,19 +349,62 @@ export const checkEmbeddingHealth = internalAction({
           detail: `Embedding search is available; ${result.entries.length} entries available.`,
         },
       );
+      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+        runKey: `embedding-health:${randomUUID()}`,
+        reservationKey: reservation.reservationKey,
+        agentSlug: "suki",
+        stage: "embedding",
+        model: EMBEDDING_MODEL,
+        inputTokens: embedded.inputTokens,
+        durationMs: Date.now() - startedAt,
+      });
       return {
         healthy: true,
         model: EMBEDDING_MODEL,
         entries: result.entries.length,
-        embeddingTokens: result.usage.tokens,
+        embeddingTokens: embedded.inputTokens,
       };
     } catch (error) {
+      if (reservationKey !== undefined)
+        await markEmbeddingCallFailed(ctx, reservationKey);
       const detail = safeError(error);
       await recordEmbeddingFailure(ctx, error);
       return { healthy: false, detail };
     }
   },
 });
+
+async function reserveEmbeddingCall(ctx: ActionCtx, text: string) {
+  const reservationKey = `forum-embedding:${randomUUID()}`;
+  try {
+    const reservation = await ctx.runMutation(
+      internal.aiRoutingControlData.reserveModelCall,
+      {
+        reservationKey,
+        model: EMBEDDING_MODEL,
+        dayKey: forumDayKey(Date.now()),
+        estimatedInputTokens: Math.max(1, text.length * 2),
+        estimatedOutputTokens: 0,
+        budgetLimitMicroUsd: openRouterDailyBudgetMicroUsd(
+          env.OPENROUTER_DAILY_BUDGET_USD,
+        ),
+      },
+    );
+    return reservation.accepted
+      ? { accepted: true as const, reservationKey }
+      : { accepted: false as const, reason: reservation.reason };
+  } catch {
+    // Memory is an enhancement. If the shared spend ledger is unavailable,
+    // fail closed without making an unmetered embedding request.
+    return { accepted: false as const, reason: "reservation_unavailable" };
+  }
+}
+
+async function markEmbeddingCallFailed(ctx: ActionCtx, reservationKey: string) {
+  await ctx.runMutation(internal.aiRoutingControlData.markModelCallFailed, {
+    reservationKey,
+  });
+}
 
 export const backfillForumMemory = internalAction({
   args: {

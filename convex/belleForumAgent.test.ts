@@ -4,12 +4,56 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildDigestBody,
+  canReuseDailyDigestStories,
   clipGeneratedProse,
   normalizeGeneratedHeadline,
 } from "./belleForumAgent";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
+import type { ReusableDailyDigestStory } from "./newsDigestTypes";
 
 describe("Belle Hacker News digest", () => {
+  test("reuses only the exact ranked stories from the unchanged snapshot", () => {
+    const stories: ReusableDailyDigestStory[] = Array.from(
+      { length: 12 },
+      (_, index) => ({
+        hnItemId: index + 1,
+        snapshotDate: "2026-10-02",
+        rank: index + 1,
+        title: `Story ${index + 1}`,
+        summary: `Source summary ${index + 1}`,
+      }),
+    );
+    const snapshot = {
+      stories,
+      snapshotDate: "2026-10-02",
+      snapshotStoryCount: 18,
+      snapshotCompletedAt: 1_800_000_000_000,
+      expectedCompletedAt: 1_800_000_000_000,
+    };
+
+    expect(canReuseDailyDigestStories(snapshot)).toBe(true);
+    expect(
+      canReuseDailyDigestStories({
+        ...snapshot,
+        snapshotCompletedAt: snapshot.snapshotCompletedAt + 1,
+      }),
+    ).toBe(false);
+    expect(
+      canReuseDailyDigestStories({
+        ...snapshot,
+        stories: stories.slice(1),
+      }),
+    ).toBe(false);
+    expect(
+      canReuseDailyDigestStories({
+        ...snapshot,
+        stories: stories.map((story, index) =>
+          index === 4 ? { ...story, snapshotDate: "2026-10-01" } : story,
+        ),
+      }),
+    ).toBe(false);
+  });
+
   test("renders a dated visual briefing with direct SYMBaiEX and source links", () => {
     const story = {
       hnItemId: 42,

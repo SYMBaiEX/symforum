@@ -1,9 +1,16 @@
+import { APICallError, Output, ToolLoopAgent } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { LanguageModel } from "ai";
+import { z } from "zod";
 import {
   openRouterModelForStage,
   openRouterModelsForStage,
+  ModelSpendBudgetExceededError,
+  openRouterBillingModel,
+  openRouterReservationModel,
+  openRouterSettlementModel,
+  openRouterSettlementRoute,
   routedModelCandidates,
   routedAttemptTimeoutMs,
   runRoutedCandidates,
@@ -28,6 +35,49 @@ function candidate(persistedModel: string): RoutedModel {
 }
 
 describe("OpenRouter-only model routing", () => {
+  test("settles only explicitly resolved free variants at zero-cost", () => {
+    expect(openRouterSettlementRoute("openrouter/free")).toBe("paid");
+    expect(openRouterSettlementRoute("qwen/qwen3-235b-a22b:free")).toBe("free");
+    expect(openRouterSettlementRoute("deepseek/deepseek-v4-flash-0731")).toBe(
+      "paid",
+    );
+    expect(openRouterSettlementRoute("unexpected-provider-model")).toBe("paid");
+    expect(openRouterSettlementModel("free")).toBe("openrouter/free");
+    expect(openRouterSettlementModel("paid")).toBe(
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    );
+  });
+
+  test("prices free aliases conservatively and bills ambiguous responses as paid", () => {
+    expect(openRouterReservationModel("openrouter/free")).toBe(
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    );
+    expect(openRouterReservationModel("vendor/model:free")).toBe(
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    );
+    expect(openRouterReservationModel(OPENROUTER_PAID_FALLBACK_MODEL)).toBe(
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    );
+    expect(openRouterBillingModel("qwen/qwen3-235b-a22b:free")).toBe(
+      "openrouter/free",
+    );
+    expect(openRouterBillingModel("openrouter/free", "openrouter/free")).toBe(
+      "openrouter/free",
+    );
+    expect(openRouterBillingModel(undefined, "openrouter/free")).toBe(
+      "openrouter/free",
+    );
+    expect(
+      openRouterBillingModel("unexpected-provider-model", "openrouter/free"),
+    ).toBe(OPENROUTER_PAID_FALLBACK_MODEL);
+    expect(
+      openRouterBillingModel(undefined, OPENROUTER_PAID_FALLBACK_MODEL),
+    ).toBe(OPENROUTER_PAID_FALLBACK_MODEL);
+    expect(openRouterBillingModel(undefined)).toBe(
+      OPENROUTER_PAID_FALLBACK_MODEL,
+    );
+  });
+
   test("routes every generation stage through OpenRouter free first with a paid rescue", () => {
     expect(OPENROUTER_FREE_GENERATION_MODELS).toEqual(["openrouter/free"]);
     expect(openRouterModelForStage("suki:forum-topic")).toBe("openrouter/free");
@@ -64,6 +114,69 @@ describe("OpenRouter-only model routing", () => {
     expect(candidates.map(({ persistedModel }) => persistedModel)).toEqual(
       OPENROUTER_GENERATION_MODELS,
     );
+  });
+
+  test("sends structured object generation as strict JSON Schema", async () => {
+    const requestBodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>,
+        );
+        return new Response(
+          JSON.stringify({
+            id: "chatcmpl-structured-test",
+            object: "chat.completion",
+            created: 1_760_000_000,
+            model: "openrouter/free",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: '{"status":"ok"}' },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const [freeRoute] = await routedModelCandidates(
+        { openRouterApiKey: "test-openrouter-key" },
+        undefined,
+        undefined,
+        undefined,
+        ["openrouter/free"],
+      );
+      const writer = new ToolLoopAgent({
+        id: "structured-output-test",
+        model: freeRoute.model,
+        output: Output.object({
+          schema: z.object({ status: z.enum(["ok", "failed"]) }),
+        }),
+        maxRetries: 0,
+      });
+      const result = await writer.generate({
+        prompt: "Return a status object.",
+      });
+
+      expect(result.output).toEqual({ status: "ok" });
+      expect(requestBodies).toHaveLength(1);
+      expect(requestBodies[0].tool_choice).toBeUndefined();
+      expect(requestBodies[0].response_format).toMatchObject({
+        type: "json_schema",
+        json_schema: {
+          strict: true,
+          schema: expect.objectContaining({ required: ["status"] }),
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("deduplicates candidates and retains the free emergency route", async () => {
@@ -113,6 +226,104 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
+  test("reserves a priced paid attempt before calling its provider", async () => {
+    const paid = candidate(OPENROUTER_PAID_FALLBACK_MODEL);
+    const beforeAttempt = vi.fn(async () => "paid-reservation");
+    const afterAttempt = vi.fn();
+    const result = await runRoutedCandidates([paid], {
+      stage: "budgeted-generation",
+      totalTimeoutMs: 5_000,
+      estimatedInputTokens: 1_000,
+      maxOutputTokens: 500,
+      beforeAttempt,
+      afterAttempt,
+      run: async () => "generated",
+    });
+
+    expect(beforeAttempt).toHaveBeenCalledWith(paid, {
+      inputTokens: 1_000,
+      outputTokens: 500,
+      estimatedMicroUsd: 806,
+    });
+    expect(result.route.reservationKey).toBe("paid-reservation");
+    expect(afterAttempt).toHaveBeenCalledWith(paid, {
+      succeeded: true,
+      reservationKey: "paid-reservation",
+    });
+  });
+
+  test("does not reserve paid spend for a standalone zero-priced free route", async () => {
+    const free = candidate("openrouter/free");
+    const beforeAttempt = vi.fn(async () => "should-not-reserve");
+    const onAttempt = vi.fn();
+    const result = await runRoutedCandidates([free], {
+      stage: "free-alias-budget",
+      totalTimeoutMs: 5_000,
+      estimatedInputTokens: 1_000,
+      maxOutputTokens: 500,
+      beforeAttempt,
+      onAttempt,
+      run: async () => "generated",
+    });
+
+    expect(beforeAttempt).not.toHaveBeenCalled();
+    expect(result.route.reservationKey).toBeUndefined();
+    expect(result.route.reservationModel).toBeUndefined();
+    expect(onAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ estimatedCostMicroUsd: 0 }),
+    );
+  });
+
+  test("prices the routed alias when OpenRouter returns a versioned model id", async () => {
+    const resolvedModelId = "deepseek/deepseek-v4-flash-0731";
+    const onAttempt = vi.fn();
+    const result = await runRoutedCandidates(
+      [candidate(OPENROUTER_PAID_FALLBACK_MODEL)],
+      {
+        stage: "versioned-provider-model",
+        totalTimeoutMs: 5_000,
+        estimatedInputTokens: 1_000,
+        maxOutputTokens: 500,
+        onAttempt,
+        run: async () => ({
+          modelId: resolvedModelId,
+          inputTokens: 1_000,
+          outputTokens: 500,
+        }),
+      },
+    );
+
+    expect(result.value.modelId).toBe(resolvedModelId);
+    expect(result.route.persistedModel).toBe(OPENROUTER_PAID_FALLBACK_MODEL);
+    expect(onAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: OPENROUTER_PAID_FALLBACK_MODEL,
+        outcome: "completed",
+        estimatedCostMicroUsd: 806,
+      }),
+    );
+  });
+
+  test("fails closed when a paid spend reservation is rejected", async () => {
+    const run = vi.fn(async () => "must-not-run");
+    const onAttempt = vi.fn();
+    await expect(
+      runRoutedCandidates([candidate(OPENROUTER_PAID_FALLBACK_MODEL)], {
+        stage: "budget-denied-generation",
+        totalTimeoutMs: 5_000,
+        estimatedInputTokens: 1_000,
+        maxOutputTokens: 500,
+        beforeAttempt: async () => {
+          throw new ModelSpendBudgetExceededError("daily-budget");
+        },
+        onAttempt,
+        run,
+      }),
+    ).rejects.toThrow(/daily-budget/);
+    expect(run).not.toHaveBeenCalled();
+    expect(onAttempt).not.toHaveBeenCalled();
+  });
+
   test("falls back within OpenRouter and marks the paid rescue in telemetry", async () => {
     const onAttempt = vi.fn();
     const result = await runRoutedCandidates(
@@ -144,6 +355,109 @@ describe("OpenRouter-only model routing", () => {
       }),
     );
   });
+
+  test("offsets retry ordinals without mislabeling the retried primary as fallback", async () => {
+    const onAttempt = vi.fn();
+    await runRoutedCandidates(OPENROUTER_GENERATION_MODELS.map(candidate), {
+      stage: "scheduled-retry-ordinal",
+      totalTimeoutMs: 5_000,
+      attemptOffset: 2,
+      onAttempt,
+      run: async (route) => {
+        if (route.persistedModel === "openrouter/free") {
+          throw new Error("structured response failed");
+        }
+        return "paid-result";
+      },
+    });
+
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        attempt: 3,
+        model: "openrouter/free",
+        outcome: "failed",
+        fallback: false,
+      }),
+    );
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        attempt: 4,
+        model: OPENROUTER_PAID_FALLBACK_MODEL,
+        outcome: "completed",
+        fallback: true,
+      }),
+    );
+  });
+
+  test.each([401, 402])(
+    "does not invoke another model after account-level HTTP %i failures",
+    async (statusCode) => {
+      const error = new APICallError({
+        message: `OpenRouter returned ${statusCode}`,
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode,
+      });
+      const run = vi.fn(async () => {
+        throw error;
+      });
+      const afterAttempt = vi.fn();
+      const onAttempt = vi.fn();
+
+      await expect(
+        runRoutedCandidates(OPENROUTER_GENERATION_MODELS.map(candidate), {
+          stage: "account-level-provider-failure",
+          totalTimeoutMs: 5_000,
+          afterAttempt,
+          onAttempt,
+          run,
+        }),
+      ).rejects.toBe(error);
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(afterAttempt).toHaveBeenCalledTimes(1);
+      expect(afterAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({ persistedModel: "openrouter/free" }),
+        { succeeded: false, reservationKey: undefined },
+      );
+      expect(onAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "failed",
+          model: "openrouter/free",
+        }),
+      );
+    },
+  );
+
+  test.each([400, 403])(
+    "keeps model-specific HTTP %i failures eligible for the configured fallback",
+    async (statusCode) => {
+      const error = new APICallError({
+        message: `OpenRouter returned ${statusCode}`,
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode,
+      });
+      const run = vi.fn(async (route: RoutedModel) => {
+        if (route.persistedModel === "openrouter/free") throw error;
+        return "paid-result";
+      });
+
+      await expect(
+        runRoutedCandidates(OPENROUTER_GENERATION_MODELS.map(candidate), {
+          stage: "model-specific-provider-failure",
+          totalTimeoutMs: 5_000,
+          run,
+        }),
+      ).resolves.toMatchObject({
+        value: "paid-result",
+        route: { persistedModel: OPENROUTER_PAID_FALLBACK_MODEL },
+      });
+      expect(run).toHaveBeenCalledTimes(2);
+    },
+  );
 
   test("reserves a usable structured-generation window for the paid rescue", () => {
     expect(

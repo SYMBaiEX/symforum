@@ -1,13 +1,18 @@
 "use node";
 
-import { generateText, tool } from "ai";
+import { randomUUID } from "node:crypto";
+import { generateText, Output } from "ai";
 import { v } from "convex/values";
 import { z } from "zod";
 import {
+  estimatePromptInputTokens,
   forumDayKey,
+  hasModelPrice,
+  openRouterReservationModel,
   openRouterDailyBudgetMicroUsd,
 } from "../lib/ai-model-costs";
 import {
+  ModelSpendBudgetExceededError,
   routedModelCandidates,
   runRoutedCandidates,
   runWithModelFallback,
@@ -15,13 +20,19 @@ import {
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
-import { OPENROUTER_PAID_FALLBACK_MODEL } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
 
 const CANARY_MESSAGE = "SYMBiEX structured model route healthy";
 const CANARY_FAILURE_PAUSE_MS = 30 * 60 * 1_000;
+const canaryOutputSchema = z.object({
+  topic: z.string().min(12).max(120),
+  title: z.string().min(12).max(120),
+  draft: z.string().min(80).max(1_200),
+  sourceUrls: z.array(z.string().url()).min(1).max(3),
+  message: z.literal(CANARY_MESSAGE),
+});
 
 export async function convexModelRoutingConfig(
   ctx?: ActionCtx,
@@ -32,25 +43,52 @@ export async function convexModelRoutingConfig(
   };
   if (ctx === undefined) return base;
 
-  const now = Date.now();
-  const budgetLimitMicroUsd = openRouterDailyBudgetMicroUsd(
-    env.OPENROUTER_DAILY_BUDGET_USD,
+  const control = await ctx.runQuery(
+    internal.aiRoutingControlData.readRoutingControl,
+    { now: Date.now() },
   );
-  const control: {
-    disabledModelIds: string[];
-    paidBudgetExceeded: boolean;
-  } = await ctx.runQuery(internal.aiRoutingControlData.readRoutingControl, {
-    dayKey: forumDayKey(now),
-    budgetLimitMicroUsd,
-    now,
-  });
-  const disabledModelIds = new Set(control.disabledModelIds);
-  if (control.paidBudgetExceeded) {
-    disabledModelIds.add(OPENROUTER_PAID_FALLBACK_MODEL);
-  }
-
-  void options;
-  return { ...base, disabledModelIds: [...disabledModelIds] };
+  return {
+    ...base,
+    disabledModelIds: control.disabledModelIds,
+    beforeAttempt: async (candidate, estimate) => {
+      const reservationModel = openRouterReservationModel(
+        candidate.persistedModel,
+      );
+      if (!hasModelPrice(reservationModel)) {
+        throw new ModelSpendBudgetExceededError("missing-model-price");
+      }
+      if (estimate.inputTokens <= 0 || estimate.outputTokens <= 0) {
+        throw new ModelSpendBudgetExceededError("missing-token-estimate");
+      }
+      if (estimate.estimatedMicroUsd <= 0) {
+        throw new ModelSpendBudgetExceededError("invalid-cost-estimate");
+      }
+      const reservation = await ctx.runMutation(
+        internal.aiRoutingControlData.reserveModelCall,
+        {
+          reservationKey: `${options?.correlationId ?? "ai"}:${candidate.persistedModel}:${randomUUID()}`,
+          model: reservationModel,
+          dayKey: forumDayKey(Date.now()),
+          estimatedInputTokens: estimate.inputTokens,
+          estimatedOutputTokens: estimate.outputTokens,
+          budgetLimitMicroUsd: openRouterDailyBudgetMicroUsd(
+            env.OPENROUTER_DAILY_BUDGET_USD,
+          ),
+        },
+      );
+      if (!reservation.accepted) {
+        throw new ModelSpendBudgetExceededError(reservation.reason);
+      }
+      return reservation.reservationKey;
+    },
+    afterAttempt: async (_candidate, completion) => {
+      if (completion.succeeded || completion.reservationKey === undefined)
+        return;
+      await ctx.runMutation(internal.aiRoutingControlData.markModelCallFailed, {
+        reservationKey: completion.reservationKey,
+      });
+    },
+  };
 }
 
 /** Non-publishing structured smoke test for operators. */
@@ -104,11 +142,20 @@ export const runStructuredCanary = internalAction({
 
 async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
   const correlationId = `model-canary:${Date.now()}`;
+  const generationStartedAt = Date.now();
   const config = await convexModelRoutingConfig(ctx, { correlationId });
   const requestContext = {
     user: "operator-route-probe",
     tags: ["feature:model-route-probe"],
   };
+  const canaryPrompt =
+    "You are validating the exact structured-output contract used by a " +
+    "forum agent before it may publish. Return one structured object using " +
+    "topic 'Structured routing health check', title " +
+    "'Structured routing health check passed', source URL " +
+    "'https://symbaiex.com/agents.md', the exact required message, and " +
+    "an 80-200 character draft explaining that this synthetic payload " +
+    "checks schema-valid tool submission without publishing. Do not write prose.";
   const routeArgs = {
     stage: `operator:model-route-probe:${provider ?? "auto"}`,
     correlationId,
@@ -119,31 +166,13 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
       runKey: correlationId,
     }),
     totalTimeoutMs: 180_000,
+    estimatedInputTokens: estimatePromptInputTokens(canaryPrompt),
+    maxOutputTokens: 1_500,
     run: async (candidate: RoutedModel, signal: AbortSignal) => {
       const result = await generateText({
         model: candidate.model,
-        prompt:
-          "You are validating the exact structured-output contract used by a " +
-          "forum agent before it may publish. Call validateForumDraft exactly " +
-          "once using topic 'Structured routing health check', title " +
-          "'Structured routing health check passed', source URL " +
-          "'https://symbaiex.com/agents.md', the exact required message, and " +
-          "an 80-200 character draft explaining that this synthetic payload " +
-          "checks schema-valid tool submission without publishing. Do not write prose.",
-        tools: {
-          validateForumDraft: tool({
-            description:
-              "Validate a representative topic selection and grounded forum draft without publishing it.",
-            inputSchema: z.object({
-              topic: z.string().min(12).max(120),
-              title: z.string().min(12).max(120),
-              draft: z.string().min(80).max(1_200),
-              sourceUrls: z.array(z.string().url()).min(1).max(3),
-              message: z.literal(CANARY_MESSAGE),
-            }),
-          }),
-        },
-        toolChoice: "required",
+        prompt: canaryPrompt,
+        output: Output.object({ schema: canaryOutputSchema }),
         maxOutputTokens: 1_500,
         maxRetries: 0,
         temperature: 0,
@@ -152,29 +181,34 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
         providerOptions: candidate.providerOptions,
         abortSignal: signal,
       });
-      const call = result.staticToolCalls[0];
+      const output = result.output;
       if (
-        call?.toolName !== "validateForumDraft" ||
-        call.input.message !== CANARY_MESSAGE ||
-        call.input.topic.trim().length < 12 ||
-        call.input.title.trim().length < 12 ||
-        call.input.draft.trim().length < 80 ||
-        call.input.sourceUrls.length < 1
+        output.message !== CANARY_MESSAGE ||
+        output.topic.trim().length < 12 ||
+        output.title.trim().length < 12 ||
+        output.draft.trim().length < 80 ||
+        output.sourceUrls.length < 1
       ) {
         throw new Error(
-          `model route did not complete the structured canary (finish=${result.finishReason}, toolCalls=${result.staticToolCalls.length}, outputTokens=${result.usage.outputTokens ?? 0})`,
+          `model route did not complete the structured canary (finish=${result.finishReason}, outputTokens=${result.usage.outputTokens ?? 0})`,
         );
       }
-      return { response: call.input.message, modelId: result.response.modelId };
+      return {
+        response: output.message,
+        modelId: result.response.modelId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+      };
     },
   };
   const generation =
     provider === undefined
-      ? await runWithModelFallback<{ response: string; modelId: string }>(
-          config,
-          requestContext,
-          routeArgs,
-        )
+      ? await runWithModelFallback<{
+          response: string;
+          modelId: string;
+          inputTokens?: number;
+          outputTokens?: number;
+        }>(config, requestContext, routeArgs)
       : await runRoutedCandidates(
           (await routedModelCandidates(config, requestContext)).filter(
             (candidate) => candidate.provider === provider,
@@ -185,6 +219,18 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
             afterAttempt: config.afterAttempt,
           },
         );
+  await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+    runKey: correlationId,
+    reservationKey: generation.route.reservationKey,
+    reservationModel: generation.route.reservationModel,
+    agentSlug: "system",
+    stage: "canary",
+    model: generation.route.persistedModel,
+    servedModel: generation.value.modelId,
+    inputTokens: generation.value.inputTokens,
+    outputTokens: generation.value.outputTokens,
+    durationMs: Date.now() - generationStartedAt,
+  });
   return {
     provider: generation.route.provider,
     model: generation.value.modelId || generation.route.persistedModel,

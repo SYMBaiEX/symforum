@@ -4,7 +4,7 @@ import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import { convexRefs, type AiTelemetrySnapshotRecord } from "@/lib/convex-refs";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation } from "convex/react";
 import {
   Activity,
   Cpu,
@@ -15,7 +15,7 @@ import {
   Timer,
   Zap,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 type ModelTotals = {
@@ -97,6 +97,7 @@ type ModelTelemetry = {
     correlationId?: string;
     feature?: string;
     agent?: string;
+    requestedModel?: string;
     keyName?: string;
     endpoint?: string;
     model?: string;
@@ -164,7 +165,8 @@ export function modelTelemetryFromSnapshot(
     correlationId: event.correlationId,
     feature: event.stage,
     agent: event.agentSlug,
-    model: event.model,
+    requestedModel: event.requestedModel,
+    model: event.servedModel ?? event.model,
     outcome: event.status,
     totalMs: event.durationMs,
     inputTokens: event.inputTokens,
@@ -223,13 +225,44 @@ export function modelTelemetryFromSnapshot(
 }
 
 export function AdminTelemetry() {
+  const convex = useConvex();
   const [queryNow, setQueryNow] = useState(() => Date.now());
   const [hours, setHours] = useState(24);
   const [view, setView] = useState<TelemetryView>("overview");
-  const editorial = useQuery(convexRefs.admin.aiTelemetrySnapshot, {
-    hours,
-    now: queryNow,
-  });
+  const [editorial, setEditorial] = useState<
+    AiTelemetrySnapshotRecord | undefined
+  >();
+  const [editorialError, setEditorialError] = useState<string | null>(null);
+  const [loadedQueryKey, setLoadedQueryKey] = useState<string | null>(null);
+  const queryKey = `${hours}:${queryNow}`;
+  useEffect(() => {
+    let cancelled = false;
+    void convex
+      .query(convexRefs.admin.aiTelemetrySnapshot, { hours, now: queryNow })
+      .then(
+        (snapshot) => {
+          if (cancelled) return;
+          setEditorial(snapshot);
+          setEditorialError(null);
+          setLoadedQueryKey(queryKey);
+        },
+        (error: unknown) => {
+          if (cancelled) return;
+          reportAppError(error, {
+            scope: "admin",
+            eventType: "ai_telemetry_snapshot_failed",
+            component: "AdminTelemetry",
+            action: "admin:aiTelemetrySnapshot",
+            notify: false,
+          });
+          setEditorialError("Telemetry could not be loaded. Refresh to retry.");
+          setLoadedQueryKey(queryKey);
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, hours, queryKey, queryNow]);
   const verifyEmbeddings = useMutation(
     convexRefs.admin.verifyForumAgentEmbeddings,
   );
@@ -248,7 +281,7 @@ export function AdminTelemetry() {
       } else {
         await backfillEmbeddings({});
       }
-      setQueryNow(Date.now());
+      setQueryNow((previous) => Math.max(Date.now(), previous + 1));
       toast.success(
         action === "verify"
           ? "Embedding health check queued"
@@ -274,8 +307,8 @@ export function AdminTelemetry() {
     () => modelTelemetryFromSnapshot(editorial),
     [editorial],
   );
-  const modelLoading = editorial === undefined;
-  const modelError = null;
+  const modelLoading = loadedQueryKey !== queryKey;
+  const modelError = editorialError;
   const runtime = model?.runtime.latest;
   const combinedRecent = useMemo(
     () => mergeRecent(model?.recent ?? [], editorial?.recent ?? []),
@@ -290,11 +323,8 @@ export function AdminTelemetry() {
         <div className="relative grid gap-8 p-5 md:p-7 xl:grid-cols-[minmax(0,1.15fr)_minmax(28rem,0.85fr)] xl:items-end">
           <div>
             <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-              </span>
-              Live observatory / redacted telemetry
+              <span className="size-2 rounded-full bg-muted-foreground/50" />
+              On-demand observatory / redacted telemetry
             </div>
             <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
               The machine and the voices, on one signal board.
@@ -302,7 +332,8 @@ export function AdminTelemetry() {
             <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
               OpenRouter inference, route health, model routing, and editorial
               output are correlated without retaining prompts or generated
-              content.
+              content. Refresh loads a bounded snapshot without a live
+              subscription to high-churn event tables.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-px border border-row-border bg-row-border">
@@ -332,6 +363,12 @@ export function AdminTelemetry() {
                 ? `sample ${relativeTime(runtime.at)}`
                 : "connecting"}
             </span>
+            <span aria-hidden="true">/</span>
+            <span>
+              {editorial?.generatedAt
+                ? `snapshot ${relativeTime(new Date(editorial.generatedAt).toISOString())}`
+                : "snapshot pending"}
+            </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex border border-row-border bg-background p-1">
@@ -355,7 +392,9 @@ export function AdminTelemetry() {
               variant="outline"
               size="sm"
               className="rounded-none"
-              onClick={() => setQueryNow(Date.now())}
+              onClick={() =>
+                setQueryNow((previous) => Math.max(Date.now(), previous + 1))
+              }
               disabled={modelLoading}
             >
               <RefreshCw className={cn(modelLoading && "animate-spin")} />
@@ -603,6 +642,43 @@ export function AdminTelemetry() {
               detail={`${percent(editorial?.totals.revisionRate)} revision rate`}
             />
           </section>
+          {editorial !== undefined &&
+          (editorial.costCoverage.unpricedRouteAttempts > 0 ||
+            editorial.costCoverage.unpricedUsageEvents > 0 ||
+            editorial.bounded.routes ||
+            editorial.bounded.runs ||
+            editorial.bounded.replies ||
+            editorial.bounded.usage ||
+            editorial.bounded.newsletters) ? (
+            <aside
+              aria-live="polite"
+              className="border border-amber-500/40 bg-amber-500/5 p-4"
+              role="status"
+            >
+              <p className="font-mono text-xs uppercase tracking-[0.15em] text-amber-600">
+                Telemetry coverage warning
+              </p>
+              {editorial.costCoverage.unpricedRouteAttempts > 0 ||
+              editorial.costCoverage.unpricedUsageEvents > 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {editorial.costCoverage.unpricedRouteAttempts} route attempts
+                  and {editorial.costCoverage.unpricedUsageEvents} usage events
+                  lack a reliable price attribution. A zero spend total may not
+                  mean zero provider spend.
+                </p>
+              ) : null}
+              {editorial.bounded.routes ||
+              editorial.bounded.runs ||
+              editorial.bounded.replies ||
+              editorial.bounded.usage ||
+              editorial.bounded.newsletters ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  At least one telemetry table reached its row cap, so totals
+                  and per-agent quality rates may be incomplete.
+                </p>
+              ) : null}
+            </aside>
+          ) : null}
           <section className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
             <Panel eyebrow="Budget governor" title="OpenRouter daily envelope">
               <dl className="divide-y divide-row-border border-y border-row-border">
@@ -674,8 +750,18 @@ export function AdminTelemetry() {
                 <MetricCard
                   icon={Zap}
                   label="Revision lift"
-                  value={decimal(editorial?.totals.averageRevisionGain)}
-                  detail="quality points"
+                  value={
+                    (editorial?.totals.revisionSamples ?? 0) > 0
+                      ? decimal(editorial?.totals.averageRevisionGain)
+                      : "—"
+                  }
+                  detail={
+                    (editorial?.totals.revisionSamples ?? 0) > 0
+                      ? `quality points · positive lift in ${percent(
+                          editorial?.totals.revisionImprovementRate,
+                        )} · n=${integer(editorial?.totals.revisionSamples)}`
+                      : "no measured revisions"
+                  }
                 />
                 <MetricCard
                   icon={Activity}
@@ -1117,7 +1203,7 @@ function AgentTable({
     return <EmptyState>No agent activity in this window</EmptyState>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-left text-xs">
+      <table className="w-full min-w-[680px] text-left text-xs">
         <thead className="font-mono uppercase text-muted-foreground">
           <tr className="border-b border-row-border">
             <th className="pb-3 font-normal">Agent</th>
@@ -1126,6 +1212,12 @@ function AgentTable({
             <th className="pb-3 text-right font-normal">Replies</th>
             <th className="pb-3 text-right font-normal">Failed</th>
             <th className="pb-3 text-right font-normal">Quality</th>
+            <th
+              className="pb-3 text-right font-normal"
+              title="Average quality gain, positive revision rate, and measured sample count"
+            >
+              Revision yield
+            </th>
             <th className="pb-3 text-right font-normal">Spend</th>
             <th className="pb-3 text-right font-normal">Tokens</th>
           </tr>
@@ -1155,6 +1247,11 @@ function AgentTable({
                 {decimal(agent.averageQuality)}
               </td>
               <td className="py-3 text-right font-mono">
+                {agent.revisionSamples > 0
+                  ? `${agent.averageRevisionGain > 0 ? "+" : ""}${decimal(agent.averageRevisionGain)} · ${percent(agent.revisionImprovementRate)} · n=${integer(agent.revisionSamples)}`
+                  : "—"}
+              </td>
+              <td className="py-3 text-right font-mono">
                 {currency(agent.estimatedCostMicroUsd / 1_000_000)}
               </td>
               <td className="py-3 text-right font-mono">
@@ -1179,14 +1276,25 @@ function ModelTable({
     return <EmptyState>No model routes in this window</EmptyState>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-left text-xs">
+      <table className="w-full min-w-[700px] text-left text-xs">
         <thead className="font-mono uppercase text-muted-foreground">
           <tr className="border-b border-row-border">
             <th className="pb-3 font-normal">Model</th>
             <th className="pb-3 text-right font-normal">Attempts</th>
-            <th className="pb-3 text-right font-normal">Fallbacks</th>
+            <th
+              className="pb-3 text-right font-normal"
+              title="Successful fallback attempts divided by all fallback attempts"
+            >
+              Fallback yield
+            </th>
             <th className="pb-3 text-right font-normal">Failures</th>
             <th className="pb-3 text-right font-normal">Spend</th>
+            <th
+              className="pb-3 text-right font-normal"
+              title="Conservative budget hold for failed or ambiguous attempts; not confirmed provider spend"
+            >
+              Failed hold
+            </th>
             <th className="pb-3 text-right font-normal">Tokens</th>
           </tr>
         </thead>
@@ -1202,8 +1310,13 @@ function ModelTable({
               <td className="py-3 text-right font-mono">
                 {integer(model.attempts)}
               </td>
-              <td className="py-3 text-right font-mono">
-                {integer(model.fallbacks)}
+              <td
+                className="py-3 text-right font-mono"
+                title={`${integer(model.fallbacks - model.fallbackFailures)} of ${integer(model.fallbacks)} fallback attempts completed`}
+              >
+                {model.fallbacks > 0
+                  ? `${integer(model.fallbacks - model.fallbackFailures)}/${integer(model.fallbacks)} (${percent(((model.fallbacks - model.fallbackFailures) / model.fallbacks) * 100)})`
+                  : "—"}
               </td>
               <td
                 className={cn(
@@ -1215,6 +1328,9 @@ function ModelTable({
               </td>
               <td className="py-3 text-right font-mono">
                 {currency(model.estimatedCostMicroUsd / 1_000_000)}
+              </td>
+              <td className="py-3 text-right font-mono">
+                {currency(model.failedAttemptReserveMicroUsd / 1_000_000)}
               </td>
               <td className="py-3 text-right font-mono">
                 {integer(model.inputTokens + model.outputTokens)}
@@ -1352,7 +1468,13 @@ function mergeRecent(
         row.outcome ??
         (row.statusCode && row.statusCode >= 400 ? "failed" : "completed"),
       detail:
-        [row.agent, row.keyName, row.model, row.correlationId]
+        [
+          row.agent,
+          row.keyName,
+          row.requestedModel,
+          row.model,
+          row.correlationId,
+        ]
           .filter(Boolean)
           .join(" · ") || "model service event",
       durationMs: row.totalMs,

@@ -23,9 +23,16 @@ function snapshot(): AiTelemetrySnapshotRecord {
       p95DurationMs: 40,
       averageQuality: 91,
       estimatedSpendUsd: 0.01,
+      failedAttemptReserveUsd: 0.002,
       revisionRate: 0,
       averageRevisionGain: 0,
+      revisionSamples: 0,
+      revisionImprovementRate: 0,
       averagePresentation: 90,
+    },
+    costCoverage: {
+      unpricedRouteAttempts: 0,
+      unpricedUsageEvents: 0,
     },
     models: [],
     agents: [],
@@ -38,6 +45,7 @@ function snapshot(): AiTelemetrySnapshotRecord {
         inputTokens: 100,
         outputTokens: 25,
         estimatedCostMicroUsd: 10,
+        failedAttemptReserveMicroUsd: 5,
       },
     ],
     recent: [
@@ -72,7 +80,7 @@ function snapshot(): AiTelemetrySnapshotRecord {
 }
 
 describe("modelTelemetryFromSnapshot", () => {
-  it("derives the model view from the existing reactive Convex snapshot", () => {
+  it("derives the model view from a bounded Convex telemetry snapshot", () => {
     const model = modelTelemetryFromSnapshot(snapshot());
 
     expect(model?.totals).toMatchObject({
@@ -90,7 +98,7 @@ describe("modelTelemetryFromSnapshot", () => {
     expect(model?.recent[0]?.correlationId).toBe("route-1");
   });
 
-  it("stays unavailable until the reactive query resolves", () => {
+  it("stays unavailable until the requested snapshot resolves", () => {
     expect(modelTelemetryFromSnapshot(undefined)).toBeUndefined();
   });
 });

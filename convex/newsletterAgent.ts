@@ -1,9 +1,10 @@
 "use node";
 
-import { tool, ToolLoopAgent } from "ai";
+import { isStepCount, Output, ToolLoopAgent } from "ai";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { z } from "zod";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
@@ -14,6 +15,7 @@ import {
   runWithModelFallback,
   type OpenRouterRequestContext,
 } from "../lib/ai-model-routing";
+import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   evaluateAgentPublicationHygiene,
   PUBLICATION_VOICE_GUARDRAILS,
@@ -29,8 +31,13 @@ import {
 } from "../lib/openrouter-model-profile";
 import type { EditorialNewsletterPayload } from "./newsletterPayload";
 import {
+  BELLE_DAILY_DIGEST_STORY_LIMIT,
+  type ReusableDailyDigestStory,
+} from "./newsDigestTypes";
+import {
   cacheResearchImage,
-  fetchArticleSnapshot,
+  fetchArticleSnapshots,
+  forumRevisionEvidenceExcerpt,
   type ArticleSnapshot,
   type ResearchCandidate,
 } from "./sukiForumAgent";
@@ -43,6 +50,53 @@ const DAILY_SOURCE_LIMIT = 18;
 const WEEKLY_SOURCE_LIMIT = 28;
 const DAILY_QUALITY_THRESHOLD = 82;
 const WEEKLY_QUALITY_THRESHOLD = 86;
+
+export function reusableDailyDigestStories(
+  stories: Array<
+    Pick<
+      Doc<"hnStories">,
+      | "hnItemId"
+      | "snapshotDate"
+      | "rank"
+      | "title"
+      | "url"
+      | "host"
+      | "text"
+      | "score"
+      | "descendants"
+      | "timePosted"
+    >
+  >,
+): ReusableDailyDigestStory[] {
+  return stories.slice(0, BELLE_DAILY_DIGEST_STORY_LIMIT).map((story) => {
+    const summary = compact(story.text ?? "", 1_000);
+    return {
+      hnItemId: story.hnItemId,
+      snapshotDate: story.snapshotDate,
+      rank: story.rank,
+      title: story.title,
+      ...(story.url === undefined ? {} : { url: story.url }),
+      ...(story.host === undefined ? {} : { host: story.host }),
+      summary,
+      ...(story.score === undefined ? {} : { score: story.score }),
+      ...(story.descendants === undefined
+        ? {}
+        : { descendants: story.descendants }),
+      ...(story.timePosted === undefined
+        ? {}
+        : { timePosted: story.timePosted }),
+    };
+  });
+}
+
+export function articleSnapshotsForForumDigest<T>(
+  edition: "daily-signal" | "weekly-field-note",
+  snapshots: readonly T[],
+): T[] {
+  return edition === "daily-signal"
+    ? snapshots.slice(0, BELLE_DAILY_DIGEST_STORY_LIMIT)
+    : [...snapshots];
+}
 
 const readIndexedSnapshotRef = makeFunctionReference<
   "query",
@@ -175,6 +229,7 @@ export const generateDailySignal = internalAction({
       edition: "daily-signal",
       runDate: args.runDate,
       snapshotDate: indexed.snapshot.snapshotDate,
+      snapshotCompletedAt: indexed.snapshot.completedAt,
       siteUrl: args.siteUrl,
       stories: indexed.stories,
     });
@@ -213,6 +268,7 @@ async function generateEditorialPackage(
     edition: "daily-signal" | "weekly-field-note";
     runDate: string;
     snapshotDate: string;
+    snapshotCompletedAt?: number;
     siteUrl: string;
     stories: Doc<"hnStories">[];
   },
@@ -224,7 +280,7 @@ async function generateEditorialPackage(
     limit: args.edition === "daily-signal" ? 7 : 4,
   });
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
-  const snapshots = await Promise.all(candidates.map(fetchArticleSnapshot));
+  const snapshots = await fetchArticleSnapshots(candidates);
   const routeTags = [
     "agent:belle",
     `feature:${args.edition}`,
@@ -233,10 +289,6 @@ async function generateEditorialPackage(
   ];
   const schema =
     args.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
-  const toolName =
-    args.edition === "daily-signal"
-      ? "submitDailySignal"
-      : "submitWeeklyFieldNote";
   const generation = await generateDraftWithFallback({
     ctx,
     edition: args.edition,
@@ -246,7 +298,6 @@ async function generateEditorialPackage(
     routeTags,
     prompt: editorialPrompt(args, snapshots, recent),
     schema,
-    toolName,
   });
   let draft = generation.draft;
   let totalInputTokens = generation.usage.inputTokens;
@@ -311,7 +362,6 @@ async function generateEditorialPackage(
         previousDraft: draft,
       }),
       schema,
-      toolName,
     });
     draft = revision.draft;
     totalInputTokens = addOptionalNumbers(
@@ -444,6 +494,20 @@ async function generateEditorialPackage(
     topStoryIds: selectedIds,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
+    articleSnapshots: articleSnapshotsForForumDigest(
+      args.edition,
+      snapshots,
+    ).map(serializableArticleSnapshot),
+    ...(args.edition === "daily-signal"
+      ? {
+          reusableDigestStories: reusableDailyDigestStories(args.stories),
+          ...(args.snapshotCompletedAt === undefined
+            ? {}
+            : {
+                reusableDigestSnapshotCompletedAt: args.snapshotCompletedAt,
+              }),
+        }
+      : {}),
   };
 }
 
@@ -456,7 +520,6 @@ async function generateDraftWithFallback({
   routeTags,
   prompt,
   schema,
-  toolName,
 }: {
   ctx: ActionCtx;
   edition: "daily-signal" | "weekly-field-note";
@@ -466,9 +529,9 @@ async function generateDraftWithFallback({
   routeTags: string[];
   prompt: string;
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
-  toolName: "submitDailySignal" | "submitWeeklyFieldNote";
 }) {
   const correlationId = `newsletter:${edition}:${runDate}`;
+  const generationStartedAt = Date.now();
   const requestContext = {
     user: "belle",
     tags: [...routeTags, `stage:${stage}`],
@@ -488,17 +551,19 @@ async function generateDraftWithFallback({
         agentSlug: "belle",
       }),
       totalTimeoutMs: edition === "daily-signal" ? 270_000 : 330_000,
+      estimatedInputTokens: estimatePromptInputTokens(prompt),
+      maxOutputTokens: (candidate) =>
+        openRouterStructuredOutputBudget(
+          candidate.modelId,
+          edition === "daily-signal" ? 4_000 : 6_000,
+        ),
       run: async (candidate, signal) => {
         const writer = new ToolLoopAgent({
           id: `belle-${edition}-${stage}-${candidate.persistedModel.replaceAll("/", "-")}`,
           model: candidate.model,
-          tools: {
-            [toolName]: tool({
-              description: `Submit Belle's complete ${edition} editorial package.`,
-              inputSchema: schema,
-            }),
-          },
-          toolChoice: "required",
+          output: Output.object({ schema }),
+          // The newsletter is a single structured response, not a tool loop.
+          stopWhen: isStepCount(1),
           providerOptions: candidate.providerOptions,
           ...modelGenerationSettings(
             candidate.provider,
@@ -526,23 +591,32 @@ async function generateDraftWithFallback({
           prompt,
           abortSignal: signal,
         });
-        const call = result.staticToolCalls[0];
-        if (call?.toolName !== toolName) {
-          throw new Error(`missing tool submission (${result.finishReason})`);
-        }
 
         return {
-          draft: schema.parse(call.input),
+          draft: schema.parse(result.output),
           usage: result.usage,
+          modelId: result.response.modelId,
         };
       },
     },
     NEWSLETTER_MODEL_IDS,
   );
+  await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+    runKey: `${correlationId}:${stage}`,
+    reservationKey: generation.route.reservationKey,
+    reservationModel: generation.route.reservationModel,
+    agentSlug: "belle",
+    stage,
+    model: generation.route.persistedModel,
+    servedModel: generation.value.modelId,
+    inputTokens: generation.value.usage.inputTokens,
+    outputTokens: generation.value.usage.outputTokens,
+    durationMs: Date.now() - generationStartedAt,
+  });
   return generation.value;
 }
 
-function editorialPrompt(
+export function editorialPrompt(
   args: {
     edition: "daily-signal" | "weekly-field-note";
     runDate: string;
@@ -561,6 +635,12 @@ function editorialPrompt(
   },
 ) {
   const weekly = args.edition === "weekly-field-note";
+  const revisionClaimsByStoryId = new Map(
+    revision?.previousDraft.stories.map((story) => [
+      story.hnItemId,
+      [story.summary, story.whyItMatters, ...story.takeaways],
+    ]) ?? [],
+  );
   return [
     `Edition: ${args.edition}. Publication date: ${args.runDate}. Latest source snapshot: ${args.snapshotDate}.`,
     weekly
@@ -586,7 +666,15 @@ function editorialPrompt(
         url: snapshot.url,
         articleTitle: snapshot.articleTitle,
         description: compact(snapshot.articleDescription, 900),
-        articleText: compact(snapshot.articleText, weekly ? 3_200 : 2_800),
+        articleText:
+          revision === undefined
+            ? compact(snapshot.articleText, weekly ? 3_200 : 2_800)
+            : revisionClaimsByStoryId.has(candidateStoryId(snapshot))
+              ? forumRevisionEvidenceExcerpt(
+                  snapshot.articleText,
+                  revisionClaimsByStoryId.get(candidateStoryId(snapshot)) ?? [],
+                )
+              : compact(snapshot.articleText, 450),
         hasImage: Boolean(snapshot.imageUrl),
       })),
     ),
@@ -618,6 +706,37 @@ function candidateStoryId(snapshot: ArticleSnapshot) {
     throw new Error("Invalid newsletter research candidate");
   }
   return id;
+}
+
+function serializableArticleSnapshot(
+  snapshot: ArticleSnapshot,
+): ArticleSnapshot {
+  return {
+    id: snapshot.id,
+    sourceKey: snapshot.sourceKey,
+    sourceName: snapshot.sourceName,
+    sourceFeedUrl: snapshot.sourceFeedUrl,
+    title: snapshot.title,
+    url: snapshot.url,
+    summary: snapshot.summary,
+    ...(snapshot.publishedAt === undefined
+      ? {}
+      : { publishedAt: snapshot.publishedAt }),
+    ...(snapshot.imageUrl === undefined ? {} : { imageUrl: snapshot.imageUrl }),
+    boardSlugs: snapshot.boardSlugs,
+    articleTitle: snapshot.articleTitle,
+    articleDescription: snapshot.articleDescription,
+    articleText: snapshot.articleText,
+    imageCredit: snapshot.imageCredit,
+    sourceFetchSucceeded: snapshot.sourceFetchSucceeded === true,
+    ...(snapshot.imageAlt === undefined ? {} : { imageAlt: snapshot.imageAlt }),
+    ...(snapshot.imageWidth === undefined
+      ? {}
+      : { imageWidth: snapshot.imageWidth }),
+    ...(snapshot.imageHeight === undefined
+      ? {}
+      : { imageHeight: snapshot.imageHeight }),
+  };
 }
 
 function uniqueStories(stories: Doc<"hnStories">[]) {
