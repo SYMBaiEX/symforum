@@ -49,10 +49,11 @@ type NewsPageDataDependencies = {
 };
 
 /**
- * Prefer the indexed timeline and only fan out to Hacker News when the durable
- * snapshot is unavailable. A live fallback costs one IDs request plus one
- * request per story, so running both paths eagerly wastes upstream work on the
- * healthy path.
+ * Prefer indexed stories and only fan out to Hacker News when the durable
+ * timeline is unavailable or empty. Preserve a successful empty timeline so
+ * the client can hydrate from it instead of issuing the same query again.
+ * A live fallback costs one IDs request plus one request per story, so running
+ * both paths eagerly wastes upstream work on the healthy path.
  */
 export async function getNewsPageData(
   limit = 30,
@@ -72,7 +73,7 @@ export async function getNewsPageData(
       console.warn("Unable to load live HN stories", error);
       return [];
     });
-  return { initialTimeline: null, initialStories };
+  return { initialTimeline: timeline, initialStories };
 }
 
 export const getDailyNews = cache(async function getDailyNews(

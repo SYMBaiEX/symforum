@@ -33,6 +33,18 @@ import {
 import { parseEditorialNewsletterPayload } from "./newsletterPayload";
 import { applyContactEmailEvent } from "./contact";
 import { sha256Base64Url } from "./agentIdentityCrypto";
+import { interactionSaveCounts } from "./contentAggregates";
+import { migrations } from "./migrations";
+import {
+  newsletterAnalyticsCounts,
+  recordNewsletterMetric,
+} from "./newsletterMetrics";
+import { readNewsletterSettings } from "./newsletterSettings";
+
+const NEWSLETTER_METRIC_MIGRATIONS = [
+  "migrations:backfillNewsletterEventMetrics",
+  "migrations:backfillNewsletterEngagementMetrics",
+];
 
 const newsletterPublicRateLimiter = new RateLimiter(components.rateLimiter, {
   subscribeGlobal: {
@@ -53,9 +65,42 @@ const newsletterPublicRateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 600,
     period: MINUTE,
     capacity: 120,
-    shards: 6,
+    // Keep the same global budget while reducing contention on shared state.
+    // The 2026-10-02 production Insights sample reported 77 OCC retries here
+    // over 72 hours, with sampled calls retrying up to three times.
+    shards: 12,
   },
 });
+
+const publicEngagementEventTypeValidator = v.union(
+  v.literal("archive_view"),
+  v.literal("archive_click"),
+  v.literal("source_click"),
+  v.literal("discussion_click"),
+  v.literal("forum_click"),
+  v.literal("news_index_click"),
+);
+
+type PublicEngagementEventType =
+  | "archive_view"
+  | "archive_click"
+  | "source_click"
+  | "discussion_click"
+  | "forum_click"
+  | "news_index_click";
+
+type PublicIssueRoutingSnapshot = {
+  issueId: Id<"newsletterIssues">;
+  forumCategorySlug?: string;
+  forumThreadSlug?: string;
+  routing: NewsletterIssueRouting;
+};
+
+type PublicDestination = {
+  url: string;
+  eventType: Exclude<PublicEngagementEventType, "archive_view">;
+  hnItemId?: number;
+};
 
 const sendConfirmationEmailRef = makeFunctionReference<
   "action",
@@ -407,121 +452,43 @@ export const resolvePublicDestination = query({
   handler: async (ctx, args) => {
     const issue = await publicIssueRoutingBySlug(ctx, args.slug);
     if (issue === null) return null;
-    if (args.target === "forum") {
-      return issue.forumCategorySlug && issue.forumThreadSlug
-        ? {
-            url: `${issue.routing.siteUrl}/forum/${issue.forumCategorySlug}/${issue.forumThreadSlug}`,
-            eventType: "forum_click" as const,
-          }
-        : null;
+    return publicDestinationForTarget(issue, args.target);
+  },
+});
+
+export const resolveAndRecordPublicEngagement = mutation({
+  args: {
+    slug: v.string(),
+    target: v.string(),
+    visitorKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const issue = await publicIssueRoutingBySlug(ctx, args.slug);
+    const destination =
+      issue === null ? null : publicDestinationForTarget(issue, args.target);
+    if (issue === null || destination === null) {
+      return { destination: null, recorded: false };
     }
-    if (args.target === "news") {
-      return {
-        url: issue.routing.newsUrl,
-        eventType: "news_index_click" as const,
-      };
-    }
-    if (args.target === "archive") {
-      return {
-        url: issue.routing.archiveUrl,
-        eventType: "archive_click" as const,
-      };
-    }
-    const match = args.target.match(/^(source|discussion)-(\d+)$/);
-    if (match === null) {
-      return null;
-    }
-    const storyId = Number(match[2]);
-    const story = issue.routing.stories.find(
-      (candidate) => candidate.hnItemId === storyId,
-    );
-    if (story === undefined) {
-      return null;
-    }
-    return {
-      url: match[1] === "source" ? story.sourceUrl : story.discussionUrl,
-      eventType:
-        match[1] === "source"
-          ? ("source_click" as const)
-          : ("discussion_click" as const),
-      hnItemId: storyId,
-    };
+    const result = await recordPublicEngagementForIssue(ctx, issue, {
+      eventType: destination.eventType,
+      hnItemId: destination.hnItemId,
+      visitorKey: args.visitorKey,
+    });
+    return { destination, recorded: result.recorded };
   },
 });
 
 export const recordPublicEngagement = mutation({
   args: {
     slug: v.string(),
-    eventType: v.union(
-      v.literal("archive_view"),
-      v.literal("archive_click"),
-      v.literal("source_click"),
-      v.literal("discussion_click"),
-      v.literal("forum_click"),
-      v.literal("news_index_click"),
-    ),
+    eventType: publicEngagementEventTypeValidator,
     hnItemId: v.optional(v.number()),
     visitorKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const capacity = await newsletterPublicRateLimiter.limit(
-      ctx,
-      "engagementGlobal",
-      { key: "global" },
-    );
-    if (!capacity.ok) {
-      return {
-        recorded: false,
-        reason: "RATE_LIMITED" as const,
-        retryAfter: capacity.retryAfter,
-      };
-    }
     const issue = await publicIssueRoutingBySlug(ctx, args.slug);
     if (issue === null) return { recorded: false };
-    const storyEvent =
-      args.eventType === "source_click" ||
-      args.eventType === "discussion_click";
-    if (
-      (storyEvent &&
-        (args.hnItemId === undefined ||
-          !issue.routing.stories.some(
-            (story) => story.hnItemId === args.hnItemId,
-          ))) ||
-      (!storyEvent && args.hnItemId !== undefined) ||
-      (args.eventType === "forum_click" &&
-        (!issue.forumCategorySlug || !issue.forumThreadSlug))
-    ) {
-      return { recorded: false };
-    }
-    const now = Date.now();
-    const visitorKey = normalizeVisitorKey(args.visitorKey);
-    if (visitorKey) {
-      const dedupeWindow =
-        args.eventType === "archive_view" ? 60 * 60 * 1000 : 10 * 1000;
-      const duplicate = await ctx.db
-        .query("newsletterEngagements")
-        .withIndex("by_issue_event_visitor_story_created", (q) =>
-          q
-            .eq("issueId", issue.issueId)
-            .eq("eventType", args.eventType)
-            .eq("visitorKey", visitorKey)
-            .eq("hnItemId", args.hnItemId)
-            .gt("createdAt", now - dedupeWindow),
-        )
-        .order("desc")
-        .take(1);
-      if (duplicate.length > 0) {
-        return { recorded: false };
-      }
-    }
-    await ctx.db.insert("newsletterEngagements", {
-      issueId: issue.issueId,
-      eventType: args.eventType,
-      hnItemId: args.hnItemId,
-      visitorKey,
-      createdAt: now,
-    });
-    return { recorded: true };
+    return await recordPublicEngagementForIssue(ctx, issue, args);
   },
 });
 
@@ -561,22 +528,45 @@ export const adminEditorialAnalytics = query({
       .withIndex("by_updatedAt")
       .order("desc")
       .take(30);
+    const metricMigrationStatuses = await migrations.getStatus(ctx, {
+      migrations: NEWSLETTER_METRIC_MIGRATIONS,
+    });
+    const metricsReady =
+      metricMigrationStatuses.length === NEWSLETTER_METRIC_MIGRATIONS.length &&
+      metricMigrationStatuses.every((status) => status.isDone);
+    const eligibleIssueIds = issues
+      .filter((issue) => issue.status === "sent" || issue.status === "failed")
+      .map((issue) => issue._id);
+    const aggregateCounts = metricsReady
+      ? await newsletterAnalyticsCounts(ctx, eligibleIssueIds)
+      : null;
     const rows = await Promise.all(
       issues.map(async (issue) => {
-        const [events, engagements] = await Promise.all([
-          ctx.db
-            .query("newsletterEvents")
-            .withIndex("by_issueId_and_receivedAt", (q) =>
-              q.eq("issueId", issue._id),
-            )
-            .take(2_000),
-          ctx.db
-            .query("newsletterEngagements")
-            .withIndex("by_issueId_and_createdAt", (q) =>
-              q.eq("issueId", issue._id),
-            )
-            .take(2_000),
-        ]);
+        let events: Doc<"newsletterEvents">[] = [];
+        let engagements: Doc<"newsletterEngagements">[] = [];
+        const metrics = aggregateCounts?.get(String(issue._id));
+        // Only sent issues can receive public engagement. Failed sends may
+        // have partially completed at the provider, so keep their metrics
+        // reads; drafts, scheduled, and cancelled issues cannot have either.
+        if (
+          metrics === undefined &&
+          (issue.status === "sent" || issue.status === "failed")
+        ) {
+          [events, engagements] = await Promise.all([
+            ctx.db
+              .query("newsletterEvents")
+              .withIndex("by_issueId_and_receivedAt", (q) =>
+                q.eq("issueId", issue._id),
+              )
+              .take(2_000),
+            ctx.db
+              .query("newsletterEngagements")
+              .withIndex("by_issueId_and_createdAt", (q) =>
+                q.eq("issueId", issue._id),
+              )
+              .take(2_000),
+          ]);
+        }
         const forumThread =
           issue.forumCategorySlug && issue.forumThreadSlug
             ? await ctx.db
@@ -589,23 +579,13 @@ export const adminEditorialAnalytics = query({
                 .unique()
             : null;
         const payload = parseEditorialNewsletterPayload(issue.body);
-        const saveRows =
-          payload === null
-            ? []
-            : (
-                await Promise.all(
-                  payload.stories.map((story) =>
-                    ctx.db
-                      .query("interactions")
-                      .withIndex("by_entityType_and_entityId", (q) =>
-                        q
-                          .eq("entityType", "hnStory")
-                          .eq("entityId", String(story.hnItemId)),
-                      )
-                      .take(1_000),
-                  ),
-                )
-              ).flat();
+        const storyIds =
+          payload?.stories.map((story) => String(story.hnItemId)) ?? [];
+        const savedInteractionsByStoryId = await interactionSaveCounts(
+          ctx,
+          "hnStory",
+          storyIds,
+        );
         return {
           issueId: issue._id,
           slug: issue.slug,
@@ -614,23 +594,38 @@ export const adminEditorialAnalytics = query({
           edition: issue.edition,
           qualityScore: issue.qualityScore ?? payload?.quality.score,
           sentAt: issue.sentAt,
-          delivered: countEvent(events, "email.delivered"),
-          opened: countEvent(events, "email.opened"),
-          bounced: countEvent(events, "email.bounced"),
-          complained: countEvent(events, "email.complained"),
-          clicked: engagements.filter((row) => row.eventType.endsWith("_click"))
-            .length,
-          archiveViews: engagements.filter(
-            (row) => row.eventType === "archive_view",
-          ).length,
-          sourceClicks: engagements.filter(
-            (row) => row.eventType === "source_click",
-          ).length,
-          forumClicks: engagements.filter(
-            (row) => row.eventType === "forum_click",
-          ).length,
+          delivered:
+            metrics?.delivered ?? countEvent(events, "email.delivered"),
+          opened: metrics?.opened ?? countEvent(events, "email.opened"),
+          bounced: metrics?.bounced ?? countEvent(events, "email.bounced"),
+          complained:
+            metrics?.complained ?? countEvent(events, "email.complained"),
+          clicked:
+            metrics === undefined
+              ? engagements.filter((row) => row.eventType.endsWith("_click"))
+                  .length
+              : metrics.archiveClicks +
+                metrics.sourceClicks +
+                metrics.discussionClicks +
+                metrics.forumClicks +
+                metrics.newsIndexClicks,
+          archiveViews:
+            metrics?.archiveViews ??
+            engagements.filter((row) => row.eventType === "archive_view")
+              .length,
+          sourceClicks:
+            metrics?.sourceClicks ??
+            engagements.filter((row) => row.eventType === "source_click")
+              .length,
+          forumClicks:
+            metrics?.forumClicks ??
+            engagements.filter((row) => row.eventType === "forum_click").length,
           forumReplies: forumThread?.replyCount ?? 0,
-          saves: saveRows.filter((row) => row.saved).length,
+          saves: storyIds.reduce(
+            (total, storyId) =>
+              total + (savedInteractionsByStoryId.get(storyId) ?? 0),
+            0,
+          ),
         };
       }),
     );
@@ -769,12 +764,7 @@ export const getSetting = internalQuery({
 export const getSettings = internalQuery({
   args: { keys: v.array(v.string()) },
   handler: async (ctx, args) => {
-    const keys = [...new Set(args.keys)].slice(0, 20);
-    const requested = new Set(keys);
-    const rows = await ctx.db.query("newsletterSettings").take(100);
-    return rows
-      .filter((row) => requested.has(row.key))
-      .map((row) => ({ key: row.key, value: row.value }));
+    return await readNewsletterSettings(ctx, args.keys);
   },
 });
 
@@ -890,25 +880,48 @@ export const handleEmailEvent = internalMutation({
   handler: async (ctx, args) => {
     // The Resend component emits all application email callbacks through this
     // hook. Contact notices are matched by the component email id, never by
-    // recipient address, and use their own idempotent event ledger.
+    // recipient address, and use their own idempotent event ledger. A known
+    // broadcast issue is already sufficient classification, so check it
+    // before falling back to the contact-request lookup.
+    const data = args.event.data;
+    const eventId = `${args.id}:${args.event.type}:${args.event.created_at}`;
+    const broadcastId =
+      "broadcast_id" in data && typeof data.broadcast_id === "string"
+        ? data.broadcast_id
+        : undefined;
+    let issue: Doc<"newsletterIssues"> | null = null;
+    let newsletterEventChecked = false;
+    if (broadcastId !== undefined) {
+      const existingEvent = await ctx.db
+        .query("newsletterEvents")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .unique();
+      if (existingEvent !== null) return null;
+      newsletterEventChecked = true;
+      issue = await ctx.db
+        .query("newsletterIssues")
+        .withIndex("by_resendBroadcastId", (q) =>
+          q.eq("resendBroadcastId", broadcastId),
+        )
+        .unique();
+    }
     if (
-      await applyContactEmailEvent(ctx, {
+      issue === null &&
+      (await applyContactEmailEvent(ctx, {
         resendEmailId: args.id,
         event: args.event,
-      })
+      }))
     ) {
       return null;
     }
-    const data = args.event.data;
     const to = Array.isArray(data.to) ? data.to[0] : data.to;
     const email = typeof to === "string" ? to.toLowerCase() : undefined;
-    const eventId = `${args.id}:${args.event.type}:${args.event.created_at}`;
-    const existingEvent = await ctx.db
-      .query("newsletterEvents")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .unique();
-    if (existingEvent !== null) {
-      return null;
+    if (!newsletterEventChecked) {
+      const existingEvent = await ctx.db
+        .query("newsletterEvents")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .unique();
+      if (existingEvent !== null) return null;
     }
 
     const subscriber = email
@@ -919,20 +932,8 @@ export const handleEmailEvent = internalMutation({
           )
           .unique()
       : null;
-    const broadcastId =
-      "broadcast_id" in data && typeof data.broadcast_id === "string"
-        ? data.broadcast_id
-        : undefined;
-    const issue = broadcastId
-      ? await ctx.db
-          .query("newsletterIssues")
-          .withIndex("by_resendBroadcastId", (q) =>
-            q.eq("resendBroadcastId", broadcastId),
-          )
-          .unique()
-      : null;
 
-    await ctx.db.insert("newsletterEvents", {
+    const newsletterEventId = await ctx.db.insert("newsletterEvents", {
       provider: "resend",
       eventId,
       eventType: args.event.type,
@@ -940,8 +941,13 @@ export const handleEmailEvent = internalMutation({
       subscriberId: subscriber?._id,
       issueId: issue?._id,
       resendEmailId: data.email_id,
-      metadataJson: JSON.stringify(args.event).slice(0, 5000),
       receivedAt: Date.now(),
+    });
+    await recordNewsletterMetric(ctx, {
+      issueId: issue?._id,
+      scope: "email",
+      eventType: args.event.type,
+      id: String(newsletterEventId),
     });
 
     if (subscriber && args.event.type === "email.bounced") {
@@ -1065,15 +1071,123 @@ async function issueBySlug(
     .unique();
 }
 
+function publicDestinationForTarget(
+  issue: PublicIssueRoutingSnapshot,
+  target: string,
+): PublicDestination | null {
+  if (target === "forum") {
+    return issue.forumCategorySlug && issue.forumThreadSlug
+      ? {
+          url: `${issue.routing.siteUrl}/forum/${issue.forumCategorySlug}/${issue.forumThreadSlug}`,
+          eventType: "forum_click",
+        }
+      : null;
+  }
+  if (target === "news") {
+    return { url: issue.routing.newsUrl, eventType: "news_index_click" };
+  }
+  if (target === "archive") {
+    return { url: issue.routing.archiveUrl, eventType: "archive_click" };
+  }
+  const match = target.match(/^(source|discussion)-(\d+)$/);
+  if (match === null) return null;
+
+  const storyId = Number(match[2]);
+  const story = issue.routing.stories.find(
+    (candidate) => candidate.hnItemId === storyId,
+  );
+  if (story === undefined) return null;
+  return {
+    url: match[1] === "source" ? story.sourceUrl : story.discussionUrl,
+    eventType: match[1] === "source" ? "source_click" : "discussion_click",
+    hnItemId: storyId,
+  };
+}
+
+async function recordPublicEngagementForIssue(
+  ctx: MutationCtx,
+  issue: PublicIssueRoutingSnapshot,
+  args: {
+    eventType: PublicEngagementEventType;
+    hnItemId?: number;
+    visitorKey?: string;
+  },
+): Promise<
+  | { recorded: true }
+  | { recorded: false }
+  | { recorded: false; reason: "RATE_LIMITED"; retryAfter: number }
+> {
+  const storyEvent =
+    args.eventType === "source_click" || args.eventType === "discussion_click";
+  if (
+    (storyEvent &&
+      (args.hnItemId === undefined ||
+        !issue.routing.stories.some(
+          (story) => story.hnItemId === args.hnItemId,
+        ))) ||
+    (!storyEvent && args.hnItemId !== undefined) ||
+    (args.eventType === "forum_click" &&
+      (!issue.forumCategorySlug || !issue.forumThreadSlug))
+  ) {
+    return { recorded: false };
+  }
+
+  const now = Date.now();
+  const visitorKey = normalizeVisitorKey(args.visitorKey);
+  if (visitorKey) {
+    const dedupeWindow =
+      args.eventType === "archive_view" ? 60 * 60 * 1000 : 10 * 1000;
+    const duplicate = await ctx.db
+      .query("newsletterEngagements")
+      .withIndex("by_issue_event_visitor_story_created", (q) =>
+        q
+          .eq("issueId", issue.issueId)
+          .eq("eventType", args.eventType)
+          .eq("visitorKey", visitorKey)
+          .eq("hnItemId", args.hnItemId)
+          .gt("createdAt", now - dedupeWindow),
+      )
+      .order("desc")
+      .take(1);
+    if (duplicate.length > 0) return { recorded: false };
+  }
+
+  // Deduplicate before touching the shared limiter. Repeated valid events do
+  // not create rows, so they should not write the rate-limit component's hot
+  // state or contend with unrelated readers.
+  const capacity = await newsletterPublicRateLimiter.limit(
+    ctx,
+    "engagementGlobal",
+    { key: "global" },
+  );
+  if (!capacity.ok) {
+    return {
+      recorded: false,
+      reason: "RATE_LIMITED",
+      retryAfter: capacity.retryAfter,
+    };
+  }
+
+  const engagementId = await ctx.db.insert("newsletterEngagements", {
+    issueId: issue.issueId,
+    eventType: args.eventType,
+    hnItemId: args.hnItemId,
+    visitorKey,
+    createdAt: now,
+  });
+  await recordNewsletterMetric(ctx, {
+    issueId: issue.issueId,
+    scope: "engagement",
+    eventType: args.eventType,
+    id: String(engagementId),
+  });
+  return { recorded: true };
+}
+
 async function publicIssueRoutingBySlug(
   ctx: { db: MutationCtx["db"] | QueryCtx["db"] },
   slug: string,
-): Promise<{
-  issueId: Id<"newsletterIssues">;
-  forumCategorySlug?: string;
-  forumThreadSlug?: string;
-  routing: NewsletterIssueRouting;
-} | null> {
+): Promise<PublicIssueRoutingSnapshot | null> {
   const normalizedSlug = normalizeIssueInput({
     subject: slug,
     previewText: slug,

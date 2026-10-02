@@ -95,7 +95,11 @@ function LiveNewsFeed({
   );
   const data = useQuery(
     convexRefs.news.timeline,
-    selectedDate ? { snapshotDate: selectedDate } : {},
+    selectedDate
+      ? { snapshotDate: selectedDate }
+      : initialTimeline === null
+        ? {}
+        : "skip",
   );
   const pending = selectedDate !== undefined && data === undefined;
 
@@ -107,6 +111,23 @@ function LiveNewsFeed({
 
   function onSnapshotChange(snapshotDate: string) {
     setSelectedDate(snapshotDate);
+  }
+
+  const showLiveFallback =
+    selectedDate === undefined &&
+    visibleData !== null &&
+    visibleData.stories.length === 0 &&
+    initialStories.length > 0;
+
+  if (showLiveFallback && visibleData !== null) {
+    return (
+      <NewsRows
+        interactive
+        onSnapshotChange={onSnapshotChange}
+        snapshots={visibleData.snapshots}
+        stories={initialStories}
+      />
+    );
   }
 
   if (visibleData === null) {
