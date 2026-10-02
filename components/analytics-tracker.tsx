@@ -3,6 +3,11 @@
 import { convexRefs } from "@/lib/convex-refs";
 import { getBrowserStorage } from "@/lib/browser-storage";
 import { isPrivateAnalyticsPath } from "@/lib/analytics-privacy";
+import {
+  ANALYTICS_DEDUPE_WINDOW_MS,
+  claimAnalyticsAttempt,
+  releaseAnalyticsAttempt,
+} from "@/lib/analytics-attempt-throttle";
 import { useMutation } from "convex/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
@@ -19,6 +24,7 @@ export function AnalyticsTracker() {
   const searchParams = useSearchParams();
   const record = useMutation(convexRefs.analytics.record);
   const previousPathRef = useRef<string | null>(null);
+  const attemptsRef = useRef<Map<string, number>>(new Map());
   const path = useMemo(() => {
     const query = searchParams.toString();
     return query ? `${pathname}?${query}` : pathname;
@@ -42,6 +48,14 @@ export function AnalyticsTracker() {
     const referrer = previousPathRef.current ?? document.referrer;
     previousPathRef.current = path;
 
+    // The mutation also dedupes by session + route. Avoid making a second
+    // network request when React replays the same effect inside that window.
+    const eventKey = JSON.stringify(["page_view", ids.sessionId, pathname]);
+    const attemptedAt = Date.now();
+    if (!claimAnalyticsAttempt(attemptsRef.current, eventKey, attemptedAt)) {
+      return;
+    }
+
     void record({
       name: "page_view",
       path,
@@ -58,6 +72,7 @@ export function AnalyticsTracker() {
           : "light",
       }),
     }).catch((error) => {
+      releaseAnalyticsAttempt(attemptsRef.current, eventKey, attemptedAt);
       if (process.env.NODE_ENV === "development") {
         console.warn("Analytics record failed", error);
       }
