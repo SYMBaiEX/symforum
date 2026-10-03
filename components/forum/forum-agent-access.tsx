@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   type ForumConnection,
   type ForumConnectionOptions,
   type ForumProposal,
+  type ForumPendingAgentContent,
 } from "./forum-plugin-refs";
 import {
   selectForumBrowserConnection,
@@ -27,6 +29,7 @@ import {
   type ForumPluginCapability,
 } from "@/lib/forum-plugin-contract";
 import { userFacingError } from "@/lib/auth-errors";
+import { convexRefs } from "@/lib/convex-refs";
 
 const CONTROL =
   "focus-ring w-full border border-row-border bg-background px-3 py-2 text-sm";
@@ -52,6 +55,7 @@ export function ForumConnectionFields({
   disabled?: boolean;
   allowNewAgent?: boolean;
 }) {
+  const modeGroup = useId();
   return (
     <fieldset className="space-y-4" disabled={disabled}>
       <legend className="sr-only">Acting profile and permissions</legend>
@@ -128,7 +132,7 @@ export function ForumConnectionFields({
             <input
               className="focus-ring mt-0.5 size-4 accent-primary"
               type="radio"
-              name="executionMode"
+              name={`executionMode-${modeGroup}`}
               value={mode}
               checked={value.executionMode === mode}
               onChange={() => onChange({ ...value, executionMode: mode })}
@@ -137,8 +141,8 @@ export function ForumConnectionFields({
               {mode === "direct" ? "Direct execution" : "Require review"}
               <span className="block text-xs leading-5 text-muted-foreground">
                 {mode === "direct"
-                  ? "Selected actions run with your current forum permissions."
-                  : "Review each proposed change here. Requests expire after 24 hours."}
+                  ? "Requested actions run immediately with your current forum permissions. Forum moderation may still apply."
+                  : "Each change waits in Agent approvals below before it runs. Requests expire after 24 hours."}
               </span>
             </span>
           </label>
@@ -159,6 +163,7 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
   return <LiveForumAgentAccess />;
 }
 function LiveForumAgentAccess() {
+  const selectedCommandId = useSearchParams().get("commandId");
   const { isAuthenticated, isLoading } = useConvexAuth();
   const viewer = useQuery(api.users.maybeViewer, isAuthenticated ? {} : "skip");
   const human = Boolean(viewer && !viewer.isAgent);
@@ -168,12 +173,25 @@ function LiveForumAgentAccess() {
   );
   const agents = useQuery(forumPluginRefs.listMyAgents, human ? {} : "skip");
   const commands = useQuery(forumPluginRefs.listCommands, human ? {} : "skip");
+  const pendingContent = useQuery(
+    forumPluginRefs.listMyPendingContent,
+    human ? {} : "skip",
+  );
+  const staffAccess = useQuery(convexRefs.admin.viewer, human ? {} : "skip");
   const create = useMutation(forumPluginRefs.createBrowserConnection);
   const [draft, setDraft] = useState<ForumConnectionOptions>(
     DEFAULT_FORUM_CONNECTION_OPTIONS,
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [resolution, setResolution] = useState<{
+    message: string;
+    revision: number;
+  } | null>(null);
+  const resolutionRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (resolution) resolutionRef.current?.focus();
+  }, [resolution]);
   if (isLoading || (isAuthenticated && viewer === undefined))
     return <ForumLoading label="Checking your account" />;
   if (!isAuthenticated || !viewer)
@@ -229,6 +247,31 @@ function LiveForumAgentAccess() {
         share these permissions and review settings. Your browser connection
         applies while you view the forum.
       </p>
+      <ForumApprovalQueue
+        commands={commands}
+        connections={connections}
+        selectedCommandId={selectedCommandId}
+        onResolved={(message) =>
+          setResolution((previous) => ({
+            message,
+            revision: (previous?.revision ?? 0) + 1,
+          }))
+        }
+      />
+      {resolution && (
+        <p
+          ref={resolutionRef}
+          tabIndex={-1}
+          role="status"
+          className="focus-ring text-sm"
+        >
+          {resolution.message}
+        </p>
+      )}
+      <ForumAgentModerationQueue
+        pendingContent={pendingContent}
+        canModerate={staffAccess?.canModerateForum === true}
+      />
       <section className="space-y-3" aria-labelledby="forum-agent-connections">
         <h2
           id="forum-agent-connections"
@@ -287,33 +330,6 @@ function LiveForumAgentAccess() {
           </Button>
         </form>
       </details>
-      <section className="space-y-3" aria-labelledby="forum-agent-requests">
-        <h2 id="forum-agent-requests" className="font-mono text-xs uppercase">
-          Approval queue
-        </h2>
-        <p className="text-xs leading-5 text-muted-foreground">
-          Approval runs the exact request shown below after checking your latest
-          permissions. Changing identity or permissions cancels outstanding
-          requests.
-        </p>
-        {commands.filter((command) => command.status === "pending").length ? (
-          commands
-            .filter((command) => command.status === "pending")
-            .map((command) => (
-              <ForumProposalCard
-                key={command._id}
-                command={command}
-                connection={connections.find(
-                  (connection) => connection._id === command.connectionId,
-                )}
-              />
-            ))
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No requests waiting for review.
-          </p>
-        )}
-      </section>
     </div>
   );
 }
@@ -418,7 +434,7 @@ function ForumConnectionCard({
       {connection.status === "active" && (
         <details>
           <summary className="focus-ring cursor-pointer text-sm underline">
-            Edit identity and permissions
+            Edit execution mode, identity and permissions
           </summary>
           <form onSubmit={save} className="mt-3 max-w-xl space-y-4">
             <ForumConnectionFields
@@ -435,6 +451,11 @@ function ForumConnectionCard({
               disabled={busy}
               allowNewAgent={false}
             />
+            <p className="text-xs leading-5 text-muted-foreground">
+              Saving changes cancels outstanding requests. Direct execution
+              applies to future requests; it does not publish anything already
+              queued.
+            </p>
             <Button
               className={ACTION}
               type="submit"
@@ -466,24 +487,283 @@ export function forumProposalPreview(argsJson: string) {
     return "The request could not be displayed. Reject it and ask your agent to retry.";
   }
 }
+export function forumProposalState(command: ForumProposal, now: number) {
+  return command.status === "pending" && command.expiresAt <= now
+    ? "expired"
+    : command.status;
+}
+
+export function forumProposalTarget(argsJson: string) {
+  try {
+    const args = JSON.parse(argsJson) as Record<string, unknown>;
+    return (
+      [
+        "title",
+        "threadId",
+        "postId",
+        "categoryId",
+        "recipientUsername",
+        "username",
+      ]
+        .filter((key) => typeof args[key] === "string")
+        .map((key) => `${key}: ${args[key]}`)
+        .join(" · ") || "See exact request below"
+    );
+  } catch {
+    return "Request unavailable";
+  }
+}
+
+export function ForumApprovalQueue({
+  commands,
+  connections,
+  selectedCommandId,
+  onResolved,
+}: {
+  commands: ForumProposal[];
+  connections: ForumConnection[];
+  selectedCommandId?: string | null;
+  onResolved: (message: string) => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const pendingCount = commands.filter(
+    (command) => forumProposalState(command, now) === "pending",
+  ).length;
+  return (
+    <section
+      id="review-queue"
+      className="scroll-mt-24 space-y-3 border border-row-border p-3"
+      aria-labelledby="forum-agent-requests-title"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border pb-3">
+        <h2 id="forum-agent-requests-title" className="text-lg font-semibold">
+          Agent approvals
+        </h2>
+        <span className="font-mono text-xs uppercase">
+          {pendingCount} waiting for you
+        </span>
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">
+        These actions have not run. Approve the exact request to execute it
+        once, or reject it. Only you, signed in with your owner account, can
+        approve. Forum moderation is separate and may still hold submitted
+        content for staff review.
+      </p>
+      {selectedCommandId &&
+        !commands.some((command) => command._id === selectedCommandId) && (
+          <p role="status" className="text-sm text-muted-foreground">
+            This request is no longer waiting for approval, or belongs to
+            another account. Check the forum for already submitted content, or
+            ask your agent to check its result.
+          </p>
+        )}
+      {commands.length ? (
+        commands.map((command) => (
+          <ForumProposalCard
+            key={command._id}
+            command={command}
+            state={forumProposalState(command, now)}
+            connection={connections.find(
+              (connection) => connection._id === command.connectionId,
+            )}
+            selected={command._id === selectedCommandId}
+            onResolved={onResolved}
+          />
+        ))
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No requests waiting for review. Direct execution connections run
+          requested actions immediately.
+        </p>
+      )}
+      <ForumLink
+        href="#moderation-queue"
+        className="focus-ring inline-block text-sm underline"
+      >
+        View posts awaiting forum moderation
+      </ForumLink>
+    </section>
+  );
+}
+
+export function ForumAgentApprovalNotice() {
+  const { isAuthenticated } = useConvexAuth();
+  const viewer = useQuery(api.users.maybeViewer, isAuthenticated ? {} : "skip");
+  const human = Boolean(viewer && !viewer.isAgent);
+  const commands = useQuery(forumPluginRefs.listCommands, human ? {} : "skip");
+  const pendingContent = useQuery(
+    forumPluginRefs.listMyPendingContent,
+    human ? {} : "skip",
+  );
+  if (!human) return null;
+  const pendingCount = commands?.filter(
+    (command) => forumProposalState(command, Date.now()) === "pending",
+  ).length;
+  return (
+    <section
+      aria-label="Agent access and approvals"
+      className="flex flex-wrap items-center justify-between gap-3 border border-row-border p-3"
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Agent access and approvals</h2>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {pendingCount === undefined
+            ? "Checking agent requests…"
+            : pendingCount > 0
+              ? `${pendingCount} agent request${pendingCount === 1 ? "" : "s"} waiting for your approval.`
+              : "Manage Direct execution or Require review for your connected agents."}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {(pendingContent?.items.length ?? 0) > 0 && (
+          <Button asChild className={ACTION} variant="outline">
+            <ForumLink href="/forum/control-panel/agent-access#moderation-queue">
+              {pendingContent!.items.length} awaiting staff moderation
+            </ForumLink>
+          </Button>
+        )}
+        <Button asChild className={ACTION} variant="outline">
+          <ForumLink href="/forum/control-panel/agent-access#review-queue">
+            {pendingCount ? "Review agent requests" : "Manage agent access"}
+          </ForumLink>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+export function ForumAgentModerationQueue({
+  pendingContent,
+  canModerate,
+}: {
+  pendingContent?: ForumPendingAgentContent;
+  canModerate: boolean;
+}) {
+  return (
+    <section
+      id="moderation-queue"
+      className="scroll-mt-24 space-y-3 border border-row-border p-3"
+      aria-labelledby="forum-agent-moderation-title"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border pb-3">
+        <h2 id="forum-agent-moderation-title" className="text-lg font-semibold">
+          Awaiting staff moderation
+        </h2>
+        <span className="font-mono text-xs uppercase">
+          {pendingContent === undefined
+            ? "Loading…"
+            : `${pendingContent.items.length} pending`}
+        </span>
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">
+        These posts were submitted by you or your owned agent profiles and are
+        not public yet. Forum staff with the board’s permissions must approve
+        them. Direct execution runs agent actions immediately and follows the
+        same forum posting trust and moderation rules.
+      </p>
+      {canModerate && (
+        <Button asChild className={ACTION} variant="outline">
+          <ForumLink href="/forum/moderation">Review in Moderator CP</ForumLink>
+        </Button>
+      )}
+      {pendingContent === undefined ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading pending submissions…
+        </p>
+      ) : pendingContent.restricted ? (
+        <p className="text-sm text-muted-foreground">
+          Pending content is unavailable while your forum account is restricted.
+          You can still manage or disconnect your agent connections.
+        </p>
+      ) : pendingContent.items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No visible posts from you or your agents are awaiting staff
+          moderation.
+        </p>
+      ) : (
+        pendingContent.items.map((item) => (
+          <article
+            key={item.id}
+            className="space-y-2 border border-row-border p-3"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h3 className="text-sm font-semibold">{item.title}</h3>
+              <span className="font-mono text-xs uppercase">
+                {item.kind} · Not public
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {item.categoryName} · {item.actingAs.username}
+              {item.actingAs.isAgent ? " · AI" : ""} ·{" "}
+              {new Date(item.createdAt).toLocaleString()}
+            </p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-6">
+              {item.body}
+            </p>
+            <ForumLink
+              href={item.url}
+              className="focus-ring inline-block text-sm underline"
+            >
+              Open forum location
+            </ForumLink>
+          </article>
+        ))
+      )}
+      {pendingContent?.limited && (
+        <p className="text-xs text-muted-foreground">
+          Showing a limited set of recent submissions across your profiles.
+          Staff can find more in the Moderator CP.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ForumProposalCard({
   command,
   connection,
+  state,
+  selected,
+  onResolved,
 }: {
   command: ForumProposal;
   connection?: ForumConnection;
+  state: ForumProposal["status"];
+  selected: boolean;
+  onResolved: (message: string) => void;
 }) {
   const approve = useMutation(forumPluginRefs.approveCommand);
   const reject = useMutation(forumPluginRefs.rejectCommand);
+  const card = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const expired = command.expiresAt <= Date.now();
+  useEffect(() => {
+    if (selected) {
+      card.current?.scrollIntoView({ block: "nearest" });
+      card.current?.focus({ preventScroll: true });
+    }
+  }, [selected]);
   async function resolve(approved: boolean) {
     setBusy(true);
     setError("");
     try {
-      if (approved) await approve({ commandId: command._id });
-      else await reject({ commandId: command._id });
+      if (approved) {
+        const result = await approve({ commandId: command._id });
+        const data = result.data as { state?: string } | undefined;
+        onResolved(
+          result.message ??
+            (data?.state === "expired" || data?.state === "invalidated"
+              ? "This request expired or changed and did not run. Ask your agent to submit a fresh request."
+              : "Request executed. Check the forum for its publication or moderation status."),
+        );
+      } else {
+        await reject({ commandId: command._id });
+        onResolved("Request rejected. No action was taken.");
+      }
     } catch (caught) {
       setError(
         userFacingError(
@@ -495,34 +775,74 @@ function ForumProposalCard({
       setBusy(false);
     }
   }
+  const actingAs =
+    connection?.actingAs?.userId === command.actorUserId
+      ? connection.actingAs
+      : undefined;
   return (
-    <article className="space-y-3 border border-row-border p-3">
-      <h3 className="text-sm font-semibold">
-        {command.operation
-          .replace(/([a-z])([A-Z])/g, "$1 $2")
-          .replaceAll("_", " ")}
-      </h3>
+    <article
+      ref={card}
+      tabIndex={-1}
+      id={`forum-command-${command._id}`}
+      className={`focus-ring space-y-3 border border-row-border p-3 ${selected ? "border-primary" : ""}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">
+          {command.operation
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replaceAll("_", " ")}
+        </h3>
+        <span className="font-mono text-xs uppercase">
+          {state === "pending"
+            ? "Awaiting your approval · Not executed"
+            : state}
+        </span>
+      </div>
       <p className="text-xs text-muted-foreground">
-        {connection?.actingAs?.username ?? command.actorUserId} ·{" "}
-        {connection?.actingAs?.isAgent ? "AI · " : ""}Expires{" "}
+        Acting as {actingAs?.username ?? command.actorUserId}
+        {actingAs?.isAgent ? " · AI" : ""} · Expires{" "}
         {new Date(command.expiresAt).toLocaleString()}
       </p>
-      <p className="text-xs font-semibold">Exact request</p>
-      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words border border-row-border p-3 text-xs">
-        {forumProposalPreview(command.argsJson)}
-      </pre>
+      <p className="break-words text-sm">
+        {forumProposalTarget(command.argsJson)}
+      </p>
+      {state === "expired" && (
+        <p className="text-sm text-muted-foreground">
+          This request expired and did not run. Ask your agent to submit it
+          again.
+        </p>
+      )}
+      {state === "invalidated" && (
+        <p className="text-sm text-muted-foreground">
+          Identity, permissions, connection or target state changed. This
+          request cannot run; ask your agent for a fresh request.
+        </p>
+      )}
+      <details open={selected || undefined}>
+        <summary className="focus-ring cursor-pointer text-sm underline">
+          Exact request
+        </summary>
+        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words border border-row-border p-3 text-xs">
+          {forumProposalPreview(command.argsJson)}
+        </pre>
+      </details>
       <div className="flex gap-2">
         <Button
           className={ACTION}
-          disabled={busy || expired}
+          disabled={busy || state !== "pending"}
           onClick={() => void resolve(true)}
         >
-          {expired ? "Expired" : "Approve"}
+          {busy ? "Working…" : "Approve and execute"}
         </Button>
         <Button
           className={ACTION}
           variant="outline"
-          disabled={busy}
+          disabled={
+            busy ||
+            (command.status !== "pending" &&
+              state !== "expired" &&
+              state !== "invalidated")
+          }
           onClick={() => void resolve(false)}
         >
           Reject

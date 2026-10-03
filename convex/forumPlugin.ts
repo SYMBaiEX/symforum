@@ -158,6 +158,29 @@ function actingAs(principal: ForumPluginPrincipal | null) {
 function plainResult(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value ?? null));
 }
+async function postingContext(
+  ctx: QueryCtx | MutationCtx,
+  principal: ForumPluginPrincipal,
+) {
+  const profile = (await operations.getMyForumProfile.definition.handler(
+    withForumPluginPrincipal(ctx, principal),
+    {},
+  )) as { trusted: boolean };
+  return {
+    ownerProfile: {
+      userId: String(principal.owner._id),
+      username: principal.owner.username ?? principal.owner.name ?? "",
+    },
+    postingTrust: profile.trusted
+      ? ("trusted" as const)
+      : ("moderated" as const),
+    postingNotice: profile.trusted
+      ? "The connected owner's posting trust permits immediate publication. Forum permissions and restrictions still apply."
+      : "The connected owner is awaiting forum posting trust. Posts and replies require forum staff moderation even in Direct execution; the owner can review saved submissions in Agent access.",
+    pendingContentUrl:
+      "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+  };
+}
 async function readOperation(
   ctx: QueryCtx | MutationCtx,
   args: {
@@ -196,6 +219,7 @@ async function readOperation(
         capabilities: principal.capabilities,
         executionMode: principal.connection.executionMode,
         policyVersion: principal.policyVersion,
+        ...(await postingContext(ctx, principal)),
       },
     };
   }
@@ -481,6 +505,8 @@ async function commandResult(
       commandId: String(command._id),
       expiresAt: command.expiresAt,
       data: { state: "expired" },
+      message:
+        "This owner-review request expired without executing. It was not published.",
     };
   }
   if (
@@ -495,14 +521,18 @@ async function commandResult(
       actingAs: actingAs(principal),
       commandId: String(command._id),
       data: { state: "invalidated" },
+      message:
+        "This owner-review request was cancelled after the acting profile or permissions changed. It was not executed.",
     };
   }
   return {
     status: "pending_approval",
     actingAs: actingAs(principal),
     commandId: String(command._id),
-    approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access",
+    approvalUrl: `https://forum.symbaiex.com/control-panel/agent-access?commandId=${encodeURIComponent(String(command._id))}#review-queue`,
     expiresAt: command.expiresAt,
+    message:
+      "Awaiting your human owner's review in Agent access. This action has not executed; no content was published. Direct execution can be selected for future actions, but changing the mode cancels queued requests.",
   };
 }
 async function runCommand(
@@ -538,12 +568,28 @@ async function runCommand(
     record?.thread && typeof record.thread === "object"
       ? (record.thread as Record<string, unknown>)
       : null;
-  const threadId = record?.threadId ?? nested?._id;
+  const post =
+    record?.post && typeof record.post === "object"
+      ? (record.post as Record<string, unknown>)
+      : null;
+  const threadId = record?.threadId ?? nested?._id ?? post?.threadId;
   if (typeof threadId === "string") {
     const id = ctx.db.normalizeId("forumThreads", threadId);
     const thread = id ? await ctx.db.get("forumThreads", id) : null;
-    if (thread)
+    if (thread) {
       url = `https://forum.symbaiex.com/${thread.categorySlug}/${thread.slug}`;
+      if (
+        operationName === "createReply" ||
+        operationName === "updatePostContent"
+      ) {
+        const postPage = record?.postPage ?? post?.postPage;
+        const postNumber = record?.postNumber ?? post?.postNumber;
+        if (typeof postPage === "number" && postPage > 1)
+          url += `?postPage=${postPage}`;
+        if (typeof postNumber === "number" && postNumber > 0)
+          url += `#post-${postNumber}`;
+      }
+    }
   }
   const result: ForumPluginResult = {
     status: "completed",
@@ -552,6 +598,27 @@ async function runCommand(
     commandId: commandId ? String(commandId) : undefined,
     url,
   };
+  if (
+    [
+      "createThread",
+      "createReply",
+      "updateThreadContent",
+      "updatePostContent",
+    ].includes(operationName)
+  ) {
+    const contentStatus = record?.status ?? nested?.status ?? post?.status;
+    if (contentStatus === "pending") {
+      result.publicationStatus = "pending_moderation";
+      result.pendingContentUrl =
+        "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue";
+      result.moderationUrl = "https://forum.symbaiex.com/moderation";
+      result.message =
+        "Saved to the forum moderation queue; not published yet. Forum staff must approve it. Direct execution already ran this action and does not bypass forum posting trust.";
+    } else if (contentStatus === "active" || contentStatus === "locked") {
+      result.publicationStatus = "published";
+      result.message = "Published in the forum.";
+    }
+  }
   const now = Date.now();
   await ctx.db.insert("systemLogs", {
     createdAt: now,
@@ -756,6 +823,7 @@ export const status = internalQuery({
       capabilities: p.capabilities,
       executionMode: p.connection.executionMode,
       policyVersion: p.policyVersion,
+      ...(await postingContext(ctx, p)),
     };
   },
 });
@@ -796,6 +864,137 @@ export const listCommands = query({
           };
         }),
     );
+  },
+});
+/** Owner inspection only: this does not grant staff review or posting authority. */
+export const listMyPendingContent = query({
+  args: {},
+  returns: v.any(),
+  handler: async (ctx) => {
+    const owner = await requirePluginOwner(ctx);
+    const now = Date.now();
+    const unrestricted = (user: Doc<"users">) =>
+      user.forumBannedAt === undefined &&
+      (user.forumSuspendedUntil ?? 0) <= now;
+    if (!unrestricted(owner))
+      return { items: [], limited: false, restricted: true };
+    // The existing domain query checks board and ancestor visibility using the
+    // owner's real first-party identity. Never fabricate an agent grant to read.
+    const categories = (await operations.listCategoryOptions.definition.handler(
+      ctx,
+      {},
+    )) as Array<{
+      _id: Id<"forumCategories">;
+      slug: string;
+      name: string;
+    }>;
+    const categoriesById = new Map(
+      categories.map((category) => [category._id, category]),
+    );
+    const identities = await ctx.db
+      .query("agentIdentities")
+      .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", owner._id))
+      .take(51);
+    const authors = [owner];
+    const authorIds = new Set([owner._id]);
+    for (const identity of identities.slice(0, 50)) {
+      if (authorIds.has(identity.userId)) continue;
+      const actor = await ctx.db.get("users", identity.userId);
+      if (!actor?.isAgent || !unrestricted(actor)) continue;
+      authorIds.add(actor._id);
+      authors.push(actor);
+    }
+    type PendingItem = {
+      id: string;
+      kind: "thread" | "reply";
+      title: string;
+      body: string;
+      categoryName: string;
+      actingAs: NonNullable<ForumPluginResult["actingAs"]>;
+      createdAt: number;
+      url: string;
+    };
+    const items: PendingItem[] = [];
+    // Thread bodies may contain 64,000 multi-byte characters. Keep the read
+    // window below Convex's byte limit as well as bounding the result excerpt.
+    let remaining = 24;
+    let limited = identities.length > 50;
+    for (const actor of authors) {
+      if (remaining === 0) {
+        limited = true;
+        break;
+      }
+      const actingProfile = {
+        userId: String(actor._id),
+        username: actor.username ?? actor.name ?? "",
+        isAgent: actor.isAgent === true,
+      };
+      const threadLimit = Math.min(12, remaining);
+      const threads = await ctx.db
+        .query("forumThreads")
+        .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+          q.eq("authorId", actor._id).eq("status", "pending"),
+        )
+        .order("desc")
+        .take(threadLimit + 1);
+      limited ||= threads.length > threadLimit;
+      for (const thread of threads.slice(0, threadLimit)) {
+        remaining--;
+        const category = categoriesById.get(thread.categoryId);
+        if (!category) continue;
+        items.push({
+          id: String(thread._id),
+          kind: "thread",
+          title: thread.title,
+          body: thread.body.slice(0, 500),
+          categoryName: category.name,
+          actingAs: actingProfile,
+          createdAt: thread.createdAt,
+          url: `https://forum.symbaiex.com/${category.slug}/${thread.slug}`,
+        });
+      }
+      if (remaining === 0) {
+        limited = true;
+        break;
+      }
+      const postLimit = Math.min(12, remaining);
+      const posts = await ctx.db
+        .query("forumPosts")
+        .withIndex("by_authorId_and_status_and_createdAt", (q) =>
+          q.eq("authorId", actor._id).eq("status", "pending"),
+        )
+        .order("desc")
+        .take(postLimit + 1);
+      limited ||= posts.length > postLimit;
+      for (const post of posts.slice(0, postLimit)) {
+        remaining--;
+        const category = categoriesById.get(post.categoryId);
+        if (!category) continue;
+        const thread = await ctx.db.get("forumThreads", post.threadId);
+        if (
+          !thread ||
+          thread.categoryId !== category._id ||
+          (thread.status !== "active" && thread.status !== "locked")
+        )
+          continue;
+        items.push({
+          id: String(post._id),
+          kind: "reply",
+          title: thread.title,
+          body: post.body.slice(0, 500),
+          categoryName: category.name,
+          actingAs: actingProfile,
+          createdAt: post.createdAt,
+          url: `https://forum.symbaiex.com/${category.slug}/${thread.slug}`,
+        });
+      }
+    }
+    return {
+      items: items.sort(
+        (a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id),
+      ),
+      limited,
+    };
   },
 });
 export const approveCommand = mutation({

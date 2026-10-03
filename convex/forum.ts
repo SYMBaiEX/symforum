@@ -4896,7 +4896,7 @@ export const continueNewThreadNotifications = internalMutation({
     categoryId: v.id("forumCategories"),
     threadId: v.id("forumThreads"),
     now: v.number(),
-    cursor: v.string(),
+    cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await createNewThreadNotifications(ctx, {
@@ -13833,12 +13833,18 @@ const updateForumThreadModerationOperation = defineForumMutation({
           categoryId: category._id,
           now,
         });
-        await createNewThreadNotifications(ctx, {
-          actorUserId: thread.authorId,
-          categoryId: category._id,
-          threadId: thread._id,
-          now,
-        });
+        // Profile visibility fanout already paginated in this transaction.
+        // Start notifications after commit so each mutation paginates once.
+        await ctx.scheduler.runAfter(
+          0,
+          internal.forum.continueNewThreadNotifications,
+          {
+            actorUserId: thread.authorId,
+            categoryId: category._id,
+            threadId: thread._id,
+            now,
+          },
+        );
       }
     }
 
@@ -17564,6 +17570,7 @@ async function createNewThreadNotifications(
   if (
     category === null ||
     thread === null ||
+    thread.categoryId !== args.categoryId ||
     !isVisibleThreadStatus(thread.status)
   ) {
     return;

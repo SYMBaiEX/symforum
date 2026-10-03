@@ -27,4 +27,9 @@ export type ForumPluginResult = {
   approvalUrl?: string;
   expiresAt?: number;
   url?: string;
+  /** Command completion does not imply that newly saved content is public. */
+  publicationStatus?: "published" | "pending_moderation";
+  message?: string;
+  pendingContentUrl?: string;
+  moderationUrl?: string;
 };

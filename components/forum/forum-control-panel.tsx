@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumAgentApprovalNotice } from "./forum-agent-access";
+
 import { asRoute } from "@/lib/typed-route";
 
 import { reportAppError } from "@/components/app-error-surface";
@@ -272,6 +274,7 @@ function LiveForumControlPanel() {
           },
         ]}
       />
+      <ForumAgentApprovalNotice />
       <ForumControlPanelDirectory
         notificationPreferences={notificationPreferences}
         pendingContentCount={pendingContentCount}
@@ -1368,7 +1371,9 @@ function ForumPendingContentPanel({
           <p className="font-mono text-[10px] uppercase text-muted-foreground">
             Moderation queue
           </p>
-          <h2 className="mt-2 text-lg font-semibold">Awaiting approval</h2>
+          <h2 className="mt-2 text-lg font-semibold">
+            Awaiting staff moderation
+          </h2>
         </div>
         <span className="border border-row-border px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground">
           {pendingContent === undefined

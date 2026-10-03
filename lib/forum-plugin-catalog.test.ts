@@ -54,6 +54,9 @@ describe("shared forum operation catalog", () => {
     );
   });
   test("only render tool opens the forum app; status and file inputs have dedicated metadata", () => {
+    expect(
+      FORUM_PLUGIN_TOOLS.find((tool) => tool.name === "forum_open"),
+    ).toMatchObject({ name: "forum_open", title: "SYMBaiEX Forum" });
     for (const tool of FORUM_PLUGIN_TOOLS)
       expect(tool.securitySchemes).toEqual(tool._meta.securitySchemes);
     expect(

@@ -66,11 +66,16 @@ describe("forum MCP protocol boundary", () => {
       result: {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {}, resources: {} },
+        serverInfo: { title: "SYMBaiEX Forum" },
+        instructions: expect.stringContaining("completed means the command ran"),
       },
     });
     const discovered = await POST(request("tools/list"));
     const tools = (await discovered.json()).result.tools;
     expect(tools.length).toBeGreaterThan(80);
+    expect(
+      tools.find((tool: { name: string }) => tool.name === "forum_open"),
+    ).toMatchObject({ title: "SYMBaiEX Forum" });
     expect(
       tools.find((tool: { name: string }) => tool.name === "forum_open")._meta
         .ui.resourceUri,
@@ -165,7 +170,7 @@ describe("forum MCP protocol boundary", () => {
       Response.json({
         status: "pending_approval",
         commandId: "proposal-1",
-        approvalUrl: "https://forum.symbaiex.com/cp/agent-access",
+        approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=proposal-1#review-queue",
       }),
     );
     const response = await POST(
@@ -186,6 +191,14 @@ describe("forum MCP protocol boundary", () => {
     );
     expect(await response.json()).toMatchObject({
       result: {
+        content: expect.arrayContaining([
+          expect.objectContaining({
+            text: expect.stringContaining("This action has not run and no content has been published"),
+          }),
+          expect.objectContaining({
+            text: expect.stringContaining("commandId=proposal-1#review-queue"),
+          }),
+        ]),
         structuredContent: {
           status: "pending_approval",
           commandId: "proposal-1",
@@ -203,6 +216,49 @@ describe("forum MCP protocol boundary", () => {
         }),
       }),
     );
+  });
+  test.each([
+    { status: "completed", data: { threadId: "thread-1", status: "pending" } },
+    {
+      status: "completed",
+      publicationStatus: "pending_moderation",
+      pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+      data: { threadId: "thread-1", status: "pending" },
+    },
+  ])("reports moderated content as unpublished, including old retry receipts", async (receipt) => {
+    vi.mocked(fetch).mockResolvedValue(Response.json(receipt));
+    const response = await POST(request("tools/call", {
+      name: "forum_create_thread",
+      arguments: {
+        categorySlug: "general", title: "Title", body: "Body",
+        idempotencyKey: "command-123", expectedPolicyVersion: 1,
+      },
+    }, token()));
+    const body = await response.json();
+    expect(body.result.structuredContent).toEqual(receipt);
+    expect(body.result.content[0].text).toContain("not published yet");
+    expect(body.result.content[0].text).toContain("#moderation-queue");
+    expect(body.result.content[0].text).toContain("forum moderator");
+    expect(JSON.parse(body.result.content[1].text)).toEqual(receipt);
+  });
+  test("preserves authoritative successful publication in both model and structured output", async () => {
+    const receipt = {
+      status: "completed", publicationStatus: "published",
+      message: "Published to the forum.",
+      data: { threadId: "thread-1", status: "active" },
+    };
+    vi.mocked(fetch).mockResolvedValue(Response.json(receipt));
+    const response = await POST(request("tools/call", {
+      name: "forum_create_thread",
+      arguments: {
+        categorySlug: "general", title: "Title", body: "Body",
+        idempotencyKey: "command-123", expectedPolicyVersion: 1,
+      },
+    }, token()));
+    const body = await response.json();
+    expect(body.result.structuredContent).toEqual(receipt);
+    expect(body.result.content[0].text).toBe("Published to the forum.");
+    expect(JSON.parse(body.result.content[1].text)).toEqual(receipt);
   });
   test("returns safe tool failures and actionable HTTP auth challenges", async () => {
     vi.mocked(fetch).mockResolvedValue(
@@ -246,7 +302,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.0.0",
+            version: "1.1.0",
           },
         },
       },

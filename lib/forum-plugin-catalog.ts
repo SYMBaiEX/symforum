@@ -170,6 +170,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
 ];
 export const FORUM_PLUGIN_TOOLS = FORUM_PLUGIN_OPERATIONS.map((tool) => ({
   name: tool.name,
+  ...(tool.name === "forum_open" ? { title: "SYMBaiEX Forum" } : {}),
   description: tool.description,
   inputSchema: tool.inputSchema,
   securitySchemes: [

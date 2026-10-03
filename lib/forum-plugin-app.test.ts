@@ -1,4 +1,5 @@
 import { runInNewContext } from "node:vm";
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_RESOURCE } from "./forum-plugin-app";
 import { findForumPluginTool, validateForumPluginArguments } from "./forum-plugin-catalog";
@@ -49,12 +50,13 @@ type Message = { jsonrpc?: string; id?: number; method?: string; params?: Record
 function appHarness(openai?: Record<string, unknown>) {
   const sent: Message[] = [];
   const nodes = new Map<string, Node>();
-  for (const id of ["app", "content", "status", "identity", "mode", "navigation", "compose", "expand", "search", "query", "settings"]) nodes.set(id, new Node(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings"]) nodes.set(id, new Node(id === "search" ? "form" : "div"));
   const listeners = new Map<string, (event: { source: unknown; data: unknown }) => void>();
   const timers = new Map<number, () => void>();
   let nextTimer = 0;
   let uuid = 0;
   const parent = { postMessage(message: Message) { sent.push(message); } };
+  const documentElement = new Node("html");
   const window = {
     parent,
     openai,
@@ -67,7 +69,7 @@ function appHarness(openai?: Record<string, unknown>) {
       getElementById(id: string) { return nodes.get(id); },
       createElement(tag: string) { return new Node(tag); },
       createTextNode(text: string) { const node = new Node("text"); node.textContent = text; return node; },
-      documentElement: new Node("html"),
+      documentElement,
     },
     URL, Date, Map, Set, Promise,
     crypto: { randomUUID() { return "00000000-0000-0000-0000-" + String(++uuid).padStart(12, "0"); } },
@@ -86,7 +88,7 @@ function appHarness(openai?: Record<string, unknown>) {
     reply(latest("tools/call"), { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { threads: [], pagination: { page: 1, totalPages: 1 } } } });
     await flush();
   };
-  return { sent, nodes, listeners, timers, message, reply, latest, flush, connect };
+  return { sent, nodes, documentElement, listeners, timers, message, reply, latest, flush, connect };
 }
 
 describe("forum MCP App resource", () => {
@@ -98,6 +100,89 @@ describe("forum MCP App resource", () => {
     expect(FORUM_PLUGIN_APP_HTML).not.toMatch(/innerHTML|<iframe|fetch\(|XMLHttpRequest|localStorage|accessToken|authorization:/i);
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="Forum sections"');
     expect(FORUM_PLUGIN_APP_HTML).toContain("focus-visible");
+  });
+
+  test("keeps the portable light and dark palette aligned with native forum tokens", () => {
+    const nativeCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    const declarations = (block: string) => Object.fromEntries([...block.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)].map(match => [match[1], match[2].trim()]));
+    const nativeLight = declarations(nativeCss.match(/:root\s*\{([^}]+)\}/)![1]);
+    const nativeDark = { ...nativeLight, ...declarations(nativeCss.match(/\.dark\s*\{([^}]+)\}/)![1]) };
+    for (const [theme, expected] of [["light", nativeLight], ["dark", nativeDark]] as const) {
+      const portable = declarations(FORUM_PLUGIN_APP_HTML.match(new RegExp(":root\\[data-theme=" + theme + "\\]\\{([^}]+)\\}"))![1]);
+      expect(Object.keys(portable).length).toBeGreaterThan(10);
+      for (const [name, value] of Object.entries(portable)) expect(value, theme + " " + name).toBe(expected[name]);
+    }
+    expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="SYMBaiEX Forum"');
+  });
+
+  test("updates theme from the host without losing the active forum draft", async () => {
+    const app = appHarness();
+    await app.connect();
+    expect(app.documentElement.dataset.theme).toBe("dark");
+    app.nodes.get("compose")!.fire("click");
+    const body = app.nodes.get("content")!.byName("body")!;
+    body.value = "Keep my draft when the theme changes";
+    body.fire("input");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { theme: "light" } });
+    expect(app.documentElement.dataset.theme).toBe("light");
+    expect(app.nodes.get("content")!.byName("body")).toBe(body);
+    expect(body.value).toBe("Keep my draft when the theme changes");
+  });
+
+  test("shows the connected owner and posting trust independently of direct execution without clearing the action receipt", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=queued#review-queue" } } });
+    const receipt = app.nodes.get("status")!.textContent;
+    const pendingContentUrl = "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue";
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      status: "completed", actingAs: { userId: "agent", username: "Forum assistant", isAgent: true }, data: {
+        capabilities: ["read", "participate"], executionMode: "direct", policyVersion: 2,
+        ownerProfile: { userId: "owner", username: "austin-hamilton-8fjcv2" }, postingTrust: "moderated",
+        postingNotice: "The connected owner is awaiting forum posting trust.", pendingContentUrl,
+      },
+    } } });
+    expect(app.nodes.get("identity")!.textContent).toBe("Forum assistant · AI agent");
+    expect(app.nodes.get("connection-owner")!.textContent).toBe("Connected owner: austin-hamilton-8fjcv2");
+    expect(app.nodes.get("mode")!.textContent).toBe("Direct execution · Posts require forum moderation");
+    expect(app.nodes.get("posting-trust")!.textContent).toContain("awaiting forum posting trust");
+    app.nodes.get("posting-trust")!.querySelector("a")!.fire("click");
+    expect(app.latest("ui/open-link").params).toEqual({ url: pendingContentUrl });
+    expect(app.nodes.get("status")!.textContent).toBe(receipt);
+
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: [], postingTrust: "moderated" } } } });
+    expect(app.nodes.get("identity")!.textContent).toBe("Public browsing");
+    expect(app.nodes.get("mode")!.textContent).toBe("Connect a profile to participate");
+    expect(app.nodes.get("connection-owner")!.hidden).toBe(true);
+    expect(app.nodes.get("posting-trust")!.hidden).toBe(true);
+    expect(app.nodes.get("status")!.textContent).toBe(receipt);
+  });
+
+  test("removes the moderation warning and queue link when current owner posting trust becomes trusted", async () => {
+    const app = appHarness();
+    await app.connect();
+    for (const postingTrust of ["moderated", "trusted"]) {
+      app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "owner", username: "Forum member", isAgent: false }, data: {
+        capabilities: ["read", "participate"], executionMode: "direct", ownerProfile: { userId: "owner", username: "Forum member" }, postingTrust,
+        postingNotice: postingTrust === "trusted" ? "Current posting trust permits immediate publication; forum permissions still apply." : "Posts require moderator approval.",
+        pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+      } } } });
+    }
+    expect(app.nodes.get("connection-owner")!.textContent).toBe("Connected owner: Forum member");
+    expect(app.nodes.get("mode")!.textContent).toBe("Direct execution");
+    expect(app.nodes.get("posting-trust")!.textContent).toContain("forum permissions still apply");
+    expect(app.nodes.get("posting-trust")!.querySelector("a")).toBeNull();
+  });
+
+  test("renders native board rows with separately labelled thread and post counts", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "completed", data: [{ name: "Research", slug: "research", description: "Working notes", threadCount: 12, postCount: 34 }] } });
+    await app.flush();
+    const counts = app.nodes.get("content")!.querySelector("dl")!;
+    expect(counts.children.map(item => item.children.map(node => [node.tagName, node.textContent]))).toEqual([[ ["dt", "Threads"], ["dd", "12"] ], [ ["dt", "Posts"], ["dd", "34"] ]]);
+    expect(app.nodes.get("content")!.find("Research")!.disabled).toBe(false);
   });
 
   test("negotiates the standard protocol and guards parent source, response shape and request IDs", async () => {
@@ -180,6 +265,66 @@ describe("forum MCP App resource", () => {
     expect(draft.textContent).toContain("Awaiting owner review");
     expect(app.nodes.get("status")!.textContent).toContain("has not executed");
     expect(app.sent.filter(message => message.method === "tools/call").some(message => /approve/i.test(String(message.params!.name)))).toBe(false);
+  });
+
+  test("surfaces model-triggered moderation results without replacing an open draft or opening unpublished content", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("compose")!.fire("click");
+    const draft = app.nodes.get("content")!;
+    const body = draft.byName("body")!;
+    body.value = "My unsent draft";
+    body.fire("input");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      status: "completed", publicationStatus: "pending_moderation", message: "Saved, awaiting moderator approval. It is not published yet.",
+      pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+      moderationUrl: "https://forum.symbaiex.com/moderation?threadId=thread-pending",
+      actingAs: { username: "Research agent", isAgent: true },
+    } } });
+    expect(draft.byName("body")).toBe(body);
+    expect(body.value).toBe("My unsent draft");
+    expect(app.nodes.get("status")!.textContent).toContain("not published yet");
+    expect(app.nodes.get("status")!.querySelector("a")!.href).toBe("https://forum.symbaiex.com/control-panel/agent-access#moderation-queue");
+    expect(app.sent.some(message => message.method === "ui/open-link")).toBe(false);
+    expect(app.sent.some(message => message.params?.name === "forum_get_thread")).toBe(false);
+  });
+
+  test("keeps a model-triggered approval notice visible when an earlier navigation finishes", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    const read = app.latest("tools/call");
+    const approvalUrl = "https://forum.symbaiex.com/control-panel/agent-access?commandId=command-1#review-queue";
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { status: "pending_approval", commandId: "command-1", approvalUrl } } });
+    app.reply(read, { structuredContent: { status: "completed", data: [] } });
+    await app.flush();
+    expect(app.nodes.get("status")!.textContent).toContain("has not executed");
+    const reviewLink = app.nodes.get("status")!.querySelector("a")!;
+    expect(reviewLink.href).toBe(approvalUrl);
+    reviewLink.fire("click");
+    expect(app.latest("ui/open-link").params).toEqual({ url: approvalUrl });
+  });
+
+  test("distinguishes completed moderation submissions from published composer posts", async () => {
+    for (const pending of [true, false]) {
+      const app = appHarness();
+      await app.connect();
+      app.nodes.get("compose")!.fire("click");
+      const content = app.nodes.get("content")!;
+      for (const [name, value] of Object.entries({ categorySlug: "research", title: "Notes", body: "My research" })) { const field = content.byName(name)!; field.value = value; field.fire("input"); }
+      content.querySelector("form")!.fire("submit");
+      await app.flush();
+      app.reply(app.latest("tools/call"), { structuredContent: {
+        status: "completed", publicationStatus: pending ? "pending_moderation" : "published",
+        moderationUrl: "https://forum.symbaiex.com/moderation?threadId=notes",
+        url: pending ? undefined : "https://forum.symbaiex.com/research/notes",
+        pendingContentUrl: pending ? "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue" : undefined,
+      } });
+      await app.flush();
+      expect(content.querySelector("h1")!.textContent).toBe(pending ? "Awaiting moderator approval" : "Published on the forum");
+      expect(content.querySelector("a")!.href).toBe(pending ? "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue" : "https://forum.symbaiex.com/research/notes");
+      if (pending) expect(content.textContent).toContain("not published yet");
+    }
   });
 
   test("imports ChatGPT-selected files through tools and waits for attachment review before sending content", async () => {

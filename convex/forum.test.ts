@@ -27,6 +27,7 @@ import {
 } from "./forumAgentClaimProvenance";
 import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 import schema from "./schema";
+import { forumOperations } from "./forum";
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -470,6 +471,212 @@ describe("forum notification preferences", () => {
       }),
     ).rejects.toThrow(/Forum admin access/);
   });
+
+  test("approving a pending thread uses one pagination transaction and defers deduplicated notifications", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup();
+      const seed = await seedForum(t);
+      const asOwner = t.withIdentity({ subject: seed.ownerId });
+      await t.run(async (ctx) => {
+        await ctx.db.patch("forumCategories", seed.publicCategoryId, {
+          threadAccess: "members",
+        });
+        for (const userId of [seed.trustedUserId, seed.otherTrustedUserId]) {
+          await ctx.db.insert("forumCategorySubscriptions", {
+            userId,
+            categoryId: seed.publicCategoryId,
+            status: "active",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      });
+      const pending = await t
+        .withIdentity({ subject: seed.untrustedUserId })
+        .mutation(api.forum.createThread, {
+          categorySlug: "public-square",
+          title: "Moderated launch",
+          body: "@trustedauthor please review this launch.",
+        });
+      expect(pending.status).toBe("pending");
+      let paginations = 0;
+      await asOwner.run(async (ctx) => {
+        // convex-test does not enforce production's one-paginate-per-function
+        // limit. Instrument the actual moderation handler's query builders.
+        const wrapQuery = (query: object): object =>
+          new Proxy(query, {
+            get(target, property, receiver) {
+              const method = Reflect.get(target, property, receiver);
+              if (typeof method !== "function") return method;
+              return (...args: unknown[]) => {
+                if (property === "paginate" && ++paginations > 1)
+                  throw new Error("Multiple paginated queries in one mutation");
+                const result: unknown = Reflect.apply(method, target, args);
+                return result &&
+                  typeof result === "object" &&
+                  "paginate" in result
+                  ? wrapQuery(result)
+                  : result;
+              };
+            },
+          });
+        const db = new Proxy(ctx.db, {
+          get(target, property, receiver) {
+            const method = Reflect.get(target, property, receiver);
+            if (property !== "query")
+              return typeof method === "function"
+                ? method.bind(target)
+                : method;
+            return (...args: unknown[]) =>
+              wrapQuery(Reflect.apply(method, target, args));
+          },
+        });
+        await forumOperations.updateForumThreadModeration.definition.handler(
+          { ...ctx, db },
+          { threadId: pending.threadId, status: "active" },
+        );
+      });
+      expect(paginations).toBe(1);
+      const committed = await t.run(async (ctx) => ({
+        thread: await ctx.db.get("forumThreads", pending.threadId),
+        category: await ctx.db.get("forumCategories", seed.publicCategoryId),
+        profile: await ctx.db
+          .query("forumUserProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", seed.untrustedUserId))
+          .unique(),
+        notifications: await ctx.db.query("forumNotifications").collect(),
+        scheduled: await ctx.db.system.query("_scheduled_functions").collect(),
+      }));
+      expect(committed.thread?.status).toBe("active");
+      expect(committed.category?.threadCount).toBe(2);
+      expect(committed.profile).toMatchObject({ threadCount: 1, postCount: 1 });
+      expect(committed.notifications).toEqual([]);
+      expect(committed.scheduled).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "forum:continueNewThreadNotifications",
+            args: [expect.objectContaining({ threadId: pending.threadId })],
+          }),
+        ]),
+      );
+      const notificationArgs = {
+        actorUserId: seed.untrustedUserId,
+        categoryId: seed.publicCategoryId,
+        threadId: pending.threadId,
+        now: pending.createdAt,
+      };
+      await t.mutation(
+        internal.forum.continueNewThreadNotifications,
+        notificationArgs,
+      );
+      await t.mutation(
+        internal.forum.continueNewThreadNotifications,
+        notificationArgs,
+      );
+      const notifications = await t.run((ctx) =>
+        ctx.db.query("forumNotifications").collect(),
+      );
+      expect(notifications).toHaveLength(2);
+      expect(notifications).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            recipientUserId: seed.trustedUserId,
+            type: "mention",
+          }),
+          expect.objectContaining({
+            recipientUserId: seed.otherTrustedUserId,
+            type: "newThread",
+          }),
+        ]),
+      );
+      await asOwner.mutation(api.forum.updateForumThreadModeration, {
+        threadId: pending.threadId,
+        status: "active",
+      });
+      expect(
+        await t.run((ctx) =>
+          ctx.db
+            .query("forumUserProfiles")
+            .withIndex("by_userId", (q) => q.eq("userId", seed.untrustedUserId))
+            .unique(),
+        ),
+      ).toMatchObject({ threadCount: 1, postCount: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test.each([
+    "thread hidden",
+    "board restricted",
+    "thread moved to restricted board",
+  ] as const)(
+    "deferred approval notifications recheck visibility when %s",
+    async (change) => {
+      vi.useFakeTimers();
+      try {
+        const t = setup();
+        const seed = await seedForum(t);
+        const asOwner = t.withIdentity({ subject: seed.ownerId });
+        await t.run(async (ctx) => {
+          await ctx.db.patch("forumCategories", seed.publicCategoryId, {
+            threadAccess: "members",
+          });
+          await ctx.db.insert("forumCategorySubscriptions", {
+            userId: seed.trustedUserId,
+            categoryId: seed.publicCategoryId,
+            status: "active",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        });
+        const pending = await t
+          .withIdentity({ subject: seed.untrustedUserId })
+          .mutation(api.forum.createThread, {
+            categorySlug: "public-square",
+            title: "Delayed visibility",
+            body: "@trustedauthor this content needs moderation.",
+          });
+        await asOwner.mutation(api.forum.updateForumThreadModeration, {
+          threadId: pending.threadId,
+          status: "active",
+        });
+        if (change === "thread hidden")
+          await asOwner.mutation(api.forum.updateForumThreadModeration, {
+            threadId: pending.threadId,
+            status: "hidden",
+          });
+        else if (change === "thread moved to restricted board") {
+          await asOwner.mutation(api.forum.moveForumThread, {
+            threadId: pending.threadId,
+            targetCategoryId: seed.trustedCategoryId,
+          });
+          await t.run(async (ctx) => {
+            await ctx.db.patch("forumCategories", seed.trustedCategoryId, {
+              viewAccess: "staff",
+            });
+          });
+        } else
+          await t.run(async (ctx) => {
+            await ctx.db.patch("forumCategories", seed.publicCategoryId, {
+              viewAccess: "staff",
+            });
+          });
+        await t.mutation(internal.forum.continueNewThreadNotifications, {
+          actorUserId: seed.untrustedUserId,
+          categoryId: seed.publicCategoryId,
+          threadId: pending.threadId,
+          now: pending.createdAt,
+        });
+        expect(
+          await t.run((ctx) => ctx.db.query("forumNotifications").collect()),
+        ).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   test("board moderators are scoped to assigned boards", async () => {
     const t = setup();
