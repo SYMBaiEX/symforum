@@ -3,15 +3,132 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES,
   buildDigestBody,
+  belleDigestRetryArguments,
   canReuseDailyDigestStories,
   clipGeneratedProse,
   normalizeGeneratedHeadline,
 } from "./belleForumAgent";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import type { ReusableDailyDigestStory } from "./newsDigestTypes";
+import type { ArticleSnapshot } from "./sukiForumAgent";
 
 describe("Belle Hacker News digest", () => {
+  test("reuses successful bounded article snapshots across a retry", () => {
+    const story: ReusableDailyDigestStory = {
+      hnItemId: 42,
+      snapshotDate: "2026-10-03",
+      rank: 1,
+      title: "A research update",
+      summary: "A concise source summary with enough context for the digest.",
+    };
+    const fetchedSnapshot: ArticleSnapshot = {
+      id: "hn-42-0",
+      sourceKey: "hn-42",
+      sourceName: "Example",
+      sourceFeedUrl: "https://example.com/feed",
+      title: "A research update",
+      url: "https://example.com/research-update",
+      summary: story.summary,
+      boardSlugs: ["news-hacker-news"],
+      articleTitle: "A research update",
+      articleDescription: "A longer description of the research update.",
+      articleText: "Fetched source evidence.",
+      imageCredit: "Example",
+      sourceFetchSucceeded: true,
+    };
+    const failedSnapshot = {
+      ...fetchedSnapshot,
+      id: "hn-43-1",
+      sourceKey: "hn-43",
+      url: "https://example.com/temporarily-unavailable",
+      sourceFetchSucceeded: false,
+    };
+
+    const retry = belleDigestRetryArguments({
+      snapshotDate: "2026-10-03",
+      attempt: 1,
+      reusableDigestStories: [story],
+      reusableDigestSnapshotCompletedAt: 1_800_000_000_000,
+      reusableArticleSnapshots: [fetchedSnapshot, failedSnapshot],
+    });
+
+    expect(retry).toMatchObject({
+      snapshotDate: "2026-10-03",
+      attempt: 1,
+      reusableDigestStories: [story],
+      reusableDigestSnapshotCompletedAt: 1_800_000_000_000,
+      reusableArticleSnapshots: [fetchedSnapshot],
+    });
+  });
+
+  test("caps retry reuse payload while keeping later small successful snapshots", () => {
+    const snapshot: ArticleSnapshot = {
+      id: "hn-42-0",
+      sourceKey: "hn-42",
+      sourceName: "Example",
+      sourceFeedUrl: "https://example.com/feed",
+      title: "A research update",
+      url: "https://example.com/research-update",
+      summary: "A concise source summary.",
+      boardSlugs: ["news-hacker-news"],
+      articleTitle: "A research update",
+      articleDescription: "A source description.",
+      articleText: "Fetched source evidence.",
+      imageCredit: "Example",
+      sourceFetchSucceeded: true,
+    };
+    const tooLarge = {
+      ...snapshot,
+      articleText: "x".repeat(BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES + 1),
+    };
+
+    const retry = belleDigestRetryArguments({
+      snapshotDate: "2026-10-03",
+      attempt: 1,
+      reusableArticleSnapshots: [tooLarge, snapshot],
+    });
+
+    expect(retry.reusableArticleSnapshots).toEqual([snapshot]);
+    expect(
+      new TextEncoder().encode(JSON.stringify(retry)).byteLength,
+    ).toBeLessThanOrEqual(BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES);
+  });
+
+  test("keeps the maximum weekly source packet under the retry budget", () => {
+    const articleText = "🚀".repeat(6_000);
+    const snapshots: ArticleSnapshot[] = Array.from(
+      { length: 28 },
+      (_, index) => ({
+        id: `hn-${index + 1}-0`,
+        sourceKey: `hn-${index + 1}`,
+        sourceName: "Example research publication",
+        sourceFeedUrl: "https://example.com/feed",
+        title: `Research update ${index + 1}`,
+        url: `https://example.com/research-update-${index + 1}`,
+        summary: "A concise source summary.",
+        boardSlugs: ["news-hacker-news"],
+        articleTitle: `Research update ${index + 1}`,
+        articleDescription: "A source description.",
+        articleText,
+        imageCredit: "Example",
+        sourceFetchSucceeded: true,
+      }),
+    );
+
+    const retry = belleDigestRetryArguments({
+      snapshotDate: "2026-10-03",
+      attempt: 1,
+      reusableArticleSnapshots: snapshots,
+    });
+
+    expect(retry.reusableArticleSnapshots).toHaveLength(28);
+    expect(
+      new TextEncoder().encode(JSON.stringify(retry)).byteLength,
+    ).toBeLessThanOrEqual(BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES);
+  });
+
   test("reuses only the exact ranked stories from the unchanged snapshot", () => {
     const stories: ReusableDailyDigestStory[] = Array.from(
       { length: 12 },

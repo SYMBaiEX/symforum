@@ -154,6 +154,78 @@ type IndexedHackerNewsSnapshot = {
   stories: Array<Doc<"hnStories"> | ReusableDailyDigestStory>;
 };
 
+type BelleDigestRetryArguments = {
+  snapshotDate: string;
+  attempt: number;
+  reusableDigestStories?: ReusableDailyDigestStory[];
+  reusableDigestSnapshotCompletedAt?: number;
+  reusableArticleSnapshots?: ArticleSnapshot[];
+};
+
+// Leave headroom below Convex's per-scheduled-function argument limit for
+// transport encoding and any future retry metadata.
+export const BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES = 3 * 1024 * 1024;
+
+export function belleDigestRetryArguments(
+  args: BelleDigestRetryArguments,
+): BelleDigestRetryArguments {
+  const retryArguments: BelleDigestRetryArguments = {
+    snapshotDate: args.snapshotDate,
+    attempt: args.attempt,
+  };
+  const encoder = new TextEncoder();
+
+  if (
+    args.reusableDigestStories !== undefined &&
+    args.reusableDigestSnapshotCompletedAt !== undefined
+  ) {
+    const withStories: BelleDigestRetryArguments = {
+      ...retryArguments,
+      reusableDigestStories: args.reusableDigestStories,
+      reusableDigestSnapshotCompletedAt: args.reusableDigestSnapshotCompletedAt,
+    };
+    if (
+      encoder.encode(JSON.stringify(withStories)).byteLength <=
+      BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES
+    ) {
+      Object.assign(retryArguments, withStories);
+    }
+  }
+
+  const successfulSnapshots = (args.reusableArticleSnapshots ?? []).filter(
+    (snapshot) => snapshot.sourceFetchSucceeded === true,
+  );
+  if (successfulSnapshots.length === 0) {
+    return retryArguments;
+  }
+
+  const withEmptySnapshots: BelleDigestRetryArguments = {
+    ...retryArguments,
+    reusableArticleSnapshots: [],
+  };
+  let serializedBytes = encoder.encode(
+    JSON.stringify(withEmptySnapshots),
+  ).byteLength;
+  const reusableArticleSnapshots: ArticleSnapshot[] = [];
+  for (const snapshot of successfulSnapshots) {
+    const snapshotBytes = encoder.encode(JSON.stringify(snapshot)).byteLength;
+    const nextSerializedBytes =
+      serializedBytes +
+      snapshotBytes +
+      (reusableArticleSnapshots.length > 0 ? 1 : 0);
+    if (nextSerializedBytes > BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES) {
+      continue;
+    }
+    reusableArticleSnapshots.push(snapshot);
+    serializedBytes = nextSerializedBytes;
+  }
+
+  if (reusableArticleSnapshots.length > 0) {
+    retryArguments.reusableArticleSnapshots = reusableArticleSnapshots;
+  }
+  return retryArguments;
+}
+
 export function canReuseDailyDigestStories(args: {
   stories: readonly ReusableDailyDigestStory[];
   snapshotDate: string;
@@ -595,10 +667,14 @@ export const runDailyHackerNewsDigest = internalAction({
         await ctx.scheduler.runAfter(
           BELLE_DIGEST_RETRY_MS * (attempt + 1),
           internal.belleForumAgent.runDailyHackerNewsDigest,
-          {
+          belleDigestRetryArguments({
             snapshotDate: runDate,
             attempt: attempt + 1,
-          },
+            reusableDigestStories: args.reusableDigestStories,
+            reusableDigestSnapshotCompletedAt:
+              args.reusableDigestSnapshotCompletedAt,
+            reusableArticleSnapshots: args.reusableArticleSnapshots,
+          }),
         );
       }
       return { status: "failed", error: message };
