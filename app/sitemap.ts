@@ -6,6 +6,7 @@ import { forumSiteUrl, primarySiteUrl } from "@/lib/site-urls";
 import { getPortfolioProjects } from "@/lib/site-content";
 import { convexRefs } from "@/lib/convex-refs";
 import { getServerConvexClient } from "@/lib/server-convex";
+import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
 import {
   buildSiteObservabilityReport,
   FORUM_SITEMAP_QUERY_LIMIT,
@@ -30,12 +31,7 @@ const PRIMARY_PATHS = [
   "/blog",
   "/contact",
   "/developers",
-  "/developers/api",
-  "/developers/openapi",
-  "/developers/authentication",
-  "/developers/mcp",
-  "/developers/webhooks",
-  "/developers/api-lifecycle",
+  ...Object.keys(DEVELOPER_RESOURCES).map((slug) => `/developers/${slug}`),
   "/developers/sandbox",
   "/news",
   "/newsletter",
