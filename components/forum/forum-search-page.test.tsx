@@ -22,7 +22,7 @@ vi.mock("next/image", () => ({
 }));
 
 import { forumRefs } from "./forum-refs";
-import { ForumSearchPage } from "./forum-search-page";
+import { ForumSearchPage, ForumSearchResults } from "./forum-search-page";
 
 beforeEach(() => {
   mocks.params = new URLSearchParams("q=signal");
@@ -59,4 +59,24 @@ test("a basic search keeps advanced fields available without expanding them", ()
   expect(html).not.toMatch(/<details[^>]*open=""/);
   expect(html).toContain("Author");
   expect(html).toContain('aria-label="Filter forum search by board"');
+});
+
+test("failed search offers a retry using the existing filter context", () => {
+  const onRetry = vi.fn();
+  const params = new URLSearchParams("q=signal&author=reader-one&days=7");
+  const element = ForumSearchResults({
+    query: "signal",
+    author: "reader-one",
+    categoryLookup: new Map(),
+    pageSize: 12,
+    result: undefined,
+    error: "Search could not be completed.",
+    onRetry,
+    searchParams: params,
+  });
+  const html = renderToStaticMarkup(element);
+  expect(html).toContain("Retry search");
+  element.props.action.props.onClick();
+  expect(onRetry).toHaveBeenCalledOnce();
+  expect(params.toString()).toBe("q=signal&author=reader-one&days=7");
 });

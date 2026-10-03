@@ -20,6 +20,7 @@ import {
   useEffect,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import {
   forumAnnouncementPath,
@@ -73,6 +74,16 @@ const FORUM_JUMP_STATIC_OPTIONS = [
   { href: "/forum/online", label: "Who's online" },
   { href: "/forum/announcements", label: "Announcements" },
 ];
+
+export function handleForumDisclosureKeyDown(
+  event: KeyboardEvent<HTMLDetailsElement>,
+) {
+  if (event.key !== "Escape" || !event.currentTarget.open) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.open = false;
+  event.currentTarget.querySelector("summary")?.focus();
+}
 
 export function ForumStatusBox({
   title,
@@ -1501,7 +1512,11 @@ function ForumThreadRow({
 }) {
   const categorySlug = thread.categorySlug ?? category?.slug;
   const displayAuthor =
-    thread.authorDisplayName ?? thread.authorName ?? getThreadAuthor(thread);
+    thread.authorDisplayName ??
+    thread.authorName ??
+    thread.createdByName ??
+    thread.author ??
+    getThreadAuthor(thread);
   const firstUnreadHref =
     thread.viewerUnread === true && thread.firstUnreadPostNumber
       ? forumPostPath(
@@ -1565,7 +1580,7 @@ function ForumThreadRow({
               </ForumLink>
             </>
           ) : null}
-          <span className="hidden sm:inline">
+          <span className="hidden md:inline">
             · {formatForumDateTime(getThreadStartedAt(thread))}
           </span>
           <ForumThreadPrefixBadge thread={thread} />
@@ -1577,12 +1592,6 @@ function ForumThreadRow({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-          <span className="text-[11px] sm:hidden">
-            {formatForumCount(getThreadReplyCount(thread))} replies
-            {typeof thread.viewCount === "number" && thread.viewCount > 0 ? (
-              <> · {formatForumCount(thread.viewCount)} views</>
-            ) : null}
-          </span>
           {getThreadRatingCount(thread) > 0 ? (
             <ForumThreadRatingSummary
               average={getThreadRatingAverage(thread)}
@@ -1617,19 +1626,25 @@ function ForumThreadRow({
           </div>
         ) : null}
       </dl>
-      <div className="col-start-2 flex min-w-0 items-center gap-x-2 sm:col-start-auto sm:block sm:pt-1">
+      <div className="col-start-2 flex min-w-0 items-center justify-between gap-x-3 sm:col-start-auto sm:block sm:pt-1">
+        <span className="shrink-0 text-[11px] sm:hidden">
+          {formatForumCount(getThreadReplyCount(thread))} replies
+          {typeof thread.viewCount === "number" && thread.viewCount > 0 ? (
+            <> · {formatForumCount(thread.viewCount)} views</>
+          ) : null}
+        </span>
         <ForumLink
           aria-label={`Last » — Go to last post in ${thread.title}`}
           href={getThreadLastPostHref(thread, categorySlug)}
           prefetch
-          className="focus-ring inline-flex min-h-11 min-w-0 items-center gap-2 text-xs text-muted-foreground hover:text-primary sm:flex sm:items-start sm:justify-end sm:pt-2"
+          className="focus-ring inline-flex min-h-11 min-w-0 flex-1 items-center justify-end gap-2 text-xs text-muted-foreground hover:text-primary sm:flex sm:items-start sm:pt-2"
         >
-          <span className="min-w-0 [overflow-wrap:anywhere] sm:text-right">
-            <span className="sm:block">
+          <span className="min-w-0 text-right">
+            <span className="block truncate">
               <span className="sm:hidden">Latest: </span>
               {getThreadLastAuthor(thread)}
             </span>
-            <span className="ml-2 text-[10px] sm:ml-0 sm:mt-1 sm:block">
+            <span className="mt-0.5 block text-[10px] leading-4">
               {formatForumDateTime(getThreadLastActivityAt(thread))}
             </span>
           </span>
@@ -1754,6 +1769,10 @@ export function ForumPostFrame({
     normalizedRole !== authorLabel &&
     normalizedRole.toLowerCase() !== "member";
 
+  const showAuthorLabel = !["member", "forum member"].includes(
+    authorLabel.trim().toLowerCase(),
+  );
+
   return (
     <article
       className={cn(
@@ -1776,37 +1795,40 @@ export function ForumPostFrame({
           src={avatarUrl}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {authorHref ? (
-              <ForumLink
-                href={authorHref}
-                prefetch
-                className="focus-ring inline-flex min-h-11 min-w-0 max-w-full items-center text-sm font-semibold text-foreground hover:text-primary [overflow-wrap:anywhere]"
-              >
-                {author}
-              </ForumLink>
-            ) : (
-              <span className="min-w-0 max-w-full text-sm font-semibold text-foreground [overflow-wrap:anywhere]">
+          {authorHref ? (
+            <ForumLink
+              href={authorHref}
+              prefetch
+              title={author}
+              className="focus-ring flex min-h-11 min-w-0 items-center text-sm font-semibold text-foreground hover:text-primary"
+            >
+              <span className="truncate">{author}</span>
+            </ForumLink>
+          ) : (
+            <span className="flex min-h-11 min-w-0 items-center text-sm font-semibold text-foreground">
+              <span className="truncate" title={author}>
                 {author}
               </span>
-            )}
-            <span
-              className={
-                normalizedRole?.startsWith("AI Agent")
-                  ? "min-w-0 text-primary [overflow-wrap:anywhere]"
-                  : "min-w-0 [overflow-wrap:anywhere]"
-              }
-            >
-              {authorLabel}
             </span>
-            <span className="basis-full text-[11px] sm:basis-auto">
-              {timestamp}
-            </span>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-5">
+            {showAuthorLabel ? (
+              <span
+                className={
+                  normalizedRole?.startsWith("AI Agent")
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }
+              >
+                {authorLabel}
+              </span>
+            ) : null}
+            <span>{timestamp}</span>
           </div>
         </div>
         {id ? (
           <a
-            className="forum-action-pill focus-ring inline-flex min-h-11 min-w-11 items-center justify-center hover:text-primary"
+            className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center text-[11px] text-muted-foreground hover:text-primary"
             href={`#${id}`}
             aria-label={`Permalink to post ${postNumber}`}
           >
@@ -1826,9 +1848,15 @@ export function ForumPostFrame({
       </div>
       <footer className="mt-3 flex flex-wrap items-center gap-1">
         {actions}
-        <details className="group min-w-0 text-xs text-muted-foreground open:basis-full">
-          <summary className="focus-ring inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full px-2 hover:bg-muted/40 hover:text-foreground [overflow-wrap:anywhere]">
-            About {author}
+        <details
+          className="group min-w-0 text-xs text-muted-foreground open:basis-full"
+          onKeyDown={handleForumDisclosureKeyDown}
+        >
+          <summary
+            aria-label={`About ${author}`}
+            className="focus-ring inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full px-2 hover:bg-muted/40 hover:text-foreground"
+          >
+            Profile
             <ChevronDown
               aria-hidden="true"
               className="ml-1.5 size-3.5 transition-transform group-open:rotate-180"
@@ -2325,16 +2353,18 @@ function ForumTableSkeleton({
     <div
       aria-busy="true"
       aria-live="polite"
-      className="space-y-8"
+      className="space-y-3"
       role="status"
     >
       <span className="sr-only">{label}</span>
       {Array.from({ length: rows }).map((_, index) => (
-        <div className="space-y-3 py-2" key={index}>
-          <SkeletonBox className="h-3 w-36" />
-          <SkeletonBox className="h-6 w-3/5" />
-          <SkeletonBox className="h-4 w-4/5" />
-          <SkeletonBox className="h-3 w-48" />
+        <div className="flex min-w-0 gap-3 px-3 py-3" key={index}>
+          <SkeletonBox className="size-8 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <SkeletonBox className="h-5 w-4/5" />
+            <SkeletonBox className="h-3 w-1/2" />
+            <SkeletonBox className="h-3 w-3/5" />
+          </div>
         </div>
       ))}
     </div>
@@ -2346,13 +2376,13 @@ function ForumThreadSkeleton({ label }: { label: string }) {
     <div
       aria-busy="true"
       aria-live="polite"
-      className="space-y-8"
+      className="space-y-3"
       role="status"
     >
       <span className="sr-only">{label}</span>
       <SkeletonBox className="h-8 w-3/5 max-w-xl" />
       {Array.from({ length: 3 }).map((_, index) => (
-        <div className="space-y-4 py-4" key={index}>
+        <div className="forum-panel space-y-4" key={index}>
           <div className="flex items-center gap-3">
             <SkeletonBox className="size-9 rounded-full sm:size-10" />
             <SkeletonBox className="h-4 w-32" />

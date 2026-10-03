@@ -565,9 +565,25 @@ export function ForumApprovalQueue({
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  const pendingCount = commands.filter(
+  const pendingCommands = commands.filter(
     (command) => forumProposalState(command, now) === "pending",
-  ).length;
+  );
+  const previousCommands = commands.filter(
+    (command) => forumProposalState(command, now) !== "pending",
+  );
+  const pendingCount = pendingCommands.length;
+  const renderCommand = (command: ForumProposal) => (
+    <ForumProposalCard
+      key={command._id}
+      command={command}
+      state={forumProposalState(command, now)}
+      connection={connections.find(
+        (connection) => connection._id === command.connectionId,
+      )}
+      selected={command._id === selectedCommandId}
+      onResolved={onResolved}
+    />
+  );
   return (
     <section
       id="review-queue"
@@ -596,25 +612,29 @@ export function ForumApprovalQueue({
             ask your agent to check its result.
           </p>
         )}
-      {commands.length ? (
-        commands.map((command) => (
-          <ForumProposalCard
-            key={command._id}
-            command={command}
-            state={forumProposalState(command, now)}
-            connection={connections.find(
-              (connection) => connection._id === command.connectionId,
-            )}
-            selected={command._id === selectedCommandId}
-            onResolved={onResolved}
-          />
-        ))
+      {pendingCommands.length ? (
+        pendingCommands.map(renderCommand)
       ) : (
         <p className="text-sm text-muted-foreground">
           No requests waiting for review. Direct execution connections run
           requested actions immediately.
         </p>
       )}
+      {previousCommands.length ? (
+        <details
+          open={previousCommands.some(
+            (command) => command._id === selectedCommandId,
+          )}
+          className="rounded-xl bg-muted/30 p-3"
+        >
+          <summary className="focus-ring min-h-8 cursor-pointer text-sm font-medium">
+            Previous requests ({previousCommands.length})
+          </summary>
+          <div className="mt-3 space-y-3">
+            {previousCommands.map(renderCommand)}
+          </div>
+        </details>
+      ) : null}
       <ForumLink
         href="#moderation-queue"
         className="focus-ring inline-block text-sm underline"

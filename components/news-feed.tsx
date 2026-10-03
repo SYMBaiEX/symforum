@@ -529,6 +529,15 @@ function ForumNewsRows({
           </span>
         )}
       </ForumSectionHeader>
+      {pending ? (
+        <p
+          role="status"
+          className="px-1 text-xs leading-5 text-muted-foreground"
+        >
+          Loading the selected edition. Current stories stay visible until it is
+          ready.
+        </p>
+      ) : null}
       <div
         aria-busy={pending}
         className={`space-y-3 transition-opacity${pending ? " opacity-50" : ""}`}

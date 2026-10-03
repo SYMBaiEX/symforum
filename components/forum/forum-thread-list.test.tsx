@@ -196,6 +196,13 @@ test("board navigation carries sub-board and latest post targets while retaining
   );
   expect(html).toContain('aria-label="Submit board search"');
   expect(html).toContain('aria-label="Filter board by thread prefix"');
+  expect(html).toContain('aria-label="Active board filters"');
+  expect(html).toContain("Clear filters");
+  const filterTag = html.match(
+    /<details[^>]*aria-label="Board filter controls"[^>]*>/,
+  )?.[0];
+  expect(filterTag).toBeDefined();
+  expect(filterTag).not.toMatch(/\sopen(?:[=\s>])/);
   expect(html.match(/>Research<\/h1>/g)).toHaveLength(1);
   expect(mocks.query).toHaveBeenCalledWith(forumRefs.listThreads, {
     categorySlug: "research",

@@ -2,7 +2,15 @@
 
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquare, RefreshCw, ArrowUpRight, Share2 } from "lucide-react";
+import {
+  MessageSquare,
+  RefreshCw,
+  ArrowUpRight,
+  Share2,
+  LayoutList,
+  Rows3,
+  ChevronDown,
+} from "lucide-react";
 import { toast } from "sonner";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { reportAppError } from "@/components/app-error-surface";
@@ -30,6 +38,8 @@ import {
 } from "./forum-home-model";
 
 const PAGE_SIZE = 12;
+const DISPLAY_STORAGE_KEY = "symbaiex.forum.feed-display";
+type FeedDisplay = "cards" | "compact";
 const actionClass =
   "forum-action-pill focus-ring inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-2 px-3 text-xs font-semibold disabled:opacity-50";
 
@@ -45,7 +55,8 @@ export function ForumFeedList({
     forumFeedRefs.authorizationFingerprint,
     isLoading ? "skip" : {},
   );
-  if (isLoading || authorization === undefined) return <FeedLoading />;
+  if (isLoading || authorization === undefined)
+    return <FeedLoading communityOnly={communityOnly} />;
   return (
     <LiveFeed
       key={`${sort}:${communityOnly}:${isAuthenticated}:${authorization.fingerprint}`}
@@ -55,24 +66,35 @@ export function ForumFeedList({
   );
 }
 
-function FeedLoading() {
+function FeedLoading({ communityOnly }: { communityOnly: boolean }) {
   return (
     <div aria-busy="true" role="status" className="space-y-3">
       <span className="sr-only">Loading discussions</span>
-      <div aria-hidden="true" className="h-12 bg-muted/70" />
-      <div className="space-y-5 px-3 py-4 sm:px-4">
+      <div className="flex min-h-11 items-center gap-3 px-1">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          {communityOnly ? "Community" : "Feed"}
+        </h1>
+        <div aria-hidden="true" className="flex items-center gap-2">
+          <div className="h-8 w-16 rounded-full bg-muted/70" />
+          <div className="h-8 w-12 rounded-full bg-muted/40" />
+        </div>
+      </div>
+      <div className="space-y-3">
         {[1, 2, 3].map((item) => (
           <div
             aria-hidden="true"
-            className="grid grid-cols-[28px_minmax(0,1fr)] gap-3"
+            className="forum-post-card space-y-3 p-4"
             key={item}
           >
-            <div className="size-7 rounded-sm bg-muted" />
+            <div className="flex items-center gap-2">
+              <div className="size-7 rounded-full bg-muted" />
+              <div className="h-3 w-2/5 rounded-full bg-muted" />
+            </div>
             <div className="space-y-3">
               <div className="h-5 w-4/5 rounded-sm bg-muted" />
-              <div className="h-3 w-1/2 rounded-sm bg-muted" />
               <div className="h-4 w-full rounded-sm bg-muted" />
               <div className="h-4 w-2/3 rounded-sm bg-muted" />
+              <div className="h-8 w-24 rounded-full bg-muted/50" />
             </div>
           </div>
         ))}
@@ -89,6 +111,7 @@ export function LiveFeed({
   communityOnly: boolean;
 }) {
   const convex = useConvex();
+  const [display, setDisplay] = useState<FeedDisplay>("cards");
   const [result, setResult] = useState<ForumFeedPage>();
   const [pending, setPending] = useState<"initial" | "more" | "refresh" | null>(
     "initial",
@@ -99,6 +122,24 @@ export function LiveFeed({
   const generation = useRef(0);
   const busy = useRef(false);
   const pageCount = useRef(1);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(DISPLAY_STORAGE_KEY) === "compact")
+        setDisplay("compact");
+    } catch {
+      /* Browsing still works when local preference storage is unavailable. */
+    }
+  }, []);
+
+  function changeDisplay(next: FeedDisplay) {
+    setDisplay(next);
+    try {
+      window.localStorage.setItem(DISPLAY_STORAGE_KEY, next);
+    } catch {
+      /* Keep this session's selection. */
+    }
+  }
 
   const queryPage = useCallback(
     (cursor: string | null) =>
@@ -181,18 +222,58 @@ export function LiveFeed({
     }
   }
 
-  if (!result && pending) return <FeedLoading />;
+  if (!result && pending) return <FeedLoading communityOnly={communityOnly} />;
   return (
     <section
       aria-label={communityOnly ? "Community discussions" : "Forum discussions"}
       aria-busy={Boolean(pending)}
       className="space-y-3"
     >
-      <div className="forum-toolbar flex min-h-11 flex-wrap items-center gap-2 px-1">
+      <div className="forum-toolbar flex min-h-11 flex-wrap items-center gap-1.5 px-1 sm:gap-2">
+        <h1 className="text-xl font-semibold tracking-tight sm:mr-1 sm:text-2xl">
+          {communityOnly ? "Community" : "Feed"}
+        </h1>
         <h2 className="sr-only">
           {communityOnly ? "Community conversations" : "Discussions"}
         </h2>
-        <nav aria-label="Sort discussions" className="flex gap-1">
+        <details
+          className="relative sm:hidden"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }
+          }}
+        >
+          <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-1 text-xs font-medium text-muted-foreground">
+            {sort === "new" ? "New" : "Active"}
+            <ChevronDown className="size-3" aria-hidden="true" />
+          </summary>
+          <nav
+            aria-label="Sort discussions"
+            className="absolute left-0 top-full z-10 mt-1 min-w-28 rounded-xl bg-popover p-1 shadow-lg"
+          >
+            {(
+              [
+                { value: "active", label: "Active" },
+                { value: "new", label: "New" },
+              ] as const
+            ).map((item) => (
+              <ForumLink
+                className={`${actionClass} w-full justify-start ${sort === item.value ? "text-primary" : ""}`}
+                aria-current={sort === item.value ? "page" : undefined}
+                href={forumHomeHref(
+                  communityOnly ? "community" : "feed",
+                  item.value,
+                )}
+                key={item.value}
+              >
+                {item.label}
+              </ForumLink>
+            ))}
+          </nav>
+        </details>
+        <nav aria-label="Sort discussions" className="hidden gap-1 sm:flex">
           {[
             { value: "active", label: "Active" },
             { value: "new", label: "New" },
@@ -210,20 +291,73 @@ export function LiveFeed({
             </ForumLink>
           ))}
         </nav>
+        <div
+          role="group"
+          aria-label="Discussion display"
+          className="ml-auto hidden items-center gap-1 sm:flex"
+        >
+          {(
+            [
+              { value: "cards", label: "Card view", icon: LayoutList },
+              { value: "compact", label: "Compact view", icon: Rows3 },
+            ] as const
+          ).map(({ value, label, icon: Icon }) => (
+            <button
+              className={`${actionClass} px-2 ${display === value ? "bg-muted text-foreground" : "bg-transparent text-muted-foreground"}`}
+              aria-label={label}
+              aria-pressed={display === value}
+              onClick={() => changeDisplay(value)}
+              type="button"
+              key={value}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
         <button
-          className={`${actionClass} ml-auto bg-transparent text-muted-foreground`}
+          className={`${actionClass} ml-auto px-2 sm:hidden`}
+          onClick={() =>
+            changeDisplay(display === "cards" ? "compact" : "cards")
+          }
+          aria-label={
+            display === "cards"
+              ? "Switch to compact view"
+              : "Switch to card view"
+          }
+          title={
+            display === "cards"
+              ? "Switch to compact view"
+              : "Switch to card view"
+          }
+          type="button"
+        >
+          {display === "cards" ? (
+            <Rows3 className="size-4" aria-hidden="true" />
+          ) : (
+            <LayoutList className="size-4" aria-hidden="true" />
+          )}
+        </button>
+        <button
+          className={`${actionClass} bg-transparent text-muted-foreground`}
           disabled={Boolean(pending)}
           onClick={() => void load("refresh")}
           type="button"
         >
           <RefreshCw aria-hidden="true" className="size-3.5" />
-          <span>{pending === "refresh" ? "Refreshing…" : "Refresh"}</span>
+          <span className="hidden sm:inline">
+            {pending === "refresh" ? "Refreshing…" : "Refresh"}
+          </span>
+          <span className="sr-only sm:hidden">
+            {pending === "refresh"
+              ? "Refreshing discussions"
+              : "Refresh discussions"}
+          </span>
         </button>
       </div>
       {error ? (
         <div
           role="status"
-          className="flex flex-wrap items-center justify-between gap-x-3 bg-muted/40 px-4 py-2 text-sm"
+          className="forum-post-card flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
         >
           <span className="max-w-lg leading-6 text-muted-foreground">
             {result
@@ -248,7 +382,7 @@ export function LiveFeed({
             : ""}
       </p>
       {result && result.page.length === 0 ? (
-        <div className="px-4 py-8 sm:px-5">
+        <div className="forum-post-card px-4 py-7 sm:px-5">
           <h3 className="text-base font-semibold">
             {result.isDone
               ? "No discussions here yet"
@@ -256,11 +390,13 @@ export function LiveFeed({
           </h3>
           <p className="mt-1 max-w-lg text-sm leading-6 text-muted-foreground">
             {result.isDone
-              ? "Choose a board to start a conversation."
+              ? communityOnly
+                ? "Community discussions will appear here. Choose a board to start one."
+                : "Choose a board to start a conversation."
               : "This page has no visible discussions. Continue to the next page."}
           </p>
           <ForumLink
-            className={`${actionClass} mt-2 -ml-3 text-primary`}
+            className={`${actionClass} mt-4 text-primary`}
             href="/forum?view=boards"
           >
             Browse boards <ArrowUpRight className="size-4" aria-hidden="true" />
@@ -270,12 +406,12 @@ export function LiveFeed({
       <ul className="space-y-3">
         {result?.page.map((thread) => (
           <li key={thread._id}>
-            <ForumFeedArticle thread={thread} />
+            <ForumFeedArticle thread={thread} display={display} />
           </li>
         ))}
       </ul>
       {result && !result.isDone ? (
-        <div className="flex justify-center bg-muted/35 px-4 py-2">
+        <div className="flex justify-center py-2">
           <button
             className={`${actionClass} text-foreground`}
             disabled={Boolean(pending)}
@@ -290,22 +426,31 @@ export function LiveFeed({
   );
 }
 
-export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
+export function ForumFeedArticle({
+  thread,
+  display = "cards",
+}: {
+  thread: ForumFeedThread;
+  display?: FeedDisplay;
+}) {
   const href = forumPath(thread.categorySlug, thread.slug);
   const author = thread.authorIdentity;
   const replies = getThreadReplyCount(thread);
   const [sharing, setSharing] = useState(false);
+  const [shareFailed, setShareFailed] = useState(false);
   const posted = thread.createdAt ? new Date(thread.createdAt) : null;
 
   async function share() {
     if (sharing) return;
     setSharing(true);
+    setShareFailed(false);
     try {
       await navigator.clipboard.writeText(
         forumSiteUrl(`/${thread.categorySlug}/${thread.slug}`),
       );
       toast.success("Discussion link copied");
     } catch {
+      setShareFailed(true);
       toast.error(
         "Could not copy the link. Open the discussion to copy its address.",
       );
@@ -315,7 +460,9 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
   }
 
   return (
-    <article className="forum-post-card min-w-0 p-4">
+    <article
+      className={`forum-post-card min-w-0 ${display === "compact" ? "p-3" : "p-4"}`}
+    >
       <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
         <ForumAvatar
           alt=""
@@ -323,30 +470,32 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
           name={author.name}
           src={author.avatarUrl}
         />
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 text-xs">
+        <div className="flex min-w-0 flex-1 items-center gap-x-2 text-xs">
           <ForumLink
-            className="focus-ring inline-flex min-h-9 max-w-full items-center font-semibold text-foreground hover:text-primary [overflow-wrap:anywhere]"
+            className="focus-ring inline-flex min-h-9 min-w-0 max-w-[45%] items-center font-semibold text-foreground hover:text-primary"
             href={forumPath(thread.categorySlug)}
+            title={thread.categoryName}
           >
-            {thread.categoryName}
+            <span className="truncate">{thread.categoryName}</span>
           </ForumLink>
           <span aria-hidden="true" className="text-muted-foreground/50">
             ·
           </span>
           <ForumLink
-            className="focus-ring inline-flex min-h-9 max-w-full items-center text-[11px] hover:text-primary [overflow-wrap:anywhere]"
+            className="focus-ring inline-flex min-h-9 min-w-0 flex-1 items-center text-[11px] hover:text-primary"
             href={forumMemberProfilePath(author.username)}
+            title={author.name}
           >
-            {author.name}
+            <span className="truncate">{author.name}</span>
           </ForumLink>
           {author.isAgent ? (
-            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-foreground">
+            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-foreground">
               AI
             </span>
           ) : null}
           {posted ? (
             <time
-              className="whitespace-nowrap text-[11px]"
+              className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground"
               dateTime={posted.toISOString()}
               title={posted.toUTCString()}
               aria-label={`Posted ${posted.toUTCString()}`}
@@ -360,7 +509,9 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
           ) : null}
         </div>
       </div>
-      <h3 className="mt-1 text-lg font-semibold leading-6 tracking-tight sm:text-[19px] sm:leading-7">
+      <h3
+        className={`mt-1 font-semibold leading-6 tracking-tight ${display === "compact" ? "text-base sm:text-[17px]" : "text-lg sm:text-[19px] sm:leading-7"}`}
+      >
         <ForumLink
           className="focus-ring inline-flex min-h-11 max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
           href={href}
@@ -373,7 +524,9 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
         <ForumThreadStateBadges thread={thread} />
       </div>
       {thread.excerpt ? (
-        <p className="mt-1 line-clamp-2 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere]">
+        <p
+          className={`mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
+        >
           {thread.excerpt}
         </p>
       ) : null}
@@ -383,18 +536,19 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
           href={href}
           aria-label={
             replies > 0
-              ? `${replies} replies to ${thread.title}`
-              : `Reply to ${thread.title}`
+              ? `${replies} ${replies === 1 ? "reply" : "replies"} to ${thread.title}`
+              : `Read discussion: ${thread.title}`
           }
         >
           <MessageSquare aria-hidden="true" className="size-4" />
           {replies > 0
             ? `${replies} ${replies === 1 ? "reply" : "replies"}`
-            : "Reply"}
+            : "Discuss"}
         </ForumLink>
         <button
           className={actionClass}
           disabled={sharing}
+          aria-busy={sharing}
           onClick={() => void share()}
           aria-label={`Share ${thread.title}`}
           type="button"
@@ -403,6 +557,20 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
           Share
         </button>
       </div>
+      {shareFailed ? (
+        <p
+          role="status"
+          className="mt-2 text-xs leading-5 text-muted-foreground"
+        >
+          Link could not be copied.{" "}
+          <a
+            className="focus-ring inline-flex min-h-9 items-center font-medium text-foreground underline underline-offset-2"
+            href={forumSiteUrl(`/${thread.categorySlug}/${thread.slug}`)}
+          >
+            Open discussion link
+          </a>
+        </p>
+      ) : null}
     </article>
   );
 }

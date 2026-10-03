@@ -58,6 +58,9 @@ test("member activity preserves identity, rank, statistics and presence in one l
   expect(html).toContain('href="/forum/members/reader-one"');
   expect(html).toContain('type="search"');
   expect(html).toContain("Sort by");
+  expect(html).not.toContain("Previous</button>");
+  expect(html).not.toContain("Next</button>");
+  expect(html).toContain("25 per page");
 });
 
 test("the directory preserves its heading and controls while data loads", () => {

@@ -29,7 +29,7 @@ class Node {
   addEventListener(name: string, callback: (event: { preventDefault(): void }) => void) {
     this.listeners.set(name, [...(this.listeners.get(name) ?? []), callback]);
   }
-  fire(name: string) { for (const listener of this.listeners.get(name) ?? []) listener({ preventDefault() {} }); }
+  fire(name: string) { let prevented = false; for (const listener of this.listeners.get(name) ?? []) listener({ preventDefault() { prevented = true; } }); return prevented; }
   focus() { this.onFocus?.(this); }
   reportValidity() { return true; }
   contains(node: Node | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
@@ -54,7 +54,11 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const nodes = new Map<string, Node>();
   let activeElement: Node | null = null;
   const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  nodes.get("surface-switcher")!.append(nodes.get("surface-trigger")!, nodes.get("surface-choices")!);
+  nodes.get("connection-details")!.append(nodes.get("connection-trigger")!);
+  nodes.get("search-panel")!.append(createNode("summary"), nodes.get("search")!);
+  const documentListeners = new Map<string, (event: { target: Node | null; key?: string; preventDefault(): void }) => void>();
   const listeners = new Map<string, (event: { source: unknown; data: unknown }) => void>();
   const timers = new Map<number, () => void>();
   const timerDurations = new Map<number, number>();
@@ -85,6 +89,8 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   runInNewContext(script, {
     window, document: {
       getElementById(id: string) { return nodes.get(id); },
+      addEventListener(name: string, callback: (event: { target: Node | null; key?: string; preventDefault(): void }) => void) { documentListeners.set(name, callback); },
+      removeEventListener(name: string) { documentListeners.delete(name); },
       createElement(tag: string) { return createNode(tag); },
       get activeElement() { return activeElement; },
       createTextNode(text: string) { const node = new Node("text"); node.textContent = text; return node; },
@@ -115,10 +121,116 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     if (chat) reply(chat, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await flush();
   };
-  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
+  return { sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
+  test("surface links wait for the host handshake before opening an external site", () => {
+    const app = appHarness();
+    expect(app.nodes.get("surface-choices")!.children[0].fire("click")).toBe(true);
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+    expect(app.nodes.get("status")!.textContent).toContain("Connecting to the host");
+  });
+
+  test("the unified logo switcher opens Blog through the host and selects the embedded Forum feed", async () => {
+    const app = appHarness(); await app.connect(false);
+    const choices = app.nodes.get("surface-choices")!;
+    const [blog, forum, nativeForum] = choices.children;
+    expect(blog.attributes["aria-label"]).toBe("Blog");
+    expect(blog.href).toBe("https://www.symbaiex.com");
+    expect(blog.textContent).toContain("Articles, research & news");
+    expect(forum.attributes).toMatchObject({ "aria-label": "Forum", "aria-current": "page" });
+    expect(forum.textContent).toContain("Conversations & communityCurrent");
+    expect(nativeForum.textContent).toBe("Open forum website ↗");
+    app.nodes.get("surface-switcher")!.open = true;
+    blog.fire("click");
+    expect(app.latest("ui/open-link").params).toEqual({ url: "https://www.symbaiex.com" });
+    expect(app.nodes.get("surface-switcher")!.open).toBe(false);
+    forum.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_feed_threads");
+    expect(app.sent.some(call => /create|send|approve/.test(String(call.params?.name)))).toBe(false);
+  });
+
+  test("the logo switcher preserves a draft and dismisses with Escape, outside click and focus leave", async () => {
+    const app = appHarness(undefined, 390); await app.connect(false);
+    app.nodes.get("compose")!.fire("click");
+    const body = app.nodes.get("content")!.byName("body")!;
+    body.value = "Keep this unsent draft"; body.fire("input");
+    const panel = app.nodes.get("surface-switcher")!;
+    const forum = app.nodes.get("surface-choices")!.children[1];
+    panel.open = true; forum.focus();
+    app.documentEvent("keydown", forum, "Escape");
+    expect(panel.open).toBe(false);
+    expect(app.activeElement).toBe(app.nodes.get("surface-trigger"));
+    panel.open = true; forum.fire("click");
+    expect(body.value).toBe("Keep this unsent draft");
+    expect(app.nodes.get("content")!.byName("body")).toBe(body);
+    expect(app.nodes.get("status")!.textContent).toContain("Close or submit your draft");
+    panel.open = true; app.documentEvent("pointerdown", app.nodes.get("query")!);
+    expect(panel.open).toBe(false);
+    panel.open = true; app.nodes.get("query")!.focus(); app.documentEvent("focusin", app.nodes.get("query")!);
+    expect(panel.open).toBe(false);
+    expect(app.activeElement).toBe(app.nodes.get("query"));
+    expect(body.value).toBe("Keep this unsent draft");
+    app.message({ jsonrpc: "2.0", id: 201, method: "ui/resource-teardown" }); await app.flush();
+    expect(app.documentListeners.size).toBe(0);
+  });
+
+  test("legacy Blog navigation uses openExternal without direct window navigation", async () => {
+    const external: string[] = [];
+    const app = appHarness({ openExternal: ({ href }: { href: string }) => { external.push(href); }, callTool: async (name: string) => ({ structuredContent: { data: name === "forum_status" ? { capabilities: ["read"] } : { page: [], isDone: true } } }) });
+    app.timers.values().next().value!(); await app.flush();
+    app.nodes.get("surface-choices")!.children[0].fire("click");
+    expect(external).toEqual(["https://www.symbaiex.com"]);
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("navigation clears stale content while loading and retry preserves the failed target", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Members")!.fire("click");
+    const members = app.latest("tools/call");
+    app.reply(members, { structuredContent: { data: { members: [{ username: "Visible member" }] } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Visible member");
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    expect(app.nodes.get("content")!.textContent).not.toContain("Visible member");
+    expect(app.nodes.get("content")!.attributes["aria-busy"]).toBe("true");
+    expect(app.nodes.get("compose")!.disabled).toBe(true);
+    app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: "Connection expired. Reconnect to continue." } }); await app.flush();
+    expect(app.nodes.get("content")!.attributes["aria-busy"]).toBe("false");
+    expect(app.nodes.get("status")!.textContent).toContain("Connection expired");
+    expect(app.nodes.get("compose")!.disabled).toBe(false);
+    app.nodes.get("content")!.find("Try again")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_categories");
+  });
+
+  test("mailbox folders and pagination remain bound to the selected mailbox", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Inbox")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [], pagination: { totalPages: 1 } } } }); await app.flush();
+    app.nodes.get("content")!.find("Sent")!.fire("click");
+    expect(app.latest("tools/call").params).toMatchObject({ name: "forum_list_private_messages", arguments: { box: "sent", page: 1, pageSize: 20 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [{ _id: "sent-1", subject: "Sent note" }], pagination: { totalPages: 2 } } } }); await app.flush();
+    app.nodes.get("content")!.find("Next →")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ box: "sent", page: 2 });
+  });
+
+  test.each(["trash", "sent"])("%s message readers preserve folder visibility and return page", async (box) => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Inbox")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [], pagination: { totalPages: 1 } } } }); await app.flush();
+    const label = box === "trash" ? "Trash" : "Sent";
+    app.nodes.get("content")!.find(label)!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [], pagination: { totalPages: 2 } } } }); await app.flush();
+    app.nodes.get("content")!.find("Next →")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [{ _id: "message-2", subject: "Folder message" }], pagination: { totalPages: 2 } } } }); await app.flush();
+    app.nodes.get("content")!.find("Folder message")!.fire("click");
+    expect(app.latest("tools/call").params).toMatchObject({ name: "forum_get_private_message", arguments: { messageId: "message-2", box } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { message: { _id: "message-2", subject: "Folder message", body: "Visible folder message" } } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Visible folder message");
+    app.nodes.get("content")!.find("← " + label)!.fire("click");
+    expect(app.latest("tools/call").params).toMatchObject({ name: "forum_list_private_messages", arguments: { box, page: 2, pageSize: 20 } });
+  });
+
   test("responsive search preserves an active query across widths and cleans up its media listener", async () => {
     const app = appHarness(undefined, 390);
     const panel = app.nodes.get("search-panel")!;
@@ -304,9 +416,9 @@ describe("forum MCP App resource", () => {
     const content = app.nodes.get("content")!;
     expect(content.querySelector("time")!.textContent).toBe(new Date(1_800_000_000_000).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
     expect(content.textContent).not.toContain("Duplicate activity author");
-    expect(content.find("Reply")).toBeDefined();
+    expect(content.find("Discuss")).toBeDefined();
     expect(content.find("1 reply")).toBeDefined();
-    content.find("Reply")!.fire("click");
+    content.find("Discuss")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "first" });
   });
 

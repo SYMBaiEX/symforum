@@ -70,7 +70,12 @@ export function forumPluginAppRuntime() {
   const modeLabel = document.getElementById("mode")!;
   const nav = document.getElementById("navigation")!;
   const contextRail = document.getElementById("forum-context")!;
-  const compose = document.getElementById("compose")!;
+  const surfaceSwitcher = document.getElementById("surface-switcher") as HTMLDetailsElement;
+  const surfaceTrigger = document.getElementById("surface-trigger")!;
+  const surfaceChoices = document.getElementById("surface-choices")!;
+  const connectionDetails = document.getElementById("connection-details") as HTMLDetailsElement;
+  const connectionTrigger = document.getElementById("connection-trigger")!;
+  const compose = document.getElementById("compose") as HTMLButtonElement;
   const expand = document.getElementById("expand")!;
   const searchForm = document.getElementById("search") as HTMLFormElement;
   const searchPanel = document.getElementById("search-panel") as HTMLDetailsElement;
@@ -156,6 +161,9 @@ export function forumPluginAppRuntime() {
     ++chatRevision;
     window.removeEventListener("message", onMessage);
     resizeObserver?.disconnect();
+    document.removeEventListener("pointerdown", dismissPopups);
+    document.removeEventListener("focusin", dismissPopups);
+    document.removeEventListener("keydown", onPopupKey);
     searchMedia?.removeEventListener("change", updateSearchLayout);
     navigationMedia?.removeEventListener("change", updateNavigationLayout);
   }
@@ -537,6 +545,57 @@ export function forumPluginAppRuntime() {
     access.append(link("Agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
     contextRail.append(access);
   }
+  function popupEntries(): Array<{ panel: HTMLDetailsElement; trigger: HTMLElement; enabled: boolean }> {
+    return [
+      { panel: surfaceSwitcher, trigger: surfaceTrigger, enabled: true },
+      { panel: searchPanel, trigger: searchPanel.firstElementChild as HTMLElement, enabled: searchMedia?.matches === true },
+      { panel: connectionDetails, trigger: connectionTrigger, enabled: true },
+      ...(moreNavigation ? [{ panel: moreNavigation, trigger: moreNavigation.firstElementChild as HTMLElement, enabled: navigationMedia?.matches !== true }] : []),
+    ];
+  }
+  function dismissPopups(event: Event) {
+    for (const { panel, enabled } of popupEntries()) {
+      if (enabled && panel.open && !panel.contains(event.target as Node)) panel.open = false;
+    }
+  }
+  function onPopupKey(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    const entries = popupEntries().filter(entry => entry.enabled && entry.panel.open);
+    const focused = entries.find(entry => entry.panel.contains(document.activeElement));
+    if (focused) { focused.panel.open = false; focused.trigger.focus(); event.preventDefault(); }
+    else if (entries.length) { for (const entry of entries) entry.panel.open = false; event.preventDefault(); }
+  }
+  function renderSurfaceChoices() {
+    const forum = button("", () => {
+      surfaceSwitcher.open = false;
+      surfaceTrigger.focus();
+      run(() => navigate("feed"));
+    }, "surface-choice");
+    forum.setAttribute("aria-label", "Forum");
+    forum.setAttribute("aria-current", "page");
+    forum.append(element("strong", "Forum"), element("span", "Conversations & community", "surface-description"), element("span", "Current", "surface-current"));
+    const blog = link("", "https://www.symbaiex.com");
+    blog.className = "surface-choice";
+    blog.setAttribute("aria-label", "Blog");
+    blog.append(element("strong", "Blog"), element("span", "Articles, research & news", "surface-description"));
+    const nativeForum = link("Open forum website ↗", "https://forum.symbaiex.com");
+    nativeForum.className = "surface-native-link";
+    for (const external of [blog, nativeForum]) external.addEventListener("click", event => {
+      if (!ready) { event.preventDefault(); report("Connecting to the host. Try this link again when the forum is ready."); return; }
+      surfaceSwitcher.open = false; surfaceTrigger.focus();
+    });
+    surfaceChoices.replaceChildren(blog, forum, nativeForum);
+  }
+  function loadingView() {
+    const loading = element("div", undefined, "loading-state");
+    loading.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index++) {
+      const panel = element("div", undefined, "loading-panel");
+      panel.append(element("span", undefined, "loading-meta"), element("span", undefined, "loading-title"), element("span", undefined, "loading-copy"), element("span", undefined, "loading-action"));
+      loading.append(panel);
+    }
+    content.replaceChildren(loading);
+  }
   function heading(title: string, subtitle?: string) {
     content.replaceChildren();
     const header = element("header", undefined, "view-heading");
@@ -614,7 +673,7 @@ export function forumPluginAppRuntime() {
       if (excerpt) main.append(element("p", excerpt.slice(0, 420), "excerpt"));
       item.append(main);
       const footer = element("footer", undefined, "discussion-footer");
-      const read = button(record.replyCount === undefined ? "Read discussion" : Number(record.replyCount) === 0 ? "Reply" : Number(record.replyCount) === 1 ? "1 reply" : text(record.replyCount) + " replies", () => run(() => navigate("thread", target)), "discussion-action");
+      const read = button(record.replyCount === undefined ? "Read discussion" : Number(record.replyCount) === 0 ? "Discuss" : Number(record.replyCount) === 1 ? "1 reply" : text(record.replyCount) + " replies", () => run(() => navigate("thread", target)), "discussion-action");
       read.disabled = !available;
       footer.append(read);
       const meaningfulViews = Number(record.viewCount) > 1 ? record.viewCount : undefined;
@@ -674,7 +733,7 @@ export function forumPluginAppRuntime() {
     const sort = args.sort === "new" ? "new" : "active";
     heading(view === "community" ? "Community" : "Feed", view === "community" ? "Conversations from people and their agents." : "News and discussions from SYMBaiEX.");
     const filters = element("div", undefined, "actions feed-filters");
-    for (const [key, label] of [["active", "Active"], ["new", "Newest"]]) {
+    for (const [key, label] of [["active", "Active"], ["new", "New"]]) {
       const control = button(label, () => run(() => navigate(view, { sort: key })));
       control.setAttribute("aria-pressed", String(sort === key));
       filters.append(control);
@@ -893,7 +952,7 @@ export function forumPluginAppRuntime() {
       content.append(replyBar);
     }
   }
-  function renderRecords(rows: RecordValue[], title: string, type: string) {
+  function renderRecords(rows: RecordValue[], title: string, type: string, mailboxArgs: RecordValue = {}) {
     heading(title);
     if (!rows.length) return empty();
     const list = element("div", undefined, type === "member" ? "rows member-list" : "rows record-list");
@@ -901,7 +960,7 @@ export function forumPluginAppRuntime() {
       const item = element("article", undefined, "row record-row " + type + "-row");
       if (type === "member") item.append(avatar(row.username ?? row.name));
       const titleText = text(row.title ?? row.subject ?? row.username ?? row.name ?? row.reason, "Forum item");
-      if (type === "message") item.append(button(titleText, () => run(() => navigate("message", { messageId: row._id ?? row.messageId })), "row-title"));
+      if (type === "message") item.append(button(titleText, () => run(() => navigate("message", { messageId: row._id ?? row.messageId, box: mailboxArgs.box === "sent" || mailboxArgs.box === "trash" ? mailboxArgs.box : "inbox", page: mailboxArgs.page ?? 1 })), "row-title"));
       else if (type === "notification" && threadTarget(row).threadSlug) item.append(button(text(row.threadTitle, titleText), () => run(() => navigate("thread", threadTarget(row))), "row-title"));
       else item.append(element("h2", titleText));
       item.append(element("p", summary(row), "muted"));
@@ -926,7 +985,10 @@ export function forumPluginAppRuntime() {
     const revision = ++viewRevision;
     currentView = view;
     renderNavigation();
+    currentCategory = view === "board" || view === "thread" ? text(args.categorySlug) : "";
+    compose.disabled = true;
     content.setAttribute("aria-busy", "true");
+    loadingView();
     report("Loading forum…");
     try {
       let result: RecordValue;
@@ -979,11 +1041,12 @@ export function forumPluginAppRuntime() {
           pagination(data, Number(args.page ?? 1), next => run(() => navigate("search", { ...args, page: next })));
         };
       } else if (view === "message") {
-        result = await tool("forum_get_private_message", { messageId: args.messageId });
+        const box = args.box === "sent" || args.box === "trash" ? args.box : "inbox";
+        result = await tool("forum_get_private_message", { messageId: args.messageId, box });
         render = () => {
           const message = object(object(result.data).message ?? result.data);
           heading(text(message.subject, "Private message"), "Private to the selected acting profile");
-          content.append(renderPost(message), button("← Inbox", () => run(() => navigate("inbox"))));
+          content.append(renderPost(message), button("← " + (box === "trash" ? "Trash" : box === "sent" ? "Sent" : "Inbox"), () => run(() => navigate("inbox", { box, page: args.page ?? 1 }))));
         };
       } else if (view === "profile") {
         result = await tool("forum_get_my_forum_profile");
@@ -1028,14 +1091,20 @@ export function forumPluginAppRuntime() {
       } else {
         const names: Record<string, string> = { recent: "forum_list_recent_threads", bookmarks: "forum_list_my_thread_bookmarks", notifications: "forum_list_my_notifications", inbox: "forum_list_private_messages", members: "forum_list_members", staff: "forum_list_forum_threads" };
         const labels: Record<string, string> = { recent: "Recent discussions", bookmarks: "Saved discussions", notifications: "Notifications", inbox: "Private messages", members: "Community members", staff: "Pending moderation" };
-        result = await tool(names[view] ?? names.recent, view === "staff" ? { status: "pending", limit: 30 } : view === "inbox" ? { box: "inbox", page: args.page ?? 1, pageSize: 20 } : view === "recent" ? { mode: "new", now: Date.now(), page: args.page ?? 1, pageSize: 20 } : { limit: 30 });
+        result = await tool(names[view] ?? names.recent, view === "staff" ? { status: "pending", limit: 30 } : view === "inbox" ? { box: args.box === "sent" || args.box === "trash" ? args.box : "inbox", page: args.page ?? 1, pageSize: 20 } : view === "recent" ? { mode: "new", now: Date.now(), page: args.page ?? 1, pageSize: 20 } : { limit: 30 });
         render = () => {
           const rows = collection(result.data);
           if (view === "recent" || view === "bookmarks") renderThreadList(rows, labels[view]);
-          else renderRecords(rows, labels[view], view === "inbox" ? "message" : view === "notifications" ? "notification" : view === "members" ? "member" : "staff");
+          else renderRecords(rows, labels[view], view === "inbox" ? "message" : view === "notifications" ? "notification" : view === "members" ? "member" : "staff", args);
           if (view === "inbox") {
             content.querySelector("header")!.append(button("New message", () => openComposer("message"), "primary"));
-            pagination(result.data, Number(args.page ?? 1), next => run(() => navigate("inbox", { page: next })));
+            const folders = element("nav", undefined, "mailbox-folders"); folders.setAttribute("aria-label", "Mailbox folders");
+            for (const [box, label] of [["inbox", "Inbox"], ["sent", "Sent"], ["trash", "Trash"]]) {
+              const folder = button(label, () => run(() => navigate("inbox", { box })));
+              folder.setAttribute("aria-current", (args.box ?? "inbox") === box ? "page" : "false"); folders.append(folder);
+            }
+            content.querySelector("header")!.append(folders);
+            pagination(result.data, Number(args.page ?? 1), next => run(() => navigate("inbox", { box: args.box ?? "inbox", page: next })));
           }
           if (view === "recent") pagination(result.data, Number(args.page ?? 1), next => run(() => navigate("recent", { page: next })));
         };
@@ -1051,10 +1120,15 @@ export function forumPluginAppRuntime() {
     } catch (error) {
       if (revision !== viewRevision || destroyed) return;
       heading("Forum request unavailable");
-      content.append(element("p", error instanceof Error ? error.message : "Request failed."), button("Try again", () => run(() => navigate(view, args))));
-      report("Your connection and current permissions are checked for every request.", true);
+      const panel = element("section", undefined, "request-error");
+      const message = error instanceof Error ? error.message : "Request failed.";
+      panel.append(element("p", message));
+      const recovery = element("div", undefined, "actions");
+      recovery.append(button("Try again", () => run(() => navigate(view, args)), "primary"), link("Open forum website ↗", "https://forum.symbaiex.com"));
+      panel.append(recovery); content.append(panel);
+      report(message, true);
     } finally {
-      if (revision === viewRevision) content.setAttribute("aria-busy", "false");
+      if (revision === viewRevision) { content.setAttribute("aria-busy", "false"); compose.disabled = false; }
     }
   }
   function newKey() { return "app-" + crypto.randomUUID(); }
@@ -1380,11 +1454,15 @@ export function forumPluginAppRuntime() {
     if (query) run(() => navigate("search", { query }));
   });
   document.getElementById("settings")!.replaceChildren(link("Agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+  renderSurfaceChoices();
+  document.addEventListener("pointerdown", dismissPopups);
+  document.addEventListener("focusin", dismissPopups);
+  document.addEventListener("keydown", onPopupKey);
   renderNavigation();
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.5.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.6.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -1451,4 +1529,11 @@ body{background:var(--community-backdrop);color:var(--community-text)}button,a{c
 @media(min-width:1000px){.workspace{grid-template-columns:190px minmax(0,1fr);gap:20px;padding:16px 24px}.masthead{grid-template-columns:190px minmax(0,1fr) auto}.sidebar{padding:0;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}#navigation{display:block;padding:0}.primary-navigation{display:grid;gap:4px}.primary-navigation button{width:100%;text-align:left;padding:12px 14px!important}.navigation-more{margin:12px 0 0}.navigation-more summary{padding:8px 14px;color:var(--community-muted)}.secondary-navigation{position:static;min-width:0;max-width:100%;max-height:none;outline:0;background:transparent;padding:0;gap:2px}.secondary-navigation button{padding:10px 14px!important}.connection{padding:16px 12px;margin-top:16px;background:var(--community-panel);border-radius:12px;display:block}.connection strong{display:block;font-size:12px}.connection #mode{display:block;margin:6px 0;font-size:11px;line-height:1.7}.connection-details{margin:0}.connection-details summary{padding:4px 0}.connection-detail-panel{position:static;width:auto;max-width:100%;outline:0;padding:8px 0;background:transparent;border-radius:0}.main{padding:0 0 48px;max-width:680px}.view-heading{margin-top:12px}}
 @media(min-width:1240px){.workspace{grid-template-columns:190px minmax(0,680px) 220px;justify-content:center;gap:24px}.context-rail{display:grid;gap:14px;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;min-width:0}.context-panel{padding:16px;background:var(--community-panel);border-radius:12px;min-width:0}.context-panel h2{font-size:13px;margin:0 0 8px;font-weight:650}.context-panel p{font-size:12px;line-height:1.8;margin:0 0 8px}.context-panel a{font-size:12px;display:inline-flex;align-items:center;min-height:44px}.context-board{display:block;width:100%;text-align:left;background:transparent;padding:10px 0;font-size:12px}.context-access{background:hsl(var(--accent)/.05)}}
 @media(max-width:680px){.masthead{padding:12px;gap:8px;grid-template-columns:minmax(0,1fr) auto}.brand{font-size:20px}.brand .brand-forum{font-size:11px;margin-top:4px}.mast-actions>button{padding:8px 12px;font-size:11px}.mast-actions{gap:0}.masthead{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px}.brand .brand-forum{display:none}.product-search{width:auto;max-width:none;position:relative}.product-search>summary{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:12px;cursor:pointer;list-style:none;padding:8px}.product-search>summary::-webkit-details-marker{display:none}.product-search>summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}.product-search #search{position:absolute;right:0;top:50px;width:min(296px,calc(100vw - 24px));max-width:none;background:var(--community-panel);outline:1px solid hsl(var(--border));z-index:40}#query{font-size:16px;padding:10px 14px}.sidebar{padding:0 12px;top:60px}#navigation{gap:2px;padding:2px 0}.primary-navigation{gap:0;justify-content:space-between}.primary-navigation>button{padding:8px 5px!important;min-width:44px;flex:0 0 auto;font-size:12px!important}.navigation-more summary{padding:8px 6px;font-size:12px}#navigation button[aria-current=page]:before{display:none}.navigation-more summary:after{margin-left:3px}.connection{gap:2px 8px;min-height:36px;padding:0 0 4px}.connection strong{font-size:11px;max-width:calc(100% - 92px)}#mode{flex:1 1 100%;order:3;font-size:10px}.connection-details summary{min-height:36px;font-size:10px;padding:4px}.main{padding:4px 12px 28px}.view-heading{margin:0 0 6px;gap:4px 8px}.view-heading h1{font-size:23px}.view-heading>.muted{font-size:12px}.view-heading>.primary{margin-left:0}input,textarea,select,.chat-form input{font-size:16px}.row,.board{padding:14px}.board{grid-template-columns:30px minmax(0,1fr);gap:4px 10px}.board-icon{width:28px;height:28px;margin-top:6px}.board .row-title{font-size:17px;min-height:44px}.board-counts{grid-column:2;gap:12px}.board-latest{grid-column:2;display:block}.board-latest .latest-activity{display:none}.board-description>.excerpt{font-size:12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.discussion-row{display:block;padding:14px}.discussion-main .row-title{font-size:18px;min-height:44px}.discussion-main>.excerpt{font-size:14px;-webkit-line-clamp:3}.discussion-meta>.muted{font-size:10px}.discussion-footer{gap:6px 10px;margin-top:10px}.discussion-footer>.latest-activity{margin-left:0;font-size:10px}.discussion-counts{gap:10px}.post{padding:16px}.post-author{gap:6px}.post-author>.muted{margin-left:0;flex:1 1 100%;padding-left:36px}.post-body{font-size:15px}.chat-header #chat-profile{display:inline;font-size:10px}.chat-header{gap:3px;padding:2px 10px}.chat-header button{padding:4px 5px}.chat-row{grid-template-columns:minmax(0,1fr);gap:1px}.chat-row-actions{grid-column:1}.chat-messages{max-height:70px}.section-bar{padding:0 2px 6px;gap:4px}.section-detail{font-size:10px}.news-story{grid-template-columns:38px minmax(0,1fr);gap:8px}.news-main .row-title{font-size:17px}.news-rank .rank-points{font-size:8px}.breadcrumbs{gap:2px}.composer{padding:14px}.composer textarea{min-height:210px}.edition select{width:auto;max-width:calc(100% - 55px)}}
-</style></head><body><div id="app"><header class="masthead"><div><div class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></div></div><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details class="connection-details"><summary>Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Live chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Latest</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;
+
+/* Surface switcher and the final forum refinement layer. */
+.surface-switcher{position:relative;min-width:0;align-self:center}.surface-switcher>summary{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;list-style:none;border-radius:8px;padding:4px 0}.surface-switcher>summary::-webkit-details-marker{display:none}.surface-switcher>summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:4px}.surface-arrow{flex:none;color:var(--community-muted);transition:transform .15s ease}.surface-switcher[open] .surface-arrow{transform:rotate(180deg)}.surface-choices{position:absolute;left:0;top:calc(100% + 10px);width:300px;max-width:calc(100vw - 24px);padding:6px;background:var(--community-panel);border:1px solid hsl(var(--border));border-radius:14px;z-index:60;display:grid;gap:2px}.surface-choice{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;width:100%;min-height:68px;padding:12px;border-radius:9px;text-decoration:none;text-align:left;background:transparent;min-width:0}.surface-choice:hover{background:var(--community-hover);color:var(--community-text)}.surface-choice strong{font-size:14px;font-weight:650}.surface-description{grid-column:1;font-size:12px;color:var(--community-muted);font-weight:400}.surface-current{grid-column:2;grid-row:1/3;align-self:center;font-size:10px;font-weight:500;color:var(--community-muted);padding:4px 7px;background:var(--community-hover);border-radius:99px}.surface-choice[aria-current=page]{background:var(--community-hover)}.surface-native-link{display:flex;align-items:center;min-height:44px;padding:8px 12px;color:var(--community-muted);font-size:11px;text-decoration:none}
+.connection strong,#mode,.post-author strong,.member-row h2,.record-row .row-title,.conversation-reply p{min-width:0;max-width:100%;overflow-wrap:anywhere}.connection{min-width:0}.post-author{align-items:center}.post-author strong{flex:0 1 auto}.post-author>.muted{overflow-wrap:anywhere}.discussion-row{background:var(--community-panel);padding:18px 20px;border-radius:14px}.discussion-main .row-title{font-size:20px;line-height:1.35;letter-spacing:-.025em}.discussion-meta{margin-bottom:9px}.discussion-footer{gap:8px 12px;margin-top:14px}.discussion-action{font-weight:600;font-size:12px}.discussion-main>.excerpt{line-height:1.75}.board-index{gap:0;background:var(--community-panel);border-radius:14px;overflow:hidden}.board{border-radius:0;background:transparent;padding:18px 16px}.board:hover{background:var(--community-hover)}.board-counts,.discussion-counts{font-family:inherit}.board-counts dd{font-weight:650;font-size:12px}.board-counts dt{color:var(--community-muted)}.board-description>.excerpt{line-height:1.7}.board-latest{min-width:0;overflow-wrap:anywhere}.board-latest .latest-title{font-weight:500}.post{padding:22px;border-radius:14px}.post-author{padding-bottom:4px}.post-author strong{font-weight:650;font-size:14px}.post-body{font-size:15px;line-height:1.9}.post-content>a{min-height:44px;align-content:center}.conversation-reply{background:var(--community-hover);border-radius:14px}.conversation-reply>.muted{font-size:12px}.composer{padding:22px;border-radius:14px;gap:20px}.composer label{gap:10px;font-size:12px;font-weight:650}.composer input,.composer textarea,.composer select{border:1px solid hsl(var(--border));border-radius:9px}.composer textarea{min-height:260px;line-height:1.8}.composer .actions{padding-top:4px}.composer .actions button{font-weight:600}.attachments{padding:12px 0;font-size:12px}.mailbox-folders{display:flex;flex-wrap:wrap;gap:4px;width:100%;margin-top:6px}.mailbox-folders button{padding:8px 14px;border-radius:99px;font-size:12px;background:transparent;color:var(--community-muted)}.mailbox-folders button[aria-current=page]{background:var(--community-hover);color:var(--community-text);font-weight:650}.record-list,.member-list{gap:0;background:var(--community-panel);border-radius:14px;overflow:hidden}.record-row{padding:18px;border-radius:0;background:transparent}.record-row:hover{background:var(--community-hover)}.record-row>.muted{font-size:11px}.record-row.message-row>.post-body{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.7}.member-row{grid-template-columns:34px minmax(0,1fr);align-items:start}.member-row h2{font-size:14px;font-weight:650}.member-row .member-avatar{width:32px;height:32px;flex-basis:32px}.info-row h3{font-weight:650}.profile-field h3{text-transform:none;font-weight:500}.request-error{background:var(--community-panel);border-radius:14px;padding:20px;overflow-wrap:anywhere}.request-error>p{margin:0 0 12px;font-size:13px;line-height:1.75}.loading-state{display:grid;gap:10px}.loading-panel{display:grid;gap:12px;padding:20px;border-radius:14px;background:var(--community-panel)}.loading-panel span{display:block;border-radius:6px;background:var(--community-hover);animation:forum-loading 1.8s ease-in-out infinite alternate}.loading-meta{width:42%;height:16px}.loading-title{width:76%;height:25px}.loading-copy{width:92%;height:42px}.loading-action{width:100px;height:32px;border-radius:99px!important}@keyframes forum-loading{from{opacity:.55}to{opacity:1}}
+@media(min-width:760px){.board{grid-template-columns:36px minmax(0,1fr) 64px 150px;gap:12px;align-items:center}.board-description{grid-column:2}.board-counts{grid-column:3;flex-direction:column;gap:8px}.board-counts div{flex-direction:column;gap:0}.board-latest{grid-column:4;display:block}.board-latest .latest-title{font-size:11px;line-height:1.65;min-height:32px}.board-latest .latest-activity{font-size:10px;line-height:1.7;display:flex;flex-direction:column;gap:2px}.board .row-title{font-size:16px}.board-description>.excerpt{font-size:12px}}
+@media(max-width:680px){.surface-switcher>summary{gap:7px}.surface-arrow{width:14px;height:14px}.surface-choices{width:min(300px,calc(100vw - 24px));top:calc(100% + 8px)}.surface-choice{padding:12px}.connection strong{font-size:11px;overflow-wrap:anywhere}.connection-details{flex:none}.discussion-row{padding:16px;border-radius:12px}.discussion-main .row-title{font-size:18px;line-height:1.4}.discussion-meta{margin-bottom:6px}.discussion-meta>.muted{line-height:1.6}.discussion-footer{margin-top:12px;gap:6px 10px}.board{padding:15px 12px}.post{padding:18px;border-radius:12px}.post-author>.muted{padding-left:0;flex-basis:100%}.post-author strong{flex:1;min-width:0}.post-body{font-size:15px;line-height:1.85}.composer{padding:18px;gap:18px;border-radius:12px}.composer textarea{min-height:240px}.composer .actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.composer .actions>button{min-width:0}.composer .actions>.primary{grid-column:1/-1}.record-row{padding:16px}.conversation-reply{padding:16px}.conversation-reply>button{width:100%}.request-error{padding:18px}.loading-panel{padding:16px}.loading-title{width:84%}}
+@media(prefers-reduced-motion:reduce){.surface-arrow{transition:none}.loading-panel span{animation:none}}
+</style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Live chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Latest</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;

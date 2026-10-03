@@ -455,7 +455,7 @@ function ForumControlPanelDirectory({
     },
     {
       href: "#ucp-lists",
-      label: "Lists",
+      label: "Buddies / ignore",
       meta: profile.trusted ? "Buddy / ignore" : "Locked",
     },
     {
@@ -468,7 +468,7 @@ function ForumControlPanelDirectory({
     },
     {
       href: "#ucp-queue",
-      label: "Queue",
+      label: "Pending posts",
       meta:
         pendingContentCount === undefined
           ? "Syncing"
@@ -488,29 +488,17 @@ function ForumControlPanelDirectory({
   ];
 
   return (
-    <section
-      aria-label="User control panel directory"
-      className="forum-panel min-w-0"
-      id="ucp-index"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
-        <div>
-          <p className="text-xs text-muted-foreground">User CP</p>
-          <h2 className="mt-1 text-sm font-semibold">Settings sections</h2>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="rounded-xl bg-muted px-2 py-1">
-            {profile.threadCount} threads
-          </span>
-          <span className="rounded-xl bg-muted px-2 py-1">
-            {profile.postCount} posts
-          </span>
-          <span className="rounded-xl bg-muted px-2 py-1">
-            {profile.reputationScore > 0 ? "+" : ""}
-            {profile.reputationScore} rep
-          </span>
-        </div>
-      </div>
+    <details className="forum-panel min-w-0" id="ucp-index">
+      <summary className="focus-ring cursor-pointer px-4 py-3 text-sm font-semibold">
+        Jump to settings{" "}
+        <span className="ml-2 text-xs font-normal text-muted-foreground">
+          {navItems.length} sections
+          {pendingContentCount ? ` · ${pendingContentCount} pending posts` : ""}
+          {warningSummary.activeCount
+            ? ` · ${warningSummary.activeCount} warnings`
+            : ""}
+        </span>
+      </summary>
       <nav
         aria-label="Settings sections"
         className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4"
@@ -536,7 +524,7 @@ function ForumControlPanelDirectory({
           </a>
         ))}
       </nav>
-    </section>
+    </details>
   );
 }
 

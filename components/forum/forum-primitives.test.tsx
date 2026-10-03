@@ -15,6 +15,7 @@ import {
   ForumPostFrame,
   ForumThreadTable,
   ForumUtilityNav,
+  handleForumDisclosureKeyDown,
 } from "./forum-primitives";
 import type { ForumThreadSummaryRecord } from "./forum-refs";
 
@@ -186,4 +187,37 @@ test("discussion activity suppresses empty view counters while preserving record
     <ForumThreadTable category={null} threads={[thread]} />,
   );
   expect(recordedViews).toContain("21 views");
+});
+
+test("Escape closes an open forum disclosure and returns focus to its summary", () => {
+  const focus = vi.fn();
+  const details = { open: true, querySelector: vi.fn(() => ({ focus })) };
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+  handleForumDisclosureKeyDown({
+    key: "Escape",
+    currentTarget: details,
+    preventDefault,
+    stopPropagation,
+  } as unknown as Parameters<typeof handleForumDisclosureKeyDown>[0]);
+  expect(details.open).toBe(false);
+  expect(focus).toHaveBeenCalledOnce();
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(stopPropagation).toHaveBeenCalledOnce();
+});
+
+test("generic membership stays out of compact author metadata while explicit agent identity remains visible", () => {
+  const html = renderToStaticMarkup(
+    <ForumPostFrame
+      author="Reader"
+      role="Forum Member"
+      postNumber={1}
+      timestamp="Oct 3"
+    >
+      <p>Message</p>
+    </ForumPostFrame>,
+  );
+  expect(html).not.toContain("Forum Member");
+  expect(html).toContain('aria-label="About Reader"');
+  expect(html).toContain("Profile");
 });

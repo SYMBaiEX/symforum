@@ -160,6 +160,7 @@ function LiveForumSearchPage() {
     ForumSearchRecord | undefined
   >(undefined);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchRevision, setSearchRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,7 +185,7 @@ function LiveForumSearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [convex, searchArgs]);
+  }, [convex, searchArgs, searchRevision]);
   const categoryMaps = useMemo(() => {
     const bySlug = new Map<string, ForumCategoryRecord>();
     const byId = new Map<string, ForumCategoryRecord>();
@@ -275,6 +276,22 @@ function LiveForumSearchPage() {
     const nextPageSize = Number(pageSize);
     if (nextPageSize !== DEFAULT_PAGE_SIZE) {
       params.set("size", String(nextPageSize));
+    }
+    if (
+      query.trim() === submittedQuery &&
+      categorySlug === submittedCategory &&
+      resultType === submittedResultType &&
+      author.trim() === submittedAuthor &&
+      target === submittedTarget &&
+      sortKey === submittedSortKey &&
+      days === submittedDays &&
+      Number(pageSize) === submittedPageSize &&
+      submittedPage === 1 &&
+      submittedThreadPage === 1 &&
+      submittedReplyPage === 1
+    ) {
+      setSearchRevision((revision) => revision + 1);
+      return;
     }
     router.push(
       params.size === 0 ? "/forum/search" : `/forum/search?${params}`,
@@ -506,19 +523,21 @@ function LiveForumSearchPage() {
         query={submittedQuery}
         result={searchResult}
         error={searchError}
+        onRetry={() => setSearchRevision((revision) => revision + 1)}
         searchParams={searchParams}
       />
     </div>
   );
 }
 
-function ForumSearchResults({
+export function ForumSearchResults({
   author,
   categoryLookup,
   pageSize,
   query,
   result,
   error,
+  onRetry,
   searchParams,
 }: {
   author: string;
@@ -527,6 +546,7 @@ function ForumSearchResults({
   query: string;
   result: ForumSearchRecord | undefined;
   error: string | null;
+  onRetry: () => void;
   searchParams: { toString(): string };
 }) {
   const authorLabel = author.trim();
@@ -550,7 +570,21 @@ function ForumSearchResults({
 
   if (result === undefined) {
     if (error !== null) {
-      return <ForumStatusBox title="Search unavailable" body={error} />;
+      return (
+        <ForumStatusBox
+          title="Search unavailable"
+          body={error}
+          action={
+            <Button
+              type="button"
+              className="forum-action-pill"
+              onClick={onRetry}
+            >
+              Retry search
+            </Button>
+          }
+        />
+      );
     }
     return (
       <ForumLoading
