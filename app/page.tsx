@@ -6,6 +6,7 @@ import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import { primarySiteUrl } from "@/lib/site-urls";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import Link from "next/link";
@@ -130,8 +131,16 @@ async function HomeContent() {
                 href="/developers/mcp"
               >
                 public documentation MCP
-              </Link>{" "}
-              or use the separately owner-approved{" "}
+              </Link>
+              . Its{" "}
+              <a
+                className="underline underline-offset-4"
+                href={primarySiteUrl("/api/docs/mcp/server-card")}
+              >
+                machine-readable server card
+              </a>{" "}
+              publishes the exact endpoint and tool list. Use the separately
+              owner-approved{" "}
               <Link
                 className="underline underline-offset-4"
                 href="/developers/api"
