@@ -8,7 +8,7 @@ export type ForumHomeView = (typeof FORUM_HOME_VIEWS)[number];
 export type ForumFeedSort = "new" | "active";
 
 export function resolveForumHomeView(value?: string | string[]): ForumHomeView {
-  return FORUM_HOME_VIEWS.find((view) => view === value) ?? "feed";
+  return FORUM_HOME_VIEWS.find((view) => view === value) ?? "boards";
 }
 
 export function resolveForumFeedSort(value?: string | string[]): ForumFeedSort {

@@ -34,6 +34,7 @@ describe("service_auth discovery and transport", () => {
       "test-relay-with-at-least-thirty-two-characters",
     );
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
+    vi.stubEnv("CONVEX_SITE_URL", "https://test.convex.site");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Response.json({ keys: [{ kty: "RSA" }] })),

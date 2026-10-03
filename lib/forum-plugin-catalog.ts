@@ -35,6 +35,8 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
+  if (operation === "listChatMessages") return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; connected reads use the same forum permissions and quotas.";
+  if (operation === "sendChatMessage") return "Send a short message to the public forum chat as the selected profile. Requires the user's instruction, participate capability, current policyVersion, and idempotency key. Owner review and forum posting moderation still apply. Never post automatically while polling.";
   if (operation === "listFeedThreads")
     return "Browse the forum's global feed in new or recently active order with compact previews and author identities. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
   if (operation === "listNewsFeed")
@@ -46,6 +48,10 @@ function boundArguments(
   schema: ForumJsonSchema,
 ): ForumJsonSchema {
   const properties = { ...schema.properties };
+  if (["listChatMessages", "listChatPendingMessages"].includes(operation) && properties.paginationOpts) {
+    properties.paginationOpts = { ...properties.paginationOpts, properties: { ...properties.paginationOpts.properties, numItems: { type: "integer", minimum: 1, maximum: 60 } } };
+  }
+  if (operation === "sendChatMessage" && properties.body) properties.body = { ...properties.body, minLength: 1, maxLength: 2_000 };
   if (operation === "listFeedThreads" && properties.paginationOpts) {
     const pagination = properties.paginationOpts;
     const fields = { ...pagination.properties };

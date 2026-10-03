@@ -50,9 +50,10 @@ type Message = { jsonrpc?: string; id?: number; method?: string; params?: Record
 function appHarness(openai?: Record<string, unknown>) {
   const sent: Message[] = [];
   const nodes = new Map<string, Node>();
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings"]) nodes.set(id, new Node(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, new Node(id === "search" ? "form" : "div"));
   const listeners = new Map<string, (event: { source: unknown; data: unknown }) => void>();
   const timers = new Map<number, () => void>();
+  const timerDurations = new Map<number, number>();
   let nextTimer = 0;
   let uuid = 0;
   const parent = { postMessage(message: Message) { sent.push(message); } };
@@ -73,30 +74,172 @@ function appHarness(openai?: Record<string, unknown>) {
     },
     URL, Date, Map, Set, Promise,
     crypto: { randomUUID() { return "00000000-0000-0000-0000-" + String(++uuid).padStart(12, "0"); } },
-    setTimeout(callback: () => void) { timers.set(++nextTimer, callback); return nextTimer; },
+    setTimeout(callback: () => void, duration: number) { timers.set(++nextTimer, callback); timerDurations.set(nextTimer, duration); return nextTimer; },
     clearTimeout(id: number) { timers.delete(id); },
   });
   const message = (data: Message, source: unknown = parent) => listeners.get("message")?.({ source, data });
   const reply = (request: Message, result: unknown) => message({ jsonrpc: "2.0", id: request.id, result });
   const latest = (method: string) => sent.filter(request => request.method === method).at(-1)!;
-  const flush = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
+  const flush = async () => { for (let index = 0; index < 30; index++) await Promise.resolve(); };
   const connect = async () => {
     reply(latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark", availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" }, hostCapabilities: { serverTools: {} } });
     await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1 } });
     await flush();
-    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_feed_threads", "forum_list_news_feed"].includes(String(request.params?.name)))) {
-      reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_news_feed" ? { stories: [], snapshots: [], snapshot: null } : { page: [], isDone: true, continueCursor: "" } } });
+    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
+      reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_categories" ? [] : { page: [], pending: [], viewer: { canSend: true }, isDone: true, continueCursor: "" } } });
     }
     await flush();
+    const chat = sent.filter(request => request.params?.name === "forum_list_chat_messages").at(-1);
+    if (chat) reply(chat, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
+    await flush();
   };
-  return { sent, nodes, documentElement, listeners, timers, message, reply, latest, flush, connect };
+  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect };
 }
 
 describe("forum MCP App resource", () => {
+  test("opens Boards by default and decodes preserved ChatGPT result metadata", async () => {
+    const app = appHarness();
+    await app.connect();
+    expect(app.sent.some(call => call.params?.name === "forum_list_categories")).toBe(true);
+    expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(false);
+    for (const key of ["call_tool_result", "mcp_tool_result"]) {
+      app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { [key]: { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=test#review-queue" } } } });
+      expect(app.nodes.get("status")!.textContent).toContain("Review");
+      expect(app.nodes.get("status")!.textContent).not.toContain("no structured");
+    }
+  });
+
+  test("recovers an older cached feed tool without hiding authorization failures", async () => {
+    for (const [error, fallback] of [["Unknown tool forum_list_feed_threads", true], ["Permission denied: tool unavailable", false]] as const) {
+      const app = appHarness(); await app.connect();
+      app.nodes.get("navigation")!.find("Feed")!.fire("click");
+      const news = app.sent.filter(call => call.params?.name === "forum_list_news_feed").at(-1)!;
+      app.reply(news, { structuredContent: { data: { stories: [] } } });
+      app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: error } });
+      await app.flush();
+      expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(fallback);
+      if (fallback) {
+        app.reply(app.latest("tools/call"), { structuredContent: { data: { newestThreads: [{ title: "Cached-host conversation", slug: "cached", categorySlug: "general" }] } } });
+        await app.flush();
+        expect(app.nodes.get("content")!.textContent).toContain("Cached-host conversation");
+      } else expect(app.nodes.get("content")!.textContent).toContain("Permission denied");
+    }
+  });
+
+  test("uses a shorter initialize timeout only when the legacy host bridge is available", async () => {
+    const standard = appHarness();
+    expect([...standard.timerDurations.values()]).toEqual([20000]);
+    const calls: string[] = [];
+    const legacy = appHarness({ callTool: async (name: string) => { calls.push(name); return { structuredContent: { data: name === "forum_list_categories" ? [] : { capabilities: [], page: [], isDone: true } } }; } });
+    expect([...legacy.timerDurations.values()]).toEqual([2000]);
+    legacy.timers.values().next().value!(); await legacy.flush();
+    expect(calls).toContain("forum_list_categories");
+    expect(legacy.nodes.get("content")!.textContent).toContain("Forum boards");
+  });
+
+  test.each([
+    { label: "empty metadata with valid raw output", metadata: {}, output: { actingAs: { userId: "hint", username: "Snapshot profile" }, data: { capabilities: ["read"] } } },
+    { label: "both snapshots malformed", metadata: { unrelated: "host metadata" }, output: "not structured forum data" },
+  ])("legacy boot continues with $label", async ({ metadata, output }) => {
+    const calls: string[] = [];
+    const app = appHarness({ toolResponseMetadata: metadata, toolOutput: output, callTool: async (name: string) => {
+      calls.push(name);
+      if (name === "forum_status") return { structuredContent: { actingAs: { userId: "owner", username: "Authenticated profile" }, data: { capabilities: ["read"], policyVersion: 1, executionMode: "direct" } } };
+      return { structuredContent: { data: name === "forum_list_categories" ? [{ name: "Working General", slug: "general" }] : { page: [], pending: [], viewer: { canRead: true, canSend: false }, isDone: true } } };
+    } });
+    app.timers.values().next().value!(); await app.flush();
+    expect(calls).toEqual(["forum_status", "forum_list_categories", "forum_list_chat_messages"]);
+    expect(app.nodes.get("identity")!.textContent).toContain("Authenticated profile");
+    expect(app.nodes.get("content")!.textContent).toContain("Working General");
+    expect(app.nodes.get("status")!.textContent).not.toContain("no structured forum data");
+  });
+
+  test("uses the available legacy tool bridge after an explicit cached-tool error", async () => {
+    const calls: string[] = [];
+    const app = appHarness({ callTool: async (name: string) => { calls.push(name); return { mcp_tool_result: { structuredContent: { data: { page: [{ title: "Bridge fallback", categorySlug: "general", slug: "fallback" }], isDone: true } } } }; } });
+    await app.connect();
+    app.nodes.get("navigation")!.find("Community")!.fire("click");
+    app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: "Tool unavailable in cache" } });
+    await app.flush();
+    expect(calls).toEqual(["forum_list_feed_threads"]);
+    expect(app.nodes.get("content")!.textContent).toContain("Bridge fallback");
+  });
+
+  test("chat sends only on submission, preserves exact retry keys, and stops polling when collapsed", async () => {
+    const app = appHarness(); await app.connect();
+    expect(app.sent.filter(call => call.params?.name === "forum_send_chat_message")).toHaveLength(0);
+    const body = app.nodes.get("chat-body")!; body.value = "Hello lounge"; body.fire("input");
+    app.nodes.get("chat-form")!.fire("submit"); await app.flush();
+    const first = app.latest("tools/call");
+    expect(first.params).toMatchObject({ name: "forum_send_chat_message", arguments: { body: "Hello lounge", expectedPolicyVersion: 1 } });
+    app.message({ jsonrpc: "2.0", id: first.id, error: { message: "Temporary failure" } }); await app.flush();
+    expect(body.value).toBe("Hello lounge");
+    app.nodes.get("chat-form")!.fire("submit"); await app.flush();
+    const retry = app.latest("tools/call"); expect(retry.params).toEqual(first.params);
+    app.reply(retry, { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=chat#review-queue" } }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], pending: [], viewer: { canSend: true }, isDone: true } } }); await app.flush();
+    expect(app.nodes.get("chat-notice")!.textContent).toContain("not sent yet");
+    expect(body.value).toBe("");
+    app.nodes.get("chat-toggle")!.fire("click");
+    expect(app.nodes.get("chat-panel")!.hidden).toBe(true);
+    expect(app.timers.size).toBe(0);
+  });
+
+  test("chat permission transition drops old reads and requires explicit draft actor confirmation", async () => {
+    const app = appHarness(); await app.connect();
+    const body = app.nodes.get("chat-body")!; body.value = "Preserve chat draft"; body.fire("input");
+    app.nodes.get("chat-latest")!.fire("click"); const old = app.latest("tools/call");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "new", username: "New profile" }, data: { capabilities: ["read", "participate"], policyVersion: 2, executionMode: "direct" } } } });
+    app.reply(old, { structuredContent: { data: { page: [{ body: "Old private response" }], viewer: { canSend: true }, isDone: true } } }); await app.flush();
+    expect(app.nodes.get("chat-messages")!.textContent).not.toContain("Old private response");
+    expect(app.nodes.get("chat-send")!.disabled).toBe(true);
+    expect(body.value).toBe("Preserve chat draft");
+    expect(app.nodes.get("chat-form")!.find("Use current profile")!.hidden).toBe(false);
+    app.nodes.get("chat-form")!.fire("submit");
+    expect(app.sent.filter(call => call.params?.name === "forum_send_chat_message")).toHaveLength(0);
+  });
+
+  test("missing chat tools leave Boards readable and do not keep polling an unsupported tool", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("chat-latest")!.fire("click");
+    app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: "Unknown tool forum_list_chat_messages" } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Forum boards");
+    expect(app.nodes.get("chat-notice")!.textContent).toContain("Reconnect");
+    expect(app.timers.size).toBe(0);
+  });
+
+
+  test("chat shows own moderated messages safely and polling leaves the active reader intact", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("compose")!.fire("click");
+    const draft = app.nodes.get("content")!.byName("body")!; draft.value = "Keep forum draft"; draft.fire("input");
+    app.nodes.get("chat-latest")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], pending: [{ _id: "pending", body: "<script>untrusted</script>", status: "pending", authorIdentity: { username: "Research agent", isAgent: true } }], viewer: { canRead: true, canSend: true }, isDone: true } } }); await app.flush();
+    expect(app.nodes.get("chat-messages")!.textContent).toContain("Awaiting staff");
+    expect(app.nodes.get("chat-messages")!.textContent).toContain("<script>untrusted</script>");
+    expect(app.nodes.get("chat-messages")!.querySelector("script")).toBeNull();
+    expect(app.nodes.get("content")!.byName("body")).toBe(draft);
+    expect(draft.value).toBe("Keep forum draft");
+  });
+
+  test("chat stops automatic polling on denied or quota failures and requires an explicit sending allowance", async () => {
+    for (const message of ["Connection revoked", "Quota exhausted", "Permission denied"]) {
+      const app = appHarness(); await app.connect();
+      app.nodes.get("chat-latest")!.fire("click");
+      app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message } }); await app.flush();
+      expect(app.timers.size).toBe(0);
+      expect(app.nodes.get("chat-send")!.disabled).toBe(true);
+      app.nodes.get("chat-latest")!.fire("click");
+      app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], viewer: {}, isDone: true } } }); await app.flush();
+      expect(app.nodes.get("chat-send")!.disabled).toBe(true);
+    }
+  });
+
   test("opens the real feed and pages through sparse community results without using unread semantics", async () => {
     const app = appHarness();
     await app.connect();
+    app.nodes.get("navigation")!.find("Feed")!.fire("click");
     expect(app.sent.filter(call => call.method === "tools/call").map(call => call.params?.name)).toContain("forum_list_feed_threads");
     expect(app.sent.some(call => call.params?.name === "forum_list_recent_threads")).toBe(false);
     app.nodes.get("navigation")!.find("Community")!.fire("click");
