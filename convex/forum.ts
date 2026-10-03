@@ -1533,17 +1533,6 @@ const overviewOperation = defineForumQuery({
         category.lastThreadId === undefined ? [] : [category.lastThreadId],
       ),
     );
-    const lastPostTargetsByThreadId = await loadThreadLastPostTargets(
-      ctx,
-      Array.from(lastThreadsById.values()),
-    );
-    const lastThreadAuthorsByUserId = await loadUserNamesById(
-      ctx,
-      Array.from(lastThreadsById.values()).flatMap((thread) => [
-        thread.authorId,
-        thread.lastPostUserId,
-      ]),
-    );
     const categoryReadsById =
       viewer === null
         ? new Map<Id<"forumCategories">, ForumCategoryReadDoc>()
@@ -1552,6 +1541,62 @@ const overviewOperation = defineForumQuery({
             viewer._id,
             visibleCategories.map((category) => category._id),
           );
+
+    const [activeThreads, lockedThreads] = await Promise.all([
+      ctx.db
+        .query("forumThreads")
+        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
+        .order("desc")
+        .take(SEARCH_RESULT_LIMIT),
+      ctx.db
+        .query("forumThreads")
+        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "locked"))
+        .order("desc")
+        .take(SEARCH_RESULT_LIMIT),
+    ]);
+    const newestThreadCandidates = [...activeThreads, ...lockedThreads];
+    const visibleBoardCategoryIds = new Set(
+      boardCategories.map((category) => category._id),
+    );
+    const uncachedCategoryThreads = newestThreadCandidates.filter(
+      (thread) => !visibleBoardCategoryIds.has(thread.categoryId),
+    );
+    const fallbackVisibleThreads =
+      uncachedCategoryThreads.length === 0
+        ? []
+        : await filterThreadsForPublicCategory(
+            ctx,
+            uncachedCategoryThreads,
+            null,
+            viewer,
+          );
+    const fallbackVisibleThreadIds = new Set(
+      fallbackVisibleThreads.map((thread) => thread._id),
+    );
+    const newestThreads = newestThreadCandidates
+      .filter(
+        (thread) =>
+          visibleBoardCategoryIds.has(thread.categoryId) ||
+          fallbackVisibleThreadIds.has(thread._id),
+      )
+      .sort((left, right) => right.lastPostAt - left.lastPostAt)
+      .slice(0, SEARCH_RESULT_LIMIT);
+    const overviewThreadsById = new Map([
+      ...lastThreadsById,
+      ...newestThreads.map((thread) => [thread._id, thread] as const),
+    ]);
+    const overviewThreads = Array.from(overviewThreadsById.values());
+    const [threadAuthorsByUserId, lastPostTargetsByThreadId] =
+      await Promise.all([
+        loadUserNamesById(
+          ctx,
+          overviewThreads.flatMap((thread) => [
+            thread.authorId,
+            thread.lastPostUserId,
+          ]),
+        ),
+        loadThreadLastPostTargets(ctx, overviewThreads),
+      ]);
     const categoryRecords = boardCategories.map((category) => {
       const lastThread =
         category.lastThreadId === undefined
@@ -1567,11 +1612,11 @@ const overviewOperation = defineForumQuery({
           lastPostAuthor:
             lastThread === undefined
               ? undefined
-              : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+              : threadAuthorsByUserId.get(lastThread.lastPostUserId),
           threadAuthor:
             lastThread === undefined
               ? undefined
-              : lastThreadAuthorsByUserId.get(lastThread.authorId),
+              : threadAuthorsByUserId.get(lastThread.authorId),
           viewerHasRead:
             viewer === null
               ? undefined
@@ -1594,11 +1639,11 @@ const overviewOperation = defineForumQuery({
           lastPostAuthor:
             lastThread === undefined
               ? undefined
-              : lastThreadAuthorsByUserId.get(lastThread.lastPostUserId),
+              : threadAuthorsByUserId.get(lastThread.lastPostUserId),
           threadAuthor:
             lastThread === undefined
               ? undefined
-              : lastThreadAuthorsByUserId.get(lastThread.authorId),
+              : threadAuthorsByUserId.get(lastThread.authorId),
           viewerHasRead:
             viewer === null
               ? undefined
@@ -1606,37 +1651,6 @@ const overviewOperation = defineForumQuery({
         },
       );
     });
-
-    const [activeThreads, lockedThreads] = await Promise.all([
-      ctx.db
-        .query("forumThreads")
-        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "active"))
-        .order("desc")
-        .take(SEARCH_RESULT_LIMIT),
-      ctx.db
-        .query("forumThreads")
-        .withIndex("by_status_and_lastPostAt", (q) => q.eq("status", "locked"))
-        .order("desc")
-        .take(SEARCH_RESULT_LIMIT),
-    ]);
-    const newestThreads = (
-      await filterThreadsForPublicCategory(
-        ctx,
-        [...activeThreads, ...lockedThreads],
-        null,
-        viewer,
-      )
-    )
-      .sort((left, right) => right.lastPostAt - left.lastPostAt)
-      .slice(0, SEARCH_RESULT_LIMIT);
-    const authorsById = await loadUserNamesById(ctx, [
-      ...newestThreads.map((thread) => thread.authorId),
-      ...newestThreads.map((thread) => thread.lastPostUserId),
-    ]);
-    const newestLastPostTargetsByThreadId = await loadThreadLastPostTargets(
-      ctx,
-      newestThreads,
-    );
     const categoryNamesById = new Map(
       visibleCategories.map((category) => [category._id, category.name]),
     );
@@ -1650,11 +1664,15 @@ const overviewOperation = defineForumQuery({
         publicForumAnnouncementRecord(announcement),
       ),
       newestThreads: newestThreads.map((thread) =>
-        publicThreadListRecord(thread, authorsById.get(thread.authorId), {
-          categoryName: categoryNamesById.get(thread.categoryId),
-          lastPostAuthor: authorsById.get(thread.lastPostUserId),
-          lastPostTarget: newestLastPostTargetsByThreadId.get(thread._id),
-        }),
+        publicThreadListRecord(
+          thread,
+          threadAuthorsByUserId.get(thread.authorId),
+          {
+            categoryName: categoryNamesById.get(thread.categoryId),
+            lastPostAuthor: threadAuthorsByUserId.get(thread.lastPostUserId),
+            lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
+          },
+        ),
       ),
       totals: {
         categories: boardCategories.length,
@@ -22724,9 +22742,12 @@ async function filterThreadsForPublicCategory<T extends ForumThreadListSource>(
   user: UserDoc | null,
 ) {
   if (category !== null) {
-    return isBoardCategory(category) &&
-      (await visibleCategoriesForUser(ctx, [category], user)).length === 1
-      ? threads
+    // Non-null categories come only from searchOperation after
+    // requireVisibleCategory has checked the full ancestor access graph. Match
+    // the projection-backed search path: keep category scoping here, but don't
+    // reload the same category and ancestors for every search result set.
+    return isBoardCategory(category)
+      ? threads.filter((thread) => thread.categoryId === category._id)
       : [];
   }
 
