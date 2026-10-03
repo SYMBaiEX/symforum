@@ -3,12 +3,26 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { agentScopeValidator } from "./authz";
 import { serviceAuthTables } from "./agentServiceAuthSchema";
+import { forumPluginTables } from "./forumPluginSchema";
+
+const agentIdentityFields = {
+  agentId: v.string(),
+  userId: v.id("users"),
+  ownerUserId: v.optional(v.id("users")),
+  scopes: v.array(agentScopeValidator),
+  status: v.union(v.literal("active"), v.literal("revoked")),
+  keyVersion: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  revokedAt: v.optional(v.number()),
+};
 
 // The schema is normally optional, but Convex Auth
 // requires indexes defined on `authTables`.
 export default defineSchema({
   ...authTables,
   ...serviceAuthTables,
+  ...forumPluginTables,
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),
@@ -251,21 +265,18 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_createdAt", ["createdAt"]),
-  agentIdentities: defineTable({
-    agentId: v.string(),
-    userId: v.id("users"),
-    // The account that enrolled this identity. Optional for records created
-    // before multi-tenant ownership was introduced; those legacy records stay
-    // manageable by site admins only.
-    ownerUserId: v.optional(v.id("users")),
-    publicKey: v.string(),
-    scopes: v.array(agentScopeValidator),
-    status: v.union(v.literal("active"), v.literal("revoked")),
-    keyVersion: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    revokedAt: v.optional(v.number()),
-  })
+  agentIdentities: defineTable(v.union(
+    v.object({
+      ...agentIdentityFields,
+      credentialKind: v.optional(v.literal("ed25519")),
+      publicKey: v.string(),
+    }),
+    v.object({
+      ...agentIdentityFields,
+      credentialKind: v.literal("oauth"),
+      publicKey: v.optional(v.null()),
+    }),
+  ))
     .index("by_agentId", ["agentId"])
     .index("by_userId", ["userId"])
     .index("by_ownerUserId", ["ownerUserId"]),

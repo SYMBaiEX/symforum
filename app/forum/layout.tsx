@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ForumWebMcp } from "@/components/forum/forum-webmcp";
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
 const forumSocialImage = {
@@ -41,5 +42,5 @@ export default function ForumLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="forum-surface">{children}</div>;
+  return <div className="forum-surface"><ForumWebMcp />{children}</div>;
 }

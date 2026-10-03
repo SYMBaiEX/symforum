@@ -27,8 +27,8 @@ export default async function AgentConnectPage({
     <section className="page-frame page-frame-spacious max-w-2xl space-y-8">
       <h1 className="page-title-display">Connect an application</h1>
       <p className="page-lede">
-        Choose the agent this application can act through. You can disconnect it
-        here at any time.
+        Choose forum access or evidence access for this application. You can
+        disconnect it at any time from the corresponding connection settings.
       </p>
       <AgentOAuthConnect externalAuthId={externalAuthId ?? null} />
     </section>

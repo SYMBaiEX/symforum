@@ -1,0 +1,369 @@
+#!/usr/bin/env node
+/** Public-only checks. Never accepts credentials, cookies, or an authenticated action. */
+import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+
+const options = process.argv.slice(2);
+if (options.includes("--help")) {
+  console.log(
+    "Usage: bun scripts/smoke-forum-plugin.mjs [--origin https://www.symbaiex.com] [--issuer https://your.authkit.app]\nDefaults: FORUM_PLUGIN_ORIGIN, FORUM_PLUGIN_EXPECTED_ISSUER (or WORKOS_AUTHKIT_ISSUER). All calls are unauthenticated.",
+  );
+  process.exit(0);
+}
+const values = {};
+for (let i = 0; i < options.length; i += 2) {
+  if (!["--origin", "--issuer"].includes(options[i]) || !options[i + 1])
+    throw new Error(
+      "Use --origin URL and optionally --issuer URL; no credential arguments are supported.",
+    );
+  values[options[i].slice(2)] = options[i + 1];
+}
+function originUrl(value, httpsOnly = false) {
+  const url = new URL(value);
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/" ||
+    (url.protocol !== "https:" &&
+      (httpsOnly ||
+        url.protocol !== "http:" ||
+        !["localhost", "127.0.0.1", "forum.localhost"].includes(url.hostname)))
+  )
+    throw new Error(
+      "Use a bare HTTPS origin, or HTTP localhost for local smoke checks.",
+    );
+  return url.origin;
+}
+const origin = originUrl(
+  values.origin ??
+    process.env.FORUM_PLUGIN_ORIGIN ??
+    "https://www.symbaiex.com",
+);
+const expectedIssuerValue =
+  values.issuer ??
+  process.env.FORUM_PLUGIN_EXPECTED_ISSUER ??
+  process.env.WORKOS_AUTHKIT_ISSUER;
+const expectedIssuer = expectedIssuerValue
+  ? originUrl(expectedIssuerValue, true)
+  : null;
+// The offline catalog is the source for complete tool-name/schema coverage.
+const generated = JSON.parse(
+  readFileSync(
+    new URL("../lib/forum-plugin-catalog.generated.json", import.meta.url),
+    "utf8",
+  ),
+);
+const contract = readFileSync(
+  new URL("../lib/forum-plugin-contract.ts", import.meta.url),
+  "utf8",
+);
+const resource = contract.match(/FORUM_PLUGIN_RESOURCE\s*=\s*"([^"]+)"/)?.[1];
+const metadataUrl = contract.match(
+  /FORUM_PLUGIN_METADATA_URL\s*=\s*"([^"]+)"/,
+)?.[1];
+if (!resource || !metadataUrl)
+  throw new Error(
+    "Forum plugin resource constants could not be read from the shared contract.",
+  );
+const resourcePath = new URL(resource).pathname;
+const metadataPath = new URL(metadataUrl).pathname;
+const appUri = "ui://symbaiex/forum.html";
+const evidenceResource = "https://www.symbaiex.com/api/agent/mcp";
+const checks = [];
+const discoveredIds = { boardIds: [], threadIds: [] };
+let sequence = 0;
+let tools;
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+async function check(name, action) {
+  try {
+    const detail = await action();
+    checks.push({ name, status: "passed", ...(detail ? { detail } : {}) });
+  } catch (error) {
+    checks.push({
+      name,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Check failed.",
+    });
+  }
+}
+async function fetchJson(path, body, expectedStatus = 200) {
+  const response = await fetch(new URL(path, origin), {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      Accept: "application/json, text/event-stream",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    redirect: "error",
+    signal: AbortSignal.timeout(20_000),
+    cache: "no-store",
+    credentials: "omit",
+  });
+  assert(
+    response.status === expectedStatus,
+    `${path} returned HTTP ${response.status}; expected ${expectedStatus}.`,
+  );
+  const payload = await response.json().catch(() => null);
+  assert(payload !== null, `${path} did not return valid JSON.`);
+  return { response, payload };
+}
+async function rpc(method, params, expectedStatus = 200) {
+  const id = ++sequence;
+  const { response, payload } = await fetchJson(
+    resourcePath,
+    { jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) },
+    expectedStatus,
+  );
+  if (expectedStatus === 200) {
+    assert(
+      payload.jsonrpc === "2.0" && payload.id === id,
+      "MCP response correlation or JSON-RPC version is invalid.",
+    );
+    assert(!payload.error, `MCP ${method} returned a protocol error.`);
+  }
+  return { response, payload };
+}
+function requireTool(name) {
+  assert(
+    Array.isArray(tools),
+    "Tool discovery must succeed before this check.",
+  );
+  const tool = tools.find((candidate) => candidate.name === name);
+  assert(tool, `Missing tool ${name}.`);
+  return tool;
+}
+async function publicTool(name, args = {}) {
+  requireTool(name);
+  const { payload } = await rpc("tools/call", { name, arguments: args });
+  assert(!payload.result?.isError, `${name} returned a tool error.`);
+  const structured = payload.result?.structuredContent;
+  assert(
+    structured?.status === "completed" && structured.actingAs === null,
+    `${name} must return completed public-only content with no acting profile.`,
+  );
+  return structured.data;
+}
+function rows(value) {
+  if (Array.isArray(value)) return value;
+  for (const name of ["page", "items", "threads", "categories", "results"])
+    if (Array.isArray(value?.[name])) return value[name];
+  return [];
+}
+function ids(value) {
+  return rows(value)
+    .map((row) => row?._id ?? row?.id ?? row?.threadId ?? row?.categoryId)
+    .filter((id) => typeof id === "string")
+    .slice(0, 3);
+}
+
+await check("evidence resource boundary unchanged", async () => {
+  const { payload } = await fetchJson("/.well-known/oauth-protected-resource");
+  assert(
+    payload.resource === evidenceResource,
+    "Evidence protected resource was changed to the forum resource.",
+  );
+  assert(
+    payload["x-symbaiex-authentication"]?.scheme ===
+      "ed25519_challenge_response",
+    "Existing evidence authentication declaration changed.",
+  );
+  return { resource: payload.resource };
+});
+await check("forum OAuth resource and issuer metadata", async () => {
+  const { payload } = await fetchJson(metadataPath);
+  assert(
+    payload.resource === resource,
+    "Forum protected-resource metadata has the wrong resource.",
+  );
+  assert(
+    JSON.stringify(payload.scopes_supported) ===
+      JSON.stringify(["openid", "offline_access"]),
+    "Forum metadata must only declare the expected identity scopes.",
+  );
+  assert(
+    payload.bearer_methods_supported?.includes("header"),
+    "Forum metadata is missing bearer-header support.",
+  );
+  assert(
+    Array.isArray(payload.authorization_servers) &&
+      payload.authorization_servers.length === 1,
+    "Forum WorkOS OAuth issuer is not configured uniquely.",
+  );
+  const issuer = originUrl(payload.authorization_servers[0], true);
+  const hostname = new URL(issuer).hostname;
+  assert(
+    hostname.endsWith(".authkit.app") || hostname.endsWith(".symbaiex.com"),
+    "Forum metadata advertises an unsupported issuer domain.",
+  );
+  if (expectedIssuer)
+    assert(
+      issuer === expectedIssuer,
+      "Forum metadata issuer does not match the expected WorkOS issuer.",
+    );
+  return {
+    resource,
+    issuer,
+    issuerComparedTo: expectedIssuer ?? "configured metadata issuer",
+  };
+});
+await check("MCP initialize", async () => {
+  const { payload } = await rpc("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "symbaiex-public-smoke", version: "1.0.0" },
+  });
+  assert(
+    payload.result?.protocolVersion === "2025-06-18" &&
+      payload.result?.serverInfo?.name === "symbaiex-forum",
+    "Forum MCP negotiation or server identity is incorrect.",
+  );
+  assert(
+    payload.result.capabilities?.tools &&
+      payload.result.capabilities?.resources,
+    "Forum tool/resource capabilities are missing.",
+  );
+});
+await check("complete typed forum tool catalog", async () => {
+  const { payload } = await rpc("tools/list");
+  tools = payload.result?.tools;
+  assert(Array.isArray(tools), "MCP tool list is missing.");
+  const expectedNames = [
+    ...Object.keys(generated).map(
+      (name) =>
+        `forum_${name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()}`,
+    ),
+    "forum_open",
+    "forum_status",
+    "forum_upload_attachments",
+  ];
+  assert(
+    tools.length === expectedNames.length &&
+      new Set(tools.map((tool) => tool.name)).size === tools.length,
+    "Production tool count differs from the current shared catalog, or names are duplicated.",
+  );
+  for (const name of expectedNames) {
+    const tool = requireTool(name);
+    assert(
+      tool.inputSchema?.type === "object" &&
+        tool.inputSchema.additionalProperties === false,
+      `${name} arguments must be a strict object.`,
+    );
+    if (tool.annotations?.readOnlyHint === false) {
+      assert(
+        tool.inputSchema.required?.includes("idempotencyKey") &&
+          tool.inputSchema.required?.includes("expectedPolicyVersion"),
+        `${name} lacks required retry or policy snapshot arguments.`,
+      );
+      assert(
+        tool.inputSchema.properties?.expectedPolicyVersion?.type === "integer",
+        `${name} policy snapshot is not typed as integer.`,
+      );
+    }
+  }
+  const open = requireTool("forum_open");
+  assert(
+    open._meta?.ui?.resourceUri === appUri &&
+      open._meta?.["openai/ui"]?.entrypoints?.some(
+        (entry) => entry.type === "global",
+      ),
+    "Forum render tool is missing the native/global app entrypoint.",
+  );
+  assert(
+    requireTool("forum_status")._meta?.["openai/profile"] === true,
+    "Connection status profile metadata is missing.",
+  );
+  assert(
+    requireTool("forum_upload_attachments")._meta?.[
+      "openai/fileParams"
+    ]?.includes("files"),
+    "ChatGPT attachment parameters are missing.",
+  );
+  return { toolCount: tools.length };
+});
+await check("native in-ChatGPT forum resource", async () => {
+  const { payload: listed } = await rpc("resources/list");
+  const descriptor = listed.result?.resources?.find(
+    (entry) => entry.uri === appUri,
+  );
+  assert(
+    descriptor?.mimeType === "text/html;profile=mcp-app",
+    "Native forum resource is missing or has an incorrect MIME type.",
+  );
+  const { payload: read } = await rpc("resources/read", { uri: appUri });
+  const content = read.result?.contents?.find((entry) => entry.uri === appUri);
+  assert(
+    typeof content?.text === "string" &&
+      /<!doctype html>/i.test(content.text) &&
+      content.text.includes("ui/initialize"),
+    "Native forum HTML or MCP Apps bridge is missing.",
+  );
+});
+await check("anonymous forum_open", async () => {
+  await publicTool("forum_open");
+});
+await check("anonymous boards and recent discussions", async () => {
+  discoveredIds.boardIds = ids(
+    await publicTool("forum_list_categories", { limit: 3 }),
+  );
+  discoveredIds.threadIds = ids(
+    await publicTool("forum_list_recent_threads", {
+      mode: "new",
+      now: Date.now(),
+      page: 1,
+      pageSize: 3,
+    }),
+  );
+  return discoveredIds;
+});
+for (const [label, name, args] of [
+  ["private mailbox", "forum_list_private_messages", {}],
+  ["connection state", "forum_status", {}],
+  // A nonexistent board provides an additional guard even if authentication regresses.
+  [
+    "write boundary",
+    "forum_create_thread",
+    {
+      categorySlug: "public-smoke-never-create",
+      title: "Unauthorized smoke request",
+      body: "Must never publish: this request has no credentials.",
+      idempotencyKey: `public-smoke-${randomUUID()}`,
+      expectedPolicyVersion: 1,
+    },
+  ],
+]) {
+  await check(`unauthenticated ${label} challenge`, async () => {
+    requireTool(name);
+    const { response } = await rpc(
+      "tools/call",
+      { name, arguments: args },
+      401,
+    );
+    const challenge = response.headers.get("www-authenticate") ?? "";
+    assert(
+      challenge.startsWith("Bearer ") &&
+        challenge.includes(`resource_metadata="${metadataUrl}"`) &&
+        challenge.includes('scope="openid offline_access"'),
+      "Forum OAuth challenge does not point at its isolated resource metadata and identity scopes.",
+    );
+  });
+}
+const failed = checks.filter((entry) => entry.status === "failed");
+console.log(
+  JSON.stringify(
+    {
+      mode: "public-only",
+      origin,
+      checks,
+      passed: checks.length - failed.length,
+      failed: failed.length,
+      discoveredIds,
+    },
+    null,
+    2,
+  ),
+);
+if (failed.length) process.exitCode = 1;

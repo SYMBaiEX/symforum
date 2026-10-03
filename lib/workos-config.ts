@@ -1,5 +1,10 @@
 /** Shared by Next.js discovery and Convex token verification. */
 export const WORKOS_AGENT_RESOURCE = "https://www.symbaiex.com/api/agent/mcp";
+export const WORKOS_PLUGIN_RESOURCE = "https://www.symbaiex.com/api/plugin/mcp";
+export const WORKOS_PLUGIN_GRANT_CLAIM = "urn:symbaiex:forum-plugin-grant";
+export const WORKOS_PLUGIN_RESOURCE_CLAIM =
+  "urn:symbaiex:forum-plugin-resource";
+export const WORKOS_PLUGIN_KIND_CLAIM = "urn:symbaiex:forum-plugin-kind";
 export const WORKOS_GRANT_CLAIM = "urn:symbaiex:agent-grant";
 
 export function workosConfig(environment: {
@@ -36,4 +41,11 @@ export function workosConfig(environment: {
     jwks: `${url.origin}/oauth2/jwks`,
     metadata: `${url.origin}/.well-known/oauth-authorization-server`,
   };
+}
+
+export function workosPluginConfig(
+  environment: Parameters<typeof workosConfig>[0],
+) {
+  const config = workosConfig(environment);
+  return config ? { ...config, audience: WORKOS_PLUGIN_RESOURCE } : null;
 }
