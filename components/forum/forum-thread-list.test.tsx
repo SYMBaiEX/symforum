@@ -177,7 +177,7 @@ test("board navigation carries sub-board and latest post targets while retaining
     'href="/forum/systems/build-tools?postPage=2#post-11"',
   );
   expect(html).toContain("latest-reader");
-  expect(html).toContain("Latest activity unavailable");
+  expect(html).not.toContain("Latest activity unavailable");
   expect(html).toContain(
     'href="/forum/research?sort=replies&amp;order=asc&amp;days=7&amp;page=3"',
   );

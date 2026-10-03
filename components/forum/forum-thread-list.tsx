@@ -981,27 +981,20 @@ function ForumSubboardSelector({
                       </div>
                     ) : null}
                   </div>
-                  <div className="col-start-2 min-w-0 sm:col-start-auto sm:pt-2 sm:text-right">
-                    {latest ? (
-                      <>
-                        <ForumLink
-                          className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary [overflow-wrap:anywhere] sm:justify-end"
-                          href={getThreadLastPostHref(latest, board.slug)}
-                        >
-                          {latest.title}
-                        </ForumLink>
-                        <p className="text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                          {getThreadLastAuthor(latest)} ·{" "}
-                          {formatForumDateTime(getThreadLastActivityAt(latest))}
-                        </p>
-                      </>
-                    ) : getCategoryPostCount(board) > 0 ||
-                      getCategoryThreadCount(board) > 0 ? (
-                      <p className="py-2 text-xs text-muted-foreground">
-                        Latest activity unavailable
+                  {latest ? (
+                    <div className="col-start-2 min-w-0 sm:col-start-auto sm:pt-2 sm:text-right">
+                      <ForumLink
+                        className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary [overflow-wrap:anywhere] sm:justify-end"
+                        href={getThreadLastPostHref(latest, board.slug)}
+                      >
+                        {latest.title}
+                      </ForumLink>
+                      <p className="text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                        {getThreadLastAuthor(latest)} ·{" "}
+                        {formatForumDateTime(getThreadLastActivityAt(latest))}
                       </p>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </article>
               </li>
             );
