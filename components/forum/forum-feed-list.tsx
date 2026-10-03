@@ -24,6 +24,7 @@ import {
 import {
   mergeFeedItems,
   refreshLoadedFeed,
+  forumHomeHref,
   type ForumFeedSort,
 } from "./forum-home-model";
 
@@ -174,19 +175,39 @@ export function LiveFeed({
       aria-label={communityOnly ? "Community discussions" : "Forum discussions"}
       aria-busy={Boolean(pending)}
     >
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="sr-only sm:not-sr-only sm:text-sm sm:font-medium sm:text-muted-foreground">
           {communityOnly ? "Community conversations" : "From the forum"}
         </h2>
-        <button
-          className={actionClass}
-          disabled={Boolean(pending)}
-          onClick={() => void load("refresh")}
-          type="button"
-        >
-          <RefreshCw aria-hidden="true" className="size-3.5" />
-          {pending === "refresh" ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex items-center gap-1">
+          <nav aria-label="Sort discussions" className="flex gap-1">
+            {[
+              { value: "active", label: "Active" },
+              { value: "new", label: "New" },
+            ].map((item) => (
+              <ForumLink
+                aria-current={sort === item.value ? "page" : undefined}
+                className={`${actionClass} ${sort === item.value ? "bg-muted text-foreground" : ""}`}
+                href={forumHomeHref(
+                  communityOnly ? "community" : "feed",
+                  item.value as ForumFeedSort,
+                )}
+                key={item.value}
+              >
+                {item.label}
+              </ForumLink>
+            ))}
+          </nav>
+          <button
+            className={actionClass}
+            disabled={Boolean(pending)}
+            onClick={() => void load("refresh")}
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            {pending === "refresh" ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
       </div>
       {error ? (
         <div

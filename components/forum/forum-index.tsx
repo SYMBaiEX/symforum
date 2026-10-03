@@ -154,9 +154,9 @@ function LiveForumIndex({
               {view === "feed" && news.length > 0 ? (
                 <section
                   aria-labelledby="forum-news-heading"
-                  className="mb-10 rounded-lg bg-muted/35 px-5 py-5 sm:px-6"
+                  className="mb-6 rounded-lg bg-muted/35 px-4 py-2"
                 >
-                  <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3">
                     <h2
                       id="forum-news-heading"
                       className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground"
@@ -171,46 +171,31 @@ function LiveForumIndex({
                       <ArrowUpRight aria-hidden="true" className="size-4" />
                     </ForumLink>
                   </div>
-                  <div className="space-y-5">
+                  <div className="space-y-1">
                     {news.slice(0, 3).map((story) => (
                       <article key={story.hnItemId}>
-                        <h3 className="text-lg font-semibold leading-6">
-                          <Link
-                            className="focus-ring rounded-sm hover:text-primary"
-                            href={asRoute(primarySiteUrl(newsStoryPath(story)))}
-                          >
+                        <Link
+                          className="focus-ring flex min-h-11 flex-col justify-center rounded-sm hover:text-primary"
+                          href={asRoute(primarySiteUrl(newsStoryPath(story)))}
+                        >
+                          <h3 className="text-base font-semibold leading-5">
                             {story.title}
-                          </Link>
-                        </h3>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          {story.host ?? "Hacker News"}
-                          {typeof story.score === "number"
-                            ? ` · ${formatForumCount(story.score)} HN points`
-                            : ""}
-                          {typeof story.descendants === "number"
-                            ? ` · ${formatForumCount(story.descendants)} HN comments`
-                            : ""}
-                        </p>
+                          </h3>
+                          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                            {story.host ?? "Hacker News"}
+                            {typeof story.score === "number"
+                              ? ` · ${formatForumCount(story.score)} HN points`
+                              : ""}
+                            {typeof story.descendants === "number"
+                              ? ` · ${formatForumCount(story.descendants)} HN comments`
+                              : ""}
+                          </p>
+                        </Link>
                       </article>
                     ))}
                   </div>
                 </section>
               ) : null}
-              <div className="mb-2 flex gap-1" aria-label="Sort discussions">
-                {[
-                  { value: "active", label: "Active" },
-                  { value: "new", label: "New" },
-                ].map((item) => (
-                  <ForumLink
-                    aria-current={sort === item.value ? "page" : undefined}
-                    className={`${quietLink} ${sort === item.value ? "bg-muted text-foreground" : ""}`}
-                    href={forumHomeHref(view, item.value as ForumFeedSort)}
-                    key={item.value}
-                  >
-                    {item.label}
-                  </ForumLink>
-                ))}
-              </div>
               <ForumFeedList sort={sort} communityOnly={view === "community"} />
             </>
           )}
