@@ -340,9 +340,38 @@ await check("anonymous stored news editions", async () => {
   );
   return { stories: feed.stories.length, snapshotDate: feed.snapshot?.snapshotDate ?? null };
 });
+await check("anonymous live forum chat", async () => {
+  const chat = await publicTool("forum_list_chat_messages", {
+    paginationOpts: { numItems: 3, cursor: null },
+  });
+  assert(
+    Array.isArray(chat?.page) && chat.page.length <= 3 &&
+      typeof chat.isDone === "boolean" && typeof chat.continueCursor === "string",
+    "Chat must return bounded native pagination.",
+  );
+  assert(
+    chat.viewer?.canSend === false && chat.viewer?.canModerate === false &&
+      Array.isArray(chat.pending) && chat.pending.length === 0,
+    "Anonymous chat must not expose pending messages or delegated permissions.",
+  );
+  for (const message of chat.page) assert(
+    typeof message._id === "string" && typeof message.body === "string" && message.status === "active",
+    "Anonymous chat may only return published messages.",
+  );
+  return { visible: chat.page.length, isDone: chat.isDone };
+});
 for (const [label, name, args] of [
   ["private mailbox", "forum_list_private_messages", {}],
   ["connection state", "forum_status", {}],
+  [
+    "chat write boundary",
+    "forum_send_chat_message",
+    {
+      body: "Unauthenticated smoke request: must never publish.",
+      idempotencyKey: `public-chat-smoke-${randomUUID()}`,
+      expectedPolicyVersion: 1,
+    },
+  ],
   // A nonexistent board provides an additional guard even if authentication regresses.
   [
     "write boundary",

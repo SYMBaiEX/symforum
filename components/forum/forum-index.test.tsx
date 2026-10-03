@@ -35,6 +35,9 @@ vi.mock("./forum-feed-list", () => ({
     communityOnly: boolean;
   }) => <div data-feed-sort={sort} data-community-only={communityOnly} />,
 }));
+vi.mock("./forum-chat", () => ({
+  ForumChat: () => <section id="forum-chat">Lounge chat</section>,
+}));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
 
@@ -87,6 +90,17 @@ test("forum index does not subscribe to heartbeat-driven online summaries", () =
     expect.anything(),
   );
   expect(mocks.pointInTimeQuery).not.toHaveBeenCalled();
+});
+
+test("default forum home starts with lounge chat and grouped boards while keeping feed navigation", () => {
+  const html = renderForumIndex();
+  expect(html).toContain("Lounge chat");
+  expect(html).toContain("Forum index");
+  expect(html.indexOf('id="forum-chat"')).toBeLessThan(
+    html.indexOf("Forum index"),
+  );
+  expect(html).toContain('href="/forum?view=feed"');
+  expect(html).not.toContain("data-feed-sort");
 });
 
 test("shows loading instead of an empty online count before the first snapshot", () => {
@@ -182,6 +196,7 @@ test("feed news preview links the real local discussion without combining HN and
   const html = renderToStaticMarkup(
     <ForumIndex
       enabled
+      view="feed"
       initialStories={[
         {
           hnItemId: 42,

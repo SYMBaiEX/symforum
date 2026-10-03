@@ -219,6 +219,23 @@
       "additionalProperties": false
     }
   },
+  "deleteChatMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
   "deletePost": {
     "kind": "mutation",
     "schema": {
@@ -706,6 +723,114 @@
         }
       },
       "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listChatMessages": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "paginationOpts": {
+          "type": "object",
+          "properties": {
+            "numItems": {
+              "type": "number"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endCursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "number"
+            },
+            "maximumRowsRead": {
+              "type": "number"
+            },
+            "maximumBytesRead": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "numItems",
+            "cursor"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "paginationOpts"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listChatPendingMessages": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "paginationOpts": {
+          "type": "object",
+          "properties": {
+            "numItems": {
+              "type": "number"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endCursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "number"
+            },
+            "maximumRowsRead": {
+              "type": "number"
+            },
+            "maximumBytesRead": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "numItems",
+            "cursor"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "paginationOpts"
+      ],
       "additionalProperties": false
     }
   },
@@ -1528,6 +1653,34 @@
       "additionalProperties": false
     }
   },
+  "moderateChatMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "hidden"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
   "moveForumPosts": {
     "kind": "mutation",
     "schema": {
@@ -1866,6 +2019,21 @@
         }
       },
       "required": [],
+      "additionalProperties": false
+    }
+  },
+  "sendChatMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "body"
+      ],
       "additionalProperties": false
     }
   },

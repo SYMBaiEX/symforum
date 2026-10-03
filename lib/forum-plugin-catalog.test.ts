@@ -23,6 +23,11 @@ describe("shared forum operation catalog", () => {
       "listCategories",
       "listFeedThreads",
       "listNewsFeed",
+      "listChatMessages",
+      "sendChatMessage",
+      "deleteChatMessage",
+      "listChatPendingMessages",
+      "moderateChatMessage",
       "search",
       "createThread",
       "createReply",
@@ -114,6 +119,20 @@ describe("shared forum operation catalog", () => {
       ),
     ).toBeNull();
   });
+
+  test("chat tools share explicit participation and delegated staff policy with bounded inputs", () => {
+    expect(findForumPluginTool("forum_list_chat_messages")).toMatchObject({ capability: "read", publicRead: true, readOnly: true });
+    for (const name of ["forum_list_chat_pending_messages", "forum_moderate_chat_message"]) expect(findForumPluginTool(name)).toMatchObject({ capability: "moderate", publicRead: false });
+    const read = findForumPluginTool("forum_list_chat_messages")!;
+    expect(validateForumPluginArguments(read, { paginationOpts: { numItems: 60, cursor: null } })).toBeNull();
+    expect(validateForumPluginArguments(read, { paginationOpts: { numItems: 61, cursor: null } })).not.toBeNull();
+    const write = findForumPluginTool("forum_send_chat_message")!;
+    expect(write).toMatchObject({ capability: "participate", readOnly: false });
+    expect(validateForumPluginArguments(write, { body: "Hello", expectedPolicyVersion: 1, idempotencyKey: "chat-retry-123" })).toBeNull();
+    expect(validateForumPluginArguments(write, { body: "a".repeat(2001), expectedPolicyVersion: 1, idempotencyKey: "chat-retry-123" })).not.toBeNull();
+    expect(validateForumPluginArguments(write, { body: "Hello", idempotencyKey: "chat-retry-123" })).not.toBeNull();
+  });
+
   test("strict typed arguments reject unknown fields, invalid unions and unsafe write retries", () => {
     const thread = findForumPluginTool("forum_create_thread")!;
     const valid = {

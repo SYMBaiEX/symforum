@@ -16,17 +16,14 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ForumFeedList } from "./forum-feed-list";
+import { ForumChat } from "./forum-chat";
+import { ForumGroupedBoards } from "./forum-grouped-boards";
 import {
   forumHomeHref,
   type ForumHomeView,
   type ForumFeedSort,
 } from "./forum-home-model";
-import {
-  ForumAvatar,
-  ForumLink,
-  ForumIndexTable,
-  ForumStatusBox,
-} from "./forum-primitives";
+import { ForumAvatar, ForumLink, ForumStatusBox } from "./forum-primitives";
 import {
   formatForumCount,
   formatForumDateTime,
@@ -48,17 +45,17 @@ export type ForumIndexProps = {
   initialTimeline?: NewsTimelineRecord | null;
 };
 const views = [
+  { value: "boards", label: "Boards" },
   { value: "feed", label: "Feed" },
   { value: "news", label: "News" },
   { value: "community", label: "Community" },
-  { value: "boards", label: "Boards" },
 ] as const;
 const quietLink =
   "focus-ring inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
 
 export function ForumIndex({
   enabled,
-  view = "feed",
+  view = "boards",
   sort = "active",
   initialStories = [],
   initialTimeline = null,
@@ -95,7 +92,7 @@ export function ForumIndex({
 }
 
 function LiveForumIndex({
-  view = "feed",
+  view = "boards",
   sort = "active",
   initialStories = [],
   initialTimeline = null,
@@ -129,8 +126,9 @@ function LiveForumIndex({
   return (
     <div>
       <ForumHomeHeader overview={overview} view={view} sort={sort} />
-      <div className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,760px)_240px]">
+      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(220px,1fr)]">
         <div className="min-w-0">
+          {view === "boards" ? <ForumChat /> : null}
           {view === "news" ? (
             <NewsFeed
               enabled
@@ -205,6 +203,7 @@ function LiveForumIndex({
           online={snapshot?.data}
           onlineRefreshError={refreshError}
           refreshOnlineSummary={refreshNow}
+          news={view === "boards" ? news : []}
         />
       </div>
     </div>
@@ -231,14 +230,14 @@ function ForumHomeHeader({
     <header>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          <h1 className="text-2xl font-semibold tracking-tight">
             {view === "feed"
               ? "The feed"
               : view === "news"
                 ? "News"
                 : view === "community"
                   ? "Community"
-                  : "Boards"}
+                  : "Forum"}
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -287,7 +286,7 @@ function ForumHomeHeader({
           </details>
         </div>
       </div>
-      <nav aria-label="Forum views" className="mt-6 flex flex-wrap gap-1">
+      <nav aria-label="Forum views" className="mt-2 flex flex-wrap gap-1">
         {views.map((item) => (
           <ForumLink
             aria-current={view === item.value ? "page" : undefined}
@@ -335,7 +334,8 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
   }
   return (
     <section aria-label="Board index">
-      <div className="mb-6 flex justify-end">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Forum index</h2>
         <Button
           aria-busy={pending}
           disabled={isLoading || pending}
@@ -346,10 +346,7 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
           {pending ? "Marking…" : "Mark all read"}
         </Button>
       </div>
-      <ForumIndexTable
-        categories={overview.categories}
-        sections={overview.sections}
-      />
+      <ForumGroupedBoards overview={overview} />
     </section>
   );
 }
@@ -359,18 +356,69 @@ function ForumHomeRail({
   online,
   onlineRefreshError,
   refreshOnlineSummary,
+  news,
 }: {
   overview?: ForumOverviewRecord;
   online?: ForumOnlineSummaryRecord;
   onlineRefreshError: boolean;
   refreshOnlineSummary: () => void;
+  news: HnStory[];
 }) {
   const boards =
     overview?.categories
       .filter((category) => category.kind !== "section")
       .slice(0, 7) ?? [];
   return (
-    <aside aria-label="Forum context" className="space-y-8 text-sm">
+    <aside aria-label="Forum context" className="space-y-6 text-sm">
+      {overview?.newestThreads.length ? (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold">Latest activity</h2>
+          <div className="space-y-3">
+            {overview.newestThreads.slice(0, 4).map((thread) => (
+              <article key={thread.slug}>
+                <ForumLink
+                  className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
+                  href={forumPath(thread.categorySlug, thread.slug)}
+                >
+                  {thread.title}
+                </ForumLink>
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  {thread.categoryName ?? "Forum"}
+                  {thread.authorName ? ` · ${thread.authorName}` : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {news.length ? (
+        <section>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">On Hacker News</h2>
+            <ForumLink className={quietLink} href={forumHomeHref("news")}>
+              All news
+            </ForumLink>
+          </div>
+          <div className="space-y-2">
+            {news.slice(0, 3).map((story) => (
+              <article key={story.hnItemId}>
+                <Link
+                  className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
+                  href={asRoute(primarySiteUrl(newsStoryPath(story)))}
+                >
+                  {story.title}
+                </Link>
+                <p className="text-[11px] text-muted-foreground">
+                  {story.host ?? "Hacker News"}
+                  {typeof story.score === "number"
+                    ? ` · ${formatForumCount(story.score)} HN points`
+                    : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section>
         <h2 className="mb-3 text-sm font-semibold">Boards</h2>
         <div className="flex flex-wrap gap-1 lg:flex-col lg:items-start">

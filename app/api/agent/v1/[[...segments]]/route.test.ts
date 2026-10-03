@@ -38,6 +38,8 @@ describe("agent evidence REST endpoint", () => {
   });
 
   test("accepts only documented bounded job request bodies", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "");
     const research = await POST(
       new Request("https://www.symbaiex.com/api/agent/v1/research-jobs", {
         method: "POST",

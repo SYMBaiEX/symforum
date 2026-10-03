@@ -1144,6 +1144,22 @@ export default defineSchema({
     viewCount: v.number(),
     updatedAt: v.number(),
   }).index("by_threadId", ["threadId"]),
+  // General-board live chat. Status indexes keep public and moderator reads bounded.
+  forumChatMessages: defineTable({
+    categoryId: v.id("forumCategories"),
+    authorId: v.id("users"),
+    ownerUserId: v.id("users"),
+    connectionId: v.optional(v.id("forumPluginConnections")),
+    agentAssisted: v.optional(v.boolean()),
+    body: v.string(),
+    status: v.union(v.literal("active"), v.literal("pending"), v.literal("hidden"), v.literal("deleted")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    moderatedBy: v.optional(v.id("users")),
+    moderatedOwnerUserId: v.optional(v.id("users")),
+  })
+    .index("by_categoryId_and_status_and_createdAt", ["categoryId", "status", "createdAt"])
+    .index("by_categoryId_and_authorId_and_status_and_createdAt", ["categoryId", "authorId", "status", "createdAt"]),
   forumPosts: defineTable({
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),

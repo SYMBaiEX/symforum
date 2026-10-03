@@ -64,6 +64,7 @@ import {
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import { readForumNewsFeed } from "./news";
 import { sha256Base64Url } from "./agentIdentityCrypto";
+import { createForumChatOperations } from "./forumChat";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -14460,6 +14461,7 @@ async function requireVisibleCategory(
   ctx: QueryCtx | MutationCtx,
   categorySlug: string,
   user: UserDoc | null,
+  denyModeratorOverride = false,
 ) {
   const category = await ctx.db
     .query("forumCategories")
@@ -14470,7 +14472,7 @@ async function requireVisibleCategory(
   if (
     category === null ||
     !isBoardCategory(category) ||
-    !(await canViewCategoryWithAncestors(ctx, user, category))
+    !(await canViewCategoryWithAncestors(ctx, user, category, denyModeratorOverride))
   ) {
     throw forumError("CATEGORY_NOT_FOUND", "That board is not available.");
   }
@@ -14817,12 +14819,13 @@ async function canViewCategoryWithAncestors(
   ctx: QueryCtx | MutationCtx,
   user: UserDoc | null | undefined,
   category: ForumCategoryDoc | null | undefined,
+  denyModeratorOverride = false,
 ) {
   if (category === null || category === undefined) {
     return false;
   }
 
-  const targetModeratorOverride = await canModerateCategory(
+  const targetModeratorOverride = !denyModeratorOverride && await canModerateCategory(
     ctx,
     user,
     category,
@@ -14843,8 +14846,9 @@ async function canViewCategoryWithAncestors(
       !canViewCategory(
         user,
         parent,
-        targetModeratorOverride ||
-          (await canModerateCategory(ctx, user, parent)),
+        !denyModeratorOverride &&
+          (targetModeratorOverride ||
+            (await canModerateCategory(ctx, user, parent))),
       )
     ) {
       return false;
@@ -22749,7 +22753,24 @@ function forumError(code: string, message: string) {
 }
 
 /** Plain domain definitions shared by first-party handlers and trusted plugin execution. */
+export const forumChatOperations = createForumChatOperations({
+  maybeCurrentUser,
+  requireSignedInUser,
+  requireVisibleCategory,
+  canModerateCategory,
+  canReplyInCategory,
+  assertForumParticipationAllowed,
+  isTrustedForumUser,
+  enforcePendingForumSubmissionLimits,
+});
+export const listChatMessages = query(forumChatOperations.listChatMessages.definition);
+export const sendChatMessage = mutation(forumChatOperations.sendChatMessage.definition);
+export const deleteChatMessage = mutation(forumChatOperations.deleteChatMessage.definition);
+export const listChatPendingMessages = query(forumChatOperations.listChatPendingMessages.definition);
+export const moderateChatMessage = mutation(forumChatOperations.moderateChatMessage.definition);
+
 export const forumOperations = {
+...forumChatOperations,
 setCategorySubscription: { kind: "mutation", definition: setCategorySubscriptionOperation },
 setThreadSubscription: { kind: "mutation", definition: setThreadSubscriptionOperation },
 authorizeForumAttachmentUpload: { kind: "query", definition: authorizeForumAttachmentUploadOperation },

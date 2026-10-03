@@ -311,14 +311,16 @@ export const remoteRead = internalMutation({
 async function targetVersions(
   ctx: QueryCtx | MutationCtx,
   args: Record<string, unknown>,
+  operationName: string,
 ): Promise<string> {
   const targets: Record<string, unknown> = {};
-  // Snapshot only records explicitly selected by a command, never unrelated member activity.
+  // Snapshot command targets and implicit operation targets, never unrelated activity.
   const tables = [
     "users",
     "forumCategories",
     "forumThreads",
     "forumPosts",
+    "forumChatMessages",
     "forumPolls",
     "forumPollOptions",
     "forumThreadPrefixes",
@@ -361,6 +363,14 @@ async function targetVersions(
     }
   }
   await visit(args);
+  if (operationName === "sendChatMessage") {
+    // The public chat always writes to General even though its typed payload
+    // contains only body. Bind review to that exact board and hierarchy.
+    targets["forumCategories:implicitChatGeneral"] = await ctx.db
+      .query("forumCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", "general"))
+      .unique();
+  }
   for (const key of ["categorySlug", "recipientUsername", "username"]) {
     if (typeof args[key] !== "string") continue;
     const value = (args[key] as string).trim().toLowerCase();
@@ -424,6 +434,8 @@ function relevantTargetState(key: string, value: unknown): unknown {
       "status",
       "postNumber",
     ];
+  else if (key.startsWith("forumChatMessages:"))
+    fields = ["_id", "categoryId", "authorId", "ownerUserId", "body", "status", "updatedAt"];
   else if (key.startsWith("forumPolls:"))
     fields = [
       "_id",
@@ -598,6 +610,18 @@ async function runCommand(
     commandId: commandId ? String(commandId) : undefined,
     url,
   };
+  if (["sendChatMessage", "moderateChatMessage", "deleteChatMessage"].includes(operationName)) {
+    result.url = "https://forum.symbaiex.com/#forum-chat";
+    if (record?.status === "pending" || record?.publicationStatus === "pending_moderation") {
+      result.publicationStatus = "pending_moderation";
+      result.pendingContentUrl = result.url;
+      result.moderationUrl = result.url;
+      result.message = "Saved to the chat moderation queue; not published yet. Forum staff must approve this message.";
+    } else if (record?.status === "active" || record?.publicationStatus === "published") {
+      result.publicationStatus = "published";
+      result.message = "Published in the forum chat.";
+    } else result.message = "Forum chat moderation saved.";
+  }
   if (
     [
       "createThread",
@@ -754,7 +778,7 @@ async function executeOperation(
     fingerprint: boundFingerprint,
     argsJson: canonicalForumJson(args.args),
     policyVersion: principal.policyVersion,
-    targetVersionsJson: await targetVersions(ctx, args.args),
+    targetVersionsJson: await targetVersions(ctx, args.args, args.operation),
     status: "pending",
     createdAt: now,
     expiresAt: now + FORUM_PLUGIN_PROPOSAL_TTL_MS,
@@ -1010,7 +1034,7 @@ export const approveCommand = mutation({
     const current = await commandResult(ctx, principal, command);
     if (command.status === "completed" || current.data) return current;
     const input = JSON.parse(command.argsJson) as Record<string, unknown>;
-    if ((await targetVersions(ctx, input)) !== command.targetVersionsJson) {
+    if ((await targetVersions(ctx, input, command.operation)) !== command.targetVersionsJson) {
       await ctx.db.patch("forumPluginCommands", command._id, {
         status: "invalidated",
       });

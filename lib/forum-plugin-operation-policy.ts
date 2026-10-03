@@ -16,6 +16,7 @@ const PUBLIC_READ = new Set([
   "listRecentThreads",
   "listFeedThreads",
   "listNewsFeed",
+  "listChatMessages",
   "getThread",
   "search",
   "listMembers",
@@ -23,6 +24,8 @@ const PUBLIC_READ = new Set([
   "onlineSummary",
 ]);
 const STAFF = new Set([
+  "listChatPendingMessages",
+  "moderateChatMessage",
   "listForumThreads",
   "listForumPosts",
   "getForumThread",
