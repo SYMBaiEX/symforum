@@ -40,12 +40,18 @@ describe("serializeJsonLd", () => {
   test("keeps the site graph canonical and omits retired search actions", () => {
     const graph = siteStructuredData()["@graph"];
     const website = graph.find((entry) => entry["@type"] === "WebSite");
-    expect(website?.["@id"]).toBe("https://www.symbaiex.com#website");
+    expect(website).toMatchObject({
+      "@id": "https://www.symbaiex.com#website",
+      name: "Austin Hamilton (SYMBiEX)",
+      alternateName: "SYMBaiEX",
+    });
     expect(website).not.toHaveProperty("potentialAction");
     const organization = graph.find(
       (entry) => entry["@type"] === "Organization",
     );
     expect(organization).toMatchObject({
+      name: "SYMBaiEX",
+      alternateName: "SYMBiEX",
       contactPoint: { email: "austin@symbaiex.com" },
       address: { addressLocality: "Birmingham", addressRegion: "AL" },
     });
