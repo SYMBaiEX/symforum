@@ -144,6 +144,8 @@ function LiveForumMessages() {
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const recipientInputRef = useRef<HTMLInputElement | null>(null);
   const messageDetailRef = useRef<HTMLElement | null>(null);
+  const mailboxListRef = useRef<HTMLElement | null>(null);
+  const previousMessageId = useRef<string | null>(null);
   const mailboxReady = messages !== undefined;
 
   const selectedListRecord = useMemo(
@@ -294,12 +296,11 @@ function LiveForumMessages() {
   useEffect(() => {
     if (composeOpen) {
       recipientInputRef.current?.focus();
-    } else if (
-      selectedMessageId &&
-      window.matchMedia("(max-width: 1535px)").matches
-    ) {
-      messageDetailRef.current?.focus();
+    } else if (window.matchMedia("(max-width: 1535px)").matches) {
+      if (selectedMessageId) messageDetailRef.current?.focus();
+      else if (previousMessageId.current) mailboxListRef.current?.focus();
     }
+    previousMessageId.current = selectedMessageId;
   }, [composeOpen, selectedMessageId, mailboxReady]);
 
   useEffect(() => {
@@ -994,8 +995,11 @@ function LiveForumMessages() {
         )}
       >
         <section
+          ref={mailboxListRef}
+          tabIndex={-1}
+          aria-label="Private message mailbox"
           className={cn(
-            "forum-panel min-w-0",
+            "focus-ring forum-panel min-w-0",
             selectedMessageId && "hidden 2xl:block",
           )}
         >
@@ -1176,7 +1180,11 @@ function LiveForumMessages() {
               ← Back to {mailboxLabel(box).toLowerCase()}
             </ForumLink>
           ) : null}
-          {visibleMessage ? (
+          {selectedMessageId &&
+          selectedMessage === undefined &&
+          !selectedListRecord ? (
+            <ForumLoading label="Opening private message" />
+          ) : visibleMessage ? (
             <MessageDetail
               confirmDelete={deleteConfirmMessageId === visibleMessage._id}
               deletePending={deletePending}

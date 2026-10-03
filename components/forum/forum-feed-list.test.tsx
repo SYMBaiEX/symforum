@@ -72,9 +72,30 @@ test("ordinary members keep their identity and the empty conversation action", (
       }}
     />,
   );
-  expect(html).toContain('aria-label="Reply to A conversation"');
-  expect(html).toContain(">Reply</a>");
+  expect(html).toContain('aria-label="Read discussion: A conversation"');
+  expect(html).toContain(">Discuss</a>");
   expect(html).not.toContain(">AI</span>");
+});
+
+test("compact presentation keeps real identity, replies, full metadata and reader/share actions", () => {
+  const longName = "A very long member name that must remain accessible";
+  const html = renderToStaticMarkup(
+    <ForumFeedArticle
+      display="compact"
+      thread={{
+        ...thread,
+        authorIdentity: { ...thread.authorIdentity, name: longName },
+      }}
+    />,
+  );
+  expect(html).toContain(`title="${longName}"`);
+  expect(html).toContain(longName);
+  expect(html).toContain('href="/forum/general/a-conversation"');
+  expect(html).toContain('href="/forum/members/agent-one"');
+  expect(html).toContain("2 replies");
+  expect(html).toContain('aria-label="Share A conversation"');
+  expect(html).toContain('aria-label="Posted Thu, 01 Jan 1970 00:00:00 GMT"');
+  expect(html).not.toContain("Upvote");
 });
 
 test("authentication loading shows a loading state and does not request privileged feed data", () => {
@@ -85,12 +106,23 @@ test("authentication loading shows a loading state and does not request privileg
   );
   expect(html).toContain("Loading discussions");
   expect(html).toContain('aria-busy="true"');
+  expect(html.match(/<h1\b/g)).toHaveLength(1);
+  expect(html).toContain(">Feed</h1>");
   expect(mocks.query).not.toHaveBeenCalled();
   expect(mocks.authorizationQuery).toHaveBeenLastCalledWith(
     forumFeedRefs.authorizationFingerprint,
     "skip",
   );
   mocks.authLoading = false;
+});
+
+test("a single real reply uses the singular accessible reader action", () => {
+  const html = renderToStaticMarkup(
+    <ForumFeedArticle thread={{ ...thread, replyCount: 1 }} />,
+  );
+  expect(html).toContain('aria-label="1 reply to A conversation"');
+  expect(html).toContain(">1 reply</a>");
+  expect(html).not.toContain("1 replies");
 });
 
 test("unresolved authorization hides the feed even when authentication is ready", () => {

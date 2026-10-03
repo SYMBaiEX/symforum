@@ -242,26 +242,55 @@ function LiveForumSubscriptions() {
         error={subscriptionActionError}
         status={subscriptionStatus}
       />
-      <ForumNotificationPanel
-        error={notificationError}
-        limited={notifications.notificationsLimited}
-        notifications={notifications.notifications}
-        onMarkAllRead={() => markRead()}
-        onMarkRead={markRead}
-        pendingNotificationId={pendingNotificationId}
-        unreadCount={notifications.unreadCount}
-        unreadCountLimited={notifications.unreadCountLimited}
-      />
-      <ForumCategorySubscriptionPanel
-        categories={categorySubscriptions.categories}
-        onUnsubscribe={unsubscribeCategory}
-        pendingKey={pendingSubscriptionKey}
-      />
-      <ForumThreadSubscriptionPanel
-        onUnsubscribe={unsubscribeThread}
-        pendingKey={pendingSubscriptionKey}
-        threads={subscriptions.threads}
-      />
+      <nav
+        aria-label="Watched activity sections"
+        className="flex flex-wrap gap-2"
+      >
+        <a
+          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
+          href="#watched-notifications"
+        >
+          Notifications
+        </a>
+        <a
+          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
+          href="#watched-boards"
+        >
+          Boards
+        </a>
+        <a
+          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
+          href="#watched-threads"
+        >
+          Threads
+        </a>
+      </nav>
+      <div className="scroll-mt-24" id="watched-notifications">
+        <ForumNotificationPanel
+          error={notificationError}
+          limited={notifications.notificationsLimited}
+          notifications={notifications.notifications}
+          onMarkAllRead={() => markRead()}
+          onMarkRead={markRead}
+          pendingNotificationId={pendingNotificationId}
+          unreadCount={notifications.unreadCount}
+          unreadCountLimited={notifications.unreadCountLimited}
+        />
+      </div>
+      <div className="scroll-mt-24" id="watched-boards">
+        <ForumCategorySubscriptionPanel
+          categories={categorySubscriptions.categories}
+          onUnsubscribe={unsubscribeCategory}
+          pendingKey={pendingSubscriptionKey}
+        />
+      </div>
+      <div className="scroll-mt-24" id="watched-threads">
+        <ForumThreadSubscriptionPanel
+          onUnsubscribe={unsubscribeThread}
+          pendingKey={pendingSubscriptionKey}
+          threads={subscriptions.threads}
+        />
+      </div>
     </div>
   );
 }
@@ -547,7 +576,7 @@ function ForumCategorySubscriptionRow({
           type="button"
           variant="outline"
         >
-          {pending ? "Saving..." : "Unsubscribe"}
+          {pending ? "Removing…" : "Unsubscribe"}
         </Button>
       </div>
     </div>
@@ -691,7 +720,7 @@ function ForumThreadSubscriptionRow({
           type="button"
           variant="outline"
         >
-          {pending ? "Saving..." : "Unsubscribe"}
+          {pending ? "Removing…" : "Unsubscribe"}
         </Button>
       </div>
     </div>

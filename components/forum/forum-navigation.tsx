@@ -26,6 +26,7 @@ import {
   Users,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteSurfaceSwitcher } from "@/components/site-surface-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -175,24 +176,15 @@ export function ForumNavigationLayout({
   }
   return (
     <>
-      <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card">
-        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center gap-2 px-3 pt-[env(safe-area-inset-top)] sm:gap-3 sm:px-5 lg:gap-5">
-          <ForumLink
-            href="/forum"
-            className="focus-ring mr-auto flex min-h-11 shrink-0 items-center gap-2.5 text-lg font-extrabold tracking-tight lg:mr-0 lg:w-[200px] lg:text-xl"
-          >
-            <span className="forum-brand-mark hidden size-9 items-center justify-center rounded-xl bg-primary/10 text-primary sm:flex">
-              <MessageSquare
-                className="size-5"
-                strokeWidth={2.5}
-                aria-hidden="true"
-              />
-            </span>
-            <span>
-              SYMB<span className="text-primary">ai</span>EX
-            </span>
-            <span className="sr-only"> Forum</span>
-          </ForumLink>
+      <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center gap-2 px-3 sm:gap-3 sm:px-5 lg:gap-5">
+          <SiteSurfaceSwitcher
+            activeSurface="forum"
+            blogHref={primarySiteHref}
+            forumHref={forumHrefForPathname("/forum", pathname)}
+            showForumMark
+            className="mr-auto text-lg lg:mr-0 lg:w-[200px] lg:text-xl"
+          />
           <form
             action={forumHrefForPathname("/forum/search", pathname)}
             method="get"
@@ -226,7 +218,9 @@ export function ForumNavigationLayout({
               >
                 <Plus aria-hidden="true" className="size-[18px]" />
                 <span className="hidden md:inline">Create post</span>
-                <span className="md:hidden">Post</span>
+                <span className="hidden min-[360px]:inline md:hidden">
+                  Post
+                </span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent

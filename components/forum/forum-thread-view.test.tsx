@@ -4,11 +4,15 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn<(reference: unknown) => unknown>(() => undefined),
+  authenticated: false,
 }));
 vi.mock("convex-helpers/react/cache/hooks", () => ({ useQuery: mocks.query }));
 vi.mock("convex/react", () => ({
   useMutation: () => vi.fn(),
-  useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
+  useConvexAuth: () => ({
+    isAuthenticated: mocks.authenticated,
+    isLoading: false,
+  }),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -35,11 +39,13 @@ test("opening a thread does not subscribe to an automatic full-text search", () 
 });
 
 beforeEach(() => {
+  mocks.authenticated = false;
   mocks.query.mockReset();
   mocks.query.mockReturnValue(undefined);
 });
 
 function configureThread(locked: boolean, totalPages = 1) {
+  mocks.authenticated = true;
   mocks.query.mockImplementation((reference) =>
     reference === forumRefs.getThread
       ? {
@@ -131,7 +137,7 @@ test("a newly locked thread removes quote actions without hiding existing conten
   );
   expect(lockedHtml).not.toContain(">Quote</button>");
   expect(lockedHtml).not.toContain('href="#forum-reply-composer"');
-  expect(lockedHtml).toContain("Replying unavailable");
+  expect(lockedHtml).toContain("Thread closed");
   expect(lockedHtml).toContain("First reply.");
   expect(lockedHtml).toContain(">Report</button>");
 });
@@ -179,4 +185,18 @@ test("multi-page readers preserve pagination destinations", () => {
   );
   expect(html.match(/aria-label="Posts pagination"/g)).toHaveLength(2);
   expect(html).toContain('href="/forum/research/example?postPage=2"');
+});
+
+test("signing out hides cached reply permissions and shows one truthful guest invitation", () => {
+  configureThread(false);
+  mocks.authenticated = false;
+  const html = renderToStaticMarkup(
+    <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+  );
+  expect(html).toContain("Join the discussion");
+  expect(html).toContain("Sign in to reply");
+  expect(html).toContain('id="forum-reply-composer"');
+  expect(html).not.toContain(">Quote</button>");
+  expect(html).not.toContain("Replies publish under your current SYM handle");
+  expect(html).not.toContain("Replying unavailable");
 });

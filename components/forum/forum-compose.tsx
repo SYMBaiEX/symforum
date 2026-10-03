@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  useImperativeHandle,
   useEffect,
   useId,
   useRef,
@@ -109,6 +110,18 @@ export function ForumCompose({
   onTitleChange?: (value: string) => void;
 }) {
   const bodyInputId = useId();
+  const generatedErrorId = useId();
+  const resolvedErrorId = errorId ?? generatedErrorId;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useImperativeHandle(bodyTextareaRef, () => textareaRef.current!, []);
+  const bodyDescription =
+    Array.from(
+      new Set(
+        [bodyAriaDescribedBy, error ? resolvedErrorId : undefined].filter(
+          Boolean,
+        ),
+      ),
+    ).join(" ") || undefined;
   const controlsDisabled = disabled || pending;
   const [hydratedDraftKey, setHydratedDraftKey] = useState<
     string | undefined
@@ -194,14 +207,28 @@ export function ForumCompose({
     }
   }
   function appendMarkup(open: string, close: string, sample: string) {
-    if (controlsDisabled) {
+    if (controlsDisabled) return;
+    const input = textareaRef.current;
+    if (!input) {
+      onBodyChange(
+        `${body.trimEnd()}${body.length ? "\n\n" : ""}${open}${sample}${close}`,
+      );
       return;
     }
-    const next =
-      body.trim().length === 0
-        ? `${open}${sample}${close}`
-        : `${body.trimEnd()}\n\n${open}${sample}${close}`;
-    onBodyChange(next);
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const selected = body.slice(start, end) || sample;
+    onBodyChange(
+      `${body.slice(0, start)}${open}${selected}${close}${body.slice(end)}`,
+    );
+    window.requestAnimationFrame(() => {
+      if (!input.isConnected || input.disabled) return;
+      input.focus();
+      input.setSelectionRange(
+        start + open.length,
+        start + open.length + selected.length,
+      );
+    });
   }
 
   return (
@@ -420,9 +447,9 @@ export function ForumCompose({
           />
         </div>
         <Textarea
-          ref={bodyTextareaRef}
+          ref={textareaRef}
           id={bodyInputId}
-          aria-describedby={bodyAriaDescribedBy}
+          aria-describedby={bodyDescription}
           aria-invalid={bodyAriaInvalid}
           disabled={controlsDisabled}
           maxLength={bodyMaxLength}
@@ -430,6 +457,16 @@ export function ForumCompose({
           onChange={(event) => onBodyChange(event.target.value)}
           placeholder={bodyPlaceholder}
           rows={bodyRows}
+          onKeyDown={(event) => {
+            if (
+              (event.metaKey || event.ctrlKey) &&
+              event.key === "Enter" &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              void submitWithDraftCleanup();
+            }
+          }}
           className="min-h-48 resize-y rounded-none rounded-b-xl border border-input bg-background px-3 py-3 text-base leading-7 focus-visible:ring-1 focus-visible:ring-primary"
         />
         <details className="mt-1">
@@ -462,7 +499,7 @@ export function ForumCompose({
       ) : null}
       {error ? (
         <p
-          id={errorId}
+          id={resolvedErrorId}
           className="mt-3 rounded-sm bg-accent-canary/10 p-3 text-sm text-foreground"
           role="alert"
         >
@@ -471,7 +508,7 @@ export function ForumCompose({
       ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
-          {draftSaved ? "Draft saved on this device" : "BBCode supported"}
+          {draftSaved ? "Draft saved on this device" : "Ctrl/⌘ Enter to post"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {footerActions}
@@ -602,11 +639,14 @@ export function ForumAttachmentDraftPanel({
       <ForumAgentAttachmentPicker />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Attachments
+          <p className="flex items-center gap-2 text-xs font-medium text-foreground">
+            Attachments{" "}
+            <span className="text-muted-foreground">
+              {usedAttachmentSlots}/{MAX_FORUM_ATTACHMENTS}
+            </span>
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Images, PDFs, text, markdown, or zip files. 5 MB each.
+            Images, PDF, text, markdown, or zip. Up to 5 MiB per file.
           </p>
         </div>
         <Button
@@ -671,7 +711,7 @@ export function ForumAttachmentDraftPanel({
               </span>
               <Button
                 aria-label={`Remove ${attachment.filename}`}
-                className="size-8 rounded-none p-0"
+                className="size-11 shrink-0 rounded-full p-0"
                 disabled={disabled || uploading}
                 type="button"
                 variant="ghost"

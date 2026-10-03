@@ -9,11 +9,11 @@ import {
 import { ForumShellContextProvider } from "@/components/forum/forum-shell-context";
 import { ForumNavigation } from "@/components/forum/forum-navigation";
 import { HeaderNav } from "@/components/header-nav";
+import { SiteSurfaceSwitcher } from "@/components/site-surface-switcher";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 import { Github, Linkedin, Twitter } from "lucide-react";
-import Link from "next/link";
 import {
   CSSProperties,
   ReactNode,
@@ -117,7 +117,7 @@ export function SiteShell({
 
   return (
     <div
-      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]"
+      className="relative z-10 min-h-dvh overflow-hidden bg-background/92 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:calc(4rem+env(safe-area-inset-top)+1px)] md:[--site-header-offset:calc(3.75rem+env(safe-area-inset-top)+1px)]"
       style={
         footerOffset
           ? ({
@@ -133,9 +133,7 @@ export function SiteShell({
         Skip to content
       </a>
       <SiteHeader
-        brandHref={primarySiteHref}
-        brandLabel="SYMBaiEX"
-        brandPrefetch={primarySiteHref === "/"}
+        blogHref={primarySiteHref}
         initialForumHost={initialForumHost}
         initialPrimarySiteHref={initialPrimarySiteHref}
       />
@@ -281,52 +279,26 @@ function SiteFooter({
 }
 
 function SiteHeader({
-  forumContext = false,
-  brandHref,
-  brandLabel,
-  brandPrefetch,
+  blogHref,
   initialForumHost,
   initialPrimarySiteHref,
 }: {
-  forumContext?: boolean;
-  brandHref: string;
-  brandLabel: string;
-  brandPrefetch: boolean;
+  blogHref: string;
   initialForumHost: boolean;
   initialPrimarySiteHref: string;
 }) {
   return (
-    <header
-      className={
-        forumContext
-          ? "fixed inset-x-0 top-0 z-50 bg-background/95 backdrop-blur"
-          : "fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 backdrop-blur"
-      }
-    >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 md:min-h-[3.75rem] md:px-8">
         <div className="flex min-w-0 items-center">
-          <a
-            href={brandHref}
-            className={
-              forumContext
-                ? "focus-ring truncate text-xl font-extrabold tracking-tight"
-                : "focus-ring truncate font-mono text-sm font-semibold uppercase"
-            }
-          >
-            {forumContext ? (
-              <>
-                SYMB<span className="text-primary">ai</span>EX{" "}
-                <span className="ml-1 font-normal text-muted-foreground">
-                  Forum
-                </span>
-              </>
-            ) : (
-              brandLabel
-            )}
-          </a>
+          <SiteSurfaceSwitcher
+            activeSurface="blog"
+            blogHref={blogHref}
+            forumHref={initialForumHost ? "/" : "/forum"}
+            className="font-mono text-sm"
+          />
         </div>
         <HeaderNav
-          compact={forumContext}
           initialForumHost={initialForumHost}
           initialPrimarySiteHref={initialPrimarySiteHref}
         />

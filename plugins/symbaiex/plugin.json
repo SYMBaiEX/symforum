@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "symbaiex",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Browse and participate in the SYMBaiEX forum through a selected human or owned agent profile, with scoped permissions and optional human review.",
   "author": {
     "name": "SYMBaiEX",
@@ -94,7 +94,7 @@
         }
       },
       "publication": {
-        "release_notes": "Forum lounge chat and Boards-first embedded view, with scoped tools, human or owned-agent delegation, optional review, and compatibility for older host catalogs and legacy bridges. Production interoperability and review materials must be verified before public launch."
+        "release_notes": "Feed-first embedded forum with a Blog/Forum logo switcher, clearer discussion and board readers, compact mailbox folders, accessible menu dismissal, and recoverable loading states. Scoped tools, human or owned-agent delegation, optional review, older host catalogs and legacy bridges remain supported. Production interoperability and review materials must be verified before public launch."
       }
     }
   }

@@ -11,7 +11,7 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
-import { ArrowUpRight, Users } from "lucide-react";
+import { ArrowUpRight, Users, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import {
@@ -122,7 +122,9 @@ function LiveForumIndex({
 
   return (
     <div>
-      <ForumHomeHeader overview={overview} view={view} sort={sort} />
+      {view === "boards" || view === "news" ? (
+        <ForumHomeHeader overview={overview} view={view} sort={sort} />
+      ) : null}
       <ForumBodyGrid
         sidebar={
           <ForumHomeRail
@@ -187,6 +189,7 @@ function ForumHomeHeader({
 
 function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
   const [pending, setPending] = useState(false);
+  const [query, setQuery] = useState("");
   const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
   const { isAuthenticated, isLoading } = useConvexAuth();
   async function markAllRead() {
@@ -230,7 +233,34 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
           </Button>
         </ForumSectionHeader>
       </div>
-      <ForumGroupedBoards overview={overview} />
+      <div className="mb-3 flex min-w-0 items-center gap-2 rounded-xl bg-card px-3">
+        <Search
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <label className="sr-only" htmlFor="forum-board-filter">
+          Filter boards and subforums
+        </label>
+        <input
+          id="forum-board-filter"
+          type="search"
+          className="focus-ring min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
+          placeholder="Find a board or subforum…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {query ? (
+          <button
+            type="button"
+            className="focus-ring flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+            aria-label="Clear board filter"
+            onClick={() => setQuery("")}
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      <ForumGroupedBoards overview={overview} query={query} />
     </section>
   );
 }

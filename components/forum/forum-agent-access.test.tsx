@@ -306,3 +306,26 @@ test("a policy change never relabels the original proposal as the newly selected
   expect(html).toContain("cannot run");
   expect(html).toContain('disabled=""');
 });
+
+test("outstanding requests stay ahead of history and a selected previous request remains visible", () => {
+  const pending = { ...command, _id: "pending-two" };
+  const previous = {
+    ...command,
+    _id: "completed-one",
+    status: "completed" as const,
+  };
+  const html = renderToStaticMarkup(
+    <ForumApprovalQueue
+      commands={[previous, pending]}
+      connections={[]}
+      selectedCommandId={previous._id}
+      onResolved={() => {}}
+    />,
+  );
+  expect(html).toContain("1 waiting for you");
+  expect(html.indexOf('id="forum-command-pending-two"')).toBeLessThan(
+    html.indexOf('id="forum-command-completed-one"'),
+  );
+  expect(html).toMatch(/<details[^>]*open=""[^>]*>/);
+  expect(html).toContain("Previous requests (1)");
+});

@@ -28,6 +28,7 @@ type DraftActions = {
   draft: ChatDraft;
   onDraftChange: (actorId: string, body: string) => void;
   onDraftSent: (actorId: string, sentBody: string) => void;
+  showPending?: boolean;
 };
 
 export function isForumChatAnchor(hash: string) {
@@ -39,6 +40,7 @@ export function ForumChat({
 }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState<ChatDraft>();
+  const [showPending, setShowPending] = useState(false);
   useEffect(() => {
     const openFromAnchor = () => {
       if (isForumChatAnchor(window.location.hash)) setOpen(true);
@@ -68,8 +70,13 @@ export function ForumChat({
           {open ? (
             <span className="text-[10px] text-muted-foreground">UTC</span>
           ) : (
-            <ChatErrorBoundary>
-              <ChatPreview />
+            <ChatErrorBoundary compact>
+              <ChatPreview
+                onOpenPending={() => {
+                  setShowPending(true);
+                  setOpen(true);
+                }}
+              />
             </ChatErrorBoundary>
           )}
         </div>
@@ -77,7 +84,10 @@ export function ForumChat({
           className={controlClass}
           aria-expanded={open}
           aria-controls="forum-chat-content"
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            setShowPending(false);
+            setOpen((value) => !value);
+          }}
           type="button"
         >
           {open ? (
@@ -98,6 +108,7 @@ export function ForumChat({
           <ChatErrorBoundary>
             <LiveForumChat
               draft={draft}
+              showPending={showPending}
               onDraftChange={(actorId, body) => setDraft({ actorId, body })}
               onDraftSent={(actorId, sentBody) =>
                 setDraft((current) =>
@@ -114,31 +125,47 @@ export function ForumChat({
   );
 }
 
-function ChatPreview() {
+function ChatPreview({ onOpenPending }: { onOpenPending: () => void }) {
   const { isLoading } = useConvexAuth();
   const data = useQuery(
     forumChatRefs.listChatMessages,
     isLoading ? "skip" : { paginationOpts: { numItems: 1, cursor: null } },
   );
   const latest = data?.viewer.canRead ? data.page[0] : null;
+  const preview = latest
+    ? `${latest.authorIdentity.name}${latest.authorIdentity.isAgent ? " (AI)" : latest.agentAssisted ? " (AI assisted)" : ""}: ${latest.body}`
+    : undefined;
   return (
-    <p
-      className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-      title={
-        latest ? `${latest.authorIdentity.name}: ${latest.body}` : undefined
-      }
-    >
-      {data && !data.viewer.canRead
-        ? "Chat unavailable"
-        : latest
-          ? `${latest.authorIdentity.name}: ${latest.body}`
-          : "Public chat"}
-    </p>
+    <>
+      <p
+        className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+        title={preview}
+      >
+        {data && !data.viewer.canRead
+          ? "Chat unavailable"
+          : latest
+            ? preview
+            : data === undefined
+              ? "Loading chat…"
+              : "No messages yet"}
+      </p>
+      {data?.viewer.canRead && data.viewer.actingAs && data.pending.length ? (
+        <button
+          type="button"
+          className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary/10 px-2.5 text-[11px] font-medium text-primary"
+          onClick={onOpenPending}
+          aria-label={`Open your ${data.pending.length}${data.pendingLimited ? " or more" : ""} lounge messages awaiting staff moderation`}
+        >
+          {data.pending.length}
+          {data.pendingLimited ? "+" : ""} pending
+        </button>
+      ) : null}
+    </>
   );
 }
 
 class ChatErrorBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; compact?: boolean },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -158,7 +185,11 @@ class ChatErrorBoundary extends Component<
     return this.state.failed ? (
       <div
         role="status"
-        className="flex flex-wrap items-center gap-3 px-4 py-5 text-sm text-muted-foreground"
+        className={
+          this.props.compact
+            ? "flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground"
+            : "flex flex-wrap items-center gap-3 px-4 py-5 text-sm text-muted-foreground"
+        }
       >
         Chat is unavailable.
         <button
@@ -211,6 +242,7 @@ function ChatSession({
   draft,
   onDraftChange,
   onDraftSent,
+  showPending,
 }: { data: ForumChatPage } & DraftActions) {
   const send = useMutation(forumChatRefs.sendChatMessage);
   const remove = useMutation(forumChatRefs.deleteChatMessage);
@@ -222,6 +254,10 @@ function ChatSession({
   const [deletingId, setDeletingId] = useState<string>();
   const [follow, setFollow] = useState(true);
   const [unseen, setUnseen] = useState(0);
+  const [pendingOpen, setPendingOpen] = useState(Boolean(showPending));
+  useEffect(() => {
+    if (showPending) setPendingOpen(true);
+  }, [showPending]);
   const log = useRef<HTMLDivElement>(null);
   const followsBottom = useRef(true);
   const anchor = useRef<{ id: string; offset: number } | undefined>(undefined);
@@ -404,11 +440,15 @@ function ChatSession({
             maxLength={2000}
             aria-invalid={Boolean(error)}
             aria-describedby={
-              error
-                ? "forum-chat-error"
-                : data.viewer.postingTrust === "moderated"
+              [
+                error ? "forum-chat-error" : null,
+                data.viewer.postingTrust === "moderated"
                   ? "forum-chat-trust"
-                  : undefined
+                  : null,
+                body.length > 1800 ? "forum-chat-length" : null,
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
             }
             onChange={(event) => onDraftChange(actorId, event.target.value)}
           />
@@ -441,6 +481,14 @@ function ChatSession({
           )}
         </div>
       )}
+      {body.length > 1800 ? (
+        <p
+          id="forum-chat-length"
+          className="px-4 pb-2 text-[11px] text-muted-foreground"
+        >
+          {2000 - body.length} characters remaining
+        </p>
+      ) : null}
       {data.viewer.canSend && data.viewer.postingTrust === "moderated" ? (
         <p
           id="forum-chat-trust"
@@ -464,7 +512,11 @@ function ChatSession({
         </p>
       ) : null}
       {data.pending.length ? (
-        <details className="px-4 pb-2">
+        <details
+          className="px-4 pb-2"
+          open={pendingOpen}
+          onToggle={(event) => setPendingOpen(event.currentTarget.open)}
+        >
           <summary
             className={`${controlClass} -ml-3 cursor-pointer text-xs text-muted-foreground`}
           >

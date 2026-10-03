@@ -5,6 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
   trusted: true,
+  selectedMessage: null as unknown,
   query: vi.fn(),
 }));
 vi.mock("convex-helpers/react/cache/hooks", () => ({ useQuery: mocks.query }));
@@ -26,12 +27,13 @@ import { forumRefs } from "./forum-refs";
 beforeEach(() => {
   mocks.params = new URLSearchParams();
   mocks.trusted = true;
+  mocks.selectedMessage = null;
   mocks.query.mockReset();
   mocks.query.mockImplementation((reference, args) => {
     if (args === "skip") return undefined;
     if (reference === forumRefs.getMyForumProfile)
       return { trusted: mocks.trusted };
-    if (reference === forumRefs.getPrivateMessage) return null;
+    if (reference === forumRefs.getPrivateMessage) return mocks.selectedMessage;
     if (reference === forumRefs.listMyForumRelationships)
       return { buddies: [] };
     if (reference === forumRefs.listPrivateMessages)
@@ -85,4 +87,15 @@ test("an untrusted member cannot load private mailbox or message data", () => {
     "skip",
   );
   expect(mocks.query).toHaveBeenCalledWith(forumRefs.getPrivateMessage, "skip");
+});
+
+test("a deep-linked message shows loading before deciding that it is unavailable", () => {
+  mocks.params = new URLSearchParams("box=inbox&message=loading");
+  mocks.selectedMessage = undefined;
+  const html = renderToStaticMarkup(<ForumMessages enabled />);
+  expect(html).toContain("Opening private message");
+  expect(html).not.toContain(
+    "That message is not available in this mailbox anymore.",
+  );
+  expect(html).toContain("Back to inbox");
 });

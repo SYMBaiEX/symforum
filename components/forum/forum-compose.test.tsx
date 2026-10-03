@@ -5,7 +5,8 @@ import type { ComponentProps, EffectCallback } from "react";
 
 const composeHarness = vi.hoisted(() => ({
   effects: [] as EffectCallback[],
-  buttons: [] as Array<{ onClick?: () => void }>,
+  buttons: [] as Array<{ onClick?: () => void; ariaLabel?: string }>,
+  textareas: [] as Array<ComponentProps<"textarea">>,
 }));
 vi.mock("react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react")>()),
@@ -25,6 +26,7 @@ vi.mock("@/components/ui/button", () => ({
   }: ComponentProps<"button">) => {
     composeHarness.buttons.push({
       onClick: onClick as (() => void) | undefined,
+      ariaLabel,
     });
     return (
       <button
@@ -40,9 +42,16 @@ vi.mock("@/components/ui/button", () => ({
     );
   },
 }));
+vi.mock("@/components/ui/textarea", () => ({
+  Textarea: (props: ComponentProps<"textarea">) => {
+    composeHarness.textareas.push(props);
+    return <textarea {...props} />;
+  },
+}));
 beforeEach(() => {
   composeHarness.effects.length = 0;
   composeHarness.buttons.length = 0;
+  composeHarness.textareas.length = 0;
   vi.unstubAllGlobals();
 });
 
@@ -136,4 +145,101 @@ test("a restored draft is hydrated once rather than being resurrected when the b
   restoreDraft?.();
   expect(getItem).toHaveBeenCalledOnce();
   expect(onBodyChange).toHaveBeenCalledExactlyOnceWith("Recovered reply");
+});
+
+function mountSelectionEditor(connected = true) {
+  const onBodyChange = vi.fn();
+  const callbacks: FrameRequestCallback[] = [];
+  vi.stubGlobal("window", {
+    requestAnimationFrame: (callback: FrameRequestCallback) => {
+      callbacks.push(callback);
+      return 1;
+    },
+  });
+  renderToStaticMarkup(
+    <ForumCompose
+      body="Hello world!"
+      bodyLabel="Reply"
+      bodyPlaceholder="Reply"
+      submitLabel="Post"
+      onBodyChange={onBodyChange}
+      onSubmit={() => {}}
+    />,
+  );
+  const input = {
+    selectionStart: 6,
+    selectionEnd: 11,
+    isConnected: connected,
+    disabled: false,
+    focus: vi.fn(),
+    setSelectionRange: vi.fn(),
+  };
+  const ref = composeHarness.textareas[0]?.ref;
+  if (typeof ref === "function") ref(input as unknown as HTMLTextAreaElement);
+  else if (ref) ref.current = input as unknown as HTMLTextAreaElement;
+  composeHarness.buttons
+    .find((button) => button.ariaLabel === "Insert bold markup")
+    ?.onClick?.();
+  return { input, callbacks, onBodyChange };
+}
+
+test("formatting wraps the selected text and restores its selection after the controlled update", () => {
+  const { input, callbacks, onBodyChange } = mountSelectionEditor();
+  expect(onBodyChange).toHaveBeenCalledWith("Hello [b]world[/b]!");
+  callbacks[0]?.(0);
+  expect(input.focus).toHaveBeenCalledOnce();
+  expect(input.setSelectionRange).toHaveBeenCalledWith(9, 14);
+});
+
+test("a deferred formatting update does not focus a detached editor", () => {
+  const { input, callbacks } = mountSelectionEditor(false);
+  callbacks[0]?.(0);
+  expect(input.focus).not.toHaveBeenCalled();
+  expect(input.setSelectionRange).not.toHaveBeenCalled();
+});
+
+test.each([false, true])(
+  "keyboard posting respects the pending state (pending %s)",
+  (pending) => {
+    const onSubmit = vi.fn();
+    renderToStaticMarkup(
+      <ForumCompose
+        body="A reply"
+        bodyLabel="Reply"
+        bodyPlaceholder="Reply"
+        submitLabel="Post"
+        pending={pending}
+        onBodyChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+    const preventDefault = vi.fn();
+    const handler = composeHarness.textareas[0]?.onKeyDown;
+    handler?.({
+      key: "Enter",
+      ctrlKey: true,
+      metaKey: false,
+      nativeEvent: { isComposing: false },
+      preventDefault,
+    } as unknown as Parameters<NonNullable<typeof handler>>[0]);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(onSubmit).toHaveBeenCalledTimes(pending ? 0 : 1);
+  },
+);
+
+test("failed-post feedback is associated with the labelled editor", () => {
+  const html = renderToStaticMarkup(
+    <ForumCompose
+      body="A reply"
+      bodyLabel="Reply"
+      bodyPlaceholder="Reply"
+      submitLabel="Post"
+      error="Could not post"
+      onBodyChange={() => {}}
+      onSubmit={() => {}}
+    />,
+  );
+  const errorId = html.match(/<p[^>]*id="([^"]+)"[^>]*role="alert"/)?.[1];
+  expect(errorId).toBeDefined();
+  expect(html).toContain(`aria-describedby="${errorId}"`);
 });

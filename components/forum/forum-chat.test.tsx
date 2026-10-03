@@ -219,3 +219,46 @@ test("canonical lounge deep links open chat while unrelated anchors leave disclo
   expect(isForumChatAnchor("#post-1")).toBe(false);
   expect(isForumChatAnchor("#forum-chat-content")).toBe(false);
 });
+
+test("collapsed chat exposes the acting profile's pending count without disclosing pending text", () => {
+  const data = page();
+  data.viewer.actingAs = {
+    userId: "actor",
+    username: "austin",
+    isAgent: false,
+  };
+  data.pending = [
+    {
+      ...message("pending", "Private pending content", 3000),
+      status: "pending",
+    },
+  ];
+  mocks.data = data;
+  const html = renderToStaticMarkup(<ForumChat />);
+  expect(html).toContain(
+    'aria-label="Open your 1 lounge messages awaiting staff moderation"',
+  );
+  expect(html).toContain("1 pending");
+  expect(html).not.toContain("Private pending content");
+  data.viewer.canRead = false;
+  expect(renderToStaticMarkup(<ForumChat />)).not.toContain("1 pending");
+});
+
+test("collapsed chat retains explicit agent identity in its public preview", () => {
+  const data = page();
+  data.page = [
+    {
+      ...message("agent", "Hello from an agent", 1000),
+      authorIdentity: {
+        userId: "agent",
+        username: "agent",
+        name: "Agent",
+        isAgent: true,
+      },
+    },
+  ];
+  mocks.data = data;
+  expect(renderToStaticMarkup(<ForumChat />)).toContain(
+    "Agent (AI): Hello from an agent",
+  );
+});

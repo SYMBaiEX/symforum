@@ -53,3 +53,45 @@ test("grouped board rows keep subforums, actual counts, read-state and latest-po
   expect(html).toContain("threads");
   expect(html).not.toContain("divide-y");
 });
+
+test("board filtering finds nested subforums without changing actual totals or last-post targets", () => {
+  const overview = {
+    categories: [],
+    totals: { categories: 2, threads: 15, posts: 30 },
+    sections: [
+      {
+        section: { slug: "community", name: "Community" },
+        boards: [
+          {
+            slug: "general",
+            name: "General",
+            threadCount: 10,
+            postCount: 20,
+            children: [{ slug: "lounge", name: "Lounge", threadCount: 2 }],
+            lastThread: {
+              slug: "hello",
+              title: "Hello",
+              categorySlug: "lounge",
+              lastPostNumber: 2,
+              lastPostAuthorName: "Member",
+            },
+          },
+          { slug: "projects", name: "Projects", threadCount: 5, postCount: 10 },
+        ],
+      },
+    ],
+  } as unknown as ForumOverviewRecord;
+  const html = renderToStaticMarkup(
+    <ForumGroupedBoards overview={overview} query="  LOUNGE  " />,
+  );
+  expect(html).toContain('href="/lounge"');
+  expect(html).toContain('href="/lounge/hello#post-2"');
+  expect(html).toContain('open=""');
+  expect(html).not.toContain('href="/projects"');
+  expect(html).toContain(">15</dd>");
+  const empty = renderToStaticMarkup(
+    <ForumGroupedBoards overview={overview} query="missing board" />,
+  );
+  expect(empty).toContain("No matching boards");
+  expect(empty).not.toContain('href="/general"');
+});

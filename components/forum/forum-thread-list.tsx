@@ -33,6 +33,7 @@ import {
 } from "@/components/forum/forum-refs";
 import {
   ForumAnnouncementPanel,
+  handleForumDisclosureKeyDown,
   ForumBody,
   ForumBreadcrumbs,
   ForumLink,
@@ -481,7 +482,7 @@ function LiveForumThreadList({
   }
 
   if (listResult === undefined) {
-    return <ForumLoading label={`Syncing ${categorySlug}`} variant="threads" />;
+    return <ForumLoading label="Loading discussions" variant="threads" />;
   }
 
   const category = listResult.category;
@@ -489,9 +490,14 @@ function LiveForumThreadList({
   if (!category) {
     return (
       <ForumStatusBox
-        title="Category unavailable"
-        body="This board was not returned by the forum backend. Check the category slug or seed data."
+        title="Board unavailable"
+        body="This board may have been removed or restricted. Browse the boards to find another discussion."
         accent="canary"
+        action={
+          <Button asChild className="rounded-full">
+            <ForumLink href="/forum?view=boards">Back to boards</ForumLink>
+          </Button>
+        }
       />
     );
   }
@@ -564,7 +570,10 @@ function LiveForumThreadList({
           ? "Close thread form"
           : "New thread"}
       </Button>
-      <details className="group relative">
+      <details
+        className="group relative"
+        onKeyDown={handleForumDisclosureKeyDown}
+      >
         <summary className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
           Board tools <ChevronDown className="size-3.5" aria-hidden="true" />
         </summary>
@@ -747,6 +756,38 @@ function LiveForumThreadList({
                 />
               ) : null}
             </div>
+            {boardFiltersActive ? (
+              <div
+                className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                aria-label="Active board filters"
+              >
+                {selectedPrefixFilter !== PREFIX_FILTER_ALL ? (
+                  <span className="rounded-full bg-muted/50 px-3 py-2">
+                    {prefixFilterSummary}
+                  </span>
+                ) : null}
+                {selectedDayFilter !== THREAD_DAY_FILTER_ALL ? (
+                  <span className="rounded-full bg-muted/50 px-3 py-2">
+                    {getThreadDayFilterLabel(selectedDayFilter)}
+                  </span>
+                ) : null}
+                {selectedSortKey !== DEFAULT_THREAD_SORT_KEY ||
+                selectedSortOrder !== DEFAULT_THREAD_SORT_ORDER ? (
+                  <span className="rounded-full bg-muted/50 px-3 py-2">
+                    {getThreadSortLabel(selectedSortKey)} ·{" "}
+                    {getThreadSortOrderLabel(selectedSortOrder)}
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 rounded-full px-3 text-xs"
+                  onClick={resetBoardView}
+                >
+                  Clear filters
+                </Button>
+              </div>
+            ) : null}
             {boardActionError ? (
               <p
                 className="border border-row-border p-3 text-sm text-muted-foreground"
@@ -1089,7 +1130,8 @@ function ForumBoardTools({
   return (
     <details
       className="group relative shrink-0"
-      open={filtersActive || undefined}
+      onKeyDown={handleForumDisclosureKeyDown}
+      aria-label="Board filter controls"
     >
       <summary className="forum-action-pill focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full px-3 py-2 text-xs text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
         <span className="text-foreground">Filter</span>

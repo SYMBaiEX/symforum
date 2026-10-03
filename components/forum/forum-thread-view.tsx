@@ -33,6 +33,7 @@ import {
 } from "@/components/forum/forum-refs";
 import {
   ForumAnnouncementPanel,
+  handleForumDisclosureKeyDown,
   ForumAttachmentList,
   ForumBody,
   ForumBreadcrumbs,
@@ -1059,7 +1060,7 @@ function LiveForumThreadView({
   }
 
   if (detail === undefined) {
-    return <ForumLoading label={`Syncing ${threadSlug}`} variant="thread" />;
+    return <ForumLoading label="Loading discussion" variant="thread" />;
   }
 
   const { category, thread } = detail;
@@ -1068,14 +1069,20 @@ function LiveForumThreadView({
     return (
       <ForumStatusBox
         title="Thread unavailable"
-        body="The forum backend did not return this thread. Confirm the board slug and thread slug."
+        body="This discussion may have been removed or restricted. Browse the board to find another thread."
         accent="canary"
+        action={
+          <Button asChild className="rounded-full">
+            <ForumLink href={forumPath(categorySlug)}>Back to board</ForumLink>
+          </Button>
+        }
       />
     );
   }
 
   const threadLocked = isLockedThread(thread);
-  const viewerCanReply = !threadLocked && thread.viewerCanReply === true;
+  const viewerCanReply =
+    isAuthenticated && !threadLocked && thread.viewerCanReply === true;
   const replyMessage = replyUnavailableMessage(
     category,
     threadLocked,
@@ -1137,11 +1144,14 @@ function LiveForumThreadView({
               Reply
             </Button>
           ) : null}
-          <details className="group relative">
+          <details
+            className="group min-w-0 open:basis-full"
+            onKeyDown={handleForumDisclosureKeyDown}
+          >
             <summary className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-xs">
               Thread tools <span aria-hidden="true">⌄</span>
             </summary>
-            <div className="absolute right-0 z-20 mt-1 flex w-[min(22rem,calc(100vw-2rem))] flex-wrap gap-1 rounded-xl bg-card p-3 shadow-lg">
+            <div className="mt-2 flex w-full flex-wrap gap-1 rounded-xl bg-muted/30 p-3">
               <ThreadActions
                 bookmarked={thread.viewerBookmarked === true}
                 bookmarkPending={bookmarkPending}
@@ -1364,6 +1374,8 @@ function LiveForumThreadView({
                 author={
                   post.authorDisplayName ??
                   post.authorName ??
+                  post.createdByName ??
+                  post.author ??
                   getThreadAuthor(post)
                 }
                 authorHref={profileHref(post.authorUsername)}
@@ -1504,12 +1516,9 @@ function LiveForumThreadView({
         id="forum-reply-composer"
         tabIndex={-1}
       >
-        <ForumSectionHeader title="Your reply" />
-        <div className="px-1">
-          <p className="text-sm leading-5 text-muted-foreground">
-            Replies publish under your current SYM handle.
-          </p>
-        </div>
+        {viewerCanReply ? (
+          <h2 className="px-1 text-sm font-semibold">Your reply</h2>
+        ) : null}
         {viewerCanReply && queuedQuotes.length > 0 ? (
           <QueuedQuotePanel
             quotes={queuedQuotes}
@@ -1556,12 +1565,19 @@ function LiveForumThreadView({
             {replyPreviewOpen ? <ReplyPreviewPanel body={replyBody} /> : null}
           </ForumCompose>
         ) : (
-          <div className="forum-panel space-y-3">
-            <ForumStatusBox
-              title="Replying unavailable"
-              body={replyMessage}
-              accent={threadLocked ? "muted" : "canary"}
-            />
+          <div className="forum-panel flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">
+                {threadLocked
+                  ? "Thread closed"
+                  : !isAuthenticated && !authLoading
+                    ? "Join the discussion"
+                    : "Replying unavailable"}
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {replyMessage}
+              </p>
+            </div>
             {!isAuthenticated && !authLoading && !threadLocked && (
               <Button
                 className="rounded-full"
@@ -2293,7 +2309,10 @@ function PostActions({
           </Button>
         </>
       ) : null}
-      <details className="group min-w-0 open:basis-full">
+      <details
+        className="group min-w-0 open:basis-full"
+        onKeyDown={handleForumDisclosureKeyDown}
+      >
         <summary
           className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
           aria-label={`More actions for post ${postNumber}`}

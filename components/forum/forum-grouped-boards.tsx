@@ -26,8 +26,10 @@ const accents = [
 
 export function ForumGroupedBoards({
   overview,
+  query = "",
 }: {
   overview: ForumOverviewRecord;
+  query?: string;
 }) {
   const groups = overview.sections.length
     ? overview.sections
@@ -39,9 +41,25 @@ export function ForumGroupedBoards({
         body="Published boards will appear here."
       />
     );
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleGroups = groups
+    .map((group) => ({
+      ...group,
+      boards: group.boards.filter((board) =>
+        matchesBoard(board, normalizedQuery),
+      ),
+    }))
+    .filter((group) => group.boards.length);
+  if (!visibleGroups.length)
+    return (
+      <ForumStatusBox
+        title="No matching boards"
+        body={`No board names, descriptions, or subforums match “${query.trim()}”. Try a shorter search or clear the filter.`}
+      />
+    );
   return (
     <div className="space-y-4">
-      {groups.map((group, index) => (
+      {visibleGroups.map((group, index) => (
         <section
           key={group.section?.slug ?? `group-${index}`}
           aria-label={`${group.section ? getCategoryTitle(group.section) : "Main"} boards`}
@@ -64,7 +82,10 @@ export function ForumGroupedBoards({
           <ul className="py-1">
             {group.boards.map((category) => (
               <li key={category.slug}>
-                <GroupedBoardRow category={category} />
+                <GroupedBoardRow
+                  category={category}
+                  searching={Boolean(normalizedQuery)}
+                />
               </li>
             ))}
           </ul>
@@ -88,6 +109,16 @@ export function ForumGroupedBoards({
   );
 }
 
+function matchesBoard(category: ForumCategoryRecord, query: string): boolean {
+  return (
+    !query ||
+    `${getCategoryTitle(category)} ${getCategoryDescription(category)}`
+      .toLocaleLowerCase()
+      .includes(query) ||
+    Boolean(category.children?.some((child) => matchesBoard(child, query)))
+  );
+}
+
 function unread(category: ForumCategoryRecord): boolean {
   return (
     category.viewerUnread === true || (category.children ?? []).some(unread)
@@ -106,7 +137,13 @@ function hasActivity(category: ForumCategoryRecord): boolean {
   );
 }
 
-function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
+function GroupedBoardRow({
+  category,
+  searching,
+}: {
+  category: ForumCategoryRecord;
+  searching: boolean;
+}) {
   const latest = getCategoryLatestThread(category);
   const author = getThreadLastAuthor(latest);
   const activity = getThreadLastActivityAt(latest);
@@ -170,7 +207,10 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
           <span>{formatForumCount(getCategoryPostCount(category))} posts</span>
         </div>
         {category.children?.length ? (
-          <details className="group/subforums mt-0.5">
+          <details
+            className="group/subforums mt-0.5"
+            open={searching || undefined}
+          >
             <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
               <ChevronDown
                 className="size-3.5 transition-transform group-open/subforums:rotate-180"
@@ -220,13 +260,30 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
             <ForumLink
               className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary [overflow-wrap:anywhere]"
               href={getThreadLastPostHref(latest, category.slug)}
+              title={latest.title}
             >
-              {latest.title}
+              <span className="line-clamp-2">{latest.title}</span>
             </ForumLink>
-            <p className="text-[11px] leading-5 text-muted-foreground">
-              {author !== "SYM-UNKNOWN" ? author : ""}
-              {activity ? ` · ${formatForumDateTime(activity)}` : ""}
-            </p>
+            <div className="flex min-w-0 items-center gap-2 text-[11px] leading-5 text-muted-foreground">
+              {author !== "SYM-UNKNOWN" ? (
+                <span className="min-w-0 flex-1 truncate" title={author}>
+                  {author}
+                </span>
+              ) : null}
+              {activity ? (
+                <time
+                  className="shrink-0 whitespace-nowrap text-[10px]"
+                  dateTime={new Date(activity).toISOString()}
+                  title={formatForumDateTime(activity)}
+                >
+                  {new Intl.DateTimeFormat("en", {
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  }).format(activity)}
+                </time>
+              ) : null}
+            </div>
           </>
         ) : (
           <p className="py-3 text-xs text-muted-foreground">

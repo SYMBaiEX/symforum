@@ -146,35 +146,33 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="forum-panel mb-3 p-4">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
-          <label className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
-            <span className="text-xs text-muted-foreground">
-              Search members
-            </span>
+      <div className="forum-panel mb-3 p-3">
+        <div className="flex items-center gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Search members</span>
             <input
               autoComplete="off"
-              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
+              className="focus-ring min-h-11 w-full rounded-xl border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
                 const nextQuery = event.target.value;
                 setDraftQuery(nextQuery);
                 updateMemberParams({ page: 1, query: nextQuery });
               }}
-              placeholder="Name, handle, rank"
+              placeholder="Search members"
               type="search"
               value={draftQuery}
             />
           </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs text-muted-foreground">Sort by</span>
+          <label className="w-[42%] max-w-44 shrink-0">
+            <span className="sr-only">Sort by</span>
             <select
-              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-xs outline-none"
-              onChange={(event) => {
+              className="focus-ring min-h-11 w-full rounded-xl border border-row-border bg-background px-2 text-sm outline-none"
+              onChange={(event) =>
                 updateMemberParams({
                   page: 1,
                   sortKey: event.target.value as ForumMemberSortKey,
-                });
-              }}
+                })
+              }
               value={sortKey}
             >
               {MEMBER_SORT_OPTIONS.map((option) => (
@@ -184,40 +182,41 @@ function ForumMemberTable() {
               ))}
             </select>
           </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs text-muted-foreground">Per page</span>
-            <select
-              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-xs outline-none"
-              onChange={(event) => {
-                updateMemberParams({
-                  page: 1,
-                  pageSize: Number(event.target.value) as ForumMemberPageSize,
-                });
-              }}
-              value={pageSize}
-            >
-              {MEMBER_PAGE_SIZE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
-        <ForumMemberPager
-          currentPage={currentPage}
-          endItem={endItem}
-          matchedCount={matchedCount}
-          onPageChange={(nextPage) =>
-            updateMemberParams({ page: nextPage }, "push")
-          }
-          pageCount={pageCount}
-          startItem={startItem}
-        />
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <p aria-live="polite">
+            {result === undefined
+              ? "Loading members…"
+              : `${matchedCount} member${matchedCount === 1 ? "" : "s"}${pageCount > 1 ? ` · Page ${currentPage} of ${pageCount}` : ""}`}
+          </p>
+          <details className="relative shrink-0">
+            <summary className="focus-ring cursor-pointer py-1">
+              {pageSize} per page
+            </summary>
+            <label className="absolute right-0 z-20 mt-2 grid w-40 gap-2 rounded-xl border border-row-border bg-card p-3 shadow-sm">
+              <span>Members per page</span>
+              <select
+                className="focus-ring min-h-11 rounded-xl border border-row-border bg-background px-2 text-sm"
+                value={pageSize}
+                onChange={(event) =>
+                  updateMemberParams({
+                    page: 1,
+                    pageSize: Number(event.target.value) as ForumMemberPageSize,
+                  })
+                }
+              >
+                {MEMBER_PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </details>
+        </div>
         {result?.limited ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Directory scan limited. Narrow the search to inspect older matching
-            members.
+            Newest matches shown. Narrow the search to find older members.
           </p>
         ) : null}
       </div>
@@ -312,18 +311,20 @@ function ForumMemberTable() {
               </article>
             ))}
           </div>
-          <div className="px-3 py-2">
-            <ForumMemberPager
-              currentPage={currentPage}
-              endItem={endItem}
-              matchedCount={matchedCount}
-              onPageChange={(nextPage) =>
-                updateMemberParams({ page: nextPage }, "push")
-              }
-              pageCount={pageCount}
-              startItem={startItem}
-            />
-          </div>
+          {pageCount > 1 ? (
+            <div className="px-3 py-2">
+              <ForumMemberPager
+                currentPage={currentPage}
+                endItem={endItem}
+                matchedCount={matchedCount}
+                onPageChange={(nextPage) =>
+                  updateMemberParams({ page: nextPage }, "push")
+                }
+                pageCount={pageCount}
+                startItem={startItem}
+              />
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
@@ -398,7 +399,24 @@ function ForumMemberPager({
       <p>
         Showing {startItem}-{endItem} of {matchedCount} matched
       </p>
-      <div className="grid grid-cols-5 gap-1 sm:flex sm:flex-wrap sm:items-center">
+      <div className="flex items-center justify-between gap-2 sm:hidden">
+        <ForumMemberPagerButton
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          Previous
+        </ForumMemberPagerButton>
+        <span aria-current="page">
+          {currentPage} / {pageCount}
+        </span>
+        <ForumMemberPagerButton
+          disabled={currentPage === pageCount}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          Next
+        </ForumMemberPagerButton>
+      </div>
+      <div className="hidden gap-1 sm:flex sm:flex-wrap sm:items-center">
         <ForumMemberPagerButton
           disabled={currentPage === 1}
           onClick={() => onPageChange(1)}

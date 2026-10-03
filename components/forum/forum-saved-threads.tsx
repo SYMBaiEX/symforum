@@ -143,7 +143,16 @@ function LiveForumSavedThreads() {
       {bookmarks.threads.length === 0 ? (
         <ForumStatusBox
           title="Saved threads"
-          body="No saved threads yet. Use Save on any thread to add it to this private reading list."
+          body="Save a discussion to keep it in your private reading list."
+          action={
+            <ForumLink
+              className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
+              href="/forum"
+              prefetch
+            >
+              Browse discussions
+            </ForumLink>
+          }
         />
       ) : (
         <section className="forum-panel min-w-0">
@@ -254,7 +263,7 @@ function SavedThreadRow({
           type="button"
           variant="outline"
         >
-          {pending ? "Saving..." : "Remove"}
+          {pending ? "Removing…" : "Remove"}
         </Button>
       </div>
     </div>
