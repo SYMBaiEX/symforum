@@ -4,7 +4,7 @@ export const SITE_NAME = "Austin Hamilton (SYMBiEX)";
 export const AUTHOR_NAME = "Austin Hamilton";
 export const AUTHOR_URL = `${PRIMARY_SITE_URL}/about`;
 
-export const SITE_SAME_AS = [
+export const PERSON_SAME_AS = [
   "https://github.com/SYMBaiEX",
   "https://www.linkedin.com/in/austinhamiltonal",
   "https://twitter.com/symbiex",
@@ -104,7 +104,7 @@ export function siteStructuredData({
           "@type": "Place",
           name: "Birmingham, Alabama",
         },
-        sameAs: SITE_SAME_AS,
+        sameAs: PERSON_SAME_AS,
       },
       {
         "@type": "Organization",
@@ -126,7 +126,6 @@ export function siteStructuredData({
           addressRegion: "AL",
           addressCountry: "US",
         },
-        sameAs: SITE_SAME_AS,
       },
       {
         "@type": "WebSite",
