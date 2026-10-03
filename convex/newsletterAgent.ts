@@ -273,14 +273,16 @@ async function generateEditorialPackage(
     stories: Doc<"hnStories">[];
   },
 ) {
-  const routingConfig = await convexModelRoutingConfig(ctx, {
-    correlationId: `newsletter:${args.edition}:${args.runDate}`,
-  });
-  const recent = await ctx.runQuery(readRecentEditorialContextRef, {
-    limit: args.edition === "daily-signal" ? 7 : 4,
-  });
   const candidates = uniqueStories(args.stories).map(newsletterCandidate);
-  const snapshots = await fetchArticleSnapshots(candidates);
+  const [routingConfig, recent, snapshots] = await Promise.all([
+    convexModelRoutingConfig(ctx, {
+      correlationId: `newsletter:${args.edition}:${args.runDate}`,
+    }),
+    ctx.runQuery(readRecentEditorialContextRef, {
+      limit: args.edition === "daily-signal" ? 7 : 4,
+    }),
+    fetchArticleSnapshots(candidates),
+  ]);
   const routeTags = [
     "agent:belle",
     `feature:${args.edition}`,
