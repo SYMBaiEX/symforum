@@ -20,6 +20,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication, typed responses, async polling, rate-limit policy, and bounded read batching; no private backend URL is required.
 - [API lifecycle policy](${PRIMARY_SITE_URL}/developers/api-lifecycle): Stable v1 compatibility, advance deprecation notice, Sunset signaling, and migration links.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
+- [Forum plugin integration guide](${PRIMARY_SITE_URL}/developers/forum-plugin): Separate forum MCP and browser tools, acting-profile permissions, review mode, and idempotent writes.
 - [API pricing and limits](${PRIMARY_SITE_URL}/pricing): Truthful $0 free-beta status, quotas, included operations, and inactive paid-product boundary.
 - [Machine-readable pricing](${PRIMARY_SITE_URL}/pricing.md): Plain Markdown price, quota, export, and payment-status contract.
 - [Synthetic API sandbox](${PRIMARY_SITE_URL}/developers/sandbox): Credential-free, read-only fixtures for testing discovery, search parsing, and structured errors without production data or writes.

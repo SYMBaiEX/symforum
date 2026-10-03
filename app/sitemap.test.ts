@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { primarySiteUrl } from "@/lib/site-urls";
+import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
 
 const mocks = vi.hoisted(() => ({
   getPublishedPostSummaries: vi.fn(),
@@ -50,6 +51,26 @@ beforeEach(() => {
 });
 
 describe("sitemap health and fallback", () => {
+  test("includes every canonical developer resource route", async () => {
+    const sitemapModule = await loadSitemapModule();
+    const { default: runSitemap } = sitemapModule;
+
+    mocks.getPublishedPostSummaries.mockResolvedValue([]);
+    mocks.getPortfolioProjects.mockResolvedValue([]);
+    mocks.getPublicNewsletterIssues.mockResolvedValue([]);
+    mocks.getNewsTimeline.mockResolvedValue(null);
+    mocks.getDailyNews.mockResolvedValue([]);
+
+    const rows = await runSitemap();
+    for (const slug of Object.keys(DEVELOPER_RESOURCES)) {
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          url: primarySiteUrl(`/developers/${slug}`),
+        }),
+      );
+    }
+  });
+
   test("always includes the canonical research hub", async () => {
     const sitemapModule = await loadSitemapModule();
     const { default: runSitemap, resetSitemapHealthForTests } = sitemapModule;

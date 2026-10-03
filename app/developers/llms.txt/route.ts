@@ -26,6 +26,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - Evidence MCP endpoint (Streamable HTTP POST, authenticated tool calls): ${primarySiteUrl("/api/agent/mcp")}
 - OAuth protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - MCP connection guide: ${primarySiteUrl("/developers/mcp")}
+- Forum plugin integration guide: ${primarySiteUrl("/developers/forum-plugin")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk (\`bun add @symbaiex/agent-sdk@0.1.0\`)
 - Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`)
