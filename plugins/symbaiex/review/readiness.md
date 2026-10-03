@@ -1,6 +1,19 @@
-# Submission preparation — 0.7.0 / runtime target 1.7.0
+# Submission preparation — 0.8.0 / runtime target 1.8.0
 
 This file is source-only and excluded from the public ZIP. It records preparation, not a submission or approval.
+
+## Latest evidence — 2026-10-03, after creator recording
+
+- Runtime 1.7.0 was verified deployed on both stable forum MCP origins. The earlier verification and account snapshots below describe preparation time, not the latest state.
+- Member and scoped-staff owners completed normal email verification and have real owned OAuth-only agents. Prepared browser connections cover human Direct, owned-agent Direct, human Require review and scoped-staff agent Direct. Password sign-in remains verified; reviewer remote OAuth still requires an actual reviewer-host connection.
+- Existing OpenAI draft 0.7.0 was uploaded. Its secure reviewer fields, Authorized MCP connection and domain verification were preserved. Latest observed scan could not finish; no successful scan or public submission is claimed.
+- Creator recording: `https://pub-5f6c24b330084d07847e5d09f72cd0af.r2.dev/walkthrough.html`. Public HTTPS video returned 200 with video/mp4 and byte-range support; Chrome loaded and played it without login. The local MP4 fully decoded without error, 2560×1532, 141 seconds, no audio.
+- The derivative retains original seconds 0–141 at normal speed; the unrelated-app tail was removed. The Desktop original is unchanged. Observed: feed/board navigation, thread reading, Lounge chat published, direct reply published and an agent Research-post request still in progress. No completed agent-created Research post is shown.
+- This is a runtime 1.7.0 demonstration, not proof of the exact five positive/three negative cases. Their Not run statuses below remain unchanged. The new sidecar parity pass targets runtime 1.8.0/package 0.8.0 and needs updated intended-host evidence before review submission.
+
+## Sidecar parity validation — 2026-10-03
+
+The runtime 1.8.0 source passed the full main regression suite (235 files / 1,669 tests), full ESLint and frontend typecheck. After the final board-navigation correction, all 75 embedded runtime tests and the production rebuild passed. Desktop and 390px browser checks used live public forum reads through a simulated host bridge; mobile clientWidth and scrollWidth both measured 390. These layout checks do not establish authenticated ChatGPT-host behavior. The public package validates seven files and exactly five positive / three negative cases.
 
 ## Prepared
 
@@ -11,7 +24,7 @@ This file is source-only and excluded from the public ZIP. It records preparatio
 - Public-copy packager verifies exact seven-file ZIP inventory and byte equality. Public upload excludes `.app.json`, all app bindings, source review notes and credentials.
 - All current tool annotations expose boolean readOnlyHint, openWorldHint and destructiveHint; catalog regression checks retained.
 
-## Public URL and fixture inspection — 2026-10-03
+## Historical public URL and fixture inspection — 2026-10-03
 
 Direct HTTPS requests with Accept: text/html returned 200 and the expected content for:
 
@@ -26,13 +39,13 @@ The checked source now includes factual privacy/terms addenda covering human-or-
 
 Ignored reviewer credential and content-receipt files remain mode 0600. The sanitized receipt reports three prepared active fixtures: Welcome, Moderation rehearsal and voting rehearsal; known public board/thread URLs returned 200 with correct titles. The release operator subsequently verified all three existing Password logins and current posting trust through normal first-party reads, without changing accounts or bypassing verification. Scoped staff retains site role reader, no global forumRole, and canModerate=true for the sample Plugin Review board. Member and recipient have canModerate=false for that board. All three accounts report emailVerified=false, canEnrollAgent=false, agents=[] and connections=[]. Actual owned profiles and remote OAuth connections are not prepared: complete the owners’ normal contact-email verification before agent enrollment and then use ordinary consent. Existing Password login does not establish OAuth or delegated-agent access.
 
-## Final checked source — 2026-10-03
+## Historical checked source — 2026-10-03
 
 `bun run verify` passed: 235 main test files / 1,662 tests; additional SDK 16, CLI 14 and socials 8 test runs; frontend, Convex and social-worker typechecks; full ESLint; SDK/CLI builds; Wrangler dry-run; Next production build with 101 static pages. The production dependency audit checked 473 packages with no vulnerabilities. Workspace test runs may repeat tests in the main suite; these are execution counts rather than a unique aggregate.
 
 Privacy/terms source landed after the full run. Additional frontend typecheck, scoped page lint, 9 SEO tests and a production rebuild passed; the page worker also checked 11 SEO/analytics tests and static bodies/headings/date metadata. Build warnings are the existing local development backend’s absent posts:listPublishedSummaries function; static blog fallbacks completed successfully. No deployment is established by these checks.
 
-Real-host review cases and walkthrough/video are not run. A saved browser-access restriction persists and the local preview is denied; source/package tests do not establish embedded-host execution. Publisher, country targeting, commerce and actual public recording declarations remain absent pending confirmed input.
+At that preparation checkpoint, real-host review cases and walkthrough/video were not run. A saved browser-access restriction persists and the local preview is denied; source/package tests do not establish embedded-host execution. Publisher, country targeting, commerce and actual public recording declarations remain absent pending confirmed input.
 
 ## Exact submitted-version host cases
 
@@ -52,9 +65,9 @@ Record Passed, Failed, Blocked or Not run with real call/argument/result evidenc
 ## Preparation gaps, in order
 
 1. Confirm the intended verified individual/business identity, supported countries (or explicit all-available choice), and whether this plugin involves payments/purchases. Write only confirmed values to developerName, publication.countries and review.commerce/commerce_description. Do not infer them from the website.
-2. Verify the checked privacy/terms addenda are published after release. Complete normal contact-email verification for reviewer owners, prepare their actual owned profiles, and complete ordinary remote OAuth; do not bypass verification. Keep legal/policy attestations with the authorized human.
-3. Resolve the persisted browser-access restriction and denied local preview through the supported host path, then rehearse/record the supplied walkthrough in the intended host, play it back, redact unrelated private data, host it at a reviewer-accessible URL and verify actual playback. Only then add review.demo_recording_url and rebuild.
+2. Verify the privacy/terms addenda at the live URLs and complete reviewer-host OAuth using the prepared verified owners and owned profiles. Keep legal/policy attestations with the authorized human.
+3. The hosted creator recording and manifest URL are verified. Capture the redesigned runtime 1.8.0 in the intended host and run all eight saved-version cases. Resolve the persisted ChatGPT browser-access restriction through the supported host path; local layout previews cannot establish ChatGPT execution.
 4. Run final package checks and inspect the final ZIP. Upload as a draft only when requested, into the intended organization and existing plugin identity. Verify saved metadata, actual MCP OAuth connection and all eight cases.
 5. The authorized developer completes domain/developer verification, scans and legal/policy attestations. Submission begins review; publishing an approved release is separate.
 
-No publisher/country/commerce/video declarations have been synthesized. A structurally valid ZIP with these gaps is **not ready to submit**.
+Publisher/country/commerce declarations have not been synthesized. The latest recording URL is verified above. A structurally valid ZIP with these gaps is **not ready to submit**.

@@ -33,10 +33,16 @@ class Node {
   focus() { this.onFocus?.(this); }
   reportValidity() { return true; }
   contains(node: Node | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
-  querySelector(tag: string): Node | null {
-    for (const child of this.children) { if (child.tagName === tag) return child; const nested = child.querySelector(tag); if (nested) return nested; }
+  querySelector(selector: string): Node | null {
+    const [head, ...tail] = selector.split(" ");
+    const matches = (node: Node) => head.startsWith(".") ? (node.attributes.class ?? node.className).split(" ").includes(head.slice(1)) : node.tagName === head;
+    for (const child of this.children) {
+      if (matches(child)) { if (!tail.length) return child; const match = child.querySelector(tail.join(" ")); if (match) return match; }
+      const nested = child.querySelector(selector); if (nested) return nested;
+    }
     return null;
   }
+  className = "";
   get firstElementChild() { return this.children[0]; }
   find(text: string): Node | undefined {
     if (this.tagName === "button" && this.textContent === text) return this;
@@ -54,7 +60,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const nodes = new Map<string, Node>();
   let activeElement: Node | null = null;
   const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "post-choices", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
   nodes.get("surface-switcher")!.append(nodes.get("surface-trigger")!, nodes.get("surface-choices")!);
   nodes.get("connection-details")!.append(nodes.get("connection-trigger")!);
   nodes.get("search-panel")!.append(createNode("summary"), nodes.get("search")!);
@@ -92,6 +98,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
       addEventListener(name: string, callback: (event: { target: Node | null; key?: string; preventDefault(): void }) => void) { documentListeners.set(name, callback); },
       removeEventListener(name: string) { documentListeners.delete(name); },
       createElement(tag: string) { return createNode(tag); },
+      createElementNS(_namespace: string, tag: string) { return createNode(tag); },
       get activeElement() { return activeElement; },
       createTextNode(text: string) { const node = new Node("text"); node.textContent = text; return node; },
       documentElement,
@@ -113,7 +120,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } });
     await flush();
-    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
+    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_overview", "forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
       reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_categories" ? [] : { page: [], pending: [], viewer: { canSend: true }, isDone: true, continueCursor: "" } } });
     }
     await flush();
@@ -124,10 +131,143 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     if (chat) reply(chat, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await flush();
   };
-  return { sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
+  const beginPostDraft = async () => {
+    nodes.get("compose")!.fire("click");
+    if (nodes.get("post-choices")!.textContent.includes("Loading boards")) {
+      reply(latest("tools/call"), { structuredContent: { data: [{ _id: "general", slug: "general", name: "General", isPostable: true, viewerCanCreateThread: true }] } }); await flush();
+    }
+    const choice = nodes.get("post-choices")!.find("General") ?? nodes.get("post-choices")!.querySelector("button");
+    choice?.fire("click");
+  };
+  return { beginPostDraft, sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
+  test("launch board navigation matches the website groups and selects a parent while reading a sub-board", async () => {
+    const app = appHarness(undefined, 1280); await app.connect(false);
+    const overview = app.sent.find(call => call.params?.name === "forum_overview")!;
+    // A completed launch overview normally arrives before or alongside Feed.
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [
+      { _id: "section", slug: "community", name: "Community", kind: "section" },
+      { _id: "general", slug: "general", name: "General", parentCategoryId: "section" },
+      { _id: "child", slug: "support", name: "Support", parentCategoryId: "general" },
+    ] } }); await app.flush();
+    const nav = app.nodes.get("navigation")!;
+    expect(overview).toBeDefined();
+    expect(nav.textContent).toContain("Your spaceSaved threadsFollowingInboxAgent access");
+    expect(nav.textContent).toContain("CommunityMembersAgentsAnnouncementsCalendarHelp & rules");
+    expect(nav.find("GGeneral")).toBeDefined();
+    expect(nav.find("SSupport")).toBeUndefined();
+    app.nodes.get("content")!.find("Support")!.fire("click");
+    expect(nav.find("GGeneral")!.attributes["aria-current"]).toBe("page");
+    expect(nav.find("Boards")!.attributes["aria-current"]).toBe("page");
+    expect(nav.find("Browse all boards")!.attributes["aria-current"]).toBe("false");
+  });
+
+  test("Following and individual resources call the matching forum operations", async () => {
+    const app = appHarness(); await app.connect(false);
+    for (const [label, name] of [["Following", "forum_list_my_thread_subscriptions"], ["Announcements", "forum_list_announcements"], ["Calendar", "forum_list_calendar_events"], ["Help & rules", "forum_list_help_documents"], ["Who’s online", "forum_list_online_members"], ["Today’s posts", "forum_list_recent_threads"]]) {
+      const count = app.sent.filter(call => call.method === "tools/call").length;
+      app.nodes.get("navigation")!.find(label)!.fire("click"); await app.flush();
+      const calls = app.sent.filter(call => call.method === "tools/call").slice(count);
+      expect(calls.map(call => call.params?.name)).toEqual([name]);
+      expect(validateForumPluginArguments(findForumPluginTool(name)!, calls[0].params?.arguments)).toBeNull();
+      if (label === "Today’s posts") expect(calls[0].params?.arguments).toMatchObject({ mode: "today" });
+      app.reply(calls[0], { structuredContent: { data: [] } }); await app.flush();
+    }
+  });
+
+  test("header post picker only offers writable boards and restores board filters when a draft closes", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [
+      { _id: "general", slug: "general", name: "General", isPostable: true, viewerCanCreateThread: true },
+      { _id: "locked", slug: "locked", name: "Restricted", viewerCanCreateThread: false },
+      { _id: "section", slug: "section", name: "Section", kind: "section" },
+    ] } }); await app.flush();
+    app.nodes.get("navigation")!.find("GGeneral")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { category: { slug: "general", name: "General", viewerCanCreateThread: true }, threads: [] } } }); await app.flush();
+    const filters = app.nodes.get("content")!.querySelector("form")!;
+    filters.byName("sortKey")!.value = "replies"; filters.byName("sortOrder")!.value = "asc"; filters.byName("days")!.value = "7";
+    filters.fire("submit");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", sortKey: "replies", sortOrder: "asc", days: 7, page: 1 });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_list_threads")!, app.latest("tools/call").params?.arguments)).toBeNull();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { category: { slug: "general", name: "General", viewerCanCreateThread: true }, threads: [] } } }); await app.flush();
+    app.nodes.get("compose")!.fire("click");
+    const picker = app.nodes.get("post-choices")!;
+    expect(picker.hidden).toBe(false); expect(picker.find("Restricted")).toBeUndefined(); expect(picker.find("Section")).toBeUndefined();
+    picker.find("General")!.fire("click");
+    expect(picker.hidden).toBe(true); expect(app.nodes.get("compose")!.attributes["aria-expanded"]).toBe("false");
+    expect(app.nodes.get("content")!.byName("categorySlug")!.value).toBe("general");
+    app.nodes.get("content")!.find("Close draft")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", sortKey: "replies", sortOrder: "asc", days: 7 });
+  });
+
+  test("card display changes without a read request and failed load-more retains loaded discussions", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Feed")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "one", title: "First discussion", slug: "first", categorySlug: "general" }], isDone: false, continueCursor: "next" } } }); await app.flush();
+    const count = app.sent.length;
+    app.nodes.get("content")!.find("Compact view")!.fire("click");
+    expect(app.nodes.get("app")!.dataset.feedDisplay).toBe("compact"); expect(app.sent).toHaveLength(count);
+    app.nodes.get("content")!.find("Load more discussions")!.fire("click");
+    expect(app.nodes.get("content")!.textContent).toContain("First discussion");
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { error: "Temporary read failure" } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("First discussion");
+    app.nodes.get("content")!.find("Try again")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "one", title: "First discussion", slug: "first", categorySlug: "general" }, { _id: "two", title: "Second discussion", slug: "second", categorySlug: "general" }], isDone: true } } }); await app.flush();
+    const text = app.nodes.get("content")!.textContent;
+    expect(text.split("First discussion")).toHaveLength(2); expect(text).toContain("Second discussion");
+    expect(app.nodes.get("app")!.dataset.feedDisplay).toBe("compact");
+  });
+
+  test("delayed launch metadata cannot restore a prior actor's board rail", async () => {
+    const app = appHarness();
+    app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { actingAs: { userId: "owner-a", username: "Owner A" }, data: { capabilities: ["read", "participate"], policyVersion: 1 } } }); await app.flush();
+    const oldOverview = app.sent.find(call => call.params?.name === "forum_overview")!;
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "owner-b", username: "Owner B" }, data: { capabilities: ["read"], policyVersion: 2 } } } });
+    app.reply(oldOverview, { structuredContent: { data: { categories: [{ _id: "old", name: "Old private board", slug: "private" }] } } }); await app.flush();
+    expect(app.nodes.get("navigation")!.textContent).not.toContain("Old private board");
+    expect(app.nodes.get("identity")!.textContent).toContain("Owner B");
+    expect(app.nodes.get("post-choices")!.hidden).toBe(true);
+  });
+
+  test("closing a draft after policy changes cannot restore cached restricted feed rows or a prior cursor", async () => {
+    for (const nextActor of ["research-agent", "new-owner"]) {
+      const app = appHarness(); await app.connect(false);
+      app.nodes.get("navigation")!.find("Feed")!.fire("click");
+      app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "private", title: "Restricted old profile discussion", slug: "private", categorySlug: "restricted" }], isDone: false, continueCursor: "old-owner-cursor" } } }); await app.flush();
+      app.nodes.get("content")!.find("Load more discussions")!.fire("click");
+      app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "second", title: "Second old discussion", slug: "second", categorySlug: "general" }], isDone: true } } }); await app.flush();
+      await app.beginPostDraft();
+      const body = app.nodes.get("content")!.byName("body")!; body.value = "Preserved unsent editor"; body.fire("input");
+      app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: nextActor, username: "Current profile" }, data: { capabilities: ["read"], policyVersion: 2 } } } });
+      expect(body.value).toBe("Preserved unsent editor");
+      app.nodes.get("content")!.find("Close draft")!.fire("click"); app.nodes.get("content")!.find("Discard draft")!.fire("click");
+      expect(app.latest("tools/call").params?.arguments).toMatchObject({ paginationOpts: { cursor: null } });
+      expect(app.nodes.get("content")!.textContent).not.toContain("old profile discussion");
+      app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "fresh", title: "Current profile discussion", slug: "fresh", categorySlug: "general" }], isDone: true } } }); await app.flush();
+      expect(app.nodes.get("content")!.textContent).toContain("Current profile discussion");
+      expect(app.nodes.get("content")!.textContent).not.toContain("Restricted old"); expect(app.nodes.get("content")!.textContent).not.toContain("Second old");
+    }
+  });
+
+  test("post picker Escape restores trigger focus and mobile navigation cannot discard a draft", async () => {
+    const app = appHarness(undefined, 390); await app.connect(false);
+    await app.beginPostDraft();
+    const body = app.nodes.get("content")!.byName("body")!; body.value = "Keep my reply"; body.fire("input");
+    app.nodes.get("navigation")!.find("News")!.fire("click");
+    expect(app.nodes.get("content")!.byName("body")).toBe(body); expect(body.value).toBe("Keep my reply");
+    app.nodes.get("content")!.find("Close draft")!.fire("click"); expect(body.value).toBe("Keep my reply");
+    app.nodes.get("content")!.find("Discard draft")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    app.nodes.get("compose")!.fire("click"); app.nodes.get("post-choices")!.find("General")!.focus();
+    app.documentEvent("keydown", app.activeElement, "Escape");
+    expect(app.nodes.get("post-choices")!.hidden).toBe(true); expect(app.activeElement).toBe(app.nodes.get("compose"));
+  });
+
   test("surface links wait for the host handshake before opening an external site", () => {
     const app = appHarness();
     expect(app.nodes.get("surface-choices")!.children[0].fire("click")).toBe(true);
@@ -156,7 +296,7 @@ describe("forum MCP App resource", () => {
 
   test("the logo switcher preserves a draft and dismisses with Escape, outside click and focus leave", async () => {
     const app = appHarness(undefined, 390); await app.connect(false);
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const body = app.nodes.get("content")!.byName("body")!;
     body.value = "Keep this unsent draft"; body.fire("input");
     const panel = app.nodes.get("surface-switcher")!;
@@ -261,7 +401,7 @@ describe("forum MCP App resource", () => {
     expect(more.open).toBe(true);
     app.setSearchWidth(320); expect(more.open).toBe(false);
     app.setSearchWidth(1280); expect(more.open).toBe(true);
-    const saved = more.find("Saved")!; saved.focus();
+    const saved = more.find("Saved threads")!; saved.focus();
     app.setSearchWidth(320);
     expect(more.open).toBe(true);
     expect(app.activeElement).toBe(saved);
@@ -341,7 +481,7 @@ describe("forum MCP App resource", () => {
     app.reply(app.latest("tools/call"), { isError: true, structuredContent: { error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 2500 } }); await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("Try again in 3 seconds.");
     expect(app.nodes.get("content")!.find("Try again")).toBeDefined();
-    expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(false);
+    expect(app.sent.filter(call => call.params?.name === "forum_overview")).toHaveLength(1);
   });
 
   test.each([
@@ -358,7 +498,7 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("settings")!.textContent).toContain("Forum has no monthly usage limit.");
     expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(true);
     expect(app.nodes.get("chat-panel")!.find("Pause live refresh")).toBeDefined();
-    expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(false);
+    expect(app.sent.filter(call => call.params?.name === "forum_overview")).toHaveLength(1);
   });
 
   test("an explicit thread selection during connection wins over the default feed", async () => {
@@ -382,17 +522,17 @@ describe("forum MCP App resource", () => {
     expect(nav.children[0].children.map(node => node.textContent)).toEqual(["Feed", "News", "Community", "Boards"]);
     const more = nav.querySelector("details")!;
     expect(more.firstElementChild.textContent).toBe("More");
-    expect(more.find("Saved")).toBeDefined();
+    expect(more.find("Saved threads")).toBeDefined();
     expect(more.find("Inbox")).toBeDefined();
     expect(more.find("Moderation")).toBeUndefined();
-    more.find("Saved")!.fire("click");
+    more.find("Saved threads")!.fire("click");
     expect(app.latest("tools/call").params?.name).toBe("forum_list_my_thread_bookmarks");
     expect(nav.querySelector("summary")!.attributes["aria-current"]).toBe("page");
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
       actingAs: { userId: "research-agent", username: "Research agent", isAgent: true },
       data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
     } } });
-    expect(nav.find("Saved")).toBeUndefined();
+    expect(nav.find("Saved threads")).toBeUndefined();
     expect(nav.find("Inbox")).toBeUndefined();
     expect(nav.find("Boards")).toBeDefined();
     expect(app.nodes.get("content")!.textContent).toContain("Connection changed");
@@ -403,7 +543,7 @@ describe("forum MCP App resource", () => {
     const app = appHarness(); await app.connect();
     const nav = app.nodes.get("navigation")!;
     const more = nav.querySelector("details")!;
-    const saved = more.find("Saved")!;
+    const saved = more.find("Saved threads")!;
     more.open = true; saved.focus();
     const pollTimer = [...app.timers.keys()].find(id => app.timerDurations.get(id) === 30_000)!;
     app.timers.get(pollTimer)!();
@@ -417,34 +557,34 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("chat-messages")!.textContent).toContain("A new lounge message");
     expect(nav.querySelector("details")).toBe(more);
     expect(more.open).toBe(true);
-    expect(nav.find("Saved")).toBe(saved);
+    expect(nav.find("Saved threads")).toBe(saved);
     expect(app.activeElement).toBe(saved);
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
       actingAs: { userId: "research-agent", username: "Research agent", isAgent: true },
       data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
     } } });
-    expect(nav.find("Saved")).toBeUndefined();
+    expect(nav.find("Saved threads")).toBeUndefined();
     expect(nav.find("Inbox")).toBeUndefined();
     expect(app.nodes.get("compose")!.hidden).toBe(true);
   });
 
-  test("context rail uses current visible boards and drops cached communities when the actor changes", async () => {
+  test("board rail uses current visible boards and drops cached communities when the actor changes", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("navigation")!.find("Boards")!.fire("click");
     app.reply(app.latest("tools/call"), { structuredContent: { data: [
       { _id: "general", slug: "general", name: "General" }, { _id: "section", slug: "category", name: "Category heading", kind: "section" },
     ] } });
     await app.flush();
-    const rail = app.nodes.get("forum-context")!;
-    expect(rail.find("General")).toBeDefined();
+    const rail = app.nodes.get("navigation")!;
+    expect(rail.find("GGeneral")).toBeDefined();
     expect(rail.find("Category heading")).toBeUndefined();
-    const boardControl = rail.find("General")!; boardControl.focus();
+    const boardControl = rail.find("GGeneral")!; boardControl.focus();
     app.nodes.get("chat-latest")!.fire("click");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await app.flush();
-    expect(rail.find("General")).toBe(boardControl);
+    expect(rail.find("GGeneral")).toBe(boardControl);
     expect(app.activeElement).toBe(boardControl);
-    rail.find("General")!.fire("click");
+    rail.find("GGeneral")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general" });
     const stale = app.latest("tools/call");
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
@@ -452,8 +592,8 @@ describe("forum MCP App resource", () => {
     } } });
     app.reply(stale, { structuredContent: { data: { category: { name: "Old restricted board" }, threads: [] } } });
     await app.flush();
-    expect(rail.find("General")).toBeUndefined();
-    expect(rail.textContent).toContain("New reader");
+    expect(rail.find("GGeneral")).toBeUndefined();
+    expect(app.nodes.get("forum-context")!.textContent).toContain("New reader");
     expect(app.nodes.get("content")!.textContent).not.toContain("Old restricted board");
   });
 
@@ -533,7 +673,7 @@ describe("forum MCP App resource", () => {
   test("opens Feed by default and decodes preserved ChatGPT result metadata", async () => {
     const app = appHarness();
     await app.connect();
-    expect(app.sent.some(call => call.params?.name === "forum_list_categories")).toBe(false);
+    expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(true);
     expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(true);
     for (const key of ["call_tool_result", "mcp_tool_result"]) {
       app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { [key]: { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=test#review-queue" } } } });
@@ -548,7 +688,7 @@ describe("forum MCP App resource", () => {
       app.nodes.get("navigation")!.find("Feed")!.fire("click");
         app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: error } });
       await app.flush();
-      expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(fallback);
+      expect(app.sent.filter(call => call.params?.name === "forum_overview")).toHaveLength(fallback ? 2 : 1);
       if (fallback) {
         app.reply(app.latest("tools/call"), { structuredContent: { data: { newestThreads: [{ title: "Cached-host conversation", slug: "cached", categorySlug: "general" }] } } });
         await app.flush();
@@ -579,7 +719,7 @@ describe("forum MCP App resource", () => {
       return { structuredContent: { data: name === "forum_list_feed_threads" ? { page: [{ title: "Working conversation", categorySlug: "general", slug: "working" }], isDone: true } : { page: [], pending: [], viewer: { canRead: true, canSend: false }, isDone: true } } };
     } });
     app.timers.values().next().value!(); await app.flush();
-    expect(calls).toEqual(["forum_status", "forum_list_feed_threads"]);
+    expect(calls).toEqual(["forum_status", "forum_overview", "forum_list_feed_threads"]);
     expect(app.nodes.get("identity")!.textContent).toContain("Authenticated profile");
     expect(app.nodes.get("content")!.textContent).toContain("Working conversation");
     expect(app.nodes.get("status")!.textContent).not.toContain("no structured forum data");
@@ -668,7 +808,7 @@ describe("forum MCP App resource", () => {
 
   test("chat shows own moderated messages safely and polling leaves the active reader intact", async () => {
     const app = appHarness(); await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const draft = app.nodes.get("content")!.byName("body")!; draft.value = "Keep forum draft"; draft.fire("input");
     app.nodes.get("chat-latest")!.fire("click");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], pending: [{ _id: "pending", body: "<script>untrusted</script>", status: "pending", authorIdentity: { username: "Research agent", isAgent: true } }], viewer: { canRead: true, canSend: true }, isDone: true } } }); await app.flush();
@@ -704,13 +844,13 @@ describe("forum MCP App resource", () => {
     app.reply(first, { structuredContent: { data: { page: [], isDone: false, continueCursor: "native-cursor" } } });
     await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("No visible conversations on this page");
-    app.nodes.get("content")!.find("More discussions →")!.fire("click");
+    app.nodes.get("content")!.find("Load more discussions")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: "native-cursor" } });
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "A real conversation", slug: "real", categorySlug: "general", authorIdentity: { name: "Agent reader", isAgent: true }, excerpt: "A clear preview" }], isDone: true, continueCursor: "" } } });
     await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("A real conversation");
-    expect(app.nodes.get("content")!.textContent).toContain("Agent reader · AI agent");
-    app.nodes.get("content")!.find("← Previous")!.fire("click");
+    expect(app.nodes.get("content")!.textContent).toContain("Agent readerAI agent");
+    app.nodes.get("content")!.find("Refresh")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } });
   });
 
@@ -736,7 +876,7 @@ describe("forum MCP App resource", () => {
   test("drops a delayed old actor response after a policy change and clears the private reader", async () => {
     const app = appHarness();
     await app.connect();
-    app.nodes.get("navigation")!.find("Saved")!.fire("click");
+    app.nodes.get("navigation")!.find("Saved threads")!.fire("click");
     const stale = app.latest("tools/call");
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "new-owner", username: "New profile" }, data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" } } } });
     expect(app.nodes.get("content")!.textContent).toContain("Connection changed");
@@ -754,7 +894,7 @@ describe("forum MCP App resource", () => {
     await app.connect();
     const status = (connectionId: string) => ({ structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { connectionId, capabilities: ["read", "personal"], policyVersion: 1, executionMode: "direct" } } });
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: status("old-connection") });
-    app.nodes.get("navigation")!.find("Saved")!.fire("click");
+    app.nodes.get("navigation")!.find("Saved threads")!.fire("click");
     const stale = app.latest("tools/call");
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: status("new-connection") });
     app.reply(stale, { structuredContent: { data: [{ title: "Old connection bookmark" }] } });
@@ -768,7 +908,7 @@ describe("forum MCP App resource", () => {
     expect(FORUM_PLUGIN_APP_RESOURCE.mimeType).toBe("text/html;profile=mcp-app");
     expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [] });
     expect(FORUM_PLUGIN_APP_HTML.startsWith("<!doctype html>")).toBe(true);
-    expect(FORUM_PLUGIN_APP_HTML).not.toMatch(/innerHTML|<iframe|fetch\(|XMLHttpRequest|localStorage|accessToken|authorization:/i);
+    expect(FORUM_PLUGIN_APP_HTML).not.toMatch(/innerHTML|<iframe|fetch\(|XMLHttpRequest|accessToken|authorization:/i);
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="Forum sections"');
     expect(FORUM_PLUGIN_APP_HTML).toContain("focus-visible");
   });
@@ -799,7 +939,7 @@ describe("forum MCP App resource", () => {
     expect(app.latest("tools/call").params!.name).toBe("forum_list_feed_threads");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } });
     await app.flush();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const body = app.nodes.get("content")!.byName("body")!; body.value = "Fullscreen must preserve this draft";
     app.reply(app.latest("ui/request-display-mode"), { mode: "fullscreen" });
     await app.flush();
@@ -918,7 +1058,7 @@ describe("forum MCP App resource", () => {
     const app = appHarness();
     await app.connect();
     expect(app.documentElement.dataset.theme).toBe("dark");
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const body = app.nodes.get("content")!.byName("body")!;
     body.value = "Keep my draft when the theme changes";
     body.fire("input");
@@ -1103,7 +1243,7 @@ describe("forum MCP App resource", () => {
   test("keeps exact idempotency key and draft across write errors; queues review actions", async () => {
     const app = appHarness();
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const draft = app.nodes.get("content")!;
     const fields = { categorySlug: "general", title: "Research notes", body: "Hello forum" };
     for (const [name, value] of Object.entries(fields)) { const field = draft.byName(name)!; field.value = value; field.fire("input"); }
@@ -1132,7 +1272,7 @@ describe("forum MCP App resource", () => {
   test("surfaces model-triggered moderation results without replacing an open draft or opening unpublished content", async () => {
     const app = appHarness();
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const draft = app.nodes.get("content")!;
     const body = draft.byName("body")!;
     body.value = "My unsent draft";
@@ -1171,7 +1311,7 @@ describe("forum MCP App resource", () => {
     for (const pending of [true, false]) {
       const app = appHarness();
       await app.connect();
-      app.nodes.get("compose")!.fire("click");
+      await app.beginPostDraft();
       const content = app.nodes.get("content")!;
       for (const [name, value] of Object.entries({ categorySlug: "research", title: "Notes", body: "My research" })) { const field = content.byName(name)!; field.value = value; field.fire("input"); }
       content.querySelector("form")!.fire("submit");
@@ -1196,7 +1336,7 @@ describe("forum MCP App resource", () => {
       getFileDownloadUrl: async () => { downloadRequestCount++; return { downloadUrl: "https://files.example.test/temporary-secret-" + downloadRequestCount }; },
     });
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const draft = app.nodes.get("content")!;
     for (const [name, value] of Object.entries({ categorySlug: "general", title: "Research notes", body: "Read the attachment" })) { const field = draft.byName(name)!; field.value = value; field.fire("input"); }
     draft.find("Choose from ChatGPT")!.fire("click");
@@ -1230,7 +1370,7 @@ describe("forum MCP App resource", () => {
   test("enforces the attachment count before importing library files", async () => {
     const app = appHarness({ selectFiles: async () => Array.from({ length: 6 }, (_, index) => ({ fileId: "file-" + index, fileName: index + ".txt", mimeType: "text/plain" })), getFileDownloadUrl: async () => ({ downloadUrl: "https://files.example.test" }) });
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     app.nodes.get("content")!.find("Choose from ChatGPT")!.fire("click");
     await app.flush();
     expect(app.nodes.get("status")!.textContent).toContain("at most five attachments");
@@ -1241,7 +1381,7 @@ describe("forum MCP App resource", () => {
     let uploaded = 0;
     const app = appHarness({ uploadFile: async () => { uploaded++; return { fileId: "file-local" }; }, getFileDownloadUrl: async () => ({ downloadUrl: "https://files.example.test" }) });
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const input = app.nodes.get("content")!.byName("attachments")!;
     input.files = [{ name: "large.pdf", size: 5 * 1024 * 1024 + 1, type: "application/pdf" }];
     input.fire("change");
@@ -1262,7 +1402,7 @@ describe("forum MCP App resource", () => {
   test("binds writes to the draft policy and requires an explicit profile choice after a stale-policy rejection", async () => {
     const app = appHarness();
     await app.connect();
-    app.nodes.get("compose")!.fire("click");
+    await app.beginPostDraft();
     const draft = app.nodes.get("content")!;
     for (const [name, value] of Object.entries({ categorySlug: "general", title: "Preserved research", body: "Do not lose this draft" })) { const field = draft.byName(name)!; field.value = value; field.fire("input"); }
     const form = draft.querySelector("form")!;
