@@ -169,7 +169,11 @@ export function buildExtractiveEvidenceDigest(
         `- [${index + 1}] ${source.title}: ${source.excerpt} (${source.canonicalUrl})`,
     )
     .join("\n");
-  return `# Evidence digest\n\nQuery: ${query}\n\nRouting unavailable or model citations failed validation; this is a deterministic extractive digest, not generated analysis.\n\n${citations}`;
+  const explanation =
+    sources.length === 0
+      ? "No matching public evidence sources were found, so no model analysis was attempted."
+      : "Routing unavailable or model citations failed validation; this is a deterministic extractive digest, not generated analysis.";
+  return `# Evidence digest\n\nQuery: ${query}\n\n${explanation}\n\n${citations}`;
 }
 
 /** Validate citation numbering and require every non-heading paragraph to cite a source. */
