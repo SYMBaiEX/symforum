@@ -295,6 +295,7 @@ export async function settleModelCallReservation(
     settlementModel?: string;
     inputTokens: number;
     outputTokens: number;
+    providerReportedCostMicroUsd?: number;
     now?: number;
   },
 ) {
@@ -319,8 +320,23 @@ export async function settleModelCallReservation(
   if (reservation.status === "settled")
     return { settled: false as const, estimatedCostMicroUsd: 0 };
 
+  if (
+    args.providerReportedCostMicroUsd !== undefined &&
+    (!Number.isSafeInteger(args.providerReportedCostMicroUsd) ||
+      args.providerReportedCostMicroUsd < 0)
+  ) {
+    throw new ConvexError({
+      code: "AI_USAGE_PROVIDER_COST_INVALID",
+      message:
+        "Provider-reported AI cost must be a non-negative microdollar integer.",
+    });
+  }
+
   const settlementModel = args.settlementModel ?? args.model;
-  if (!hasModelPrice(settlementModel)) {
+  if (
+    args.providerReportedCostMicroUsd === undefined &&
+    !hasModelPrice(settlementModel)
+  ) {
     throw new ConvexError({
       code: "AI_USAGE_SETTLEMENT_MODEL_UNPRICED",
       message: "AI usage cannot settle against an unpriced model.",
@@ -328,11 +344,13 @@ export async function settleModelCallReservation(
   }
 
   const now = args.now ?? Date.now();
-  const estimatedCostMicroUsd = estimatedModelCostMicroUsd(
-    settlementModel,
-    args.inputTokens,
-    args.outputTokens,
-  );
+  const estimatedCostMicroUsd =
+    args.providerReportedCostMicroUsd ??
+    estimatedModelCostMicroUsd(
+      settlementModel,
+      args.inputTokens,
+      args.outputTokens,
+    );
   const spend = await ctx.db
     .query("aiSpendBuckets")
     .withIndex("by_dayKey_and_provider_and_bucket", (q) =>

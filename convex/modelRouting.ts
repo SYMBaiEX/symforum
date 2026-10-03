@@ -198,6 +198,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
         modelId: result.response.modelId,
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
+        usage: result.usage,
       };
     },
   };
@@ -208,6 +209,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
           modelId: string;
           inputTokens?: number;
           outputTokens?: number;
+          usage: { raw?: unknown };
         }>(config, requestContext, routeArgs)
       : await runRoutedCandidates(
           (await routedModelCandidates(config, requestContext)).filter(
@@ -227,6 +229,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
     stage: "canary",
     model: generation.route.persistedModel,
     servedModel: generation.value.modelId,
+    providerReportedCostMicroUsd: generation.route.providerReportedCostMicroUsd,
     inputTokens: generation.value.inputTokens,
     outputTokens: generation.value.outputTokens,
     durationMs: Date.now() - generationStartedAt,

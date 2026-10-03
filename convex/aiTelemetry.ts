@@ -13,6 +13,13 @@ import {
 } from "../lib/ai-model-costs";
 import { env } from "./_generated/server";
 
+function effectiveUsageCostMicroUsd(event: {
+  estimatedCostMicroUsd?: number;
+  providerReportedCostMicroUsd?: number;
+}) {
+  return event.providerReportedCostMicroUsd ?? event.estimatedCostMicroUsd ?? 0;
+}
+
 export const recordRouteEvent = internalMutation({
   args: {
     correlationId: v.string(),
@@ -134,14 +141,23 @@ export const snapshotAdmin = query({
       0,
     );
     const estimatedCostMicroUsd = usage.reduce(
-      (total, event) => total + (event.estimatedCostMicroUsd ?? 0),
+      (total, event) => total + effectiveUsageCostMicroUsd(event),
+      0,
+    );
+    const providerReportedCostMicroUsd = usage.reduce(
+      (total, event) => total + (event.providerReportedCostMicroUsd ?? 0),
       0,
     );
     const unpricedRouteAttempts = routes.filter(
       (event) => !hasCostAttribution(event.model, event.estimatedCostMicroUsd),
     ).length;
     const unpricedUsageEvents = usage.filter(
-      (event) => !hasCostAttribution(event.model, event.estimatedCostMicroUsd),
+      (event) =>
+        event.providerReportedCostMicroUsd === undefined &&
+        !hasCostAttribution(event.model, event.estimatedCostMicroUsd),
+    ).length;
+    const providerReportedUsageEvents = usage.filter(
+      (event) => event.providerReportedCostMicroUsd !== undefined,
     ).length;
     const failedAttemptReserveMicroUsd = routes.reduce(
       (total, event) =>
@@ -199,7 +215,7 @@ export const snapshotAdmin = query({
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
       row.durationMs += event.durationMs;
-      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
+      row.estimatedCostMicroUsd += effectiveUsageCostMicroUsd(event);
       models.set(event.model, row);
     }
     for (const event of routes) {
@@ -289,7 +305,7 @@ export const snapshotAdmin = query({
       const row = agentRow(event.agentSlug);
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
-      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
+      row.estimatedCostMicroUsd += effectiveUsageCostMicroUsd(event);
       if (
         event.stage === "revision" &&
         event.qualityBefore !== undefined &&
@@ -326,7 +342,7 @@ export const snapshotAdmin = query({
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
       row.durationMs += event.durationMs;
-      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
+      row.estimatedCostMicroUsd += effectiveUsageCostMicroUsd(event);
       stages.set(event.stage, row);
     }
 
@@ -357,7 +373,7 @@ export const snapshotAdmin = query({
       row.generations += 1;
       row.inputTokens += event.inputTokens ?? 0;
       row.outputTokens += event.outputTokens ?? 0;
-      row.estimatedCostMicroUsd += event.estimatedCostMicroUsd ?? 0;
+      row.estimatedCostMicroUsd += effectiveUsageCostMicroUsd(event);
       series.set(at, row);
     }
     for (const event of routes) {
@@ -446,6 +462,7 @@ export const snapshotAdmin = query({
         durationMs: event.durationMs,
         inputTokens: event.inputTokens,
         outputTokens: event.outputTokens,
+        providerReportedCostMicroUsd: event.providerReportedCostMicroUsd,
       })),
     ]
       .sort((left, right) => right.at - left.at)
@@ -474,6 +491,7 @@ export const snapshotAdmin = query({
         p95DurationMs: percentile(durations, 0.95),
         averageQuality: average(qualityScores),
         estimatedSpendUsd: estimatedCostMicroUsd / 1_000_000,
+        providerReportedSpendUsd: providerReportedCostMicroUsd / 1_000_000,
         failedAttemptReserveUsd: failedAttemptReserveMicroUsd / 1_000_000,
         revisionRate:
           (usage.filter((event) => event.stage === "revision").length /
@@ -490,7 +508,11 @@ export const snapshotAdmin = query({
             : (positiveRevisionSamples / revisionSamples) * 100,
         averagePresentation: average(presentationScores),
       },
-      costCoverage: { unpricedRouteAttempts, unpricedUsageEvents },
+      costCoverage: {
+        unpricedRouteAttempts,
+        unpricedUsageEvents,
+        providerReportedUsageEvents,
+      },
       models: [...models.values()].sort(
         (left, right) => right.outputTokens - left.outputTokens,
       ),

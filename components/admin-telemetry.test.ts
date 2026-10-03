@@ -23,6 +23,7 @@ function snapshot(): AiTelemetrySnapshotRecord {
       p95DurationMs: 40,
       averageQuality: 91,
       estimatedSpendUsd: 0.01,
+      providerReportedSpendUsd: 0.004,
       failedAttemptReserveUsd: 0.002,
       revisionRate: 0,
       averageRevisionGain: 0,
@@ -33,6 +34,7 @@ function snapshot(): AiTelemetrySnapshotRecord {
     costCoverage: {
       unpricedRouteAttempts: 0,
       unpricedUsageEvents: 0,
+      providerReportedUsageEvents: 1,
     },
     models: [],
     agents: [],

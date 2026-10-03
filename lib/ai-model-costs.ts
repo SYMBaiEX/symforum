@@ -127,6 +127,60 @@ export function estimatedModelCostMicroUsd(
   );
 }
 
+function openRouterUsageCostUsd(usage: unknown): number | undefined {
+  if (usage === null || typeof usage !== "object") return undefined;
+  const raw = (usage as { raw?: unknown }).raw;
+  if (raw === null || typeof raw !== "object") return undefined;
+  const cost = (raw as { cost?: unknown }).cost;
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0
+    ? cost
+    : undefined;
+}
+
+function openRouterResultCostUsd(
+  result: unknown,
+  depth = 0,
+): number | undefined {
+  if (depth > 5 || result === null || typeof result !== "object")
+    return undefined;
+  const record = result as {
+    usage?: unknown;
+    steps?: unknown;
+    result?: unknown;
+  };
+
+  // Tool-loop results aggregate token counts but can discard the raw provider
+  // usage. Sum per-step receipts only when every step reports its own cost.
+  if (Array.isArray(record.steps) && record.steps.length > 0) {
+    const stepCosts = record.steps.map((step) => {
+      if (step === null || typeof step !== "object") return undefined;
+      return openRouterUsageCostUsd((step as { usage?: unknown }).usage);
+    });
+    if (stepCosts.every((cost) => cost !== undefined))
+      return stepCosts.reduce<number>((total, cost) => total + cost!, 0);
+    // A single-step result may still expose the receipt only on aggregate
+    // usage. Multi-step aggregate usage is ambiguous, so do not mistake a
+    // final-step receipt for the bill for the whole tool loop.
+    if (record.steps.length > 1) return undefined;
+  }
+
+  const directCost = openRouterUsageCostUsd(record.usage);
+  if (directCost !== undefined) return directCost;
+  return openRouterResultCostUsd(record.result, depth + 1);
+}
+
+/**
+ * Read OpenRouter's provider-reported bill from an AI SDK result. The SDK
+ * preserves the raw response usage, so this adds no follow-up API request.
+ * Returns undefined when the provider did not include a cost receipt.
+ */
+export function openRouterReportedCostMicroUsd(result: unknown) {
+  const costUsd = openRouterResultCostUsd(result);
+  if (costUsd === undefined) return undefined;
+  const costMicroUsd = Math.ceil(costUsd * 1_000_000);
+  return Number.isSafeInteger(costMicroUsd) ? costMicroUsd : undefined;
+}
+
 /**
  * Conservative character-based prompt estimate used only for pre-call budget
  * reservations. Provider-reported token usage replaces this estimate after a

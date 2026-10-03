@@ -3,6 +3,7 @@ import { APICallError, type generateText, type LanguageModel } from "ai";
 import {
   estimatedModelCostMicroUsd,
   isOpenRouterFreeModel,
+  openRouterReportedCostMicroUsd,
   openRouterReservationModel,
 } from "./ai-model-costs";
 export {
@@ -24,6 +25,7 @@ export type ModelRoute = {
   persistedModel: string;
   reservationKey?: string;
   reservationModel?: string;
+  providerReportedCostMicroUsd?: number;
 };
 
 export type ModelUsageEstimate = {
@@ -312,12 +314,17 @@ export async function runRoutedCandidates<T>(
         durationMs: Date.now() - attemptStartedAt,
         estimatedCostMicroUsd,
       });
+      const providerReportedCostMicroUsd =
+        openRouterReportedCostMicroUsd(value);
       return {
         value,
         route: {
           provider: candidate.provider,
           modelId: candidate.modelId,
           persistedModel: candidate.persistedModel,
+          ...(providerReportedCostMicroUsd === undefined
+            ? {}
+            : { providerReportedCostMicroUsd }),
           ...(reservationModel === undefined ? {} : { reservationModel }),
           ...(reservationKey === undefined ? {} : { reservationKey }),
         },

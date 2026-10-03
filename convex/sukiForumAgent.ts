@@ -552,6 +552,8 @@ export async function runForumResearchSlot(
       stage: "topic",
       model: selectionGeneration.route.persistedModel,
       servedModel: selectionResult.response.modelId,
+      providerReportedCostMicroUsd:
+        selectionGeneration.route.providerReportedCostMicroUsd,
       inputTokens: selectionResult.usage.inputTokens,
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
@@ -799,6 +801,8 @@ export async function runForumResearchSlot(
       stage: "draft",
       model: draftGeneration.route.persistedModel,
       servedModel: draftResult.response.modelId,
+      providerReportedCostMicroUsd:
+        draftGeneration.route.providerReportedCostMicroUsd,
       categorySlug: category.slug,
       inputTokens: draftResult.usage.inputTokens,
       outputTokens: draftResult.usage.outputTokens,
@@ -870,6 +874,8 @@ export async function runForumResearchSlot(
         stage: "revision",
         model: revisionGeneration.route.persistedModel,
         servedModel: revision.response.modelId,
+        providerReportedCostMicroUsd:
+          revisionGeneration.route.providerReportedCostMicroUsd,
         categorySlug: category.slug,
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,

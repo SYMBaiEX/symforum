@@ -334,6 +334,68 @@ describe("forum editorial cohort refresh", () => {
     expect(spend?.outputTokens).toBe(outputTokens);
   });
 
+  test("uses OpenRouter's reported cost when settling a paid reservation", async () => {
+    const t = convexTest(schema, modules);
+    const reservationKey = "provider-reported-cost:test";
+    const dayKey = forumDayKey();
+    const providerReportedCostMicroUsd = 37;
+    const reservation = await t.mutation(
+      internal.aiRoutingControlData.reserveModelCall,
+      {
+        reservationKey,
+        model: OPENROUTER_PAID_FALLBACK_MODEL,
+        dayKey,
+        estimatedInputTokens: 1_000,
+        estimatedOutputTokens: 500,
+        budgetLimitMicroUsd: 1_000,
+      },
+    );
+    expect(reservation.accepted).toBe(true);
+
+    await t.mutation(editorial.recordUsage, {
+      runKey: reservationKey,
+      reservationKey,
+      reservationModel: OPENROUTER_PAID_FALLBACK_MODEL,
+      agentSlug: "suki",
+      stage: "draft",
+      model: OPENROUTER_PAID_FALLBACK_MODEL,
+      inputTokens: 1_000,
+      outputTokens: 500,
+      providerReportedCostMicroUsd,
+      durationMs: 20,
+    });
+
+    const { event, settled, spend } = await t.run(async (ctx) => ({
+      event: (await usageEventsForRun(ctx, reservationKey))[0] ?? null,
+      settled: await ctx.db
+        .query("aiModelCallReservations")
+        .withIndex("by_reservationKey", (q) =>
+          q.eq("reservationKey", reservationKey),
+        )
+        .unique(),
+      spend: await ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+          q
+            .eq("dayKey", dayKey)
+            .eq("provider", "openrouter")
+            .eq("bucket", spendBucketForKey(reservationKey)),
+        )
+        .unique(),
+    }));
+
+    expect(event).toMatchObject({
+      estimatedCostMicroUsd: estimatedModelCostMicroUsd(
+        OPENROUTER_PAID_FALLBACK_MODEL,
+        1_000,
+        500,
+      ),
+      providerReportedCostMicroUsd,
+    });
+    expect(settled?.settledMicroUsd).toBe(providerReportedCostMicroUsd);
+    expect(spend?.spentMicroUsd).toBe(providerReportedCostMicroUsd);
+  });
+
   test("keeps incomplete usage reserved and reconciles its event in place", async () => {
     for (const [caseName, partialUsage] of [
       ["input", { outputTokens: 500 }],

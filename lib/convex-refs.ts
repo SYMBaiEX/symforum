@@ -1510,6 +1510,7 @@ export type AiTelemetrySnapshotRecord = {
     p95DurationMs: number;
     averageQuality: number;
     estimatedSpendUsd: number;
+    providerReportedSpendUsd: number;
     failedAttemptReserveUsd: number;
     revisionRate: number;
     averageRevisionGain: number;
@@ -1520,6 +1521,7 @@ export type AiTelemetrySnapshotRecord = {
   costCoverage: {
     unpricedRouteAttempts: number;
     unpricedUsageEvents: number;
+    providerReportedUsageEvents: number;
   };
   models: Array<{
     model: string;
@@ -1582,6 +1584,7 @@ export type AiTelemetrySnapshotRecord = {
     detail?: string;
     durationMs?: number;
     estimatedCostMicroUsd?: number;
+    providerReportedCostMicroUsd?: number;
     inputTokens?: number;
     outputTokens?: number;
   }>;

@@ -338,12 +338,14 @@ export const runResearch = internalAction({
         persistedModel: string;
         reservationKey?: string;
         reservationModel?: string;
+        providerReportedCostMicroUsd?: number;
       };
       value: {
         text: string;
         modelId: string;
         inputTokens?: number;
         outputTokens?: number;
+        usage: { raw?: unknown };
       };
     } | null = null;
     try {
@@ -376,6 +378,7 @@ export const runResearch = internalAction({
               modelId: result.response.modelId,
               inputTokens: result.usage.inputTokens,
               outputTokens: result.usage.outputTokens,
+              usage: result.usage,
             };
           },
         },
@@ -411,6 +414,8 @@ export const runResearch = internalAction({
         stage: "research",
         model: generationResult.route.persistedModel,
         servedModel: generationResult.value.modelId,
+        providerReportedCostMicroUsd:
+          generationResult.route.providerReportedCostMicroUsd,
         inputTokens: generationResult.value.inputTokens,
         outputTokens: generationResult.value.outputTokens,
         durationMs: Date.now() - generationStartedAt,
