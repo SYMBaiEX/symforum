@@ -9,6 +9,7 @@ import {
 } from "./forum";
 import {
   assertAiSourceReplyGrounding,
+  FORUM_REPLY_AGENT_GENERATION_OPTIONS,
   FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
   replySweepRouteAttemptOffset,
   sukiReplyPrompt,
@@ -20,6 +21,10 @@ describe("Suki forum reply helpers", () => {
     expect(replySweepRouteAttemptOffset(0)).toBe(0);
     expect(replySweepRouteAttemptOffset(1)).toBe(2);
     expect(replySweepRouteAttemptOffset(2)).toBe(4);
+  });
+
+  test("leaves provider retries to the budget-aware route fallback", () => {
+    expect(FORUM_REPLY_AGENT_GENERATION_OPTIONS).toEqual({ maxRetries: 0 });
   });
 
   test("validates useful structured BBCode replies", () => {
