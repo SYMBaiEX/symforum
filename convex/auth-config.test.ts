@@ -19,6 +19,12 @@ test("enabled auth configuration evaluates without Node Buffer and preserves oth
   vi.stubGlobal("Buffer", undefined);
   const { default: config } = await import("./auth.config");
   expect(config.providers).toHaveLength(3);
+  expect(
+    config.providers.some(
+      (provider) =>
+        provider.applicationID === "https://www.symbaiex.com/api/plugin/mcp",
+    ),
+  ).toBe(false);
   expect(config.providers[0]).toMatchObject({
     type: "customJwt",
     issuer: "https://www.symbaiex.com/agent-auth",
@@ -32,5 +38,6 @@ test("enabled auth configuration evaluates without Node Buffer and preserves oth
   });
   expect(config.providers[2]).toMatchObject({
     issuer: "https://test.authkit.app",
+    applicationID: "https://www.symbaiex.com/api/agent/mcp",
   });
 });

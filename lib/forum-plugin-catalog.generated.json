@@ -1,0 +1,2870 @@
+{
+  "adminOverview": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "assignCategoryModerator": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "categoryId",
+        "username"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createPrivateMessageReport": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reason": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createReply": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "idempotencyKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createReport": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "entityType": {
+          "anyOf": [
+            {
+              "const": "thread"
+            },
+            {
+              "const": "post"
+            }
+          ]
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reason": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entityType",
+        "threadId",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createThread": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        },
+        "prefixId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "idempotencyKey": {
+          "type": "string"
+        },
+        "poll": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 8192
+            }
+          },
+          "required": [
+            "question",
+            "options"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "categorySlug",
+        "title",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "deletePost": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "postId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "deletePrivateMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "box": {
+          "anyOf": [
+            {
+              "const": "inbox"
+            },
+            {
+              "const": "sent"
+            },
+            {
+              "const": "trash"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageId",
+        "box"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "deleteThread": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getAnnouncement": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string"
+        },
+        "categorySlug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getCalendarEvent": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getForumThread": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "paginationOpts": {
+          "type": "object",
+          "properties": {
+            "numItems": {
+              "type": "number"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endCursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "number"
+            },
+            "maximumRowsRead": {
+              "type": "number"
+            },
+            "maximumBytesRead": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "numItems",
+            "cursor"
+          ],
+          "additionalProperties": false
+        },
+        "focusPostId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "threadId",
+        "paginationOpts"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getHelpDocument": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getMyForumNavState": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getMyForumNotificationPreferences": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getMyForumProfile": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getPrivateMessage": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "box": {
+          "anyOf": [
+            {
+              "const": "inbox"
+            },
+            {
+              "const": "sent"
+            },
+            {
+              "const": "trash"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getThread": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        },
+        "threadSlug": {
+          "type": "string"
+        },
+        "paginationOpts": {
+          "type": "object",
+          "properties": {
+            "numItems": {
+              "type": "number"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endCursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "number"
+            },
+            "maximumRowsRead": {
+              "type": "number"
+            },
+            "maximumBytesRead": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "numItems",
+            "cursor"
+          ],
+          "additionalProperties": false
+        },
+        "page": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "categorySlug",
+        "threadSlug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "issueForumWarning": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "targetUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "points": {
+          "type": "number"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "moderationNote": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reportId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "targetUserId",
+        "points",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listAnnouncements": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        },
+        "includeBoardAnnouncements": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listAnnouncementsAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listBoardRulesAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listCalendarEvents": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "month"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listCalendarEventsAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "month": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listCategories": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listCategoriesAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listCategoryModeratorsAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listCategoryOptions": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listForumContentEdits": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listForumModerationEvents": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "entityType": {
+          "anyOf": [
+            {
+              "const": "forumThread"
+            },
+            {
+              "const": "forumPost"
+            },
+            {
+              "const": "forumReport"
+            },
+            {
+              "const": "forumPoll"
+            },
+            {
+              "const": "forumWarning"
+            },
+            {
+              "const": "forumCategory"
+            },
+            {
+              "const": "forumCategoryOrder"
+            },
+            {
+              "const": "forumThreadPrefix"
+            },
+            {
+              "const": "forumAnnouncement"
+            },
+            {
+              "const": "forumHelpDocument"
+            },
+            {
+              "const": "forumCalendarEvent"
+            },
+            {
+              "const": "forumBoardRules"
+            }
+          ]
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listForumPosts": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "pending"
+            },
+            {
+              "const": "active"
+            },
+            {
+              "const": "hidden"
+            },
+            {
+              "const": "deleted"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listForumReports": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "const": "open"
+            },
+            {
+              "const": "reviewed"
+            },
+            {
+              "const": "dismissed"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listForumThreads": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "pending"
+            },
+            {
+              "const": "active"
+            },
+            {
+              "const": "locked"
+            },
+            {
+              "const": "hidden"
+            },
+            {
+              "const": "deleted"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listForumWarnings": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "targetUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "revoked"
+            },
+            {
+              "const": "expired"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listHelpDocuments": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listHelpDocumentsAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMembers": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "query": {
+          "type": "string"
+        },
+        "sortKey": {
+          "anyOf": [
+            {
+              "const": "posts-desc"
+            },
+            {
+              "const": "threads-desc"
+            },
+            {
+              "const": "reputation-desc"
+            },
+            {
+              "const": "joined-desc"
+            },
+            {
+              "const": "joined-asc"
+            },
+            {
+              "const": "name-asc"
+            },
+            {
+              "const": "online-desc"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyCategorySubscriptions": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyForumRelationships": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyForumReputationHistory": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "anyOf": [
+            {
+              "const": "received"
+            },
+            {
+              "const": "given"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listMyForumWarnings": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyNotifications": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "unread"
+            },
+            {
+              "const": "read"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyPendingForumContent": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyThreadBookmarks": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyThreadSubscriptions": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listOnlineMembers": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "now": {
+          "type": "number"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "now"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listPrivateMessages": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "box": {
+          "anyOf": [
+            {
+              "const": "inbox"
+            },
+            {
+              "const": "sent"
+            },
+            {
+              "const": "trash"
+            }
+          ]
+        },
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listRecentThreads": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "const": "new"
+            },
+            {
+              "const": "today"
+            }
+          ]
+        },
+        "now": {
+          "type": "number"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "mode",
+        "now"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listResearchFeedThreads": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listThreadPrefixes": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "categorySlug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listThreadPrefixesAdmin": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listThreads": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "threadPage": {
+          "type": "number"
+        },
+        "replyPage": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "prefixId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sortKey": {
+          "anyOf": [
+            {
+              "const": "lastPostAt"
+            },
+            {
+              "const": "createdAt"
+            },
+            {
+              "const": "replies"
+            },
+            {
+              "const": "views"
+            },
+            {
+              "const": "rating"
+            },
+            {
+              "const": "title"
+            }
+          ]
+        },
+        "sortOrder": {
+          "anyOf": [
+            {
+              "const": "desc"
+            },
+            {
+              "const": "asc"
+            }
+          ]
+        },
+        "days": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "categorySlug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "markAllForumsRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "markCategoryRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "categorySlug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "markNotificationRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "notificationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "markAll": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "markPrivateMessageRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "markThreadRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "lastReadPostNumber": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "mergeForumThread": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "sourceThreadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "targetThreadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceThreadId",
+        "targetThreadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "moveForumPosts": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "postIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        },
+        "targetThreadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "postIds",
+        "targetThreadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "moveForumThread": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "targetCategoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "targetCategoryId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "onlineSummary": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "now": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "now"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "overview": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "rateThread": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "score": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "const": 1
+                },
+                {
+                  "const": 2
+                },
+                {
+                  "const": 3
+                },
+                {
+                  "const": 4
+                },
+                {
+                  "const": 5
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "threadId",
+        "score"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "recordPresence": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "locationType": {
+          "anyOf": [
+            {
+              "const": "index"
+            },
+            {
+              "const": "board"
+            },
+            {
+              "const": "thread"
+            },
+            {
+              "const": "search"
+            },
+            {
+              "const": "members"
+            },
+            {
+              "const": "online"
+            },
+            {
+              "const": "newPosts"
+            },
+            {
+              "const": "help"
+            },
+            {
+              "const": "calendar"
+            },
+            {
+              "const": "userCp"
+            },
+            {
+              "const": "messages"
+            },
+            {
+              "const": "subscriptions"
+            },
+            {
+              "const": "saved"
+            }
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "locationType",
+        "path",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "recordThreadView": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "removeCategoryModerator": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "moderatorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "moderatorId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "reorderForumCategories": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categoryIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        }
+      },
+      "required": [
+        "categoryIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "restorePrivateMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "search": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "categorySlug": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "page": {
+          "type": "number"
+        },
+        "threadPage": {
+          "type": "number"
+        },
+        "replyPage": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "resultType": {
+          "anyOf": [
+            {
+              "const": "all"
+            },
+            {
+              "const": "threads"
+            },
+            {
+              "const": "replies"
+            }
+          ]
+        },
+        "author": {
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "const": "all"
+            },
+            {
+              "const": "titles"
+            },
+            {
+              "const": "bodies"
+            }
+          ]
+        },
+        "sortKey": {
+          "anyOf": [
+            {
+              "const": "relevance"
+            },
+            {
+              "const": "newest"
+            },
+            {
+              "const": "oldest"
+            },
+            {
+              "const": "replies"
+            },
+            {
+              "const": "views"
+            }
+          ]
+        },
+        "days": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "sendPrivateMessage": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "recipientUsername": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "recipientUsername",
+        "subject",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setCategorySubscription": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "subscribed": {
+          "type": "boolean"
+        },
+        "categorySlug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "subscribed",
+        "categorySlug"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setForumReputation": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "targetType": {
+          "anyOf": [
+            {
+              "const": "thread"
+            },
+            {
+              "const": "post"
+            }
+          ]
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "score": {
+          "anyOf": [
+            {
+              "const": -1
+            },
+            {
+              "const": 0
+            },
+            {
+              "const": 1
+            }
+          ]
+        },
+        "comment": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "targetType",
+        "threadId",
+        "score"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setThreadBookmark": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "saved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "threadId",
+        "saved"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setThreadSubscription": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "subscribed": {
+          "type": "boolean"
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "subscribed",
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "splitForumPosts": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "postIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        },
+        "targetCategoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "title": {
+          "type": "string"
+        },
+        "prefixId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "postIds",
+        "targetCategoryId",
+        "title"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumPollStatus": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pollId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "open"
+            },
+            {
+              "const": "closed"
+            }
+          ]
+        }
+      },
+      "required": [
+        "pollId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumPostModeration": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "pending"
+            },
+            {
+              "const": "active"
+            },
+            {
+              "const": "hidden"
+            },
+            {
+              "const": "deleted"
+            }
+          ]
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "postId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumRelationship": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "buddy"
+            },
+            {
+              "const": "ignore"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "username",
+        "kind",
+        "enabled"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumReportStatus": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "reportId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "open"
+            },
+            {
+              "const": "reviewed"
+            },
+            {
+              "const": "dismissed"
+            }
+          ]
+        },
+        "moderationNote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reportId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumThreadModeration": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "pending"
+            },
+            {
+              "const": "active"
+            },
+            {
+              "const": "locked"
+            },
+            {
+              "const": "hidden"
+            },
+            {
+              "const": "deleted"
+            }
+          ]
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "moderationReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateForumWarningStatus": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "warningId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "revoked"
+            },
+            {
+              "const": "expired"
+            }
+          ]
+        },
+        "moderationNote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "warningId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateMyForumNotificationPreferences": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "inAppReplies": {
+          "type": "boolean"
+        },
+        "inAppNewThreads": {
+          "type": "boolean"
+        },
+        "inAppMentions": {
+          "type": "boolean"
+        },
+        "emailReplies": {
+          "type": "boolean"
+        },
+        "emailNewThreads": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "inAppReplies",
+        "inAppNewThreads",
+        "emailReplies",
+        "emailNewThreads"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateMyForumProfile": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "avatarUrl": {
+          "type": "string"
+        },
+        "bio": {
+          "type": "string"
+        },
+        "birthday": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "customTitle": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "showSignatures": {
+          "type": "boolean"
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "websiteUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "showSignatures"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updatePollContent": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pollId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "question": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8192
+        }
+      },
+      "required": [
+        "pollId",
+        "question",
+        "options"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updatePostContent": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "attachmentIdsToKeep": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        },
+        "editReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "postId",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateThreadContent": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "prefixId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "attachmentIdsToKeep": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        },
+        "editReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "title",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertAnnouncementAdmin": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "announcementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slug": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        },
+        "position": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "slug",
+        "title",
+        "body",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertBoardRulesAdmin": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "rulesId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        }
+      },
+      "required": [
+        "categoryId",
+        "title",
+        "body",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertCalendarEventAdmin": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slug": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        },
+        "startsAt": {
+          "type": "number"
+        },
+        "endsAt": {
+          "type": "number"
+        },
+        "allDay": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "slug",
+        "title",
+        "body",
+        "status",
+        "startsAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertForumCategory": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slug": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "section"
+            },
+            {
+              "const": "board"
+            }
+          ]
+        },
+        "parentCategoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        },
+        "viewAccess": {
+          "anyOf": [
+            {
+              "const": "public"
+            },
+            {
+              "const": "members"
+            },
+            {
+              "const": "trusted"
+            },
+            {
+              "const": "staff"
+            }
+          ]
+        },
+        "threadAccess": {
+          "anyOf": [
+            {
+              "const": "members"
+            },
+            {
+              "const": "trusted"
+            },
+            {
+              "const": "staff"
+            },
+            {
+              "const": "closed"
+            }
+          ]
+        },
+        "replyAccess": {
+          "anyOf": [
+            {
+              "const": "members"
+            },
+            {
+              "const": "trusted"
+            },
+            {
+              "const": "staff"
+            },
+            {
+              "const": "closed"
+            }
+          ]
+        },
+        "pollAccess": {
+          "anyOf": [
+            {
+              "const": "members"
+            },
+            {
+              "const": "trusted"
+            },
+            {
+              "const": "staff"
+            },
+            {
+              "const": "closed"
+            }
+          ]
+        },
+        "position": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertHelpDocumentAdmin": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "helpDocumentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slug": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        },
+        "position": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "slug",
+        "title",
+        "body",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "upsertThreadPrefixAdmin": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "prefixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "categoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slug": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "archived"
+            }
+          ]
+        },
+        "position": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "slug",
+        "label",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "votePoll": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pollId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "optionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "pollId",
+        "optionId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "listUsers": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "updateUserForumRole": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "forumRole": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "const": "moderator"
+                },
+                {
+                  "const": "admin"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "userId",
+        "forumRole"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateUserForumStatus": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "suspended"
+            },
+            {
+              "const": "banned"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "suspendedUntil": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "userId",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateUserForumTrust": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "trusted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "userId",
+        "trusted"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

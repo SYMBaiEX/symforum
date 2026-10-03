@@ -12,7 +12,7 @@ describe("developer documentation indexing", () => {
     expect(payload.keyLocation).toBe(
       `https://www.symbaiex.com/indexnow-${"a".repeat(64)}.txt`,
     );
-    expect(new Set(payload.urlList).size).toBe(11);
+    expect(new Set(payload.urlList).size).toBe(12);
     for (const slug of Object.keys(DEVELOPER_RESOURCES))
       expect(payload.urlList).toContain(
         `https://www.symbaiex.com/developers/${slug}`,
@@ -27,7 +27,7 @@ describe("developer documentation indexing", () => {
       );
     }
     payload.urlList.pop();
-    expect(DEVELOPER_INDEX_URLS).toHaveLength(11);
+    expect(DEVELOPER_INDEX_URLS).toHaveLength(12);
     expect(DEVELOPER_INDEX_URLS).not.toContain(
       "https://www.symbaiex.com/agent/instructions",
     );

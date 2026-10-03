@@ -1,3 +1,4 @@
+import type { ForumPluginPrincipal } from "./forumPluginPrincipal";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
@@ -606,6 +607,7 @@ export async function consumeAgentQuotaForRequest(
     requestFingerprint?: string;
     now?: number;
   },
+  trustedPluginPrincipal?: ForumPluginPrincipal,
 ): Promise<AgentQuotaConsumeResult> {
   const units = requireIntegerInRange(args.units, "units", 1);
   const agentId = args.agentId.trim().toLowerCase();
@@ -634,7 +636,7 @@ export async function consumeAgentQuotaForRequest(
   // cannot spend another agent's owner-scoped allowance by guessing agentId.
   const caller = await ctx.auth.getUserIdentity();
   const authenticatedUser = caller ? await getCurrentUser(ctx) : null;
-  if (caller !== null && authenticatedUser?._id !== identity.userId) {
+  if (trustedPluginPrincipal ? trustedPluginPrincipal.credentialAgent._id !== identity._id || trustedPluginPrincipal.owner._id !== identity.ownerUserId : caller !== null && authenticatedUser?._id !== identity.userId) {
     throw new ConvexError({
       code: "AGENT_IDENTITY_MISMATCH",
       message: "The authenticated agent does not match the requested agent.",
@@ -917,3 +919,14 @@ export const recordAgentUsage = consumeAgentQuota;
 
 /** Explicit alias for quota dashboards and future API consumers. */
 export const getQuotaStatus = getAgentQuota;
+
+/** Called only after a server-side plugin grant is resolved; human mode still spends automation quota. */
+export async function consumeForumPluginQuota(ctx: MutationCtx, principal: ForumPluginPrincipal, args: {operation: string; idempotencyKey: string; requestFingerprint?:string}) {
+  const result = await consumeAgentQuotaForRequest(ctx, {
+    agentId: principal.credentialAgent.agentId, units: 1,
+    operation: args.operation, idempotencyKey: args.idempotencyKey, requestFingerprint:args.requestFingerprint,
+    metadataJson: JSON.stringify({ connectionId: principal.connection._id, actorUserId: principal.actor._id, agentAssisted: true }),
+  }, principal);
+  if (!result.accepted) throw new ConvexError({ code: "AGENT_QUOTA_EXCEEDED", message: "Agent usage quota reached.", reason: result.reason, retryAfter: result.retryAfter });
+  return result;
+}

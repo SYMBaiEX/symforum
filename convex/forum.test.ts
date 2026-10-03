@@ -2,6 +2,7 @@
 
 import { convexTest } from "convex-test";
 import agentTest from "@convex-dev/agent/test";
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import presenceTest from "@convex-dev/presence/test";
 import { describe, expect, test, vi } from "vitest";
 
@@ -35,6 +36,7 @@ const modules = {
 function setup() {
   const t = convexTest(schema, modules);
   agentTest.register(t);
+  registerRateLimiter(t);
   presenceTest.register(t);
   return t;
 }

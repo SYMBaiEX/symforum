@@ -8,9 +8,11 @@ import { AGENT_MCP_RESOURCE_AUDIENCE } from "./agentIdentityCrypto";
 import { normalizeAgentDataHttpError } from "./agentDataHttpErrors";
 import { workosConfig } from "../lib/workos-config";
 import { addServiceAuthRoutes } from "./agentServiceAuthHttp";
+import { addForumPluginRoutes } from "./forumPluginHttp";
 
 const http = httpRouter();
 addServiceAuthRoutes(http);
+addForumPluginRoutes(http);
 const FORUM_ATTACHMENT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const FORUM_ATTACHMENT_ALLOWED_CONTENT_TYPES = new Set([
   "image/gif",

@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumAgentAttachmentPicker } from "./forum-webmcp";
+
 import { Button } from "@/components/ui/button";
 import { type ForumAttachmentInput } from "@/components/forum/forum-refs";
 import {
@@ -560,6 +562,7 @@ export function ForumAttachmentDraftPanel({
 
   return (
     <section className="border border-row-border p-3">
+      <ForumAgentAttachmentPicker />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase text-muted-foreground">

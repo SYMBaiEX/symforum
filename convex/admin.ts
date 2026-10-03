@@ -1,3 +1,5 @@
+import { forumPluginPrincipal } from "./forumPluginContext";
+import { defineForumQuery, defineForumMutation } from './forumOperationDefinitions';
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -445,10 +447,10 @@ export const overview = query({
   },
 });
 
-export const listUsers = query({
+const listUsersOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
+    await requireForumPluginAccountOwner(ctx);
     const users = await ctx.db
       .query("users")
       .withIndex("by_usernameNormalized")
@@ -457,6 +459,7 @@ export const listUsers = query({
     return users.map(adminUserRecord);
   },
 });
+export const listUsers = query(listUsersOperation);
 
 export const updateUserRole = mutation({
   args: {
@@ -516,16 +519,19 @@ export const updateUserRole = mutation({
   },
 });
 
-export const updateUserForumRole = mutation({
+const updateUserForumRoleOperation = defineForumMutation({
   args: {
     userId: v.id("users"),
     forumRole: v.union(forumRoleValidator, v.null()),
   },
   handler: async (ctx, args) => {
-    const actor = await requireOwner(ctx);
+    const actor = await requireForumPluginAccountOwner(ctx);
     const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
+    }
+    if (forumPluginPrincipal(ctx) && user.isAgent && args.forumRole !== null) {
+      throw new Error("Delegated staff permissions belong to the human owner, not an agent profile.");
     }
     if (
       args.forumRole !== null &&
@@ -569,14 +575,15 @@ export const updateUserForumRole = mutation({
     return adminUserRecord(updated);
   },
 });
+export const updateUserForumRole = mutation(updateUserForumRoleOperation);
 
-export const updateUserForumTrust = mutation({
+const updateUserForumTrustOperation = defineForumMutation({
   args: {
     userId: v.id("users"),
     trusted: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const actor = await requireOwner(ctx);
+    const actor = await requireForumPluginAccountOwner(ctx);
     const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
@@ -633,8 +640,9 @@ export const updateUserForumTrust = mutation({
     return adminUserRecord(updated);
   },
 });
+export const updateUserForumTrust = mutation(updateUserForumTrustOperation);
 
-export const updateUserForumStatus = mutation({
+const updateUserForumStatusOperation = defineForumMutation({
   args: {
     userId: v.id("users"),
     status: forumAccountStatusValidator,
@@ -642,7 +650,7 @@ export const updateUserForumStatus = mutation({
     suspendedUntil: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const actor = await requireOwner(ctx);
+    const actor = await requireForumPluginAccountOwner(ctx);
     const user = await ctx.db.get("users", args.userId);
     if (user === null) {
       throw new Error("User not found");
@@ -737,6 +745,7 @@ export const updateUserForumStatus = mutation({
     return adminUserRecord(updated);
   },
 });
+export const updateUserForumStatus = mutation(updateUserForumStatusOperation);
 
 export const listPosts = query({
   args: {},
@@ -1106,3 +1115,20 @@ export const updateContactRequestStatus = mutation({
     return { updated: true };
   },
 });
+
+/** Plain domain definitions shared by first-party handlers and trusted plugin execution. */
+export const forumAccountOperations = {
+listUsers: { kind: 'query', definition: listUsersOperation },
+updateUserForumRole: { kind: 'mutation', definition: updateUserForumRoleOperation },
+updateUserForumTrust: { kind: 'mutation', definition: updateUserForumTrustOperation },
+updateUserForumStatus: { kind: 'mutation', definition: updateUserForumStatusOperation }
+} as const;
+
+async function requireForumPluginAccountOwner(ctx: QueryCtx | MutationCtx) {
+  const principal = forumPluginPrincipal(ctx);
+  if (!principal) return await requireOwner(ctx);
+  if (!principal.capabilities.includes("accounts") || principal.owner.role !== "owner") {
+    throw new Error("Owner access is required.");
+  }
+  return principal.owner;
+}

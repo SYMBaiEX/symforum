@@ -1,6 +1,12 @@
 import type { UserIdentity } from "convex/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
-import { WORKOS_GRANT_CLAIM } from "../lib/workos-config";
+import {
+  WORKOS_GRANT_CLAIM,
+  WORKOS_PLUGIN_GRANT_CLAIM,
+  WORKOS_PLUGIN_RESOURCE_CLAIM,
+  WORKOS_PLUGIN_KIND_CLAIM,
+  WORKOS_AGENT_RESOURCE,
+} from "../lib/workos-config";
 
 /** Runs only after Convex has verified issuer, RS256 signature, expiry and audience. */
 export async function resolveOAuthAgent(
@@ -9,6 +15,24 @@ export async function resolveOAuthAgent(
   issuer: string,
 ) {
   if (identity.issuer !== issuer || !identity.subject) return null;
+  // Reject plugin and cross-resource tokens before looking up evidence grants.
+  if (
+    identity[WORKOS_PLUGIN_GRANT_CLAIM] ||
+    identity[WORKOS_PLUGIN_RESOURCE_CLAIM] ||
+    identity[WORKOS_PLUGIN_KIND_CLAIM]
+  )
+    return null;
+  const audience = identity.aud;
+  if (
+    audience !== undefined &&
+    audience !== WORKOS_AGENT_RESOURCE &&
+    !(
+      Array.isArray(audience) &&
+      audience.length === 1 &&
+      audience[0] === WORKOS_AGENT_RESOURCE
+    )
+  )
+    return null;
   const grantValue = identity[WORKOS_GRANT_CLAIM];
   if (typeof grantValue !== "string") return null;
   const grantId = ctx.db.normalizeId("agentOAuthGrants", grantValue);

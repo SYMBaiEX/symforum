@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { ForumAgentContextStrip } from "@/components/forum/forum-webmcp";
 import { safeImageUrl } from "@/lib/safe-url";
 import { ForumBbcodeBody } from "@/components/forum/forum-bbcode";
 import { decodeForumEntities } from "@/components/forum/forum-bbcode-model";
@@ -329,6 +330,7 @@ export function ForumChrome({
     >
       <ForumPresenceHeartbeat pathname={pathname} />
       <ForumWelcomeStrip />
+      <ForumAgentContextStrip />
       {children ? (
         <div className="border-t border-row-border bg-background px-2 py-2 md:px-3">
           {children}
@@ -1030,6 +1032,7 @@ export function ForumUserCpShell({
   const normalizedPathname = normalizedForumPathname(pathname);
   const items = [
     { href: "/forum/control-panel", label: "Profile settings" },
+    { href: "/forum/control-panel/agent-access", label: "Agent access" },
     { href: "/forum/messages", label: "Private messages" },
     { href: "/forum/subscriptions", label: "Subscriptions" },
     { href: "/forum/saved", label: "Saved threads" },

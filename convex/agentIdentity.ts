@@ -189,9 +189,11 @@ export const listMyAgentConsoleStatus = query({
           status: identity.status,
           scopes: identity.scopes,
           keyVersion: identity.keyVersion,
-          publicKeyFingerprint: (
-            await sha256Base64Url(identity.publicKey)
-          ).slice(0, 16),
+          credentialKind: identity.credentialKind ?? "ed25519",
+          publicKeyFingerprint:
+            typeof identity.publicKey === "string"
+              ? (await sha256Base64Url(identity.publicKey)).slice(0, 16)
+              : null,
           createdAt: identity.createdAt,
           updatedAt: identity.updatedAt,
           revokedAt: identity.revokedAt,
@@ -332,6 +334,7 @@ export const enrollAgent = mutation({
       agentId,
       userId,
       ownerUserId: owner._id,
+      credentialKind: "ed25519",
       publicKey: args.publicKey,
       scopes,
       status: "active",
@@ -358,7 +361,11 @@ export const requestLoginChallenge = mutation({
     const agentId = resolveAgentId(args);
     const audience = normalizeAudience(args.audience);
     const identity = await findIdentityByAgentId(ctx, agentId);
-    if (identity === null || identity.status !== "active") {
+    if (
+      identity === null ||
+      identity.status !== "active" ||
+      identity.credentialKind === "oauth"
+    ) {
       throw new ConvexError({
         code: "AGENT_NOT_ACTIVE",
         message: "The requested agent is not active.",
@@ -508,6 +515,7 @@ export const rotateAgentKey = mutation({
     const now = Date.now();
     const keyVersion = identity.keyVersion + 1;
     await ctx.db.patch("agentIdentities", identity._id, {
+      credentialKind: "ed25519",
       publicKey,
       scopes,
       keyVersion,
@@ -545,7 +553,12 @@ export const getLoginContext = internalQuery({
       return null;
     }
     const identity = await findIdentityByAgentId(ctx, args.agentId);
-    if (identity === null || identity.status !== "active") return null;
+    if (
+      identity === null ||
+      identity.status !== "active" ||
+      identity.credentialKind === "oauth"
+    )
+      return null;
     return {
       challengeId: challenge._id,
       challengeHash,
@@ -594,6 +607,7 @@ export const consumeLoginChallenge = internalMutation({
     if (
       identity === null ||
       identity.status !== "active" ||
+      identity.credentialKind === "oauth" ||
       identity.keyVersion !== args.keyVersion
     ) {
       throw new ConvexError({
@@ -626,4 +640,73 @@ async function requireAgentManager(
     });
   }
   return actor;
+}
+
+/** First-party consent may provision a credential without a signing key. */
+export async function createOAuthOnlyAgent(
+  ctx: MutationCtx,
+  owner: import("./_generated/dataModel").Doc<"users">,
+) {
+  if (
+    owner.isAgent ||
+    (!hasSiteAdminAccess(owner) && owner.emailVerificationTime === undefined)
+  ) {
+    throw new ConvexError(
+      "Verify your human account email before creating an agent profile.",
+    );
+  }
+  const identities = await ctx.db
+    .query("agentIdentities")
+    .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", owner._id))
+    .take(MAX_ENROLLED_AGENTS_PER_OWNER);
+  if (identities.length >= MAX_ENROLLED_AGENTS_PER_OWNER)
+    throw new ConvexError("Agent identity limit reached.");
+  const [capacity, ownerCapacity] = await Promise.all([
+    agentEnrollmentRateLimiter.limit(ctx, "enrollmentGlobal", {
+      key: "global",
+    }),
+    agentEnrollmentRateLimiter.limit(ctx, "enrollmentPerOwner", {
+      key: owner._id,
+    }),
+  ]);
+  if (!capacity.ok || !ownerCapacity.ok)
+    throw new ConvexError("Agent creation is temporarily rate limited.");
+  const agentId = `forum-${randomBase64Url(12).toLowerCase()}`;
+  if (
+    (await findIdentityByAgentId(ctx, agentId)) ||
+    (await ctx.db
+      .query("users")
+      .withIndex("by_usernameNormalized", (q) =>
+        q.eq("usernameNormalized", agentId),
+      )
+      .unique())
+  )
+    throw new ConvexError("Agent name collision. Please retry.");
+  const now = Date.now();
+  const userId = await ctx.db.insert("users", {
+    name: "Forum agent",
+    username: agentId,
+    usernameNormalized: agentId,
+    usernameSource: "auto",
+    role: "reader",
+    onboardedAt: now,
+    isAgent: true,
+    agentSlug: agentId,
+    agentStatus: "active",
+    agentScopes: ["forum"],
+    agentKeyVersion: 1,
+    agentEnrolledAt: now,
+  });
+  const identityId = await ctx.db.insert("agentIdentities", {
+    agentId,
+    userId,
+    ownerUserId: owner._id,
+    credentialKind: "oauth",
+    scopes: ["forum"],
+    status: "active",
+    keyVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return (await ctx.db.get("agentIdentities", identityId))!;
 }

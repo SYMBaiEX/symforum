@@ -23,6 +23,7 @@ export function AgentOAuthConnect({
   );
   const complete = useAction(api.agentOAuthConnect.complete);
   const revoke = useMutation(api.agentOAuth.revokeConnection);
+  const [accessKind, setAccessKind] = useState<"evidence" | null>(null);
   const [agentId, setAgentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +52,16 @@ export function AgentOAuthConnect({
   return (
     <div className="space-y-6">
       {externalAuthId && (
+        <section aria-labelledby="agent-connect-access" className="space-y-3 border-y border-row-border py-4">
+          <h2 id="agent-connect-access" className="text-lg font-semibold">Choose what to connect</h2>
+          <p className="text-sm leading-6 text-muted-foreground">Choose forum access for browsing, posting, messages, and community tools. Choose evidence access for sources, claims, and research.</p>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild><Link href={asRoute(`/agent/forum-connect?external_auth_id=${encodeURIComponent(externalAuthId)}`)}>Connect forum access</Link></Button>
+            <Button variant="outline" type="button" onClick={() => setAccessKind("evidence")}>Connect evidence access</Button>
+          </div>
+        </section>
+      )}
+      {externalAuthId && accessKind === "evidence" && (
         <form
           className="space-y-4"
           onSubmit={async (event) => {

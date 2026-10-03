@@ -1,3 +1,5 @@
+import { forumPluginPrincipal, forumUserPrincipal, principalForumUser } from "./forumPluginContext";
+import { defineForumQuery, defineForumMutation } from './forumOperationDefinitions';
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { createThread as createAgentThread } from "@convex-dev/agent";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
@@ -923,7 +925,7 @@ type ForumLastPostTarget = {
   lastPostPage?: number;
 };
 
-export const listCategories = query({
+const listCategoriesOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -1002,13 +1004,14 @@ export const listCategories = query({
     });
   },
 });
+export const listCategories = query(listCategoriesOperation);
 
 /**
  * A compact category list for navigation and filter controls. Those surfaces
  * need labels and hierarchy only; avoid reading each board's latest-thread,
  * author, pagination-target, and per-viewer read-state data.
  */
-export const listCategoryOptions = query({
+const listCategoryOptionsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -1042,8 +1045,9 @@ export const listCategoryOptions = query({
       }));
   },
 });
+export const listCategoryOptions = query(listCategoryOptionsOperation);
 
-export const listThreadPrefixes = query({
+const listThreadPrefixesOperation = defineForumQuery({
   args: {
     categorySlug: v.string(),
   },
@@ -1058,6 +1062,7 @@ export const listThreadPrefixes = query({
     return prefixes.map(publicThreadPrefixRecord);
   },
 });
+export const listThreadPrefixes = query(listThreadPrefixesOperation);
 
 export const routeStatus = query({
   args: {
@@ -1165,7 +1170,7 @@ export const routeStatus = query({
   },
 });
 
-export const listAnnouncements = query({
+const listAnnouncementsOperation = defineForumQuery({
   args: {
     categorySlug: v.optional(v.string()),
     includeBoardAnnouncements: v.optional(v.boolean()),
@@ -1240,8 +1245,9 @@ export const listAnnouncements = query({
       );
   },
 });
+export const listAnnouncements = query(listAnnouncementsOperation);
 
-export const getAnnouncement = query({
+const getAnnouncementOperation = defineForumQuery({
   args: {
     slug: v.string(),
     categorySlug: v.optional(v.string()),
@@ -1295,8 +1301,9 @@ export const getAnnouncement = query({
     return publicForumAnnouncementRecord(announcement, category);
   },
 });
+export const getAnnouncement = query(getAnnouncementOperation);
 
-export const listHelpDocuments = query({
+const listHelpDocumentsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -1316,8 +1323,9 @@ export const listHelpDocuments = query({
     return documents.map(publicForumHelpDocumentSummaryRecord);
   },
 });
+export const listHelpDocuments = query(listHelpDocumentsOperation);
 
-export const getHelpDocument = query({
+const getHelpDocumentOperation = defineForumQuery({
   args: {
     slug: v.string(),
   },
@@ -1334,8 +1342,9 @@ export const getHelpDocument = query({
     return publicForumHelpDocumentRecord(document);
   },
 });
+export const getHelpDocument = query(getHelpDocumentOperation);
 
-export const listCalendarEvents = query({
+const listCalendarEventsOperation = defineForumQuery({
   args: {
     month: v.string(),
   },
@@ -1351,6 +1360,7 @@ export const listCalendarEvents = query({
     return events.map(publicForumCalendarEventSummaryRecord);
   },
 });
+export const listCalendarEvents = query(listCalendarEventsOperation);
 
 /**
  * Return only the public fields needed to build the forum sitemap.
@@ -1476,7 +1486,7 @@ function categoryIsPublicForSitemap(
   return false;
 }
 
-export const getCalendarEvent = query({
+const getCalendarEventOperation = defineForumQuery({
   args: {
     slug: v.string(),
   },
@@ -1493,8 +1503,9 @@ export const getCalendarEvent = query({
     return publicForumCalendarEventRecord(event);
   },
 });
+export const getCalendarEvent = query(getCalendarEventOperation);
 
-export const overview = query({
+const overviewOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const viewer = await maybeCurrentUser(ctx);
@@ -1653,8 +1664,9 @@ export const overview = query({
     };
   },
 });
+export const overview = query(overviewOperation);
 
-export const listThreads = query({
+const listThreadsOperation = defineForumQuery({
   args: {
     categorySlug: v.string(),
     limit: v.optional(v.number()),
@@ -1886,6 +1898,7 @@ export const listThreads = query({
     };
   },
 });
+export const listThreads = query(listThreadsOperation);
 
 /**
  * Compact, public-only feed for the research landing page.
@@ -1896,7 +1909,7 @@ export const listThreads = query({
  * and activity index, then its current category and ancestor visibility is
  * checked again before the merged result is returned.
  */
-export const listResearchFeedThreads = query({
+const listResearchFeedThreadsOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const requestedCategories = await Promise.all(
@@ -1955,8 +1968,9 @@ export const listResearchFeedThreads = query({
     }));
   },
 });
+export const listResearchFeedThreads = query(listResearchFeedThreadsOperation);
 
-export const listRecentThreads = query({
+const listRecentThreadsOperation = defineForumQuery({
   args: {
     mode: recentThreadModeValidator,
     now: v.number(),
@@ -2146,8 +2160,9 @@ export const listRecentThreads = query({
     };
   },
 });
+export const listRecentThreads = query(listRecentThreadsOperation);
 
-export const getThread = query({
+const getThreadOperation = defineForumQuery({
   args: {
     categorySlug: v.string(),
     threadSlug: v.string(),
@@ -2409,8 +2424,9 @@ export const getThread = query({
     };
   },
 });
+export const getThread = query(getThreadOperation);
 
-export const search = query({
+const searchOperation = defineForumQuery({
   args: {
     query: v.optional(v.string()),
     categorySlug: v.optional(v.string()),
@@ -2700,8 +2716,9 @@ export const search = query({
     };
   },
 });
+export const search = query(searchOperation);
 
-export const listMyThreadSubscriptions = query({
+const listMyThreadSubscriptionsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -2789,8 +2806,9 @@ export const listMyThreadSubscriptions = query({
     };
   },
 });
+export const listMyThreadSubscriptions = query(listMyThreadSubscriptionsOperation);
 
-export const listMyThreadBookmarks = query({
+const listMyThreadBookmarksOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -2876,8 +2894,9 @@ export const listMyThreadBookmarks = query({
     };
   },
 });
+export const listMyThreadBookmarks = query(listMyThreadBookmarksOperation);
 
-export const listMyCategorySubscriptions = query({
+const listMyCategorySubscriptionsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -2954,8 +2973,9 @@ export const listMyCategorySubscriptions = query({
     };
   },
 });
+export const listMyCategorySubscriptions = query(listMyCategorySubscriptionsOperation);
 
-export const listMyNotifications = query({
+const listMyNotificationsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
     status: v.optional(notificationStatusValidator),
@@ -3023,8 +3043,9 @@ export const listMyNotifications = query({
     };
   },
 });
+export const listMyNotifications = query(listMyNotificationsOperation);
 
-export const getMyForumNavState = query({
+const getMyForumNavStateOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const user = await maybeCurrentUser(ctx);
@@ -3076,8 +3097,9 @@ export const getMyForumNavState = query({
     };
   },
 });
+export const getMyForumNavState = query(getMyForumNavStateOperation);
 
-export const recordPresence = mutation({
+const recordPresenceOperation = defineForumMutation({
   args: {
     locationType: presenceLocationTypeValidator,
     path: v.string(),
@@ -3143,8 +3165,9 @@ export const recordPresence = mutation({
     return { recorded: true, presenceId: existing._id, lastSeenAt: now };
   },
 });
+export const recordPresence = mutation(recordPresenceOperation);
 
-export const markNotificationRead = mutation({
+const markNotificationReadOperation = defineForumMutation({
   args: {
     notificationId: v.optional(v.id("forumNotifications")),
     markAll: v.optional(v.boolean()),
@@ -3201,8 +3224,9 @@ export const markNotificationRead = mutation({
     return { marked: 1 };
   },
 });
+export const markNotificationRead = mutation(markNotificationReadOperation);
 
-export const listPrivateMessages = query({
+const listPrivateMessagesOperation = defineForumQuery({
   args: {
     box: v.optional(privateMessageBoxValidator),
     limit: v.optional(v.number()),
@@ -3290,8 +3314,9 @@ export const listPrivateMessages = query({
     };
   },
 });
+export const listPrivateMessages = query(listPrivateMessagesOperation);
 
-export const getPrivateMessage = query({
+const getPrivateMessageOperation = defineForumQuery({
   args: {
     messageId: v.id("forumPrivateMessages"),
     box: v.optional(privateMessageBoxValidator),
@@ -3318,8 +3343,9 @@ export const getPrivateMessage = query({
     return privateMessageDetailRecord(message, user._id, usersById, args.box);
   },
 });
+export const getPrivateMessage = query(getPrivateMessageOperation);
 
-export const sendPrivateMessage = mutation({
+const sendPrivateMessageOperation = defineForumMutation({
   args: {
     recipientUsername: v.string(),
     subject: v.string(),
@@ -3356,6 +3382,7 @@ export const sendPrivateMessage = mutation({
         "Send private messages to another member.",
       );
     }
+    await assertOwnerPrivateMessageRules(ctx, sender, recipient);
     const recipientIgnoresSender = await loadForumUserRelationship(
       ctx,
       recipient._id,
@@ -3448,8 +3475,9 @@ export const sendPrivateMessage = mutation({
     return { messageId, createdAt: now };
   },
 });
+export const sendPrivateMessage = mutation(sendPrivateMessageOperation);
 
-export const markPrivateMessageRead = mutation({
+const markPrivateMessageReadOperation = defineForumMutation({
   args: {
     messageId: v.id("forumPrivateMessages"),
   },
@@ -3483,8 +3511,9 @@ export const markPrivateMessageRead = mutation({
     return { marked: true };
   },
 });
+export const markPrivateMessageRead = mutation(markPrivateMessageReadOperation);
 
-export const deletePrivateMessage = mutation({
+const deletePrivateMessageOperation = defineForumMutation({
   args: {
     messageId: v.id("forumPrivateMessages"),
     box: privateMessageBoxValidator,
@@ -3571,8 +3600,9 @@ export const deletePrivateMessage = mutation({
     return { deleted: true };
   },
 });
+export const deletePrivateMessage = mutation(deletePrivateMessageOperation);
 
-export const restorePrivateMessage = mutation({
+const restorePrivateMessageOperation = defineForumMutation({
   args: {
     messageId: v.id("forumPrivateMessages"),
   },
@@ -3621,8 +3651,9 @@ export const restorePrivateMessage = mutation({
     );
   },
 });
+export const restorePrivateMessage = mutation(restorePrivateMessageOperation);
 
-export const listMembers = query({
+const listMembersOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
     page: v.optional(v.number()),
@@ -3720,8 +3751,9 @@ export const listMembers = query({
     };
   },
 });
+export const listMembers = query(listMembersOperation);
 
-export const listOnlineMembers = query({
+const listOnlineMembersOperation = defineForumQuery({
   args: {
     now: v.number(),
     limit: v.optional(v.number()),
@@ -3777,8 +3809,9 @@ export const listOnlineMembers = query({
     };
   },
 });
+export const listOnlineMembers = query(listOnlineMembersOperation);
 
-export const onlineSummary = query({
+const onlineSummaryOperation = defineForumQuery({
   args: { now: v.number() },
   handler: async (ctx, args) => {
     return await onlineForumSummary(
@@ -3788,8 +3821,9 @@ export const onlineSummary = query({
     );
   },
 });
+export const onlineSummary = query(onlineSummaryOperation);
 
-export const getMyForumProfile = query({
+const getMyForumProfileOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const user = await requireSignedInUser(
@@ -3805,8 +3839,9 @@ export const getMyForumProfile = query({
     return myForumProfileRecord(user, profile, warningSummary);
   },
 });
+export const getMyForumProfile = query(getMyForumProfileOperation);
 
-export const getMyForumNotificationPreferences = query({
+const getMyForumNotificationPreferencesOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const user = await requireSignedInUser(
@@ -3817,8 +3852,9 @@ export const getMyForumNotificationPreferences = query({
     return myForumNotificationPreferencesRecord(user, preferences);
   },
 });
+export const getMyForumNotificationPreferences = query(getMyForumNotificationPreferencesOperation);
 
-export const listMyForumReputationHistory = query({
+const listMyForumReputationHistoryOperation = defineForumQuery({
   args: {
     direction: reputationHistoryDirectionValidator,
     limit: v.optional(v.number()),
@@ -3851,8 +3887,9 @@ export const listMyForumReputationHistory = query({
     return await loadVisibleMyForumReputationHistory(ctx, query, user, limit);
   },
 });
+export const listMyForumReputationHistory = query(listMyForumReputationHistoryOperation);
 
-export const listMyForumWarnings = query({
+const listMyForumWarningsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -3877,8 +3914,9 @@ export const listMyForumWarnings = query({
     return await hydrateMyForumWarnings(ctx, warnings, user, Date.now());
   },
 });
+export const listMyForumWarnings = query(listMyForumWarningsOperation);
 
-export const listMyPendingForumContent = query({
+const listMyPendingForumContentOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -3917,8 +3955,9 @@ export const listMyPendingForumContent = query({
     );
   },
 });
+export const listMyPendingForumContent = query(listMyPendingForumContentOperation);
 
-export const listMyForumRelationships = query({
+const listMyForumRelationshipsOperation = defineForumQuery({
   args: {
     limit: v.optional(v.number()),
   },
@@ -3983,8 +4022,9 @@ export const listMyForumRelationships = query({
     };
   },
 });
+export const listMyForumRelationships = query(listMyForumRelationshipsOperation);
 
-export const authorizeForumAttachmentUpload = internalQuery({
+const authorizeForumAttachmentUploadOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const user = await requireSignedInUser(
@@ -4004,8 +4044,9 @@ export const authorizeForumAttachmentUpload = internalQuery({
     return { ok: true };
   },
 });
+export const authorizeForumAttachmentUpload = internalQuery(authorizeForumAttachmentUploadOperation);
 
-export const claimStoredForumAttachmentUpload = internalMutation({
+const claimStoredForumAttachmentUploadOperation = defineForumMutation({
   args: {
     storageId: v.id("_storage"),
     filename: v.string(),
@@ -4075,6 +4116,7 @@ export const claimStoredForumAttachmentUpload = internalMutation({
     return normalized;
   },
 });
+export const claimStoredForumAttachmentUpload = internalMutation(claimStoredForumAttachmentUploadOperation);
 
 export const cleanupForumAttachmentStorage = internalMutation({
   args: {
@@ -4120,7 +4162,7 @@ export const cleanupForumAttachmentStorage = internalMutation({
   },
 });
 
-export const createThread = mutation({
+const createThreadOperation = defineForumMutation({
   args: {
     categorySlug: v.string(),
     prefixId: v.optional(v.union(v.id("forumThreadPrefixes"), v.null())),
@@ -4222,7 +4264,7 @@ export const createThread = mutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    await consumeAgentQuotaIfNeeded(ctx, user, {
+    if (!forumPluginPrincipal(ctx)) await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "forum.create-thread",
       idempotencyKey: args.idempotencyKey,
     });
@@ -4351,8 +4393,9 @@ export const createThread = mutation({
     };
   },
 });
+export const createThread = mutation(createThreadOperation);
 
-export const updateMyForumProfile = mutation({
+const updateMyForumProfileOperation = defineForumMutation({
   args: {
     avatarUrl: v.optional(v.string()),
     bio: v.optional(v.string()),
@@ -4455,8 +4498,9 @@ export const updateMyForumProfile = mutation({
     return myForumProfileRecord(user, updated, warningSummary);
   },
 });
+export const updateMyForumProfile = mutation(updateMyForumProfileOperation);
 
-export const updateMyForumNotificationPreferences = mutation({
+const updateMyForumNotificationPreferencesOperation = defineForumMutation({
   args: {
     inAppReplies: v.boolean(),
     inAppNewThreads: v.boolean(),
@@ -4514,8 +4558,9 @@ export const updateMyForumNotificationPreferences = mutation({
     return myForumNotificationPreferencesRecord(user, updated);
   },
 });
+export const updateMyForumNotificationPreferences = mutation(updateMyForumNotificationPreferencesOperation);
 
-export const updateForumRelationship = mutation({
+const updateForumRelationshipOperation = defineForumMutation({
   args: {
     username: v.string(),
     kind: forumRelationshipKindValidator,
@@ -4614,8 +4659,9 @@ export const updateForumRelationship = mutation({
     };
   },
 });
+export const updateForumRelationship = mutation(updateForumRelationshipOperation);
 
-export const createReply = mutation({
+const createReplyOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     body: v.string(),
@@ -4704,7 +4750,7 @@ export const createReply = mutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    await consumeAgentQuotaIfNeeded(ctx, user, {
+    if (!forumPluginPrincipal(ctx)) await consumeAgentQuotaIfNeeded(ctx, user, {
       operation: "forum.create-reply",
       idempotencyKey: args.idempotencyKey,
     });
@@ -4820,6 +4866,7 @@ export const createReply = mutation({
     };
   },
 });
+export const createReply = mutation(createReplyOperation);
 
 export const continueReplyNotifications = internalMutation({
   args: {
@@ -5050,7 +5097,7 @@ export const continueMovedThreadCategoryReferenceSync = internalMutation({
   },
 });
 
-export const recordThreadView = mutation({
+const recordThreadViewOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
   },
@@ -5135,8 +5182,9 @@ export const recordThreadView = mutation({
     return { recorded: true, viewCount: nextViewCount };
   },
 });
+export const recordThreadView = mutation(recordThreadViewOperation);
 
-export const markThreadRead = mutation({
+const markThreadReadOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     lastReadPostNumber: v.optional(v.number()),
@@ -5190,8 +5238,9 @@ export const markThreadRead = mutation({
     return { marked: true, readId, lastReadAt };
   },
 });
+export const markThreadRead = mutation(markThreadReadOperation);
 
-export const markCategoryRead = mutation({
+const markCategoryReadOperation = defineForumMutation({
   args: {
     categorySlug: v.string(),
   },
@@ -5210,8 +5259,9 @@ export const markCategoryRead = mutation({
     return { marked: true, threadCount: category.threadCount, markedAt: now };
   },
 });
+export const markCategoryRead = mutation(markCategoryReadOperation);
 
-export const markAllForumsRead = mutation({
+const markAllForumsReadOperation = defineForumMutation({
   args: {},
   handler: async (ctx) => {
     const user = await requireSignedInUser(
@@ -5241,8 +5291,56 @@ export const markAllForumsRead = mutation({
     };
   },
 });
+export const markAllForumsRead = mutation(markAllForumsReadOperation);
 
-export const toggleThreadSubscription = mutation({
+const setThreadSubscriptionOperation = defineForumMutation({
+  args: {
+    subscribed: v.boolean(),
+    threadId: v.id("forumThreads"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireSignedInUser(
+      ctx,
+      "Sign in to subscribe to threads.",
+    );
+    const thread = await ctx.db.get("forumThreads", args.threadId);
+    if (thread === null || !isVisibleThreadStatus(thread.status)) {
+      throw forumError("THREAD_NOT_FOUND", "That thread is not available.");
+    }
+    const category = await requireVisibleCategoryById(
+      ctx,
+      thread.categoryId,
+      user,
+    );
+
+    const existing = await loadThreadSubscription(ctx, user._id, thread._id);
+    const now = Date.now();
+    if (existing === null && !args.subscribed) return { subscribed: false, subscriptionId: null };
+    if (existing === null) {
+      const subscriptionId = await ctx.db.insert("forumThreadSubscriptions", {
+        userId: user._id,
+        threadId: thread._id,
+        categoryId: category._id,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { subscribed: true, subscriptionId };
+    }
+
+    const nextStatus = args.subscribed ? "active" : "muted";
+    await ctx.db.patch("forumThreadSubscriptions", existing._id, {
+      status: nextStatus,
+      updatedAt: now,
+    });
+    return {
+      subscribed: nextStatus === "active",
+      subscriptionId: existing._id,
+    };
+  },
+});
+export const setThreadSubscription = mutation(setThreadSubscriptionOperation);
+const toggleThreadSubscriptionOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
   },
@@ -5286,8 +5384,9 @@ export const toggleThreadSubscription = mutation({
     };
   },
 });
+export const toggleThreadSubscription = mutation(toggleThreadSubscriptionOperation);
 
-export const setThreadBookmark = mutation({
+const setThreadBookmarkOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     saved: v.boolean(),
@@ -5330,8 +5429,50 @@ export const setThreadBookmark = mutation({
     return { saved: true, bookmarkId };
   },
 });
+export const setThreadBookmark = mutation(setThreadBookmarkOperation);
 
-export const toggleCategorySubscription = mutation({
+const setCategorySubscriptionOperation = defineForumMutation({
+  args: {
+    subscribed: v.boolean(),
+    categorySlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireSignedInUser(
+      ctx,
+      "Sign in to subscribe to boards.",
+    );
+    const category = await requireVisibleCategory(ctx, args.categorySlug, user);
+    const existing = await loadCategorySubscription(
+      ctx,
+      user._id,
+      category._id,
+    );
+    const now = Date.now();
+    if (existing === null && !args.subscribed) return { subscribed: false, subscriptionId: null };
+    if (existing === null) {
+      const subscriptionId = await ctx.db.insert("forumCategorySubscriptions", {
+        userId: user._id,
+        categoryId: category._id,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { subscribed: true, subscriptionId };
+    }
+
+    const nextStatus = args.subscribed ? "active" : "muted";
+    await ctx.db.patch("forumCategorySubscriptions", existing._id, {
+      status: nextStatus,
+      updatedAt: now,
+    });
+    return {
+      subscribed: nextStatus === "active",
+      subscriptionId: existing._id,
+    };
+  },
+});
+export const setCategorySubscription = mutation(setCategorySubscriptionOperation);
+const toggleCategorySubscriptionOperation = defineForumMutation({
   args: {
     categorySlug: v.string(),
   },
@@ -5369,17 +5510,23 @@ export const toggleCategorySubscription = mutation({
     };
   },
 });
+export const toggleCategorySubscription = mutation(toggleCategorySubscriptionOperation);
 
-export const votePoll = mutation({
+const votePollOperation = defineForumMutation({
   args: {
     pollId: v.id("forumPolls"),
     optionId: v.id("forumPollOptions"),
   },
   handler: async (ctx, args) => {
-    const user = await requireSignedInUser(
+    let user = await requireSignedInUser(
       ctx,
       "Sign in with a SYM handle to vote.",
     );
+    const principal = forumPluginPrincipal(ctx);
+    if (principal) {
+      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      user = principalForumUser(principal, true);
+    }
     requireHumanForumVoter(user);
     const poll = await ctx.db.get("forumPolls", args.pollId);
     if (poll === null) {
@@ -5470,8 +5617,9 @@ export const votePoll = mutation({
     };
   },
 });
+export const votePoll = mutation(votePollOperation);
 
-export const updatePollContent = mutation({
+const updatePollContentOperation = defineForumMutation({
   args: {
     pollId: v.id("forumPolls"),
     question: v.string(),
@@ -5609,8 +5757,9 @@ export const updatePollContent = mutation({
     };
   },
 });
+export const updatePollContent = mutation(updatePollContentOperation);
 
-export const setForumReputation = mutation({
+const setForumReputationOperation = defineForumMutation({
   args: {
     targetType: reputationTargetTypeValidator,
     threadId: v.id("forumThreads"),
@@ -5619,7 +5768,12 @@ export const setForumReputation = mutation({
     comment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireSignedInUser(ctx, "Sign in to rate forum posts.");
+    let user = await requireSignedInUser(ctx, "Sign in to rate forum posts.");
+    const principal = forumPluginPrincipal(ctx);
+    if (principal) {
+      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      user = principalForumUser(principal, true);
+    }
     requireHumanForumVoter(user);
     requireTrustedForumUser(
       user,
@@ -5662,7 +5816,7 @@ export const setForumReputation = mutation({
       );
     }
 
-    if (targetAuthorId === user._id) {
+    if (targetAuthorId === user._id || await isOwnerSiblingForumProfile(ctx, targetAuthorId)) {
       throw forumError(
         "INVALID_REPUTATION_TARGET",
         "You cannot rate your own post.",
@@ -5732,14 +5886,20 @@ export const setForumReputation = mutation({
     };
   },
 });
+export const setForumReputation = mutation(setForumReputationOperation);
 
-export const rateThread = mutation({
+const rateThreadOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     score: v.union(threadRatingScoreValidator, v.null()),
   },
   handler: async (ctx, args) => {
-    const user = await requireSignedInUser(ctx, "Sign in to rate this thread.");
+    let user = await requireSignedInUser(ctx, "Sign in to rate this thread.");
+    const principal = forumPluginPrincipal(ctx);
+    if (principal) {
+      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      user = principalForumUser(principal, true);
+    }
     requireHumanForumVoter(user);
     requireTrustedForumUser(
       user,
@@ -5756,7 +5916,7 @@ export const rateThread = mutation({
       thread.categoryId,
       user,
     );
-    if (thread.authorId === user._id) {
+    if (thread.authorId === user._id || await isOwnerSiblingForumProfile(ctx, thread.authorId)) {
       throw forumError(
         "INVALID_THREAD_RATING_TARGET",
         "You cannot rate your own thread.",
@@ -5818,8 +5978,9 @@ export const rateThread = mutation({
     };
   },
 });
+export const rateThread = mutation(rateThreadOperation);
 
-export const updateThreadContent = mutation({
+const updateThreadContentOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     prefixId: v.optional(v.union(v.id("forumThreadPrefixes"), v.null())),
@@ -6004,8 +6165,9 @@ export const updateThreadContent = mutation({
     };
   },
 });
+export const updateThreadContent = mutation(updateThreadContentOperation);
 
-export const updatePostContent = mutation({
+const updatePostContentOperation = defineForumMutation({
   args: {
     postId: v.id("forumPosts"),
     body: v.string(),
@@ -6137,8 +6299,9 @@ export const updatePostContent = mutation({
     };
   },
 });
+export const updatePostContent = mutation(updatePostContentOperation);
 
-export const deleteThread = mutation({
+const deleteThreadOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
   },
@@ -6222,8 +6385,9 @@ export const deleteThread = mutation({
     return { deleted: true, categorySlug: category.slug };
   },
 });
+export const deleteThread = mutation(deleteThreadOperation);
 
-export const deletePost = mutation({
+const deletePostOperation = defineForumMutation({
   args: {
     postId: v.id("forumPosts"),
   },
@@ -6304,8 +6468,9 @@ export const deletePost = mutation({
     return { deleted: true, threadId: thread._id };
   },
 });
+export const deletePost = mutation(deletePostOperation);
 
-export const createReport = mutation({
+const createReportOperation = defineForumMutation({
   args: {
     entityType: contentReportEntityTypeValidator,
     threadId: v.id("forumThreads"),
@@ -6452,8 +6617,9 @@ export const createReport = mutation({
     return { reportId, created: true };
   },
 });
+export const createReport = mutation(createReportOperation);
 
-export const createPrivateMessageReport = mutation({
+const createPrivateMessageReportOperation = defineForumMutation({
   args: {
     messageId: v.id("forumPrivateMessages"),
     reason: v.string(),
@@ -6576,8 +6742,9 @@ export const createPrivateMessageReport = mutation({
     return { reportId, created: true };
   },
 });
+export const createPrivateMessageReport = mutation(createPrivateMessageReportOperation);
 
-export const listCategoriesAdmin = query({
+const listCategoriesAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
   },
@@ -6614,8 +6781,9 @@ export const listCategoriesAdmin = query({
     );
   },
 });
+export const listCategoriesAdmin = query(listCategoriesAdminOperation);
 
-export const listCategoryModeratorsAdmin = query({
+const listCategoryModeratorsAdminOperation = defineForumQuery({
   args: {
     categoryId: v.optional(v.id("forumCategories")),
   },
@@ -6636,8 +6804,9 @@ export const listCategoryModeratorsAdmin = query({
     return await hydrateCategoryModeratorRecords(ctx, assignments);
   },
 });
+export const listCategoryModeratorsAdmin = query(listCategoryModeratorsAdminOperation);
 
-export const assignCategoryModerator = mutation({
+const assignCategoryModeratorOperation = defineForumMutation({
   args: {
     categoryId: v.id("forumCategories"),
     username: v.string(),
@@ -6729,8 +6898,9 @@ export const assignCategoryModerator = mutation({
     };
   },
 });
+export const assignCategoryModerator = mutation(assignCategoryModeratorOperation);
 
-export const removeCategoryModerator = mutation({
+const removeCategoryModeratorOperation = defineForumMutation({
   args: {
     moderatorId: v.id("forumCategoryModerators"),
   },
@@ -6780,8 +6950,9 @@ export const removeCategoryModerator = mutation({
     };
   },
 });
+export const removeCategoryModerator = mutation(removeCategoryModeratorOperation);
 
-export const listThreadPrefixesAdmin = query({
+const listThreadPrefixesAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
     categoryId: v.optional(v.id("forumCategories")),
@@ -6832,8 +7003,9 @@ export const listThreadPrefixesAdmin = query({
     );
   },
 });
+export const listThreadPrefixesAdmin = query(listThreadPrefixesAdminOperation);
 
-export const listAnnouncementsAdmin = query({
+const listAnnouncementsAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
     categoryId: v.optional(v.id("forumCategories")),
@@ -6892,8 +7064,9 @@ export const listAnnouncementsAdmin = query({
     );
   },
 });
+export const listAnnouncementsAdmin = query(listAnnouncementsAdminOperation);
 
-export const listHelpDocumentsAdmin = query({
+const listHelpDocumentsAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
   },
@@ -6926,8 +7099,9 @@ export const listHelpDocumentsAdmin = query({
     );
   },
 });
+export const listHelpDocumentsAdmin = query(listHelpDocumentsAdminOperation);
 
-export const listCalendarEventsAdmin = query({
+const listCalendarEventsAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
     month: v.optional(v.string()),
@@ -6981,8 +7155,9 @@ export const listCalendarEventsAdmin = query({
     );
   },
 });
+export const listCalendarEventsAdmin = query(listCalendarEventsAdminOperation);
 
-export const listBoardRulesAdmin = query({
+const listBoardRulesAdminOperation = defineForumQuery({
   args: {
     includeArchived: v.optional(v.boolean()),
     categoryId: v.optional(v.id("forumCategories")),
@@ -7041,8 +7216,9 @@ export const listBoardRulesAdmin = query({
     );
   },
 });
+export const listBoardRulesAdmin = query(listBoardRulesAdminOperation);
 
-export const adminOverview = query({
+const adminOverviewOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const actor = await requireAnyForumModerator(ctx);
@@ -7243,8 +7419,9 @@ export const adminOverview = query({
     };
   },
 });
+export const adminOverview = query(adminOverviewOperation);
 
-export const listForumReports = query({
+const listForumReportsOperation = defineForumQuery({
   args: {
     status: v.optional(reportStatusValidator),
     limit: v.optional(v.number()),
@@ -7334,8 +7511,9 @@ export const listForumReports = query({
     });
   },
 });
+export const listForumReports = query(listForumReportsOperation);
 
-export const listForumModerationEvents = query({
+const listForumModerationEventsOperation = defineForumQuery({
   args: {
     entityType: v.optional(moderationEventEntityTypeValidator),
     entityId: v.optional(v.string()),
@@ -7451,8 +7629,9 @@ export const listForumModerationEvents = query({
     return await hydrateForumModerationEvents(ctx, events);
   },
 });
+export const listForumModerationEvents = query(listForumModerationEventsOperation);
 
-export const listForumWarnings = query({
+const listForumWarningsOperation = defineForumQuery({
   args: {
     targetUserId: v.optional(v.id("users")),
     status: v.optional(warningStatusValidator),
@@ -7536,8 +7715,9 @@ export const listForumWarnings = query({
     return await hydrateForumWarnings(ctx, warnings);
   },
 });
+export const listForumWarnings = query(listForumWarningsOperation);
 
-export const issueForumWarning = mutation({
+const issueForumWarningOperation = defineForumMutation({
   args: {
     targetUserId: v.id("users"),
     points: v.number(),
@@ -7694,8 +7874,9 @@ export const issueForumWarning = mutation({
     };
   },
 });
+export const issueForumWarning = mutation(issueForumWarningOperation);
 
-export const updateForumWarningStatus = mutation({
+const updateForumWarningStatusOperation = defineForumMutation({
   args: {
     warningId: v.id("forumWarnings"),
     status: warningStatusValidator,
@@ -7773,8 +7954,9 @@ export const updateForumWarningStatus = mutation({
     };
   },
 });
+export const updateForumWarningStatus = mutation(updateForumWarningStatusOperation);
 
-export const updateForumReportStatus = mutation({
+const updateForumReportStatusOperation = defineForumMutation({
   args: {
     reportId: v.id("forumReports"),
     status: reportStatusValidator,
@@ -7862,8 +8044,9 @@ export const updateForumReportStatus = mutation({
     };
   },
 });
+export const updateForumReportStatus = mutation(updateForumReportStatusOperation);
 
-export const updateForumPollStatus = mutation({
+const updateForumPollStatusOperation = defineForumMutation({
   args: {
     pollId: v.id("forumPolls"),
     status: pollStatusValidator,
@@ -7930,8 +8113,9 @@ export const updateForumPollStatus = mutation({
     };
   },
 });
+export const updateForumPollStatus = mutation(updateForumPollStatusOperation);
 
-export const upsertForumCategory = mutation({
+const upsertForumCategoryOperation = defineForumMutation({
   args: {
     categoryId: v.optional(v.id("forumCategories")),
     slug: v.optional(v.string()),
@@ -8138,8 +8322,9 @@ export const upsertForumCategory = mutation({
     );
   },
 });
+export const upsertForumCategory = mutation(upsertForumCategoryOperation);
 
-export const upsertThreadPrefixAdmin = mutation({
+const upsertThreadPrefixAdminOperation = defineForumMutation({
   args: {
     prefixId: v.optional(v.id("forumThreadPrefixes")),
     categoryId: v.optional(v.id("forumCategories")),
@@ -8284,8 +8469,9 @@ export const upsertThreadPrefixAdmin = mutation({
     };
   },
 });
+export const upsertThreadPrefixAdmin = mutation(upsertThreadPrefixAdminOperation);
 
-export const upsertAnnouncementAdmin = mutation({
+const upsertAnnouncementAdminOperation = defineForumMutation({
   args: {
     announcementId: v.optional(v.id("forumAnnouncements")),
     categoryId: v.optional(v.id("forumCategories")),
@@ -8438,8 +8624,9 @@ export const upsertAnnouncementAdmin = mutation({
     );
   },
 });
+export const upsertAnnouncementAdmin = mutation(upsertAnnouncementAdminOperation);
 
-export const upsertHelpDocumentAdmin = mutation({
+const upsertHelpDocumentAdminOperation = defineForumMutation({
   args: {
     helpDocumentId: v.optional(v.id("forumHelpDocuments")),
     slug: v.string(),
@@ -8567,8 +8754,9 @@ export const upsertHelpDocumentAdmin = mutation({
     return adminForumHelpDocumentRecord(updated, undefined, displayName(actor));
   },
 });
+export const upsertHelpDocumentAdmin = mutation(upsertHelpDocumentAdminOperation);
 
-export const upsertCalendarEventAdmin = mutation({
+const upsertCalendarEventAdminOperation = defineForumMutation({
   args: {
     eventId: v.optional(v.id("forumCalendarEvents")),
     slug: v.string(),
@@ -8721,8 +8909,9 @@ export const upsertCalendarEventAdmin = mutation({
     );
   },
 });
+export const upsertCalendarEventAdmin = mutation(upsertCalendarEventAdminOperation);
 
-export const upsertBoardRulesAdmin = mutation({
+const upsertBoardRulesAdminOperation = defineForumMutation({
   args: {
     rulesId: v.optional(v.id("forumBoardRules")),
     categoryId: v.id("forumCategories"),
@@ -8844,8 +9033,9 @@ export const upsertBoardRulesAdmin = mutation({
     );
   },
 });
+export const upsertBoardRulesAdmin = mutation(upsertBoardRulesAdminOperation);
 
-export const reorderForumCategories = mutation({
+const reorderForumCategoriesOperation = defineForumMutation({
   args: {
     categoryIds: v.array(v.id("forumCategories")),
   },
@@ -8903,6 +9093,7 @@ export const reorderForumCategories = mutation({
     return { updated: true };
   },
 });
+export const reorderForumCategories = mutation(reorderForumCategoriesOperation);
 
 export const ensureDefaultForumCategories = mutation({
   args: {},
@@ -12215,7 +12406,7 @@ async function ensureDefaultForumBoardRules(
   return createdBoardRulesIds;
 }
 
-export const listForumThreads = query({
+const listForumThreadsOperation = defineForumQuery({
   args: {
     categoryId: v.optional(v.id("forumCategories")),
     status: v.optional(threadStatusValidator),
@@ -12318,8 +12509,9 @@ export const listForumThreads = query({
     );
   },
 });
+export const listForumThreads = query(listForumThreadsOperation);
 
-export const listForumPosts = query({
+const listForumPostsOperation = defineForumQuery({
   args: {
     threadId: v.optional(v.id("forumThreads")),
     status: v.optional(postStatusValidator),
@@ -12447,8 +12639,9 @@ export const listForumPosts = query({
     });
   },
 });
+export const listForumPosts = query(listForumPostsOperation);
 
-export const getForumThread = query({
+const getForumThreadOperation = defineForumQuery({
   args: {
     threadId: v.id("forumThreads"),
     paginationOpts: paginationOptsValidator,
@@ -12523,8 +12716,9 @@ export const getForumThread = query({
     };
   },
 });
+export const getForumThread = query(getForumThreadOperation);
 
-export const listForumContentEdits = query({
+const listForumContentEditsOperation = defineForumQuery({
   args: {
     threadId: v.id("forumThreads"),
     postId: v.optional(v.id("forumPosts")),
@@ -12578,8 +12772,9 @@ export const listForumContentEdits = query({
     );
   },
 });
+export const listForumContentEdits = query(listForumContentEditsOperation);
 
-export const moveForumThread = mutation({
+const moveForumThreadOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     targetCategoryId: v.id("forumCategories"),
@@ -12735,8 +12930,9 @@ export const moveForumThread = mutation({
     };
   },
 });
+export const moveForumThread = mutation(moveForumThreadOperation);
 
-export const moveForumPosts = mutation({
+const moveForumPostsOperation = defineForumMutation({
   args: {
     postIds: v.array(v.id("forumPosts")),
     targetThreadId: v.id("forumThreads"),
@@ -12974,8 +13170,9 @@ export const moveForumPosts = mutation({
     };
   },
 });
+export const moveForumPosts = mutation(moveForumPostsOperation);
 
-export const splitForumPosts = mutation({
+const splitForumPostsOperation = defineForumMutation({
   args: {
     postIds: v.array(v.id("forumPosts")),
     targetCategoryId: v.id("forumCategories"),
@@ -13254,8 +13451,9 @@ export const splitForumPosts = mutation({
     };
   },
 });
+export const splitForumPosts = mutation(splitForumPostsOperation);
 
-export const mergeForumThread = mutation({
+const mergeForumThreadOperation = defineForumMutation({
   args: {
     sourceThreadId: v.id("forumThreads"),
     targetThreadId: v.id("forumThreads"),
@@ -13507,8 +13705,9 @@ export const mergeForumThread = mutation({
     };
   },
 });
+export const mergeForumThread = mutation(mergeForumThreadOperation);
 
-export const updateForumThreadModeration = mutation({
+const updateForumThreadModerationOperation = defineForumMutation({
   args: {
     threadId: v.id("forumThreads"),
     status: v.optional(threadStatusValidator),
@@ -13682,8 +13881,9 @@ export const updateForumThreadModeration = mutation({
     };
   },
 });
+export const updateForumThreadModeration = mutation(updateForumThreadModerationOperation);
 
-export const updateForumPostModeration = mutation({
+const updateForumPostModerationOperation = defineForumMutation({
   args: {
     postId: v.id("forumPosts"),
     status: postStatusValidator,
@@ -13837,8 +14037,11 @@ export const updateForumPostModeration = mutation({
     };
   },
 });
+export const updateForumPostModeration = mutation(updateForumPostModerationOperation);
 
 async function maybeCurrentUser(ctx: QueryCtx | MutationCtx) {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal) return principalForumUser(principal);
   const userId = await getAuthUserId(ctx);
   if (userId === null) {
     return null;
@@ -13945,6 +14148,16 @@ async function assertForumParticipationAllowed(
   user: UserDoc,
   action: string,
 ) {
+  const principal = forumUserPrincipal(user);
+  if (principal && principal.owner._id !== user._id) {
+    await assertForumParticipationAllowed(ctx, principal.owner, action);
+  }
+  if (principal && principal.actor.isAgent) {
+    const agentWarnings = await activeWarningSummaryForUser(ctx, principal.actor._id, Date.now());
+    if (agentWarnings.activeWarningPoints >= WARNING_PARTICIPATION_BLOCK_POINTS) {
+      throw forumError("FORUM_WARNING_BLOCKED", "The acting agent is restricted by active forum warnings.");
+    }
+  }
   const accountRestriction = forumAccountRestriction(user, Date.now());
   if (accountRestriction !== null) {
     throw forumError(accountRestriction.code, accountRestriction.message);
@@ -14084,7 +14297,10 @@ function forumStaffRole(user: UserDoc | null | undefined) {
   return user?.forumRole ?? null;
 }
 
-function canModerate(user: UserDoc | null | undefined) {
+function canModerate(user: UserDoc | null | undefined): boolean {
+  const principal = forumUserPrincipal(user);
+  if (principal) return (principal.capabilities.includes("moderate") || principal.capabilities.includes("administer")) &&
+    forumAccountRestriction(principal.actor, Date.now()) === null && canModerate(principal.owner);
   if (hasLegacyForumAdminRole(user)) {
     return true;
   }
@@ -14098,6 +14314,11 @@ async function canModerateAnyForumCategory(
   ctx: QueryCtx | MutationCtx,
   user: UserDoc | null | undefined,
 ) {
+  const principal = forumUserPrincipal(user);
+  if (principal) {
+    if (!principal.capabilities.includes("moderate") || !isActiveForumAccount(principal.actor)) return false;
+    user = principal.owner;
+  }
   if (canModerate(user)) {
     return true;
   }
@@ -14116,6 +14337,11 @@ async function canModerateCategory(
   user: UserDoc | null | undefined,
   category: ForumCategoryDoc | null | undefined,
 ) {
+  const principal = forumUserPrincipal(user);
+  if (principal) {
+    if (!principal.capabilities.includes("moderate") || !isActiveForumAccount(principal.actor)) return false;
+    user = principal.owner;
+  }
   if (canModerate(user)) {
     return true;
   }
@@ -14141,6 +14367,8 @@ async function loadModeratedCategoryIdsForUser(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ) {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal && userId === principal.actor._id) userId = principal.owner._id;
   const assignments = await ctx.db
     .query("forumCategoryModerators")
     .withIndex("by_userId_and_categoryId", (q) => q.eq("userId", userId))
@@ -14155,7 +14383,10 @@ function includesCategoryId(
   return categoryIds.some((candidate) => candidate === categoryId);
 }
 
-function canAdminForum(user: UserDoc | null | undefined) {
+function canAdminForum(user: UserDoc | null | undefined): boolean {
+  const principal = forumUserPrincipal(user);
+  if (principal) return principal.capabilities.includes("administer") &&
+    forumAccountRestriction(principal.actor, Date.now()) === null && canAdminForum(principal.owner);
   if (hasLegacyForumAdminRole(user)) {
     return true;
   }
@@ -14196,7 +14427,9 @@ function isActiveForumAccount(user: UserDoc | null | undefined) {
   return forumAccountRestriction(user, Date.now()) === null;
 }
 
-function isTrustedForumUser(user: UserDoc | null | undefined) {
+function isTrustedForumUser(user: UserDoc | null | undefined): boolean {
+  const principal = forumUserPrincipal(user);
+  if (principal) return isActiveForumAccount(principal.actor) && isTrustedForumUser(principal.owner);
   if (canModerate(user)) {
     return true;
   }
@@ -17790,6 +18023,8 @@ async function loadThreadRating(
   userId: Id<"users">,
   threadId: Id<"forumThreads">,
 ): Promise<ForumThreadRatingDoc | null> {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal && userId === principal.actor._id) userId = principal.owner._id;
   return await ctx.db
     .query("forumThreadRatings")
     .withIndex("by_userId_and_threadId", (q) =>
@@ -17897,6 +18132,8 @@ async function loadForumReputation(
   fromUserId: Id<"users">,
   targetKey: string,
 ) {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal && fromUserId === principal.actor._id) fromUserId = principal.owner._id;
   return await ctx.db
     .query("forumReputations")
     .withIndex("by_fromUserId_and_targetKey", (q) =>
@@ -17910,6 +18147,8 @@ async function loadForumReputationsByTargetKey(
   fromUserId: Id<"users">,
   targetKeys: string[],
 ) {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal && fromUserId === principal.actor._id) fromUserId = principal.owner._id;
   const rows = await Promise.all(
     [...new Set(targetKeys)].map(
       async (targetKey) =>
@@ -18129,6 +18368,8 @@ async function loadPollVote(
   pollId: Id<"forumPolls">,
   userId: Id<"users">,
 ) {
+  const principal = forumPluginPrincipal(ctx);
+  if (principal && userId === principal.actor._id) userId = principal.owner._id;
   const votes = await ctx.db
     .query("forumPollVotes")
     .withIndex("by_pollId_and_userId", (q) =>
@@ -22238,4 +22479,139 @@ async function filterThreadsForPublicCategory<T extends ForumThreadListSource>(
 
 function forumError(code: string, message: string) {
   return new ConvexError({ code, message });
+}
+
+/** Plain domain definitions shared by first-party handlers and trusted plugin execution. */
+export const forumOperations = {
+setCategorySubscription: { kind: "mutation", definition: setCategorySubscriptionOperation },
+setThreadSubscription: { kind: "mutation", definition: setThreadSubscriptionOperation },
+authorizeForumAttachmentUpload: { kind: "query", definition: authorizeForumAttachmentUploadOperation },
+claimStoredForumAttachmentUpload: { kind: "mutation", definition: claimStoredForumAttachmentUploadOperation },
+listCategories: { kind: 'query', definition: listCategoriesOperation },
+listCategoryOptions: { kind: 'query', definition: listCategoryOptionsOperation },
+listThreadPrefixes: { kind: 'query', definition: listThreadPrefixesOperation },
+listAnnouncements: { kind: 'query', definition: listAnnouncementsOperation },
+getAnnouncement: { kind: 'query', definition: getAnnouncementOperation },
+listHelpDocuments: { kind: 'query', definition: listHelpDocumentsOperation },
+getHelpDocument: { kind: 'query', definition: getHelpDocumentOperation },
+listCalendarEvents: { kind: 'query', definition: listCalendarEventsOperation },
+getCalendarEvent: { kind: 'query', definition: getCalendarEventOperation },
+overview: { kind: 'query', definition: overviewOperation },
+listThreads: { kind: 'query', definition: listThreadsOperation },
+listResearchFeedThreads: { kind: 'query', definition: listResearchFeedThreadsOperation },
+listRecentThreads: { kind: 'query', definition: listRecentThreadsOperation },
+getThread: { kind: 'query', definition: getThreadOperation },
+search: { kind: 'query', definition: searchOperation },
+listMyThreadSubscriptions: { kind: 'query', definition: listMyThreadSubscriptionsOperation },
+listMyThreadBookmarks: { kind: 'query', definition: listMyThreadBookmarksOperation },
+listMyCategorySubscriptions: { kind: 'query', definition: listMyCategorySubscriptionsOperation },
+listMyNotifications: { kind: 'query', definition: listMyNotificationsOperation },
+getMyForumNavState: { kind: 'query', definition: getMyForumNavStateOperation },
+recordPresence: { kind: 'mutation', definition: recordPresenceOperation },
+markNotificationRead: { kind: 'mutation', definition: markNotificationReadOperation },
+listPrivateMessages: { kind: 'query', definition: listPrivateMessagesOperation },
+getPrivateMessage: { kind: 'query', definition: getPrivateMessageOperation },
+sendPrivateMessage: { kind: 'mutation', definition: sendPrivateMessageOperation },
+markPrivateMessageRead: { kind: 'mutation', definition: markPrivateMessageReadOperation },
+deletePrivateMessage: { kind: 'mutation', definition: deletePrivateMessageOperation },
+restorePrivateMessage: { kind: 'mutation', definition: restorePrivateMessageOperation },
+listMembers: { kind: 'query', definition: listMembersOperation },
+listOnlineMembers: { kind: 'query', definition: listOnlineMembersOperation },
+onlineSummary: { kind: 'query', definition: onlineSummaryOperation },
+getMyForumProfile: { kind: 'query', definition: getMyForumProfileOperation },
+getMyForumNotificationPreferences: { kind: 'query', definition: getMyForumNotificationPreferencesOperation },
+listMyForumReputationHistory: { kind: 'query', definition: listMyForumReputationHistoryOperation },
+listMyForumWarnings: { kind: 'query', definition: listMyForumWarningsOperation },
+listMyPendingForumContent: { kind: 'query', definition: listMyPendingForumContentOperation },
+listMyForumRelationships: { kind: 'query', definition: listMyForumRelationshipsOperation },
+createThread: { kind: 'mutation', definition: createThreadOperation },
+updateMyForumProfile: { kind: 'mutation', definition: updateMyForumProfileOperation },
+updateMyForumNotificationPreferences: { kind: 'mutation', definition: updateMyForumNotificationPreferencesOperation },
+updateForumRelationship: { kind: 'mutation', definition: updateForumRelationshipOperation },
+createReply: { kind: 'mutation', definition: createReplyOperation },
+recordThreadView: { kind: 'mutation', definition: recordThreadViewOperation },
+markThreadRead: { kind: 'mutation', definition: markThreadReadOperation },
+markCategoryRead: { kind: 'mutation', definition: markCategoryReadOperation },
+markAllForumsRead: { kind: 'mutation', definition: markAllForumsReadOperation },
+setThreadBookmark: { kind: 'mutation', definition: setThreadBookmarkOperation },
+votePoll: { kind: 'mutation', definition: votePollOperation },
+updatePollContent: { kind: 'mutation', definition: updatePollContentOperation },
+setForumReputation: { kind: 'mutation', definition: setForumReputationOperation },
+rateThread: { kind: 'mutation', definition: rateThreadOperation },
+updateThreadContent: { kind: 'mutation', definition: updateThreadContentOperation },
+updatePostContent: { kind: 'mutation', definition: updatePostContentOperation },
+deleteThread: { kind: 'mutation', definition: deleteThreadOperation },
+deletePost: { kind: 'mutation', definition: deletePostOperation },
+createReport: { kind: 'mutation', definition: createReportOperation },
+createPrivateMessageReport: { kind: 'mutation', definition: createPrivateMessageReportOperation },
+listCategoriesAdmin: { kind: 'query', definition: listCategoriesAdminOperation },
+listCategoryModeratorsAdmin: { kind: 'query', definition: listCategoryModeratorsAdminOperation },
+assignCategoryModerator: { kind: 'mutation', definition: assignCategoryModeratorOperation },
+removeCategoryModerator: { kind: 'mutation', definition: removeCategoryModeratorOperation },
+listThreadPrefixesAdmin: { kind: 'query', definition: listThreadPrefixesAdminOperation },
+listAnnouncementsAdmin: { kind: 'query', definition: listAnnouncementsAdminOperation },
+listHelpDocumentsAdmin: { kind: 'query', definition: listHelpDocumentsAdminOperation },
+listCalendarEventsAdmin: { kind: 'query', definition: listCalendarEventsAdminOperation },
+listBoardRulesAdmin: { kind: 'query', definition: listBoardRulesAdminOperation },
+adminOverview: { kind: 'query', definition: adminOverviewOperation },
+listForumReports: { kind: 'query', definition: listForumReportsOperation },
+listForumModerationEvents: { kind: 'query', definition: listForumModerationEventsOperation },
+listForumWarnings: { kind: 'query', definition: listForumWarningsOperation },
+issueForumWarning: { kind: 'mutation', definition: issueForumWarningOperation },
+updateForumWarningStatus: { kind: 'mutation', definition: updateForumWarningStatusOperation },
+updateForumReportStatus: { kind: 'mutation', definition: updateForumReportStatusOperation },
+updateForumPollStatus: { kind: 'mutation', definition: updateForumPollStatusOperation },
+upsertForumCategory: { kind: 'mutation', definition: upsertForumCategoryOperation },
+upsertThreadPrefixAdmin: { kind: 'mutation', definition: upsertThreadPrefixAdminOperation },
+upsertAnnouncementAdmin: { kind: 'mutation', definition: upsertAnnouncementAdminOperation },
+upsertHelpDocumentAdmin: { kind: 'mutation', definition: upsertHelpDocumentAdminOperation },
+upsertCalendarEventAdmin: { kind: 'mutation', definition: upsertCalendarEventAdminOperation },
+upsertBoardRulesAdmin: { kind: 'mutation', definition: upsertBoardRulesAdminOperation },
+reorderForumCategories: { kind: 'mutation', definition: reorderForumCategoriesOperation },
+listForumThreads: { kind: 'query', definition: listForumThreadsOperation },
+listForumPosts: { kind: 'query', definition: listForumPostsOperation },
+getForumThread: { kind: 'query', definition: getForumThreadOperation },
+listForumContentEdits: { kind: 'query', definition: listForumContentEditsOperation },
+moveForumThread: { kind: 'mutation', definition: moveForumThreadOperation },
+moveForumPosts: { kind: 'mutation', definition: moveForumPostsOperation },
+splitForumPosts: { kind: 'mutation', definition: splitForumPostsOperation },
+mergeForumThread: { kind: 'mutation', definition: mergeForumThreadOperation },
+updateForumThreadModeration: { kind: 'mutation', definition: updateForumThreadModerationOperation },
+updateForumPostModeration: { kind: 'mutation', definition: updateForumPostModerationOperation }
+} as const;
+
+async function isOwnerSiblingForumProfile(ctx: MutationCtx, authorId: Id<"users">) {
+  const principal = forumPluginPrincipal(ctx);
+  if (!principal) return false;
+  if (authorId === principal.owner._id) return true;
+  const identity = await ctx.db.query("agentIdentities").withIndex("by_userId", q => q.eq("userId", authorId)).unique();
+  return identity?.ownerUserId === principal.owner._id;
+}
+
+const delegatedPrivateMessageRateLimiter = new RateLimiter(components.rateLimiter, {
+  ownerPrivateMessage: { kind: "token bucket", rate: 1, period: PRIVATE_MESSAGE_RATE_LIMIT_MS, capacity: 1 },
+  ownerRecipientPrivateMessage: { kind: "token bucket", rate: 1, period: PRIVATE_MESSAGE_RECIPIENT_RATE_LIMIT_MS, capacity: 1 },
+});
+async function forumProfileOwnerId(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
+  const identity = await ctx.db.query("agentIdentities").withIndex("by_userId", q => q.eq("userId", userId)).unique();
+  return identity?.ownerUserId ?? userId;
+}
+async function assertOwnerPrivateMessageRules(ctx: MutationCtx, sender: UserDoc, recipient: UserDoc) {
+  const [senderOwner, recipientOwner] = await Promise.all([forumProfileOwnerId(ctx, sender._id), forumProfileOwnerId(ctx, recipient._id)]);
+  if (senderOwner === recipientOwner) throw forumError("INVALID_RECIPIENT", "Choose another owner's profile.");
+  const [senderSiblings,recipientSiblings] = await Promise.all([
+    ctx.db.query("agentIdentities").withIndex("by_ownerUserId", q => q.eq("ownerUserId", senderOwner)).take(101),
+    ctx.db.query("agentIdentities").withIndex("by_ownerUserId", q => q.eq("ownerUserId", recipientOwner)).take(101),
+  ]);
+  if(senderSiblings.length>100||recipientSiblings.length>100)throw forumError("PRIVATE_MESSAGE_OWNER_PROFILE_LIMIT", "Reduce the owner's profile count before using private messages.");
+  const senderProfiles = new Set([senderOwner,sender._id,...senderSiblings.map(row=>row.userId)]);
+  const recipientProfiles = new Set([recipientOwner,recipient._id,...recipientSiblings.map(row=>row.userId)]);
+  for(const profileId of recipientProfiles) {
+    const ignores=await ctx.db.query("forumUserRelationships").withIndex("by_userId_and_kind_and_createdAt",q=>q.eq("userId",profileId).eq("kind","ignore")).take(FORUM_RELATIONSHIP_LIST_LIMIT+1);
+    if(ignores.length>FORUM_RELATIONSHIP_LIST_LIMIT)throw forumError("PRIVATE_MESSAGE_IGNORED", "That profile's ignore rules exceed the supported limit.");
+    if(ignores.some(row=>senderProfiles.has(row.targetUserId)))throw forumError("PRIVATE_MESSAGE_IGNORED", "That member is not accepting private messages from this owner.");
+  }
+  const quota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerPrivateMessage", { key: senderOwner });
+  const recipientQuota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerRecipientPrivateMessage", { key: `${senderOwner}:${recipientOwner}` });
+  if (!quota.ok || !recipientQuota.ok) throw forumError("PRIVATE_MESSAGE_RATE_LIMITED", "Give the owner's inbox a minute, then send again.");
 }
