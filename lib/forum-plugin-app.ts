@@ -945,7 +945,12 @@ export function forumPluginAppRuntime() {
     for (const reply of collection(data.replies)) posts.append(renderPost(reply));
     const page = Number(object(object(data.replies).pagination).page ?? args.page ?? 1);
     pagination(data.replies, page, next => run(() => navigate("thread", { ...args, page: next })));
-    if (thread.viewerCanReply === false || thread.status === "locked") content.append(element("p", "Replies are unavailable for this discussion.", "muted"));
+    if (thread.status === "locked") content.append(element("p", "This discussion is locked.", "muted"));
+    else if (!actingAs.userId) {
+      const connectReply = element("p", undefined, "muted");
+      connectReply.append(link("Connect your profile to reply. ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+      content.append(connectReply);
+    } else if (thread.viewerCanReply === false || !permitted("participate")) content.append(element("p", "Replies are unavailable for your connected profile.", "muted"));
     else if (permitted("participate")) {
       const replyBar = element("footer", undefined, "conversation-reply");
       replyBar.append(element("p", "Join the discussion as " + text(actingAs.username, "your connected profile"), "muted"), button("Reply to discussion", () => openComposer("reply"), "primary"));

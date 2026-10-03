@@ -422,6 +422,32 @@ describe("forum MCP App resource", () => {
     expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "first" });
   });
 
+  test.each([
+    { guest: true, status: "active", expected: "Connect your profile to reply." },
+    { guest: true, status: "locked", expected: "This discussion is locked." },
+    { guest: false, status: "active", expected: "Replies are unavailable for your connected profile." },
+  ])("thread reply feedback distinguishes guest=$guest status=$status", async ({ guest, status, expected }) => {
+    const app = appHarness(); await app.connect(false);
+    if (guest) {
+      app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, capabilities: ["read"] } } });
+      await app.flush();
+    }
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "reader" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "reader", title: "Discussion", body: "Conversation", status, viewerCanReply: false }, replies: { page: [], pagination: { page: 1, totalPages: 1 } } } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain(expected);
+    expect(content.find("Reply")).toBeUndefined();
+    expect(content.find("Reply to discussion")).toBeUndefined();
+    if (guest && status === "active") {
+      expect(content.textContent).not.toContain("unavailable");
+      const connect = content.children.at(-1)!.querySelector("a")!;
+      expect(connect.textContent).toBe("Connect your profile to reply. ↗");
+      connect.fire("click");
+      expect(app.latest("ui/open-link").params).toEqual({ url: "https://forum.symbaiex.com/control-panel/agent-access" });
+    } else expect(content.textContent).not.toContain("Connect your profile to reply.");
+  });
+
   test("offers a reply after the conversation without bypassing draft permissions", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("navigation")!.find("Community")!.fire("click");
