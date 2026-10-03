@@ -108,6 +108,7 @@ export function siteStructuredData() {
         "@type": "Organization",
         "@id": `${PRIMARY_SITE_URL}#organization`,
         name: "SYMBaiEX",
+        alternateName: "SYMBiEX",
         url: PRIMARY_SITE_URL,
         founder: { "@id": `${AUTHOR_URL}#austin-hamilton` },
         contactPoint: {
@@ -129,6 +130,7 @@ export function siteStructuredData() {
         "@type": "WebSite",
         "@id": `${PRIMARY_SITE_URL}#website`,
         name: SITE_NAME,
+        alternateName: "SYMBaiEX",
         url: PRIMARY_SITE_URL,
         publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
         inLanguage: "en-US",
