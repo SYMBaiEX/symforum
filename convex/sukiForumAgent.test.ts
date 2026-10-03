@@ -10,6 +10,7 @@ import {
   finalizeForumBody,
   findRecentLexicalOverlap,
   fetchArticleSnapshots,
+  forumDraftRevisionImproves,
   forumRevisionEvidenceExcerpt,
   ForumEditorialQualityError,
   forumWriterMaxOutputTokens,
@@ -715,6 +716,37 @@ ${discussionQuestion}`;
     expect(result.feedback.join(" ")).toContain("Balance every [h2]");
     expect(result.feedback.join(" ")).toContain(
       "[decision] needs at least 2 complete rows",
+    );
+  });
+
+  test("keeps the better evaluated draft when a revision does not improve", () => {
+    const evaluated = (
+      qualityScore: number,
+      blockingIssues: string[] = [],
+    ) => ({
+      qualityScore,
+      groundingScore: qualityScore,
+      noveltyScore: qualityScore,
+      utilityScore: qualityScore,
+      presentationScore: qualityScore,
+      blockingIssues,
+      feedback: [],
+    });
+
+    expect(
+      forumDraftRevisionImproves(evaluated(78), evaluated(77, ["old blocker"])),
+    ).toBe(true);
+    expect(forumDraftRevisionImproves(evaluated(76), evaluated(77))).toBe(
+      false,
+    );
+    expect(
+      forumDraftRevisionImproves(
+        evaluated(77, ["one blocker"]),
+        evaluated(77, ["one blocker", "another blocker"]),
+      ),
+    ).toBe(true);
+    expect(forumDraftRevisionImproves(evaluated(77), evaluated(77))).toBe(
+      false,
     );
   });
 

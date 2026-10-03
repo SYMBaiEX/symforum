@@ -848,7 +848,7 @@ export async function runForumResearchSlot(
         },
       );
       const revision = revisionGeneration.value.result;
-      draft = repairForumDraftForReview(
+      const revisedDraft = repairForumDraftForReview(
         revisionGeneration.value.draft,
         snapshots,
       );
@@ -860,8 +860,8 @@ export async function runForumResearchSlot(
         revisionOutputTokens,
         revision.usage.outputTokens,
       );
-      quality = evaluateForumDraft({
-        draft,
+      const revisionQuality = evaluateForumDraft({
+        draft: revisedDraft,
         selection: effectiveSelection,
         snapshots,
         recentThreadTitles: context.recentThreadTitles,
@@ -880,24 +880,34 @@ export async function runForumResearchSlot(
         inputTokens: revision.usage.inputTokens,
         outputTokens: revision.usage.outputTokens,
         qualityBefore,
-        qualityAfter: quality.qualityScore,
+        qualityAfter: revisionQuality.qualityScore,
         durationMs: Date.now() - revisionStartedAt,
       });
-      latestPrivateRevision = revisionPass;
-      await ctx.runMutation(
-        internal.forumAgentResearchPackets.recordDraftRevision,
-        {
-          runKey: claim.runKey,
-          agentSlug: config.slug,
-          revision: latestPrivateRevision,
-          title: draft.title,
-          body: draft.body,
-          claimHashes: draft.claims.map((item) =>
-            deterministicForumClaimHash(item.claim),
-          ),
-          qualityScore: quality.qualityScore,
-        },
-      );
+      if (
+        forumDraftRevisionImproves(
+          revisionQuality,
+          quality,
+          config.qualityThreshold,
+        )
+      ) {
+        draft = revisedDraft;
+        quality = revisionQuality;
+        latestPrivateRevision = revisionPass;
+        await ctx.runMutation(
+          internal.forumAgentResearchPackets.recordDraftRevision,
+          {
+            runKey: claim.runKey,
+            agentSlug: config.slug,
+            revision: latestPrivateRevision,
+            title: draft.title,
+            body: draft.body,
+            claimHashes: draft.claims.map((item) =>
+              deterministicForumClaimHash(item.claim),
+            ),
+            qualityScore: quality.qualityScore,
+          },
+        );
+      }
     }
     if (!forumDraftPassesGate(quality, config.qualityThreshold)) {
       await ctx.runMutation(
@@ -2290,6 +2300,20 @@ export function forumDraftPassesGate(
   return (
     quality.qualityScore >= threshold && quality.blockingIssues.length === 0
   );
+}
+
+export function forumDraftRevisionImproves(
+  revision: EvaluatedForumDraft,
+  current: EvaluatedForumDraft,
+  threshold = FORUM_AGENT_QUALITY_THRESHOLD,
+) {
+  const revisionPasses = forumDraftPassesGate(revision, threshold);
+  const currentPasses = forumDraftPassesGate(current, threshold);
+  if (revisionPasses !== currentPasses) return revisionPasses;
+  if (revision.qualityScore !== current.qualityScore) {
+    return revision.qualityScore > current.qualityScore;
+  }
+  return revision.blockingIssues.length < current.blockingIssues.length;
 }
 
 export function forumRevisionTier(quality: EvaluatedForumDraft) {
