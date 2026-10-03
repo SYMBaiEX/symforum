@@ -70,6 +70,16 @@ describe("evidence research prompt", () => {
     expect(fallback).toContain("- [2] Manifest guide:");
   });
 
+  test("explains an empty evidence result without implying routing failed", () => {
+    const fallback = buildExtractiveEvidenceDigest("empty query", []);
+
+    expect(fallback).toContain(
+      "No matching public evidence sources were found",
+    );
+    expect(fallback).toContain("no model analysis was attempted");
+    expect(fallback).not.toContain("Routing unavailable");
+  });
+
   test("caps the combined excerpt packet at 24,000 characters for ten sources", () => {
     const sources = compactEvidenceResearchSources(
       "checkpoint recovery",
