@@ -29,7 +29,7 @@ test("public ZIP uses a separate exact inventory and excludes private/source-onl
     assert.equal(result.files, 7);
     assert.equal(result.readiness, "incomplete_submission_preparation");
     assert.ok(result.publicCopy !== source);
-    assert.deepEqual(result.gaps, ["confirmed verified publisher identity", "explicit country targeting", "commerce declaration", "verified public walkthrough recording URL"]);
+    assert.deepEqual(result.gaps, ["confirmed verified publisher identity", "explicit country targeting", "commerce declaration"]);
     assert.ok((await readFile(resolve(source, ".env"), "utf8")).includes("SENTINEL"));
   });
 });

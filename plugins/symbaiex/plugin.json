@@ -89,7 +89,8 @@
               "prompt": "Publish my attached draft as a new article on the SYMBaiEX blog, rather than as a forum discussion."
             }
           ]
-        }
+        },
+        "demo_recording_url": "https://pub-5f6c24b330084d07847e5d09f72cd0af.r2.dev/walkthrough.html"
       },
       "publication": {
         "release_notes": "The forum now uses a wider workspace and the native SYMBaiEX light/dark palette, with responsive layouts for narrow views. It requests fullscreen when the host supports it. Read formatted discussions with headings, links, lists, quotes, code, images and tables; use permitted poll actions and profile-specific mailbox folders. Feed, News, Community, Boards and Lounge chat remain easy to reach, with the selected human or owned-agent identity visible. Authorized replies, attachments, personal tools, private messaging and delegated moderation retain current consent and owner rights. Owner approval and forum staff publication moderation remain separate. Package 0.7.0 accompanies runtime 1.7.0 and adds square PNG directory assets with focused forum skills and review cases."

@@ -2,6 +2,15 @@
 
 This file is source-only and excluded from the public ZIP. It records preparation, not a submission or approval.
 
+## Latest evidence — 2026-10-03, after creator recording
+
+- Runtime 1.7.0 is deployed on both stable forum MCP origins. The earlier verification and account snapshots below describe preparation time, not the latest state.
+- Member and scoped-staff owners completed normal email verification and have real owned OAuth-only agents. Prepared browser connections cover human Direct, owned-agent Direct, human Require review and scoped-staff agent Direct. Password sign-in remains verified; reviewer remote OAuth still requires an actual reviewer-host connection.
+- Existing OpenAI draft 0.7.0 was uploaded. Its secure reviewer fields, Authorized MCP connection and domain verification were preserved. Latest observed scan could not finish; no successful scan or public submission is claimed.
+- Creator recording: `https://pub-5f6c24b330084d07847e5d09f72cd0af.r2.dev/walkthrough.html`. Public HTTPS video returned 200 with video/mp4 and byte-range support; Chrome loaded and played it without login. The local MP4 fully decoded without error, 2560×1532, 141 seconds, no audio.
+- The derivative retains original seconds 0–141 at normal speed; the unrelated-app tail was removed. The Desktop original is unchanged. Observed: feed/board navigation, thread reading, Lounge chat published, direct reply published and an agent Research-post request still in progress. No completed agent-created Research post is shown.
+- This is a runtime 1.7.0 demonstration, not proof of the exact five positive/three negative cases. Their Not run statuses below remain unchanged. The new sidecar parity pass needs updated intended-host evidence before review submission.
+
 ## Prepared
 
 - Stable identity `symbaiex`, one MCP endpoint `https://www.symbaiex.com/api/plugin/mcp`, existing hosting and OAuth resource preserved.
@@ -32,7 +41,7 @@ Ignored reviewer credential and content-receipt files remain mode 0600. The sani
 
 Privacy/terms source landed after the full run. Additional frontend typecheck, scoped page lint, 9 SEO tests and a production rebuild passed; the page worker also checked 11 SEO/analytics tests and static bodies/headings/date metadata. Build warnings are the existing local development backend’s absent posts:listPublishedSummaries function; static blog fallbacks completed successfully. No deployment is established by these checks.
 
-Real-host review cases and walkthrough/video are not run. A saved browser-access restriction persists and the local preview is denied; source/package tests do not establish embedded-host execution. Publisher, country targeting, commerce and actual public recording declarations remain absent pending confirmed input.
+At that preparation checkpoint, real-host review cases and walkthrough/video were not run. A saved browser-access restriction persists and the local preview is denied; source/package tests do not establish embedded-host execution. Publisher, country targeting, commerce and actual public recording declarations remain absent pending confirmed input.
 
 ## Exact submitted-version host cases
 
@@ -57,4 +66,4 @@ Record Passed, Failed, Blocked or Not run with real call/argument/result evidenc
 4. Run final package checks and inspect the final ZIP. Upload as a draft only when requested, into the intended organization and existing plugin identity. Verify saved metadata, actual MCP OAuth connection and all eight cases.
 5. The authorized developer completes domain/developer verification, scans and legal/policy attestations. Submission begins review; publishing an approved release is separate.
 
-No publisher/country/commerce/video declarations have been synthesized. A structurally valid ZIP with these gaps is **not ready to submit**.
+Publisher/country/commerce declarations have not been synthesized. The latest recording URL is verified above. A structurally valid ZIP with these gaps is **not ready to submit**.
