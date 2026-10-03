@@ -9,6 +9,7 @@ import {
   NEWSLETTER_MODEL_IDS,
   reusableDailyDigestStories,
   scoreEditorialPackage,
+  shouldAcceptEditorialRevision,
 } from "./newsletterAgent";
 
 function long(value: string, length: number) {
@@ -254,5 +255,56 @@ describe("Belle editorial scoring", () => {
 
     expect(quality.blockingIssues.join(" ")).toContain("Remove process labels");
     expect(quality.blockingIssues.join(" ")).toContain("canned AI-editorial");
+  });
+});
+
+describe("Belle editorial revision selection", () => {
+  const limits = { threshold: 70, minimumWords: 650, maximumWords: 1_600 };
+
+  test("keeps the first draft when the revision regresses quality", () => {
+    expect(
+      shouldAcceptEditorialRevision(
+        { score: 78, blockingIssueCount: 0, wordCount: 900 },
+        { score: 72, blockingIssueCount: 1, wordCount: 900 },
+        limits,
+      ),
+    ).toBe(false);
+  });
+
+  test("accepts a revision that repairs the draft enough to publish", () => {
+    expect(
+      shouldAcceptEditorialRevision(
+        { score: 69, blockingIssueCount: 1, wordCount: 620 },
+        { score: 72, blockingIssueCount: 0, wordCount: 800 },
+        limits,
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts only non-regressing improvements when neither draft passes", () => {
+    expect(
+      shouldAcceptEditorialRevision(
+        { score: 68, blockingIssueCount: 2, wordCount: 610 },
+        { score: 68, blockingIssueCount: 1, wordCount: 630 },
+        limits,
+      ),
+    ).toBe(true);
+    expect(
+      shouldAcceptEditorialRevision(
+        { score: 68, blockingIssueCount: 2, wordCount: 610 },
+        { score: 69, blockingIssueCount: 2, wordCount: 590 },
+        limits,
+      ),
+    ).toBe(false);
+  });
+
+  test("preserves the current draft when a revision is only a tie", () => {
+    expect(
+      shouldAcceptEditorialRevision(
+        { score: 68, blockingIssueCount: 1, wordCount: 610 },
+        { score: 68, blockingIssueCount: 1, wordCount: 610 },
+        limits,
+      ),
+    ).toBe(false);
   });
 });

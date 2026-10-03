@@ -363,7 +363,30 @@ async function generateEditorialPackage(
       }),
       schema,
     });
+    const originalDraft = draft;
+    const originalEvaluation = evaluation;
     draft = revision.draft;
+    const revisionEvaluation = evaluateDraft();
+    if (
+      shouldAcceptEditorialRevision(
+        {
+          score: originalEvaluation.quality.score,
+          blockingIssueCount: originalEvaluation.quality.blockingIssues.length,
+          wordCount: originalEvaluation.wordCount,
+        },
+        {
+          score: revisionEvaluation.quality.score,
+          blockingIssueCount: revisionEvaluation.quality.blockingIssues.length,
+          wordCount: revisionEvaluation.wordCount,
+        },
+        { threshold, minimumWords, maximumWords },
+      )
+    ) {
+      evaluation = revisionEvaluation;
+    } else {
+      draft = originalDraft;
+      evaluation = originalEvaluation;
+    }
     totalInputTokens = addOptionalNumbers(
       totalInputTokens,
       revision.usage.inputTokens,
@@ -372,7 +395,6 @@ async function generateEditorialPackage(
       totalOutputTokens,
       revision.usage.outputTokens,
     );
-    evaluation = evaluateDraft();
   }
   if (
     evaluation.quality.score < threshold ||
@@ -1038,6 +1060,60 @@ function editorialDraftWordCount(
 function addOptionalNumbers(left?: number, right?: number) {
   if (left === undefined && right === undefined) return undefined;
   return (left ?? 0) + (right ?? 0);
+}
+
+export function shouldAcceptEditorialRevision(
+  current: {
+    score: number;
+    blockingIssueCount: number;
+    wordCount: number;
+  },
+  candidate: {
+    score: number;
+    blockingIssueCount: number;
+    wordCount: number;
+  },
+  limits: { threshold: number; minimumWords: number; maximumWords: number },
+) {
+  const currentIsPublishable =
+    current.score >= limits.threshold &&
+    current.blockingIssueCount === 0 &&
+    current.wordCount >= limits.minimumWords &&
+    current.wordCount <= limits.maximumWords;
+  const candidateIsPublishable =
+    candidate.score >= limits.threshold &&
+    candidate.blockingIssueCount === 0 &&
+    candidate.wordCount >= limits.minimumWords &&
+    candidate.wordCount <= limits.maximumWords;
+
+  if (currentIsPublishable !== candidateIsPublishable) {
+    return candidateIsPublishable;
+  }
+
+  const currentWordCountGap = editorialWordCountGap(current.wordCount, limits);
+  const candidateWordCountGap = editorialWordCountGap(
+    candidate.wordCount,
+    limits,
+  );
+  const doesNotRegress =
+    candidate.score >= current.score &&
+    candidate.blockingIssueCount <= current.blockingIssueCount &&
+    candidateWordCountGap <= currentWordCountGap;
+  const improves =
+    candidate.score > current.score ||
+    candidate.blockingIssueCount < current.blockingIssueCount ||
+    candidateWordCountGap < currentWordCountGap;
+
+  return doesNotRegress && improves;
+}
+
+function editorialWordCountGap(
+  wordCount: number,
+  limits: { minimumWords: number; maximumWords: number },
+) {
+  if (wordCount < limits.minimumWords) return limits.minimumWords - wordCount;
+  if (wordCount > limits.maximumWords) return wordCount - limits.maximumWords;
+  return 0;
 }
 
 function normalizeSiteUrl(value: string) {
