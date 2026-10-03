@@ -32,8 +32,8 @@ import { userFacingError } from "@/lib/auth-errors";
 import { convexRefs } from "@/lib/convex-refs";
 
 const CONTROL =
-  "focus-ring w-full border border-row-border bg-background px-3 py-2 text-sm";
-const ACTION = "rounded-none font-mono text-[10px] uppercase";
+  "focus-ring min-h-11 w-full rounded-sm border border-row-border bg-background px-3 py-2 text-base";
+const ACTION = "rounded-sm text-xs";
 export const DEFAULT_FORUM_CONNECTION_OPTIONS: ForumConnectionOptions = {
   actorMode: "human",
   executionMode: "direct",
@@ -57,7 +57,7 @@ export function ForumConnectionFields({
 }) {
   const modeGroup = useId();
   return (
-    <fieldset className="space-y-4" disabled={disabled}>
+    <fieldset className="min-w-0 space-y-5" disabled={disabled}>
       <legend className="sr-only">Acting profile and permissions</legend>
       <label className="block space-y-1.5">
         <span className="text-sm">Act as</span>
@@ -98,37 +98,47 @@ export function ForumConnectionFields({
           : "To create a new agent or expand access, authorize a new connection."}
       </p>
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-sm">Allow this connection to</legend>
-        {FORUM_PLUGIN_CAPABILITIES.map((capability) => (
-          <label key={capability} className="flex items-center gap-2 text-sm">
-            <input
-              className="focus-ring size-4 accent-primary"
-              type="checkbox"
-              checked={value.capabilities.includes(capability)}
-              disabled={capability === "read" || !ceiling.includes(capability)}
-              onChange={(event) =>
-                onChange({
-                  ...value,
-                  capabilities: event.target.checked
-                    ? [...value.capabilities, capability]
-                    : value.capabilities.filter(
-                        (entry) => entry !== capability,
-                      ),
-                })
-              }
-            />
-            <span>
-              {FORUM_PLUGIN_CAPABILITY_LABELS[capability]}
-              {capability === "read" ? " · Required" : ""}
-              {!ceiling.includes(capability) ? " · Needs new consent" : ""}
-            </span>
-          </label>
-        ))}
+        <legend className="mb-2 text-sm font-semibold">Permissions</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {FORUM_PLUGIN_CAPABILITIES.map((capability) => (
+            <label
+              key={capability}
+              className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-sm p-3 text-sm ${value.capabilities.includes(capability) ? "bg-primary/5" : "bg-muted/35"}`}
+            >
+              <input
+                className="focus-ring size-4 accent-primary"
+                type="checkbox"
+                checked={value.capabilities.includes(capability)}
+                disabled={
+                  capability === "read" || !ceiling.includes(capability)
+                }
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    capabilities: event.target.checked
+                      ? [...value.capabilities, capability]
+                      : value.capabilities.filter(
+                          (entry) => entry !== capability,
+                        ),
+                  })
+                }
+              />
+              <span>
+                {FORUM_PLUGIN_CAPABILITY_LABELS[capability]}
+                {capability === "read" ? " · Required" : ""}
+                {!ceiling.includes(capability) ? " · Needs new consent" : ""}
+              </span>
+            </label>
+          ))}
+        </div>
       </fieldset>
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-sm">Execution mode</legend>
+        <legend className="mb-2 text-sm font-semibold">Execution mode</legend>
         {(["direct", "review"] as const).map((mode) => (
-          <label key={mode} className="flex items-start gap-2 text-sm">
+          <label
+            key={mode}
+            className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-sm p-3 text-sm ${value.executionMode === mode ? "bg-primary/5" : "bg-muted/35"}`}
+          >
             <input
               className="focus-ring mt-0.5 size-4 accent-primary"
               type="radio"
@@ -247,6 +257,34 @@ function LiveForumAgentAccess() {
         share these permissions and review settings. Your browser connection
         applies while you view the forum.
       </p>
+      <nav aria-label="Agent access sections" className="flex flex-wrap gap-2">
+        <a
+          href="#review-queue"
+          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-sm bg-primary/10 px-3 text-sm font-medium text-primary"
+        >
+          Agent approvals{" "}
+          <span className="rounded-sm bg-background px-2 py-0.5 text-xs">
+            {
+              commands.filter(
+                (command) =>
+                  forumProposalState(command, Date.now()) === "pending",
+              ).length
+            }
+          </span>
+        </a>
+        <a
+          href="#moderation-queue"
+          className="focus-ring inline-flex min-h-11 items-center rounded-sm bg-muted px-3 text-sm"
+        >
+          Pending publication
+        </a>
+        <a
+          href="#forum-agent-connections"
+          className="focus-ring inline-flex min-h-11 items-center rounded-sm bg-muted px-3 text-sm"
+        >
+          Connections
+        </a>
+      </nav>
       <ForumApprovalQueue
         commands={commands}
         connections={connections}
@@ -273,10 +311,7 @@ function LiveForumAgentAccess() {
         canModerate={staffAccess?.canModerateForum === true}
       />
       <section className="space-y-3" aria-labelledby="forum-agent-connections">
-        <h2
-          id="forum-agent-connections"
-          className="font-mono text-xs uppercase"
-        >
+        <h2 id="forum-agent-connections" className="text-xs">
           Connections
         </h2>
         {connections.length ? (
@@ -294,7 +329,7 @@ function LiveForumAgentAccess() {
         )}
       </section>
       <details
-        className="border-y border-row-border py-3"
+        className="rounded-sm bg-background py-3"
         open={
           !connections.some(
             (entry) =>
@@ -302,7 +337,7 @@ function LiveForumAgentAccess() {
           )
         }
       >
-        <summary className="focus-ring cursor-pointer font-mono text-xs uppercase">
+        <summary className="focus-ring flex min-h-11 cursor-pointer items-center text-sm font-medium">
           Enable a browser connection
         </summary>
         <form className="mt-4 max-w-xl space-y-4" onSubmit={createConnection}>
@@ -385,7 +420,7 @@ function ForumConnectionCard({
     }
   }
   return (
-    <article className="space-y-3 border border-row-border p-3">
+    <article className="space-y-3 rounded-sm bg-muted/35 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -536,16 +571,14 @@ export function ForumApprovalQueue({
   return (
     <section
       id="review-queue"
-      className="scroll-mt-24 space-y-3 border border-row-border p-3"
+      className="scroll-mt-24 space-y-3 rounded-sm bg-muted/35 p-4"
       aria-labelledby="forum-agent-requests-title"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <h2 id="forum-agent-requests-title" className="text-lg font-semibold">
           Agent approvals
         </h2>
-        <span className="font-mono text-xs uppercase">
-          {pendingCount} waiting for you
-        </span>
+        <span className="text-xs">{pendingCount} waiting for you</span>
       </div>
       <p className="text-sm leading-6 text-muted-foreground">
         These actions have not run. Approve the exact request to execute it
@@ -606,7 +639,7 @@ export function ForumAgentApprovalNotice() {
   return (
     <section
       aria-label="Agent access and approvals"
-      className="flex flex-wrap items-center justify-between gap-3 border border-row-border p-3"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-muted/35 p-4"
     >
       <div>
         <h2 className="text-sm font-semibold">Agent access and approvals</h2>
@@ -646,14 +679,14 @@ export function ForumAgentModerationQueue({
   return (
     <section
       id="moderation-queue"
-      className="scroll-mt-24 space-y-3 border border-row-border p-3"
+      className="scroll-mt-24 space-y-3 rounded-sm bg-muted/35 p-4"
       aria-labelledby="forum-agent-moderation-title"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-row-border pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <h2 id="forum-agent-moderation-title" className="text-lg font-semibold">
           Awaiting staff moderation
         </h2>
-        <span className="font-mono text-xs uppercase">
+        <span className="text-xs">
           {pendingContent === undefined
             ? "Loading…"
             : `${pendingContent.items.length} pending`}
@@ -688,13 +721,11 @@ export function ForumAgentModerationQueue({
         pendingContent.items.map((item) => (
           <article
             key={item.id}
-            className="space-y-2 border border-row-border p-3"
+            className="space-y-2 rounded-sm bg-muted/35 p-4"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3 className="text-sm font-semibold">{item.title}</h3>
-              <span className="font-mono text-xs uppercase">
-                {item.kind} · Not public
-              </span>
+              <span className="text-xs">{item.kind} · Not public</span>
             </div>
             <p className="text-xs text-muted-foreground">
               {item.categoryName} · {item.actingAs.username}
@@ -784,7 +815,7 @@ function ForumProposalCard({
       ref={card}
       tabIndex={-1}
       id={`forum-command-${command._id}`}
-      className={`focus-ring space-y-3 border border-row-border p-3 ${selected ? "border-primary" : ""}`}
+      className={`focus-ring space-y-3 rounded-sm bg-muted/35 p-4 ${selected ? "ring-1 ring-primary" : ""}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">
@@ -792,7 +823,7 @@ function ForumProposalCard({
             .replace(/([a-z])([A-Z])/g, "$1 $2")
             .replaceAll("_", " ")}
         </h3>
-        <span className="font-mono text-xs uppercase">
+        <span className="text-xs">
           {state === "pending"
             ? "Awaiting your approval · Not executed"
             : state}
@@ -822,7 +853,7 @@ function ForumProposalCard({
         <summary className="focus-ring cursor-pointer text-sm underline">
           Exact request
         </summary>
-        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words border border-row-border p-3 text-xs">
+        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-muted/35 p-4 text-xs">
           {forumProposalPreview(command.argsJson)}
         </pre>
       </details>

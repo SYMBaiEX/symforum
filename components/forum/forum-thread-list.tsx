@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare } from "lucide-react";
+import { ChevronDown, MessageSquare, Plus } from "lucide-react";
 import {
   ForumBodyGrid,
   ForumPageHeader,
@@ -629,9 +629,9 @@ function LiveForumThreadList({
             {listResult.pagination.totalItems === 1 ? "thread" : "threads"}
           </ForumSectionHeader>
           <div className="min-w-0 space-y-3">
-            <div className="grid gap-3 py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
+            <div className="flex flex-col-reverse gap-3 py-3 sm:flex-row sm:items-center">
               <form
-                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto]"
+                className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto]"
                 onSubmit={submitBoardSearch}
                 role="search"
               >
@@ -659,39 +659,48 @@ function LiveForumThreadList({
                     : "Search"}
                 </Button>
               </form>
-              <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
+              <div className="flex min-w-0 items-start gap-2">
                 <Button
                   className="min-h-11 rounded-none text-xs "
                   type="button"
                   disabled={authLoading || pending}
                   onClick={toggleThreadComposer}
                 >
+                  <Plus className="size-4" aria-hidden="true" />
                   {composeOpen && isAuthenticated && viewerCanCreateThread
                     ? "Close thread form"
                     : "New thread"}
                 </Button>
-                <Button
-                  className="min-h-11 rounded-none text-xs "
-                  type="button"
-                  variant="outline"
-                  disabled={authLoading || categorySubscriptionPending}
-                  onClick={toggleBoardSubscription}
-                >
-                  {categorySubscriptionPending
-                    ? "Saving..."
-                    : categorySubscribed
-                      ? "Unsubscribe"
-                      : "Subscribe"}
-                </Button>
-                <Button
-                  className="min-h-11 rounded-none text-xs "
-                  type="button"
-                  variant="outline"
-                  disabled={authLoading || markReadPending}
-                  onClick={markBoardRead}
-                >
-                  {markReadPending ? "Marking..." : "Mark read"}
-                </Button>
+                <details className="group relative">
+                  <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
+                    Board tools{" "}
+                    <ChevronDown className="size-3.5" aria-hidden="true" />
+                  </summary>
+                  <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-sm bg-background p-2 shadow-lg">
+                    <Button
+                      className="min-h-11 rounded-none text-xs "
+                      type="button"
+                      variant="ghost"
+                      disabled={authLoading || categorySubscriptionPending}
+                      onClick={toggleBoardSubscription}
+                    >
+                      {categorySubscriptionPending
+                        ? "Saving..."
+                        : categorySubscribed
+                          ? "Unsubscribe"
+                          : "Subscribe"}
+                    </Button>
+                    <Button
+                      className="min-h-11 rounded-none text-xs "
+                      type="button"
+                      variant="outline"
+                      disabled={authLoading || markReadPending}
+                      onClick={markBoardRead}
+                    >
+                      {markReadPending ? "Marking..." : "Mark read"}
+                    </Button>
+                  </div>
+                </details>
               </div>
             </div>
             {boardActionError ? (
@@ -899,105 +908,99 @@ function ForumSubboardSelector({
   return (
     <nav
       aria-label={`${parentTitle} sub-boards`}
-      className="overflow-hidden rounded-sm bg-muted/20"
+      className="min-w-0 rounded-sm bg-background/60"
     >
-      <ForumSectionHeader title="Sub-boards">
-        {boards.length} {boards.length === 1 ? "board" : "boards"}
-      </ForumSectionHeader>
-      <ul className="px-4">
-        {boards.map((board) => {
-          const latest = getCategoryLatestThread(board);
-          return (
-            <li key={board.slug}>
-              <article className="grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-3 gap-y-1 py-3 xl:grid-cols-[24px_minmax(0,1fr)_64px_170px]">
-                <span
-                  role="img"
-                  aria-label={
-                    board.viewerUnread === undefined
-                      ? "Sub-board"
-                      : board.viewerUnread
-                        ? "Unread board"
-                        : "Read board"
-                  }
-                  className={`pt-3 ${board.viewerUnread ? "text-primary" : "text-muted-foreground"}`}
-                >
-                  <MessageSquare className="size-5" aria-hidden="true" />
-                </span>
-                <div className="min-w-0">
-                  <h3>
-                    <ForumLink
-                      className="focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere]"
-                      href={forumPath(board.slug)}
-                      prefetch
-                    >
-                      {getCategoryTitle(board)}
-                    </ForumLink>
-                  </h3>
-                  {getCategoryDescription(board) ? (
-                    <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                      {getCategoryDescription(board)}
-                    </p>
-                  ) : null}
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground xl:hidden">
-                    {forumItemCount(getCategoryThreadCount(board), "thread")} ·{" "}
-                    {forumItemCount(getCategoryPostCount(board), "post")}
-                  </p>
-                  {board.children?.length ? (
-                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
-                      {board.children.map((child) => (
-                        <ForumLink
-                          className="focus-ring inline-flex min-h-11 items-center hover:text-primary"
-                          href={forumPath(child.slug)}
-                          key={child.slug}
-                        >
-                          {getCategoryTitle(child)}
-                        </ForumLink>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <dl className="hidden space-y-2 pt-3 font-mono text-[10px] text-muted-foreground xl:block">
-                  <div className="flex flex-col">
-                    <dt className="order-2">threads</dt>
-                    <dd className="order-1 text-sm tabular-nums text-foreground">
-                      {formatForumCount(getCategoryThreadCount(board))}
-                    </dd>
-                  </div>
-                  <div className="flex flex-col">
-                    <dt className="order-2">posts</dt>
-                    <dd className="order-1 tabular-nums text-foreground">
-                      {formatForumCount(getCategoryPostCount(board))}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="col-start-2 min-w-0 xl:col-start-auto xl:pt-2">
-                  {latest ? (
-                    <>
+      <details className="group" aria-label="Sub-board selector">
+        <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-3 px-3 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
+          <MessageSquare
+            className="size-4 shrink-0 text-primary"
+            aria-hidden="true"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              {boards.length} {boards.length === 1 ? "sub-board" : "sub-boards"}
+            </span>
+            <span className="block truncate text-xs leading-5 text-muted-foreground">
+              {boards.map(getCategoryTitle).join(", ")}
+            </span>
+          </span>
+          <ChevronDown
+            className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          />
+        </summary>
+        <ul className="px-2 sm:px-4">
+          {boards.map((board) => {
+            const latest = getCategoryLatestThread(board);
+            return (
+              <li key={board.slug}>
+                <article className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)] gap-x-3 py-3 sm:grid-cols-[36px_minmax(0,1fr)_180px]">
+                  <span
+                    role="img"
+                    aria-label={
+                      board.viewerUnread === undefined
+                        ? "Sub-board"
+                        : board.viewerUnread
+                          ? "Unread board"
+                          : "Read board"
+                    }
+                    className={`mt-2 flex size-9 items-center justify-center rounded-sm ${board.viewerUnread ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"}`}
+                  >
+                    <MessageSquare className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3>
                       <ForumLink
-                        className="focus-ring block min-h-11 content-center break-words text-xs font-medium leading-5 hover:text-primary"
+                        className="focus-ring flex min-h-11 items-center text-[15px] font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere]"
+                        href={forumPath(board.slug)}
+                        prefetch
+                      >
+                        {getCategoryTitle(board)}
+                      </ForumLink>
+                    </h3>
+                    {getCategoryDescription(board) ? (
+                      <p className="line-clamp-1 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                        {getCategoryDescription(board)}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      {forumItemCount(getCategoryThreadCount(board), "thread")}{" "}
+                      · {forumItemCount(getCategoryPostCount(board), "post")}
+                    </p>
+                    {board.children?.length ? (
+                      <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                        {board.children.map((child) => (
+                          <ForumLink
+                            className="focus-ring inline-flex min-h-11 items-center text-muted-foreground hover:text-primary"
+                            href={forumPath(child.slug)}
+                            key={child.slug}
+                          >
+                            {getCategoryTitle(child)} →
+                          </ForumLink>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {latest ? (
+                    <div className="col-start-2 min-w-0 sm:col-start-auto sm:pt-2 sm:text-right">
+                      <ForumLink
+                        className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary [overflow-wrap:anywhere] sm:justify-end"
                         href={getThreadLastPostHref(latest, board.slug)}
                       >
                         {latest.title}
                       </ForumLink>
-                      <p className="text-[11px] leading-5 text-muted-foreground">
+                      <p className="text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                         {getThreadLastAuthor(latest)} ·{" "}
                         {formatForumDateTime(getThreadLastActivityAt(latest))}
                       </p>
-                    </>
-                  ) : (
-                    <p className="py-2 text-xs text-muted-foreground">
-                      {getCategoryPostCount(board) > 0 ||
-                      getCategoryThreadCount(board) > 0
-                        ? "Latest activity unavailable"
-                        : "No posts yet"}
-                    </p>
-                  )}
-                </div>
-              </article>
-            </li>
-          );
-        })}
-      </ul>
+                    </div>
+                  ) : null}
+                </article>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
     </nav>
   );
 }
@@ -1358,8 +1361,8 @@ function ForumPollDraft({
   }
 
   return (
-    <fieldset className="border border-row-border p-3">
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+    <fieldset className="rounded-sm bg-muted/30 p-3">
+      <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
         <input
           type="checkbox"
           disabled={disabled}

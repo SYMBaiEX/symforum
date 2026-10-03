@@ -122,11 +122,13 @@ test("a newly locked thread removes quote actions without hiding existing conten
     <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
   );
   expect(openHtml).toContain(">Quote</button>");
+  expect(openHtml).toContain('href="#forum-reply-composer"');
   configureThread(true);
   const lockedHtml = renderToStaticMarkup(
     <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
   );
   expect(lockedHtml).not.toContain(">Quote</button>");
+  expect(lockedHtml).not.toContain('href="#forum-reply-composer"');
   expect(lockedHtml).toContain("Replying unavailable");
   expect(lockedHtml).toContain("First reply.");
   expect(lockedHtml).toContain(">Report</button>");
@@ -143,6 +145,8 @@ test("server-rendered thread heading suppresses duplicate client heading while p
     />,
   );
   expect(html).not.toContain("<h1");
+  expect(html).toContain('href="#forum-reply-composer"');
+  expect(html).toContain('aria-label="More actions for post 2"');
   expect(html).toContain("Opening message.");
   expect(html).toContain("First reply.");
   expect(html).toContain('aria-label="Forum breadcrumb"');

@@ -1120,6 +1120,13 @@ function LiveForumThreadView({
             breadcrumbs={
               <ForumBreadcrumbs category={category} thread={thread} />
             }
+            actions={
+              viewerCanReply ? (
+                <Button asChild className="min-h-11 rounded-sm px-4 text-sm">
+                  <a href="#forum-reply-composer">Reply to thread</a>
+                </Button>
+              ) : undefined
+            }
             view="boards"
             nested
           />
@@ -1141,6 +1148,11 @@ function LiveForumThreadView({
                 >
                   First unread »
                 </ForumJumpLink>
+              ) : null}
+              {!showHeading && viewerCanReply ? (
+                <Button asChild className="min-h-11 rounded-sm px-4 text-sm">
+                  <a href="#forum-reply-composer">Reply to thread</a>
+                </Button>
               ) : null}
               <ThreadActions
                 bookmarked={thread.viewerBookmarked === true}
@@ -1333,7 +1345,7 @@ function LiveForumThreadView({
         </ForumLink>
       ) : null}
 
-      <section className="space-y-4" aria-label="Discussion posts">
+      <section className="space-y-3" aria-label="Discussion posts">
         <ForumSectionHeader title="Discussion">
           <ForumLink
             className="focus-ring inline-flex min-h-11 items-center hover:text-primary"
@@ -1509,8 +1521,12 @@ function LiveForumThreadView({
         />
       </section>
 
-      <section className="space-y-3" id="forum-reply-composer">
-        <ForumSectionHeader title="Post to thread" />
+      <section
+        className="scroll-mt-28 space-y-3"
+        id="forum-reply-composer"
+        tabIndex={-1}
+      >
+        <ForumSectionHeader title="Your reply" />
         <div className="px-1">
           <p className="text-sm leading-5 text-muted-foreground">
             Replies publish under your current SYM handle.
@@ -1534,8 +1550,8 @@ function LiveForumThreadView({
             bodyTextareaRef={replyTextareaRef}
             draftKey={`symbaiex:forum:draft:reply:${thread._id}`}
             onBodyChange={setReplyBody}
-            bodyLabel="Reply body"
-            bodyPlaceholder="Write the next post in the thread."
+            bodyLabel="Join the discussion"
+            bodyPlaceholder="Share your reply…"
             submitLabel="Post reply"
             pending={pending}
             disabled={authLoading}
@@ -1794,7 +1810,7 @@ function ForumPollPanel({
   const statusId = `poll-${poll._id}-status`;
 
   return (
-    <section className="bg-muted/20 p-4">
+    <section className="rounded-sm bg-background p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2 py-2.5">
         <div>
           <p className="text-xs text-muted-foreground">Poll</p>
@@ -1811,7 +1827,7 @@ function ForumPollPanel({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-3 p-3">
+      <div className="grid gap-3 pt-3">
         <fieldset
           className="grid gap-2"
           aria-describedby={statusId}
@@ -1825,9 +1841,9 @@ function ForumPollPanel({
             return (
               <label
                 key={option._id}
-                className={`grid gap-1.5 border border-row-border p-2.5 ${
+                className={`grid min-h-11 gap-2 rounded-sm bg-muted/35 p-3 ${
                   interaction.canSelect && !pending
-                    ? "cursor-pointer hover:border-primary/60"
+                    ? "cursor-pointer hover:bg-primary/5"
                     : "cursor-not-allowed"
                 }`}
               >
@@ -1854,7 +1870,14 @@ function ForumPollPanel({
                   ) : null}
                 </span>
                 {resultsVisible ? (
-                  <span className="h-2 border border-row-border bg-muted">
+                  <span
+                    className="h-1.5 overflow-hidden rounded-sm bg-muted"
+                    role="progressbar"
+                    aria-label={`${option.label} vote percentage`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.max(0, Math.min(100, option.percent))}
+                  >
                     <span
                       className="block h-full bg-primary"
                       style={{
@@ -1868,7 +1891,7 @@ function ForumPollPanel({
           })}
         </fieldset>
         <p
-          className="border border-row-border px-3 py-2 text-sm text-muted-foreground"
+          className="py-1 text-xs text-muted-foreground"
           id={statusId}
           aria-live="polite"
         >
@@ -1894,7 +1917,10 @@ function ForumPollPanel({
           ) : null}
         </div>
         {error ? (
-          <p className="border border-row-border p-3 text-sm text-muted-foreground">
+          <p
+            className="rounded-sm bg-accent-canary/10 p-3 text-sm text-foreground"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -2091,7 +2117,7 @@ function ReplyPreviewPanel({
   const trimmed = body.trim();
 
   return (
-    <section className="border border-row-border">
+    <section className="rounded-sm bg-muted/25">
       <div className="px-3 py-2.5 text-xs text-muted-foreground">{label}</div>
       <div className="p-3">
         {trimmed.length > 0 ? (
@@ -2131,7 +2157,7 @@ function ForumEditAttachmentManager({
 
   return (
     <section className="space-y-3">
-      <div className="border border-row-border p-3">
+      <div className="rounded-sm bg-muted/25 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">{label}</p>
           <p className="text-xs text-muted-foreground">
@@ -2143,11 +2169,11 @@ function ForumEditAttachmentManager({
           <div className="mt-3 grid gap-2">
             {existingAttachments.map((attachment) => (
               <div
-                className="flex flex-wrap items-center justify-between gap-2 border border-row-border px-3 py-2"
+                className="flex min-w-0 items-center justify-between gap-2 rounded-sm bg-background px-3 py-2"
                 key={attachment._id}
               >
                 <a
-                  className="min-w-0 text-sm font-semibold underline-offset-4 hover:underline"
+                  className="min-w-0 flex-1 text-sm font-semibold underline-offset-4 hover:underline"
                   href={attachment.url}
                   rel="noreferrer"
                   target="_blank"
@@ -2255,26 +2281,6 @@ function PostActions({
 
   return (
     <>
-      <Button
-        asChild
-        className="min-h-11 rounded-none px-2 text-xs "
-        variant="ghost"
-      >
-        <a
-          aria-label={`Link to post ${postNumber}`}
-          href={`#post-${postNumber}`}
-        >
-          #{postNumber}
-        </a>
-      </Button>
-      <Button
-        className="min-h-11 rounded-none px-2 text-xs "
-        type="button"
-        variant="ghost"
-        onClick={onCopyLink}
-      >
-        Copy link
-      </Button>
       {canQuote ? (
         <>
           <Button
@@ -2296,68 +2302,98 @@ function PostActions({
           </Button>
         </>
       ) : null}
-      {canGiveReputation ? (
-        <>
+      <details className="group min-w-0 open:basis-full">
+        <summary
+          className="focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground"
+          aria-label={`More actions for post ${postNumber}`}
+        >
+          More <span aria-hidden="true">⌄</span>
+        </summary>
+        <div className="mt-1 flex w-full flex-wrap gap-1 rounded-sm bg-muted/35 p-2">
           <Button
-            aria-pressed={viewerReputationScore === 1}
+            asChild
             className="min-h-11 rounded-none px-2 text-xs "
-            type="button"
-            variant={viewerReputationScore === 1 ? "default" : "ghost"}
-            disabled={reputationPending}
-            onClick={() => onReputation(1)}
+            variant="ghost"
           >
-            + Rep
+            <a
+              aria-label={`Link to post ${postNumber}`}
+              href={`#post-${postNumber}`}
+            >
+              #{postNumber}
+            </a>
           </Button>
           <Button
-            aria-pressed={viewerReputationScore === -1}
             className="min-h-11 rounded-none px-2 text-xs "
             type="button"
-            variant={viewerReputationScore === -1 ? "default" : "ghost"}
-            disabled={reputationPending}
-            onClick={() => onReputation(-1)}
+            variant="ghost"
+            onClick={onCopyLink}
           >
-            - Rep
+            Copy link
           </Button>
-        </>
-      ) : null}
-      {canEdit ? (
-        <Button
-          className="min-h-11 rounded-none px-2 text-xs "
-          type="button"
-          variant="ghost"
-          onClick={onEdit}
-        >
-          Edit
-        </Button>
-      ) : null}
-      {canDelete ? (
-        <Button
-          className="min-h-11 rounded-none px-2 text-xs "
-          type="button"
-          variant="ghost"
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
-      ) : null}
-      <Button
-        className="min-h-11 rounded-none px-2 text-xs "
-        type="button"
-        variant="ghost"
-        onClick={() =>
-          onReport({
-            entityType: postId === undefined ? "thread" : "post",
-            threadId,
-            postId,
-            label:
-              postId === undefined
-                ? `Thread starter #${postNumber}`
-                : `Reply #${postNumber}`,
-          })
-        }
-      >
-        Report
-      </Button>
+          {canGiveReputation ? (
+            <>
+              <Button
+                aria-pressed={viewerReputationScore === 1}
+                className="min-h-11 rounded-none px-2 text-xs "
+                type="button"
+                variant={viewerReputationScore === 1 ? "default" : "ghost"}
+                disabled={reputationPending}
+                onClick={() => onReputation(1)}
+              >
+                + Rep
+              </Button>
+              <Button
+                aria-pressed={viewerReputationScore === -1}
+                className="min-h-11 rounded-none px-2 text-xs "
+                type="button"
+                variant={viewerReputationScore === -1 ? "default" : "ghost"}
+                disabled={reputationPending}
+                onClick={() => onReputation(-1)}
+              >
+                - Rep
+              </Button>
+            </>
+          ) : null}
+          {canEdit ? (
+            <Button
+              className="min-h-11 rounded-none px-2 text-xs "
+              type="button"
+              variant="ghost"
+              onClick={onEdit}
+            >
+              Edit
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              className="min-h-11 rounded-none px-2 text-xs "
+              type="button"
+              variant="ghost"
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
+          ) : null}
+          <Button
+            className="min-h-11 rounded-none px-2 text-xs "
+            type="button"
+            variant="ghost"
+            onClick={() =>
+              onReport({
+                entityType: postId === undefined ? "thread" : "post",
+                threadId,
+                postId,
+                label:
+                  postId === undefined
+                    ? `Thread starter #${postNumber}`
+                    : `Reply #${postNumber}`,
+              })
+            }
+          >
+            Report
+          </Button>
+        </div>
+      </details>
     </>
   );
 }

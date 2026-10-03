@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import { formatForumDateTime, forumRefs } from "@/components/forum/forum-refs";
 import {
   ForumBody,
@@ -43,11 +45,7 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
         title="Help topic not found"
         body="That help document is no longer active in the forum help desk."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <ForumLink href="/forum/help" prefetch>
               Help / FAQ
             </ForumLink>
@@ -59,30 +57,16 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
 
   return (
     <article className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum helpdesk</p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold md:text-2xl">
-            {document.title}
-          </h1>
-          <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-            FAQ
-          </span>
-        </div>
-        <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
-          Updated {formatForumDateTime(document.updatedAt)}
-        </p>
-      </div>
+      <ForumPageHeader
+        title={document.title}
+        description={`Updated ${formatForumDateTime(document.updatedAt)}`}
+      />
 
-      <div className="border-y border-row-border py-3">
+      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
         <ForumBody body={document.body} />
       </div>
 
-      <Button
-        asChild
-        className="rounded-none font-mono text-[10px] uppercase"
-        variant="outline"
-      >
+      <Button asChild className="rounded-sm text-xs" variant="outline">
         <ForumLink href="/forum/help" prefetch>
           Help / FAQ
         </ForumLink>

@@ -36,30 +36,21 @@ function LiveForumHelpPage() {
 
   return (
     <div className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum helpdesk</p>
-        <h2 className="mt-1 text-xl font-semibold md:text-2xl">Help / FAQ</h2>
-        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-          Read posting guidelines, account information, and forum policies
-          before opening a new thread.
-        </p>
-      </div>
-
       {documents.length === 0 ? (
         <ForumStatusBox
           title="No help documents"
           body="The forum help desk has no active documents yet."
         />
       ) : (
-        <div className="border border-row-border">
-          <div className="grid grid-cols-[minmax(0,1fr)_9rem] border-b border-row-border bg-muted/35 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+        <div className="min-w-0 rounded-sm bg-background">
+          <div className="grid grid-cols-[minmax(0,1fr)_9rem] bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
             <span>Topic</span>
             <span className="text-right">Last edited</span>
           </div>
-          <div className="divide-y divide-row-border">
+          <div className="space-y-1">
             {documents.map((document) => (
               <article
-                className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_9rem]"
+                className="forum-list-row grid min-w-0 gap-2 px-3 py-3 md:grid-cols-[minmax(0,1fr)_9rem]"
                 key={document._id}
               >
                 <div className="min-w-0">
@@ -73,12 +64,12 @@ function LiveForumHelpPage() {
                   </p>
                 </div>
                 <div className="flex items-start justify-between gap-2 md:block md:text-right">
-                  <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {formatForumDateTime(document.updatedAt)}
                   </p>
                   <Button
                     asChild
-                    className="mt-0 h-7 rounded-none px-2 font-mono text-[10px] uppercase md:mt-2"
+                    className="mt-0 h-7 rounded-sm px-2 text-xs md:mt-2"
                     size="sm"
                     variant="outline"
                   >

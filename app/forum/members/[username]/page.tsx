@@ -1,3 +1,4 @@
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { PublicProfilePanel } from "@/components/public-profile-panel";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
@@ -57,14 +58,12 @@ export default async function ForumMemberProfilePage({ params }: PageProps) {
         ]}
       />
       <ForumUtilityNav />
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum member</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
-          /members/{username}
-        </h1>
-      </div>
+      <ForumPageHeader
+        title={username}
+        description="Member profile and recent forum activity."
+      />
       {configured ? (
-        <PublicProfilePanel username={username} />
+        <PublicProfilePanel username={username} forum />
       ) : (
         <div className="border border-row-border p-4">
           <p className="font-mono text-xs uppercase text-muted-foreground">

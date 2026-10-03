@@ -1,3 +1,4 @@
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { ForumAnnouncementsPage } from "@/components/forum/forum-announcements-page";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import { StructuredData } from "@/components/structured-data";
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function ForumAnnouncementsRoute() {
   return (
-    <section className="page-frame page-frame-dense">
+    <section className="page-frame page-frame-dense forum-workspace space-y-4">
       <StructuredData
         data={forumCollectionStructuredData(
           "Forum Announcements",
@@ -23,12 +24,10 @@ export default function ForumAnnouncementsRoute() {
         )}
       />
       <ForumUtilityNav className="mb-2" />
-      <header className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum bulletin</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
-          Announcements
-        </h1>
-      </header>
+      <ForumPageHeader
+        title="Announcements"
+        description="Forum updates and notices from the team."
+      />
       <ForumAnnouncementsPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
       />

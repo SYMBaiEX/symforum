@@ -40,20 +40,13 @@ function LiveForumAnnouncementsPage() {
 
   return (
     <div className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum bulletin</p>
-        <h2 className="mt-1 text-xl font-semibold md:text-2xl">
-          Announcements
-        </h2>
-      </div>
-
       {announcements.length === 0 ? (
         <ForumStatusBox
           title="No announcements"
           body="There are no forum announcements yet."
         />
       ) : (
-        <div className="divide-y divide-row-border border-y border-row-border">
+        <div className="space-y-1 rounded-sm bg-background">
           {announcements.map((announcement) => (
             <article className="py-3" key={announcement._id}>
               <div className="flex flex-wrap items-center gap-2">
@@ -65,19 +58,19 @@ function LiveForumAnnouncementsPage() {
                     {announcement.title}
                   </ForumLink>
                 </h2>
-                <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+                <span className="border border-row-border px-1.5 text-xs text-muted-foreground">
                   {announcement.categoryName ?? "global"}
                 </span>
               </div>
               <ForumBody body={announcement.body} className="mt-2" />
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Updated {formatForumDateTime(announcement.updatedAt)}
                 </p>
                 {announcement.categorySlug ? (
                   <Button
                     asChild
-                    className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+                    className="h-7 rounded-sm px-2 text-xs"
                     size="sm"
                     variant="outline"
                   >

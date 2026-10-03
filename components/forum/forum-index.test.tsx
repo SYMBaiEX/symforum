@@ -97,26 +97,28 @@ test("forum index does not subscribe to heartbeat-driven online summaries", () =
   expect(mocks.pointInTimeQuery).not.toHaveBeenCalled();
 });
 
-test("default forum home starts with lounge chat and grouped boards while keeping feed navigation", () => {
+test("default home starts with lounge chat and grouped boards without duplicating shell navigation", () => {
   const html = renderForumIndex();
   expect(html).toContain("Lounge chat");
   expect(html).toContain("Forum index");
   expect(html.indexOf('id="forum-chat"')).toBeLessThan(
     html.indexOf("Forum index"),
   );
-  expect(html).toContain('href="/forum?view=feed"');
+  expect(html).not.toContain('aria-label="Forum views"');
+  expect(html).not.toContain('aria-label="Search the forum"');
   expect(html).not.toContain("data-feed-sort");
 });
 
 test.each(["feed", "news", "community"] as const)(
-  "%s keeps Lounge chat before its content and the current forum navigation",
+  "%s keeps Lounge chat before its content while shell owns view navigation",
   (view) => {
     mocks.query.mockImplementation((reference) =>
       reference === forumRefs.overview ? overview : undefined,
     );
     const html = renderToStaticMarkup(<ForumIndex enabled view={view} />);
     expect(html).toContain('id="forum-chat"');
-    expect(html).toContain(`href="/forum?view=${view}"`);
+    expect(html).not.toContain('aria-label="Forum views"');
+    expect(html).not.toContain('aria-label="Search the forum"');
     if (view === "news") {
       expect(html).toContain('data-news-variant="forum"');
       expect(html.indexOf('id="forum-chat"')).toBeLessThan(
@@ -183,14 +185,14 @@ test("shows zero when an empty online snapshot loaded successfully", () => {
   expect(html).not.toContain("Online status unavailable.");
 });
 
-test("home exposes real view URLs on the forum host and community filtering", () => {
+test("home resolves board URLs on the forum host and retains community filtering", () => {
   mocks.pathname = "/";
   mocks.query.mockImplementation(() => overview);
   const html = renderToStaticMarkup(
     <ForumIndex enabled view="community" sort="new" />,
   );
-  expect(html).toContain('href="/?view=news&amp;sort=new"');
-  expect(html).toContain('aria-current="page"');
+  expect(html).toContain('href="/?view=boards"');
+  expect(html).not.toContain('aria-label="Search the forum"');
   expect(html).toContain('data-community-only="true"');
   expect(html).toContain('data-feed-sort="new"');
   expect(html).not.toContain("Mark all read");
@@ -244,9 +246,10 @@ test("feed news preview links the real local discussion without combining HN and
   expect(html).not.toContain("102");
 });
 
-test("disabled forum uses a clear local fallback with functional view links", () => {
+test("disabled forum uses a clear local fallback with a functional board link", () => {
   const html = renderToStaticMarkup(<ForumIndex enabled={false} />);
   expect(html).toContain("Forum unavailable locally");
-  expect(html).toContain('href="/forum?view=news"');
+  expect(html).toContain('href="/forum?view=boards"');
+  expect(html).not.toContain('aria-label="Search the forum"');
   expect(html).not.toContain("Loading discussions");
 });

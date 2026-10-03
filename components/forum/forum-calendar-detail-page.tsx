@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import {
   FORUM_CALENDAR_TIME_ZONE,
   formatForumDateTime,
@@ -48,11 +50,7 @@ function LiveForumCalendarDetailPage({ slug }: { slug: string }) {
         title="Calendar event not found"
         body="That event is no longer active on the forum calendar."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <ForumLink href="/forum/calendar" prefetch>
               Calendar
             </ForumLink>
@@ -64,29 +62,16 @@ function LiveForumCalendarDetailPage({ slug }: { slug: string }) {
 
   return (
     <article className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum calendar</p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold md:text-2xl">{event.title}</h1>
-          <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-            Event
-          </span>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-          <span>{formatCalendarEventRange(event)}</span>
-          <span>Updated {formatForumDateTime(event.updatedAt)}</span>
-        </div>
-      </div>
+      <ForumPageHeader
+        title={event.title}
+        description={formatCalendarEventRange(event)}
+      />
 
-      <div className="border-y border-row-border py-3">
+      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
         <ForumBody body={event.body} />
       </div>
 
-      <Button
-        asChild
-        className="rounded-none font-mono text-[10px] uppercase"
-        variant="outline"
-      >
+      <Button asChild className="rounded-sm text-xs" variant="outline">
         <ForumLink href={`/forum/calendar?month=${event.month}`} prefetch>
           Calendar
         </ForumLink>

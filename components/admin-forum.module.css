@@ -1,0 +1,75 @@
+.moderation {
+  min-width: 0;
+  margin-top: 0;
+  padding-block: 0.5rem;
+  border: 0;
+}
+
+.moderation section,
+.moderation article {
+  min-width: 0;
+  border: 0;
+  scroll-margin-top: 7rem;
+}
+
+.moderation > section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: hsl(var(--muted) / 0.25);
+  border-radius: var(--radius);
+}
+
+.moderation article {
+  padding: 1rem;
+  border-radius: var(--radius);
+  background: hsl(var(--background));
+  overflow-wrap: anywhere;
+}
+
+.moderation :global(.grid) > * {
+  min-width: 0;
+}
+
+.moderation :global(.divide-y) > * {
+  border-top-width: 0;
+}
+
+.moderation :global(.divide-y) > * + * {
+  margin-top: 0.5rem;
+}
+
+.moderation :global(.uppercase) {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.75rem;
+  text-transform: none;
+}
+
+.moderation input,
+.moderation select,
+.moderation textarea,
+.moderation button {
+  max-width: 100%;
+  border-radius: var(--radius);
+}
+
+@media (max-width: 767px) {
+  .moderation > section {
+    padding: 0.75rem;
+  }
+
+  .moderation [class*="grid-cols-["] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .moderation button,
+  .moderation select,
+  .moderation input:not([type="checkbox"]) {
+    min-height: 2.75rem;
+  }
+
+  .moderation input:not([type="checkbox"]),
+  .moderation select,
+  .moderation textarea {
+    font-size: 1rem;
+  }
+}

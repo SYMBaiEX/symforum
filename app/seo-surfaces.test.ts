@@ -130,8 +130,11 @@ describe("public discovery surfaces", () => {
     ];
 
     for (const route of routes) {
-      expect(readFileSync(resolve(process.cwd(), route), "utf8")).toMatch(
-        /<h1\b/,
+      const source = readFileSync(resolve(process.cwd(), route), "utf8");
+      expect(source.match(/<ForumPageHeader\b/g)).toHaveLength(1);
+      expect(source).not.toMatch(/<h1\b/);
+      expect(source).toMatch(
+        /enabled=\{Boolean\(process\.env\.NEXT_PUBLIC_CONVEX_URL\)\}/,
       );
     }
   });
@@ -160,6 +163,6 @@ describe("public discovery surfaces", () => {
     );
     expect(html.match(/<h1(?:\s|>)/g)).toHaveLength(1);
     expect(html).toMatch(/<h1[^>]*>Research &amp; discussion<\/h1>/);
-    expect(html).toContain('aria-label="Forum views"');
+    expect(html).toContain("forum-page-header");
   });
 });

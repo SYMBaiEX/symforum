@@ -83,7 +83,10 @@ export function createForumBrowserTools(
         : operation.publicRead),
   ).map((operation): ForumBrowserTool => ({
     name: operation.name,
-    title: operation.name === "forum_open" ? "SYMBaiEX Forum" : operation.operation.replace(/([a-z])([A-Z])/g, "$1 $2"),
+    title:
+      operation.name === "forum_open"
+        ? "SYMBaiEX Forum"
+        : operation.operation.replace(/([a-z])([A-Z])/g, "$1 $2"),
     description: operation.description,
     inputSchema: {
       ...operation.inputSchema,
@@ -382,7 +385,7 @@ function LiveForumAgentContextStrip() {
   if (!isAuthenticated || !connectionId) return null;
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-2 border-t border-row-border bg-accent/5 px-3 py-2 text-xs"
+      className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-sm bg-accent/5 px-3 py-2 text-xs leading-5 [overflow-wrap:anywhere]"
       role="status"
     >
       <p>
@@ -401,7 +404,7 @@ function LiveForumAgentContextStrip() {
         )}
       </p>
       <ForumLink
-        className="focus-ring underline"
+        className="focus-ring inline-flex min-h-11 items-center font-medium hover:underline"
         href="/forum/control-panel/agent-access"
       >
         Manage agent access
@@ -433,7 +436,7 @@ function LiveForumAgentAttachmentPicker() {
 function AgentFilePicker({ username }: { username: string }) {
   const [error, setError] = useState("");
   return (
-    <div className="mt-3 border-t border-row-border pt-3">
+    <div className="mt-3 rounded-sm bg-muted/25 p-3">
       <label className="block space-y-2 text-xs">
         <span>
           Files for your agent acting as <strong>{username}</strong>

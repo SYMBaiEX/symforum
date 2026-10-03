@@ -11,7 +11,7 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
-import { ArrowUpRight, Plus, Search } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import {
@@ -63,7 +63,7 @@ export function ForumIndex({
     return (
       <div>
         <ForumHomeHeader view={view} sort={sort} />
-        <div className="mt-8">
+        <div className="mt-4">
           {view === "news" ? (
             <NewsFeed
               variant="forum"
@@ -196,25 +196,25 @@ function ForumHomeHeader({
       sort={sort}
       actions={
         <>
-          <ForumLink
-            aria-label="Search the forum"
-            className={quietLink}
-            href="/forum/search"
+          <details
+            className="group/compose relative"
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }}
           >
-            <Search aria-hidden="true" className="size-4" />
-            <span className="hidden sm:inline">Search</span>
-          </ForumLink>
-          <details className="relative">
             <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground">
               <Plus className="size-4" aria-hidden="true" />
-              Create post
+              <span className="hidden sm:inline">Create post</span>
+              <span className="sm:hidden">Post</span>
             </summary>
-            <div className="absolute right-0 z-20 mt-2 w-72 rounded-sm bg-popover p-3 shadow-lg ring-1 ring-row-border">
+            <div className="absolute right-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-sm bg-popover p-2 shadow-lg ring-1 ring-row-border">
               <p className="px-2 pb-2 text-xs text-muted-foreground">
                 Choose a board
               </p>
               {boards.length ? (
-                <div className="space-y-1">
+                <div className="max-h-[50dvh] space-y-1 overflow-y-auto overscroll-contain">
                   {boards.slice(0, 6).map((board) => (
                     <ForumLink
                       className={`${quietLink} flex w-full`}
@@ -313,7 +313,7 @@ function ForumHomeRail({
       .filter((category) => category.kind !== "section")
       .slice(0, 7) ?? [];
   return (
-    <aside aria-label="Forum context" className="space-y-5 text-sm">
+    <aside aria-label="Forum context" className="space-y-6 text-sm">
       {overview?.newestThreads.length ? (
         <section>
           <ForumSectionHeader title="Latest activity" />
@@ -467,7 +467,7 @@ function ForumHomeRail({
           <div className="mt-4 flex flex-wrap gap-2">
             {online.members.slice(0, 5).map((member) => (
               <ForumLink
-                className="focus-ring rounded-full"
+                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full"
                 href={forumMemberProfilePath(member.username)}
                 title={member.displayName}
                 key={member.userId}

@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import { asRoute } from "@/lib/typed-route";
 
 import {
@@ -56,16 +58,11 @@ export function ForumMembers({ enabled }: { enabled: boolean }) {
 
 function LiveForumMembers() {
   return (
-    <section className="overflow-hidden border-y border-row-border">
-      <div className="border-b border-row-border px-3 py-2">
-        <p className="page-kicker">Community directory</p>
-        <h1 className="mt-1 text-xl font-semibold leading-tight md:text-2xl">
-          Members
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
-          Find members, activity, and forum profiles.
-        </p>
-      </div>
+    <section className="forum-workspace space-y-4">
+      <ForumPageHeader
+        title="Members"
+        description="The people behind the conversations. Find a member or explore their recent activity."
+      />
       <ForumMemberTable />
     </section>
   );
@@ -150,15 +147,15 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="border-b border-row-border bg-muted/10 px-3 py-2">
+      <div className="bg-muted/10 px-3 py-2">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
           <label className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               Search members
             </span>
             <input
               autoComplete="off"
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
+              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
                 const nextQuery = event.target.value;
                 setDraftQuery(nextQuery);
@@ -170,11 +167,9 @@ function ForumMemberTable() {
             />
           </label>
           <label className="grid gap-1.5">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Sort by
-            </span>
+            <span className="text-xs text-muted-foreground">Sort by</span>
             <select
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
+              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-xs outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -191,11 +186,9 @@ function ForumMemberTable() {
             </select>
           </label>
           <label className="grid gap-1.5">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Per page
-            </span>
+            <span className="text-xs text-muted-foreground">Per page</span>
             <select
-              className="focus-ring h-10 rounded-none border border-row-border bg-background px-3 font-mono text-xs uppercase outline-none"
+              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-xs outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -223,7 +216,7 @@ function ForumMemberTable() {
           startItem={startItem}
         />
         {result?.limited ? (
-          <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             Directory scan limited. Narrow the search to inspect older matching
             members.
           </p>
@@ -248,9 +241,12 @@ function ForumMemberTable() {
       ) : null}
       {visibleMembers.length > 0 ? (
         <>
-          <div className="divide-y divide-row-border lg:hidden">
+          <div className="space-y-1 lg:hidden">
             {visibleMembers.map((member) => (
-              <article key={member._id} className="px-3 py-2.5 odd:bg-muted/15">
+              <article
+                key={member._id}
+                className="px-3 py-2.5 rounded-sm hover:bg-muted/45"
+              >
                 <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5">
                   <ForumAvatar
                     alt={`${member.displayName} avatar`}
@@ -266,7 +262,7 @@ function ForumMemberTable() {
                     >
                       {member.displayName}
                     </ForumLink>
-                    <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       /members/{member.username}
                     </p>
                     {member.customTitle ? (
@@ -275,13 +271,13 @@ function ForumMemberTable() {
                       </p>
                     ) : null}
                     {member.location ? (
-                      <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {member.location}
                       </p>
                     ) : null}
                   </div>
                 </div>
-                <dl className="mt-2 grid grid-cols-3 gap-px border-y border-row-border bg-row-border">
+                <dl className="mt-2 grid grid-cols-3 gap-px rounded-sm bg-background bg-row-border">
                   <MemberMetric className="col-span-2" label="Rank">
                     {member.rank}
                   </MemberMetric>
@@ -310,7 +306,7 @@ function ForumMemberTable() {
                   <MemberMetric className="col-span-3" label="Joined">
                     {formatForumDateTime(member.joinedAt)}
                     {member.isOnline && member.onlineLocation ? (
-                      <span className="mt-1 block truncate font-mono text-[10px] uppercase text-muted-foreground">
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
                         Viewing {member.onlineLocation.label}
                       </span>
                     ) : null}
@@ -322,7 +318,7 @@ function ForumMemberTable() {
           <table className="hidden w-full table-fixed border-collapse lg:table">
             <caption className="sr-only">Forum members</caption>
             <thead>
-              <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
+              <tr className="text-xs text-muted-foreground">
                 <th className="px-3 py-2 text-left font-normal" scope="col">
                   Member
                 </th>
@@ -364,9 +360,9 @@ function ForumMemberTable() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-row-border">
+            <tbody className="space-y-1">
               {visibleMembers.map((member) => (
-                <tr className="odd:bg-muted/15" key={member._id}>
+                <tr className="rounded-sm hover:bg-muted/45" key={member._id}>
                   <th
                     className="px-3 py-2.5 text-left align-middle font-normal"
                     scope="row"
@@ -386,7 +382,7 @@ function ForumMemberTable() {
                         >
                           {member.displayName}
                         </ForumLink>
-                        <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           /members/{member.username}
                         </p>
                         {member.customTitle ? (
@@ -395,7 +391,7 @@ function ForumMemberTable() {
                           </p>
                         ) : null}
                         {member.location ? (
-                          <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {member.location}
                           </p>
                         ) : null}
@@ -420,7 +416,7 @@ function ForumMemberTable() {
                           {member.isOnline ? "Online" : "Offline"}
                         </p>
                         {member.isOnline && member.onlineLocation ? (
-                          <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
+                          <p className="truncate text-xs text-muted-foreground">
                             {member.onlineLocation.label}
                           </p>
                         ) : null}
@@ -451,7 +447,7 @@ function ForumMemberTable() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-row-border px-3 py-2">
+          <div className="px-3 py-2">
             <ForumMemberPager
               currentPage={currentPage}
               endItem={endItem}
@@ -533,7 +529,7 @@ function ForumMemberPager({
 }) {
   const pages = visibleMemberPages(currentPage, pageCount);
   return (
-    <div className="mt-3 flex flex-col gap-2 font-mono text-[10px] uppercase text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <p>
         Showing {startItem}-{endItem} of {matchedCount} matched
       </p>
@@ -630,9 +626,7 @@ function MemberMetric({
 }) {
   return (
     <div className={cn("min-w-0 bg-background px-2 py-2", className)}>
-      <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-        {label}
-      </dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-1 break-words text-sm font-medium">{children}</dd>
     </div>
   );

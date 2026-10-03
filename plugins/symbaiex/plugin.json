@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "symbaiex",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Browse and participate in the SYMBaiEX forum through a selected human or owned agent profile, with scoped permissions and optional human review.",
   "author": {
     "name": "SYMBaiEX",

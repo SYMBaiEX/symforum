@@ -55,22 +55,17 @@ function LiveForumCalendarPage({ month }: { month: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum calendar</p>
+      <div className="rounded-sm bg-background py-2">
         <div className="mt-1.5 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold md:text-2xl">
               {forumCalendarMonthLabel(month)}
             </h2>
-            <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-              Community events, meetups, publishing windows, and forum
-              reminders.
-            </p>
           </div>
           <div className="flex gap-2">
             <Button
               asChild={previousMonth !== null}
-              className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+              className="h-7 rounded-sm px-2 text-xs"
               disabled={previousMonth === null}
               size="sm"
               variant="outline"
@@ -88,7 +83,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             </Button>
             <Button
               asChild={nextMonth !== null}
-              className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+              className="h-7 rounded-sm px-2 text-xs"
               disabled={nextMonth === null}
               size="sm"
               variant="outline"
@@ -105,37 +100,31 @@ function LiveForumCalendarPage({ month }: { month: string }) {
         </div>
       </div>
 
-      <section className="border border-row-border">
+      <section className="min-w-0 rounded-sm bg-background">
         <div className="md:hidden">
-          <div className="grid grid-cols-7 border-b border-row-border bg-muted/35 text-center font-mono text-[10px] uppercase text-muted-foreground">
+          <div className="grid grid-cols-7 bg-muted/35 text-center text-xs text-muted-foreground">
             {WEEKDAY_LABELS.map((label) => (
-              <div
-                aria-label={label}
-                className="border-r border-row-border px-1 py-2 last:border-r-0"
-                key={label}
-              >
+              <div aria-label={label} className="px-1 py-2" key={label}>
                 {label.slice(0, 1)}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-1">
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-14 border-r border-t border-row-border p-1.5 last:border-r-0",
+                  "min-h-14 min-w-0 rounded-sm bg-muted/35 p-1.5",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}
               >
-                <p className="font-mono text-[10px] uppercase">
-                  {day.dayNumber}
-                </p>
+                <p className="text-xs">{day.dayNumber}</p>
                 {day.events.length > 0 ? (
                   <span
                     aria-label={`${day.events.length} ${
                       day.events.length === 1 ? "event" : "events"
                     }`}
-                    className="mt-1 inline-flex min-w-5 items-center justify-center border border-primary/60 px-1 font-mono text-[10px] text-primary"
+                    className="mt-1 inline-flex min-w-5 items-center justify-center rounded-sm bg-primary/10 px-1 text-xs font-medium text-primary"
                   >
                     {day.events.length}
                   </span>
@@ -145,32 +134,27 @@ function LiveForumCalendarPage({ month }: { month: string }) {
           </div>
         </div>
         <div className="hidden md:block">
-          <div className="grid grid-cols-7 border-b border-row-border bg-muted/35 font-mono text-[10px] uppercase text-muted-foreground">
+          <div className="grid grid-cols-7 bg-muted/35 text-xs text-muted-foreground">
             {WEEKDAY_LABELS.map((label) => (
-              <div
-                className="border-r border-row-border px-2 py-2 last:border-r-0"
-                key={label}
-              >
+              <div className="px-2 py-2" key={label}>
                 {label}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-1">
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-24 border-r border-t border-row-border p-2 last:border-r-0",
+                  "min-h-24 min-w-0 rounded-sm bg-muted/35 p-2",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}
               >
-                <p className="font-mono text-[10px] uppercase">
-                  {day.dayNumber}
-                </p>
+                <p className="text-xs">{day.dayNumber}</p>
                 <div className="mt-2 space-y-1">
                   {day.events.slice(0, 3).map((event) => (
                     <ForumLink
-                      className="block truncate border border-row-border bg-background px-1.5 py-1 font-mono text-[10px] uppercase hover:border-foreground"
+                      className="focus-ring block truncate rounded-sm bg-primary/10 px-1.5 py-2 text-xs text-primary hover:bg-primary/15"
                       href={forumCalendarEventPath(event)}
                       key={event._id}
                       prefetch
@@ -179,7 +163,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                     </ForumLink>
                   ))}
                   {day.events.length > 3 ? (
-                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       +{day.events.length - 3} more
                     </p>
                   ) : null}
@@ -196,18 +180,18 @@ function LiveForumCalendarPage({ month }: { month: string }) {
           body="This month has no active forum events yet."
         />
       ) : (
-        <section className="border border-row-border">
-          <div className="grid grid-cols-[8rem_minmax(0,1fr)] border-b border-row-border bg-muted/35 px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+        <section className="min-w-0 rounded-sm bg-background">
+          <div className="grid grid-cols-[8rem_minmax(0,1fr)] bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
             <span>Date</span>
             <span>Event</span>
           </div>
-          <div className="divide-y divide-row-border">
+          <div className="space-y-1">
             {events.map((event) => (
               <article
-                className="grid gap-2 px-3 py-2.5 md:grid-cols-[8rem_minmax(0,1fr)_auto]"
+                className="forum-list-row grid min-w-0 gap-2 px-3 py-3 md:grid-cols-[8rem_minmax(0,1fr)_auto]"
                 key={event._id}
               >
-                <div className="font-mono text-[10px] uppercase text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   <p>{formatCalendarDay(event.day)}</p>
                   <p>{formatCalendarTime(event)}</p>
                 </div>
@@ -223,7 +207,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                 </div>
                 <Button
                   asChild
-                  className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+                  className="h-7 rounded-sm px-2 text-xs"
                   size="sm"
                   variant="outline"
                 >

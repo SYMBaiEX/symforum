@@ -14,11 +14,12 @@ class Node {
   disabled = false;
   hidden = false;
   name = "";
+  open = false;
   files: Array<{ name: string; size: number; type: string }> = [];
   href = "";
   tagName: string;
   private ownText = "";
-  constructor(tag: string) { this.tagName = tag; }
+  constructor(tag: string, private onFocus?: (node: Node) => void) { this.tagName = tag; }
   set textContent(value: string) { this.ownText = value; this.children = []; }
   get textContent(): string { return this.ownText + this.children.map(node => node.textContent).join(""); }
   append(...nodes: Node[]) { this.children.push(...nodes); }
@@ -29,7 +30,7 @@ class Node {
     this.listeners.set(name, [...(this.listeners.get(name) ?? []), callback]);
   }
   fire(name: string) { for (const listener of this.listeners.get(name) ?? []) listener({ preventDefault() {} }); }
-  focus() {}
+  focus() { this.onFocus?.(this); }
   reportValidity() { return true; }
   querySelector(tag: string): Node | null {
     for (const child of this.children) { if (child.tagName === tag) return child; const nested = child.querySelector(tag); if (nested) return nested; }
@@ -50,7 +51,9 @@ type Message = { jsonrpc?: string; id?: number; method?: string; params?: Record
 function appHarness(openai?: Record<string, unknown>) {
   const sent: Message[] = [];
   const nodes = new Map<string, Node>();
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, new Node(id === "search" ? "form" : "div"));
+  let activeElement: Node | null = null;
+  const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
   const listeners = new Map<string, (event: { source: unknown; data: unknown }) => void>();
   const timers = new Map<number, () => void>();
   const timerDurations = new Map<number, number>();
@@ -68,7 +71,8 @@ function appHarness(openai?: Record<string, unknown>) {
   runInNewContext(script, {
     window, document: {
       getElementById(id: string) { return nodes.get(id); },
-      createElement(tag: string) { return new Node(tag); },
+      createElement(tag: string) { return createNode(tag); },
+      get activeElement() { return activeElement; },
       createTextNode(text: string) { const node = new Node("text"); node.textContent = text; return node; },
       documentElement,
     },
@@ -94,10 +98,93 @@ function appHarness(openai?: Record<string, unknown>) {
     if (chat) reply(chat, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await flush();
   };
-  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect };
+  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
+  test("keeps the four discussion sections visible and moves permission-gated tools into More", async () => {
+    const app = appHarness(); await app.connect();
+    const nav = app.nodes.get("navigation")!;
+    expect(nav.children[0].children.map(node => node.textContent)).toEqual(["Boards", "Feed", "News", "Community"]);
+    const more = nav.querySelector("details")!;
+    expect(more.firstElementChild.textContent).toBe("More");
+    expect(more.find("Saved")).toBeDefined();
+    expect(more.find("Inbox")).toBeDefined();
+    expect(more.find("Moderation")).toBeUndefined();
+    more.find("Saved")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_my_thread_bookmarks");
+    expect(nav.querySelector("summary")!.attributes["aria-current"]).toBe("page");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      actingAs: { userId: "research-agent", username: "Research agent", isAgent: true },
+      data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
+    } } });
+    expect(nav.find("Saved")).toBeUndefined();
+    expect(nav.find("Inbox")).toBeUndefined();
+    expect(nav.find("Boards")).toBeDefined();
+    expect(app.nodes.get("content")!.textContent).toContain("Connection changed");
+    expect(app.nodes.get("compose")!.hidden).toBe(true);
+  });
+
+  test("chat polling preserves an expanded More menu and keyboard focus until authority changes", async () => {
+    const app = appHarness(); await app.connect();
+    const nav = app.nodes.get("navigation")!;
+    const more = nav.querySelector("details")!;
+    const saved = more.find("Saved")!;
+    more.open = true; saved.focus();
+    const pollTimer = [...app.timers.keys()].find(id => app.timerDurations.get(id) === 15_000)!;
+    app.timers.get(pollTimer)!();
+    const poll = app.latest("tools/call");
+    expect(poll.params?.name).toBe("forum_list_chat_messages");
+    app.reply(poll, { structuredContent: {
+      actingAs: { userId: "research-agent", username: "Research agent", isAgent: true },
+      data: { page: [{ body: "A new lounge message", authorIdentity: { name: "Member" } }], pending: [], viewer: { canRead: true, canSend: true }, isDone: true },
+    } });
+    await app.flush();
+    expect(app.nodes.get("chat-messages")!.textContent).toContain("A new lounge message");
+    expect(nav.querySelector("details")).toBe(more);
+    expect(more.open).toBe(true);
+    expect(nav.find("Saved")).toBe(saved);
+    expect(app.activeElement).toBe(saved);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      actingAs: { userId: "research-agent", username: "Research agent", isAgent: true },
+      data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
+    } } });
+    expect(nav.find("Saved")).toBeUndefined();
+    expect(nav.find("Inbox")).toBeUndefined();
+    expect(app.nodes.get("compose")!.hidden).toBe(true);
+  });
+
+  test("prioritizes forum conversations before news and preserves the correct thread target", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("navigation")!.find("Feed")!.fire("click");
+    const news = app.sent.filter(call => call.params?.name === "forum_list_news_feed").at(-1)!;
+    const feed = app.sent.filter(call => call.params?.name === "forum_list_feed_threads").at(-1)!;
+    app.reply(news, { structuredContent: { data: { stories: [{ hnItemId: 42, title: "Daily story" }] } } });
+    app.reply(feed, { structuredContent: { data: { page: [{ title: "Community notes", categorySlug: "general", slug: "notes", authorIdentity: { name: "Community reader" } }], isDone: true } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent.indexOf("Community notes")).toBeLessThan(content.textContent.indexOf("Daily story"));
+    content.find("Community notes")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "notes" });
+  });
+
+  test("offers a reply after the conversation without bypassing draft permissions", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("navigation")!.find("Community")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "Sources", slug: "sources", categorySlug: "research" }], isDone: true } } });
+    await app.flush(); app.nodes.get("content")!.find("Sources")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { category: { name: "Research" }, thread: { _id: "sources", title: "Sources", body: "Read these references", viewerCanReply: true }, replies: { page: [], pagination: { page: 1, totalPages: 1 } } } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.querySelector("footer")!.textContent).toContain("Join the discussion as Research agent");
+    content.find("Reply to discussion")!.fire("click");
+    const body = content.byName("body")!; body.value = "My reply"; body.fire("input");
+    app.nodes.get("navigation")!.find("News")!.fire("click");
+    expect(content.byName("body")!.value).toBe("My reply");
+    expect(app.nodes.get("status")!.textContent).toContain("Close or submit your draft");
+    expect(app.sent.some(call => call.params?.name === "forum_create_post")).toBe(false);
+  });
+
   test("opens Boards by default and decodes preserved ChatGPT result metadata", async () => {
     const app = appHarness();
     await app.connect();
@@ -198,6 +285,32 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("chat-form")!.find("Use current profile")!.hidden).toBe(false);
     app.nodes.get("chat-form")!.fire("submit");
     expect(app.sent.filter(call => call.params?.name === "forum_send_chat_message")).toHaveLength(0);
+  });
+
+  test("hides unavailable chat composers without discarding drafts or hiding failure reasons", async () => {
+    const app = appHarness(); await app.connect();
+    const form = app.nodes.get("chat-form")!;
+    const body = app.nodes.get("chat-body")!;
+    expect(form.hidden).toBe(false);
+    body.value = "Keep my unsent lounge draft"; body.fire("input");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
+    } } });
+    expect(form.hidden).toBe(true);
+    expect(body.value).toBe("Keep my unsent lounge draft");
+    expect(app.nodes.get("chat-send")!.disabled).toBe(true);
+    form.fire("submit");
+    expect(app.sent.some(call => call.params?.name === "forum_send_chat_message")).toBe(false);
+    app.nodes.get("chat-latest")!.fire("click");
+    app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: "Chat quota exceeded. Try tomorrow." } });
+    await app.flush();
+    expect(form.hidden).toBe(true);
+    expect(body.value).toBe("Keep my unsent lounge draft");
+    expect(app.nodes.get("chat-notice")!.textContent).toBe("Chat quota exceeded. Try tomorrow.");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: ["read"] } } } });
+    expect(form.hidden).toBe(true);
+    expect(app.nodes.get("chat-profile")!.textContent).toBe("Connect to join");
+    expect(body.value).toBe("Keep my unsent lounge draft");
   });
 
   test("missing chat tools leave Boards readable and do not keep polling an unsupported tool", async () => {

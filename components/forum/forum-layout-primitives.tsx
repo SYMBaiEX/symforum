@@ -1,31 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
-import {
-  forumHomeHref,
-  type ForumFeedSort,
-  type ForumHomeView,
-} from "./forum-home-model";
-import { ForumLink } from "./forum-primitives";
+import { useId, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import type { ForumFeedSort, ForumHomeView } from "./forum-home-model";
 
 export const forumQuietAction =
   "focus-ring inline-flex min-h-11 items-center gap-2 rounded-sm px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
-
-const views = [
-  { value: "boards", label: "Boards" },
-  { value: "feed", label: "Feed" },
-  { value: "news", label: "News" },
-  { value: "community", label: "Community" },
-] as const;
 
 export function ForumPageHeader({
   title,
   description,
   breadcrumbs,
   actions,
-  view,
-  sort = "active",
-  nested = false,
 }: {
   title: string;
   description?: ReactNode;
@@ -36,15 +22,15 @@ export function ForumPageHeader({
   nested?: boolean;
 }) {
   return (
-    <header>
-      {breadcrumbs ? <div className="mb-3">{breadcrumbs}</div> : null}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <header className="forum-page-header">
+      {breadcrumbs ? <div className="mb-2">{breadcrumbs}</div> : null}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
+          <h1 className="text-[22px] font-semibold leading-tight tracking-tight [overflow-wrap:anywhere] md:text-2xl">
             {title}
           </h1>
           {description ? (
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            <div className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
               {description}
             </div>
           ) : null}
@@ -53,20 +39,6 @@ export function ForumPageHeader({
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
         ) : null}
       </div>
-      <nav aria-label="Forum views" className="mt-3 flex flex-wrap gap-1">
-        {views.map((item) => (
-          <ForumLink
-            aria-current={
-              view === item.value ? (nested ? "true" : "page") : undefined
-            }
-            className={`${forumQuietAction} ${view === item.value ? "bg-primary/10 font-medium text-primary" : ""}`}
-            href={forumHomeHref(item.value, sort)}
-            key={item.value}
-          >
-            {item.label}
-          </ForumLink>
-        ))}
-      </nav>
     </header>
   );
 }
@@ -78,12 +50,36 @@ export function ForumBodyGrid({
   children: ReactNode;
   sidebar?: ReactNode;
 }) {
+  const [contextOpen, setContextOpen] = useState(false);
+  const contextId = useId();
   return (
     <div
-      className={`mt-4 grid items-start gap-6 ${sidebar ? "lg:grid-cols-[minmax(0,3fr)_minmax(220px,1fr)]" : ""}`}
+      className={`forum-body-grid mt-4 grid items-start gap-5 lg:gap-8 ${sidebar ? "lg:grid-cols-[minmax(0,1fr)_260px]" : ""}`}
     >
-      <div className="min-w-0 space-y-5">{children}</div>
-      {sidebar}
+      <div className="min-w-0 space-y-4">{children}</div>
+      {sidebar ? (
+        <div className="forum-context-panel min-w-0">
+          <button
+            type="button"
+            aria-expanded={contextOpen}
+            aria-controls={contextId}
+            onClick={() => setContextOpen((open) => !open)}
+            className="focus-ring flex min-h-11 w-full items-center justify-between bg-muted/35 px-3 text-sm font-medium lg:hidden"
+          >
+            Around the forum
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-4 ${contextOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          <div
+            id={contextId}
+            className={`${contextOpen ? "block pt-3" : "hidden"} lg:block lg:pt-0`}
+          >
+            {sidebar}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -98,9 +94,8 @@ export function ForumSectionHeader({
   id?: string;
 }) {
   return (
-    <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-sm bg-muted/70 px-4 py-2">
-      <span className="size-2 shrink-0 bg-primary" aria-hidden="true" />
-      <h2 id={id} className="text-sm font-semibold">
+    <div className="forum-section-header flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1">
+      <h2 id={id} className="text-sm font-semibold tracking-tight">
         {title}
       </h2>
       {children ? (

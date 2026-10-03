@@ -129,21 +129,17 @@ test.each(["plain", "grouped"] as const)(
 );
 
 test.each(["/forum/research", "/research"])(
-  "compact forum navigation routes home tabs on %s and folds secondary links and board jump",
+  "contextual board jump on %s does not duplicate the shell navigation or account controls",
   (pathname) => {
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "");
     mocks.pathname = pathname;
     const html = renderToStaticMarkup(<ForumUtilityNav />);
-    const root = pathname.startsWith("/forum") ? "/forum" : "/";
-    for (const view of ["feed", "news", "community", "boards"])
-      expect(html).toContain(`href="${root}?view=${view}"`);
-    expect(html).toContain('aria-label="Forum navigation"');
-    expect(html).toContain("Forum tools");
+    expect(html).toContain("Jump to a board");
     expect(html).toContain('aria-label="Forum jump"');
     expect(html).toContain("Help / FAQ");
-    expect(html).toContain("Sign in");
+    expect(html).not.toContain('aria-label="Forum navigation"');
+    expect(html).not.toContain('aria-label="Forum account"');
     expect(html).not.toMatch(/<details[^>]*\sopen/);
-    expect(html).not.toContain("Quick forum search");
   },
 );
 
