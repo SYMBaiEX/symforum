@@ -31,7 +31,7 @@ export type ForumBrowserTool = {
   inputSchema: ForumJsonSchema;
   annotations: {
     readOnlyHint: boolean;
-    destructiveHint: boolean;
+    consequentialHint: boolean;
     untrustedContentHint: boolean;
   };
   execute: (
@@ -94,7 +94,8 @@ export function createForumBrowserTools(
     },
     annotations: {
       readOnlyHint: operation.readOnly,
-      destructiveHint: operation.destructive,
+      // Native WebMCP names this hint differently from remote MCP annotations.
+      consequentialHint: operation.destructive,
       untrustedContentHint: true,
     },
     execute: async (input, options) => {
@@ -150,7 +151,7 @@ export function createForumBrowserTools(
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        consequentialHint: false,
         untrustedContentHint: true,
       },
       execute: async (input, options) => {

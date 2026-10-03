@@ -7,6 +7,8 @@ import {
   uploadSelectedForumAgentFiles,
 } from "./forum-webmcp";
 import type { ForumBrowserContext } from "./forum-plugin-refs";
+import { FORUM_PLUGIN_OPERATIONS } from "@/lib/forum-plugin-catalog";
+import { FORUM_PLUGIN_CAPABILITIES } from "@/lib/forum-plugin-contract";
 
 const context: ForumBrowserContext = {
   connectionId: "browser-connection",
@@ -31,6 +33,36 @@ test("anonymous tools expose only public reads and never privileged or upload to
   ).toBeUndefined();
   expect(tools.find((tool) => tool.name === "forum_status")).toBeUndefined();
   expect(tools.every((tool) => tool.annotations.readOnlyHint)).toBe(true);
+});
+
+test("native WebMCP maps destructive operations to consequentialHint", () => {
+  const tools = createForumBrowserTools(
+    { ...context, capabilities: [...FORUM_PLUGIN_CAPABILITIES] },
+    new AbortController().signal,
+    vi.fn(),
+    vi.fn(),
+  );
+  for (const tool of tools) {
+    const operation = FORUM_PLUGIN_OPERATIONS.find(
+      (entry) => entry.name === tool.name,
+    );
+    expect(tool.annotations.consequentialHint).toBe(
+      operation?.destructive ?? false,
+    );
+    expect(tool.annotations).not.toHaveProperty("destructiveHint");
+  }
+  expect(
+    tools.find((tool) => tool.name === "forum_delete_thread")?.annotations
+      .consequentialHint,
+  ).toBe(true);
+  expect(
+    tools.find((tool) => tool.name === "forum_get_thread")?.annotations
+      .consequentialHint,
+  ).toBe(false);
+  expect(
+    tools.find((tool) => tool.name === "forum_upload_selected_attachments")
+      ?.annotations.consequentialHint,
+  ).toBe(false);
 });
 
 test("registered writes use exact selected connection and stable command key", async () => {
