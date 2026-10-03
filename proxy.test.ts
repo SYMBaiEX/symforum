@@ -142,12 +142,14 @@ describe("proxy forum routing", () => {
     );
   });
 
-  test("preserves public MCP server-card responses for markdown-capable clients", async () => {
+  test("preserves native MCP routes for markdown-capable clients", async () => {
     const proxy = await loadProxy();
 
     for (const pathname of [
       "/api/agent/mcp/server-card",
       "/api/docs/mcp/server-card",
+      "/api/agent/mcp",
+      "/api/docs/mcp",
     ]) {
       const response = await proxy(
         requestFor(`https://www.symbaiex.com${pathname}`, {
