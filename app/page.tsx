@@ -5,6 +5,7 @@ import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
+import { PublicResourceSearchForm } from "@/components/public-resource-search-form";
 import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { getLatestPosts } from "@/lib/blog-data";
@@ -179,6 +180,7 @@ async function HomeContent() {
         </div>
       </section>
 
+      <PublicResourceSearchForm className="page-frame page-frame-bottom" />
       <HomeFaq />
     </>
   );
