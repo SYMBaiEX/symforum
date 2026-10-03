@@ -7,17 +7,7 @@ describe("robots policy", () => {
     const policy = robotsText();
 
     expect(policy).toContain("User-agent: *\nAllow: /");
-    for (const path of [
-      "/api/admin",
-      "/api/agent/auth",
-      "/admin",
-      "/profile",
-      "/forum/control-panel",
-      "/forum/messages",
-      "/forum/moderation",
-      "/forum/saved",
-      "/forum/subscriptions",
-    ]) {
+    for (const path of PRIVATE_ROBOTS_PATHS) {
       expect(policy).toContain(`Disallow: ${path}`);
     }
     expect(policy).not.toContain("Disallow: /signin");
@@ -48,16 +38,8 @@ describe("robots policy", () => {
     const gptBotRules = policy
       .split("User-agent: GPTBot\n")[1]
       ?.split("\n\n")[0];
-    expect(gptBotRules).toContain("Allow: /");
-    expect(gptBotRules).not.toContain("Disallow: /\n");
-    expect(gptBotRules).toContain("Disallow: /agent-auth");
-    expect(gptBotRules).toContain(
-      "Allow: /agent-auth/.well-known/oauth-authorization-server",
-    );
-    expect(gptBotRules).toContain("Allow: /agent-auth/jwks");
-    for (const path of PRIVATE_ROBOTS_PATHS) {
-      expect(gptBotRules).toContain(`Disallow: ${path}`);
-    }
+    expect(gptBotRules).toContain("Disallow: /");
+    expect(gptBotRules).not.toContain("Allow:");
     expect(policy).toContain(
       "User-agent: Claude-SearchBot\nAllow: /\nDisallow: /api/admin",
     );

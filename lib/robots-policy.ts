@@ -34,7 +34,7 @@ const rules = [
   { userAgent: "Claude-SearchBot", allow: true },
   { userAgent: "PerplexityBot", allow: true },
   { userAgent: "Bingbot", allow: true },
-  { userAgent: "GPTBot", allow: true },
+  { userAgent: "GPTBot", allow: false },
   { userAgent: "Google-Extended", allow: false },
   { userAgent: "CCBot", allow: false },
   { userAgent: "Bytespider", allow: false },
