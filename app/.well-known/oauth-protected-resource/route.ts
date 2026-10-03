@@ -39,8 +39,10 @@ export async function GET(request: Request) {
             ...(serviceAuth ? ["evidence"] : []),
           ],
           authorization_servers: [
-            ...(config ? [config.issuer] : []),
+            // Match /auth.md's recommended owner-approved service_auth flow first.
             ...(serviceAuth ? [SERVICE_AUTH_ISSUER] : []),
+            // WorkOS Connect remains an advertised alternative issuer.
+            ...(config ? [config.issuer] : []),
           ],
         }
       : METADATA;

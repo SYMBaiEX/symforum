@@ -47,8 +47,8 @@ describe("service_auth discovery and transport", () => {
       )
     ).json();
     expect(metadata.authorization_servers).toEqual([
-      "https://test.authkit.app",
       "https://www.symbaiex.com/agent-auth",
+      "https://test.authkit.app",
     ]);
     expect(metadata.scopes_supported).toEqual([
       "openid",
