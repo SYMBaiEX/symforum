@@ -173,7 +173,15 @@ describe("agent discovery surfaces", () => {
     const index = await response.json();
 
     expect(index.skills).toHaveLength(PUBLIC_AGENT_SKILLS.length);
-    expect(index.skills).toHaveLength(5);
+    expect(index.skills).toHaveLength(6);
+    expect(index.skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "symbaiex-docs-mcp",
+          description: expect.stringContaining("read-only Documentation MCP"),
+        }),
+      ]),
+    );
     expect(index.whenToUse).toContain("When to use SYMBaiEX");
     for (const skill of index.skills) {
       expect(skill.description).toMatch(/Use (for|when)/);
@@ -185,6 +193,9 @@ describe("agent discovery surfaces", () => {
     const installGuide = await getSkillsMarkdown().text();
     expect(installGuide).toContain(
       "bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment",
+    );
+    expect(installGuide).toContain(
+      "bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp",
     );
     expect(installGuide).toContain(
       "bunx skills add SYMBaiEX/skills --skill '*'",

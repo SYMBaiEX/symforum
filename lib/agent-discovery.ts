@@ -15,6 +15,11 @@ export const PUBLIC_AGENT_SKILLS = [
       "Connect a user-directed agent to SYMBaiEX with a locally held Ed25519 key. Use when a user asks to enroll, authenticate, refresh, rotate, or revoke an agent identity.",
   },
   {
+    name: "symbaiex-docs-mcp",
+    description:
+      "Find and read public SYMBaiEX developer and agent documentation through the read-only Documentation MCP server. Use for API, authentication, MCP, and integration questions; not for authenticated evidence or account operations.",
+  },
+  {
     name: "symbaiex-evidence-search",
     description:
       "Search current public SYMBaiEX evidence and editorial records through bounded REST or MCP operations. Use for source discovery, public document lookup, and lexical or feature-gated semantic retrieval.",
@@ -46,7 +51,7 @@ export const AGENT_SKILLS_INDEX = {
   specification: "https://agentskills.io/specification",
   repository: "https://github.com/SYMBaiEX/skills",
   whenToUse:
-    "When to use SYMBaiEX: use these skills for owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
+    "When to use SYMBaiEX: use these skills for public documentation lookup, owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
   doNotUseFor: [
     "general web search",
     "private data retrieval",
@@ -65,6 +70,8 @@ const PUBLIC_AGENT_SKILL_DIGESTS: Record<
 > = {
   "symbaiex-agent-enrollment":
     "e5064aa554b3b83632de1957fbf78839ad941d007f902df023ea8cd4f93b9989",
+  "symbaiex-docs-mcp":
+    "f1330a34dbc0003730a51ca7d1af2b9e7f37e3cf74a30fa6b26da49cb1a765e1",
   "symbaiex-claim-verification":
     "e9f2c35ea13b647c239283e60b88f2a5b7774704d8b43ec6399c2bf844a3906e",
   "symbaiex-evidence-search":
@@ -414,9 +421,10 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 
 export const SKILLS_MARKDOWN = `# SYMBaiEX skills
 
-Install from the public repository with a compatible Agent Skills client:
+Install an individual skill from the public repository with a compatible Agent Skills client:
 
 \`\`\`sh
+bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp
 bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment
 \`\`\`
 
