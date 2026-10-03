@@ -257,6 +257,26 @@ describe("proxy forum routing", () => {
     }
   });
 
+  test("signals positive Markdown negotiation for unmatched-route fallback only", async () => {
+    const proxy = await loadProxy();
+    const requestHeader = "x-middleware-request-x-symbaiex-markdown-404";
+
+    const markdownResponse = await proxy(
+      requestFor("http://localhost:3000/__ora-404-probe-test", {
+        accept: "application/json, text/markdown;q=0.8",
+      }),
+    );
+    expect(markdownResponse.headers.get(requestHeader)).toBe("1");
+
+    const refusedResponse = await proxy(
+      requestFor("http://localhost:3000/__ora-404-probe-test", {
+        accept: "text/markdown;q=0, text/html",
+        "x-symbaiex-markdown-404": "1",
+      }),
+    );
+    expect(refusedResponse.headers.get(requestHeader)).toBeNull();
+  });
+
   test("redirects primary-site content routes from the forum host to the primary host", async () => {
     const proxy = await loadProxy();
     const response = await proxy(

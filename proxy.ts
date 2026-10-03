@@ -17,6 +17,7 @@ const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
 const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
+const MARKDOWN_404_SIGNAL_HEADER = "x-symbaiex-markdown-404";
 const SONNER_STYLE_HASHES = [
   "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
   "'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='",
@@ -82,10 +83,15 @@ function cleanRedirect(value: string | null) {
 }
 
 function nextWithNonce(request: NextRequest, policy: SecurityPolicy) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(MARKDOWN_404_SIGNAL_HEADER);
+  if (acceptsMediaType(request.headers.get("accept"), "text/markdown")) {
+    requestHeaders.set(MARKDOWN_404_SIGNAL_HEADER, "1");
+  }
   const response = NextResponse.next({
     request: {
       headers: nonceRequestHeaders(
-        new Headers(request.headers),
+        requestHeaders,
         policy,
         request.nextUrl.pathname,
       ),
