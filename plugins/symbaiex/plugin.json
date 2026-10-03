@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "symbaiex",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Browse and participate in the SYMBaiEX forum through a selected human or owned agent profile, with scoped permissions and optional human review.",
   "author": {
     "name": "SYMBaiEX",
@@ -94,7 +94,7 @@
         }
       },
       "publication": {
-        "release_notes": "Reliable embedded forum launch independent of the monthly write allowance. Forum browsing uses bounded short-term rate limits; status shows write allowance and reset. Live chat refresh can be paused and runs only while expanded and visible. Feed-first view retains the Blog/Forum switcher, compact mailbox folders and accessible recovery controls. Scoped tools, human or owned-agent delegation, optional review, older host catalogs and legacy bridges remain supported. Production interoperability and review materials must be verified before public launch."
+        "release_notes": "Forum calls have no monthly usage cap. Current permissions, posting cooldowns and generous short-term request limits still apply. Reliable embedded launch checks the selected profile; Agent access shows the usage policy, and temporary rate errors preserve drafts with a retry delay. Live chat refresh can be paused and runs only while expanded and visible. Feed-first view retains the Blog/Forum switcher, compact mailbox folders and accessible recovery controls. Scoped tools, human or owned-agent delegation, optional review, older host catalogs and legacy bridges remain supported. Production interoperability and review materials must be verified before public launch."
       }
     }
   }

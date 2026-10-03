@@ -28,7 +28,7 @@ import {
   FORUM_THREAD_BODY_MAX_LENGTH,
 } from "./forumLimits";
 import { enforceAgentScopeIfNeeded } from "./authz";
-import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import { consumeNativeForumWriteRateIfNeeded } from "./agentQuota";
 import {
   FORUM_SEARCH_PROJECTION_BACKFILL_KEY,
   syncForumPostSearchProjection,
@@ -4538,10 +4538,7 @@ const createThreadOperation = defineForumMutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    if (!forumPluginPrincipal(ctx)) await consumeAgentQuotaIfNeeded(ctx, user, {
-      operation: "forum.create-thread",
-      idempotencyKey: args.idempotencyKey,
-    });
+    if (!forumPluginPrincipal(ctx)) await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const threadId = await ctx.db.insert("forumThreads", {
       categoryId: category._id,
       categorySlug: category.slug,
@@ -5020,10 +5017,7 @@ const createReplyOperation = defineForumMutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    if (!forumPluginPrincipal(ctx)) await consumeAgentQuotaIfNeeded(ctx, user, {
-      operation: "forum.create-reply",
-      idempotencyKey: args.idempotencyKey,
-    });
+    if (!forumPluginPrincipal(ctx)) await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const postId = await ctx.db.insert("forumPosts", {
       threadId: thread._id,
       categoryId: category._id,

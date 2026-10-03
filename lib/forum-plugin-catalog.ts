@@ -119,7 +119,7 @@ const domainOperations: ForumPluginOperation[] = Object.entries(generated).map(
           operation,
         ),
       inputSchema: schema,
-      description: describe(operation) + (readOnly ? " Connected reads retain current authorization and short-term owner/credential rate limits without spending the monthly write allowance." : ""),
+      description: describe(operation) + (readOnly ? " Forum use has no monthly usage limit. Connected reads retain current authorization and generous short-term owner request limits." : ""),
     };
   },
 );
@@ -139,7 +139,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     destructive: false,
     inputSchema: emptySchema,
     description:
-      "Open the SYMBaiEX forum app shell inside ChatGPT. Launch verifies your connected profile without loading content or spending the monthly write allowance; anonymous launch opens a public shell. Browse boards, read or search threads, and participate through separate tools. Supports expanded and sidebar views.",
+      "Open the SYMBaiEX forum app shell inside ChatGPT. Launch verifies your connected profile without loading content; anonymous launch opens a public shell. Browse boards, read or search threads, and participate through separate tools. Supports expanded and sidebar views.",
   },
   {
     name: "forum_status",
@@ -150,7 +150,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     destructive: false,
     inputSchema: emptySchema,
     description:
-      "View the forum connection's selected profile, capabilities, execution mode, policyVersion, current authorization status and monthly write allowance with its reset. Call this before mutations and pass its policyVersion as expectedPolicyVersion.",
+      "View the forum connection's selected profile, capabilities, execution mode, policyVersion, current authorization status and forum usage policy (no monthly usage limit, with temporary request limits). Call this before mutations and pass its policyVersion as expectedPolicyVersion.",
   },
   ...domainOperations,
   {

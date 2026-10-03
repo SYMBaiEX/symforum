@@ -4,7 +4,7 @@ import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { consumeAgentQuotaIfNeeded } from "./agentQuota";
+import { consumeNativeForumWriteRateIfNeeded } from "./agentQuota";
 import { enforceAgentScopeIfNeeded } from "./authz";
 import { defineForumMutation, defineForumQuery } from "./forumOperationDefinitions";
 import { forumPluginPrincipal } from "./forumPluginContext";
@@ -119,10 +119,10 @@ export function createForumChatOperations(access: Access) {
       };
     });
   }
-  async function chargeNative(ctx: MutationCtx, actor: User, operation: string) {
-    // The plugin dispatcher charges before invoking this domain handler.
+  async function admitNative(ctx: MutationCtx, actor: User) {
+    // The plugin dispatcher admits writes before invoking this domain handler.
     if (!forumPluginPrincipal(ctx)) {
-      await consumeAgentQuotaIfNeeded(ctx, actor, { operation, idempotencyKey: crypto.randomUUID() });
+      await consumeNativeForumWriteRateIfNeeded(ctx, actor);
     }
   }
   const listChatMessages = defineForumQuery({
@@ -171,7 +171,7 @@ export function createForumChatOperations(access: Access) {
       if (capacities.some(result => !result.ok)) fail("CHAT_RATE_LIMITED", "Chat is moving too quickly. Please try again shortly.");
       const status = access.isTrustedForumUser(owner) ? "active" as const : "pending" as const;
       if (status === "pending") await access.enforcePendingForumSubmissionLimits(ctx, owner);
-      await chargeNative(ctx, actor, "forum.send-chat-message");
+      await admitNative(ctx, actor);
       const now = Date.now();
       const principal = forumPluginPrincipal(ctx);
       const messageId = await ctx.db.insert("forumChatMessages", {
@@ -195,7 +195,7 @@ export function createForumChatOperations(access: Access) {
       if (!row || row.categoryId !== info.category._id) fail("CHAT_NOT_FOUND", "That chat message is unavailable.");
       if (row.authorId !== actor._id && !info.canModerate) fail("UNAUTHORIZED", "You may delete only your own chat messages.");
       if (row.status !== "deleted") {
-        await chargeNative(ctx, actor, "forum.delete-chat-message");
+        await admitNative(ctx, actor);
         await ctx.db.patch("forumChatMessages", row._id, { status: "deleted", updatedAt: Date.now(), moderatedBy: actor._id, moderatedOwnerUserId: info.owner!._id });
       }
       return { messageId: row._id, status: "deleted" as const, publicationStatus: "deleted" as const, url: CHAT_URL };
@@ -238,7 +238,7 @@ export function createForumChatOperations(access: Access) {
         await participation(ctx, author, owner);
       }
       if (row.status !== args.status) {
-        await chargeNative(ctx, actor, "forum.moderate-chat-message");
+        await admitNative(ctx, actor);
         await ctx.db.patch("forumChatMessages", row._id, { status: args.status, updatedAt: Date.now(), moderatedBy: actor._id, moderatedOwnerUserId: info.owner!._id });
       }
       return { messageId: row._id, status: args.status, publicationStatus: args.status === "active" ? "published" as const : "hidden" as const, url: CHAT_URL };

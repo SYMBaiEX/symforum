@@ -94,7 +94,7 @@ describe("forum MCP protocol boundary", () => {
     const meta = protocol === "modern" ? { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } : {};
     const headers = protocol === "modern" ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "forum_open" } : undefined;
     const response = await POST(request("tools/call", { name: "forum_open", arguments: {}, ...meta }, undefined, headers));
-    expect(response.headers.get("Mcp-Server-Version")).toBe("1.6.1");
+    expect(response.headers.get("Mcp-Server-Version")).toBe("1.6.2");
     expect(await response.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: null, data: {} } } });
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
@@ -102,10 +102,10 @@ describe("forum MCP protocol boundary", () => {
   test("authenticated launch validates status while all content reads retain normal dispatch", async () => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const command = JSON.parse(String(init?.body));
-      return command.operation === "status" ? Response.json({ status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, quota: { remainingUnits: 0 } } }) : Response.json({ code: "AGENT_QUOTA_EXCEEDED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 1500 }, { status: 429, headers: { "Retry-After": "2" } });
+      return command.operation === "status" ? Response.json({ status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } }) : Response.json({ code: "FORUM_RATE_LIMITED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 1500 }, { status: 429, headers: { "Retry-After": "2" } });
     });
     const launch = await POST(request("tools/call", { name: "forum_open", arguments: {} }, token()));
-    expect(await launch.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, quota: { remainingUnits: 0 } } } } });
+    expect(await launch.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } } } });
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ operation: "status", args: {} });
     for (const name of ["forum_overview", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages", "forum_search"]) {
       const response = await POST(request("tools/call", { name, arguments: name === "forum_search" ? { query: "news" } : ["forum_list_feed_threads", "forum_list_chat_messages"].includes(name) ? { paginationOpts: { numItems: 12, cursor: null } } : {} }, token()));
@@ -372,7 +372,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.6.1",
+            version: "1.6.2",
           },
         },
       },

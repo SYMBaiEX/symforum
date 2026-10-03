@@ -1,4 +1,5 @@
 import type { ForumPluginPrincipal } from "./forumPluginPrincipal";
+import { FORUM_REQUEST_RATES } from "../lib/forum-usage-policy";
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
@@ -50,15 +51,27 @@ export const DEFAULT_HARD_CAP_METADATA_JSON = JSON.stringify({
 const quotaRateLimiter = new RateLimiter(components.rateLimiter, {
   forumOwnerReads: {
     kind: "token bucket",
-    rate: 180,
+    rate: FORUM_REQUEST_RATES.read.ownerPerMinute,
     period: MINUTE,
-    capacity: 40,
+    capacity: FORUM_REQUEST_RATES.read.ownerBurst,
   },
   forumCredentialReads: {
     kind: "token bucket",
-    rate: 300,
+    rate: FORUM_REQUEST_RATES.read.credentialPerMinute,
     period: MINUTE,
-    capacity: 60,
+    capacity: FORUM_REQUEST_RATES.read.credentialBurst,
+  },
+  forumOwnerWrites: {
+    kind: "token bucket",
+    rate: FORUM_REQUEST_RATES.write.ownerPerMinute,
+    period: MINUTE,
+    capacity: FORUM_REQUEST_RATES.write.ownerBurst,
+  },
+  forumCredentialWrites: {
+    kind: "token bucket",
+    rate: FORUM_REQUEST_RATES.write.credentialPerMinute,
+    period: MINUTE,
+    capacity: FORUM_REQUEST_RATES.write.credentialBurst,
   },
   agentQuotaRequests: {
     kind: "token bucket",
@@ -968,7 +981,7 @@ export async function consumeForumPluginReadRate(
     : owner;
   if (!credential.ok)
     throw new ConvexError({
-      code: "AGENT_QUOTA_EXCEEDED",
+      code: "FORUM_RATE_LIMITED",
       message:
         "Forum read rate limit reached. Retry after the indicated delay.",
       quotaReason: "rate-limited",
@@ -1041,4 +1054,68 @@ export async function consumeForumPluginQuota(
     });
   }
   return result;
+}
+
+/** Forum writes use admission limits, independently of monthly API accounting.
+ * Callers validate current forum authority first and check durable receipts before
+ * admission. Existing monthly evidence/general helpers above remain unchanged.
+ */
+async function consumeForumWriteRate(
+  ctx: MutationCtx,
+  ownerUserId: Id<"users">,
+  agentId: string,
+) {
+  const owner = await quotaRateLimiter.limit(ctx, "forumOwnerWrites", {
+    key: ownerUserId,
+  });
+  const credential = owner.ok
+    ? await quotaRateLimiter.limit(ctx, "forumCredentialWrites", {
+        key: `${ownerUserId}:${agentId}`,
+      })
+    : owner;
+  if (!credential.ok)
+    throw new ConvexError({
+      code: "FORUM_RATE_LIMITED",
+      message:
+        "Forum write rate limit reached. Retry after the indicated delay.",
+      quotaReason: "rate-limited",
+      retryAfter: credential.retryAfter,
+    });
+}
+
+export async function consumeForumPluginWriteRate(
+  ctx: MutationCtx,
+  principal: ForumPluginPrincipal,
+) {
+  await consumeForumWriteRate(
+    ctx,
+    principal.owner._id,
+    principal.credentialAgent.agentId,
+  );
+}
+
+/** Native enrolled agents share their owner's forum admission across profiles. */
+export async function consumeNativeForumWriteRateIfNeeded(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+) {
+  if (user.isAgent !== true) return;
+  const identity = await findIdentityForUser(ctx, user._id);
+  if (
+    !identity ||
+    identity.status !== "active" ||
+    !isActiveAgentUser(user) ||
+    identity.keyVersion !== user.agentKeyVersion ||
+    !identity.scopes.includes("forum")
+  )
+    throw new ConvexError({
+      code: "AGENT_NOT_ACTIVE",
+      message: "An active forum agent identity is required.",
+    });
+  if (!identity.ownerUserId)
+    throw new ConvexError({
+      code: "AGENT_OWNER_REQUIRED",
+      message: "This legacy agent has no forum owner.",
+    });
+  await consumeForumWriteRate(ctx, identity.ownerUserId, identity.agentId);
 }

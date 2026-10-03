@@ -130,7 +130,7 @@ function readInput(
 
 describe("forum plugin live chat integration", () => {
   test.each(["human", "agent"] as const)(
-    "publishes as %s and charges both automation quotas only once per exact retry",
+    "publishes as %s without monthly charges and preserves exact retry receipts",
     async (mode) => {
       const t = setup();
       const seed = await fixture(t, mode);
@@ -165,17 +165,13 @@ describe("forum plugin live chat integration", () => {
           status: "active",
           agentAssisted: true,
         });
-        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+        expect(await ctx.db.query("agentQuotaBudgets").collect()).toHaveLength(
+          0,
+        );
         expect(
-          (await ctx.db.query("agentQuotaBudgets").collect())[0].usedUnits,
-        ).toBe(1);
-        expect(
-          (await ctx.db.query("agentQuotaUsageCounters").collect())[0],
-        ).toMatchObject({
-          agentId: "chat-helper",
-          ownerUserId: seed.owner,
-          usedUnits: 1,
-        });
+          await ctx.db.query("agentQuotaUsageCounters").collect(),
+        ).toHaveLength(0);
         expect(
           (await ctx.db.get("users", seed.agent))?.forumRole,
         ).toBeUndefined();
@@ -219,7 +215,7 @@ describe("forum plugin live chat integration", () => {
         expect(
           (await ctx.db.get("forumChatMessages", first.data.messageId))?.status,
         ).toBe("deleted");
-        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(2);
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
       });
     },
   );
@@ -268,7 +264,7 @@ describe("forum plugin live chat integration", () => {
   );
 
   test.each(["owner", "credential"] as const)(
-    "rolls back chat and receipts when the %s quota is exhausted in both acting modes",
+    "publishes chat despite exhausted %s evidence budgets in both acting modes",
     async (quota) => {
       for (const mode of ["human", "agent"] as const) {
         const t = setup();
@@ -295,19 +291,25 @@ describe("forum plugin live chat integration", () => {
               updatedAt: now,
             });
         });
-        await expect(
-          t.withIdentity({ subject: seed.owner }).mutation(
-            execute,
-            write(seed, "sendChatMessage", {
-              body: "Automation quotas also apply to human profiles.",
-            }),
-          ),
-        ).rejects.toThrow(/quota reached/);
+        expect(
+          (
+            await t
+              .withIdentity({ subject: seed.owner })
+              .mutation(
+                execute,
+                write(seed, "sendChatMessage", {
+                  body: "Forum participation remains available.",
+                }),
+              )
+          ).publicationStatus,
+        ).toBe("published");
         await t.run(async (ctx) => {
-          expect(await ctx.db.query("forumChatMessages").collect()).toEqual([]);
-          expect(await ctx.db.query("forumPluginCommands").collect()).toEqual(
-            [],
-          );
+          expect(
+            await ctx.db.query("forumChatMessages").collect(),
+          ).toHaveLength(1);
+          expect(
+            await ctx.db.query("forumPluginCommands").collect(),
+          ).toHaveLength(1);
           expect(await ctx.db.query("agentQuotaUsage").collect()).toEqual([]);
         });
       }
@@ -640,7 +642,7 @@ describe("forum plugin live chat integration", () => {
       expect(
         (await ctx.db.get("forumChatMessages", sent.data.messageId))?.status,
       ).toBe("deleted");
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
   });
 
@@ -685,7 +687,7 @@ describe("forum plugin live chat integration", () => {
         expect(await ctx.db.query("forumChatMessages").collect()).toHaveLength(
           1,
         );
-        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
       });
     },
   );
@@ -861,7 +863,7 @@ describe("forum plugin live chat integration", () => {
     });
     await t.run(async (ctx) => {
       expect(await ctx.db.query("forumChatMessages").collect()).toHaveLength(1);
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
   });
 });

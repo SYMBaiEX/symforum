@@ -11,6 +11,7 @@ import {
   WORKOS_PLUGIN_KIND_CLAIM,
 } from "../lib/workos-config";
 import schema from "./schema";
+import { FORUM_USAGE_POLICY } from "../lib/forum-usage-policy";
 import type { Id } from "./_generated/dataModel";
 
 const modules = {
@@ -38,6 +39,32 @@ function setup() {
   agentTest.register(t);
   presenceTest.register(t);
   return t;
+}
+async function exhaustEvidenceBudget(
+  t: ReturnType<typeof setup>,
+  owner: Id<"users">,
+) {
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    const monthKey = new Date(now).toISOString().slice(0, 7);
+    await ctx.db.insert("agentQuotaBudgets", {
+      ownerUserId: owner,
+      monthKey,
+      freeAllowanceUnits: 100,
+      hardCapUnits: 1000,
+      usedUnits: 1000,
+      hardCapMetadataJson: "{}",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("agentQuotaUsageCounters", {
+      ownerUserId: owner,
+      agentId: "helper",
+      monthKey,
+      usedUnits: 250,
+      updatedAt: now,
+    });
+  });
 }
 async function fixture(
   t: ReturnType<typeof setup>,
@@ -242,10 +269,11 @@ describe("forum plugin domain transactions", () => {
     expect(edited.url).toBe(reply.url);
   });
   test.each(["agent", "human"] as const)(
-    "posts as %s, spends automation quota once, preserves first-party author",
+    "posts as %s without monthly charges, preserves first-party author",
     async (mode) => {
       const t = setup();
       const seed = await fixture(t, mode);
+      await exhaustEvidenceBudget(t, seed.owner);
       const owner = t.withIdentity({ subject: seed.owner });
       const input = call(seed, "createThread", {
         categorySlug: "square",
@@ -268,10 +296,13 @@ describe("forum plugin domain transactions", () => {
         expect(
           threads.find((row) => row._id === first.data.threadId)?.authorId,
         ).toBe(mode === "human" ? seed.owner : seed.agent);
-        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
         expect(
-          (await ctx.db.query("agentQuotaBudgets").collect())[0].usedUnits,
-        ).toBe(1);
+          (await ctx.db.query("agentQuotaBudgets").unique())?.usedUnits,
+        ).toBe(1000);
+        expect(
+          (await ctx.db.query("agentQuotaUsageCounters").unique())?.usedUnits,
+        ).toBe(250);
         expect((await ctx.db.get("users", seed.agent))?.role).toBe("reader");
       });
       await expect(
@@ -711,6 +742,7 @@ describe("forum plugin domain transactions", () => {
   test("review queues immutable proposals, approves once, and detects changed policy/targets", async () => {
     const t = setup();
     const seed = await fixture(t, "agent", true);
+    await exhaustEvidenceBudget(t, seed.owner);
     const owner = t.withIdentity({ subject: seed.owner });
     const proposal = await owner.mutation(
       executeRef,
@@ -839,6 +871,7 @@ describe("forum plugin domain transactions", () => {
   test("upload relay staging respects review and replays retain original blob; public storage claims denied", async () => {
     const t = setup();
     const seed = await fixture(t, "agent", true);
+    await exhaustEvidenceBudget(t, seed.owner);
     const owner = t.withIdentity({ subject: seed.owner });
     const storageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(["hello"], { type: "text/plain" })),
@@ -933,7 +966,7 @@ describe("forum plugin domain transactions", () => {
 });
 
 describe("forum plugin failure integrity", () => {
-  test("exhausted owner quota rolls back domain writes and receipt insertion", async () => {
+  test("exhausted evidence budget does not block forum writes", async () => {
     const t = setup();
     const seed = await fixture(t, "human");
     const owner = t.withIdentity({ subject: seed.owner });
@@ -951,18 +984,23 @@ describe("forum plugin failure integrity", () => {
         updatedAt: now,
       });
     });
-    await expect(
-      owner.mutation(
-        executeRef,
-        call(seed, "setThreadBookmark", { threadId: seed.thread, saved: true }),
-      ),
-    ).rejects.toThrow("quota reached");
+    expect(
+      (
+        await owner.mutation(
+          executeRef,
+          call(seed, "setThreadBookmark", {
+            threadId: seed.thread,
+            saved: true,
+          }),
+        )
+      ).status,
+    ).toBe("completed");
     await t.run(async (ctx) => {
       expect(await ctx.db.query("forumThreadBookmarks").collect()).toHaveLength(
-        0,
+        1,
       );
       expect(await ctx.db.query("forumPluginCommands").collect()).toHaveLength(
-        0,
+        1,
       );
       expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
@@ -1005,7 +1043,7 @@ describe("forum plugin failure integrity", () => {
       expect(await ctx.db.query("forumPrivateMessages").collect()).toHaveLength(
         1,
       );
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
   });
   test("review attachments are actor-owned and staging is removed after rejection", async () => {
@@ -1358,7 +1396,7 @@ test("board staff writes use owner assignment and deny a different board atomica
     expect((await ctx.db.get("forumThreads", otherThread))?.status).toBe(
       "active",
     );
-    expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+    expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     expect((await ctx.db.get("users", seed.agent))?.forumRole).toBeUndefined();
   });
 });
@@ -1442,7 +1480,7 @@ test("a second owned agent shares the owner civic vote and sibling ratings are d
 });
 
 test.each(["human", "agent"] as const)(
-  "connected %s navigation stays available with exhausted write quotas and rate limits every invocation",
+  "connected %s navigation and posting ignore evidence budgets while accepted reads remain rate bounded",
   async (mode) => {
     const t = setup();
     const seed = await fixture(t, mode);
@@ -1477,15 +1515,17 @@ test.each(["human", "agent"] as const)(
     };
     for (let i = 0; i < 20; i++)
       expect((await owner.mutation(readRef, input)).status).toBe("completed");
-    await expect(
-      owner.mutation(
-        executeRef,
-        call(seed, "createReply", {
-          threadId: seed.thread,
-          body: "Still metered",
-        }),
-      ),
-    ).rejects.toThrow("quota reached");
+    expect(
+      (
+        await owner.mutation(
+          executeRef,
+          call(seed, "createReply", {
+            threadId: seed.thread,
+            body: "Forum posting remains available",
+          }),
+        )
+      ).publicationStatus,
+    ).toBe("published");
     // A second owner connection shares the same short-term owner limit.
     const second = await t.run(async (ctx) => {
       const c = await ctx.db.get("forumPluginConnections", seed.connectionId);
@@ -1495,7 +1535,7 @@ test.each(["human", "agent"] as const)(
       return ctx.db.insert("forumPluginConnections", copy);
     });
     let rejected = false;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 150; i++) {
       try {
         await owner.mutation(readRef, {
           ...input,
@@ -1517,14 +1557,14 @@ test.each(["human", "agent"] as const)(
         (await ctx.db.query("agentQuotaUsageCounters").unique())?.usedUnits,
       ).toBe(250);
       expect(await ctx.db.query("forumPluginCommands").collect()).toHaveLength(
-        0,
+        1,
       );
     });
   },
 );
 
 test.each(["human", "agent"] as const)(
-  "%s connection status exposes safe uncharged write-quota diagnostics, including exhaustion",
+  "%s connection status reports forum policy independently of exhausted evidence budgets",
   async (mode) => {
     const t = setup();
     const seed = await fixture(t, mode);
@@ -1538,15 +1578,8 @@ test.each(["human", "agent"] as const)(
         args: {},
       };
       const initial = await owner.mutation(readRef, input);
-      expect(initial.data.quota).toEqual({
-        agentUsedUnits: 0,
-        agentLimitUnits: 250,
-        ownerUsedUnits: 0,
-        ownerLimitUnits: 1000,
-        remainingUnits: 250,
-        resetsAt: Date.UTC(2027, 0, 1),
-        settingsUrl: "https://www.symbaiex.com/developer",
-      });
+      expect(initial.data.usagePolicy).toEqual(FORUM_USAGE_POLICY);
+      expect(initial.data).not.toHaveProperty("quota");
       await t.run(async (ctx) => {
         expect(await ctx.db.query("agentQuotaBudgets").collect()).toHaveLength(
           0,
@@ -1573,12 +1606,8 @@ test.each(["human", "agent"] as const)(
         });
       });
       const exhausted = await owner.mutation(readRef, input);
-      expect(exhausted.data.quota).toEqual({
-        ...initial.data.quota,
-        agentUsedUnits: 250,
-        ownerUsedUnits: 1000,
-        remainingUnits: 0,
-      });
+      expect(exhausted.data.usagePolicy).toEqual(FORUM_USAGE_POLICY);
+      expect(exhausted.data).not.toHaveProperty("quota");
       expect(JSON.stringify(exhausted)).not.toContain("private metadata");
       await t.run(async (ctx) => {
         expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);

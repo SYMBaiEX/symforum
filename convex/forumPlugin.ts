@@ -23,10 +23,10 @@ import {
   verifiedOAuthPrincipalValidator,
 } from "./forumPluginPrincipal";
 import { withForumPluginPrincipal } from "./forumPluginContext";
+import { FORUM_USAGE_POLICY } from "../lib/forum-usage-policy";
 import {
-  consumeForumPluginQuota,
+  consumeForumPluginWriteRate,
   consumeForumPluginReadRate,
-  readForumPluginQuota,
 } from "./agentQuota";
 import {
   canonicalForumJson,
@@ -224,7 +224,7 @@ async function readOperation(
         executionMode: principal.connection.executionMode,
         policyVersion: principal.policyVersion,
         ...(await postingContext(ctx, principal)),
-        quota: await readForumPluginQuota(ctx, principal, Date.now()),
+        usagePolicy: FORUM_USAGE_POLICY,
       },
     };
   }
@@ -559,10 +559,7 @@ async function runCommand(
 ): Promise<ForumPluginResult> {
   const operation = operationFor(operationName, "mutation", true);
   const quotaKey = `plugin:${await sha256Base64Url(String(principal.connection._id) + ":" + key)}`;
-  await consumeForumPluginQuota(ctx, principal, {
-    operation: `forum.${operationName}`,
-    idempotencyKey: quotaKey,
-  });
+  await consumeForumPluginWriteRate(ctx, principal);
   const handlerInput =
     operationName === "claimStoredForumAttachmentUpload"
       ? Object.fromEntries(
@@ -862,7 +859,7 @@ export const status = internalQuery({
       executionMode: p.connection.executionMode,
       policyVersion: p.policyVersion,
       ...(await postingContext(ctx, p)),
-      quota: await readForumPluginQuota(ctx, p, args.now),
+      usagePolicy: FORUM_USAGE_POLICY,
     };
   },
 });
