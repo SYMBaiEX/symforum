@@ -657,25 +657,52 @@ export const storeSnapshot = internalMutation({
         q.eq("snapshotDate", args.snapshotDate),
       )
       .take(100);
+    const currentByItemId = new Map<number, Doc<"hnStories">>();
     for (const story of current) {
-      await ctx.db.delete("hnStories", story._id);
+      if (!currentByItemId.has(story.hnItemId)) {
+        currentByItemId.set(story.hnItemId, story);
+      }
     }
+
+    const retainedStoryIds = new Set<Doc<"hnStories">["_id"]>();
+    const retainedItemIds = new Set<number>();
+    const handledItemIds = new Set<number>();
     for (const story of args.stories) {
-      const storyId = await ctx.db.insert("hnStories", story);
+      const existingStory = handledItemIds.has(story.hnItemId)
+        ? undefined
+        : currentByItemId.get(story.hnItemId);
+      handledItemIds.add(story.hnItemId);
+      retainedItemIds.add(story.hnItemId);
+
+      let storyId: Doc<"hnStories">["_id"];
+      if (existingStory !== undefined) {
+        storyId = existingStory._id;
+        await ctx.db.patch("hnStories", storyId, story);
+      } else {
+        storyId = await ctx.db.insert("hnStories", story);
+      }
+      retainedStoryIds.add(storyId);
       await syncNewsStoryUniversalSearchProjection(
         ctx,
         { ...story, _id: storyId },
         { snapshotIsComplete: true },
       );
     }
-    const retainedIds = new Set(args.stories.map((story) => story.hnItemId));
-    for (const hnItemId of new Set(current.map((story) => story.hnItemId))) {
-      if (!retainedIds.has(hnItemId)) {
+
+    const scheduledReconciliations = new Set<number>();
+    for (const story of current) {
+      if (retainedStoryIds.has(story._id)) continue;
+      await ctx.db.delete("hnStories", story._id);
+      if (
+        !retainedItemIds.has(story.hnItemId) &&
+        !scheduledReconciliations.has(story.hnItemId)
+      ) {
+        scheduledReconciliations.add(story.hnItemId);
         await ctx.scheduler.runAfter(
           0,
           internal.news.reconcileStoryProjection,
           {
-            hnItemId,
+            hnItemId: story.hnItemId,
           },
         );
       }

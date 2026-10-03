@@ -26,9 +26,11 @@ import {
 
 const MAX_SOURCES = 10;
 // Production Insights showed repeated ~17 MB reads in this export query,
-// close to the 16 MiB transaction ceiling. Keep per-query fan-out conservative;
-// the action still assembles the same overall export across more pages.
+// close to the 16 MiB transaction ceiling. Keep ordinary per-query fan-out
+// conservative; system snapshots use a smaller page because they enrich each
+// selected document with its related evidence graph.
 const EXPORT_QUERY_PAGE_SIZE = 25;
+const DATASET_SNAPSHOT_QUERY_PAGE_SIZE = 10;
 const DATASET_SNAPSHOT_RECORD_LIMIT = 100;
 type Source = {
   documentId: string;
@@ -122,11 +124,12 @@ async function readExportPages(
   args: {
     datasetId: Id<"evidenceDatasets">;
     recordLimit: number;
+    queryPageSize: number;
     selectionStrategy: "balanced" | "recent";
     cursor?: string;
   },
 ): Promise<ExportBundle> {
-  const pageCount = Math.ceil(args.recordLimit / EXPORT_QUERY_PAGE_SIZE);
+  const pageCount = Math.ceil(args.recordLimit / args.queryPageSize);
   const records: ExportRecord[] = [];
   let scannedRecordCount = 0;
   let cursor = args.cursor;
@@ -138,7 +141,7 @@ async function readExportPages(
     if (remainingScanBudget <= 0) break;
     const page: ExportBundle = await ctx.runQuery(refs.exportDocuments, {
       datasetId: args.datasetId,
-      limit: Math.min(EXPORT_QUERY_PAGE_SIZE, remainingScanBudget),
+      limit: Math.min(args.queryPageSize, remainingScanBudget),
       selectionStrategy: args.selectionStrategy,
       cursor,
     });
@@ -501,6 +504,7 @@ export const runExport = internalAction({
     const bundle = await readExportPages(ctx, {
       datasetId: input.datasetId,
       recordLimit: input.recordLimit,
+      queryPageSize: EXPORT_QUERY_PAGE_SIZE,
       selectionStrategy: input.selectionStrategy,
       cursor: input.cursor,
     });
@@ -629,6 +633,7 @@ export const materializeDatasetSnapshot = internalAction({
     const bundle = await readExportPages(ctx, {
       datasetId: args.datasetId,
       recordLimit: DATASET_SNAPSHOT_RECORD_LIMIT,
+      queryPageSize: DATASET_SNAPSHOT_QUERY_PAGE_SIZE,
       selectionStrategy: "balanced",
     });
     const records = bundle.records.map((record) => ({
