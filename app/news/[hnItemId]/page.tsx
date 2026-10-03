@@ -10,7 +10,11 @@ import {
   parseNewsStoryParam,
 } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
-import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
+import {
+  breadcrumbStructuredData,
+  compactSeoTitle,
+  SITE_BRAND,
+} from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
@@ -34,7 +38,7 @@ export async function generateMetadata({
     title: {
       absolute: compactSeoTitle(
         story?.title ?? "Indexed story",
-        "Austin Hamilton",
+        SITE_BRAND,
       ),
     },
     description: story?.host

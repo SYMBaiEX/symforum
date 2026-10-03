@@ -1,6 +1,7 @@
 import { forumSiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
-export const SITE_NAME = "SYMBaiEX — Austin Hamilton";
+export const SITE_BRAND = "SYMBaiEX";
+export const SITE_NAME = `${SITE_BRAND} — Austin Hamilton`;
 export const SITE_DESCRIPTION =
   "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.";
 export const AUTHOR_NAME = "Austin Hamilton";

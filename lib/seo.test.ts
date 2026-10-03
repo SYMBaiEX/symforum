@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   compactSeoTitle,
   developerSoftwareStructuredData,
+  SITE_BRAND,
   SITE_DESCRIPTION,
   SITE_NAME,
   serializeJsonLd,
@@ -30,7 +31,9 @@ describe("compactSeoTitle", () => {
 
 describe("publisher identity metadata", () => {
   test("uses the public brand and a grounded homepage description", () => {
+    expect(SITE_BRAND).toBe("SYMBaiEX");
     expect(SITE_NAME).toBe("SYMBaiEX — Austin Hamilton");
+    expect(compactSeoTitle("About", SITE_BRAND)).toBe("About | SYMBaiEX");
     expect(SITE_DESCRIPTION).toBe(
       "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.",
     );

@@ -16,6 +16,7 @@ import {
 import {
   AUTHOR_NAME,
   AUTHOR_URL,
+  SITE_BRAND,
   SITE_DESCRIPTION,
   SITE_NAME,
   siteStructuredData,
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(PRIMARY_SITE_URL),
   title: {
     default: SITE_NAME,
-    template: "%s | Austin Hamilton",
+    template: `%s | ${SITE_BRAND}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: "SYMBaiEX",
