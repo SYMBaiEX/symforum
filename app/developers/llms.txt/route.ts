@@ -1,4 +1,5 @@
 import { primarySiteUrl } from "@/lib/site-urls";
+import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 
 export const dynamic = "force-static";
 
@@ -23,7 +24,9 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP endpoint (Streamable HTTP POST, no credentials): ${primarySiteUrl("/api/docs/mcp")}
 - Public documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
+- Official MCP Registry entry for documentation tools: ${DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
 - Evidence MCP endpoint (Streamable HTTP POST, authenticated tool calls): ${primarySiteUrl("/api/agent/mcp")}
+- Official MCP Registry entry for evidence tools: ${MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
 - OAuth protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - MCP connection guide: ${primarySiteUrl("/developers/mcp")}
 - Forum plugin integration guide: ${primarySiteUrl("/developers/forum-plugin")}
