@@ -39,7 +39,7 @@ export const maxDuration = 300;
 export async function POST(request: Request) {
   const correlationId = `admin-ai:${crypto.randomUUID()}`;
   try {
-    const convex = await ownerConvexClient(request);
+    const { convex, disabledModelIds } = await ownerConvexClient(request);
     const { messages } = (await request.json()) as { messages?: UIMessage[] };
 
     if (!Array.isArray(messages)) {
@@ -51,6 +51,7 @@ export async function POST(request: Request) {
 
     const routedModel = await selectStreamingModel({
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
+      disabledModelIds,
     });
     const reservationsByStep = new Map<number, string>();
     const stepStartedAt = new Map<number, number>();
@@ -387,8 +388,11 @@ async function ownerConvexClient(request: Request) {
 
   const convex = new ConvexHttpClient(convexUrl);
   convex.setAuth(token);
-  const viewer = await convex.query(convexRefs.admin.viewer, {});
-  if (!viewer.isOwner) {
+  const routingControl = await convex.query(
+    convexRefs.admin.ownerConsoleRoutingControl,
+    {},
+  );
+  if (!routingControl.isOwner) {
     after(() =>
       recordSystemLog({
         level: "warn",
@@ -403,7 +407,7 @@ async function ownerConvexClient(request: Request) {
     );
     throw new AdminAiError(403, "Owner access required");
   }
-  return convex;
+  return { convex, disabledModelIds: routingControl.disabledModelIds };
 }
 
 class AdminAiError extends Error {

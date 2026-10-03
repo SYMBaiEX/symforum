@@ -10,13 +10,14 @@ import {
   openRouterDailyBudgetMicroUsd,
 } from "../lib/ai-model-costs";
 import { OWNER_ADMIN_AI_MAX_OUTPUT_TOKENS } from "../lib/ai-telemetry";
-import { mutation, env } from "./_generated/server";
+import { mutation, env, query } from "./_generated/server";
 import {
   reserveModelCallImpl,
   reserveModelCallReturns,
+  readRoutingControlImpl,
   settleModelCallReservation,
 } from "./aiRoutingControlData";
-import { requireOwner } from "./authz";
+import { getCurrentUser, requireOwner } from "./authz";
 import { v } from "convex/values";
 
 function signatureBytes(value: string) {
@@ -111,6 +112,25 @@ export const reserveOwnerConsoleStep = mutation({
         env.OPENROUTER_DAILY_BUDGET_USD,
       ),
     });
+  },
+});
+
+/** Read active route circuits while authenticating the owner-console request. */
+export const ownerConsoleRoutingControl = query({
+  args: {},
+  returns: v.object({
+    isOwner: v.boolean(),
+    disabledModelIds: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (user?.role !== "owner") {
+      return { isOwner: false, disabledModelIds: [] };
+    }
+    return {
+      isOwner: true,
+      ...(await readRoutingControlImpl(ctx, Date.now())),
+    };
   },
 });
 

@@ -46,6 +46,11 @@ const settleOwnerConsoleStep = makeFunctionReference<
   },
   { settled: boolean }
 >("adminAiBudget:settleOwnerConsoleStep");
+const ownerConsoleRoutingControl = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  { isOwner: boolean; disabledModelIds: string[] }
+>("adminAiBudget:ownerConsoleRoutingControl");
 
 function setup() {
   return convexTest(schema, modules);
@@ -81,6 +86,33 @@ async function seedOwnerAndReader(t: ReturnType<typeof setup>) {
 }
 
 describe("owner-console AI budget", () => {
+  test("shares active provider circuits only with the owner console", async () => {
+    const t = setup();
+    const { ownerId, readerId } = await seedOwnerAndReader(t);
+    const owner = t.withIdentity({ subject: ownerId });
+    const reader = t.withIdentity({ subject: readerId });
+    const now = Date.now();
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("aiProviderCircuits", {
+        model: "openrouter/free",
+        consecutiveFailures: 3,
+        reason: "temporarily unavailable",
+        disabledUntil: now + 60_000,
+        lastFailureAt: now,
+        updatedAt: now,
+      });
+    });
+
+    await expect(owner.query(ownerConsoleRoutingControl, {})).resolves.toEqual({
+      isOwner: true,
+      disabledModelIds: ["openrouter/free"],
+    });
+    await expect(reader.query(ownerConsoleRoutingControl, {})).resolves.toEqual(
+      { isOwner: false, disabledModelIds: [] },
+    );
+  });
+
   test("keeps the legacy settlement payload byte-for-byte when no receipt is present", () => {
     expect(
       ownerConsoleSettlementPayload({

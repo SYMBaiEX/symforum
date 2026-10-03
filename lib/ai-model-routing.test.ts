@@ -520,6 +520,16 @@ describe("OpenRouter-only model routing", () => {
     });
   });
 
+  test("keeps disabled provider circuits out of owner-console streaming routes", async () => {
+    const selected = await selectStreamingModel({
+      openRouterApiKey: "test-openrouter-key",
+      disabledModelIds: ["openrouter/free"],
+    });
+
+    expect(selected.persistedModel).toBe(OPENROUTER_PAID_FALLBACK_MODEL);
+    expect(selected.providerOptions).toBeUndefined();
+  });
+
   test("fails clearly when no OpenRouter key is configured", async () => {
     await expect(routedModelCandidates({})).rejects.toThrow(
       /OPENROUTER_API_KEY/,
