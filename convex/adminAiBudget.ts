@@ -4,6 +4,7 @@ import {
 } from "../lib/ai-models";
 import { ownerConsoleSettlementPayload } from "../lib/ai-usage-settlement";
 import {
+  estimatedModelCostMicroUsd,
   forumDayKey,
   openRouterSettlementRoute,
   openRouterDailyBudgetMicroUsd,
@@ -35,6 +36,7 @@ async function verifiesOwnerConsoleSettlement(args: {
   durationMs: number;
   servedRoute: "free" | "paid";
   servedModel: string;
+  providerReportedCostMicroUsd?: number;
   settlementSignature?: string;
 }) {
   const secret = env.AI_USAGE_SETTLEMENT_SECRET?.trim();
@@ -64,6 +66,11 @@ async function verifiesOwnerConsoleSettlement(args: {
           durationMs: args.durationMs,
           servedRoute: args.servedRoute,
           servedModel: args.servedModel,
+          ...(args.providerReportedCostMicroUsd === undefined
+            ? {}
+            : {
+                providerReportedCostMicroUsd: args.providerReportedCostMicroUsd,
+              }),
         }),
       ),
     );
@@ -117,6 +124,7 @@ export const settleOwnerConsoleStep = mutation({
     durationMs: v.number(),
     servedRoute: v.union(v.literal("free"), v.literal("paid")),
     servedModel: v.string(),
+    providerReportedCostMicroUsd: v.optional(v.number()),
     settlementSignature: v.optional(v.string()),
   },
   returns: v.object({ settled: v.boolean() }),
@@ -138,6 +146,9 @@ export const settleOwnerConsoleStep = mutation({
       args.durationMs > 300_000 ||
       args.servedModel.trim().length === 0 ||
       args.servedModel.length > 256 ||
+      (args.providerReportedCostMicroUsd !== undefined &&
+        (!Number.isSafeInteger(args.providerReportedCostMicroUsd) ||
+          args.providerReportedCostMicroUsd < 0)) ||
       (args.settlementSignature !== undefined &&
         args.settlementSignature.length > 128)
     ) {
@@ -161,6 +172,7 @@ export const settleOwnerConsoleStep = mutation({
       settlementModel,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
+      providerReportedCostMicroUsd: args.providerReportedCostMicroUsd,
     });
     if (!settlement.settled) return { settled: false };
     await ctx.db.insert("forumAgentUsageEvents", {
@@ -171,7 +183,16 @@ export const settleOwnerConsoleStep = mutation({
       servedModel: args.servedModel,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
-      estimatedCostMicroUsd: settlement.estimatedCostMicroUsd,
+      estimatedCostMicroUsd: estimatedModelCostMicroUsd(
+        settlementModel,
+        args.inputTokens,
+        args.outputTokens,
+      ),
+      ...(args.providerReportedCostMicroUsd === undefined
+        ? {}
+        : {
+            providerReportedCostMicroUsd: args.providerReportedCostMicroUsd,
+          }),
       durationMs: args.durationMs,
       createdAt: Date.now(),
     });

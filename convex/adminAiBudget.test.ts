@@ -41,6 +41,7 @@ const settleOwnerConsoleStep = makeFunctionReference<
     durationMs: number;
     servedRoute: "free" | "paid";
     servedModel: string;
+    providerReportedCostMicroUsd?: number;
     settlementSignature?: string;
   },
   { settled: boolean }
@@ -80,6 +81,24 @@ async function seedOwnerAndReader(t: ReturnType<typeof setup>) {
 }
 
 describe("owner-console AI budget", () => {
+  test("keeps the legacy settlement payload byte-for-byte when no receipt is present", () => {
+    expect(
+      ownerConsoleSettlementPayload({
+        reservationKey: "admin-ai:reservation",
+        runKey: "admin-ai:run",
+        inputTokens: 12,
+        outputTokens: 34,
+        durationMs: 56,
+        servedRoute: "paid",
+        servedModel: "provider/model",
+      }),
+    ).toBe(
+      "SYMBIEX_OWNER_CONSOLE_AI_SETTLEMENT_V1\n" +
+        "admin-ai:reservation\n" +
+        "admin-ai:run\n12\n34\n56\npaid\nprovider/model",
+    );
+  });
+
   test("the reservation model covers every configured stream fallback", () => {
     const reservedCost = estimatedModelCostMicroUsd(
       OPENROUTER_PAID_FALLBACK_MODEL,
@@ -276,6 +295,86 @@ describe("owner-console AI budget", () => {
         inputTokens: settleArgs.inputTokens,
         outputTokens: settleArgs.outputTokens,
         estimatedCostMicroUsd: actualCost,
+      });
+    });
+  });
+
+  test("settles a signed provider receipt instead of token-rate estimate", async () => {
+    const t = setup();
+    const { ownerId } = await seedOwnerAndReader(t);
+    const owner = t.withIdentity({ subject: ownerId });
+    const reservationKey = "admin-ai:receipt:step:0:reservation";
+    const runKey = "admin-ai:receipt:step:0";
+    const reserved = await owner.mutation(reserveOwnerConsoleStep, {
+      reservationKey,
+      estimatedInputTokens: 20_000,
+    });
+    expect(reserved.accepted).toBe(true);
+    if (!reserved.accepted) throw new Error("expected budget reservation");
+
+    const settleArgs = {
+      reservationKey,
+      runKey,
+      inputTokens: 1_000,
+      outputTokens: 120,
+      durationMs: 1_234,
+      servedRoute: "paid" as const,
+      servedModel: OPENROUTER_PAID_FALLBACK_MODEL,
+      providerReportedCostMicroUsd: 17,
+    };
+    const tokenRateEstimateMicroUsd = estimatedModelCostMicroUsd(
+      settleArgs.servedModel,
+      settleArgs.inputTokens,
+      settleArgs.outputTokens,
+    );
+    expect(tokenRateEstimateMicroUsd).not.toBe(
+      settleArgs.providerReportedCostMicroUsd,
+    );
+    const secret = "owner-console-settlement-test-secret-32chars";
+    vi.stubEnv("AI_USAGE_SETTLEMENT_SECRET", secret);
+    const settlementSignature = createHmac("sha256", secret)
+      .update(ownerConsoleSettlementPayload(settleArgs))
+      .digest("hex");
+
+    await expect(
+      owner.mutation(settleOwnerConsoleStep, {
+        ...settleArgs,
+        providerReportedCostMicroUsd: 18,
+        settlementSignature,
+      }),
+    ).resolves.toEqual({ settled: false });
+    await expect(
+      owner.mutation(settleOwnerConsoleStep, {
+        ...settleArgs,
+        settlementSignature,
+      }),
+    ).resolves.toEqual({ settled: true });
+
+    await t.run(async (ctx) => {
+      const reservation = await ctx.db
+        .query("aiModelCallReservations")
+        .withIndex("by_reservationKey", (q) =>
+          q.eq("reservationKey", reservationKey),
+        )
+        .unique();
+      expect(reservation).toMatchObject({
+        status: "settled",
+        settledMicroUsd: 17,
+      });
+      const spend = await ctx.db
+        .query("aiSpendBuckets")
+        .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+          q
+            .eq("dayKey", reservation!.dayKey)
+            .eq("provider", "openrouter")
+            .eq("bucket", reservation!.bucket),
+        )
+        .unique();
+      expect(spend?.spentMicroUsd).toBe(17);
+      const usage = (await usageEventsForRun(ctx, runKey))[0] ?? null;
+      expect(usage).toMatchObject({
+        estimatedCostMicroUsd: tokenRateEstimateMicroUsd,
+        providerReportedCostMicroUsd: 17,
       });
     });
   });

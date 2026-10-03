@@ -1755,6 +1755,7 @@ export const convexRefs = {
         durationMs: number;
         servedRoute: "free" | "paid";
         servedModel: string;
+        providerReportedCostMicroUsd?: number;
         settlementSignature: string;
       },
       { settled: boolean }

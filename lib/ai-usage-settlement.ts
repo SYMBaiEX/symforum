@@ -9,8 +9,9 @@ export function ownerConsoleSettlementPayload(args: {
   durationMs: number;
   servedRoute: OwnerConsoleSettlementRoute;
   servedModel: string;
+  providerReportedCostMicroUsd?: number;
 }) {
-  return [
+  const fields = [
     "SYMBIEX_OWNER_CONSOLE_AI_SETTLEMENT_V1",
     args.reservationKey,
     args.runKey,
@@ -19,5 +20,9 @@ export function ownerConsoleSettlementPayload(args: {
     String(args.durationMs),
     args.servedRoute,
     args.servedModel,
-  ].join("\n");
+  ];
+  if (args.providerReportedCostMicroUsd !== undefined) {
+    fields.push(String(args.providerReportedCostMicroUsd));
+  }
+  return fields.join("\n");
 }
