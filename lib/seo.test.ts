@@ -69,6 +69,21 @@ describe("serializeJsonLd", () => {
     ).toBe(false);
   });
 
+  test("can include visible homepage SDK and CLI products in the site graph", () => {
+    const graph = siteStructuredData({ includeHomeProducts: true })["@graph"];
+    const applications = graph.filter(
+      (entry) =>
+        Array.isArray(entry["@type"]) &&
+        entry["@type"].includes("SoftwareApplication"),
+    );
+
+    expect(applications).toEqual(developerSoftwareStructuredData());
+    expect(applications.map((entry) => entry.name)).toEqual([
+      "@symbaiex/agent-sdk",
+      "@symbaiex/agent-cli",
+    ]);
+  });
+
   test("scopes installable client metadata to the developer surface", () => {
     const applications = developerSoftwareStructuredData();
     expect(applications).toEqual([

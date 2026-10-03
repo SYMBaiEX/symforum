@@ -126,6 +126,7 @@ export default async function RootLayout({
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
   const host = requestHeaders.get("host");
+  const pathname = requestHeaders.get("x-symbaiex-pathname");
   const useInMemoryAuthStorage = isStorageRestrictedNewsletterPath(
     requestHeaders.get("x-symbaiex-pathname"),
   );
@@ -192,7 +193,9 @@ export default async function RootLayout({
           type="application/ld+json"
           nonce={nonce}
           dangerouslySetInnerHTML={{
-            __html: serializeJsonLd(siteStructuredData()),
+            __html: serializeJsonLd(
+              siteStructuredData({ includeHomeProducts: pathname === "/" }),
+            ),
           }}
         />
         <ThemeProvider
