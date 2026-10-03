@@ -15,3 +15,5 @@ mkdir -p tmp
 ```
 
 See `docs/forum-plugin-release.md` for the release workflow. The ZIP excludes this README, local validation script and private reviewer instructions. Re-run review cases against the deployed tool catalog before submission.
+
+The directory category is `Communication`, reflecting browsing and participating in community discussions. This is a supported category in OpenAI's [listing field reference](https://developers.openai.com/plugins/deploy/submission-errors#listing-and-interface-errors). Category suitability remains subject to the portal scan; a valid category title alone does not establish acceptance.

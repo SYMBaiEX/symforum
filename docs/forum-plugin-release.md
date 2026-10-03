@@ -99,3 +99,11 @@ To stop one connection, revoke it in the forum Agent access panel; verify old an
 For a forum-only emergency, revoke affected forum connections and revert the plugin/frontend release as appropriate. The currently shared `WORKOS_CONNECT_ENABLED` switch also affects evidence OAuth; do not use it as a forum-only shutdown without accounting for that impact. Rotating a completion API key alone does not revoke existing access tokens. Re-test the evidence boundary after any provider configuration rollback.
 
 Before public launch, attach concrete evidence for provider resource/redirect configuration, deployed revision/endpoints, real ChatGPT/Codex OAuth+refresh+UI, native WebMCP cleanup, host schedules, reviewer-ready access, sample fixtures, recording URL, portal scan/review outcome and approved publication. None of those environment outcomes is established by the package's local validation.
+
+## Production receipt — 2026-10-02
+
+Runtime revision `b72f7c8` was deployed to Convex `strong-bee-384` after schema validation and to Vercel `symbaiex-blog` as READY deployment `dpl_9hRDJdgoYf1tx1K4QS6Z7VpoLSKn`. Both production domains pass all ten public forum smoke checks, including the 100-tool catalog, UI resource, public content, OAuth challenges for private state/writes, and separate evidence metadata. The existing public evidence smoke also passes. This establishes deployed public transport, not authenticated host execution.
+
+Local validation passes 1,299 tests in 208 suites, both TypeScript projects, ESLint, the production dependency audit, the production build, catalog drift detection, package structure and both published JSON schemas. The primary checkout and its concurrent changes were preserved.
+
+OpenAI Platform imported a private draft, `plugin_asdk_app_6ac04aace92c8191a9a5720b7ba6d5d7`, and all three initial skills passed their checks. A category finding prompted the corrected Communication listing. The production WorkOS resource addition is staged pending browser-policy confirmation. The available Chrome browser reports both `document.modelContext` and `document.modelContextTesting` as undefined, so native WebMCP execution/cleanup is not yet verified in a supporting browser. Authenticated ChatGPT/Codex execution, schedules, reviewer accounts/fixtures, the real walkthrough and public review/publication remain outstanding.
