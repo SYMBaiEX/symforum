@@ -352,13 +352,17 @@ export default function DevelopersPage() {
             Agent Skills
           </h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            Install the enrollment skill directly from the public repository. It
-            explains when SYMBaiEX is useful, keeps private keys local, and
-            follows the published challenge-response flow.
+            Install the documentation skill for public, read-only API and
+            integration lookup, or the enrollment skill to guide a user-directed
+            setup while keeping private keys local.
           </p>
-          <div className="mt-5">
+          <div className="mt-5 space-y-3">
             <CopyableCommand
-              label="Copy Agent Skills install command"
+              label="Copy documentation skill install command"
+              value="bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp"
+            />
+            <CopyableCommand
+              label="Copy enrollment skill install command"
               value="bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment"
             />
           </div>
