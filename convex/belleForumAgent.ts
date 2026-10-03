@@ -318,9 +318,6 @@ export const runDailyHackerNewsDigest = internalAction({
     }
 
     try {
-      const routingConfig = await convexModelRoutingConfig(ctx, {
-        correlationId: claim.runKey,
-      });
       const recordRouteAttempt = routeTelemetry(ctx, {
         correlationId: claim.runKey,
         feature: "hacker-news-digest",
@@ -341,14 +338,16 @@ export const runDailyHackerNewsDigest = internalAction({
       if (context.agent.model !== BELLE_MODEL) {
         throw new Error(`Belle must use ${BELLE_MODEL}.`);
       }
-
       const candidates: ResearchCandidate[] = indexed.stories.map(
         (story, index) => hackerNewsCandidate(story, index),
       );
-      const snapshots: ArticleSnapshot[] = await fetchArticleSnapshots(
-        candidates,
-        args.reusableArticleSnapshots,
-      );
+      const [routingConfig, snapshots]: [
+        Awaited<ReturnType<typeof convexModelRoutingConfig>>,
+        ArticleSnapshot[],
+      ] = await Promise.all([
+        convexModelRoutingConfig(ctx, { correlationId: claim.runKey }),
+        fetchArticleSnapshots(candidates, args.reusableArticleSnapshots),
+      ]);
       const requestContext = {
         user: "belle",
         tags: [
