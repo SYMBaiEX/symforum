@@ -4,6 +4,9 @@ import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from "jose";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
+import { FORUM_USAGE_POLICY } from "../lib/forum-usage-policy";
+import agentTest from "@convex-dev/agent/test";
+import presenceTest from "@convex-dev/presence/test";
 import { api } from "./_generated/api";
 import { FORUM_PLUGIN_RESOURCE } from "../lib/forum-plugin-contract";
 import {
@@ -47,6 +50,8 @@ async function fixture() {
   vi.stubGlobal("fetch", jwksFetch);
   const t = convexTest(schema, modules);
   registerRateLimiter(t);
+  agentTest.register(t);
+  presenceTest.register(t);
   const ownerId = await t.run((ctx) =>
     ctx.db.insert("users", {
       username: "oauth-http-owner",
@@ -132,17 +137,11 @@ describe("cryptographic forum OAuth HTTP integration", () => {
     expect(jwksFetch).toHaveBeenCalledTimes(1);
   });
   test.each(["human", "agent"] as const)(
-    "signed %s status reports exhausted write quota while browsing remains available",
+    "signed %s forum posting and browsing remain available with exhausted evidence budgets",
     async (mode) => {
       const { t, ownerId, connectionId, token, call } = await fixture();
       const now = Date.now();
-      const date = new Date(now);
-      const monthKey = date.toISOString().slice(0, 7);
-      const resetsAt = Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth() + 1,
-        1,
-      );
+      const monthKey = new Date(now).toISOString().slice(0, 7);
       await t.run(async (ctx) => {
         const connection = await ctx.db.get(
           "forumPluginConnections",
@@ -157,6 +156,21 @@ describe("cryptographic forum OAuth HTTP integration", () => {
             actorMode: "agent",
             actorUserId: credential!.userId,
           });
+        await ctx.db.insert("forumCategories", {
+          slug: "general",
+          name: "General",
+          description: "",
+          kind: "board",
+          status: "active",
+          viewAccess: "public",
+          threadAccess: "members",
+          replyAccess: "members",
+          position: 0,
+          threadCount: 0,
+          postCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
         await ctx.db.insert("agentQuotaBudgets", {
           ownerUserId: ownerId,
           monthKey,
@@ -180,18 +194,11 @@ describe("cryptographic forum OAuth HTTP integration", () => {
       expect(response.status).toBe(200);
       const result = await response.json();
       expect(result.actingAs.isAgent).toBe(mode === "agent");
-      expect(result.data.quota).toEqual({
-        agentUsedUnits: 250,
-        agentLimitUnits: 250,
-        ownerUsedUnits: 1000,
-        ownerLimitUnits: 1000,
-        remainingUnits: 0,
-        resetsAt,
-        settingsUrl: "https://www.symbaiex.com/developer",
-      });
+      expect(result.data.usagePolicy).toEqual(FORUM_USAGE_POLICY);
+      expect(result.data).not.toHaveProperty("quota");
       expect(JSON.stringify(result)).not.toContain("private-metadata");
       expect((await call("overview", signed)).status).toBe(200);
-      const deniedWrite = await t.fetch("/plugin/forum", {
+      const forumWrite = await t.fetch("/plugin/forum", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -201,19 +208,17 @@ describe("cryptographic forum OAuth HTTP integration", () => {
           operation: "createThread",
           args: {
             categorySlug: "general",
-            title: "Still metered",
-            body: "Browsing is available, but write quotas still apply.",
+            title: "Posting remains available",
+            body: "Forum access is independent of evidence budgets.",
           },
           idempotencyKey: "exhausted-write",
           expectedPolicyVersion: 1,
         }),
       });
-      expect(deniedWrite.status).toBe(429);
-      expect(await deniedWrite.json()).toMatchObject({
-        code: "AGENT_QUOTA_EXCEEDED",
-        quotaReason: "hard-cap",
-        resetsAt,
-        quota: result.data.quota,
+      expect(forumWrite.status).toBe(200);
+      expect(await forumWrite.json()).toMatchObject({
+        status: "completed",
+        publicationStatus: "published",
       });
       await t.run(async (ctx) => {
         expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);

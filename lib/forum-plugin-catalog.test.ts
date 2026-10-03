@@ -15,6 +15,17 @@ import { v } from "convex/values";
 import { queryGeneric } from "convex/server";
 
 describe("shared forum operation catalog", () => {
+  test("catalog describes unlimited monthly forum use with temporary limits and unchanged authority", () => {
+    const status = findForumPluginTool("forum_status")!;
+    expect(status.description).toContain("no monthly usage limit");
+    expect(status.description).toContain("expectedPolicyVersion");
+    const chat = findForumPluginTool("forum_list_chat_messages")!;
+    expect(chat.description).toContain("no monthly usage limit");
+    expect(chat.description).toContain("current authorization");
+    expect(chat.description).toContain("short-term owner request limits");
+    expect(JSON.stringify(FORUM_PLUGIN_TOOLS)).not.toMatch(/monthly write allowance|allowance with its reset|Developer settings/);
+  });
+
   test("covers each forum surface without internal maintenance or toggle tools", () => {
     const operations = new Set(
       FORUM_PLUGIN_OPERATIONS.map((tool) => tool.operation),

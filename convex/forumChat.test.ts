@@ -130,9 +130,14 @@ describe("General live chat domain", () => {
     await expect(t.query(api.forum.listChatMessages, { paginationOpts: { numItems: 61, cursor: null } })).rejects.toThrow("1 to 60");
     await expect(t.query(api.forum.listChatMessages, { paginationOpts: { numItems: 0, cursor: null } })).rejects.toThrow("1 to 60");
   });
-  test("human and owned agent sends share owner rate capacity and failed send rolls back quota", async () => {
+  test("human and owned agent sends share chat cooldown capacity without monthly charges", async () => {
     const t = setup();
     const s = await seed(t);
+    await t.run(async ctx => {
+      const now = Date.now(); const monthKey = new Date(now).toISOString().slice(0,7);
+      await ctx.db.insert("agentQuotaBudgets", {ownerUserId:s.owner,monthKey,freeAllowanceUnits:100,hardCapUnits:1000,usedUnits:1000,hardCapMetadataJson:"{}",createdAt:now,updatedAt:now});
+      await ctx.db.insert("agentQuotaUsageCounters", {ownerUserId:s.owner,agentId:"agent",monthKey,usedUnits:250,updatedAt:now});
+    });
     const owner = t.withIdentity({ subject: s.owner });
     const agent = t.withIdentity({ subject: s.agent });
     for (let i = 0; i < 6; i++) await owner.mutation(api.forum.sendChatMessage, { body: `Human ${i}` });
@@ -140,7 +145,7 @@ describe("General live chat domain", () => {
     await expect(agent.mutation(api.forum.sendChatMessage, { body: "Owner exhausted" })).rejects.toThrow("too quickly");
     await t.run(async ctx => {
       expect(await ctx.db.query("forumChatMessages").collect()).toHaveLength(8);
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(2);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
   });
   test("moderator cannot publish a queued message after its owner is banned", async () => {

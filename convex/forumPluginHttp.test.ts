@@ -31,6 +31,32 @@ async function fixture(review = false) {
       capabilities: ["read", "attachments"],
     },
   );
+  await t.run(async (ctx) => {
+    const connection = await ctx.db.get("forumPluginConnections", connectionId);
+    const credential = await ctx.db.get(
+      "agentIdentities",
+      connection!.credentialAgentIdentityId,
+    );
+    const now = Date.now();
+    const monthKey = new Date(now).toISOString().slice(0, 7);
+    await ctx.db.insert("agentQuotaBudgets", {
+      ownerUserId: ownerId,
+      monthKey,
+      freeAllowanceUnits: 100,
+      hardCapUnits: 1000,
+      usedUnits: 1000,
+      hardCapMetadataJson: "{}",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("agentQuotaUsageCounters", {
+      ownerUserId: ownerId,
+      agentId: credential!.agentId,
+      monthKey,
+      usedUnits: 250,
+      updatedAt: now,
+    });
+  });
   return { t, owner, connectionId };
 }
 function uploadHeaders(connectionId: string, key = "http-upload-one") {
@@ -97,7 +123,7 @@ describe("forum plugin HTTP boundaries", () => {
       ).status,
     ).toBe(403);
   });
-  test("browser uploads belong to selected actor and duplicate bytes leave one blob", async () => {
+  test("browser uploads ignore exhausted evidence budgets, belong to selected actor and deduplicate bytes", async () => {
     const { t, owner, connectionId } = await fixture();
     const request = {
       method: "POST",
@@ -135,7 +161,7 @@ describe("forum plugin HTTP boundaries", () => {
       ).status,
     ).toBe(409);
   });
-  test("review uploads retain one staged blob and publish only after human approval", async () => {
+  test("review uploads ignore exhausted evidence budgets and publish only after human approval", async () => {
     const { t, owner, connectionId } = await fixture(true);
     const request = {
       method: "POST",
@@ -293,5 +319,26 @@ test("quota mapper omits unknown reasons, invalid retry delays, unsafe quota val
   expect(await unknown.json()).toEqual({
     code: "UNKNOWN_FAILURE",
     error: "Failed.",
+  });
+});
+
+test("forum admission errors expose only temporary retry diagnostics", async () => {
+  const response = forumPluginHttpError(
+    new Request("https://forum.symbaiex.com/plugin/forum"),
+    new ConvexError({
+      code: "FORUM_RATE_LIMITED",
+      message: "Forum write rate limit reached.",
+      quotaReason: "rate-limited",
+      retryAfter: 1501,
+      token: "secret",
+    }),
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("Retry-After")).toBe("2");
+  expect(await response.json()).toEqual({
+    code: "FORUM_RATE_LIMITED",
+    error: "Forum write rate limit reached.",
+    quotaReason: "rate-limited",
+    retryAfter: 1501,
   });
 });

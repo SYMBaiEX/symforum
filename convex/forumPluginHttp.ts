@@ -69,7 +69,7 @@ export function forumPluginHttpError(request: Request, error: unknown) {
       const object = data as Record<string, unknown>;
       if (typeof object.code === "string") code = object.code;
       if (typeof object.message === "string") message = object.message;
-      if (code === "AGENT_QUOTA_EXCEEDED") {
+      if (code === "AGENT_QUOTA_EXCEEDED" || code === "FORUM_RATE_LIMITED") {
         const reason = object.quotaReason ?? object.reason;
         if (
           typeof reason === "string" &&

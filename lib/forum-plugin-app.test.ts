@@ -54,7 +54,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const nodes = new Map<string, Node>();
   let activeElement: Node | null = null;
   const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
-  for (const id of ["app", "content", "status", "identity", "mode", "quota", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
   nodes.get("surface-switcher")!.append(nodes.get("surface-trigger")!, nodes.get("surface-choices")!);
   nodes.get("connection-details")!.append(nodes.get("connection-trigger")!);
   nodes.get("search-panel")!.append(createNode("summary"), nodes.get("search")!);
@@ -108,7 +108,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const connect = async (openChat = true) => {
     reply(latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark", availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" }, hostCapabilities: { serverTools: {} } });
     await flush();
-    reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1 } });
+    reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } });
     await flush();
     for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
       reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_categories" ? [] : { page: [], pending: [], viewer: { canSend: true }, isDone: true, continueCursor: "" } } });
@@ -305,17 +305,17 @@ describe("forum MCP App resource", () => {
     expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
   });
 
-  test("an exhausted write allowance does not disable browsing or live chat refresh", async () => {
+  test("forum unlimited usage status ignores obsolete counters and preserves browsing and live refresh", async () => {
     const app = appHarness(); await app.connect();
-    const resetsAt = 1_800_000_000_000;
-    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { quota: { agentUsedUnits: 250, agentLimitUnits: 250, ownerUsedUnits: 100, ownerLimitUnits: 100, remainingUnits: 0, resetsAt, settingsUrl: "https://www.symbaiex.com/developer" } } } } });
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true }, quota: { remainingUnits: 0, settingsUrl: "https://www.symbaiex.com/developer" } } } } });
     await app.flush();
-    expect(app.nodes.get("quota")!.textContent).toContain("0 write allowance units remaining");
-    expect(app.nodes.get("quota")!.textContent).toContain(new Date(resetsAt).toLocaleString(undefined, { timeZoneName: "short" }));
-    expect(app.nodes.get("settings")!.textContent).toContain("Agent: 250 / 250 units used");
-    expect(app.nodes.get("settings")!.textContent).toContain("Owner: 100 / 100 units used");
+    const settings = app.nodes.get("settings")!.textContent;
+    expect(settings).toContain("Forum has no monthly usage limit.");
+    expect(settings).toContain("posting cooldowns and permissions still apply");
+    expect(settings).not.toMatch(/allowance|remaining|Developer|units used/i);
+    expect(FORUM_PLUGIN_APP_HTML).not.toContain('id="quota"');
+    expect(FORUM_PLUGIN_APP_HTML).not.toContain("https://www.symbaiex.com/developer");
     const panel = app.nodes.get("chat-panel")!;
-    expect(panel.textContent).toContain("do not use your monthly write allowance");
     panel.find("Pause live refresh")!.fire("click");
     expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
     const resume = panel.find("Resume live refresh")!;
@@ -328,7 +328,7 @@ describe("forum MCP App resource", () => {
   test("short-term read limits keep the shell mounted, give a retry delay and stop live refresh", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("chat-latest")!.fire("click");
-    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { code: "AGENT_QUOTA_EXCEEDED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 2500, resetsAt: 1_800_000_000_000 }, content: [{ type: "text", text: "Raw transport error" }] }); await app.flush();
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { code: "FORUM_RATE_LIMITED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 2500 }, content: [{ type: "text", text: "Raw transport error" }] }); await app.flush();
     expect(app.nodes.get("chat-notice")!.textContent).toBe("Too many forum reads. Try again in 3 seconds.");
     expect(app.nodes.get("chat-notice")!.textContent).not.toContain("Write allowance resets");
     expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
@@ -341,17 +341,21 @@ describe("forum MCP App resource", () => {
     expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(false);
   });
 
-  test("monthly write quota errors preserve chat draft, show reset and keep reading live", async () => {
+  test.each([
+    { code: "FORUM_RATE_LIMITED", error: "Please slow down.", quotaReason: "rate-limited", retryAfter: 2500, expected: "Please slow down. Try again in 3 seconds." },
+    { code: "AGENT_QUOTA_EXCEEDED", error: "Agent usage quota reached.", quotaReason: "hard-cap", retryAfter: undefined, expected: "Agent usage quota reached." },
+  ])("$code write failure preserves draft and read refresh without monthly-cap presentation", async ({ expected, ...failure }) => {
     const app = appHarness(); await app.connect();
     const input = app.nodes.get("chat-body")!; input.value = "Preserve this message"; input.fire("input");
     app.nodes.get("chat-form")!.fire("submit"); await app.flush();
-    const resetsAt = 1_800_000_000_000;
-    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { code: "AGENT_QUOTA_EXCEEDED", error: "Agent usage quota reached.", quotaReason: "hard-cap", resetsAt, quota: { remainingUnits: 0, resetsAt } } }); await app.flush();
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { ...failure, resetsAt: 1_800_000_000_000, quota: { remainingUnits: 0 } } }); await app.flush();
     expect(input.value).toBe("Preserve this message");
-    expect(app.nodes.get("chat-notice")!.textContent).toContain("Write allowance resets " + new Date(resetsAt).toLocaleString(undefined, { timeZoneName: "short" }));
-    expect(app.nodes.get("quota")!.textContent).toContain("0 write allowance units remaining");
+    expect(app.nodes.get("chat-notice")!.textContent).toBe(expected);
+    expect(app.nodes.get("chat-notice")!.textContent).not.toMatch(/monthly|resets|remaining|allowance settings/i);
+    expect(app.nodes.get("settings")!.textContent).toContain("Forum has no monthly usage limit.");
     expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(true);
     expect(app.nodes.get("chat-panel")!.find("Pause live refresh")).toBeDefined();
+    expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(false);
   });
 
   test("an explicit thread selection during connection wins over the default feed", async () => {
