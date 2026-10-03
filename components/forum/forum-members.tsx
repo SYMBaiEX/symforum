@@ -17,7 +17,6 @@ import {
   ForumLoading,
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
-import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -147,7 +146,7 @@ function ForumMemberTable() {
 
   return (
     <div>
-      <div className="bg-muted/10 px-3 py-2">
+      <div className="forum-panel mb-3 p-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_9rem] lg:items-end">
           <label className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
             <span className="text-xs text-muted-foreground">
@@ -155,7 +154,7 @@ function ForumMemberTable() {
             </span>
             <input
               autoComplete="off"
-              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
+              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/70"
               onChange={(event) => {
                 const nextQuery = event.target.value;
                 setDraftQuery(nextQuery);
@@ -169,7 +168,7 @@ function ForumMemberTable() {
           <label className="grid gap-1.5">
             <span className="text-xs text-muted-foreground">Sort by</span>
             <select
-              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-xs outline-none"
+              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-xs outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -188,7 +187,7 @@ function ForumMemberTable() {
           <label className="grid gap-1.5">
             <span className="text-xs text-muted-foreground">Per page</span>
             <select
-              className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-xs outline-none"
+              className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-xs outline-none"
               onChange={(event) => {
                 updateMemberParams({
                   page: 1,
@@ -241,212 +240,78 @@ function ForumMemberTable() {
       ) : null}
       {visibleMembers.length > 0 ? (
         <>
-          <div className="space-y-1 lg:hidden">
+          <div className="forum-panel overflow-hidden">
             {visibleMembers.map((member) => (
-              <article
-                key={member._id}
-                className="px-3 py-2.5 rounded-sm hover:bg-muted/45"
-              >
-                <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5">
+              <article key={member._id} className="forum-list-row p-4">
+                <div className="flex items-start gap-3">
                   <ForumAvatar
                     alt={`${member.displayName} avatar`}
-                    className="size-10"
+                    className="size-11 shrink-0"
                     name={member.displayName}
                     src={member.avatarUrl}
                   />
-                  <div className="min-w-0">
-                    <ForumLink
-                      href={forumMemberProfilePath(member.username)}
-                      prefetch
-                      className="focus-ring inline-flex min-h-10 items-center text-base font-semibold leading-tight hover:text-primary"
-                    >
-                      {member.displayName}
-                    </ForumLink>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      /members/{member.username}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <ForumLink
+                        href={forumMemberProfilePath(member.username)}
+                        prefetch
+                        className="focus-ring text-sm font-semibold leading-6 hover:text-primary"
+                      >
+                        {member.displayName}
+                      </ForumLink>
+                      <span className="text-xs text-muted-foreground">
+                        @{member.username}
+                      </span>
+                      {member.isOnline ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan/10 px-2 py-0.5 text-[11px] text-foreground">
+                          <span
+                            className="size-1.5 rounded-full bg-cyan"
+                            aria-hidden="true"
+                          />
+                          Online
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">
+                          Offline
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {member.rank}
+                      {member.customTitle ? ` · ${member.customTitle}` : ""}
+                      {member.location ? ` · ${member.location}` : ""}
                     </p>
-                    {member.customTitle ? (
-                      <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                        {member.customTitle}
-                      </p>
-                    ) : null}
-                    {member.location ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {member.location}
-                      </p>
-                    ) : null}
+                    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <div className="flex gap-1">
+                        <dt className="order-2">posts</dt>
+                        <dd className="order-1 font-semibold tabular-nums text-foreground">
+                          {formatForumCount(member.postCount)}
+                        </dd>
+                      </div>
+                      <div className="flex gap-1">
+                        <dt className="order-2">threads</dt>
+                        <dd className="order-1 font-semibold tabular-nums text-foreground">
+                          {formatForumCount(member.threadCount)}
+                        </dd>
+                      </div>
+                      <div className="flex gap-1">
+                        <dt className="order-2">reputation</dt>
+                        <dd className="order-1 font-semibold tabular-nums text-foreground">
+                          {formatForumReputation(member.reputationScore)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Joined {formatForumDateTime(member.joinedAt)}
+                      {member.isOnline && member.onlineLocation
+                        ? ` · ${member.onlineLocation.label}`
+                        : ""}
+                    </p>
                   </div>
                 </div>
-                <dl className="mt-2 grid grid-cols-3 gap-px rounded-sm bg-background bg-row-border">
-                  <MemberMetric className="col-span-2" label="Rank">
-                    {member.rank}
-                  </MemberMetric>
-                  <MemberMetric label="Status">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className={
-                          member.isOnline
-                            ? "size-2 bg-primary"
-                            : "size-2 border border-row-border"
-                        }
-                      />
-                      {member.isOnline ? "Online" : "Offline"}
-                    </span>
-                  </MemberMetric>
-                  <MemberMetric label="Threads">
-                    {formatForumCount(member.threadCount)}
-                  </MemberMetric>
-                  <MemberMetric label="Posts">
-                    {formatForumCount(member.postCount)}
-                  </MemberMetric>
-                  <MemberMetric label="Reputation">
-                    {formatForumReputation(member.reputationScore)}
-                  </MemberMetric>
-                  <MemberMetric className="col-span-3" label="Joined">
-                    {formatForumDateTime(member.joinedAt)}
-                    {member.isOnline && member.onlineLocation ? (
-                      <span className="mt-1 block truncate text-xs text-muted-foreground">
-                        Viewing {member.onlineLocation.label}
-                      </span>
-                    ) : null}
-                  </MemberMetric>
-                </dl>
               </article>
             ))}
           </div>
-          <table className="hidden w-full table-fixed border-collapse lg:table">
-            <caption className="sr-only">Forum members</caption>
-            <thead>
-              <tr className="text-xs text-muted-foreground">
-                <th className="px-3 py-2 text-left font-normal" scope="col">
-                  Member
-                </th>
-                <th
-                  className="w-36 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Rank
-                </th>
-                <th
-                  className="w-36 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Status
-                </th>
-                <th
-                  className="w-28 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Threads
-                </th>
-                <th
-                  className="w-28 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Posts
-                </th>
-                <th
-                  className="w-32 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Reputation
-                </th>
-                <th
-                  className="w-48 px-3 py-2 text-left font-normal"
-                  scope="col"
-                >
-                  Joined
-                </th>
-              </tr>
-            </thead>
-            <tbody className="space-y-1">
-              {visibleMembers.map((member) => (
-                <tr className="rounded-sm hover:bg-muted/45" key={member._id}>
-                  <th
-                    className="px-3 py-2.5 text-left align-middle font-normal"
-                    scope="row"
-                  >
-                    <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2.5">
-                      <ForumAvatar
-                        alt={`${member.displayName} avatar`}
-                        className="size-10"
-                        name={member.displayName}
-                        src={member.avatarUrl}
-                      />
-                      <div className="min-w-0">
-                        <ForumLink
-                          href={forumMemberProfilePath(member.username)}
-                          prefetch
-                          className="focus-ring text-base font-semibold leading-tight hover:text-primary"
-                        >
-                          {member.displayName}
-                        </ForumLink>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          /members/{member.username}
-                        </p>
-                        {member.customTitle ? (
-                          <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                            {member.customTitle}
-                          </p>
-                        ) : null}
-                        {member.location ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {member.location}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </th>
-                  <td className="px-3 py-2.5 align-middle">
-                    <p className="text-sm font-medium">{member.rank}</p>
-                  </td>
-                  <td className="px-3 py-2.5 align-middle">
-                    <div className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className={
-                          member.isOnline
-                            ? "size-2 border border-primary bg-primary"
-                            : "size-2 border border-row-border"
-                        }
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">
-                          {member.isOnline ? "Online" : "Offline"}
-                        </p>
-                        {member.isOnline && member.onlineLocation ? (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {member.onlineLocation.label}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 align-middle">
-                    <p className="text-sm font-medium">
-                      {formatForumCount(member.threadCount)}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2.5 align-middle">
-                    <p className="text-sm font-medium">
-                      {formatForumCount(member.postCount)}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2.5 align-middle">
-                    <p className="text-sm font-medium">
-                      {formatForumReputation(member.reputationScore)}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2.5 align-middle">
-                    <p className="text-sm font-medium">
-                      {formatForumDateTime(member.joinedAt)}
-                    </p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
           <div className="px-3 py-2">
             <ForumMemberPager
               currentPage={currentPage}
@@ -588,7 +453,7 @@ function ForumMemberPagerButton({
     <button
       aria-current={ariaCurrent ? "page" : undefined}
       className={
-        "focus-ring min-h-10 min-w-10 border border-row-border bg-background px-2 text-foreground outline-none " +
+        "forum-action-pill focus-ring min-h-10 min-w-10 bg-card px-2 text-foreground outline-none " +
         "transition-colors duration-100 ease-out hover:border-primary hover:text-primary active:bg-muted/40 " +
         "disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:border-row-border " +
         (ariaCurrent ? "border-primary text-primary " : "")
@@ -613,21 +478,4 @@ function visibleMemberPages(currentPage: number, pageCount: number) {
   return Array.from(pages)
     .filter((page) => page >= 1 && page <= pageCount)
     .sort((left, right) => left - right);
-}
-
-function MemberMetric({
-  children,
-  className,
-  label,
-}: {
-  children: ReactNode;
-  className?: string;
-  label: string;
-}) {
-  return (
-    <div className={cn("min-w-0 bg-background px-2 py-2", className)}>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium">{children}</dd>
-    </div>
-  );
 }

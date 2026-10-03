@@ -46,9 +46,9 @@ function LiveForumAnnouncementsPage() {
           body="There are no forum announcements yet."
         />
       ) : (
-        <div className="space-y-1 rounded-sm bg-background">
+        <div className="space-y-3">
           {announcements.map((announcement) => (
-            <article className="py-3" key={announcement._id}>
+            <article className="forum-panel p-4" key={announcement._id}>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-semibold">
                   <ForumLink
@@ -58,7 +58,7 @@ function LiveForumAnnouncementsPage() {
                     {announcement.title}
                   </ForumLink>
                 </h2>
-                <span className="border border-row-border px-1.5 text-xs text-muted-foreground">
+                <span className="rounded-full bg-primary/5 px-2 py-0.5 text-xs text-muted-foreground">
                   {announcement.categoryName ?? "global"}
                 </span>
               </div>
@@ -70,7 +70,7 @@ function LiveForumAnnouncementsPage() {
                 {announcement.categorySlug ? (
                   <Button
                     asChild
-                    className="h-7 rounded-sm px-2 text-xs"
+                    className="h-7 rounded-xl px-2 text-xs"
                     size="sm"
                     variant="outline"
                   >

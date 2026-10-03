@@ -32,6 +32,7 @@ class Node {
   fire(name: string) { for (const listener of this.listeners.get(name) ?? []) listener({ preventDefault() {} }); }
   focus() { this.onFocus?.(this); }
   reportValidity() { return true; }
+  contains(node: Node | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
   querySelector(tag: string): Node | null {
     for (const child of this.children) { if (child.tagName === tag) return child; const nested = child.querySelector(tag); if (nested) return nested; }
     return null;
@@ -48,12 +49,12 @@ class Node {
 }
 
 type Message = { jsonrpc?: string; id?: number; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown };
-function appHarness(openai?: Record<string, unknown>) {
+function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const sent: Message[] = [];
   const nodes = new Map<string, Node>();
   let activeElement: Node | null = null;
   const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "compose", "expand", "search", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
   const listeners = new Map<string, (event: { source: unknown; data: unknown }) => void>();
   const timers = new Map<number, () => void>();
   const timerDurations = new Map<number, number>();
@@ -61,7 +62,20 @@ function appHarness(openai?: Record<string, unknown>) {
   let uuid = 0;
   const parent = { postMessage(message: Message) { sent.push(message); } };
   const documentElement = new Node("html");
+  const searchMediaListeners = new Set<() => void>();
+  const searchMedia = {
+    matches: initialWidth !== undefined && initialWidth <= 680,
+    addEventListener(_name: string, callback: () => void) { searchMediaListeners.add(callback); },
+    removeEventListener(_name: string, callback: () => void) { searchMediaListeners.delete(callback); },
+  };
+  const navigationMediaListeners = new Set<() => void>();
+  const navigationMedia = {
+    matches: initialWidth !== undefined && initialWidth >= 1000,
+    addEventListener(_name: string, callback: () => void) { navigationMediaListeners.add(callback); },
+    removeEventListener(_name: string, callback: () => void) { navigationMediaListeners.delete(callback); },
+  };
   const window = {
+    ...(initialWidth === undefined ? {} : { matchMedia(query: string) { return query.includes("max-width") ? searchMedia : navigationMedia; } }),
     parent,
     openai,
     addEventListener(name: string, callback: (event: { source: unknown; data: unknown }) => void) { listeners.set(name, callback); },
@@ -85,27 +99,109 @@ function appHarness(openai?: Record<string, unknown>) {
   const reply = (request: Message, result: unknown) => message({ jsonrpc: "2.0", id: request.id, result });
   const latest = (method: string) => sent.filter(request => request.method === method).at(-1)!;
   const flush = async () => { for (let index = 0; index < 30; index++) await Promise.resolve(); };
-  const connect = async () => {
+  const connect = async (openChat = true) => {
     reply(latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark", availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" }, hostCapabilities: { serverTools: {} } });
     await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1 } });
     await flush();
-    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
+    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
       reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_categories" ? [] : { page: [], pending: [], viewer: { canSend: true }, isDone: true, continueCursor: "" } } });
     }
     await flush();
+    for (const preview of sent.filter(request => request.params?.name === "forum_list_chat_messages")) reply(preview, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
+    await flush();
+    if (openChat) { nodes.get("chat-toggle")!.fire("click"); await flush(); }
     const chat = sent.filter(request => request.params?.name === "forum_list_chat_messages").at(-1);
     if (chat) reply(chat, { structuredContent: { data: { page: [], pending: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await flush();
   };
-  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect, get activeElement() { return activeElement; } };
+  return { sent, nodes, documentElement, listeners, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
+  test("responsive search preserves an active query across widths and cleans up its media listener", async () => {
+    const app = appHarness(undefined, 390);
+    const panel = app.nodes.get("search-panel")!;
+    const form = app.nodes.get("search")!;
+    const query = app.nodes.get("query")!;
+    form.append(query);
+    expect(panel.open).toBe(false);
+    query.value = "Preserved search"; query.focus();
+    app.setSearchWidth(1280); expect(panel.open).toBe(true);
+    app.setSearchWidth(390); expect(panel.open).toBe(true);
+    expect(query.value).toBe("Preserved search");
+    app.nodes.get("identity")!.focus();
+    app.setSearchWidth(1280); app.setSearchWidth(390);
+    expect(panel.open).toBe(false);
+    expect(query.value).toBe("Preserved search");
+    expect(app.searchMediaListeners.size).toBe(1);
+    app.message({ jsonrpc: "2.0", id: 199, method: "ui/resource-teardown" });
+    await app.flush();
+    expect(app.searchMediaListeners.size).toBe(0);
+  });
+
+  test("leaving desktop collapses its default More rail while preserving focused and user-opened menus", async () => {
+    const app = appHarness(undefined, 1280); await app.connect(false);
+    const more = app.nodes.get("navigation")!.querySelector("details")!;
+    expect(more.open).toBe(true);
+    app.setSearchWidth(320); expect(more.open).toBe(false);
+    app.setSearchWidth(1280); expect(more.open).toBe(true);
+    const saved = more.find("Saved")!; saved.focus();
+    app.setSearchWidth(320);
+    expect(more.open).toBe(true);
+    expect(app.activeElement).toBe(saved);
+    // A mobile user can keep a deliberately opened menu across width changes.
+    more.open = false;
+    more.querySelector("summary")!.fire("click"); more.open = true;
+    app.nodes.get("identity")!.focus();
+    app.setSearchWidth(1280); app.setSearchWidth(320);
+    expect(more.open).toBe(true);
+    expect(app.navigationMediaListeners.size).toBe(1);
+    app.message({ jsonrpc: "2.0", id: 200, method: "ui/resource-teardown" }); await app.flush();
+    expect(app.navigationMediaListeners.size).toBe(0);
+    expect(app.searchMediaListeners.size).toBe(0);
+  });
+
+  test("launches with a compact chat preview and resumes polling only when chat opens", async () => {
+    const app = appHarness(); await app.connect(false);
+    expect(app.nodes.get("chat-panel")!.hidden).toBe(true);
+    expect(FORUM_PLUGIN_APP_HTML).toContain('aria-expanded="false" aria-controls="chat-panel">Open chat');
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(false);
+    const preview = app.sent.filter(call => call.params?.name === "forum_list_chat_messages").at(-1)!;
+    // A fresh preview remains text-only even if its author or body is hostile.
+    app.nodes.get("chat-toggle")!.fire("click");
+    const opened = app.latest("tools/call");
+    expect(opened).not.toBe(preview);
+    app.reply(opened, { structuredContent: { data: { page: [{ body: "<img src=x>", authorIdentity: { username: "Reader" } }], viewer: { canRead: true, canSend: true }, isDone: true } } });
+    await app.flush();
+    expect(app.nodes.get("chat-peek")!.textContent).toBe("Reader: <img src=x>");
+    expect(app.nodes.get("chat-peek")!.querySelector("img")).toBeNull();
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(true);
+    const input = app.nodes.get("chat-body")!; input.value = "My unsent draft"; input.fire("input");
+    app.nodes.get("chat-toggle")!.fire("click");
+    expect(input.value).toBe("My unsent draft");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(false);
+  });
+
+  test("an explicit thread selection during connection wins over the default feed", async () => {
+    const app = appHarness();
+    app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26" }); await app.flush();
+    const status = app.latest("tools/call");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "selected" } } });
+    const thread = app.latest("tools/call");
+    expect(thread.params?.name).toBe("forum_get_thread");
+    app.reply(status, { structuredContent: { actingAs: { userId: "owner", username: "Reader" }, capabilities: ["read"], policyVersion: 1 } });
+    await app.flush();
+    app.reply(thread, { structuredContent: { data: { thread: { title: "Selected discussion", body: "Keep this reader" }, replies: { page: [] } } } });
+    await app.flush();
+    expect(app.nodes.get("content")!.querySelector("h1")!.textContent).toBe("Selected discussion");
+    expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(false);
+  });
+
   test("keeps the four discussion sections visible and moves permission-gated tools into More", async () => {
     const app = appHarness(); await app.connect();
     const nav = app.nodes.get("navigation")!;
-    expect(nav.children[0].children.map(node => node.textContent)).toEqual(["Boards", "Feed", "News", "Community"]);
+    expect(nav.children[0].children.map(node => node.textContent)).toEqual(["Feed", "News", "Community", "Boards"]);
     const more = nav.querySelector("details")!;
     expect(more.firstElementChild.textContent).toBe("More");
     expect(more.find("Saved")).toBeDefined();
@@ -154,6 +250,35 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("compose")!.hidden).toBe(true);
   });
 
+  test("context rail uses current visible boards and drops cached communities when the actor changes", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [
+      { _id: "general", slug: "general", name: "General" }, { _id: "section", slug: "category", name: "Category heading", kind: "section" },
+    ] } });
+    await app.flush();
+    const rail = app.nodes.get("forum-context")!;
+    expect(rail.find("General")).toBeDefined();
+    expect(rail.find("Category heading")).toBeUndefined();
+    const boardControl = rail.find("General")!; boardControl.focus();
+    app.nodes.get("chat-latest")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], viewer: { canRead: true, canSend: true }, isDone: true } } });
+    await app.flush();
+    expect(rail.find("General")).toBe(boardControl);
+    expect(app.activeElement).toBe(boardControl);
+    rail.find("General")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general" });
+    const stale = app.latest("tools/call");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+      actingAs: { userId: "new-reader", username: "New reader" }, data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" },
+    } } });
+    app.reply(stale, { structuredContent: { data: { category: { name: "Old restricted board" }, threads: [] } } });
+    await app.flush();
+    expect(rail.find("General")).toBeUndefined();
+    expect(rail.textContent).toContain("New reader");
+    expect(app.nodes.get("content")!.textContent).not.toContain("Old restricted board");
+  });
+
   test("prioritizes forum conversations before news and preserves the correct thread target", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("navigation")!.find("Feed")!.fire("click");
@@ -166,6 +291,23 @@ describe("forum MCP App resource", () => {
     expect(content.textContent.indexOf("Community notes")).toBeLessThan(content.textContent.indexOf("Daily story"));
     content.find("Community notes")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "notes" });
+  });
+
+  test("feed panels show real creation dates and reply labels without duplicate last-author activity", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Community")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [
+      { title: "First topic", slug: "first", categorySlug: "general", authorIdentity: { name: "Original reader" }, createdAt: 1_800_000_000_000, lastPostAuthor: "Duplicate activity author", lastPostAt: 1_800_001_000_000, replyCount: 0, viewCount: 1 },
+      { title: "Second topic", slug: "second", categorySlug: "general", replyCount: 1, viewCount: 9 },
+    ], isDone: true } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.querySelector("time")!.textContent).toBe(new Date(1_800_000_000_000).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+    expect(content.textContent).not.toContain("Duplicate activity author");
+    expect(content.find("Reply")).toBeDefined();
+    expect(content.find("1 reply")).toBeDefined();
+    content.find("Reply")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "first" });
   });
 
   test("offers a reply after the conversation without bypassing draft permissions", async () => {
@@ -185,11 +327,11 @@ describe("forum MCP App resource", () => {
     expect(app.sent.some(call => call.params?.name === "forum_create_post")).toBe(false);
   });
 
-  test("opens Boards by default and decodes preserved ChatGPT result metadata", async () => {
+  test("opens Feed by default and decodes preserved ChatGPT result metadata", async () => {
     const app = appHarness();
     await app.connect();
-    expect(app.sent.some(call => call.params?.name === "forum_list_categories")).toBe(true);
-    expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(false);
+    expect(app.sent.some(call => call.params?.name === "forum_list_categories")).toBe(false);
+    expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(true);
     for (const key of ["call_tool_result", "mcp_tool_result"]) {
       app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { [key]: { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=test#review-queue" } } } });
       expect(app.nodes.get("status")!.textContent).toContain("Review");
@@ -221,8 +363,8 @@ describe("forum MCP App resource", () => {
     const legacy = appHarness({ callTool: async (name: string) => { calls.push(name); return { structuredContent: { data: name === "forum_list_categories" ? [] : { capabilities: [], page: [], isDone: true } } }; } });
     expect([...legacy.timerDurations.values()]).toEqual([2000]);
     legacy.timers.values().next().value!(); await legacy.flush();
-    expect(calls).toContain("forum_list_categories");
-    expect(legacy.nodes.get("content")!.textContent).toContain("Forum boards");
+    expect(calls).toContain("forum_list_feed_threads");
+    expect(legacy.nodes.get("content")!.textContent).toContain("Feed");
   });
 
   test.each([
@@ -233,12 +375,12 @@ describe("forum MCP App resource", () => {
     const app = appHarness({ toolResponseMetadata: metadata, toolOutput: output, callTool: async (name: string) => {
       calls.push(name);
       if (name === "forum_status") return { structuredContent: { actingAs: { userId: "owner", username: "Authenticated profile" }, data: { capabilities: ["read"], policyVersion: 1, executionMode: "direct" } } };
-      return { structuredContent: { data: name === "forum_list_categories" ? [{ name: "Working General", slug: "general" }] : { page: [], pending: [], viewer: { canRead: true, canSend: false }, isDone: true } } };
+      return { structuredContent: { data: name === "forum_list_feed_threads" ? { page: [{ title: "Working conversation", categorySlug: "general", slug: "working" }], isDone: true } : { page: [], pending: [], viewer: { canRead: true, canSend: false }, isDone: true } } };
     } });
     app.timers.values().next().value!(); await app.flush();
-    expect(calls).toEqual(["forum_status", "forum_list_categories", "forum_list_chat_messages"]);
+    expect(calls).toEqual(["forum_status", "forum_list_news_feed", "forum_list_feed_threads", "forum_list_chat_messages"]);
     expect(app.nodes.get("identity")!.textContent).toContain("Authenticated profile");
-    expect(app.nodes.get("content")!.textContent).toContain("Working General");
+    expect(app.nodes.get("content")!.textContent).toContain("Working conversation");
     expect(app.nodes.get("status")!.textContent).not.toContain("no structured forum data");
   });
 
@@ -313,11 +455,11 @@ describe("forum MCP App resource", () => {
     expect(body.value).toBe("Keep my unsent lounge draft");
   });
 
-  test("missing chat tools leave Boards readable and do not keep polling an unsupported tool", async () => {
+  test("missing chat tools leave Feed readable and do not keep polling an unsupported tool", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("chat-latest")!.fire("click");
     app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: "Unknown tool forum_list_chat_messages" } }); await app.flush();
-    expect(app.nodes.get("content")!.textContent).toContain("Forum boards");
+    expect(app.nodes.get("content")!.textContent).toContain("Feed");
     expect(app.nodes.get("chat-notice")!.textContent).toContain("Reconnect");
     expect(app.timers.size).toBe(0);
   });
@@ -365,7 +507,8 @@ describe("forum MCP App resource", () => {
     expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: "native-cursor" } });
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "A real conversation", slug: "real", categorySlug: "general", authorIdentity: { name: "Agent reader", isAgent: true }, excerpt: "A clear preview" }], isDone: true, continueCursor: "" } } });
     await app.flush();
-    expect(app.nodes.get("content")!.textContent).toContain("A real conversationAgent reader · AI agent");
+    expect(app.nodes.get("content")!.textContent).toContain("A real conversation");
+    expect(app.nodes.get("content")!.textContent).toContain("Agent reader · AI agent");
     app.nodes.get("content")!.find("← Previous")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } });
   });

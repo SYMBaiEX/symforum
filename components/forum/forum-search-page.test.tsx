@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  params: new URLSearchParams("q=signal"),
   cachedUseQuery: vi.fn(() => []),
   pointInTimeQuery: vi.fn(),
 }));
@@ -14,7 +15,7 @@ vi.mock("convex/react", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams("q=signal"),
+  useSearchParams: () => mocks.params,
 }));
 vi.mock("next/image", () => ({
   default: () => null,
@@ -22,6 +23,11 @@ vi.mock("next/image", () => ({
 
 import { forumRefs } from "./forum-refs";
 import { ForumSearchPage } from "./forum-search-page";
+
+beforeEach(() => {
+  mocks.params = new URLSearchParams("q=signal");
+  mocks.cachedUseQuery.mockClear();
+});
 
 describe("ForumSearchPage request ownership", () => {
   test("keeps only board navigation on the reactive query cache", () => {
@@ -37,4 +43,20 @@ describe("ForumSearchPage request ownership", () => {
       expect.anything(),
     );
   });
+});
+
+test("a URL with an author filter exposes the exact advanced search value", () => {
+  mocks.params = new URLSearchParams("author=reader-one&days=7");
+  const html = renderToStaticMarkup(<ForumSearchPage enabled />);
+  expect(html).toMatch(/<details[^>]*open=""/);
+  expect(html).toContain('value="reader-one"');
+  expect(html).toContain("Advanced filters");
+});
+
+test("a basic search keeps advanced fields available without expanding them", () => {
+  const html = renderToStaticMarkup(<ForumSearchPage enabled />);
+  expect(html).toMatch(/<details[^>]*>/);
+  expect(html).not.toMatch(/<details[^>]*open=""/);
+  expect(html).toContain("Author");
+  expect(html).toContain('aria-label="Filter forum search by board"');
 });

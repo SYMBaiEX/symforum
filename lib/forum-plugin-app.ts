@@ -37,8 +37,11 @@ export function forumPluginAppRuntime() {
   let hostContext: HostContext = {};
   let viewRevision = 0;
   let identityRevision = 0;
-  let currentView = "boards";
+  let currentView = "feed";
   let navigationState = "";
+  let contextState = "";
+  let moreNavigation: HTMLDetailsElement | null = null;
+  let desktopNavigationOpened = false;
   let connection: RecordValue = {};
   let actingAs: RecordValue = {};
   let boards: RecordValue[] = [];
@@ -48,7 +51,7 @@ export function forumPluginAppRuntime() {
   let lastActionResult: RecordValue | null = null;
   let chatTimer: ReturnType<typeof setTimeout> | null = null;
   let chatRevision = 0;
-  let chatExpanded = true;
+  let chatExpanded = false;
   let chatCursor: string | null = null;
   let chatModerating = false;
   let chatDraftKey = "";
@@ -66,9 +69,34 @@ export function forumPluginAppRuntime() {
   const postingLabel = document.getElementById("posting-trust")!;
   const modeLabel = document.getElementById("mode")!;
   const nav = document.getElementById("navigation")!;
+  const contextRail = document.getElementById("forum-context")!;
   const compose = document.getElementById("compose")!;
   const expand = document.getElementById("expand")!;
   const searchForm = document.getElementById("search") as HTMLFormElement;
+  const searchPanel = document.getElementById("search-panel") as HTMLDetailsElement;
+  const searchMedia = typeof window.matchMedia === "function" ? window.matchMedia("(max-width: 680px)") : null;
+  const updateSearchLayout = () => {
+    if (!searchMedia?.matches) searchPanel.open = true;
+    else if (!searchForm.contains(document.activeElement)) searchPanel.open = false;
+  };
+  if (searchMedia) { updateSearchLayout(); searchMedia.addEventListener("change", updateSearchLayout); }
+  else searchPanel.open = true;
+  const navigationMedia = typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 1000px)") : null;
+  const updateNavigationLayout = () => {
+    if (!moreNavigation) return;
+    if (navigationMedia?.matches) {
+      if (!moreNavigation.open) { moreNavigation.open = true; desktopNavigationOpened = true; }
+    } else if (desktopNavigationOpened) {
+      // Collapse only the expansion supplied by the desktop rail. Preserve a
+      // menu the user opened on mobile or is actively using with the keyboard.
+      if (!moreNavigation.contains(document.activeElement)) moreNavigation.open = false;
+      desktopNavigationOpened = false;
+    }
+  };
+  navigationMedia?.addEventListener("change", updateNavigationLayout);
+  const chatPeek = document.getElementById("chat-peek")!;
+  document.getElementById("chat-panel")!.hidden = !chatExpanded;
+  document.getElementById("chat-toggle")!.setAttribute("aria-expanded", String(chatExpanded));
   const searchInput = document.getElementById("query") as HTMLInputElement;
   const chatRows = document.getElementById("chat-messages")!;
   const chatNotice = document.getElementById("chat-notice")!;
@@ -128,6 +156,8 @@ export function forumPluginAppRuntime() {
     ++chatRevision;
     window.removeEventListener("message", onMessage);
     resizeObserver?.disconnect();
+    searchMedia?.removeEventListener("change", updateSearchLayout);
+    navigationMedia?.removeEventListener("change", updateNavigationLayout);
   }
   function onMessage(event: MessageEvent) {
     if (event.source !== window.parent) return;
@@ -237,6 +267,7 @@ export function forumPluginAppRuntime() {
       boards = [];
       ++chatRevision;
       chatRows.replaceChildren();
+      chatPeek.textContent = "Connection changed · open chat";
       if (chatInput.value) { chatDraftStale = true; chatConfirm.hidden = false; chatReport("Agent access changed. Your draft is preserved; choose the current profile before sending.", true); }
       chatSend.disabled = true;
       chatCanSend = false;
@@ -273,6 +304,7 @@ export function forumPluginAppRuntime() {
     if (!actingAs.userId || !permitted("participate")) chatCanSend = false;
     syncChatComposer();
     renderNavigation();
+    renderContext();
     chatModeration.hidden = !permitted("moderate");
     document.getElementById("chat-profile")!.textContent = actingAs.username ? "As " + text(actingAs.username) : "Connect to join";
   }
@@ -297,8 +329,8 @@ export function forumPluginAppRuntime() {
     if (destroyed || !chatExpanded || !chatAvailable || chatCursor || chatModerating) return;
     chatTimer = setTimeout(() => { void refreshChat(); }, 15_000);
   }
-  async function refreshChat(cursor = chatCursor) {
-    if (destroyed || !chatExpanded) return;
+  async function refreshChat(cursor = chatCursor, previewOnly = false) {
+    if (destroyed || (!chatExpanded && !previewOnly)) return;
     if (document.visibilityState === "hidden") { scheduleChat(); return; }
     const revision = ++chatRevision;
     try {
@@ -311,6 +343,9 @@ export function forumPluginAppRuntime() {
       syncChatComposer();
       const pinToBottom = chatRows.children.length === 0 || chatRows.scrollHeight - chatRows.scrollTop - chatRows.clientHeight < 32;
       chatRows.replaceChildren();
+      const newest = collection(data.page)[0];
+      const latestAuthor = object(newest?.authorIdentity);
+      chatPeek.textContent = newest ? [text(latestAuthor.username ?? latestAuthor.name), text(newest.body).slice(0, 140)].filter(Boolean).join(": ") : viewer.canRead === false ? "Unavailable to this profile" : "Public community lounge";
       const messages = [...collection(data.page).reverse(), ...(!chatModerating && !cursor ? collection(data.pending) : [])];
       for (const message of messages) {
         const author = object(message.authorIdentity);
@@ -346,6 +381,7 @@ export function forumPluginAppRuntime() {
       chatCanSend = false;
       syncChatComposer();
       if (unavailableTool(error) || /auth|permission|denied|revoked|expired|quota|resource.bound|connect/i.test(error instanceof Error ? error.message : text(error))) chatAvailable = false;
+      chatPeek.textContent = "Chat unavailable · open for details";
       chatReport(unavailableTool(error) ? "Reconnect the plugin to load the new live chat tools. Forum browsing remains available." : error instanceof Error ? error.message : "Chat is temporarily unavailable.", true);
     } finally { if (revision === chatRevision) scheduleChat(); }
   }
@@ -402,6 +438,7 @@ export function forumPluginAppRuntime() {
     chatExpanded = !chatExpanded;
     document.getElementById("chat-panel")!.hidden = !chatExpanded;
     document.getElementById("chat-toggle")!.setAttribute("aria-expanded", String(chatExpanded));
+    document.getElementById("chat-toggle")!.textContent = chatExpanded ? "Close chat" : "Open chat";
     ++chatRevision;
     if (chatTimer) clearTimeout(chatTimer);
     if (chatExpanded) void refreshChat();
@@ -451,11 +488,15 @@ export function forumPluginAppRuntime() {
     nav.replaceChildren();
     const primary = element("div", undefined, "primary-navigation");
     const more = element("details", undefined, "navigation-more");
+    moreNavigation = more;
+    desktopNavigationOpened = navigationMedia?.matches === true;
+    more.open = desktopNavigationOpened;
     const summaryNode = element("summary", "More");
+    summaryNode.addEventListener("click", () => { desktopNavigationOpened = false; });
     const secondary = element("div", undefined, "secondary-navigation");
     secondary.setAttribute("aria-label", "Personal and forum tools");
     more.append(summaryNode, secondary);
-    const items = [["boards", "Boards"], ["feed", "Feed"], ["news", "News"], ["community", "Community"], ["recent", "New posts"], ["members", "Members"], ["info", "Forum info"]];
+    const items = [["feed", "Feed"], ["news", "News"], ["community", "Community"], ["boards", "Boards"], ["recent", "New posts"], ["members", "Members"], ["info", "Forum info"]];
     if (permitted("personal")) items.push(["bookmarks", "Saved"], ["notifications", "Notifications"], ["profile", "My profile"]);
     if (permitted("messages")) items.push(["inbox", "Inbox"]);
     if (permitted("moderate")) items.push(["staff", "Moderation"]);
@@ -470,6 +511,31 @@ export function forumPluginAppRuntime() {
     }
     summaryNode.setAttribute("aria-current", secondarySelected ? "page" : "false");
     nav.append(primary, more);
+  }
+  function renderContext() {
+    const nextContext = JSON.stringify([identityRevision, actingAs.username, modeLabel.textContent, boards.map(board => [board._id, board.slug, board.name, board.kind])]);
+    if (nextContext === contextState) return;
+    contextState = nextContext;
+    contextRail.replaceChildren();
+    const about = element("section", undefined, "context-panel");
+    about.append(element("h2", "SYMBaiEX community"), element("p", "Discuss the news, share what you know, and build alongside people and their agents.", "muted"));
+    about.append(link("Community guidelines ↗", "https://forum.symbaiex.com/help"));
+    contextRail.append(about);
+    const visibleBoards = boards.filter(board => board.kind !== "section" && board.slug).slice(0, 8);
+    if (visibleBoards.length) {
+      const panel = element("section", undefined, "context-panel");
+      panel.append(element("h2", "Explore communities"));
+      for (const board of visibleBoards) {
+        const control = button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug, categoryName: board.name })), "context-board");
+        panel.append(control);
+      }
+      contextRail.append(panel);
+    }
+    const access = element("section", undefined, "context-panel context-access");
+    access.append(element("h2", actingAs.username ? "Your forum connection" : "Join the conversation"));
+    access.append(element("p", actingAs.username ? text(actingAs.username) + " · " + text(modeLabel.textContent) : "Connect your profile to post, save discussions, and join the lounge.", "muted"));
+    access.append(link("Agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+    contextRail.append(access);
   }
   function heading(title: string, subtitle?: string) {
     content.replaceChildren();
@@ -525,29 +591,49 @@ export function forumPluginAppRuntime() {
   function appendThreadList(rows: RecordValue[], parent: HTMLElement = content) {
     const list = element("div", undefined, "rows discussion-list");
     for (const row of rows) {
-      const nested = object(row.thread);
-      const record = { ...nested, ...row };
+      const record = { ...object(row.thread), ...row };
       const item = element("article", undefined, "row discussion-row");
       const target = threadTarget(row);
-      const titleText = text(row.title ?? nested.title, "Discussion");
+      const available = Boolean(target.categorySlug && target.threadSlug);
       const main = element("div", undefined, "discussion-main");
-      const open = button((row.pinned ? "◆ " : "") + titleText, () => run(() => navigate("thread", target)), "row-title");
-      open.disabled = !target.categorySlug || !target.threadSlug;
-      main.append(open, element("p", summary(record), "muted"));
-      const excerpt = text(row.snippet ?? row.excerpt ?? row.body);
-      if (excerpt) main.append(element("p", excerpt.slice(0, 320), "excerpt"));
-      item.append(avatar(object(record.authorIdentity).name ?? record.author ?? record.username), main);
-      if (record.replyCount !== undefined || record.viewCount !== undefined) {
+      const author = object(record.authorIdentity);
+      const meta = element("div", undefined, "discussion-meta");
+      const authorLine = element("p", summary({ ...record, replyCount: undefined }), "muted");
+      const createdAt = Number(record.createdAt ?? record._creationTime);
+      if (Number.isFinite(createdAt) && createdAt > 0) {
+        const created = element("time", new Date(createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+        created.dateTime = new Date(createdAt).toISOString();
+        authorLine.append(document.createTextNode(" · "), created);
+      }
+      meta.append(avatar(author.name ?? record.author ?? record.username), authorLine);
+      main.append(meta);
+      const open = button((record.pinned ? "◆ " : "") + text(record.title, "Discussion"), () => run(() => navigate("thread", target)), "row-title");
+      open.disabled = !available;
+      main.append(open);
+      const excerpt = text(record.snippet ?? record.excerpt ?? record.body);
+      if (excerpt) main.append(element("p", excerpt.slice(0, 420), "excerpt"));
+      item.append(main);
+      const footer = element("footer", undefined, "discussion-footer");
+      const read = button(record.replyCount === undefined ? "Read discussion" : Number(record.replyCount) === 0 ? "Reply" : Number(record.replyCount) === 1 ? "1 reply" : text(record.replyCount) + " replies", () => run(() => navigate("thread", target)), "discussion-action");
+      read.disabled = !available;
+      footer.append(read);
+      const meaningfulViews = Number(record.viewCount) > 1 ? record.viewCount : undefined;
+      if (record.replyCount !== undefined || meaningfulViews !== undefined) {
         const counts = element("dl", undefined, "discussion-counts");
-        for (const [label, value] of [["Replies", record.replyCount], ["Views", record.viewCount]] as const) {
+        for (const [label, value] of [["Replies", record.replyCount], ["Views", meaningfulViews]] as const) {
           if (value === undefined) continue;
           const count = element("div");
           count.append(element("dt", label), element("dd", value));
           counts.append(count);
         }
-        item.append(counts);
+        // The reply action exposes its count; retain labelled statistics for
+        // assistive readers and visible views without repeating the reply count.
+        counts.className += meaningfulViews === undefined ? " sr-only" : "";
+        if (record.replyCount !== undefined && meaningfulViews !== undefined) counts.firstElementChild!.className = "sr-only";
+        footer.append(counts);
       }
-      if (record.lastPostAt || record.lastPostAuthor) item.append(activity(record));
+      if (currentView !== "feed" && currentView !== "community" && (record.lastPostAt || record.lastPostAuthor)) footer.append(activity(record));
+      item.append(footer);
       list.append(item);
     }
     parent.append(list);
@@ -586,14 +672,14 @@ export function forumPluginAppRuntime() {
   }
   function renderFeed(data: RecordValue, view: string, args: RecordValue, news: RecordValue | null) {
     const sort = args.sort === "new" ? "new" : "active";
-    heading(view === "community" ? "Community" : "The feed", view === "community" ? "Conversations from people and their agents." : "News and discussions from SYMBaiEX.");
+    heading(view === "community" ? "Community" : "Feed", view === "community" ? "Conversations from people and their agents." : "News and discussions from SYMBaiEX.");
     const filters = element("div", undefined, "actions feed-filters");
     for (const [key, label] of [["active", "Active"], ["new", "Newest"]]) {
       const control = button(label, () => run(() => navigate(view, { sort: key })));
       control.setAttribute("aria-pressed", String(sort === key));
       filters.append(control);
     }
-    content.append(filters);
+    content.querySelector("header")!.append(filters);
     const rows = collection(data);
     if (rows.length) appendThreadList(rows, section(view === "community" ? "Community discussions" : "Forum discussions", sort === "new" ? "Newest first" : "Latest activity"));
     else empty(data.isDone ? "No conversations here yet." : "No visible conversations on this page. Continue to see more.");
@@ -956,6 +1042,7 @@ export function forumPluginAppRuntime() {
       }
       if (revision !== viewRevision || destroyed) return;
       render();
+      renderContext();
       if (lastActionResult) showActionResult(lastActionResult);
       else report("");
       const title = content.querySelector("h1");
@@ -1297,7 +1384,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.4.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.5.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -1318,8 +1405,10 @@ export function forumPluginAppRuntime() {
     try { updateIdentity(await tool("forum_status")); } catch (error) {
       report(error instanceof Error ? error.message : "Connect your forum profile to enable posting.", true);
     }
-    await navigate("boards");
-    void refreshChat();
+    // An explicit host thread selection received during connection wins over
+    // the default feed. Do not replace its reader with the launch route.
+    if (currentView === "feed") await navigate("feed");
+    void refreshChat(null, true);
   });
 }
 
@@ -1348,13 +1437,18 @@ input,textarea,select{display:block;width:100%;min-width:0;max-width:100%;backgr
 .forum-section{min-width:0;border-radius:2px}.section-bar{display:flex;align-items:center;flex-wrap:wrap;border-radius:2px}.section-bar h2{margin:0;font-weight:600;letter-spacing:0}.section-detail{margin-left:auto;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.section-bar button{background:transparent;padding:4px 8px;margin-left:auto;min-height:44px;font-size:12px}.board-index,.rows{display:grid;gap:0;margin:0}.board,.row{min-width:0;background:transparent}.board{display:grid}.board-icon{color:hsl(var(--muted-foreground))}.board-description,.discussion-main,.news-main{min-width:0}.board-counts,.discussion-counts{display:flex;flex-direction:column;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.board-counts dd,.discussion-counts dd{margin:0;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.board-latest{min-width:0}.latest-title{text-align:left;background:transparent;padding:0;line-height:1.5;overflow-wrap:anywhere}.latest-title:hover{background:transparent}.latest-activity{display:flex;min-width:0;color:hsl(var(--muted-foreground))}.latest-author{overflow-wrap:anywhere}.subforums{display:flex;align-items:center;flex-wrap:wrap}.subforum-link{background:transparent;padding:0}.subforum-link:hover{background:transparent}.board .row-title,.row-title{text-align:left;font-family:inherit;text-transform:none;text-decoration:none;border:0;background:transparent;padding:0;overflow-wrap:anywhere}.row-title:hover{color:hsl(var(--primary));background:transparent}.row .row-title{display:block}.excerpt{color:hsl(var(--muted-foreground));overflow-wrap:anywhere;margin:4px 0 0}.discussion-row{display:grid}.discussion-main>.muted{margin:0}.news-story{display:grid}.news-rank{display:flex;flex-direction:column;align-items:center;gap:5px;font-family:ui-monospace,monospace;color:hsl(var(--muted-foreground))}.rank-number{font-size:15px;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.rank-points{font-size:9px;white-space:normal;overflow-wrap:anywhere;max-width:100%;text-align:center}.news-main>.source,.news-main>.muted{margin:0 0 4px;font-size:11px}.news-main .row-title{display:block;align-content:center}.news-preview .row-title{font-size:14px}.feed-filters button{background:transparent;color:hsl(var(--muted-foreground))}.edition{display:flex;gap:12px;align-items:center;color:hsl(var(--muted-foreground))}.edition select{width:auto}.breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;color:hsl(var(--muted-foreground));font-size:12px}.breadcrumbs button{background:transparent;min-height:44px}.board-rules{padding:0 12px;background:hsl(var(--muted)/.18)}.board-rules summary{cursor:pointer;min-height:44px;align-content:center;font-size:12px}.board-rules summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:4px}.board-rules .post-body{font-size:13px;padding-bottom:14px}.announcement-row h3{font-size:14px;margin:0}.post{margin:0;min-width:0;background:transparent}.post-author{display:flex;flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}.post-author .muted{font-size:10px}.post-content{min-width:0}.post-body{white-space:pre-wrap;overflow-wrap:anywhere}.post-content>a,.post-content>.badge{display:inline-block;margin-top:12px;margin-right:12px}.badge{font-family:ui-monospace,monospace;line-height:1.4;background:hsl(var(--accent)/.12);color:hsl(var(--muted-foreground));border-radius:2px}
 .pager{justify-content:flex-start}.composer{display:grid;max-width:760px}.composer label{display:grid;gap:8px;font-size:13px}.composer .actions{margin-top:4px}.attachments{padding:12px 0}.empty{color:hsl(var(--muted-foreground))}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .chat-header{display:flex;align-items:center;flex-wrap:wrap}.chat-header h2{margin:0 auto 0 0;letter-spacing:0}.chat-messages{overflow-y:auto}.chat-row{display:grid}.chat-meta{display:flex;align-items:baseline;flex-wrap:wrap}.chat-meta strong{overflow-wrap:anywhere}.chat-meta time{font-size:10px}.chat-message{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.chat-row-actions{display:flex;gap:6px}.chat-form{display:flex;flex-wrap:wrap}.chat-form label+input{width:auto}.chat-access{margin:0;padding:0 10px 6px;font-size:11px}.chat-access a{display:inline-flex;align-items:center;min-height:44px}#chat-notice:empty{display:none}#chat-older{margin:4px 12px}#app[data-display-mode=fullscreen]{min-height:100vh}.main:has(.composer){padding-bottom:100px}
-/* Forum workspace: compact discussion hierarchy with touch-safe controls. */
-:root{font-family:"Geist",ui-sans-serif,system-ui,sans-serif}
-#app{max-width:1180px;min-width:0}.masthead{padding:18px 24px 12px}.brand{font-size:24px}.brand .brand-forum{font-size:16px;font-weight:500}
-.sidebar{padding:0 24px;position:sticky;top:0;z-index:5;background:hsl(var(--background))}#navigation{display:flex;align-items:stretch;gap:8px;flex-wrap:nowrap;padding:4px 0}.primary-navigation{display:flex;gap:4px;flex:1;min-width:0}.primary-navigation>button{min-width:68px}.navigation-more{position:relative;margin-left:auto}.navigation-more summary,.connection-details summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center;padding:8px 12px;font-size:13px;font-weight:500;color:hsl(var(--muted-foreground))}.navigation-more summary:after{content:"⌄";margin-left:6px}.navigation-more summary::-webkit-details-marker,.connection-details summary::-webkit-details-marker{display:none}.navigation-more summary[aria-current=page]{color:hsl(var(--primary));background:hsl(var(--primary)/.08)}#navigation button[aria-current=page]{background:hsl(var(--primary)/.09);color:hsl(var(--primary))}.secondary-navigation{position:absolute;right:0;top:48px;min-width:210px;max-width:calc(100vw - 32px);max-height:65vh;overflow:auto;padding:8px;background:hsl(var(--card));outline:1px solid hsl(var(--border));display:grid;z-index:10}.secondary-navigation button{text-align:left}.navigation-more summary:focus-visible,.connection-details summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}
-.connection{margin:0;padding:4px 0 8px;gap:8px;font-size:11px;min-height:40px}.connection>.eyebrow{display:none}.connection strong{font-size:12px}.connection strong:before{content:"";display:inline-block;width:6px;height:6px;background:hsl(var(--accent));margin-right:7px}#mode{font-size:11px}.connection-details{margin-left:auto;position:relative}.connection-details summary{min-height:36px;padding:4px 8px;font-size:11px}.connection-detail-panel{position:absolute;right:0;top:38px;width:280px;max-width:calc(100vw - 32px);padding:14px;background:hsl(var(--card));outline:1px solid hsl(var(--border));z-index:9;display:grid;gap:8px}#settings{margin:0}.posting-trust{font-size:12px;gap:8px}.main{padding:8px 24px 40px}#search{margin:0 0 12px;gap:4px}#query{font-size:14px;min-height:44px;padding:10px 12px}#search button{padding:8px 12px}
-.view-heading{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin:16px 0 12px}.view-heading h1{font-size:clamp(21px,2.4vw,28px);line-height:1.3;letter-spacing:-.025em;margin:0;flex:1 1 70%}.view-heading h1:focus{outline:none}.view-heading>.muted{flex:1 1 100%;margin:0;max-width:75ch;font-size:12px}.view-heading>.primary{margin-left:auto}.forum-section{margin:14px 0;background:transparent;overflow:visible}.section-bar{background:hsl(var(--muted)/.45);padding:4px 12px;min-height:40px;gap:8px}.section-bar h2:before{display:none}.section-bar h2{font-size:13px}.board-index,.rows{padding:0}.board,.row{padding:14px 12px}.board:nth-child(even),.discussion-row:nth-child(even),.record-row:nth-child(even){background:hsl(var(--muted)/.18)}.board{grid-template-columns:36px minmax(0,1fr) 86px 200px;gap:12px;align-items:center}.board-icon{width:32px;height:32px;padding:0;background:hsl(var(--muted));display:flex;align-items:center;justify-content:center;border-radius:2px}.board-icon:before{content:"";width:14px;height:11px;border:1.5px solid currentColor;border-radius:2px}.board-icon.unread{background:hsl(var(--primary)/.1);color:hsl(var(--primary))}.board .row-title,.row-title{font-size:15px;font-weight:600;letter-spacing:-.012em;line-height:1.45;min-height:44px}.board-description>.row-title{min-height:32px}.board-description>.excerpt{margin:0;font-size:12px;line-height:1.6}.board-counts,.discussion-counts{margin:0;font-size:10px;gap:4px}.board-counts div,.discussion-counts div{display:flex;flex-direction:row;gap:5px;align-items:baseline}.board-counts dd,.discussion-counts dd{font-size:12px;order:0}.board-counts dt,.discussion-counts dt{order:1}.board-latest{padding:0}.latest-title{min-height:32px;font-size:12px}.latest-activity{padding:0;flex-direction:row;flex-wrap:wrap;gap:5px;font-size:11px}.latest-activity time{font-size:10px}.subforums{gap:0 10px;margin-top:0}.subforum-link{font-size:11px;min-height:44px}.member-avatar{width:34px;height:34px;flex:0 0 34px;display:inline-flex;align-items:center;justify-content:center;align-self:start;font-size:11px;font-weight:600;letter-spacing:.02em;background:hsl(var(--accent)/.12);color:hsl(var(--foreground));border-radius:2px}.discussion-row{grid-template-columns:34px minmax(0,1fr) 86px 150px;gap:12px;align-items:center}.discussion-row>.member-avatar{margin-top:5px}.discussion-row .latest-activity{padding:0;flex-direction:column;gap:2px}.discussion-main .row-title{min-height:32px}.discussion-main>.muted{font-size:11px}.discussion-main>.excerpt{font-size:12px;line-height:1.65;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.feed-filters{margin:8px 0;gap:4px}.feed-filters button{padding:8px 12px}.feed-filters button[aria-pressed=true]{background:hsl(var(--primary)/.09);color:hsl(var(--primary))}.news-story{grid-template-columns:44px minmax(0,1fr);padding:12px;gap:12px}.news-story:nth-child(even){background:hsl(var(--muted)/.18)}.news-rank{padding-top:8px;min-width:0}.news-main .row-title{font-size:15px}.news-main>.muted{line-height:1.6}.edition{margin:8px 0;font-size:12px}.breadcrumbs{margin:8px 0 0;gap:4px}.breadcrumbs button{padding:4px 6px;font-size:11px}.board-rules{margin:12px 0}.post{display:block;padding:18px 12px}.post:nth-of-type(odd){background:hsl(var(--muted)/.18)}.post-author{flex-direction:row;align-items:center;gap:8px;margin-bottom:12px}.post-author .member-avatar{width:30px;height:30px;flex-basis:30px;align-self:center}.post-author strong{font-size:13px}.post-author>.muted{margin-left:auto}.post-content{padding-left:38px;max-width:82ch}.post-body{font-size:14px;line-height:1.85}.badge{padding:3px 5px;font-size:9px}.conversation-reply{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;background:hsl(var(--muted)/.18);margin-top:12px}.conversation-reply p{margin:0}.profile-field h3{font-size:12px;margin:0;color:hsl(var(--muted-foreground))}.profile-field p{margin:4px 0 0}.record-list{padding:0}.record-row h2{font-size:15px;margin:0}.record-row>.post-body{font-size:13px;line-height:1.65}.member-list{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.member-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 12px;background:hsl(var(--muted)/.18)}.member-row>.member-avatar{grid-row:1/5}.member-row>p,.member-row>a,.member-row>.badge{grid-column:2}.member-row>a{font-size:12px;min-height:44px;align-content:center}.info-row h3{margin:0;font-size:14px}.info-row>.post-body{font-size:13px}.notice{padding:10px 12px;margin:0 0 12px;font-size:12px}.composer{padding:12px 0;gap:16px}.composer textarea{min-height:230px}.pager{margin-top:16px}.actions>a{display:inline-flex;align-items:center;min-height:44px;font-size:12px}.empty{font-size:13px;padding:20px 12px;margin:0;background:hsl(var(--muted)/.12)}
-.forum-chat{margin:0 0 12px;background:hsl(var(--muted)/.18)}.chat-header{padding:0 10px;background:transparent;min-height:44px;gap:6px}.chat-header h2{font-size:13px}.chat-header h2:before{content:"";display:inline-block;width:6px;height:6px;background:hsl(var(--accent));margin-right:7px}.chat-header button,.chat-row-actions button{min-height:44px;padding:4px 7px;background:transparent;font-size:11px}.chat-messages{max-height:96px;padding:0 10px}.chat-row{grid-template-columns:140px minmax(0,1fr);padding:5px 0;gap:8px}.chat-row .badge{font-size:8px;padding:2px 4px}.chat-meta{font-size:11px;gap:4px}.chat-message{font-size:12px;line-height:1.5}.chat-form{padding:6px 10px;gap:6px}.chat-form input{font-size:14px;min-height:44px;flex:1;min-width:0}.chat-form button{min-height:44px}.chat-form>button:last-child:not(#chat-send){flex-basis:100%}#chat-notice{font-size:10px;padding:0 10px 6px}#chat-older{min-height:44px}.chat-row-actions{grid-column:2}
-@media(max-width:900px){.board{grid-template-columns:32px minmax(0,1fr) 90px}.board-latest{grid-column:2/4;display:flex;align-items:center;gap:10px}.board-latest .latest-title{flex:1}.discussion-row{grid-template-columns:34px minmax(0,1fr) 74px}.discussion-row>.latest-activity{grid-column:2/4;flex-direction:row;gap:6px}}
-@media(max-width:680px){.masthead{padding:12px 12px 8px;align-items:center;gap:8px}.brand{font-size:21px;letter-spacing:-.8px}.brand .brand-forum{display:block;font-size:13px;line-height:1.4;margin:4px 0 0}.mast-actions{gap:4px}.mast-actions button{padding:8px;min-height:44px;font-size:11px}.sidebar{padding:0 12px}#navigation{gap:2px;overflow:visible}.primary-navigation{gap:0;justify-content:space-between}.primary-navigation>button{padding:8px 5px!important;min-width:44px;flex:0 0 auto;font-size:12px!important}.navigation-more summary{padding:8px 6px;font-size:12px}.navigation-more summary:after{margin-left:3px}.connection{gap:3px 8px;min-height:40px;padding:0 0 6px}.connection strong{font-size:11px;max-width:calc(100% - 92px);overflow-wrap:anywhere}#mode{flex:1 1 100%;order:3;font-size:10px}.connection-details{margin-left:auto}.connection-details summary{min-height:36px;font-size:10px;padding:4px}.main{padding:6px 12px 28px}.view-heading{margin-top:12px}.view-heading h1{font-size:22px}.view-heading>.muted{font-size:12px}.view-heading>.primary{margin-left:0}input,textarea,select,#query,.chat-form input{font-size:16px}.board,.row{padding:12px 8px}.board{grid-template-columns:30px minmax(0,1fr);gap:2px 10px}.board-icon{width:28px;height:28px;margin-top:8px;align-self:start}.board-counts{grid-column:2;flex-direction:row;gap:14px;margin:3px 0}.board-latest{grid-column:2;display:block}.board-latest .latest-title{min-height:44px}.board-latest .latest-activity{display:none}.board-description>.excerpt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.board .row-title{min-height:44px;font-size:15px}.subforums{gap:0 10px}.discussion-row{grid-template-columns:30px minmax(0,1fr);gap:4px 10px;align-items:start}.discussion-row>.member-avatar{width:28px;height:28px;flex-basis:28px;font-size:10px;margin-top:7px}.discussion-main>.row-title{min-height:44px;font-size:15px}.discussion-counts{grid-column:2;flex-direction:row;gap:14px;margin:0}.discussion-row>.latest-activity{grid-column:2;flex-direction:row;font-size:10px;gap:5px}.post{padding:14px 8px}.post-content{padding-left:0}.post-author{gap:6px}.post-author>.muted{margin-left:0;flex:1 1 100%;padding-left:36px}.post-body{font-size:15px;line-height:1.85}.chat-header #chat-profile{display:inline;font-size:10px}.chat-header{gap:3px}.chat-header button{padding:4px 5px}.chat-row{grid-template-columns:minmax(0,1fr);gap:1px}.chat-row-actions{grid-column:1}.chat-messages{max-height:84px}.section-bar{padding:4px 8px;gap:4px}.section-detail{font-size:9px}.news-story{grid-template-columns:44px minmax(0,1fr);gap:8px}.news-main .row-title{font-size:15px}.member-list{grid-template-columns:1fr}.board-index,.rows{padding:0}.notice{margin-bottom:12px}.breadcrumbs{gap:2px}.actions{gap:4px}.composer textarea{min-height:210px}.edition select{width:auto;max-width:calc(100% - 55px)}}
-</style></head><body><div id="app"><header class="masthead"><div><div class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></div></div><div class="mast-actions"><button id="expand" type="button" hidden>Expand forum</button><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details class="connection-details"><summary>Agent access</summary><div class="connection-detail-panel"><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Latest</button><button id="chat-toggle" type="button" aria-expanded="true" aria-controls="chat-panel">Chat</button></header><div id="chat-panel"><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;
+/* Community workspace: a reading lane, useful navigation, and honest activity. */
+:root{font-family:"Geist",ui-sans-serif,system-ui,sans-serif;--community-backdrop:#f4f4f5;--community-panel:#fff;--community-hover:#f0f0f3;--community-primary:#fa00a8;--community-identity:#81d8d0;--community-text:#202026;--community-muted:#676771}
+@media(prefers-color-scheme:dark){:root{--community-backdrop:#0c0c0e;--community-panel:#161618;--community-hover:#202027;--community-text:#f3f3f5;--community-muted:#a2a2ad}}
+:root[data-theme=light]{--community-backdrop:#f4f4f5;--community-panel:#fff;--community-hover:#f0f0f3;--community-text:#202026;--community-muted:#676771}
+:root[data-theme=dark]{--community-backdrop:#0c0c0e;--community-panel:#161618;--community-hover:#202027;--community-text:#f3f3f5;--community-muted:#a2a2ad}
+body{background:var(--community-backdrop);color:var(--community-text)}button,a{color:inherit}.muted,.source{color:var(--community-muted)}button{border-radius:10px}button:hover{background:var(--community-hover)}.primary{border-radius:999px;background:var(--community-primary);color:#0c0c0e}.primary:hover{background:var(--community-primary);color:#0c0c0e}input,textarea,select{background:var(--community-panel);border-color:transparent;border-radius:10px}.badge{border-radius:5px}.notice{border-radius:10px;padding:12px;margin:0 0 12px}.empty{padding:24px 16px;background:var(--community-panel);border-radius:12px;font-size:13px}
+#app{max-width:1440px;min-width:0;margin:auto}.masthead{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:24px;padding:14px 24px;background:var(--community-backdrop)}.brand{font-size:23px;white-space:nowrap;letter-spacing:-.8px}.brand .brand-ai{color:var(--community-primary)}.brand .brand-forum{display:block;font-size:12px;letter-spacing:0;font-weight:500;margin:5px 0 0}.mast-actions{gap:6px}.mast-actions>button{padding:10px 14px;font-size:12px}#expand{background:transparent;color:var(--community-muted)}.product-search{min-width:0;width:100%;max-width:680px;justify-self:center}.product-search>summary{display:none}#search{margin:0;gap:0;background:var(--community-hover);border-radius:999px;min-width:0;max-width:680px;width:100%;justify-self:center}#query{font-size:14px;border:0;border-radius:999px;background:transparent;padding:12px 18px}#search button{border-radius:999px;font-size:12px;padding:10px 16px}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:0;max-width:1320px;margin:auto}.sidebar{position:sticky;top:78px;z-index:15;background:var(--community-backdrop);padding:0 20px}#navigation{display:flex;align-items:stretch;gap:8px;padding:4px 0;flex-wrap:nowrap}.primary-navigation{display:flex;gap:4px;flex:1;min-width:0}.primary-navigation>button{min-width:68px}#navigation button{font-size:13px;color:var(--community-muted);border-radius:10px}#navigation button[aria-current=page]{background:var(--community-hover);color:var(--community-text);font-weight:650}#navigation button[aria-current=page]:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--community-primary);margin-right:7px}.navigation-more{position:relative;margin-left:auto}.navigation-more summary,.connection-details summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center;padding:8px 12px;font-size:13px;font-weight:500;color:var(--community-muted)}.navigation-more summary:after{content:"⌄";margin-left:6px}.navigation-more summary::-webkit-details-marker,.connection-details summary::-webkit-details-marker{display:none}.navigation-more summary[aria-current=page]{color:var(--community-primary);background:var(--community-hover);border-radius:10px}.secondary-navigation{position:absolute;right:0;top:48px;min-width:210px;max-width:calc(100vw - 32px);max-height:65vh;overflow:auto;padding:8px;background:var(--community-panel);border-radius:12px;display:grid;z-index:30;outline:1px solid hsl(var(--border))}.secondary-navigation button{text-align:left}.navigation-more summary:focus-visible,.connection-details summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}
+.connection{margin:0;padding:4px 0 10px;gap:6px 10px;font-size:11px;min-height:42px}.connection>.eyebrow{display:none}.connection strong{font-size:12px}.connection strong:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--community-identity);margin-right:7px}#mode{font-size:11px;color:var(--community-muted)}.connection-details{margin-left:auto;position:relative}.connection-details summary{min-height:36px;padding:4px 8px;font-size:11px}.connection-detail-panel{position:absolute;right:0;top:38px;width:280px;max-width:calc(100vw - 32px);padding:14px;background:var(--community-panel);outline:1px solid hsl(var(--border));border-radius:12px;z-index:30;display:grid;gap:8px}#settings{margin:0}.posting-trust{font-size:12px;gap:8px}.main{padding:10px 20px 48px;width:100%;max-width:720px;margin:auto;min-width:0}.context-rail{display:none}
+.view-heading{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin:12px 0 16px}.view-heading h1{font-size:26px;line-height:1.3;letter-spacing:-.035em;margin:0;flex:1 1 70%;font-weight:700}.view-heading h1:focus{outline:none}.view-heading>.muted{flex:1 1 100%;margin:0;font-size:12px}.view-heading>.primary{margin-left:auto}#app:is([data-view=feed],[data-view=community]) .view-heading h1{flex:1 1 0;font-size:24px}#app:is([data-view=feed],[data-view=community]) .view-heading>.muted{display:none}.view-heading>.feed-filters{margin:0;flex:0 0 auto}#app:is([data-view=feed],[data-view=community]) .forum-section[aria-label$="discussions"]>.section-bar{display:none}.forum-section{margin:10px 0;background:transparent;overflow:visible}.section-bar{background:transparent;padding:0 2px 8px;min-height:36px;gap:8px}.section-bar h2{font-size:13px;font-weight:650;color:var(--community-muted)}.section-bar button{font-size:12px}.section-detail{font-family:inherit;font-size:11px}.board-index,.rows{padding:0;gap:10px}.row,.board{background:var(--community-panel);border-radius:12px;padding:16px}.board{grid-template-columns:38px minmax(0,1fr);gap:6px 12px;align-items:start}.board-icon{width:36px;height:36px;padding:0;background:var(--community-hover);display:flex;align-items:center;justify-content:center;border-radius:10px}.board-icon:before{content:"";width:15px;height:12px;border:1.5px solid currentColor;border-radius:3px}.board-icon.unread{background:hsl(var(--primary)/.1);color:var(--community-primary)}.board .row-title{font-size:17px;min-height:32px;line-height:1.4;font-weight:650}.board-description>.excerpt{margin:2px 0 0;font-size:13px;line-height:1.65}.subforums{gap:0 10px;margin-top:4px}.subforum-link{font-size:12px;min-height:44px;color:var(--community-muted)}.board-counts{grid-column:2;flex-direction:row;gap:16px;margin:0}.board-counts div,.discussion-counts div{display:flex;flex-direction:row;gap:5px;align-items:baseline}.board-counts dd,.discussion-counts dd{font-size:11px;order:0}.board-counts dt,.discussion-counts dt{order:1;font-size:11px}.board-latest{grid-column:2;padding:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}.latest-title{min-height:44px;font-size:12px;color:var(--community-muted)}.latest-activity{padding:0;flex-direction:row;gap:5px;font-size:11px}.latest-activity time{font-size:10px}.member-avatar{width:28px;height:28px;flex:0 0 28px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:650;letter-spacing:.02em;background:hsl(var(--accent)/.13);color:var(--community-text);border-radius:50%}.discussion-row{display:block;padding:16px 18px}.discussion-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-width:0}.discussion-meta>.muted{flex:1;min-width:0;margin:0;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.discussion-meta time{white-space:nowrap}.discussion-main .row-title{font-size:19px;font-weight:650;letter-spacing:-.025em;line-height:1.4;min-height:44px}.discussion-main>.excerpt{font-size:14px;line-height:1.7;margin:4px 0 0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;color:var(--community-muted)}.discussion-footer{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-top:12px}.discussion-action{border-radius:999px;background:var(--community-hover);min-height:44px;padding:8px 14px;font-size:12px}.discussion-counts{margin:0;flex-direction:row;gap:12px}.discussion-footer>.latest-activity{margin-left:auto}.feed-filters{margin:0 0 12px;gap:6px}.feed-filters button{padding:8px 14px;border-radius:999px;background:transparent}.feed-filters button[aria-pressed=true]{background:var(--community-hover);color:var(--community-text);font-weight:650}.news-story{grid-template-columns:44px minmax(0,1fr);gap:12px}.news-rank{padding-top:6px;min-width:0}.rank-number{font-size:17px;font-weight:650}.news-main .row-title{font-size:18px;line-height:1.45;font-weight:650;min-height:44px}.news-main>.source{font-size:11px;line-height:1.6;margin:4px 0 8px}.news-main>.muted{font-size:11px;line-height:1.7}.news-preview .row-title{font-size:15px}.edition{margin:8px 0;font-size:12px}.breadcrumbs{margin:4px 0 0;gap:4px}.breadcrumbs button{padding:4px 6px;font-size:11px}.board-rules{padding:0 14px;border-radius:10px;background:var(--community-panel);margin:12px 0}.post{display:block;background:var(--community-panel);border-radius:12px;padding:20px;margin:10px 0}.post-author{flex-direction:row;align-items:center;gap:8px;margin:0 0 12px}.post-author strong{font-size:13px}.post-author .member-avatar{align-self:center}.post-author>.muted{margin-left:auto}.post-content{padding:0;max-width:75ch}.post-body{font-size:15px;line-height:1.85}.badge{padding:3px 5px;font-size:9px}.conversation-reply{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:16px;background:var(--community-panel);border-radius:12px;margin-top:12px}.conversation-reply p{margin:0}.profile-field h3{font-size:12px;margin:0;color:var(--community-muted)}.profile-field p{margin:4px 0 0}.record-row h2{font-size:16px;margin:0}.record-row>.post-body{font-size:14px;line-height:1.7}.member-list{grid-template-columns:1fr}.member-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 12px}.member-row>.member-avatar{grid-row:1/5}.member-row>p,.member-row>a,.member-row>.badge{grid-column:2}.member-row>a{font-size:12px;min-height:44px;align-content:center}.info-row h3{margin:0;font-size:15px}.info-row>.post-body{font-size:14px}.composer{padding:16px;background:var(--community-panel);border-radius:12px;gap:16px;max-width:none}.composer textarea{min-height:230px;background:var(--community-backdrop)}.composer input,.composer select{background:var(--community-backdrop)}.composer label{font-size:13px;font-weight:550}.pager{margin-top:16px}.actions{gap:6px}.actions>a{display:inline-flex;align-items:center;min-height:44px;font-size:12px}.actions>button{border-radius:999px;padding:8px 14px}
+.forum-chat{margin:0 0 8px;background:var(--community-panel);border-radius:12px;overflow:hidden}.chat-header{padding:2px 12px;background:transparent;min-height:44px;gap:6px}.chat-header h2{font-size:12px;margin:0;white-space:nowrap}.chat-peek{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px}.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-profile,.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-latest{display:none}.chat-header:has(#chat-toggle[aria-expanded=true]) .chat-peek{display:none}.chat-header h2:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--community-identity);margin-right:7px}.chat-header button,.chat-row-actions button{min-height:44px;padding:4px 7px;background:transparent;font-size:11px}.chat-messages{max-height:76px;padding:0 12px}.chat-row{grid-template-columns:130px minmax(0,1fr);padding:5px 0;gap:8px}.chat-meta{font-size:11px;gap:4px}.chat-message{font-size:12px;line-height:1.5}.chat-form{padding:6px 12px;gap:6px}.chat-form input{font-size:14px;min-height:44px;flex:1;min-width:0;background:var(--community-backdrop);border-radius:999px}.chat-form button{min-height:44px;border-radius:999px}.chat-form>button:last-child:not(#chat-send){flex-basis:100%}#chat-notice{font-size:10px;padding:0 12px 6px}.chat-access{padding:0 12px 6px}#chat-older{min-height:44px}.chat-row-actions{grid-column:2}
+@media(min-width:1000px){.workspace{grid-template-columns:190px minmax(0,1fr);gap:20px;padding:16px 24px}.masthead{grid-template-columns:190px minmax(0,1fr) auto}.sidebar{padding:0;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}#navigation{display:block;padding:0}.primary-navigation{display:grid;gap:4px}.primary-navigation button{width:100%;text-align:left;padding:12px 14px!important}.navigation-more{margin:12px 0 0}.navigation-more summary{padding:8px 14px;color:var(--community-muted)}.secondary-navigation{position:static;min-width:0;max-width:100%;max-height:none;outline:0;background:transparent;padding:0;gap:2px}.secondary-navigation button{padding:10px 14px!important}.connection{padding:16px 12px;margin-top:16px;background:var(--community-panel);border-radius:12px;display:block}.connection strong{display:block;font-size:12px}.connection #mode{display:block;margin:6px 0;font-size:11px;line-height:1.7}.connection-details{margin:0}.connection-details summary{padding:4px 0}.connection-detail-panel{position:static;width:auto;max-width:100%;outline:0;padding:8px 0;background:transparent;border-radius:0}.main{padding:0 0 48px;max-width:680px}.view-heading{margin-top:12px}}
+@media(min-width:1240px){.workspace{grid-template-columns:190px minmax(0,680px) 220px;justify-content:center;gap:24px}.context-rail{display:grid;gap:14px;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;min-width:0}.context-panel{padding:16px;background:var(--community-panel);border-radius:12px;min-width:0}.context-panel h2{font-size:13px;margin:0 0 8px;font-weight:650}.context-panel p{font-size:12px;line-height:1.8;margin:0 0 8px}.context-panel a{font-size:12px;display:inline-flex;align-items:center;min-height:44px}.context-board{display:block;width:100%;text-align:left;background:transparent;padding:10px 0;font-size:12px}.context-access{background:hsl(var(--accent)/.05)}}
+@media(max-width:680px){.masthead{padding:12px;gap:8px;grid-template-columns:minmax(0,1fr) auto}.brand{font-size:20px}.brand .brand-forum{font-size:11px;margin-top:4px}.mast-actions>button{padding:8px 12px;font-size:11px}.mast-actions{gap:0}.masthead{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px}.brand .brand-forum{display:none}.product-search{width:auto;max-width:none;position:relative}.product-search>summary{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:12px;cursor:pointer;list-style:none;padding:8px}.product-search>summary::-webkit-details-marker{display:none}.product-search>summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}.product-search #search{position:absolute;right:0;top:50px;width:min(296px,calc(100vw - 24px));max-width:none;background:var(--community-panel);outline:1px solid hsl(var(--border));z-index:40}#query{font-size:16px;padding:10px 14px}.sidebar{padding:0 12px;top:60px}#navigation{gap:2px;padding:2px 0}.primary-navigation{gap:0;justify-content:space-between}.primary-navigation>button{padding:8px 5px!important;min-width:44px;flex:0 0 auto;font-size:12px!important}.navigation-more summary{padding:8px 6px;font-size:12px}#navigation button[aria-current=page]:before{display:none}.navigation-more summary:after{margin-left:3px}.connection{gap:2px 8px;min-height:36px;padding:0 0 4px}.connection strong{font-size:11px;max-width:calc(100% - 92px)}#mode{flex:1 1 100%;order:3;font-size:10px}.connection-details summary{min-height:36px;font-size:10px;padding:4px}.main{padding:4px 12px 28px}.view-heading{margin:0 0 6px;gap:4px 8px}.view-heading h1{font-size:23px}.view-heading>.muted{font-size:12px}.view-heading>.primary{margin-left:0}input,textarea,select,.chat-form input{font-size:16px}.row,.board{padding:14px}.board{grid-template-columns:30px minmax(0,1fr);gap:4px 10px}.board-icon{width:28px;height:28px;margin-top:6px}.board .row-title{font-size:17px;min-height:44px}.board-counts{grid-column:2;gap:12px}.board-latest{grid-column:2;display:block}.board-latest .latest-activity{display:none}.board-description>.excerpt{font-size:12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.discussion-row{display:block;padding:14px}.discussion-main .row-title{font-size:18px;min-height:44px}.discussion-main>.excerpt{font-size:14px;-webkit-line-clamp:3}.discussion-meta>.muted{font-size:10px}.discussion-footer{gap:6px 10px;margin-top:10px}.discussion-footer>.latest-activity{margin-left:0;font-size:10px}.discussion-counts{gap:10px}.post{padding:16px}.post-author{gap:6px}.post-author>.muted{margin-left:0;flex:1 1 100%;padding-left:36px}.post-body{font-size:15px}.chat-header #chat-profile{display:inline;font-size:10px}.chat-header{gap:3px;padding:2px 10px}.chat-header button{padding:4px 5px}.chat-row{grid-template-columns:minmax(0,1fr);gap:1px}.chat-row-actions{grid-column:1}.chat-messages{max-height:70px}.section-bar{padding:0 2px 6px;gap:4px}.section-detail{font-size:10px}.news-story{grid-template-columns:38px minmax(0,1fr);gap:8px}.news-main .row-title{font-size:17px}.news-rank .rank-points{font-size:8px}.breadcrumbs{gap:2px}.composer{padding:14px}.composer textarea{min-height:210px}.edition select{width:auto;max-width:calc(100% - 55px)}}
+</style></head><body><div id="app"><header class="masthead"><div><div class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></div></div><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details class="connection-details"><summary>Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Live chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Latest</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;

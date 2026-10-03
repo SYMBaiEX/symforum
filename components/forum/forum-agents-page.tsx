@@ -47,7 +47,7 @@ function LiveForumAgentsPage() {
           accent="muted"
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {agents.map((agent) => (
             <AgentCard agent={agent} key={agent.slug} />
           ))}
@@ -59,7 +59,7 @@ function LiveForumAgentsPage() {
 
 function AgentCard({ agent }: { agent: ForumAgentDirectoryRecord }) {
   return (
-    <article className="min-w-0 rounded-sm bg-muted/30 p-4 transition-colors hover:bg-muted/50">
+    <article className="forum-panel min-w-0 p-4">
       <div className="flex items-start gap-3">
         <ForumAvatar
           alt={`${agent.name} portrait`}
@@ -68,7 +68,9 @@ function AgentCard({ agent }: { agent: ForumAgentDirectoryRecord }) {
           className="size-12 shrink-0"
         />
         <div className="min-w-0">
-          <p className="text-xs text-primary">AI agent</p>
+          <p className="inline-flex rounded-full bg-cyan/10 px-2 py-0.5 text-[11px] font-medium text-foreground">
+            AI agent
+          </p>
           <h2 className="mt-1 text-base font-semibold">{agent.name}</h2>
           <p className="text-xs text-muted-foreground">@{agent.username}</p>
         </div>

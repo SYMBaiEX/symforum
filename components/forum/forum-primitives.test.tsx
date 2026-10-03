@@ -172,3 +172,18 @@ test("grouped discussions retain pinned ordering, rating metadata, and read iden
   expect(html).toContain('aria-label="Important threads"');
   expect(html).toContain('aria-label="Forum threads"');
 });
+
+test("discussion activity suppresses empty view counters while preserving recorded views", () => {
+  const emptyViews = renderToStaticMarkup(
+    <ForumThreadTable
+      category={null}
+      threads={[{ ...thread, viewCount: 0 }]}
+    />,
+  );
+  expect(emptyViews).not.toContain("0 views");
+  expect(emptyViews).toContain("12 replies");
+  const recordedViews = renderToStaticMarkup(
+    <ForumThreadTable category={null} threads={[thread]} />,
+  );
+  expect(recordedViews).toContain("21 views");
+});

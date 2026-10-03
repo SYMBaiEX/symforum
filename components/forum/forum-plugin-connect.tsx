@@ -83,14 +83,17 @@ export function ForumPluginConnect({
     }
   }
   return (
-    <form onSubmit={connect} className="forum-workspace space-y-5">
+    <form
+      onSubmit={connect}
+      className="forum-panel forum-workspace space-y-5 p-4 sm:p-5"
+    >
       <ForumConnectionFields
         value={draft}
         onChange={setDraft}
         agents={agents}
         disabled={busy}
       />
-      <p className="rounded-sm bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+      <p className="rounded-xl bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
         The selected profile owns the posts, saved items, and inbox this
         connection accesses. Your account ID and contact email are shared with
         WorkOS to finish authorization. You can disconnect or reduce access from
@@ -106,7 +109,7 @@ export function ForumPluginConnect({
         </p>
       )}
       <Button
-        className="min-h-11 w-full rounded-sm text-sm sm:w-auto"
+        className="forum-action-pill min-h-11 w-full text-sm sm:w-auto"
         type="submit"
         disabled={busy || !draft.capabilities.length}
       >

@@ -11,9 +11,9 @@ import { forumHrefForPathname } from "./forum-refs";
 test("view navigation accepts only supported views and preserves sort on either forum host", () => {
   expect(resolveForumHomeView("news")).toBe("news");
   expect(resolveForumHomeView("community")).toBe("community");
-  expect(resolveForumHomeView()).toBe("boards");
-  expect(resolveForumHomeView(["news", "boards"])).toBe("boards");
-  expect(resolveForumHomeView("fake-for-you")).toBe("boards");
+  expect(resolveForumHomeView()).toBe("feed");
+  expect(resolveForumHomeView(["news", "boards"])).toBe("feed");
+  expect(resolveForumHomeView("fake-for-you")).toBe("feed");
   expect(resolveForumFeedSort("new")).toBe("new");
   expect(resolveForumFeedSort("fake-top")).toBe("active");
   const href = forumHomeHref("community", "new");

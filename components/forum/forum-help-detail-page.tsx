@@ -45,7 +45,7 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
         title="Help topic not found"
         body="That help document is no longer active in the forum help desk."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <ForumLink href="/forum/help" prefetch>
               Help / FAQ
             </ForumLink>
@@ -62,11 +62,11 @@ function LiveForumHelpDetailPage({ slug }: { slug: string }) {
         description={`Updated ${formatForumDateTime(document.updatedAt)}`}
       />
 
-      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
+      <div className="max-w-3xl rounded-xl bg-muted/25 p-4 sm:p-6">
         <ForumBody body={document.body} />
       </div>
 
-      <Button asChild className="rounded-sm text-xs" variant="outline">
+      <Button asChild className="rounded-xl text-xs" variant="outline">
         <ForumLink href="/forum/help" prefetch>
           Help / FAQ
         </ForumLink>

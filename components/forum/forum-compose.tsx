@@ -105,20 +105,22 @@ export function ForumCompose({
   titleLabel?: string;
   titlePlaceholder?: string;
   onBodyChange: (value: string) => void;
-  onSubmit: () => void | Promise<void>;
+  onSubmit: () => void | boolean | Promise<void | boolean>;
   onTitleChange?: (value: string) => void;
 }) {
   const bodyInputId = useId();
   const controlsDisabled = disabled || pending;
-  const [draftHydrated, setDraftHydrated] = useState(draftKey === undefined);
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<
+    string | undefined
+  >();
+  const loadedDraftKey = useRef<string | undefined>(undefined);
+  const [draftSaved, setDraftSaved] = useState(false);
   const titleEnabled =
     typeof title === "string" && typeof onTitleChange === "function";
 
   useEffect(() => {
-    if (!draftKey) {
-      setDraftHydrated(true);
-      return;
-    }
+    if (!draftKey || loadedDraftKey.current === draftKey) return;
+    loadedDraftKey.current = draftKey;
     try {
       const raw = window.localStorage.getItem(draftKey);
       if (raw) {
@@ -147,12 +149,12 @@ export function ForumCompose({
     } catch {
       // Storage can be unavailable in private or sandboxed browsers.
     } finally {
-      setDraftHydrated(true);
+      setHydratedDraftKey(draftKey);
     }
   }, [body, draftKey, onBodyChange, onTitleChange, title, titleEnabled]);
 
   useEffect(() => {
-    if (!draftKey || !draftHydrated) {
+    if (!draftKey || hydratedDraftKey !== draftKey) {
       return;
     }
     try {
@@ -161,6 +163,7 @@ export function ForumCompose({
         (!titleEnabled || title?.trim().length === 0)
       ) {
         window.localStorage.removeItem(draftKey);
+        setDraftSaved(false);
         return;
       }
       window.localStorage.setItem(
@@ -172,14 +175,17 @@ export function ForumCompose({
           savedAt: Date.now(),
         }),
       );
+      setDraftSaved(true);
     } catch {
+      setDraftSaved(false);
       // Storage can be unavailable in private or sandboxed browsers.
     }
-  }, [body, draftHydrated, draftKey, title, titleEnabled]);
+  }, [body, hydratedDraftKey, draftKey, title, titleEnabled]);
 
   async function submitWithDraftCleanup() {
-    await onSubmit();
-    if (draftKey) {
+    if (controlsDisabled) return;
+    const submitted = await onSubmit();
+    if (draftKey && submitted === true) {
       try {
         window.localStorage.removeItem(draftKey);
       } catch {
@@ -199,10 +205,7 @@ export function ForumCompose({
   }
 
   return (
-    <div
-      className="forum-composer min-w-0 rounded-sm bg-background p-3 sm:p-5"
-      aria-busy={pending}
-    >
+    <div className="forum-composer forum-panel min-w-0" aria-busy={pending}>
       {titleEnabled ? (
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">
@@ -213,7 +216,7 @@ export function ForumCompose({
             value={title}
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder={titlePlaceholder}
-            className="mt-2 min-h-11 rounded-sm border-0 bg-muted/40 px-3 text-base focus-visible:ring-1 focus-visible:ring-primary"
+            className="mt-2 min-h-12 rounded-xl border border-input bg-background px-3 text-base focus-visible:ring-1 focus-visible:ring-primary"
           />
         </label>
       ) : null}
@@ -226,7 +229,7 @@ export function ForumCompose({
         </label>
         <div
           aria-label="Forum formatting toolbar"
-          className="mt-2 flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-sm bg-muted/40 p-1"
+          className="mt-2 flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-xl border border-b-0 border-input bg-muted/30 p-1"
           role="toolbar"
           onKeyDown={(event) => {
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
@@ -427,7 +430,7 @@ export function ForumCompose({
           onChange={(event) => onBodyChange(event.target.value)}
           placeholder={bodyPlaceholder}
           rows={bodyRows}
-          className="min-h-40 resize-y rounded-none rounded-b-sm border-0 bg-muted/25 px-3 py-3 text-base leading-7 focus-visible:ring-1 focus-visible:ring-primary"
+          className="min-h-48 resize-y rounded-none rounded-b-xl border border-input bg-background px-3 py-3 text-base leading-7 focus-visible:ring-1 focus-visible:ring-primary"
         />
         <details className="mt-1">
           <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between px-1 py-2 text-xs text-muted-foreground marker:content-none">
@@ -468,12 +471,12 @@ export function ForumCompose({
       ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
-          BBCode supported
+          {draftSaved ? "Draft saved on this device" : "BBCode supported"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {footerActions}
           <Button
-            className="min-h-11 rounded-sm px-4 text-sm font-medium"
+            className="min-h-11 rounded-full px-5 text-sm font-medium"
             type="button"
             onClick={() => {
               void submitWithDraftCleanup();
@@ -595,7 +598,7 @@ export function ForumAttachmentDraftPanel({
   }
 
   return (
-    <section className="min-w-0 rounded-sm bg-muted/25 p-3">
+    <section className="min-w-0 rounded-xl bg-muted/25 p-3">
       <ForumAgentAttachmentPicker />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -607,7 +610,7 @@ export function ForumAttachmentDraftPanel({
           </p>
         </div>
         <Button
-          className="min-h-11 rounded-sm text-xs"
+          className="forum-action-pill min-h-11 rounded-full text-xs"
           disabled={
             disabled ||
             uploading ||
@@ -653,7 +656,7 @@ export function ForumAttachmentDraftPanel({
         <div className="mt-3 grid gap-2">
           {attachments.map((attachment) => (
             <div
-              className="flex min-w-0 items-center justify-between gap-2 rounded-sm bg-background px-3 py-2"
+              className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-card px-3 py-2"
               key={attachment.storageId}
             >
               <span className="min-w-0 flex-1">

@@ -283,166 +283,187 @@ function LiveForumSearchPage() {
 
   return (
     <div className="space-y-3">
-      <section className="rounded-sm bg-background">
+      <section className="space-y-3">
         <ForumPageHeader
           title="Search the forum"
           description="Find a discussion, a reply, or a familiar voice."
         />
         <form
-          className="forum-form-section mt-4 space-y-4 p-4"
+          className="forum-panel mt-4 space-y-4 p-4"
           onSubmit={submitSearch}
         >
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_14rem_10rem_11rem] xl:items-end">
-            <label className="grid gap-2">
+          <div className="space-y-3">
+            <label className="grid min-w-0 gap-2">
               <span className="text-xs text-muted-foreground">Keywords</span>
               <Input
                 value={query}
                 minLength={2}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search titles, bodies, and replies"
-                className="rounded-sm border-row-border"
+                className="rounded-xl border-row-border"
               />
             </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Board</span>
-              <Select value={categorySlug} onValueChange={setCategorySlug}>
-                <SelectTrigger
-                  aria-describedby="forum-search-board-help"
-                  aria-label="Filter forum search by board"
-                  className="rounded-sm border-row-border"
-                >
-                  <SelectValue placeholder="All public boards" />
-                </SelectTrigger>
-                <SelectContent className="max-h-96 rounded-sm border-row-border">
-                  <SelectItem value={ALL_BOARDS}>All public boards</SelectItem>
-                  {categorySlug !== ALL_BOARDS &&
-                  !boardOptions.some((board) => board.slug === categorySlug) ? (
-                    <SelectItem value={categorySlug}>
-                      {boardLabel(categoryMaps.bySlug, categorySlug)}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Board</span>
+                <Select value={categorySlug} onValueChange={setCategorySlug}>
+                  <SelectTrigger
+                    aria-describedby="forum-search-board-help"
+                    aria-label="Filter forum search by board"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="All public boards" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-96 rounded-xl border-row-border">
+                    <SelectItem value={ALL_BOARDS}>
+                      All public boards
                     </SelectItem>
-                  ) : null}
-                  {boardOptions.map((board) => (
-                    <SelectItem key={board.slug} value={board.slug}>
-                      {board.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Type</span>
-              <Select
-                value={resultType}
-                onValueChange={(value) =>
-                  setResultType(normalizeResultType(value))
-                }
-              >
-                <SelectTrigger
-                  aria-label="Filter forum search by result type"
-                  className="rounded-sm border-row-border"
+                    {categorySlug !== ALL_BOARDS &&
+                    !boardOptions.some(
+                      (board) => board.slug === categorySlug,
+                    ) ? (
+                      <SelectItem value={categorySlug}>
+                        {boardLabel(categoryMaps.bySlug, categorySlug)}
+                      </SelectItem>
+                    ) : null}
+                    {boardOptions.map((board) => (
+                      <SelectItem key={board.slug} value={board.slug}>
+                        {board.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Type</span>
+                <Select
+                  value={resultType}
+                  onValueChange={(value) =>
+                    setResultType(normalizeResultType(value))
+                  }
                 >
-                  <SelectValue placeholder="All results" />
-                </SelectTrigger>
-                <SelectContent className="rounded-sm border-row-border">
-                  <SelectItem value="all">All results</SelectItem>
-                  <SelectItem value="threads">Threads</SelectItem>
-                  <SelectItem value="replies">Replies</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Search in</span>
-              <Select
-                value={target}
-                onValueChange={(value) =>
-                  setTarget(normalizeSearchTarget(value))
-                }
-              >
-                <SelectTrigger
-                  aria-label="Choose forum search target"
-                  className="rounded-sm border-row-border"
+                  <SelectTrigger
+                    aria-label="Filter forum search by result type"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="All results" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-row-border">
+                    <SelectItem value="all">All results</SelectItem>
+                    <SelectItem value="threads">Threads</SelectItem>
+                    <SelectItem value="replies">Replies</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Sort</span>
+                <Select
+                  value={sortKey}
+                  onValueChange={(value) =>
+                    setSortKey(normalizeSearchSortKey(value))
+                  }
                 >
-                  <SelectValue placeholder="Titles + bodies" />
-                </SelectTrigger>
-                <SelectContent className="rounded-sm border-row-border">
-                  {SEARCH_TARGET_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Sort</span>
-              <Select
-                value={sortKey}
-                onValueChange={(value) =>
-                  setSortKey(normalizeSearchSortKey(value))
-                }
-              >
-                <SelectTrigger
-                  aria-label="Sort forum search results"
-                  className="rounded-sm border-row-border"
-                >
-                  <SelectValue placeholder="Relevance" />
-                </SelectTrigger>
-                <SelectContent className="rounded-sm border-row-border">
-                  {SEARCH_SORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Date</span>
-              <Select value={days} onValueChange={setDays}>
-                <SelectTrigger
-                  aria-label="Filter forum search results by date"
-                  className="rounded-sm border-row-border"
-                >
-                  <SelectValue placeholder="Any date" />
-                </SelectTrigger>
-                <SelectContent className="rounded-sm border-row-border">
-                  {SEARCH_DAY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Page size</span>
-              <Select value={pageSize} onValueChange={setPageSize}>
-                <SelectTrigger
-                  aria-label="Set forum search page size"
-                  className="rounded-sm border-row-border"
-                >
-                  <SelectValue placeholder="12" />
-                </SelectTrigger>
-                <SelectContent className="rounded-sm border-row-border">
-                  {SEARCH_PAGE_SIZES.map((size) => (
-                    <SelectItem key={size} value={String(size)}>
-                      {size}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-2 md:col-span-2">
-              <span className="text-xs text-muted-foreground">Author</span>
-              <Input
-                aria-describedby="forum-search-author-help"
-                value={author}
-                onChange={(event) => setAuthor(event.target.value)}
-                placeholder="optional handle"
-                className="rounded-sm border-row-border"
-              />
-            </label>
+                  <SelectTrigger
+                    aria-label="Sort forum search results"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="Relevance" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-row-border">
+                    {SEARCH_SORT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
           </div>
+          <details
+            className="rounded-xl bg-muted/35 p-3"
+            open={
+              submittedAuthor.trim().length > 0 ||
+              submittedTarget !== "all" ||
+              submittedDays !== ALL_DATES ||
+              submittedPageSize !== DEFAULT_PAGE_SIZE
+            }
+          >
+            <summary className="focus-ring min-h-8 cursor-pointer text-sm font-medium">
+              Advanced filters
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Search in</span>
+                <Select
+                  value={target}
+                  onValueChange={(value) =>
+                    setTarget(normalizeSearchTarget(value))
+                  }
+                >
+                  <SelectTrigger
+                    aria-label="Choose forum search target"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="Titles + bodies" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-row-border">
+                    {SEARCH_TARGET_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Date</span>
+                <Select value={days} onValueChange={setDays}>
+                  <SelectTrigger
+                    aria-label="Filter forum search results by date"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="Any date" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-row-border">
+                    {SEARCH_DAY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Page size</span>
+                <Select value={pageSize} onValueChange={setPageSize}>
+                  <SelectTrigger
+                    aria-label="Set forum search page size"
+                    className="rounded-xl border-row-border"
+                  >
+                    <SelectValue placeholder="12" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-row-border">
+                    {SEARCH_PAGE_SIZES.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs text-muted-foreground">Author</span>
+                <Input
+                  aria-describedby="forum-search-author-help"
+                  value={author}
+                  onChange={(event) => setAuthor(event.target.value)}
+                  placeholder="optional handle"
+                  className="rounded-xl border-row-border"
+                />
+              </label>
+            </div>
+          </details>
           <div className="flex flex-col gap-2 pt-2.5 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p
@@ -462,11 +483,11 @@ function LiveForumSearchPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button className="rounded-sm" type="submit">
+              <Button className="rounded-xl" type="submit">
                 Search
               </Button>
               <Button
-                className="rounded-sm"
+                className="rounded-xl"
                 disabled={!hasCustomFilters}
                 onClick={resetSearchForm}
                 type="button"
@@ -639,7 +660,7 @@ function SearchResultSection({
 }) {
   const hasResults = pagination.totalItems > 0;
   return (
-    <section className="min-w-0 rounded-sm bg-background">
+    <section className="forum-panel min-w-0">
       <div className="px-3 py-2 text-xs text-muted-foreground">{heading}</div>
       {hasResults ? (
         <>
@@ -673,7 +694,7 @@ function SearchRow({
   title: string;
 }) {
   return (
-    <article className="px-3 py-2.5 rounded-sm hover:bg-muted/45">
+    <article className="px-3 py-2.5 rounded-xl hover:bg-muted/45">
       <p className="text-xs text-muted-foreground">{label}</p>
       <ForumLink
         href={href}

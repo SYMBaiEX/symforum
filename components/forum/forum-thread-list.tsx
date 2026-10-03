@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, MessageSquare, Plus } from "lucide-react";
+import { ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
 import {
   ForumBodyGrid,
   ForumPageHeader,
@@ -129,6 +129,7 @@ export function ForumThreadList({
 
   return (
     <LiveForumThreadList
+      key={categorySlug}
       categorySlug={categorySlug}
       showHeading={showHeading}
     />
@@ -357,9 +358,10 @@ function LiveForumThreadList({
         setBoardActionError(
           "Thread submitted for approval. It will appear after a moderator approves it.",
         );
-        return;
+        return true;
       }
       router.push(forumPath(categorySlug, result.threadSlug));
+      return true;
     } catch (caught) {
       if (isAuthRequiredError(caught)) {
         setAuthAction("start a thread");
@@ -549,23 +551,78 @@ function LiveForumThreadList({
     setComposeOpen(true);
   }
 
+  const boardActions = (
+    <div className="flex min-w-0 items-start gap-2">
+      <Button
+        className="min-h-11 rounded-full px-4 text-sm font-semibold"
+        type="button"
+        disabled={authLoading || pending}
+        onClick={toggleThreadComposer}
+      >
+        <Plus className="size-4" aria-hidden="true" />
+        {composeOpen && isAuthenticated && viewerCanCreateThread
+          ? "Close thread form"
+          : "New thread"}
+      </Button>
+      <details className="group relative">
+        <summary className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
+          Board tools <ChevronDown className="size-3.5" aria-hidden="true" />
+        </summary>
+        <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-xl bg-card p-2 shadow-lg">
+          <Button
+            className="forum-action-pill min-h-11 rounded-full px-4 text-xs"
+            type="button"
+            variant="ghost"
+            disabled={authLoading || categorySubscriptionPending}
+            onClick={toggleBoardSubscription}
+          >
+            {categorySubscriptionPending
+              ? "Saving..."
+              : categorySubscribed
+                ? "Unsubscribe"
+                : "Subscribe"}
+          </Button>
+          <Button
+            className="forum-action-pill min-h-11 rounded-full px-4 text-xs"
+            type="button"
+            variant="outline"
+            disabled={authLoading || markReadPending}
+            onClick={markBoardRead}
+          >
+            {markReadPending ? "Marking..." : "Mark read"}
+          </Button>
+        </div>
+      </details>
+    </div>
+  );
+
   return (
     <div className="space-y-5">
       {showHeading ? (
         <ForumPageHeader
           title={getCategoryTitle(category)}
           description={getCategoryDescription(category)}
+          actions={boardActions}
           breadcrumbs={<ForumBreadcrumbs category={category} />}
           view="boards"
           nested
         />
       ) : (
-        <ForumBreadcrumbs category={category} />
+        <div className="space-y-2">
+          <ForumBreadcrumbs category={category} />
+          <div className="forum-toolbar flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              {formatForumCount(getCategoryThreadCount(category))} threads ·{" "}
+              {formatForumCount(getCategoryPostCount(category))} posts
+            </p>
+            {boardActions}
+          </div>
+        </div>
       )}
       <ForumBodyGrid
         sidebar={
           <aside aria-label="Board information" className="min-w-0 space-y-5">
-            <section className="overflow-hidden rounded-sm bg-muted/20">
+            <section className="forum-panel overflow-hidden !p-0">
               <ForumSectionHeader title="About this board" />
               <div className="space-y-4 p-4">
                 <dl className="grid grid-cols-2 gap-4 font-mono text-xs text-muted-foreground">
@@ -602,7 +659,7 @@ function LiveForumThreadList({
             </section>
             {listResult.rules ? (
               <section
-                className="overflow-hidden rounded-sm bg-muted/20"
+                className="forum-panel overflow-hidden !p-0"
                 aria-label="Board rules"
               >
                 <ForumSectionHeader
@@ -621,15 +678,16 @@ function LiveForumThreadList({
           parentTitle={getCategoryTitle(category)}
         />
 
-        <ForumAnnouncementPanel announcements={listResult.announcements} />
-
-        <section aria-label="Board discussions">
-          <ForumSectionHeader title="Discussions">
-            {listResult.pagination.totalItems}{" "}
-            {listResult.pagination.totalItems === 1 ? "thread" : "threads"}
-          </ForumSectionHeader>
+        <section className="min-w-0" aria-label="Board discussions">
+          <div className="flex items-center justify-between gap-3 py-1">
+            <h2 className="text-sm font-semibold">Discussions</h2>
+            <span className="text-[11px] text-muted-foreground">
+              {listResult.pagination.totalItems}{" "}
+              {listResult.pagination.totalItems === 1 ? "thread" : "threads"}
+            </span>
+          </div>
           <div className="min-w-0 space-y-3">
-            <div className="flex flex-col-reverse gap-3 py-3 sm:flex-row sm:items-center">
+            <div className="forum-toolbar flex min-w-0 items-center gap-2 py-2">
               <form
                 className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto]"
                 onSubmit={submitBoardSearch}
@@ -641,67 +699,53 @@ function LiveForumThreadList({
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search this board"
-                    className="min-h-11 rounded-none border-row-border text-base md:text-sm"
+                    className="min-h-11 rounded-l-full rounded-r-none border-0 bg-muted/45 text-base md:text-sm"
                     aria-label="Search this board"
                   />
                 </label>
                 <Button
-                  className="min-h-11 rounded-none border-l-0 text-xs "
+                  className="min-h-11 rounded-l-none rounded-r-full border-0 bg-muted/45 text-xs"
                   type="submit"
+                  aria-label="Submit board search"
                   variant="outline"
                   disabled={
                     (searchPending && submittedSearchScope === searchScope) ||
                     searchQuery.trim().length < 3
                   }
                 >
-                  {searchPending && submittedSearchScope === searchScope
-                    ? "Searching..."
-                    : "Search"}
+                  {searchPending && submittedSearchScope === searchScope ? (
+                    <span className="text-xs">…</span>
+                  ) : (
+                    <Search className="size-4" aria-hidden="true" />
+                  )}
                 </Button>
               </form>
-              <div className="flex min-w-0 items-start gap-2">
-                <Button
-                  className="min-h-11 rounded-none text-xs "
-                  type="button"
-                  disabled={authLoading || pending}
-                  onClick={toggleThreadComposer}
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                  {composeOpen && isAuthenticated && viewerCanCreateThread
-                    ? "Close thread form"
-                    : "New thread"}
-                </Button>
-                <details className="group relative">
-                  <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
-                    Board tools{" "}
-                    <ChevronDown className="size-3.5" aria-hidden="true" />
-                  </summary>
-                  <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-sm bg-background p-2 shadow-lg">
-                    <Button
-                      className="min-h-11 rounded-none text-xs "
-                      type="button"
-                      variant="ghost"
-                      disabled={authLoading || categorySubscriptionPending}
-                      onClick={toggleBoardSubscription}
-                    >
-                      {categorySubscriptionPending
-                        ? "Saving..."
-                        : categorySubscribed
-                          ? "Unsubscribe"
-                          : "Subscribe"}
-                    </Button>
-                    <Button
-                      className="min-h-11 rounded-none text-xs "
-                      type="button"
-                      variant="outline"
-                      disabled={authLoading || markReadPending}
-                      onClick={markBoardRead}
-                    >
-                      {markReadPending ? "Marking..." : "Mark read"}
-                    </Button>
-                  </div>
-                </details>
-              </div>
+              {showBoardTools ? (
+                <ForumBoardTools
+                  activePrefixes={activePrefixOptions}
+                  dayFilter={selectedDayFilter}
+                  filterSummary={prefixFilterSummary}
+                  filtersActive={boardFiltersActive}
+                  onDayFilterChange={(value) =>
+                    updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
+                  }
+                  onPrefixFilterChange={updatePrefixFilter}
+                  onSortKeyChange={(value) =>
+                    updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
+                  }
+                  onSortOrderChange={(value) =>
+                    updateBoardListParam(
+                      "order",
+                      value,
+                      DEFAULT_THREAD_SORT_ORDER,
+                    )
+                  }
+                  prefixFilter={selectedPrefixFilter}
+                  sortKey={selectedSortKey}
+                  sortOrder={selectedSortOrder}
+                  visibleThreadCount={currentPageThreads.length}
+                />
+              ) : null}
             </div>
             {boardActionError ? (
               <p
@@ -788,32 +832,6 @@ function LiveForumThreadList({
               />
             ) : null}
 
-            {showBoardTools ? (
-              <ForumBoardTools
-                activePrefixes={activePrefixOptions}
-                dayFilter={selectedDayFilter}
-                filterSummary={prefixFilterSummary}
-                filtersActive={boardFiltersActive}
-                onDayFilterChange={(value) =>
-                  updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
-                }
-                onPrefixFilterChange={updatePrefixFilter}
-                onSortKeyChange={(value) =>
-                  updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
-                }
-                onSortOrderChange={(value) =>
-                  updateBoardListParam(
-                    "order",
-                    value,
-                    DEFAULT_THREAD_SORT_ORDER,
-                  )
-                }
-                prefixFilter={selectedPrefixFilter}
-                sortKey={selectedSortKey}
-                sortOrder={selectedSortOrder}
-                visibleThreadCount={currentPageThreads.length}
-              />
-            ) : null}
             {showPagination ? (
               <ForumPaginationBar
                 buildHref={boardPageHref}
@@ -885,6 +903,15 @@ function LiveForumThreadList({
             ) : null}
           </div>
         </section>
+        {listResult.announcements.length > 0 ? (
+          <details className="group rounded-xl bg-card px-4">
+            <summary className="focus-ring flex min-h-11 cursor-pointer items-center justify-between text-xs text-muted-foreground">
+              Board announcements{" "}
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </summary>
+            <ForumAnnouncementPanel announcements={listResult.announcements} />
+          </details>
+        ) : null}
       </ForumBodyGrid>
 
       <AuthRequiredDialog
@@ -908,7 +935,7 @@ function ForumSubboardSelector({
   return (
     <nav
       aria-label={`${parentTitle} sub-boards`}
-      className="min-w-0 rounded-sm bg-background/60"
+      className="forum-panel min-w-0 !p-0"
     >
       <details className="group" aria-label="Sub-board selector">
         <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-3 px-3 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1060,94 +1087,104 @@ function ForumBoardTools({
   const dayLabel = getThreadDayFilterLabel(dayFilter);
 
   return (
-    <details className="group py-2" open={filtersActive || undefined}>
-      <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-        <span className="min-w-0 truncate">
-          <span className="text-foreground">Filter & sort</span>
-          <span className="px-2">/</span>
-          {filterSummary} · {sortLabel} · {orderLabel} · {dayLabel}
-        </span>
-        <span className="shrink-0 text-primary">
-          <span className="group-open:hidden">Open</span>
-          <span className="hidden group-open:inline">Close</span>
-        </span>
+    <details
+      className="group relative shrink-0"
+      open={filtersActive || undefined}
+    >
+      <summary className="forum-action-pill focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full px-3 py-2 text-xs text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="text-foreground">Filter</span>
+        {filtersActive ? (
+          <span
+            className="size-1.5 rounded-full bg-primary"
+            aria-label="Filters applied"
+          />
+        ) : null}
+        <ChevronDown
+          className="size-3.5 transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
       </summary>
-      <div className="grid gap-4 py-3 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-        <label className="grid gap-1 bg-background px-3 py-2">
-          <span>Prefix</span>
-          <select
-            aria-label="Filter board by thread prefix"
-            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
-            value={prefixFilter}
-            onChange={(event) => onPrefixFilterChange(event.target.value)}
-          >
-            <option value={PREFIX_FILTER_ALL}>All prefixes</option>
-            <option value={PREFIX_FILTER_NONE}>No prefix</option>
-            {activePrefixes.length > 0 ? (
-              <optgroup label="Board prefixes">
-                {activePrefixes.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    [{option.prefix.label}]
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-          </select>
-        </label>
-        <label className="grid gap-1 bg-background px-3 py-2">
-          <span>Sort by</span>
-          <select
-            aria-label="Sort board threads"
-            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
-            value={sortKey}
-            onChange={(event) =>
-              onSortKeyChange(event.target.value as ThreadSortKey)
-            }
-          >
-            {THREAD_SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 bg-background px-3 py-2">
-          <span>Order</span>
-          <select
-            aria-label="Set board thread sort order"
-            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
-            value={sortOrder}
-            onChange={(event) =>
-              onSortOrderChange(event.target.value as ThreadSortOrder)
-            }
-          >
-            {THREAD_SORT_ORDER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 bg-background px-3 py-2">
-          <span>Date window</span>
-          <select
-            aria-label="Limit board threads by recent activity"
-            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
-            value={dayFilter}
-            onChange={(event) => onDayFilterChange(event.target.value)}
-          >
-            {THREAD_DAY_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-card p-3 shadow-lg">
+        <p className="mb-2 text-xs leading-5 text-muted-foreground">
+          {filterSummary} · {sortLabel} · {orderLabel} · {dayLabel}
+        </p>
+        <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+          <label className="grid min-w-0 gap-1 px-1 py-2">
+            <span>Prefix</span>
+            <select
+              aria-label="Filter board by thread prefix"
+              className="focus-ring min-h-11 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground md:text-sm"
+              value={prefixFilter}
+              onChange={(event) => onPrefixFilterChange(event.target.value)}
+            >
+              <option value={PREFIX_FILTER_ALL}>All prefixes</option>
+              <option value={PREFIX_FILTER_NONE}>No prefix</option>
+              {activePrefixes.length > 0 ? (
+                <optgroup label="Board prefixes">
+                  {activePrefixes.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      [{option.prefix.label}]
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 px-1 py-2">
+            <span>Sort by</span>
+            <select
+              aria-label="Sort board threads"
+              className="focus-ring min-h-11 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground md:text-sm"
+              value={sortKey}
+              onChange={(event) =>
+                onSortKeyChange(event.target.value as ThreadSortKey)
+              }
+            >
+              {THREAD_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 px-1 py-2">
+            <span>Order</span>
+            <select
+              aria-label="Set board thread sort order"
+              className="focus-ring min-h-11 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground md:text-sm"
+              value={sortOrder}
+              onChange={(event) =>
+                onSortOrderChange(event.target.value as ThreadSortOrder)
+              }
+            >
+              {THREAD_SORT_ORDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 px-1 py-2">
+            <span>Date window</span>
+            <select
+              aria-label="Limit board threads by recent activity"
+              className="focus-ring min-h-11 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground md:text-sm"
+              value={dayFilter}
+              onChange={(event) => onDayFilterChange(event.target.value)}
+            >
+              {THREAD_DAY_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="py-2 text-xs text-muted-foreground">
+          Showing {visibleThreadCount} loaded{" "}
+          {visibleThreadCount === 1 ? "thread" : "threads"}.
+        </p>
       </div>
-      <p className="py-2 text-xs text-muted-foreground">
-        Showing {visibleThreadCount} loaded{" "}
-        {visibleThreadCount === 1 ? "thread" : "threads"}.
-      </p>
     </details>
   );
 }
@@ -1307,7 +1344,7 @@ function ForumPrefixSelect({
     <label className="grid gap-2">
       <span className="text-xs text-muted-foreground">Prefix</span>
       <select
-        className="min-h-11 rounded-none border border-row-border bg-background px-3 text-sm text-foreground"
+        className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1361,7 +1398,7 @@ function ForumPollDraft({
   }
 
   return (
-    <fieldset className="rounded-sm bg-muted/30 p-3">
+    <fieldset className="rounded-xl bg-muted/30 p-3">
       <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
         <input
           type="checkbox"

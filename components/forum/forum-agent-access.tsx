@@ -32,8 +32,8 @@ import { userFacingError } from "@/lib/auth-errors";
 import { convexRefs } from "@/lib/convex-refs";
 
 const CONTROL =
-  "focus-ring min-h-11 w-full rounded-sm border border-row-border bg-background px-3 py-2 text-base";
-const ACTION = "rounded-sm text-xs";
+  "focus-ring min-h-11 w-full rounded-xl border border-row-border bg-background px-3 py-2 text-base";
+const ACTION = "rounded-xl text-xs";
 export const DEFAULT_FORUM_CONNECTION_OPTIONS: ForumConnectionOptions = {
   actorMode: "human",
   executionMode: "direct",
@@ -103,7 +103,7 @@ export function ForumConnectionFields({
           {FORUM_PLUGIN_CAPABILITIES.map((capability) => (
             <label
               key={capability}
-              className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-sm p-3 text-sm ${value.capabilities.includes(capability) ? "bg-primary/5" : "bg-muted/35"}`}
+              className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl p-3 text-sm ${value.capabilities.includes(capability) ? "bg-primary/5" : "bg-muted/35"}`}
             >
               <input
                 className="focus-ring size-4 accent-primary"
@@ -137,7 +137,7 @@ export function ForumConnectionFields({
         {(["direct", "review"] as const).map((mode) => (
           <label
             key={mode}
-            className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-sm p-3 text-sm ${value.executionMode === mode ? "bg-primary/5" : "bg-muted/35"}`}
+            className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-3 text-sm ${value.executionMode === mode ? "bg-primary/5" : "bg-muted/35"}`}
           >
             <input
               className="focus-ring mt-0.5 size-4 accent-primary"
@@ -251,7 +251,7 @@ function LiveForumAgentAccess() {
     }
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <p className="text-sm leading-6 text-muted-foreground">
         Choose how agents interact with the forum. ChatGPT and Codex connections
         share these permissions and review settings. Your browser connection
@@ -260,10 +260,10 @@ function LiveForumAgentAccess() {
       <nav aria-label="Agent access sections" className="flex flex-wrap gap-2">
         <a
           href="#review-queue"
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-sm bg-primary/10 px-3 text-sm font-medium text-primary"
+          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary/10 px-3 text-sm font-medium text-primary"
         >
           Agent approvals{" "}
-          <span className="rounded-sm bg-background px-2 py-0.5 text-xs">
+          <span className="rounded-xl bg-card px-2 py-0.5 text-xs">
             {
               commands.filter(
                 (command) =>
@@ -274,13 +274,13 @@ function LiveForumAgentAccess() {
         </a>
         <a
           href="#moderation-queue"
-          className="focus-ring inline-flex min-h-11 items-center rounded-sm bg-muted px-3 text-sm"
+          className="focus-ring inline-flex min-h-11 items-center rounded-xl bg-muted px-3 text-sm"
         >
           Pending publication
         </a>
         <a
           href="#forum-agent-connections"
-          className="focus-ring inline-flex min-h-11 items-center rounded-sm bg-muted px-3 text-sm"
+          className="focus-ring inline-flex min-h-11 items-center rounded-xl bg-muted px-3 text-sm"
         >
           Connections
         </a>
@@ -329,7 +329,7 @@ function LiveForumAgentAccess() {
         )}
       </section>
       <details
-        className="rounded-sm bg-background py-3"
+        className="rounded-xl bg-card py-3"
         open={
           !connections.some(
             (entry) =>
@@ -420,7 +420,7 @@ function ForumConnectionCard({
     }
   }
   return (
-    <article className="space-y-3 rounded-sm bg-muted/35 p-4">
+    <article className="forum-panel space-y-3 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -571,14 +571,16 @@ export function ForumApprovalQueue({
   return (
     <section
       id="review-queue"
-      className="scroll-mt-24 space-y-3 rounded-sm bg-muted/35 p-4"
+      className="forum-panel scroll-mt-24 space-y-3 p-4"
       aria-labelledby="forum-agent-requests-title"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <h2 id="forum-agent-requests-title" className="text-lg font-semibold">
           Agent approvals
         </h2>
-        <span className="text-xs">{pendingCount} waiting for you</span>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+          {pendingCount} waiting for you
+        </span>
       </div>
       <p className="text-sm leading-6 text-muted-foreground">
         These actions have not run. Approve the exact request to execute it
@@ -639,7 +641,7 @@ export function ForumAgentApprovalNotice() {
   return (
     <section
       aria-label="Agent access and approvals"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-muted/35 p-4"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4"
     >
       <div>
         <h2 className="text-sm font-semibold">Agent access and approvals</h2>
@@ -679,7 +681,7 @@ export function ForumAgentModerationQueue({
   return (
     <section
       id="moderation-queue"
-      className="scroll-mt-24 space-y-3 rounded-sm bg-muted/35 p-4"
+      className="forum-panel scroll-mt-24 space-y-3 p-4"
       aria-labelledby="forum-agent-moderation-title"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
@@ -719,10 +721,7 @@ export function ForumAgentModerationQueue({
         </p>
       ) : (
         pendingContent.items.map((item) => (
-          <article
-            key={item.id}
-            className="space-y-2 rounded-sm bg-muted/35 p-4"
-          >
+          <article key={item.id} className="space-y-2 rounded-xl bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3 className="text-sm font-semibold">{item.title}</h3>
               <span className="text-xs">{item.kind} · Not public</span>
@@ -815,7 +814,7 @@ function ForumProposalCard({
       ref={card}
       tabIndex={-1}
       id={`forum-command-${command._id}`}
-      className={`focus-ring space-y-3 rounded-sm bg-muted/35 p-4 ${selected ? "ring-1 ring-primary" : ""}`}
+      className={`focus-ring forum-panel space-y-3 p-4 ${selected ? "ring-1 ring-primary" : ""}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">
@@ -853,7 +852,7 @@ function ForumProposalCard({
         <summary className="focus-ring cursor-pointer text-sm underline">
           Exact request
         </summary>
-        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-muted/35 p-4 text-xs">
+        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-card p-4 text-xs">
           {forumProposalPreview(command.argsJson)}
         </pre>
       </details>

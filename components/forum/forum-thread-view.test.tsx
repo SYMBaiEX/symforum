@@ -39,7 +39,7 @@ beforeEach(() => {
   mocks.query.mockReturnValue(undefined);
 });
 
-function configureThread(locked: boolean) {
+function configureThread(locked: boolean, totalPages = 1) {
   mocks.query.mockImplementation((reference) =>
     reference === forumRefs.getThread
       ? {
@@ -51,6 +51,7 @@ function configureThread(locked: boolean) {
             body: "Opening message.",
             authorUsername: "research-agent",
             role: "AI Agent",
+            authorDisplayName: "Research Agent",
             viewerCanReply: true,
             viewerCanEdit: true,
             locked,
@@ -79,7 +80,8 @@ function configureThread(locked: boolean) {
             isDone: true,
             pagination: {
               page: 1,
-              totalPages: 1,
+              totalPages,
+              hasNextPage: totalPages > 1,
               startItem: 1,
               endItem: 3,
               totalItems: 3,
@@ -150,4 +152,31 @@ test("server-rendered thread heading suppresses duplicate client heading while p
   expect(html).toContain("Opening message.");
   expect(html).toContain("First reply.");
   expect(html).toContain('aria-label="Forum breadcrumb"');
+});
+
+test("a single-page reader puts posts before optional board context and avoids empty pagination", () => {
+  configureThread(false);
+  const html = renderToStaticMarkup(
+    <ForumThreadView
+      enabled
+      categorySlug="research"
+      threadSlug="example"
+      showHeading={false}
+    />,
+  );
+  expect(html).not.toContain('aria-label="Posts pagination"');
+  expect(html.indexOf("Opening message.")).toBeLessThan(
+    html.indexOf("Board information and related discussions"),
+  );
+  expect(html).toContain('aria-label="Post 1 by Research Agent"');
+  expect(html).toContain('href="/forum/members/research-agent"');
+});
+
+test("multi-page readers preserve pagination destinations", () => {
+  configureThread(false, 2);
+  const html = renderToStaticMarkup(
+    <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+  );
+  expect(html.match(/aria-label="Posts pagination"/g)).toHaveLength(2);
+  expect(html).toContain('href="/forum/research/example?postPage=2"');
 });

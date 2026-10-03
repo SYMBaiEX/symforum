@@ -97,16 +97,16 @@ test("forum index does not subscribe to heartbeat-driven online summaries", () =
   expect(mocks.pointInTimeQuery).not.toHaveBeenCalled();
 });
 
-test("default home starts with lounge chat and grouped boards without duplicating shell navigation", () => {
+test("default home starts with lounge chat and discussion feed without duplicating shell navigation", () => {
   const html = renderForumIndex();
   expect(html).toContain("Lounge chat");
-  expect(html).toContain("Forum index");
+  expect(html).toContain('data-feed-sort="active"');
   expect(html.indexOf('id="forum-chat"')).toBeLessThan(
-    html.indexOf("Forum index"),
+    html.indexOf("data-feed-sort"),
   );
   expect(html).not.toContain('aria-label="Forum views"');
   expect(html).not.toContain('aria-label="Search the forum"');
-  expect(html).not.toContain("data-feed-sort");
+  expect(html).not.toContain("Mark all read");
 });
 
 test.each(["feed", "news", "community"] as const)(
@@ -180,18 +180,18 @@ test("shows zero when an empty online snapshot loaded successfully", () => {
   const html = renderForumIndex();
 
   expect(html).toMatch(/<dt[^>]*>Online<\/dt><dd[^>]*>0<\/dd>/);
-  expect(html).toContain("Newest member");
+  expect(html).toContain('href="/forum/members"');
   expect(html).not.toContain("Checking online status");
   expect(html).not.toContain("Online status unavailable.");
 });
 
-test("home resolves board URLs on the forum host and retains community filtering", () => {
+test("home resolves online member URLs on the forum host and retains community filtering", () => {
   mocks.pathname = "/";
   mocks.query.mockImplementation(() => overview);
   const html = renderToStaticMarkup(
     <ForumIndex enabled view="community" sort="new" />,
   );
-  expect(html).toContain('href="/?view=boards"');
+  expect(html).toContain('href="/online"');
   expect(html).not.toContain('aria-label="Search the forum"');
   expect(html).toContain('data-community-only="true"');
   expect(html).toContain('data-feed-sort="new"');
@@ -200,7 +200,7 @@ test("home resolves board URLs on the forum host and retains community filtering
   expect(html).not.toContain("divide-y");
 });
 
-test("create post routes to the existing board composer; boards preserve mark all read", () => {
+test("shell owns post creation while boards preserve mark all read", () => {
   mocks.query.mockImplementation(() => ({
     ...overview,
     categories: [
@@ -214,8 +214,8 @@ test("create post routes to the existing board composer; boards preserve mark al
     ],
   }));
   const html = renderToStaticMarkup(<ForumIndex enabled view="boards" />);
-  expect(html).toContain("Create post");
-  expect(html).toContain('href="/forum/general?compose=1"');
+  expect(html).not.toContain("Create post");
+  expect(html).not.toContain('aria-label="Community boards"');
   expect(html).toContain("Mark all read");
   expect(html).not.toContain("data-feed-sort");
 });
@@ -249,7 +249,6 @@ test("feed news preview links the real local discussion without combining HN and
 test("disabled forum uses a clear local fallback with a functional board link", () => {
   const html = renderToStaticMarkup(<ForumIndex enabled={false} />);
   expect(html).toContain("Forum unavailable locally");
-  expect(html).toContain('href="/forum?view=boards"');
   expect(html).not.toContain('aria-label="Search the forum"');
   expect(html).not.toContain("Loading discussions");
 });

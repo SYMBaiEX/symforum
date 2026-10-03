@@ -19,7 +19,6 @@ import {
   getPostTimestamp,
   getRenderablePosts,
   getThreadAuthor,
-  getThreadPostCount,
   getThreadRatingAverage,
   getThreadRatingCount,
   getThreadReplyCount,
@@ -128,6 +127,7 @@ export function ForumThreadView({
 
   return (
     <LiveForumThreadView
+      key={`${categorySlug}:${threadSlug}`}
       categorySlug={categorySlug}
       threadSlug={threadSlug}
       showHeading={showHeading}
@@ -421,7 +421,7 @@ function LiveForumThreadView({
         setReplyError(
           "Reply submitted for approval. It will appear after a moderator approves it.",
         );
-        return;
+        return true;
       }
       router.push(
         forumPostPath(
@@ -431,6 +431,7 @@ function LiveForumThreadView({
           result.postPage,
         ),
       );
+      return true;
     } catch (caught) {
       if (isAuthRequiredError(caught)) {
         setAuthOpen(true);
@@ -1095,65 +1096,52 @@ function LiveForumThreadView({
       : null;
   const ratingCount = getThreadRatingCount(thread);
   const ratingVisible = ratingCount > 0 || thread.viewerCanRateThread === true;
-  const threadMetrics = [
-    { label: "Replies", value: getThreadReplyCount(thread) },
-    {
-      label: "Posts",
-      value: getThreadPostCount(thread) || posts.length,
-    },
-    ...(ratingCount > 0
-      ? [
-          {
-            label: "Rating",
-            value: `${getThreadRatingAverage(thread).toFixed(1)}/5`,
-          },
-        ]
-      : []),
-  ];
+  const hasPostPages = detail.replies.pagination.totalPages > 1;
 
   return (
-    <div className="space-y-5">
-      <div>
+    <div className="space-y-3">
+      <div className="space-y-2">
         {showHeading ? (
-          <ForumPageHeader
-            title={thread.title}
-            breadcrumbs={
-              <ForumBreadcrumbs category={category} thread={thread} />
-            }
-            actions={
-              viewerCanReply ? (
-                <Button asChild className="min-h-11 rounded-sm px-4 text-sm">
-                  <a href="#forum-reply-composer">Reply to thread</a>
-                </Button>
-              ) : undefined
-            }
-            view="boards"
-            nested
-          />
-        ) : (
-          <ForumBreadcrumbs category={category} thread={thread} />
-        )}
-        <div className="mt-3 space-y-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ForumThreadPrefixBadge thread={thread} />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <ForumThreadStateBadges thread={thread} />
-              {firstUnreadHref ? (
-                <ForumJumpLink
-                  ariaLabel={`Go to first unread post in ${thread.title}`}
-                  className="px-2"
-                  href={firstUnreadHref}
-                >
-                  First unread »
-                </ForumJumpLink>
-              ) : null}
-              {!showHeading && viewerCanReply ? (
-                <Button asChild className="min-h-11 rounded-sm px-4 text-sm">
-                  <a href="#forum-reply-composer">Reply to thread</a>
-                </Button>
-              ) : null}
+          <ForumPageHeader title={thread.title} view="boards" nested />
+        ) : null}
+        <div className="forum-toolbar flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
+            <ForumBreadcrumbs category={category} thread={thread} />
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {getThreadReplyCount(thread)} replies
+          </span>
+          <ForumThreadPrefixBadge thread={thread} />
+          <ForumThreadStateBadges thread={thread} />
+          {firstUnreadHref ? (
+            <ForumJumpLink
+              ariaLabel={`Go to first unread post in ${thread.title}`}
+              className="px-2"
+              href={firstUnreadHref}
+            >
+              First unread »
+            </ForumJumpLink>
+          ) : null}
+          {viewerCanReply ? (
+            <Button asChild className="min-h-11 rounded-full px-4 text-sm">
+              <a href="#forum-reply-composer">Reply</a>
+            </Button>
+          ) : !isAuthenticated && !authLoading && !threadLocked ? (
+            <Button
+              className="min-h-11 rounded-full px-4 text-sm"
+              onClick={() => {
+                setAuthAction("reply to this thread");
+                setAuthOpen(true);
+              }}
+            >
+              Reply
+            </Button>
+          ) : null}
+          <details className="group relative">
+            <summary className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-xs">
+              Thread tools <span aria-hidden="true">⌄</span>
+            </summary>
+            <div className="absolute right-0 z-20 mt-1 flex w-[min(22rem,calc(100vw-2rem))] flex-wrap gap-1 rounded-xl bg-card p-3 shadow-lg">
               <ThreadActions
                 bookmarked={thread.viewerBookmarked === true}
                 bookmarkPending={bookmarkPending}
@@ -1168,61 +1156,42 @@ function LiveForumThreadView({
                 }
                 onToggleSubscription={() => toggleSubscription(thread._id)}
               />
+              {ratingVisible ? (
+                <div className="flex basis-full flex-wrap items-center gap-2 pt-2">
+                  {ratingCount > 0 ? (
+                    <ForumThreadRatingSummary
+                      average={getThreadRatingAverage(thread)}
+                      count={ratingCount}
+                    />
+                  ) : null}
+                  {thread.viewerCanRateThread === true ? (
+                    <ThreadRatingControls
+                      pending={ratingPending}
+                      thread={thread}
+                      onRate={updateThreadRating}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-            {ratingVisible ? (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                {ratingCount > 0 ? (
-                  <ForumThreadRatingSummary
-                    average={getThreadRatingAverage(thread)}
-                    count={ratingCount}
-                  />
-                ) : null}
-                {thread.viewerCanRateThread === true ? (
-                  <ThreadRatingControls
-                    pending={ratingPending}
-                    thread={thread}
-                    onRate={updateThreadRating}
-                  />
-                ) : null}
-              </div>
-            ) : null}
-            {subscriptionError ? (
-              <p
-                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
-                role="alert"
-              >
-                {subscriptionError}
-              </p>
-            ) : null}
-            {bookmarkError ? (
-              <p
-                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
-                role="alert"
-              >
-                {bookmarkError}
-              </p>
-            ) : null}
-            {ratingError ? (
-              <p
-                className="mt-2 border border-row-border p-2.5 text-sm text-muted-foreground"
-                role="alert"
-              >
-                {ratingError}
-              </p>
-            ) : null}
-          </div>
-          <dl className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[11px] text-muted-foreground">
-            {threadMetrics.map((metric) => (
-              <div className="flex gap-2" key={metric.label}>
-                <dt>{metric.label}</dt>
-                <dd className="tabular-nums text-foreground">{metric.value}</dd>
-              </div>
-            ))}
-          </dl>
+          </details>
         </div>
+        {subscriptionError ? (
+          <p className="rounded-xl bg-muted p-3 text-sm" role="alert">
+            {subscriptionError}
+          </p>
+        ) : null}
+        {bookmarkError ? (
+          <p className="rounded-xl bg-muted p-3 text-sm" role="alert">
+            {bookmarkError}
+          </p>
+        ) : null}
+        {ratingError ? (
+          <p className="rounded-xl bg-muted p-3 text-sm" role="alert">
+            {ratingError}
+          </p>
+        ) : null}
       </div>
-
-      <ForumAnnouncementPanel announcements={detail.announcements} />
 
       {editingThread ? (
         <section className="space-y-3">
@@ -1243,7 +1212,7 @@ function LiveForumThreadView({
             error={editThreadError}
             footerActions={
               <Button
-                className="rounded-none text-xs"
+                className="min-h-11 rounded-full px-4 text-xs"
                 type="button"
                 variant="outline"
                 disabled={editThreadBody.trim().length === 0}
@@ -1335,32 +1304,17 @@ function LiveForumThreadView({
         />
       ) : null}
 
-      {relatedSearchQuery !== null ? (
-        <ForumLink
-          className="text-sm text-muted-foreground hover:text-foreground"
-          href={`/forum/search?q=${encodeURIComponent(relatedSearchQuery)}`}
-          prefetch={false}
-        >
-          Find related discussions →
-        </ForumLink>
-      ) : null}
-
       <section className="space-y-3" aria-label="Discussion posts">
-        <ForumSectionHeader title="Discussion">
-          <ForumLink
-            className="focus-ring inline-flex min-h-11 items-center hover:text-primary"
-            href={forumPath(category.slug)}
-          >
-            Back to board →
-          </ForumLink>
-        </ForumSectionHeader>
-        <ForumPaginationBar
-          buildHref={threadPageHref}
-          label="Posts"
-          nextLabel="Later"
-          pagination={detail.replies.pagination}
-          previousLabel="Earlier"
-        />
+        <h2 className="sr-only">Discussion</h2>
+        {hasPostPages ? (
+          <ForumPaginationBar
+            buildHref={threadPageHref}
+            label="Posts"
+            nextLabel="Later"
+            pagination={detail.replies.pagination}
+            previousLabel="Earlier"
+          />
+        ) : null}
         {posts.length === 0 ? (
           <ForumStatusBox
             title="Thread body"
@@ -1407,7 +1361,11 @@ function LiveForumThreadView({
                     onReport={(target) => openReport(target)}
                   />
                 }
-                author={getThreadAuthor(post)}
+                author={
+                  post.authorDisplayName ??
+                  post.authorName ??
+                  getThreadAuthor(post)
+                }
                 authorHref={profileHref(post.authorUsername)}
                 avatarUrl={post.authorImage}
                 location={post.authorLocation}
@@ -1436,7 +1394,7 @@ function LiveForumThreadView({
                       error={editPostError}
                       footerActions={
                         <Button
-                          className="rounded-none text-xs"
+                          className="min-h-11 rounded-full px-4 text-xs"
                           type="button"
                           variant="outline"
                           disabled={editPostBody.trim().length === 0}
@@ -1512,14 +1470,34 @@ function LiveForumThreadView({
             );
           })
         )}
-        <ForumPaginationBar
-          buildHref={threadPageHref}
-          label="Posts"
-          nextLabel="Later"
-          pagination={detail.replies.pagination}
-          previousLabel="Earlier"
-        />
+        {hasPostPages ? (
+          <ForumPaginationBar
+            buildHref={threadPageHref}
+            label="Posts"
+            nextLabel="Later"
+            pagination={detail.replies.pagination}
+            previousLabel="Earlier"
+          />
+        ) : null}
       </section>
+      {detail.announcements.length > 0 || relatedSearchQuery !== null ? (
+        <details className="group rounded-xl bg-card px-4">
+          <summary className="focus-ring flex min-h-11 cursor-pointer items-center justify-between text-xs text-muted-foreground">
+            Board information and related discussions{" "}
+            <span aria-hidden="true">⌄</span>
+          </summary>
+          <ForumAnnouncementPanel announcements={detail.announcements} />
+          {relatedSearchQuery !== null ? (
+            <ForumLink
+              className="focus-ring inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground"
+              href={`/forum/search?q=${encodeURIComponent(relatedSearchQuery)}`}
+              prefetch={false}
+            >
+              Find related discussions →
+            </ForumLink>
+          ) : null}
+        </details>
+      ) : null}
 
       <section
         className="scroll-mt-28 space-y-3"
@@ -1558,7 +1536,7 @@ function LiveForumThreadView({
             error={replyError}
             footerActions={
               <Button
-                className="rounded-none text-xs"
+                className="min-h-11 rounded-full px-4 text-xs"
                 type="button"
                 variant="outline"
                 disabled={replyBody.trim().length === 0}
@@ -1578,11 +1556,24 @@ function LiveForumThreadView({
             {replyPreviewOpen ? <ReplyPreviewPanel body={replyBody} /> : null}
           </ForumCompose>
         ) : (
-          <ForumStatusBox
-            title="Replying unavailable"
-            body={replyMessage}
-            accent={threadLocked ? "muted" : "canary"}
-          />
+          <div className="forum-panel space-y-3">
+            <ForumStatusBox
+              title="Replying unavailable"
+              body={replyMessage}
+              accent={threadLocked ? "muted" : "canary"}
+            />
+            {!isAuthenticated && !authLoading && !threadLocked && (
+              <Button
+                className="rounded-full"
+                onClick={() => {
+                  setAuthAction("reply to this thread");
+                  setAuthOpen(true);
+                }}
+              >
+                Sign in to reply
+              </Button>
+            )}
+          </div>
         )}
       </section>
 
@@ -1600,7 +1591,7 @@ function LiveForumThreadView({
           }
         }}
       >
-        <DialogContent className="rounded-none border-row-border sm:rounded-none">
+        <DialogContent className="rounded-xl border-input sm:rounded-xl">
           <DialogHeader>
             <DialogTitle>Report post</DialogTitle>
             <DialogDescription>
@@ -1619,7 +1610,7 @@ function LiveForumThreadView({
                   reportError ? "forum-report-reason-error" : undefined
                 }
                 aria-invalid={reportError ? true : undefined}
-                className="rounded-none border-row-border"
+                className="rounded-xl border-input"
                 rows={2}
                 value={reportReason}
                 onChange={(event) => setReportReason(event.target.value)}
@@ -1629,7 +1620,7 @@ function LiveForumThreadView({
             <label className="grid gap-2">
               <span className="text-xs text-muted-foreground">Details</span>
               <Textarea
-                className="rounded-none border-row-border"
+                className="rounded-xl border-input"
                 rows={4}
                 value={reportDetails}
                 onChange={(event) => setReportDetails(event.target.value)}
@@ -1674,7 +1665,7 @@ function LiveForumThreadView({
           }
         }}
       >
-        <DialogContent className="rounded-none border-row-border sm:rounded-none">
+        <DialogContent className="rounded-xl border-input sm:rounded-xl">
           <DialogHeader>
             <DialogTitle>
               {reputationDraft?.score === 1
@@ -1703,7 +1694,7 @@ function LiveForumThreadView({
                   reputationError ? "forum-reputation-error" : undefined
                 }
                 aria-invalid={reputationError ? true : undefined}
-                className="rounded-none border-row-border"
+                className="rounded-xl border-input"
                 maxLength={MAX_REPUTATION_COMMENT_CHARS}
                 rows={3}
                 value={reputationComment}
@@ -1810,7 +1801,7 @@ function ForumPollPanel({
   const statusId = `poll-${poll._id}-status`;
 
   return (
-    <section className="rounded-sm bg-background p-4 sm:p-5">
+    <section className="forum-panel">
       <div className="flex flex-wrap items-start justify-between gap-2 py-2.5">
         <div>
           <p className="text-xs text-muted-foreground">Poll</p>
@@ -1818,7 +1809,7 @@ function ForumPollPanel({
         </div>
         {canEdit ? (
           <Button
-            className="rounded-none text-xs"
+            className="min-h-11 rounded-full px-4 text-xs"
             type="button"
             variant="outline"
             onClick={onEdit}
@@ -1907,7 +1898,7 @@ function ForumPollPanel({
           </p>
           {interaction.showVoteButton ? (
             <Button
-              className="rounded-none text-xs"
+              className="min-h-11 rounded-full px-4 text-xs"
               type="button"
               disabled={pending || interaction.voteButtonDisabled}
               onClick={onVote}
@@ -1976,7 +1967,7 @@ function ForumPollEditor({
         <label className="grid gap-2">
           <span className="text-xs text-muted-foreground">Question</span>
           <Input
-            className="rounded-none border-row-border"
+            className="rounded-xl border-input"
             disabled={pending}
             value={question}
             onChange={(event) => onQuestionChange(event.target.value)}
@@ -1988,14 +1979,14 @@ function ForumPollEditor({
             <div className="flex gap-2" key={`edit-poll-option-${index}`}>
               <Input
                 aria-label={`Poll option ${index + 1}`}
-                className="rounded-none border-row-border"
+                className="rounded-xl border-input"
                 disabled={pending}
                 value={option}
                 onChange={(event) => updateOption(index, event.target.value)}
               />
               {options.length > 2 ? (
                 <Button
-                  className="rounded-none text-xs"
+                  className="min-h-11 rounded-full px-4 text-xs"
                   disabled={pending}
                   type="button"
                   variant="outline"
@@ -2008,7 +1999,7 @@ function ForumPollEditor({
           ))}
           {options.length < 8 ? (
             <Button
-              className="justify-self-start rounded-none text-xs"
+              className="min-h-11 justify-self-start rounded-full px-4 text-xs"
               disabled={pending}
               type="button"
               variant="outline"
@@ -2025,7 +2016,7 @@ function ForumPollEditor({
         ) : null}
         <div className="flex flex-wrap gap-2">
           <Button
-            className="rounded-none text-xs"
+            className="min-h-11 rounded-full px-4 text-xs"
             disabled={pending}
             type="button"
             onClick={onSave}
@@ -2033,7 +2024,7 @@ function ForumPollEditor({
             {pending ? "Saving..." : "Save poll"}
           </Button>
           <Button
-            className="rounded-none text-xs"
+            className="min-h-11 rounded-full px-4 text-xs"
             disabled={pending}
             type="button"
             variant="outline"
@@ -2069,14 +2060,14 @@ function QueuedQuotePanel({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            className="rounded-none text-xs"
+            className="min-h-11 rounded-full px-4 text-xs"
             type="button"
             onClick={onInsert}
           >
             Insert quotes
           </Button>
           <Button
-            className="rounded-none text-xs"
+            className="min-h-11 rounded-full px-4 text-xs"
             type="button"
             variant="outline"
             onClick={onClear}
@@ -2093,7 +2084,7 @@ function QueuedQuotePanel({
           >
             <p className="text-xs text-muted-foreground">{quote.label}</p>
             <Button
-              className="h-7 rounded-none px-2 text-xs"
+              className="min-h-11 rounded-full px-3 text-xs"
               type="button"
               variant="outline"
               onClick={() => onRemove(quote.key)}
@@ -2117,7 +2108,7 @@ function ReplyPreviewPanel({
   const trimmed = body.trim();
 
   return (
-    <section className="rounded-sm bg-muted/25">
+    <section className="rounded-xl bg-muted/25">
       <div className="px-3 py-2.5 text-xs text-muted-foreground">{label}</div>
       <div className="p-3">
         {trimmed.length > 0 ? (
@@ -2157,7 +2148,7 @@ function ForumEditAttachmentManager({
 
   return (
     <section className="space-y-3">
-      <div className="rounded-sm bg-muted/25 p-3">
+      <div className="rounded-xl bg-muted/25 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">{label}</p>
           <p className="text-xs text-muted-foreground">
@@ -2169,7 +2160,7 @@ function ForumEditAttachmentManager({
           <div className="mt-3 grid gap-2">
             {existingAttachments.map((attachment) => (
               <div
-                className="flex min-w-0 items-center justify-between gap-2 rounded-sm bg-background px-3 py-2"
+                className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-card px-3 py-2"
                 key={attachment._id}
               >
                 <a
@@ -2189,7 +2180,7 @@ function ForumEditAttachmentManager({
                 </a>
                 <Button
                   aria-label={`Remove ${attachment.filename}`}
-                  className="size-8 rounded-none p-0"
+                  className="size-11 rounded-full p-0"
                   disabled={disabled}
                   type="button"
                   variant="ghost"
@@ -2284,7 +2275,7 @@ function PostActions({
       {canQuote ? (
         <>
           <Button
-            className="min-h-11 rounded-none px-2 text-xs "
+            className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             type="button"
             variant="ghost"
             onClick={onQuote}
@@ -2293,7 +2284,7 @@ function PostActions({
           </Button>
           <Button
             aria-pressed={multiQuoteSelected}
-            className="min-h-11 rounded-none px-2 text-xs "
+            className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             type="button"
             variant={multiQuoteSelected ? "default" : "ghost"}
             onClick={onMultiQuote}
@@ -2304,15 +2295,15 @@ function PostActions({
       ) : null}
       <details className="group min-w-0 open:basis-full">
         <summary
-          className="focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground"
+          className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
           aria-label={`More actions for post ${postNumber}`}
         >
           More <span aria-hidden="true">⌄</span>
         </summary>
-        <div className="mt-1 flex w-full flex-wrap gap-1 rounded-sm bg-muted/35 p-2">
+        <div className="mt-1 flex w-full flex-wrap gap-1 rounded-xl bg-muted/35 p-2">
           <Button
             asChild
-            className="min-h-11 rounded-none px-2 text-xs "
+            className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             variant="ghost"
           >
             <a
@@ -2323,7 +2314,7 @@ function PostActions({
             </a>
           </Button>
           <Button
-            className="min-h-11 rounded-none px-2 text-xs "
+            className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             type="button"
             variant="ghost"
             onClick={onCopyLink}
@@ -2334,7 +2325,7 @@ function PostActions({
             <>
               <Button
                 aria-pressed={viewerReputationScore === 1}
-                className="min-h-11 rounded-none px-2 text-xs "
+                className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
                 type="button"
                 variant={viewerReputationScore === 1 ? "default" : "ghost"}
                 disabled={reputationPending}
@@ -2344,7 +2335,7 @@ function PostActions({
               </Button>
               <Button
                 aria-pressed={viewerReputationScore === -1}
-                className="min-h-11 rounded-none px-2 text-xs "
+                className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
                 type="button"
                 variant={viewerReputationScore === -1 ? "default" : "ghost"}
                 disabled={reputationPending}
@@ -2356,7 +2347,7 @@ function PostActions({
           ) : null}
           {canEdit ? (
             <Button
-              className="min-h-11 rounded-none px-2 text-xs "
+              className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
               type="button"
               variant="ghost"
               onClick={onEdit}
@@ -2366,7 +2357,7 @@ function PostActions({
           ) : null}
           {canDelete ? (
             <Button
-              className="min-h-11 rounded-none px-2 text-xs "
+              className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
               type="button"
               variant="ghost"
               onClick={onDelete}
@@ -2375,7 +2366,7 @@ function PostActions({
             </Button>
           ) : null}
           <Button
-            className="min-h-11 rounded-none px-2 text-xs "
+            className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
             type="button"
             variant="ghost"
             onClick={() =>
@@ -2425,7 +2416,7 @@ function ThreadActions({
     <>
       <Button
         aria-pressed={bookmarked}
-        className="min-h-11 rounded-none px-3 text-xs"
+        className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
         type="button"
         variant="ghost"
         disabled={bookmarkPending}
@@ -2434,7 +2425,7 @@ function ThreadActions({
         {bookmarkPending ? "Saving..." : bookmarked ? "Saved" : "Save"}
       </Button>
       <Button
-        className="min-h-11 rounded-none px-3 text-xs"
+        className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
         type="button"
         variant="ghost"
         disabled={subscriptionPending}
@@ -2448,7 +2439,7 @@ function ThreadActions({
       </Button>
       {canEdit ? (
         <Button
-          className="min-h-11 rounded-none px-3 text-xs"
+          className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
           type="button"
           variant="ghost"
           onClick={onEdit}
@@ -2458,7 +2449,7 @@ function ThreadActions({
       ) : null}
       {canDelete ? (
         <Button
-          className="min-h-11 rounded-none px-3 text-xs"
+          className="forum-action-pill min-h-11 rounded-full px-3 text-xs"
           type="button"
           variant="ghost"
           onClick={onDelete}
@@ -2495,7 +2486,7 @@ function ThreadRatingControls({
             key={score}
             aria-label={`${active ? "Clear" : "Set"} ${score} star thread rating`}
             aria-pressed={active}
-            className="size-8 rounded-none p-0"
+            className="size-11 rounded-full p-0"
             disabled={pending}
             type="button"
             variant={active ? "default" : "outline"}
@@ -2531,7 +2522,7 @@ function ForumPrefixEditSelect({
     <label className="grid gap-2">
       <span className="text-xs text-muted-foreground">Prefix</span>
       <select
-        className="min-h-11 rounded-none border border-row-border bg-background px-3 text-sm text-foreground"
+        className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}

@@ -11,7 +11,7 @@ import { primarySiteUrl } from "@/lib/site-urls";
 import { asRoute } from "@/lib/typed-route";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
-import { ArrowUpRight, Plus } from "lucide-react";
+import { ArrowUpRight, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import {
@@ -32,12 +32,9 @@ import {
 import { ForumAvatar, ForumLink, ForumStatusBox } from "./forum-primitives";
 import {
   formatForumCount,
-  formatForumDateTime,
   forumAnnouncementPath,
   forumMemberProfilePath,
-  forumPath,
   forumRefs,
-  getCategoryTitle,
   type ForumOnlineSummaryRecord,
   type ForumOverviewRecord,
 } from "./forum-refs";
@@ -54,7 +51,7 @@ const quietLink = forumQuietAction;
 
 export function ForumIndex({
   enabled,
-  view = "boards",
+  view = "feed",
   sort = "active",
   initialStories = [],
   initialTimeline = null,
@@ -92,7 +89,7 @@ export function ForumIndex({
 }
 
 function LiveForumIndex({
-  view = "boards",
+  view = "feed",
   sort = "active",
   initialStories = [],
   initialTimeline = null,
@@ -166,21 +163,12 @@ function LiveForumIndex({
 }
 
 function ForumHomeHeader({
-  overview,
   view,
-  sort,
 }: {
   overview?: ForumOverviewRecord;
   view: ForumHomeView;
   sort: ForumFeedSort;
 }) {
-  const boards =
-    overview?.categories.filter(
-      (category) =>
-        category.kind !== "section" &&
-        category.isPostable !== false &&
-        category.status === "active",
-    ) ?? [];
   return (
     <ForumPageHeader
       title={
@@ -193,54 +181,6 @@ function ForumHomeHeader({
               : "Forum"
       }
       view={view}
-      sort={sort}
-      actions={
-        <>
-          <details
-            className="group/compose relative"
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
-              event.currentTarget.open = false;
-              event.currentTarget.querySelector("summary")?.focus();
-            }}
-          >
-            <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground">
-              <Plus className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Create post</span>
-              <span className="sm:hidden">Post</span>
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-sm bg-popover p-2 shadow-lg ring-1 ring-row-border">
-              <p className="px-2 pb-2 text-xs text-muted-foreground">
-                Choose a board
-              </p>
-              {boards.length ? (
-                <div className="max-h-[50dvh] space-y-1 overflow-y-auto overscroll-contain">
-                  {boards.slice(0, 6).map((board) => (
-                    <ForumLink
-                      className={`${quietLink} flex w-full`}
-                      href={`${forumPath(board.slug)}?compose=1`}
-                      key={board.slug}
-                    >
-                      {getCategoryTitle(board)}
-                    </ForumLink>
-                  ))}
-                </div>
-              ) : (
-                <ForumLink className={quietLink} href={forumHomeHref("boards")}>
-                  Browse available boards
-                </ForumLink>
-              )}
-              <ForumLink
-                className={`${quietLink} mt-2 text-primary`}
-                href={forumHomeHref("boards")}
-              >
-                All boards{" "}
-                <ArrowUpRight aria-hidden="true" className="size-4" />
-              </ForumLink>
-            </div>
-          </details>
-        </>
-      }
     />
   );
 }
@@ -308,136 +248,59 @@ function ForumHomeRail({
   refreshOnlineSummary: () => void;
   news: HnStory[];
 }) {
-  const boards =
-    overview?.categories
-      .filter((category) => category.kind !== "section")
-      .slice(0, 7) ?? [];
+  const featuredMember =
+    overview?.statistics.topPoster ?? overview?.statistics.reputationLeader;
+  const featuredLabel = overview?.statistics.topPoster
+    ? "Top contributor"
+    : "Reputation leader";
   return (
-    <aside aria-label="Forum context" className="space-y-6 text-sm">
-      {overview?.newestThreads.length ? (
-        <section>
-          <ForumSectionHeader title="Latest activity" />
-          <div className="space-y-2 px-3 pt-2">
-            {overview.newestThreads.slice(0, 4).map((thread) => (
-              <article key={thread.slug}>
-                <ForumLink
-                  className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
-                  href={forumPath(thread.categorySlug, thread.slug)}
-                >
-                  {thread.title}
-                </ForumLink>
-                <p className="text-[11px] leading-5 text-muted-foreground">
-                  {thread.categoryName ?? "Forum"}
-                  {thread.authorName ? ` · ${thread.authorName}` : ""}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {news.length ? (
-        <section>
-          <ForumSectionHeader title="On Hacker News">
-            <ForumLink className={quietLink} href={forumHomeHref("news")}>
-              All news
-            </ForumLink>
-          </ForumSectionHeader>
-          <div className="space-y-2 px-3 pt-2">
-            {news.slice(0, 3).map((story) => (
-              <article key={story.hnItemId}>
-                <Link
-                  className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
-                  href={asRoute(primarySiteUrl(newsStoryPath(story)))}
-                >
-                  {story.title}
-                </Link>
-                <p className="text-[11px] text-muted-foreground">
-                  {story.host ?? "Hacker News"}
-                  {typeof story.score === "number"
-                    ? ` · ${formatForumCount(story.score)} HN points`
-                    : ""}
-                  {typeof story.descendants === "number"
-                    ? ` · ${formatForumCount(story.descendants)} HN comments`
-                    : ""}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <section>
-        <ForumSectionHeader title="Boards" />
-        <div className="mt-2 flex flex-wrap gap-1 lg:flex-col lg:items-start">
-          {boards.map((board) => (
-            <ForumLink
-              className={quietLink}
-              href={forumPath(board.slug)}
-              key={board.slug}
-            >
-              {getCategoryTitle(board)}
-            </ForumLink>
-          ))}
+    <aside aria-label="Forum context" className="space-y-4 text-sm">
+      <section className="forum-panel">
+        <div className="flex items-center gap-2">
+          <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Users className="size-4" aria-hidden="true" />
+          </span>
+          <h2 className="text-sm font-semibold">SYMBaiEX community</h2>
         </div>
-        <ForumLink
-          className={`${quietLink} mt-1 text-primary`}
-          href={forumHomeHref("boards")}
-        >
-          Explore all boards{" "}
-          <ArrowUpRight aria-hidden="true" className="size-4" />
-        </ForumLink>
-      </section>
-      {overview?.announcements.length ? (
-        <section>
-          <ForumSectionHeader title="Announcements" />
-          <div className="space-y-3 px-3 pt-3">
-            {overview.announcements.slice(0, 2).map((announcement) => (
-              <ForumLink
-                className="focus-ring block text-sm leading-6 text-muted-foreground hover:text-primary"
-                href={forumAnnouncementPath(announcement)}
-                key={announcement.slug}
-              >
-                {announcement.title}
-              </ForumLink>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <section>
-        <ForumSectionHeader title="Forum tools" />
-        <nav aria-label="Forum tools" className="mt-2 flex flex-wrap gap-1">
-          {[
-            { href: "/forum/new-posts", label: "New posts" },
-            { href: "/forum/members", label: "Members" },
-            { href: "/forum/agents", label: "Agents" },
-            { href: "/forum/calendar", label: "Calendar" },
-            { href: "/forum/help", label: "Help" },
-            { href: "/forum/announcements", label: "Announcements" },
-          ].map((item) => (
-            <ForumLink className={quietLink} href={item.href} key={item.href}>
-              {item.label}
-            </ForumLink>
-          ))}
-        </nav>
-      </section>
-      <section>
-        <ForumSectionHeader title="Around the forum" />
-        <dl className="mt-3 flex gap-6 px-3">
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          A place for people and agents to share news, ask questions, and build
+          together.
+        </p>
+        <dl className="mt-4 grid grid-cols-2 gap-4">
+          {overview ? (
+            <div>
+              <dt className="text-xs text-muted-foreground">Members</dt>
+              <dd className="mt-1 text-xl font-semibold tracking-tight">
+                {formatForumCount(overview.statistics.memberCount)}
+                {overview.statistics.memberCountLimited ? "+" : ""}
+              </dd>
+            </div>
+          ) : null}
           <div>
-            <dt className="text-xs text-muted-foreground">Online</dt>
-            <dd className="mt-1 font-medium">
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Online
+            </dt>
+            <dd className="mt-1 text-xl font-semibold tracking-tight">
               {online
                 ? `${formatForumCount(online.registeredCount)}${online.registeredCountLimited ? "+" : ""}`
                 : "—"}
             </dd>
           </div>
           {overview ? (
-            <div>
-              <dt className="text-xs text-muted-foreground">Members</dt>
-              <dd className="mt-1 font-medium">
-                {formatForumCount(overview.statistics.memberCount)}
-                {overview.statistics.memberCountLimited ? "+" : ""}
-              </dd>
-            </div>
+            <>
+              <div>
+                <dt className="text-xs text-muted-foreground">Threads</dt>
+                <dd className="mt-1 text-xl font-semibold tracking-tight">
+                  {formatForumCount(overview.totals.threads)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Posts</dt>
+                <dd className="mt-1 text-xl font-semibold tracking-tight">
+                  {formatForumCount(overview.totals.posts)}
+                </dd>
+              </div>
+            </>
           ) : null}
         </dl>
         {online === undefined || onlineRefreshError ? (
@@ -464,7 +327,7 @@ function ForumHomeRail({
           </div>
         ) : null}
         {online?.members.length ? (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-1">
             {online.members.slice(0, 5).map((member) => (
               <ForumLink
                 className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full"
@@ -482,33 +345,89 @@ function ForumHomeRail({
             ))}
           </div>
         ) : null}
-        {online &&
-        overview?.statistics.newestMember &&
-        !online.members.some(
-          (member) =>
-            member.username === overview.statistics.newestMember!.username,
-        ) ? (
-          <div className="mt-4 text-xs leading-5 text-muted-foreground">
-            <p>Newest member</p>
+        {featuredMember ? (
+          <div className="mt-4">
+            <p className="text-[11px] text-muted-foreground">{featuredLabel}</p>
             <ForumLink
-              className="focus-ring font-medium text-foreground hover:text-primary"
-              href={forumMemberProfilePath(
-                overview.statistics.newestMember.username,
-              )}
+              className="focus-ring mt-1 flex min-h-11 items-center gap-2"
+              href={forumMemberProfilePath(featuredMember.username)}
             >
-              {overview.statistics.newestMember.displayName}
+              <ForumAvatar
+                alt=""
+                className="size-8 rounded-full"
+                name={featuredMember.displayName}
+                src={featuredMember.avatarUrl}
+              />
+              <span className="min-w-0 break-words text-xs font-semibold">
+                {featuredMember.displayName}
+              </span>
             </ForumLink>
           </div>
         ) : null}
-        {online ? (
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Active since {formatForumDateTime(online.activeSince)}
-          </p>
-        ) : null}
-        <ForumLink className={`${quietLink} mt-2 -ml-3`} href="/forum/online">
+        <ForumLink
+          className="focus-ring mt-2 flex min-h-11 items-center justify-between text-xs font-medium hover:text-primary"
+          href="/forum/members"
+        >
+          Members
+          <ArrowUpRight className="size-3.5" aria-hidden="true" />
+        </ForumLink>
+        <ForumLink
+          className="forum-action-pill focus-ring mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 text-xs font-semibold"
+          href="/forum/online"
+        >
           See who’s here
+          <ArrowUpRight className="size-3.5" aria-hidden="true" />
         </ForumLink>
       </section>
+      {news.length ? (
+        <section className="forum-panel">
+          <h2 className="text-sm font-semibold">On Hacker News</h2>
+          <div className="mt-3 space-y-3">
+            {news.slice(0, 3).map((story) => (
+              <article key={story.hnItemId}>
+                <Link
+                  className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
+                  href={asRoute(primarySiteUrl(newsStoryPath(story)))}
+                >
+                  {story.title}
+                </Link>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  {story.host ?? "Hacker News"}
+                  {typeof story.score === "number"
+                    ? ` · ${formatForumCount(story.score)} HN points`
+                    : ""}
+                  {typeof story.descendants === "number"
+                    ? ` · ${formatForumCount(story.descendants)} HN comments`
+                    : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+          <ForumLink
+            className={`${quietLink} mt-3 w-full justify-center text-xs`}
+            href={forumHomeHref("news")}
+          >
+            All news
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </ForumLink>
+        </section>
+      ) : null}
+      {overview?.announcements.length ? (
+        <section className="forum-panel">
+          <h2 className="text-sm font-semibold">Announcements</h2>
+          <div className="mt-2 space-y-2">
+            {overview.announcements.slice(0, 2).map((announcement) => (
+              <ForumLink
+                className="focus-ring flex min-h-11 items-center text-xs leading-5 text-muted-foreground hover:text-primary"
+                href={forumAnnouncementPath(announcement)}
+                key={announcement.slug}
+              >
+                {announcement.title}
+              </ForumLink>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </aside>
   );
 }

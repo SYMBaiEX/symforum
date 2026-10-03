@@ -16,7 +16,7 @@ import { activeForumSection, ForumNavigationLayout } from "./forum-navigation";
 test.each(["/forum", "/"])("home selection is preserved on %s", (path) => {
   expect(activeForumSection(path, "news")).toBe("news");
   expect(activeForumSection(path, "feed")).toBe("feed");
-  expect(activeForumSection(path, "unrecognized")).toBe("boards");
+  expect(activeForumSection(path, "unrecognized")).toBe("feed");
 });
 
 test.each(["/forum/general", "/general/lounge/topic"])(

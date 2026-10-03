@@ -500,17 +500,11 @@ function ForumNewsRows({
   summaries: Record<string, InteractionSummaryRecord> | null | undefined;
 }) {
   return (
-    <section
-      aria-label="Hacker News stories"
-      className="forum-workspace overflow-hidden rounded-sm"
-    >
+    <section aria-label="Hacker News stories" className="space-y-3">
       <ForumSectionHeader title="Hacker News">
         {onSnapshotChange ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span
-              id="forum-news-snapshot-filter-label"
-              className="text-xs text-muted-foreground"
-            >
+          <div className="flex min-w-0 items-center">
+            <span id="forum-news-snapshot-filter-label" className="sr-only">
               Edition
             </span>
             {snapshots.length > 0 ? (
@@ -537,7 +531,7 @@ function ForumNewsRows({
       </ForumSectionHeader>
       <div
         aria-busy={pending}
-        className={`px-1 py-1 transition-opacity sm:px-2${pending ? " opacity-50" : ""}`}
+        className={`space-y-3 transition-opacity${pending ? " opacity-50" : ""}`}
       >
         {stories.length === 0 ? (
           <p className="px-3 py-8 text-sm text-muted-foreground" role="status">
@@ -561,7 +555,7 @@ function ForumNewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="forum-list-row grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-2 rounded-sm px-2 py-2 hover:bg-muted/40 focus-within:bg-muted/40 sm:grid-cols-[32px_minmax(0,1fr)] sm:gap-x-3 sm:px-3"
+              className="forum-post-card grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-2 p-4 sm:gap-x-3 sm:p-5"
             >
               <span
                 className="inline-flex min-h-11 items-center justify-center font-mono text-xs tabular-nums text-muted-foreground"
@@ -570,7 +564,7 @@ function ForumNewsRows({
                 {story.rank}
               </span>
               <div className="min-w-0">
-                <h3 className="text-[15px] font-semibold leading-5 tracking-tight sm:text-base sm:leading-6">
+                <h3 className="text-lg font-semibold leading-6 tracking-tight sm:text-[19px] sm:leading-7">
                   <Link
                     href={discussionUrl}
                     prefetch
@@ -610,7 +604,7 @@ function ForumNewsRows({
                   </span>
                 </a>
               </div>
-              <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground sm:col-start-2 sm:col-span-1 sm:gap-x-4">
+              <div className="col-span-2 mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {interactive ? (
                   <NewsVoteControl
                     authLoading={authLoading}
@@ -627,7 +621,7 @@ function ForumNewsRows({
                 <Link
                   href={discussionUrl}
                   prefetch
-                  className="focus-ring inline-flex min-h-11 items-center gap-1.5 hover:text-primary"
+                  className="forum-action-pill focus-ring inline-flex min-h-11 items-center gap-1.5 px-3 font-semibold hover:text-primary"
                   aria-label={`${stats.comments} SYMBaiEX comments on ${story.title}`}
                 >
                   <MessageSquare
@@ -657,10 +651,10 @@ function ForumNewsRows({
                     href={sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center gap-1 hover:text-foreground"
+                    className="forum-action-pill focus-ring inline-flex min-h-11 min-w-11 items-center justify-center gap-1 px-3 font-semibold hover:text-foreground"
                     aria-label={`Read source article for ${story.title}`}
                   >
-                    <span className="hidden sm:inline">Read source</span>
+                    <span>Read source</span>
                     <ArrowUpRight aria-hidden="true" className="size-4" />
                   </a>
                 ) : null}
@@ -696,7 +690,7 @@ function DisabledSnapshotControl({
       aria-labelledby={ariaLabelledBy}
       className={
         variant === "forum"
-          ? "h-11 w-full max-w-[13rem] rounded-sm bg-background/60 px-3 text-left text-xs text-muted-foreground"
+          ? "h-11 w-36 max-w-full rounded-full bg-muted/55 px-3 text-left text-xs text-muted-foreground"
           : "h-9 w-[13rem] rounded-lg bg-muted/50 px-3 text-left text-xs text-muted-foreground"
       }
       disabled
@@ -726,7 +720,7 @@ function SnapshotSelect({
         aria-labelledby={ariaLabelledBy}
         className={
           variant === "forum"
-            ? "h-11 w-full max-w-[13rem] rounded-sm border-transparent bg-background/60 px-3 py-0 text-xs shadow-none"
+            ? "h-11 w-36 max-w-full rounded-full border-transparent bg-muted/55 px-3 py-0 text-xs shadow-none [&>span]:min-w-0 [&>span]:truncate"
             : "h-9 w-[13rem] rounded-lg border-transparent bg-muted/50 px-3 py-0 text-xs shadow-none"
         }
       >
@@ -847,7 +841,7 @@ function NewsVoteControl({
       <div
         className={
           variant === "forum"
-            ? "inline-flex shrink-0 items-center rounded-sm bg-muted/50 font-mono text-xs text-muted-foreground"
+            ? "inline-flex shrink-0 items-center rounded-full bg-muted/65 font-mono text-xs text-muted-foreground"
             : "flex w-8 shrink-0 flex-col items-center gap-1 text-xs text-muted-foreground"
         }
         role="group"
@@ -860,7 +854,7 @@ function NewsVoteControl({
           aria-pressed={vote === 1}
           className={
             variant === "forum"
-              ? "size-11 rounded-sm border-0 p-0 hover:bg-muted"
+              ? "size-11 rounded-full border-0 p-0 hover:bg-muted"
               : "size-8 rounded-lg border-0 p-0 hover:bg-muted"
           }
           disabled={voteDisabled}
@@ -881,7 +875,7 @@ function NewsVoteControl({
           aria-pressed={vote === -1}
           className={
             variant === "forum"
-              ? "size-11 rounded-sm border-0 p-0 hover:bg-muted"
+              ? "size-11 rounded-full border-0 p-0 hover:bg-muted"
               : "size-8 rounded-lg border-0 p-0 hover:bg-muted"
           }
           disabled={voteDisabled}
