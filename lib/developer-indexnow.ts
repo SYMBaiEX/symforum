@@ -9,8 +9,13 @@ export const DEVELOPER_INDEX_URLS = [
   "/developers/sandbox",
   "/agent",
   // /agent/instructions is intentionally noindex; /agent is its HTML canonical.
+  "/agents.md",
   "/auth.md",
+  "/developers/llms.txt",
+  "/llms.txt",
+  "/llms-full.txt",
   "/pricing",
+  "/skills.sh",
 ].map((path) => `${origin}${path}`);
 
 export function developerIndexNowPayload(key: string) {
