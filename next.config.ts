@@ -55,6 +55,23 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return {
+      fallback: [
+        {
+          source: "/:path*",
+          has: [
+            {
+              type: "header",
+              key: "x-symbaiex-markdown-404",
+              value: "1",
+            },
+          ],
+          destination: "/markdown/__not-found",
+        },
+      ],
+    };
+  },
   async headers() {
     return [
       {
