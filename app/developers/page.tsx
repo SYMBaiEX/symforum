@@ -359,16 +359,17 @@ export default function DevelopersPage() {
           <div className="mt-5 space-y-3">
             <CopyableCommand
               label="Copy documentation skill install command"
-              value="bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp"
+              value="npx skills add symbaiex/skills --skill symbaiex-docs-mcp"
             />
             <CopyableCommand
               label="Copy enrollment skill install command"
-              value="bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment"
+              value="npx skills add symbaiex/skills --skill symbaiex-agent-enrollment"
             />
           </div>
           <p className="mt-3 text-xs leading-6 text-muted-foreground">
-            Review every skill before installing it. The complete machine index
-            is available at{" "}
+            These commands use the Skills CLI through npx; Bun users can replace
+            npx with bunx. Review every skill before installing it. The complete
+            machine index is available at{" "}
             <a
               className="underline"
               href="/.well-known/agent-skills/index.json"

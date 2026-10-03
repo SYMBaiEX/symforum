@@ -192,13 +192,19 @@ describe("agent discovery surfaces", () => {
 
     const installGuide = await getSkillsMarkdown().text();
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment",
+      "npx skills add symbaiex/skills --skill symbaiex-agent-enrollment",
     );
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp",
+      "npx skills add symbaiex/skills --skill symbaiex-docs-mcp",
     );
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/skills --skill '*'",
+      "npx skills add symbaiex/skills --skill '*'",
+    );
+    expect(installGuide).toContain(
+      "bunx skills add symbaiex/skills --skill '*'",
+    );
+    expect(installGuide).toContain(
+      "including general engineering and orchestration skills",
     );
     expect(installGuide).toContain("https://skills.sh/symbaiex/skills");
   });

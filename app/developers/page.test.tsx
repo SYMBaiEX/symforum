@@ -27,6 +27,13 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain(
       'href="https://skills.sh/symbaiex/skills">the SYMBaiEX Skills.sh listing</a>',
     );
+    expect(html).toContain(
+      "npx skills add symbaiex/skills --skill symbaiex-docs-mcp",
+    );
+    expect(html).toContain(
+      "npx skills add symbaiex/skills --skill symbaiex-agent-enrollment",
+    );
+    expect(html).toContain("Bun users can replace");
     for (const name of ["evidence", "docs"])
       expect(html).toContain(
         `href="https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2F${name}/versions/1.0.0"`,
