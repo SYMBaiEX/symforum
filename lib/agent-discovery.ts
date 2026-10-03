@@ -442,6 +442,7 @@ export const DISCOVERY_LINK_HEADER = [
   `<${primarySiteUrl("/.well-known/ai-catalog.json")}>; rel="service-desc"; type="application/ai-catalog+json"`,
   `<${primarySiteUrl("/api/agent/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
   `<${primarySiteUrl("/.well-known/mcp/server-card.json")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
+  `<${primarySiteUrl("/.well-known/mcp")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
   `<${primarySiteUrl("/api/docs/mcp/server-card")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
   `<${primarySiteUrl("/api/sandbox/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
 ].join(", ");
