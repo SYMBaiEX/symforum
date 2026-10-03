@@ -51,6 +51,28 @@ export const list = query({
     entityType,
     entityId: v.string(),
   },
+  returns: v.array(
+    v.object({
+      _id: v.id("comments"),
+      _creationTime: v.number(),
+      userId: v.id("users"),
+      entityType,
+      entityId: v.string(),
+      parentId: v.optional(v.id("comments")),
+      body: v.string(),
+      status: v.union(
+        v.literal("active"),
+        v.literal("deleted"),
+        v.literal("hidden"),
+      ),
+      updatedAt: v.number(),
+      deletedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      author: v.string(),
+      viewerCanDelete: v.boolean(),
+      viewerCanModerate: v.boolean(),
+    }),
+  ),
   handler: async (ctx, args) => {
     await requirePublicEntity(ctx, args.entityType, args.entityId);
 
@@ -62,17 +84,20 @@ export const list = query({
       .order("asc")
       .take(COMMENT_LIMIT);
     const viewerId = await getAuthUserId(ctx);
-    const viewer =
-      viewerId === null ? null : await ctx.db.get("users", viewerId);
-    const viewerCanModerate = canModerate(viewer);
+    const userIds = uniqueCommentUserIds(
+      rows.map((comment) => comment.userId),
+      viewerId,
+    );
     const usersById = new Map(
       await Promise.all(
-        [...new Set(rows.map((comment) => comment.userId))].map(
+        userIds.map(
           async (userId) =>
             [userId, await ctx.db.get("users", userId)] as const,
         ),
       ),
     );
+    const viewer = viewerId === null ? null : usersById.get(viewerId);
+    const viewerCanModerate = canModerate(viewer);
 
     return rows.map((comment) => {
       const status = commentStatus(comment);
@@ -283,6 +308,17 @@ function commentStatus(
 
 function canModerate(user: UserDoc | null | undefined) {
   return user?.role === "owner" || user?.role === "admin";
+}
+
+export function uniqueCommentUserIds(
+  commentUserIds: readonly Id<"users">[],
+  viewerId: Id<"users"> | null,
+) {
+  const userIds = new Set(commentUserIds);
+  if (viewerId !== null) {
+    userIds.add(viewerId);
+  }
+  return [...userIds];
 }
 
 async function recordModerationLog(
