@@ -49,20 +49,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const routedModel = await selectStreamingModel(
-      {
-        openRouterApiKey: process.env.OPENROUTER_API_KEY,
-      },
-      {
-        tags: ["feature:admin-ai", "surface:owner-console"],
-        user: "symbaiex-owner",
-      },
-      {
-        correlationId,
-        feature: "admin-ai",
-        agent: "owner-console",
-      },
-    );
+    const routedModel = await selectStreamingModel({
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+    });
     const reservationsByStep = new Map<number, string>();
     const stepStartedAt = new Map<number, number>();
     const agent = new ToolLoopAgent({

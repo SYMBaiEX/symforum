@@ -87,11 +87,6 @@ export type ModelRouteAttempt = {
   errorMessage?: string;
 };
 
-export type OpenRouterRequestContext = {
-  user?: string;
-  tags?: readonly string[];
-};
-
 type RouteTelemetryContext = {
   correlationId?: string;
   feature?: string;
@@ -156,16 +151,8 @@ function isLowStakesIdeationStage(stage: string) {
 
 export async function routedModelCandidates(
   config: ModelRoutingConfig,
-  requestContext?: OpenRouterRequestContext,
-  _unusedModelIds?: readonly string[],
-  telemetry?: RouteTelemetryContext,
   openRouterModelIds: readonly string[] = OPENROUTER_GENERATION_MODELS,
 ) {
-  // Keep request context in the routing contract so callers can continue to
-  // attach stable attribution metadata without introducing another provider.
-  void requestContext;
-  void _unusedModelIds;
-  void telemetry;
   const candidates: RoutedModel[] = [];
   const disabled = new Set(config.disabledModelIds ?? []);
   const modelIds = [...new Set(openRouterModelIds)];
@@ -401,15 +388,11 @@ async function emitRouteAttempt<T>(
 
 export async function runWithModelFallback<T>(
   config: ModelRoutingConfig,
-  requestContext: OpenRouterRequestContext | undefined,
   args: RouteRunArgs<T>,
   fallbackModelIds?: readonly string[],
 ) {
   const candidates = await routedModelCandidates(
     config,
-    requestContext,
-    fallbackModelIds,
-    args,
     fallbackModelIds ?? openRouterModelsForStage(args.stage),
   );
   return runRoutedCandidates(candidates, {
@@ -419,16 +402,9 @@ export async function runWithModelFallback<T>(
   });
 }
 
-export async function selectStreamingModel(
-  config: ModelRoutingConfig,
-  requestContext?: OpenRouterRequestContext,
-  telemetry?: RouteTelemetryContext,
-) {
+export async function selectStreamingModel(config: ModelRoutingConfig) {
   const [candidate, ...fallbacks] = await routedModelCandidates(
     config,
-    requestContext,
-    undefined,
-    telemetry,
     OPENROUTER_IDEATION_MODELS,
   );
   console.info("AI streaming model route selected", {

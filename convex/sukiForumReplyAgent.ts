@@ -7,10 +7,7 @@ import { z } from "zod";
 import { OPENROUTER_GENERATION_MODELS } from "../lib/ai-models";
 import { components, internal } from "./_generated/api";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import {
-  runWithModelFallback,
-  type OpenRouterRequestContext,
-} from "../lib/ai-model-routing";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   AgentPublicationQualityError,
@@ -180,68 +177,55 @@ async function runReplySweepForAgent(
         "OPENROUTER_API_KEY is not configured.",
       );
     }
-    const requestContext = {
-      user: agentSlug,
-      tags: [
-        `agent:${agentSlug}`,
-        "feature:forum-replies",
-        `prompt:${PROMPT_VERSION}`,
-        `board:${claim.candidate.categorySlug}`,
-      ],
-    } satisfies OpenRouterRequestContext;
     const generationStartedAt = Date.now();
     const prompt = sukiReplyPrompt(claim.candidate, agentName);
-    const generation = await runWithModelFallback(
-      routingConfig,
-      requestContext,
-      {
-        stage: `${agentSlug}:forum-reply`,
-        correlationId: replyRunKey,
-        feature: "forum-reply",
-        agent: agentSlug,
-        onAttempt: recordRouteAttempt,
-        attemptOffset: replySweepRouteAttemptOffset(attempt),
-        totalTimeoutMs: 120_000,
-        estimatedInputTokens: estimatePromptInputTokens(prompt),
-        maxOutputTokens: 1_400,
-        run: async (candidate, signal) => {
-          const replyAgent = new Agent(components.agent, {
-            name: agentName,
-            // All current OpenRouter candidates come from the AI SDK v7
-            // openai-compatible v4 factory. The broader shared route type also
-            // permits legacy model protocols used by unrelated call sites.
-            languageModel: candidate.model as AgentLanguageModel,
-            instructions: modelInstructions(
-              candidate.provider,
-              "reply",
-              replyInstructions(agentSlug),
-            ),
-            ...FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
-          });
-          const result = await replyAgent.generateObject(
-            ctx,
-            { threadId: claim.conversationId },
-            {
-              prompt,
-              schema: sukiReplyDecisionSchema,
-              maxOutputTokens: 1_400,
-              ...modelGenerationSettings(candidate.provider, "reply"),
-              providerOptions: candidate.providerOptions,
-              abortSignal: signal,
-              ...FORUM_REPLY_AGENT_GENERATION_OPTIONS,
-            },
+    const generation = await runWithModelFallback(routingConfig, {
+      stage: `${agentSlug}:forum-reply`,
+      correlationId: replyRunKey,
+      feature: "forum-reply",
+      agent: agentSlug,
+      onAttempt: recordRouteAttempt,
+      attemptOffset: replySweepRouteAttemptOffset(attempt),
+      totalTimeoutMs: 120_000,
+      estimatedInputTokens: estimatePromptInputTokens(prompt),
+      maxOutputTokens: 1_400,
+      run: async (candidate, signal) => {
+        const replyAgent = new Agent(components.agent, {
+          name: agentName,
+          // All current OpenRouter candidates come from the AI SDK v7
+          // openai-compatible v4 factory. The broader shared route type also
+          // permits legacy model protocols used by unrelated call sites.
+          languageModel: candidate.model as AgentLanguageModel,
+          instructions: modelInstructions(
+            candidate.provider,
+            "reply",
+            replyInstructions(agentSlug),
+          ),
+          ...FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
+        });
+        const result = await replyAgent.generateObject(
+          ctx,
+          { threadId: claim.conversationId },
+          {
+            prompt,
+            schema: sukiReplyDecisionSchema,
+            maxOutputTokens: 1_400,
+            ...modelGenerationSettings(candidate.provider, "reply"),
+            providerOptions: candidate.providerOptions,
+            abortSignal: signal,
+            ...FORUM_REPLY_AGENT_GENERATION_OPTIONS,
+          },
+        );
+        const decision = validateSukiReplyDecision(result.object);
+        if (claim.candidate.authorIsAgent && decision.decision === "reply") {
+          assertAiSourceReplyGrounding(
+            decision.body,
+            claim.candidate.sourceBody,
           );
-          const decision = validateSukiReplyDecision(result.object);
-          if (claim.candidate.authorIsAgent && decision.decision === "reply") {
-            assertAiSourceReplyGrounding(
-              decision.body,
-              claim.candidate.sourceBody,
-            );
-          }
-          return { result, decision };
-        },
+        }
+        return { result, decision };
       },
-    );
+    });
     const { result, decision } = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
       runKey: replyRunKey,

@@ -147,9 +147,6 @@ describe("OpenRouter-only model routing", () => {
     try {
       const [freeRoute] = await routedModelCandidates(
         { openRouterApiKey: "test-openrouter-key" },
-        undefined,
-        undefined,
-        undefined,
         ["openrouter/free"],
       );
       const writer = new ToolLoopAgent({
@@ -181,13 +178,10 @@ describe("OpenRouter-only model routing", () => {
 
   test("deduplicates candidates and retains the free emergency route", async () => {
     await expect(
-      routedModelCandidates(
-        { openRouterApiKey: "test-openrouter-key" },
-        undefined,
-        undefined,
-        undefined,
-        ["openrouter/free", "openrouter/free"],
-      ),
+      routedModelCandidates({ openRouterApiKey: "test-openrouter-key" }, [
+        "openrouter/free",
+        "openrouter/free",
+      ]),
     ).resolves.toHaveLength(1);
     await expect(
       routedModelCandidates({

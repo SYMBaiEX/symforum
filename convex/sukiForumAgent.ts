@@ -14,7 +14,6 @@ import {
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   runWithModelFallback,
-  type OpenRouterRequestContext,
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import {
@@ -373,12 +372,6 @@ export async function runForumResearchSlot(
       },
     );
     const routeFeature = config.routeFeature ?? "forum-agent";
-    const researchRouteTag = config.routeFeature
-      ? `feature:${config.routeFeature}`
-      : "feature:forum-research";
-    const writingRouteTag = config.routeFeature
-      ? `feature:${config.routeFeature}-writing`
-      : "feature:forum-writing";
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
@@ -481,14 +474,6 @@ export async function runForumResearchSlot(
       );
     }
 
-    const requestContext = {
-      user: config.slug,
-      tags: [
-        `agent:${config.slug}`,
-        researchRouteTag,
-        `prompt:${config.promptVersion}`,
-      ],
-    } satisfies OpenRouterRequestContext;
     const topicPrompt = topicSelectionPrompt({
       candidates: shortlistedCandidates,
       categories: shortlistedCategories.slice(0, 24),
@@ -503,7 +488,6 @@ export async function runForumResearchSlot(
     const topicStartedAt = Date.now();
     const selectionGeneration = await runWithModelFallback(
       effectiveRoutingConfig,
-      requestContext,
       {
         stage: `${config.slug}:forum-topic`,
         correlationId: claim.runKey,
@@ -702,15 +686,6 @@ export async function runForumResearchSlot(
         })),
       },
     );
-    const writerRequestContext = {
-      ...requestContext,
-      tags: [
-        `agent:${config.slug}`,
-        writingRouteTag,
-        `board:${category.slug}`,
-        `prompt:${config.promptVersion}`,
-      ],
-    } satisfies OpenRouterRequestContext;
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
@@ -762,11 +737,7 @@ export async function runForumResearchSlot(
           return { result, draft: result.output };
         },
       };
-      return await runWithModelFallback(
-        effectiveRoutingConfig,
-        writerRequestContext,
-        routeArgs,
-      );
+      return await runWithModelFallback(effectiveRoutingConfig, routeArgs);
     };
     const draftStartedAt = Date.now();
     const draftGeneration = await generateForumDraft(

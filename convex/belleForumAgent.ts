@@ -10,10 +10,7 @@ import {
   OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
-import {
-  runWithModelFallback,
-  type OpenRouterRequestContext,
-} from "../lib/ai-model-routing";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   AgentPublicationQualityError,
@@ -420,57 +417,44 @@ export const runDailyHackerNewsDigest = internalAction({
         convexModelRoutingConfig(ctx, { correlationId: claim.runKey }),
         fetchArticleSnapshots(candidates, args.reusableArticleSnapshots),
       ]);
-      const requestContext = {
-        user: "belle",
-        tags: [
-          "agent:belle",
-          "feature:hacker-news-digest",
-          `snapshot:${runDate}`,
-          `prompt:${BELLE_PROMPT_VERSION}`,
-        ],
-      } satisfies OpenRouterRequestContext;
       const generationStartedAt = Date.now();
       const prompt = digestPrompt(runDate, indexed.stories, snapshots);
-      const generation = await runWithModelFallback(
-        routingConfig,
-        requestContext,
-        {
-          stage: "belle:hacker-news-digest",
-          correlationId: claim.runKey,
-          feature: "hacker-news-digest",
-          agent: "belle",
-          onAttempt: recordRouteAttempt,
-          totalTimeoutMs: 300_000,
-          estimatedInputTokens: estimatePromptInputTokens(prompt),
-          maxOutputTokens: (candidate) =>
-            openRouterStructuredOutputBudget(candidate.modelId, 5_500),
-          run: async (candidate, signal) => {
-            const writer = new ToolLoopAgent({
-              id: `belle-hacker-news-desk-${candidate.provider}`,
-              model: candidate.model,
-              output: Output.object({ schema: digestDraftSchema }),
-              // The digest is a single structured response, not a tool loop.
-              stopWhen: isStepCount(1),
-              providerOptions: candidate.providerOptions,
-              ...modelGenerationSettings(candidate.provider, "digest"),
-              maxOutputTokens: openRouterStructuredOutputBudget(
-                candidate.modelId,
-                5_500,
-              ),
-              instructions: modelInstructions(
-                candidate.provider,
-                "digest",
-                BELLE_DIGEST_INSTRUCTIONS,
-              ),
-            });
-            const result = await writer.generate({
-              prompt,
-              abortSignal: signal,
-            });
-            return { result, draft: digestDraftSchema.parse(result.output) };
-          },
+      const generation = await runWithModelFallback(routingConfig, {
+        stage: "belle:hacker-news-digest",
+        correlationId: claim.runKey,
+        feature: "hacker-news-digest",
+        agent: "belle",
+        onAttempt: recordRouteAttempt,
+        totalTimeoutMs: 300_000,
+        estimatedInputTokens: estimatePromptInputTokens(prompt),
+        maxOutputTokens: (candidate) =>
+          openRouterStructuredOutputBudget(candidate.modelId, 5_500),
+        run: async (candidate, signal) => {
+          const writer = new ToolLoopAgent({
+            id: `belle-hacker-news-desk-${candidate.provider}`,
+            model: candidate.model,
+            output: Output.object({ schema: digestDraftSchema }),
+            // The digest is a single structured response, not a tool loop.
+            stopWhen: isStepCount(1),
+            providerOptions: candidate.providerOptions,
+            ...modelGenerationSettings(candidate.provider, "digest"),
+            maxOutputTokens: openRouterStructuredOutputBudget(
+              candidate.modelId,
+              5_500,
+            ),
+            instructions: modelInstructions(
+              candidate.provider,
+              "digest",
+              BELLE_DIGEST_INSTRUCTIONS,
+            ),
+          });
+          const result = await writer.generate({
+            prompt,
+            abortSignal: signal,
+          });
+          return { result, draft: digestDraftSchema.parse(result.output) };
         },
-      );
+      });
       const result = generation.value.result;
       const draft = generation.value.draft;
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
