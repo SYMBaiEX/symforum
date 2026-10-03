@@ -20,6 +20,12 @@ export const PRIVATE_ROBOTS_PATHS = [
   "/forum/subscriptions",
 ] as const;
 
+const PUBLIC_ROBOTS_EXCEPTIONS = [
+  // Public service_auth discovery documents; other /agent-auth operations stay disallowed.
+  "/agent-auth/.well-known/oauth-authorization-server",
+  "/agent-auth/jwks",
+] as const;
+
 const rules = [
   { userAgent: "*", allow: true },
   { userAgent: "OAI-SearchBot", allow: true },
@@ -41,6 +47,9 @@ export function robotsText() {
       directives.push("Allow: /");
       directives.push(
         ...PRIVATE_ROBOTS_PATHS.map((path) => `Disallow: ${path}`),
+      );
+      directives.push(
+        ...PUBLIC_ROBOTS_EXCEPTIONS.map((path) => `Allow: ${path}`),
       );
     } else {
       directives.push("Disallow: /");
