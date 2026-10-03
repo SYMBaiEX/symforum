@@ -54,6 +54,10 @@ import {
   verifyPrivateForumAgentDraft,
 } from "./forumAgentResearchPackets";
 import {
+  enqueueForumAgentMemoryIndex,
+  forumAgentMemorySourceChanged,
+} from "./forumAgentMemoryQueue";
+import {
   FORUM_PRESENCE_ROOM,
   forumPresenceComponent,
 } from "./forumPresenceComponent";
@@ -4359,11 +4363,7 @@ const createThreadOperation = defineForumMutation({
         authorId: user._id,
         now,
       });
-      await ctx.scheduler.runAfter(
-        0,
-        internal.forumAgentMemory.indexForumThread,
-        { threadId },
-      );
+      await enqueueForumAgentMemoryIndex(ctx.scheduler, threadId);
     } else {
       await recordModerationLog(ctx, {
         actorUserId: user._id,
@@ -6116,6 +6116,15 @@ const updateThreadContentOperation = defineForumMutation({
     await invalidateResearchQualityForThread(ctx, thread._id);
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    if (
+      forumAgentMemorySourceChanged(thread, {
+        title,
+        body,
+        categoryId: thread.categoryId,
+      })
+    ) {
+      await enqueueForumAgentMemoryIndex(ctx.scheduler, thread._id);
+    }
     if (attachmentEditPlan !== null) {
       await applyForumAttachmentEditPlan(ctx, {
         plan: attachmentEditPlan,
@@ -11666,11 +11675,7 @@ export const publishSukiForumThread = internalMutation({
         updatedAt: now,
       });
     }
-    await ctx.scheduler.runAfter(
-      0,
-      internal.forumAgentMemory.indexForumThread,
-      { threadId },
-    );
+    await enqueueForumAgentMemoryIndex(ctx.scheduler, threadId);
 
     return {
       categorySlug: category.slug,
@@ -12855,6 +12860,9 @@ const moveForumThreadOperation = defineForumMutation({
     });
     await syncForumThreadEditorialDigest(ctx, thread._id);
     await syncForumThreadSearchProjection(ctx, thread._id);
+    if (visible) {
+      await enqueueForumAgentMemoryIndex(ctx.scheduler, thread._id);
+    }
     await ctx.runMutation(
       internal.evidenceFirstParty.enqueueForumResearchThread,
       { threadId: thread._id, reason: "category_changed" },
@@ -13364,6 +13372,7 @@ const splitForumPostsOperation = defineForumMutation({
     await recomputeThreadActivity(ctx, newThreadId);
     await syncForumThreadSearchProjection(ctx, sourceThread._id);
     await syncForumThreadSearchProjection(ctx, newThreadId);
+    await enqueueForumAgentMemoryIndex(ctx.scheduler, newThreadId);
 
     if (sourceCategory._id === targetCategory._id) {
       await ctx.db.patch("forumCategories", targetCategory._id, {
