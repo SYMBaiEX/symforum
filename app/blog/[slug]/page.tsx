@@ -12,6 +12,7 @@ import {
   compactSeoTitle,
   AUTHOR_NAME,
   AUTHOR_URL,
+  SITE_BRAND,
 } from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import type { Metadata } from "next";
@@ -32,7 +33,7 @@ export async function generateMetadata({
     : primarySiteUrl(`/blog/${encodeURIComponent(slug)}`);
   return {
     title: {
-      absolute: compactSeoTitle(post?.title ?? "Post", "Austin Hamilton"),
+      absolute: compactSeoTitle(post?.title ?? "Post", SITE_BRAND),
     },
     description: post?.excerpt,
     alternates: { canonical },
