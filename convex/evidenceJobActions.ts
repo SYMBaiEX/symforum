@@ -356,37 +356,33 @@ export const runResearch = internalAction({
         const config = await convexModelRoutingConfig(ctx, {
           correlationId: `evidence-research:${args.jobId}`,
         });
-        generationResult = await runWithModelFallback(
-          config,
-          { user: "evidence-research", tags: ["feature:evidence-research"] },
-          {
-            stage: "evidence-research",
-            correlationId: `evidence-research:${args.jobId}`,
-            feature: "evidence-research",
-            totalTimeoutMs: 120_000,
-            estimatedInputTokens: estimatePromptInputTokens(researchPrompt),
-            maxOutputTokens: 1_200,
-            run: async (candidate: RoutedModel, signal: AbortSignal) => {
-              const result = await generateText({
-                model: candidate.model,
-                prompt: researchPrompt,
-                maxOutputTokens: 1_200,
-                temperature: 0,
-                reasoning: "low",
-                maxRetries: 0,
-                providerOptions: candidate.providerOptions,
-                abortSignal: signal,
-              });
-              return {
-                text: result.text.trim(),
-                modelId: result.response.modelId,
-                inputTokens: result.usage.inputTokens,
-                outputTokens: result.usage.outputTokens,
-                usage: result.usage,
-              };
-            },
+        generationResult = await runWithModelFallback(config, {
+          stage: "evidence-research",
+          correlationId: `evidence-research:${args.jobId}`,
+          feature: "evidence-research",
+          totalTimeoutMs: 120_000,
+          estimatedInputTokens: estimatePromptInputTokens(researchPrompt),
+          maxOutputTokens: 1_200,
+          run: async (candidate: RoutedModel, signal: AbortSignal) => {
+            const result = await generateText({
+              model: candidate.model,
+              prompt: researchPrompt,
+              maxOutputTokens: 1_200,
+              temperature: 0,
+              reasoning: "low",
+              maxRetries: 0,
+              providerOptions: candidate.providerOptions,
+              abortSignal: signal,
+            });
+            return {
+              text: result.text.trim(),
+              modelId: result.response.modelId,
+              inputTokens: result.usage.inputTokens,
+              outputTokens: result.usage.outputTokens,
+              usage: result.usage,
+            };
           },
-        );
+        });
       } catch {
         /* Preserve the deterministic extractive fallback when routing fails. */
       }

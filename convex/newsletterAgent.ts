@@ -11,10 +11,7 @@ import {
   OPENROUTER_GENERATION_MODELS,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
-import {
-  runWithModelFallback,
-  type OpenRouterRequestContext,
-} from "../lib/ai-model-routing";
+import { runWithModelFallback } from "../lib/ai-model-routing";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   evaluateAgentPublicationHygiene,
@@ -283,12 +280,6 @@ async function generateEditorialPackage(
     }),
     fetchArticleSnapshots(candidates),
   ]);
-  const routeTags = [
-    "agent:belle",
-    `feature:${args.edition}`,
-    `snapshot:${args.snapshotDate}`,
-    `prompt:${PROMPT_VERSION}`,
-  ];
   const schema =
     args.edition === "daily-signal" ? dailyDraftSchema : weeklyDraftSchema;
   const generation = await generateDraftWithFallback({
@@ -297,7 +288,6 @@ async function generateEditorialPackage(
     runDate: args.runDate,
     stage: "draft",
     routingConfig,
-    routeTags,
     prompt: editorialPrompt(args, snapshots, recent),
     schema,
   });
@@ -358,7 +348,6 @@ async function generateEditorialPackage(
       runDate: args.runDate,
       stage: "revision",
       routingConfig,
-      routeTags,
       prompt: editorialPrompt(args, snapshots, recent, {
         feedback: evaluation.feedback,
         previousDraft: draft,
@@ -541,7 +530,6 @@ async function generateDraftWithFallback({
   runDate,
   stage,
   routingConfig,
-  routeTags,
   prompt,
   schema,
 }: {
@@ -550,19 +538,13 @@ async function generateDraftWithFallback({
   runDate: string;
   stage: "draft" | "revision";
   routingConfig: Awaited<ReturnType<typeof convexModelRoutingConfig>>;
-  routeTags: string[];
   prompt: string;
   schema: typeof dailyDraftSchema | typeof weeklyDraftSchema;
 }) {
   const correlationId = `newsletter:${edition}:${runDate}`;
   const generationStartedAt = Date.now();
-  const requestContext = {
-    user: "belle",
-    tags: [...routeTags, `stage:${stage}`],
-  } satisfies OpenRouterRequestContext;
   const generation = await runWithModelFallback(
     routingConfig,
-    requestContext,
     {
       stage: `belle:${edition}:${stage}`,
       correlationId,

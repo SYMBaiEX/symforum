@@ -144,10 +144,6 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
   const correlationId = `model-canary:${Date.now()}`;
   const generationStartedAt = Date.now();
   const config = await convexModelRoutingConfig(ctx, { correlationId });
-  const requestContext = {
-    user: "operator-route-probe",
-    tags: ["feature:model-route-probe"],
-  };
   const canaryPrompt =
     "You are validating the exact structured-output contract used by a " +
     "forum agent before it may publish. Return one structured object using " +
@@ -210,9 +206,9 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
           inputTokens?: number;
           outputTokens?: number;
           usage: { raw?: unknown };
-        }>(config, requestContext, routeArgs)
+        }>(config, routeArgs)
       : await runRoutedCandidates(
-          (await routedModelCandidates(config, requestContext)).filter(
+          (await routedModelCandidates(config)).filter(
             (candidate) => candidate.provider === provider,
           ),
           {
