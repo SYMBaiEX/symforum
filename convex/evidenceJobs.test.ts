@@ -1125,6 +1125,22 @@ describe("evidence jobs", () => {
       return datasetId;
     });
 
+    const snapshot = await t.action(jobs.materializeSnapshot, {
+      datasetId: seeded,
+    });
+    expect(snapshot).toMatchObject({ created: true, recordCount: 100 });
+    const snapshotArtifact = await t.run(async (ctx) => {
+      const version = await ctx.db.get(
+        "evidenceDatasetVersions",
+        snapshot.versionId,
+      );
+      return version === null || version.artifactStorageId === undefined
+        ? null
+        : ((await ctx.storage.get(version.artifactStorageId))?.text() ?? null);
+    });
+    expect(snapshotArtifact).not.toBeNull();
+    expect(snapshotArtifact!.trim().split("\n")).toHaveLength(100);
+
     const runPage = async (cursor: string | undefined, recordLimit: number) => {
       const job = await t.mutation(jobs.createExport, {
         ownerUserId: owner,
@@ -1184,6 +1200,106 @@ describe("evidence jobs", () => {
       250,
     );
     expect(allRecords.map((record) => record.title)).toContain("Chunked 249");
+  });
+
+  test("keeps small snapshot pages balanced across configured sources", async () => {
+    const t = setup();
+    await fixture(t);
+    const sourceKeys = [
+      "snapshot-a",
+      "snapshot-b",
+      "snapshot-c",
+      "snapshot-d",
+      "snapshot-e",
+      "snapshot-f",
+    ];
+    const datasetId = await t.run(async (ctx) => {
+      const now = Date.now();
+      const datasetId = await ctx.db.insert("evidenceDatasets", {
+        datasetKey: "balanced-snapshot-test",
+        name: "Balanced snapshot test",
+        description:
+          "Verify small snapshot pages preserve cross-source balance",
+        visibility: "public",
+        licenseClass: "open",
+        includedKinds: ["document"],
+        includedLicenseClasses: ["open"],
+        sourceKeys,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (const sourceKey of sourceKeys) {
+        const sourceId = await ctx.db.insert("evidenceSources", {
+          sourceKey,
+          name: sourceKey,
+          sourceType: "manual",
+          ingestionEnabled: false,
+          baseUrl: `https://${sourceKey}.example.com`,
+          homepageUrl: `https://${sourceKey}.example.com`,
+          status: "active",
+          licenseClass: "open",
+          provenanceClass: "official",
+          visibility: "public",
+          termsUrl: `https://${sourceKey}.example.com/terms`,
+          etag: "",
+          lastModified: "",
+          cursor: "",
+          lastFetchedAt: 0,
+          lastSucceededAt: 0,
+          lastErrorAt: 0,
+          lastErrorMessage: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+        for (let index = 0; index < 20; index += 1)
+          await ctx.db.insert("evidenceDocuments", {
+            sourceId,
+            externalKey: `${sourceKey}-${index}`,
+            canonicalUrl: `https://${sourceKey}.example.com/${index}`,
+            canonicalUrlHash: `${sourceKey}-${index}`,
+            kind: "document",
+            visibility: "public",
+            title: `${sourceKey} ${index}`,
+            excerpt: "Balanced snapshot fixture",
+            searchText: `${sourceKey} ${index}`,
+            tags: [],
+            authors: [],
+            licenseClass: "open",
+            currentVersionId: null,
+            publishedAt: null,
+            firstSeenAt: now - index,
+            updatedAt: now - index,
+          });
+      }
+      return datasetId;
+    });
+
+    const snapshot = await t.action(jobs.materializeSnapshot, { datasetId });
+    expect(snapshot).toMatchObject({ created: true, recordCount: 100 });
+    const artifact = await t.run(async (ctx) => {
+      const version = await ctx.db.get(
+        "evidenceDatasetVersions",
+        snapshot.versionId,
+      );
+      return version?.artifactStorageId === undefined
+        ? null
+        : ((await ctx.storage.get(version.artifactStorageId))?.text() ?? null);
+    });
+    expect(artifact).not.toBeNull();
+    const records = artifact!
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { source: { sourceKey: string } });
+    const counts = new Map<string, number>();
+    for (const record of records)
+      counts.set(
+        record.source.sourceKey,
+        (counts.get(record.source.sourceKey) ?? 0) + 1,
+      );
+    expect(sourceKeys.map((sourceKey) => counts.get(sourceKey))).toEqual([
+      17, 17, 17, 17, 16, 16,
+    ]);
   });
 
   test("keeps commercial dataset selections distinct", async () => {

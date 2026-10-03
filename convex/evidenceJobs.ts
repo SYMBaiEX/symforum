@@ -1290,9 +1290,6 @@ export const readExportDocuments = internalQuery({
           nextSourceCursors[entry.source.sourceKey] = entry.page.continueCursor;
       }
       if (doneSourceKeys.size < orderedSources.length)
-        // Advance from the final source that was allotted a row, even if that
-        // source happened to finish. This prevents a small page from starving
-        // later sources when source count exceeds its record limit.
         continueCursor = encodeExportCursor({
           ...cursorState,
           sourceCursors: nextSourceCursors,
@@ -1300,15 +1297,18 @@ export const readExportDocuments = internalQuery({
           nextSourceOffset:
             sourceCount === 0 || rotatedActiveSources.length === 0
               ? 0
-              : (orderedSources.findIndex(
-                  (source) =>
-                    source.sourceKey ===
-                    rotatedActiveSources[
-                      Math.min(rotatedActiveSources.length, limit) - 1
-                    ]?.sourceKey,
-                ) +
-                  1) %
-                sourceCount,
+              : // Rotate only past sources that received a remainder row. When
+                // the page is smaller than the source set, remainder equals the
+                // page size and still advances past every source read this page.
+                remainder === 0
+                ? startOffset
+                : (orderedSources.findIndex(
+                    (source) =>
+                      source.sourceKey ===
+                      rotatedActiveSources[remainder - 1]?.sourceKey,
+                  ) +
+                    1) %
+                  sourceCount,
           recentCursor: undefined,
         });
     } else {
