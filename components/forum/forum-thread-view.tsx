@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader, ForumSectionHeader } from "./forum-layout-primitives";
+
 import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import type { ForumAttachmentDraft } from "@/components/forum/forum-compose";
@@ -38,7 +40,6 @@ import {
   ForumJumpLink,
   ForumLink,
   ForumLoading,
-  ForumMetricBar,
   ForumPaginationBar,
   ForumPostFrame,
   ForumStatusBox,
@@ -1111,18 +1112,24 @@ function LiveForumThreadView({
   ];
 
   return (
-    <div className="space-y-7">
-      <div className="py-2">
-        <ForumBreadcrumbs category={category} thread={thread} />
+    <div className="space-y-5">
+      <div>
+        {showHeading ? (
+          <ForumPageHeader
+            title={thread.title}
+            breadcrumbs={
+              <ForumBreadcrumbs category={category} thread={thread} />
+            }
+            view="boards"
+            nested
+          />
+        ) : (
+          <ForumBreadcrumbs category={category} thread={thread} />
+        )}
         <div className="mt-3 space-y-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <ForumThreadPrefixBadge thread={thread} />
-              {showHeading ? (
-                <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
-                  {thread.title}
-                </h1>
-              ) : null}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <ForumThreadStateBadges thread={thread} />
@@ -1192,10 +1199,14 @@ function LiveForumThreadView({
               </p>
             ) : null}
           </div>
-          <ForumMetricBar
-            items={threadMetrics}
-            className={ratingCount > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}
-          />
+          <dl className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[11px] text-muted-foreground">
+            {threadMetrics.map((metric) => (
+              <div className="flex gap-2" key={metric.label}>
+                <dt>{metric.label}</dt>
+                <dd className="tabular-nums text-foreground">{metric.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </div>
 
@@ -1322,7 +1333,15 @@ function LiveForumThreadView({
         </ForumLink>
       ) : null}
 
-      <section className="space-y-8">
+      <section className="space-y-4" aria-label="Discussion posts">
+        <ForumSectionHeader title="Discussion">
+          <ForumLink
+            className="focus-ring inline-flex min-h-11 items-center hover:text-primary"
+            href={forumPath(category.slug)}
+          >
+            Back to board →
+          </ForumLink>
+        </ForumSectionHeader>
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
@@ -1344,6 +1363,7 @@ function LiveForumThreadView({
 
             return (
               <ForumPostFrame
+                variant="grouped"
                 key={post._id ?? `post-${index}`}
                 id={`post-${postNumber}`}
                 actions={
@@ -1490,10 +1510,9 @@ function LiveForumThreadView({
       </section>
 
       <section className="space-y-3" id="forum-reply-composer">
-        <div className="pb-2">
-          <p className="text-xs text-muted-foreground">Reply</p>
-          <h2 className="mt-1 text-lg font-semibold">Post to thread</h2>
-          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+        <ForumSectionHeader title="Post to thread" />
+        <div className="px-1">
+          <p className="text-sm leading-5 text-muted-foreground">
             Replies publish under your current SYM handle.
           </p>
         </div>

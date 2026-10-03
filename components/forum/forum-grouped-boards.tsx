@@ -220,7 +220,12 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
             </p>
           </>
         ) : (
-          <p className="py-3 text-xs text-muted-foreground">No posts yet</p>
+          <p className="py-3 text-xs text-muted-foreground">
+            {getCategoryPostCount(category) > 0 ||
+            getCategoryThreadCount(category) > 0
+              ? "Latest activity unavailable"
+              : "No posts yet"}
+          </p>
         )}
       </div>
     </article>

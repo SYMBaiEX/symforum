@@ -1,7 +1,7 @@
 import { resolveForumRouteStatus } from "@/app/forum/forum-route-status";
 import { ForumThreadView } from "@/components/forum/forum-thread-view";
 import { humanizeSlug } from "@/components/forum/forum-refs";
-import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { safeForumIsoDate } from "@/lib/forum-metadata";
 import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
@@ -120,12 +120,7 @@ export default async function ForumThreadPage({ params }: PageProps) {
           ]),
         ]}
       />
-      <ForumUtilityNav className="mb-2" />
-      <header className="py-2">
-        <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
-          {title}
-        </h1>
-      </header>
+      <ForumPageHeader title={title} view="boards" nested />
       <ForumThreadView
         categorySlug={categorySlug}
         threadSlug={threadSlug}

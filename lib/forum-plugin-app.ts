@@ -431,7 +431,7 @@ export function forumPluginAppRuntime() {
     if (permitted("administer")) items.push(["admin", "Administration"]);
     for (const [key, label] of items) {
       const node = button(label, () => run(() => navigate(key)));
-      node.setAttribute("aria-current", currentView === key ? "page" : "false");
+      node.setAttribute("aria-current", currentView === key || key === "boards" && (currentView === "board" || currentView === "thread") ? "page" : "false");
       nav.append(node);
     }
     compose.hidden = !permitted("participate");
@@ -456,45 +456,89 @@ export function forumPluginAppRuntime() {
       threadSlug: text(row.threadSlug ?? row.slug ?? thread.slug),
     };
   }
-  function appendThreadList(rows: RecordValue[]) {
-    const list = element("div", undefined, "rows");
+  function section(title: string, detail?: string) {
+    const panel = element("section", undefined, "forum-section");
+    panel.setAttribute("aria-label", title);
+    const bar = element("header", undefined, "section-bar");
+    bar.append(element("h2", title));
+    if (detail) bar.append(element("span", detail, "section-detail"));
+    panel.append(bar);
+    content.append(panel);
+    return panel;
+  }
+  function activity(row: RecordValue) {
+    const detail = element("div", undefined, "latest-activity");
+    const author = text(row.lastPostAuthor ?? object(row.lastPostAuthorIdentity).name);
+    const timestamp = Number(row.lastPostAt ?? row.updatedAt);
+    detail.append(element("span", author && author !== "SYM-UNKNOWN" ? author : "Latest activity", "latest-author"));
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      const time = element("time", new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }), "muted");
+      time.dateTime = new Date(timestamp).toISOString();
+      detail.append(time);
+    }
+    return detail;
+  }
+  function appendThreadList(rows: RecordValue[], parent: HTMLElement = content) {
+    const list = element("div", undefined, "rows discussion-list");
     for (const row of rows) {
       const nested = object(row.thread);
-      const item = element("article", undefined, "row");
+      const record = { ...nested, ...row };
+      const item = element("article", undefined, "row discussion-row");
       const target = threadTarget(row);
       const titleText = text(row.title ?? nested.title, "Discussion");
+      const main = element("div", undefined, "discussion-main");
       const open = button((row.pinned ? "◆ " : "") + titleText, () => run(() => navigate("thread", target)), "row-title");
       open.disabled = !target.categorySlug || !target.threadSlug;
-      item.append(open, element("p", summary({ ...nested, ...row }), "muted"));
+      main.append(open, element("p", summary(record), "muted"));
       const excerpt = text(row.snippet ?? row.excerpt ?? row.body);
-      if (excerpt) item.append(element("p", excerpt.slice(0, 320), "excerpt"));
+      if (excerpt) main.append(element("p", excerpt.slice(0, 320), "excerpt"));
+      item.append(main);
+      if (record.replyCount !== undefined || record.viewCount !== undefined) {
+        const counts = element("dl", undefined, "discussion-counts");
+        for (const [label, value] of [["Replies", record.replyCount], ["Views", record.viewCount]] as const) {
+          if (value === undefined) continue;
+          const count = element("div");
+          count.append(element("dt", label), element("dd", value));
+          counts.append(count);
+        }
+        item.append(counts);
+      }
+      if (record.lastPostAt || record.lastPostAuthor) item.append(activity(record));
       list.append(item);
     }
-    content.append(list);
+    parent.append(list);
   }
   function renderThreadList(rows: RecordValue[], title: string, subtitle?: string) {
     heading(title, subtitle);
     if (!rows.length) return empty("No discussions found. Try a different search or start a conversation.");
-    appendThreadList(rows);
+    appendThreadList(rows, section("Discussions", rows.length + " on this page"));
   }
   function newsPath(story: RecordValue) {
     const slug = text(story.title).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 88).replace(/-+$/g, "") || "story";
     return "https://www.symbaiex.com/news/" + slug + "-" + encodeURIComponent(text(story.hnItemId));
   }
-  function appendNews(stories: RecordValue[], compact = false) {
-    const list = element("div", undefined, compact ? "rows news-preview" : "rows");
-    for (const story of stories) {
+  function appendNews(stories: RecordValue[], compact = false, parent: HTMLElement = content) {
+    const list = element("div", undefined, compact ? "rows news-preview" : "rows news-list");
+    for (const [index, story] of stories.entries()) {
       const article = element("article", undefined, "row news-story");
+      const rail = element("div", undefined, "news-rank");
+      rail.setAttribute("aria-label", "Hacker News rank " + text(story.rank, String(index + 1)));
+      rail.append(element("span", text(story.rank, String(index + 1)), "rank-number"));
+      const points = element("span", story.hnScore === undefined ? "HN" : text(story.hnScore) + " pts", "rank-points");
+      points.setAttribute("aria-label", story.hnScore === undefined ? "Hacker News" : text(story.hnScore) + " Hacker News points");
+      rail.append(points);
+      const main = element("div", undefined, "news-main");
       const headline = link(text(story.title, "News story"), newsPath(story));
       headline.className = "row-title";
-      article.append(element("p", text(story.host, "Hacker News"), "source"), headline);
+      main.append(headline, element("p", [text(story.host, "Hacker News"), text(story.by)].filter(Boolean).join(" · "), "source"));
       const hn = [story.hnScore !== undefined ? text(story.hnScore) + " HN points" : "", story.hnCommentCount !== undefined ? text(story.hnCommentCount) + " HN comments" : ""].filter(Boolean);
       const local = object(story.platformStats);
       if (story.platformStatsStatus === "available" && Object.keys(local).length) hn.push(text(local.comments, "0") + " SYMBaiEX comments");
-      article.append(element("p", hn.join(" · "), "muted"));
+      main.append(element("p", hn.join(" · "), "muted"));
+      article.append(rail, main);
       list.append(article);
     }
-    content.append(list);
+    parent.append(list);
   }
   function renderFeed(data: RecordValue, view: string, args: RecordValue, news: RecordValue | null) {
     const sort = args.sort === "new" ? "new" : "active";
@@ -509,15 +553,13 @@ export function forumPluginAppRuntime() {
     if (news) {
       const stories = collection(news, ["stories"]).slice(0, 3);
       if (stories.length) {
-        const section = element("div", undefined, "section-heading");
-        section.append(element("h2", "In the news"), button("All news →", () => run(() => navigate("news"))));
-        content.append(section);
-        appendNews(stories, true);
-        content.append(element("h2", "Discussions", "section-title"));
+        const newsSection = section("In the news", "Hacker News");
+        newsSection.firstElementChild!.append(button("All news →", () => run(() => navigate("news"))));
+        appendNews(stories, true, newsSection);
       }
     }
     const rows = collection(data);
-    if (rows.length) appendThreadList(rows);
+    if (rows.length) appendThreadList(rows, section(view === "community" ? "Community discussions" : "Forum discussions", sort === "new" ? "Newest first" : "Latest activity"));
     else empty(data.isDone ? "No conversations here yet." : "No visible conversations on this page. Continue to see more.");
     const history = Array.isArray(args.history) ? args.history : [];
     if (history.length || (data.isDone === false && typeof data.continueCursor === "string")) {
@@ -545,7 +587,7 @@ export function forumPluginAppRuntime() {
       content.append(label);
     }
     const stories = collection(data, ["stories"]);
-    if (stories.length) appendNews(stories);
+    if (stories.length) appendNews(stories, false, section("Top stories", "HN activity · SYMBaiEX discussion"));
     else empty("No indexed stories in this edition yet.");
     if (data.limited) content.append(element("p", "Showing the stories available within this request. Open News on SYMBaiEX for more.", "muted"));
     content.append(link("Open News on SYMBaiEX ↗", "https://www.symbaiex.com/news"));
@@ -564,25 +606,94 @@ export function forumPluginAppRuntime() {
     controls.append(previous, element("span", "Page " + page, "muted"), next);
     content.append(controls);
   }
-  function renderBoards(rows: RecordValue[]) {
-    heading("Forum boards", "Ideas, research, and conversations across the SYMBaiEX community.");
-    if (!rows.length) return empty("No boards are visible to this connection.");
+  function appendBoards(rows: RecordValue[], parent: HTMLElement) {
     const grid = element("div", undefined, "board-index");
     for (const board of rows) {
       const item = element("article", undefined, "board");
+      const icon = element("span", "◇", "board-icon");
+      icon.setAttribute("aria-hidden", "true");
+      if (board.viewerUnread === true) icon.className += " unread";
       const description = element("div", undefined, "board-description");
       description.append(button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug, categoryName: board.name })), "row-title"));
-      description.append(element("p", board.description, "excerpt"));
+      if (board.description) description.append(element("p", board.description, "excerpt"));
+      const children = collection(board.children, []);
+      if (children.length) {
+        const subforums = element("div", undefined, "subforums");
+        subforums.append(element("span", "Subforums:", "muted"));
+        for (const child of children) subforums.append(button(text(child.name, "Subforum"), () => run(() => navigate("board", { categorySlug: child.slug, categoryName: child.name })), "subforum-link"));
+        description.append(subforums);
+      }
       const counts = element("dl", undefined, "board-counts");
       for (const [label, value] of [["Threads", board.threadCount], ["Posts", board.postCount]] as const) {
         const count = element("div");
         count.append(element("dt", label), element("dd", text(value, "0")));
         counts.append(count);
       }
-      item.append(description, counts);
+      item.append(icon, description, counts);
+      const latest = object(board.lastThread);
+      if (latest.title) {
+        const latestPanel = element("div", undefined, "board-latest");
+        latestPanel.append(button(text(latest.title), () => run(() => navigate("thread", { categorySlug: latest.categorySlug ?? board.slug, threadSlug: latest.slug })), "latest-title"), activity(latest));
+        item.append(latestPanel);
+      }
       grid.append(item);
     }
-    content.append(grid);
+    parent.append(grid);
+  }
+  function renderBoards(rows: RecordValue[]) {
+    heading("Forum boards", "Ideas, research, and conversations across the SYMBaiEX community.");
+    if (!rows.length) return empty("No boards are visible to this connection.");
+    const byId = new Map(rows.filter(board => board._id).map(board => [text(board._id), board]));
+    const roots = rows.filter(board => !byId.has(text(board.parentCategoryId)));
+    appendBoards(roots.map(board => {
+      if (Array.isArray(board.children)) return board;
+      const children = rows.filter(child => child.parentCategoryId && child.parentCategoryId === board._id);
+      const latest = [board, ...children].reduce((current, candidate) => Number(candidate.lastPostAt ?? 0) > Number(current.lastPostAt ?? 0) ? candidate : current, board);
+      return { ...board, children, threadCount: Number(board.threadCount ?? 0) + children.reduce((total, child) => total + Number(child.threadCount ?? 0), 0), postCount: Number(board.postCount ?? 0) + children.reduce((total, child) => total + Number(child.postCount ?? 0), 0), lastThread: latest.lastThread };
+    }), section("Forum index", roots.length + " boards"));
+  }
+  function breadcrumbs(category: RecordValue, includeCategory = false) {
+    const trail = element("nav", undefined, "breadcrumbs");
+    trail.setAttribute("aria-label", "Forum breadcrumb");
+    trail.append(button("Boards", () => run(() => navigate("boards"))));
+    const ancestors = collection(category.ancestors, []);
+    if (includeCategory && category.slug) ancestors.push(category);
+    for (const ancestor of ancestors) {
+      const separator = element("span", "/");
+      separator.setAttribute("aria-hidden", "true");
+      trail.append(separator);
+      if (ancestor.isPostable !== false && ancestor.kind !== "section") trail.append(button(text(ancestor.name, "Board"), () => run(() => navigate("board", { categorySlug: ancestor.slug, categoryName: ancestor.name }))));
+      else trail.append(element("span", ancestor.name));
+    }
+    content.prepend(trail);
+  }
+  function renderBoard(data: RecordValue, args: RecordValue) {
+    const category = object(data.category);
+    currentCategory = text(args.categorySlug);
+    heading(text(category.name ?? args.categoryName, currentCategory), text(category.description));
+    breadcrumbs(category);
+    if (permitted("participate") && category.viewerCanCreateThread === true) content.append(button("Create post", () => openComposer("thread"), "primary"));
+    const children = collection(category.children, []);
+    if (children.length) appendBoards(children, section("Subforums", children.length + " boards"));
+    const announcements = collection(data.announcements, []);
+    if (announcements.length) {
+      const panel = section("Announcements");
+      for (const announcement of announcements) {
+        const item = element("article", undefined, "row announcement-row");
+        item.append(element("h3", announcement.title), element("p", announcement.body, "excerpt"));
+        panel.append(item);
+      }
+    }
+    const rules = object(data.rules);
+    if (rules.body) {
+      const disclosure = element("details", undefined, "board-rules");
+      disclosure.append(element("summary", "Board rules"), element("p", rules.body, "post-body"));
+      content.append(disclosure);
+    }
+    const rows = collection(data.threads ?? data);
+    if (rows.length) appendThreadList(rows, section("Discussions", "Latest activity"));
+    else empty("No discussions found. Try a different search or start a conversation.");
+    pagination(data, Number(args.page ?? 1), next => run(() => navigate("board", { ...args, page: next })));
   }
   function renderPost(post: RecordValue, rootPost = false) {
     const article = element("article", undefined, "post");
@@ -590,14 +701,17 @@ export function forumPluginAppRuntime() {
     const authorIdentity = object(post.authorIdentity);
     author.append(element("strong", post.author ?? post.authorName ?? "Member"));
     if (authorIdentity.isAgent || post.isAgent) author.append(element("span", "AI agent", "badge"));
+    else if (post.agentAssisted) author.append(element("span", "Agent assisted", "badge"));
     if (post.createdAt) author.append(element("span", new Date(Number(post.createdAt)).toLocaleString(), "muted"));
     if (rootPost) author.append(element("span", "Original post", "badge"));
-    article.append(author, element("div", post.body ?? post.content, "post-body"));
+    const body = element("div", undefined, "post-content");
+    body.append(element("div", post.body ?? post.content, "post-body"));
+    article.append(author, body);
     for (const attachment of collection(post.attachments, [])) {
       const label = text(attachment.filename ?? attachment.name, "Attachment");
       const url = text(attachment.url);
-      if (safeForumUrl(url)) article.append(link(label, url));
-      else article.append(element("span", label, "badge"));
+      if (safeForumUrl(url)) body.append(link(label, url));
+      else body.append(element("span", label, "badge"));
     }
     return article;
   }
@@ -627,6 +741,7 @@ export function forumPluginAppRuntime() {
     currentThread = thread;
     currentCategory = text(args.categorySlug);
     heading(text(thread.title, "Discussion"), summary(thread));
+    breadcrumbs({ ...object(data.category), slug: args.categorySlug, name: object(data.category).name ?? args.categorySlug }, true);
     const controls = element("div", undefined, "actions");
     controls.append(button("← Board", () => run(() => navigate("board", { categorySlug: args.categorySlug }))));
     const canonical = "https://forum.symbaiex.com/" + encodeURIComponent(text(args.categorySlug)) + "/" + encodeURIComponent(text(args.threadSlug));
@@ -636,8 +751,9 @@ export function forumPluginAppRuntime() {
     content.append(controls);
     const rules = object(data.rules);
     if (rules.body) content.append(element("aside", "Board rules: " + text(rules.body), "notice"));
-    if (Number(args.page ?? 1) === 1) content.append(renderPost(thread, true));
-    for (const reply of collection(data.replies)) content.append(renderPost(reply));
+    const posts = section("Conversation", text(thread.replyCount, "0") + " replies");
+    if (Number(args.page ?? 1) === 1) posts.append(renderPost(thread, true));
+    for (const reply of collection(data.replies)) posts.append(renderPost(reply));
     const page = Number(object(object(data.replies).pagination).page ?? args.page ?? 1);
     pagination(data.replies, page, next => run(() => navigate("thread", { ...args, page: next })));
     if (thread.viewerCanReply === false || thread.status === "locked") content.append(element("p", "Replies are unavailable for this discussion.", "muted"));
@@ -706,11 +822,7 @@ export function forumPluginAppRuntime() {
       } else if (view === "board") {
         result = await tool("forum_list_threads", { categorySlug: args.categorySlug, page: args.page ?? 1, pageSize: 20 });
         const data = object(result.data);
-        render = () => {
-          currentCategory = text(args.categorySlug);
-          renderThreadList(collection(data.threads ?? result.data), text(object(data.category).name ?? args.categoryName, currentCategory));
-          pagination(data, Number(args.page ?? 1), next => run(() => navigate("board", { ...args, page: next })));
-        };
+        render = () => renderBoard({ ...data, threads: data.threads ?? result.data }, args);
       } else if (view === "thread") {
         result = await tool("forum_get_thread", { categorySlug: args.categorySlug, threadSlug: args.threadSlug, page: args.page ?? 1, pageSize: 20 });
         render = () => renderThread(object(result.data), args);
@@ -1122,7 +1234,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.3.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.3.1" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -1174,15 +1286,13 @@ h1{font-size:clamp(26px,3vw,34px);line-height:1.15;margin:0 0 12px;letter-spacin
 .primary{background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-weight:600}.primary:hover{filter:brightness(.94);background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
 .workspace{display:block}.sidebar{padding:4px 32px 0}#navigation{display:flex;gap:4px;flex-wrap:wrap}#navigation button{background:transparent;color:hsl(var(--muted-foreground));padding:10px 12px}#navigation button:hover{background:hsl(var(--muted)/.55);color:hsl(var(--foreground))}#navigation button[aria-current=page]{color:hsl(var(--foreground));background:hsl(var(--muted));font-weight:600}
 .connection{margin-top:12px;padding:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px}.connection .eyebrow{margin:0}.connection strong{overflow-wrap:anywhere;font-weight:600}#mode{color:hsl(var(--muted-foreground))}#settings{margin-left:auto}#connection-owner{color:hsl(var(--muted-foreground))}.posting-trust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;color:hsl(var(--muted-foreground))}.posting-trust a{white-space:nowrap}
-.main{padding:20px 32px 64px;max-width:880px;min-width:0}#search{display:flex;gap:8px;margin-bottom:20px}#query{flex:1;min-width:0;background:hsl(var(--muted)/.4);border-color:transparent}#search button{background:transparent}
+.main{padding:20px 32px 64px;max-width:1180px;min-width:0}#search{display:flex;gap:8px;margin-bottom:20px}#query{flex:1;min-width:0;background:hsl(var(--muted)/.4);border-color:transparent}#search button{background:transparent}
 input,textarea,select{display:block;width:100%;min-width:0;background:hsl(var(--background));border:1px solid hsl(var(--input));border-radius:2px;padding:11px 12px;color:hsl(var(--foreground));min-height:44px}input::placeholder,textarea::placeholder{color:hsl(var(--muted-foreground))}textarea{resize:vertical;min-height:200px}
 .notice{padding:12px 14px;margin:0 0 24px;background:hsl(var(--accent)/.08);font-size:13px;overflow-wrap:anywhere}.notice:empty{display:none}.error{background:hsl(var(--primary)/.08)}.muted{color:hsl(var(--muted-foreground));font-size:12px;line-height:1.7}.source{color:hsl(var(--muted-foreground));font:11px/1.5 ui-monospace,monospace;margin-bottom:6px}
-.board-index,.rows{margin-top:8px;display:grid;gap:28px}.board,.row{padding:4px 0;background:transparent;min-width:0}.board{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center}.board-description{min-width:0}.board-counts{display:flex;gap:24px;margin:0;min-width:120px;text-align:center}.board-counts dt{font-size:11px;color:hsl(var(--muted-foreground))}.board-counts dd{margin:3px 0 0;font-weight:600;font-variant-numeric:tabular-nums}
-.board .row-title,.row-title{text-align:left;font:600 20px/1.4 ui-sans-serif,system-ui,sans-serif;letter-spacing:-.025em;text-transform:none;text-decoration:none;border:0;background:transparent;padding:0;min-height:0;overflow-wrap:anywhere}.row-title:hover{color:hsl(var(--primary));background:transparent}.row .row-title{display:block}.excerpt{font-size:14px;line-height:1.65;color:hsl(var(--muted-foreground));overflow-wrap:anywhere;margin-bottom:0}.row>.muted{margin-top:8px}.news-preview{gap:12px;margin-bottom:24px}.news-preview .row{padding:0}.news-preview .source{margin:0 0 2px}.news-preview .row-title{font-size:16px;line-height:1.3;min-height:24px}.news-preview .muted{margin:4px 0 0;line-height:1.4}.section-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:24px 0 8px}.section-heading button{background:transparent}.section-title{margin-top:32px}.feed-filters{margin:12px 0}.feed-filters button{background:transparent;color:hsl(var(--muted-foreground))}.feed-filters button[aria-pressed=true]{background:hsl(var(--muted));color:hsl(var(--foreground))}.edition{display:flex;gap:12px;align-items:center;color:hsl(var(--muted-foreground));font-size:12px;margin:20px 0 28px}.edition select{width:auto}
-.post{display:block;margin-top:32px;background:transparent;min-width:0}.post-author{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:0 0 14px;overflow-wrap:anywhere}.post-author strong{font-size:14px}.post-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.75}.post>.post-body{min-width:0}.post>a,.post>.badge{display:inline-block;margin-top:12px;margin-right:12px}.badge{font:10px/1.4 ui-monospace,monospace;background:hsl(var(--accent)/.12);color:hsl(var(--muted-foreground));border-radius:2px;padding:4px 6px}
+.forum-section{margin:20px 0;min-width:0;background:hsl(var(--muted)/.22);border-radius:2px;overflow:hidden}.section-bar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;min-height:44px;padding:8px 14px;background:hsl(var(--muted)/.7)}.section-bar h2{margin:0;font-size:14px;font-weight:600;letter-spacing:0}.section-bar h2:before{content:"";display:inline-block;width:7px;height:7px;background:hsl(var(--primary));margin-right:10px}.section-detail{margin-left:auto;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.section-bar button{background:transparent;padding:4px 8px;margin-left:auto;min-height:44px;font-size:12px}.board-index,.rows{display:grid;gap:0;padding:0 14px;margin:0}.board,.row{padding:16px 0;min-width:0;background:transparent}.board{display:grid;grid-template-columns:24px minmax(0,1fr) 70px 160px;gap:16px;align-items:start}.board-icon{font-size:24px;color:hsl(var(--muted-foreground));padding-top:8px}.board-icon.unread{color:hsl(var(--primary))}.board-description,.discussion-main,.news-main{min-width:0}.board-counts,.discussion-counts{display:flex;flex-direction:column;gap:6px;margin:6px 0 0;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.board-counts div,.discussion-counts div{display:flex;flex-direction:column}.board-counts dt,.discussion-counts dt{order:2}.board-counts dd,.discussion-counts dd{margin:0;color:hsl(var(--foreground));font-size:12px;font-variant-numeric:tabular-nums}.board-latest{padding-top:4px;min-width:0}.latest-title{text-align:left;background:transparent;font-size:12px;padding:0;min-height:44px;line-height:1.5;overflow-wrap:anywhere}.latest-title:hover{background:transparent}.latest-activity{display:flex;flex-direction:column;gap:2px;font-size:11px;min-width:0;padding-top:8px;color:hsl(var(--muted-foreground))}.latest-author{overflow-wrap:anywhere}.subforums{display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;margin-top:3px}.subforum-link{min-height:44px;background:transparent;font-size:12px;padding:0}.subforum-link:hover{background:transparent}.board .row-title,.row-title{text-align:left;font:600 16px/1.45 ui-sans-serif,system-ui,sans-serif;letter-spacing:-.015em;text-transform:none;text-decoration:none;border:0;background:transparent;padding:0;min-height:44px;overflow-wrap:anywhere}.row-title:hover{color:hsl(var(--primary));background:transparent}.row .row-title{display:block}.excerpt{font-size:13px;line-height:1.65;color:hsl(var(--muted-foreground));overflow-wrap:anywhere;margin:4px 0 0}.discussion-row{display:grid;grid-template-columns:minmax(0,1fr) 70px 140px;gap:20px;align-items:start}.discussion-main>.muted{margin:0;font-size:11px}.discussion-row .latest-activity{padding-top:10px}.news-story{display:grid;grid-template-columns:40px minmax(0,1fr);gap:14px}.news-rank{display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:5px;font-family:ui-monospace,monospace;color:hsl(var(--muted-foreground))}.rank-number{font-size:15px;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.rank-points{font-size:9px;white-space:nowrap}.news-main>.source,.news-main>.muted{margin:0 0 4px;font-size:11px}.news-main .row-title{display:block;align-content:center}.news-preview .news-story{padding:12px 0}.news-preview .row-title{font-size:14px}.feed-filters{margin:12px 0}.feed-filters button{background:transparent;color:hsl(var(--muted-foreground))}.feed-filters button[aria-pressed=true]{background:hsl(var(--muted));color:hsl(var(--foreground))}.edition{display:flex;gap:12px;align-items:center;color:hsl(var(--muted-foreground));font-size:12px;margin:16px 0}.edition select{width:auto}.breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;gap:6px;color:hsl(var(--muted-foreground));font-size:12px;margin:-8px 0 12px}.breadcrumbs button{background:transparent;min-height:44px;padding:6px 8px}.board-rules{margin:16px 0;padding:0 14px;background:hsl(var(--muted)/.25)}.board-rules summary{cursor:pointer;min-height:44px;align-content:center;font-size:12px}.board-rules summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:4px}.board-rules .post-body{font-size:13px;padding-bottom:14px}.announcement-row{padding:14px}.announcement-row h3{font-size:14px;margin:0}.post{display:grid;grid-template-columns:150px minmax(0,1fr);gap:24px;margin:0;padding:20px 14px;min-width:0;background:transparent}.post-author{display:flex;align-items:flex-start;flex-direction:column;gap:6px;padding:0;min-width:0;overflow-wrap:anywhere}.post-author strong{font-size:13px}.post-author .muted{font-size:10px}.post-content{min-width:0}.post-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.75}.post-content>a,.post-content>.badge{display:inline-block;margin-top:12px;margin-right:12px}.badge{font:10px/1.4 ui-monospace,monospace;background:hsl(var(--accent)/.12);color:hsl(var(--muted-foreground));border-radius:2px;padding:4px 6px}
 .pager{justify-content:flex-start;margin-top:32px}.composer{display:grid;gap:20px;max-width:760px;padding-top:20px}.composer label{display:grid;gap:8px;font-size:13px}.composer .actions{margin-top:4px}.attachments{padding:12px 0}.empty{padding:24px 0;color:hsl(var(--muted-foreground))}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .forum-chat{background:hsl(var(--card));margin-bottom:24px}.chat-header{display:flex;align-items:center;gap:10px;padding:9px 12px;background:hsl(var(--muted));flex-wrap:wrap}.chat-header h2{font-size:15px;margin:0 auto 0 0;letter-spacing:0}.chat-header button,.chat-row-actions button{padding:3px 7px;min-height:28px;font-size:11px}.chat-messages{max-height:190px;overflow-y:auto;padding:6px 12px}.chat-row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:7px 0}.chat-meta{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-size:12px}.chat-meta strong{overflow-wrap:anywhere}.chat-meta time{font-size:10px}.chat-message{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45;margin:0}.chat-row-actions{display:flex;gap:6px;grid-column:2}.chat-form{display:flex;gap:8px;padding:10px 12px;flex-wrap:wrap}.chat-form input{flex:1;min-width:130px;font-size:13px}.chat-form button{min-height:34px;font-size:12px}.chat-form label+input{width:auto}#chat-notice{padding:0 12px 8px;font-size:11px}#chat-notice:empty{display:none}#chat-older{margin:4px 12px;font-size:11px;min-height:28px}
 @media(max-width:600px){.chat-row{grid-template-columns:1fr;gap:3px}.chat-row-actions{grid-column:1}.chat-header{gap:6px}.chat-header #chat-profile{display:none}.chat-messages{max-height:150px}}
 #app[data-display-mode=fullscreen]{min-height:100vh}.main:has(.composer){padding-bottom:100px}
-@media(max-width:680px){.masthead{padding:20px 16px 12px;align-items:flex-start;gap:8px}.brand{font-size:23px}.brand .brand-forum{display:block;margin:6px 0 0;font-size:15px}.masthead .eyebrow{display:none}.mast-actions{gap:5px;justify-content:flex-end}.mast-actions button{font-size:12px;padding:8px 10px}.sidebar{padding:8px 16px 0}#navigation{flex-wrap:nowrap;overflow-x:auto}#navigation button{white-space:nowrap;padding:10px 12px}.connection{gap:8px}.connection .eyebrow{display:none}#settings{margin-left:0}.main{padding:20px 16px 48px}input,textarea,select{font-size:16px}.board{grid-template-columns:minmax(0,1fr);gap:10px}.board-counts{justify-content:flex-start;gap:20px;text-align:left}.board-counts div{display:flex;align-items:baseline;gap:6px}.board-counts dd{margin:0}.post-author{gap:8px}.notice{margin-bottom:20px}.row-title{font-size:20px}}
+@media(max-width:680px){.masthead{padding:20px 16px 12px;align-items:flex-start;gap:8px}.brand{font-size:23px}.brand .brand-forum{display:block;margin:6px 0 0;font-size:15px}.masthead .eyebrow{display:none}.mast-actions{gap:5px;justify-content:flex-end}.mast-actions button{font-size:12px;padding:8px 10px}.sidebar{padding:8px 16px 0}#navigation{flex-wrap:nowrap;overflow-x:auto}#navigation button{white-space:nowrap;padding:10px 12px}.connection{gap:8px}.connection .eyebrow{display:none}#settings{margin-left:0}.main{padding:20px 16px 48px}input,textarea,select{font-size:16px}.board{grid-template-columns:20px minmax(0,1fr);gap:8px 12px}.board-counts,.discussion-counts{grid-column:2;flex-direction:row;gap:20px;margin:0}.board-counts div,.discussion-counts div{flex-direction:row;align-items:baseline;gap:5px}.board-counts dt,.discussion-counts dt{order:0}.board-latest{grid-column:2}.board-latest .latest-activity{flex-direction:row;flex-wrap:wrap;gap:6px;padding-top:0}.discussion-row{grid-template-columns:minmax(0,1fr);gap:8px}.discussion-counts{grid-column:1}.discussion-row .latest-activity{flex-direction:row;flex-wrap:wrap;gap:8px;padding-top:0}.post{grid-template-columns:minmax(0,1fr);gap:12px}.post-author{flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px}.notice{margin-bottom:20px}.row-title{font-size:16px}.section-detail{font-size:9px}.news-story{gap:10px}.board-index,.rows{padding:0 12px}}
 </style></head><body><div id="app"><header class="masthead"><div><div class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></div></div><div class="mast-actions"><button id="expand" type="button" hidden>Expand forum</button><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Latest</button><button id="chat-toggle" type="button" aria-expanded="true" aria-controls="chat-panel">Chat</button></header><div id="chat-panel"><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form"><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;

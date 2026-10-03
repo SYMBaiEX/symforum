@@ -1,7 +1,7 @@
 import { resolveForumRouteStatus } from "@/app/forum/forum-route-status";
 import { ForumThreadList } from "@/components/forum/forum-thread-list";
 import { humanizeSlug } from "@/components/forum/forum-refs";
-import { ForumUtilityNav } from "@/components/forum/forum-primitives";
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { StructuredData } from "@/components/structured-data";
 import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
 import { forumSiteUrl } from "@/lib/site-urls";
@@ -104,17 +104,12 @@ export default async function ForumCategoryPage({ params }: PageProps) {
           ]),
         ]}
       />
-      <ForumUtilityNav className="mb-2" />
-      <header className="py-2">
-        <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
-          {categoryName}
-        </h1>
-        {description ? (
-          <p className="mt-2 max-w-[70ch] text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
-      </header>
+      <ForumPageHeader
+        title={categoryName}
+        description={description}
+        view="boards"
+        nested
+      />
       <ForumThreadList
         categorySlug={categorySlug}
         enabled={enabled}

@@ -23,10 +23,7 @@ export default async function ForumPage({
   const params = await searchParams;
   const view = resolveForumHomeView(params.view);
   const sort = resolveForumFeedSort(params.sort);
-  const news =
-    view === "feed" || view === "news" || view === "boards"
-      ? await getNewsPageData(view === "boards" ? 3 : 30)
-      : { initialStories: [], initialTimeline: null };
+  const news = await getNewsPageData(view === "news" ? 30 : 3);
   return (
     <section className="page-frame page-frame-dense">
       <StructuredData

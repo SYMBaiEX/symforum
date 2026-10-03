@@ -1,5 +1,6 @@
 "use client";
 
+import { ForumSectionHeader } from "@/components/forum/forum-layout-primitives";
 import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 
+type NewsFeedVariant = "default" | "forum";
+
 const AuthRequiredDialog = dynamic(
   () =>
     import("@/components/auth-required-dialog").then(
@@ -49,21 +52,36 @@ export function NewsFeed({
   enabled,
   initialStories,
   initialTimeline,
+  variant = "default",
 }: {
+  variant?: NewsFeedVariant;
   enabled: boolean;
   initialStories: HnStory[];
   initialTimeline?: NewsTimelineRecord | null;
 }) {
   if (!enabled) {
-    return <NewsRows interactive={false} stories={initialStories} />;
+    return (
+      <NewsRows
+        interactive={false}
+        stories={initialStories}
+        variant={variant}
+      />
+    );
   }
   return (
     <NewsFeedErrorBoundary
-      fallback={<NewsRows interactive={false} stories={initialStories} />}
+      fallback={
+        <NewsRows
+          interactive={false}
+          stories={initialStories}
+          variant={variant}
+        />
+      }
     >
       <LiveNewsFeed
         initialStories={initialStories}
         initialTimeline={initialTimeline ?? null}
+        variant={variant}
       />
     </NewsFeedErrorBoundary>
   );
@@ -87,7 +105,9 @@ class NewsFeedErrorBoundary extends Component<
 function LiveNewsFeed({
   initialStories,
   initialTimeline,
+  variant,
 }: {
+  variant: NewsFeedVariant;
   initialStories: HnStory[];
   initialTimeline: NewsTimelineRecord | null;
 }) {
@@ -124,6 +144,7 @@ function LiveNewsFeed({
   if (showLiveFallback && visibleData !== null) {
     return (
       <NewsRows
+        variant={variant}
         interactive
         onSnapshotChange={onSnapshotChange}
         snapshots={visibleData.snapshots}
@@ -139,22 +160,17 @@ function LiveNewsFeed({
       selectedDate,
     });
     if (emptyState === "loading") {
-      return (
-        <div className="py-8 text-sm text-muted-foreground">
-          Loading stories…
-        </div>
-      );
+      return <NewsStatus variant={variant}>Loading stories…</NewsStatus>;
     }
     if (emptyState === "fallback") {
-      return <NewsRows interactive stories={initialStories} />;
+      return (
+        <NewsRows interactive stories={initialStories} variant={variant} />
+      );
     }
     return (
-      <div
-        className="py-8 text-sm leading-6 text-muted-foreground"
-        role="status"
-      >
+      <NewsStatus variant={variant}>
         The news index is temporarily unavailable. Try again shortly.
-      </div>
+      </NewsStatus>
     );
   }
 
@@ -163,6 +179,7 @@ function LiveNewsFeed({
 
   return (
     <NewsRows
+      variant={variant}
       interactive
       onSnapshotChange={onSnapshotChange}
       pending={pending}
@@ -173,6 +190,30 @@ function LiveNewsFeed({
   );
 }
 
+function NewsStatus({
+  children,
+  variant,
+}: {
+  children: ReactNode;
+  variant: NewsFeedVariant;
+}) {
+  const status = (
+    <div className="py-8 text-sm leading-6 text-muted-foreground" role="status">
+      {children}
+    </div>
+  );
+  if (variant === "default") return status;
+  return (
+    <section
+      aria-label="Hacker News stories"
+      className="overflow-hidden rounded-sm bg-muted/20"
+    >
+      <ForumSectionHeader title="Hacker News" />
+      <div className="px-4">{status}</div>
+    </section>
+  );
+}
+
 function NewsRows({
   interactive,
   onSnapshotChange,
@@ -180,7 +221,9 @@ function NewsRows({
   selectedSnapshotDate,
   snapshots = [],
   stories,
+  variant,
 }: {
+  variant: NewsFeedVariant;
   interactive: boolean;
   onSnapshotChange?: (snapshotDate: string) => void;
   pending?: boolean;
@@ -191,6 +234,7 @@ function NewsRows({
   if (interactive) {
     return (
       <InteractiveNewsRows
+        variant={variant}
         onSnapshotChange={onSnapshotChange}
         pending={pending}
         selectedSnapshotDate={selectedSnapshotDate}
@@ -202,6 +246,7 @@ function NewsRows({
 
   return (
     <NewsRowsView
+      variant={variant}
       authLoading={false}
       interactive={false}
       isAuthenticated={false}
@@ -221,7 +266,9 @@ function InteractiveNewsRows({
   selectedSnapshotDate,
   snapshots = [],
   stories,
+  variant,
 }: {
+  variant: NewsFeedVariant;
   onSnapshotChange?: (snapshotDate: string) => void;
   pending?: boolean;
   selectedSnapshotDate?: string;
@@ -240,6 +287,7 @@ function InteractiveNewsRows({
 
   return (
     <NewsRowsView
+      variant={variant}
       authLoading={isLoading}
       interactive
       isAuthenticated={isAuthenticated}
@@ -262,8 +310,10 @@ function NewsRowsView({
   selectedSnapshotDate,
   snapshots = [],
   stories,
+  variant,
   summaries,
 }: {
+  variant: NewsFeedVariant;
   authLoading: boolean;
   interactive: boolean;
   isAuthenticated: boolean;
@@ -275,6 +325,22 @@ function NewsRowsView({
   summaries: Record<string, InteractionSummaryRecord> | null | undefined;
 }) {
   const showSnapshotControl = Boolean(onSnapshotChange);
+
+  if (variant === "forum") {
+    return (
+      <ForumNewsRows
+        authLoading={authLoading}
+        interactive={interactive}
+        isAuthenticated={isAuthenticated}
+        onSnapshotChange={onSnapshotChange}
+        pending={pending}
+        selectedSnapshotDate={selectedSnapshotDate}
+        snapshots={snapshots}
+        stories={stories}
+        summaries={summaries}
+      />
+    );
+  }
 
   return (
     <div>
@@ -412,6 +478,193 @@ function NewsRowsView({
   );
 }
 
+function ForumNewsRows({
+  authLoading,
+  interactive,
+  isAuthenticated,
+  onSnapshotChange,
+  pending,
+  selectedSnapshotDate,
+  snapshots,
+  stories,
+  summaries,
+}: {
+  authLoading: boolean;
+  interactive: boolean;
+  isAuthenticated: boolean;
+  onSnapshotChange?: (snapshotDate: string) => void;
+  pending?: boolean;
+  selectedSnapshotDate?: string;
+  snapshots: NewsSnapshotRecord[];
+  stories: HnStory[];
+  summaries: Record<string, InteractionSummaryRecord> | null | undefined;
+}) {
+  return (
+    <section
+      aria-label="Hacker News stories"
+      className="overflow-hidden rounded-sm bg-muted/20"
+    >
+      <ForumSectionHeader title="Hacker News">
+        {onSnapshotChange ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              id="forum-news-snapshot-filter-label"
+              className="font-mono text-[11px] text-muted-foreground"
+            >
+              Edition
+            </span>
+            {snapshots.length > 0 ? (
+              <SnapshotSelect
+                ariaLabelledBy="forum-news-snapshot-filter-label"
+                onValueChange={onSnapshotChange}
+                snapshots={snapshots}
+                value={selectedSnapshotDate}
+                variant="forum"
+              />
+            ) : (
+              <DisabledSnapshotControl
+                label="No indexed days"
+                variant="forum"
+                ariaLabelledBy="forum-news-snapshot-filter-label"
+              />
+            )}
+          </div>
+        ) : (
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {stories.length} {stories.length === 1 ? "story" : "stories"}
+          </span>
+        )}
+      </ForumSectionHeader>
+      <div
+        aria-busy={pending}
+        className={`px-3 transition-opacity sm:px-4${pending ? " opacity-50" : ""}`}
+      >
+        {stories.length === 0 ? (
+          <p className="py-8 text-sm text-muted-foreground" role="status">
+            No indexed stories for this snapshot yet.
+          </p>
+        ) : null}
+        {stories.map((story) => {
+          const sourceUrl = safeExternalUrl(story.url);
+          const entityId = String(story.hnItemId);
+          const summary = summaries?.[entityId];
+          const stats = summary ??
+            story.platformStats ?? { comments: 0, score: 0, saves: 0 };
+          const discussionUrl = asRoute(primarySiteUrl(newsStoryPath(story)));
+          const hnUrl = `https://news.ycombinator.com/item?id=${story.hnItemId}`;
+          const postedAt =
+            story.timePosted === undefined
+              ? null
+              : new Date(story.timePosted * 1000);
+          const validDate =
+            postedAt && !Number.isNaN(postedAt.valueOf()) ? postedAt : null;
+
+          return (
+            <article
+              key={story.hnItemId}
+              className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-start gap-x-3 py-3 sm:gap-x-4"
+            >
+              <div className="flex flex-col items-center">
+                <span
+                  className="inline-flex h-5 items-center font-mono text-[10px] tabular-nums text-muted-foreground"
+                  aria-label={`Hacker News rank ${story.rank}`}
+                >
+                  #{story.rank}
+                </span>
+                {interactive ? (
+                  <NewsVoteControl
+                    authLoading={authLoading}
+                    entityId={entityId}
+                    initialScore={stats.score}
+                    isAuthenticated={isAuthenticated}
+                    summary={summary}
+                    title={story.title}
+                    variant="forum"
+                  />
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold leading-6">
+                  <Link
+                    href={discussionUrl}
+                    prefetch
+                    className="focus-ring inline-flex min-h-11 max-w-full items-center [overflow-wrap:anywhere] hover:text-primary"
+                  >
+                    {story.title}
+                  </Link>
+                </h3>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 font-mono text-[10px] leading-5 text-muted-foreground">
+                  {story.host ? (
+                    <span className="break-all">{story.host}</span>
+                  ) : null}
+                  {validDate ? (
+                    <time dateTime={validDate.toISOString()}>
+                      {validDate.toISOString().slice(0, 10)}
+                    </time>
+                  ) : null}
+                  {story.by ? (
+                    <span className="break-all">by {story.by}</span>
+                  ) : null}
+                  {story.score !== undefined ? (
+                    <span>{compactNumber(story.score)} HN points</span>
+                  ) : null}
+                  <a
+                    href={hnUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-ring inline-flex min-h-11 items-center hover:text-foreground"
+                    aria-label={`View ${story.title} on Hacker News`}
+                  >
+                    {story.descendants !== undefined
+                      ? `${compactNumber(story.descendants)} HN comments`
+                      : "Hacker News"}
+                  </a>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
+                  <Link
+                    href={discussionUrl}
+                    prefetch
+                    className="focus-ring inline-flex min-h-11 items-center gap-1.5 hover:text-primary"
+                  >
+                    <MessageSquare
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0"
+                    />
+                    {stats.comments > 0
+                      ? `${compactNumber(stats.comments)} SYMBaiEX comments`
+                      : "Discuss on SYMBaiEX"}
+                  </Link>
+                  {!interactive && stats.score !== 0 ? (
+                    <span>{compactNumber(stats.score)} SYMBaiEX votes</span>
+                  ) : null}
+                  {stats.saves > 0 ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Bookmark aria-hidden="true" className="size-3.5" />
+                      {compactNumber(stats.saves)} saves
+                    </span>
+                  ) : null}
+                  {sourceUrl ? (
+                    <a
+                      href={sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="focus-ring inline-flex min-h-11 items-center gap-1 hover:text-foreground"
+                      aria-label={`Read source article for ${story.title}`}
+                    >
+                      Read source
+                      <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function NewsFilterBar({ children }: { children: ReactNode }) {
   return (
     <div className="mb-6 flex items-center gap-3 px-3 text-[13px] text-muted-foreground sm:px-4">
@@ -421,11 +674,23 @@ function NewsFilterBar({ children }: { children: ReactNode }) {
   );
 }
 
-function DisabledSnapshotControl({ label }: { label: string }) {
+function DisabledSnapshotControl({
+  label,
+  variant = "default",
+  ariaLabelledBy = "news-snapshot-filter-label",
+}: {
+  label: string;
+  variant?: NewsFeedVariant;
+  ariaLabelledBy?: string;
+}) {
   return (
     <button
-      aria-labelledby="news-snapshot-filter-label"
-      className="h-9 w-[13rem] rounded-lg bg-muted/50 px-3 text-left text-xs text-muted-foreground"
+      aria-labelledby={ariaLabelledBy}
+      className={
+        variant === "forum"
+          ? "h-11 w-full max-w-[13rem] rounded-sm bg-background/60 px-3 text-left text-xs text-muted-foreground"
+          : "h-9 w-[13rem] rounded-lg bg-muted/50 px-3 text-left text-xs text-muted-foreground"
+      }
       disabled
       type="button"
     >
@@ -439,7 +704,9 @@ function SnapshotSelect({
   onValueChange,
   snapshots,
   value,
+  variant = "default",
 }: {
+  variant?: NewsFeedVariant;
   ariaLabelledBy?: string;
   onValueChange: (snapshotDate: string) => void;
   snapshots: NewsSnapshotRecord[];
@@ -449,11 +716,18 @@ function SnapshotSelect({
     <Select onValueChange={onValueChange} value={value}>
       <SelectTrigger
         aria-labelledby={ariaLabelledBy}
-        className="h-9 w-[13rem] rounded-lg border-transparent bg-muted/50 px-3 py-0 text-xs shadow-none"
+        className={
+          variant === "forum"
+            ? "h-11 w-full max-w-[13rem] rounded-sm border-transparent bg-background/60 px-3 py-0 text-xs shadow-none"
+            : "h-9 w-[13rem] rounded-lg border-transparent bg-muted/50 px-3 py-0 text-xs shadow-none"
+        }
       >
         <SelectValue placeholder="Select date" />
       </SelectTrigger>
-      <SelectContent align="end" className="rounded-lg">
+      <SelectContent
+        align="end"
+        className={variant === "forum" ? "rounded-sm" : "rounded-lg"}
+      >
         <SelectGroup>
           {snapshots.map((snapshot) => {
             const disabled =
@@ -461,7 +735,7 @@ function SnapshotSelect({
             return (
               <SelectItem
                 key={snapshot.snapshotDate}
-                className="text-xs"
+                className={variant === "forum" ? "min-h-11 text-xs" : "text-xs"}
                 disabled={disabled}
                 value={snapshot.snapshotDate}
               >
@@ -497,7 +771,9 @@ function NewsVoteControl({
   isAuthenticated,
   summary,
   title,
+  variant = "default",
 }: {
+  variant?: NewsFeedVariant;
   authLoading: boolean;
   entityId: string;
   initialScore: number;
@@ -561,7 +837,11 @@ function NewsVoteControl({
   return (
     <>
       <div
-        className="flex w-8 shrink-0 flex-col items-center gap-1 text-xs text-muted-foreground"
+        className={
+          variant === "forum"
+            ? "flex w-11 shrink-0 flex-col items-center font-mono text-xs text-muted-foreground"
+            : "flex w-8 shrink-0 flex-col items-center gap-1 text-xs text-muted-foreground"
+        }
         role="group"
         aria-label={`SYMBaiEX votes for ${title}`}
       >
@@ -570,7 +850,11 @@ function NewsVoteControl({
             vote === 1 ? `Remove upvote for ${title}` : `Upvote ${title}`
           }
           aria-pressed={vote === 1}
-          className="size-8 rounded-lg border-0 p-0 hover:bg-muted"
+          className={
+            variant === "forum"
+              ? "size-11 rounded-sm border-0 p-0 hover:bg-muted"
+              : "size-8 rounded-lg border-0 p-0 hover:bg-muted"
+          }
           disabled={voteDisabled}
           onClick={() => void onVote(1)}
           size="icon"
@@ -587,7 +871,11 @@ function NewsVoteControl({
             vote === -1 ? `Remove downvote for ${title}` : `Downvote ${title}`
           }
           aria-pressed={vote === -1}
-          className="size-8 rounded-lg border-0 p-0 hover:bg-muted"
+          className={
+            variant === "forum"
+              ? "size-11 rounded-sm border-0 p-0 hover:bg-muted"
+              : "size-8 rounded-lg border-0 p-0 hover:bg-muted"
+          }
           disabled={voteDisabled}
           onClick={() => void onVote(-1)}
           size="icon"

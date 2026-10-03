@@ -1,11 +1,24 @@
 "use client";
 
+import { MessageSquare } from "lucide-react";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+} from "./forum-layout-primitives";
+
 import { asRoute } from "@/lib/typed-route";
 
 import { reportAppError } from "@/components/app-error-surface";
 import { AuthRequiredDialog } from "@/components/auth-required-dialog";
 import type { ForumAttachmentDraft } from "@/components/forum/forum-compose";
 import {
+  formatForumCount,
+  formatForumDateTime,
+  getCategoryLatestThread,
+  getThreadLastAuthor,
+  getThreadLastActivityAt,
+  getThreadLastPostHref,
   forumPath,
   forumPostPath,
   forumRefs,
@@ -537,297 +550,333 @@ function LiveForumThreadList({
   }
 
   return (
-    <div className="space-y-7">
-      <div className="py-2">
+    <div className="space-y-5">
+      {showHeading ? (
+        <ForumPageHeader
+          title={getCategoryTitle(category)}
+          description={getCategoryDescription(category)}
+          breadcrumbs={<ForumBreadcrumbs category={category} />}
+          view="boards"
+          nested
+        />
+      ) : (
         <ForumBreadcrumbs category={category} />
-        <div className="mt-2">
-          {showHeading ? (
-            <>
-              <p className="text-xs text-muted-foreground">Board</p>
-              <h1 className="mt-1 break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
-                {getCategoryTitle(category)}
-              </h1>
-              {getCategoryDescription(category) ? (
-                <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-                  {getCategoryDescription(category)}
+      )}
+      <ForumBodyGrid
+        sidebar={
+          <aside aria-label="Board information" className="min-w-0 space-y-5">
+            <section className="overflow-hidden rounded-sm bg-muted/20">
+              <ForumSectionHeader title="About this board" />
+              <div className="space-y-4 p-4">
+                <dl className="grid grid-cols-2 gap-4 font-mono text-xs text-muted-foreground">
+                  <div>
+                    <dt>Threads</dt>
+                    <dd className="mt-1 text-lg tabular-nums text-foreground">
+                      {formatForumCount(getCategoryThreadCount(category))}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Posts</dt>
+                    <dd className="mt-1 text-lg tabular-nums text-foreground">
+                      {formatForumCount(getCategoryPostCount(category))}
+                    </dd>
+                  </div>
+                </dl>
+                {hasSubboards ? (
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Includes {category.children?.length ?? 0} sub-boards
+                  </p>
+                ) : null}
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {viewerCanCreateThread
+                    ? "You can start a discussion in this board."
+                    : threadCreationMessage}
                 </p>
-              ) : null}
-            </>
-          ) : null}
-          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <div className="inline-flex items-baseline gap-1.5">
-              <dt>Threads</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
-                {getCategoryThreadCount(category)}
-              </dd>
-            </div>
-            {hasSubboards ? (
-              <div className="text-muted-foreground">
-                <dt className="sr-only">Scope</dt>
-                <dd>Includes {category.children?.length ?? 0} sub-boards</dd>
+                <ForumLink
+                  className="focus-ring inline-flex min-h-11 items-center text-sm text-primary hover:underline"
+                  href="/forum#forum-chat"
+                >
+                  Open the Lounge →
+                </ForumLink>
               </div>
-            ) : null}
-            <div className="inline-flex items-baseline gap-1.5">
-              <dt>Posts</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
-                {getCategoryPostCount(category)}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </div>
-
-      <ForumSubboardSelector
-        boards={category.children ?? []}
-        parentTitle={getCategoryTitle(category)}
-      />
-
-      <ForumAnnouncementPanel announcements={listResult.announcements} />
-
-      <section>
-        <div className="min-w-0 space-y-3">
-          <div className="grid gap-3 py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
-            <form
-              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto]"
-              onSubmit={submitBoardSearch}
-              role="search"
-            >
-              <label className="min-w-0 flex-1">
-                <span className="sr-only">Search this board</span>
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search this board"
-                  className="min-h-11 rounded-none border-row-border text-base md:text-sm"
-                  aria-label="Search this board"
+            </section>
+            {listResult.rules ? (
+              <section
+                className="overflow-hidden rounded-sm bg-muted/20"
+                aria-label="Board rules"
+              >
+                <ForumSectionHeader
+                  title={listResult.rules.title || "Board rules"}
                 />
-              </label>
-              <Button
-                className="min-h-11 rounded-none border-l-0 text-xs "
-                type="submit"
-                variant="outline"
-                disabled={
-                  (searchPending && submittedSearchScope === searchScope) ||
-                  searchQuery.trim().length < 3
-                }
-              >
-                {searchPending && submittedSearchScope === searchScope
-                  ? "Searching..."
-                  : "Search"}
-              </Button>
-            </form>
-            <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
-              <Button
-                className="min-h-11 rounded-none text-xs "
-                type="button"
-                disabled={authLoading || pending}
-                onClick={toggleThreadComposer}
-              >
-                {composeOpen && isAuthenticated && viewerCanCreateThread
-                  ? "Close thread form"
-                  : "New thread"}
-              </Button>
-              <Button
-                className="min-h-11 rounded-none text-xs "
-                type="button"
-                variant="outline"
-                disabled={authLoading || categorySubscriptionPending}
-                onClick={toggleBoardSubscription}
-              >
-                {categorySubscriptionPending
-                  ? "Saving..."
-                  : categorySubscribed
-                    ? "Unsubscribe"
-                    : "Subscribe"}
-              </Button>
-              <Button
-                className="min-h-11 rounded-none text-xs "
-                type="button"
-                variant="outline"
-                disabled={authLoading || markReadPending}
-                onClick={markBoardRead}
-              >
-                {markReadPending ? "Marking..." : "Mark read"}
-              </Button>
-            </div>
-          </div>
-          {boardActionError ? (
-            <p
-              className="border border-row-border p-3 text-sm text-muted-foreground"
-              role="alert"
-            >
-              {boardActionError}
-            </p>
-          ) : null}
+                <div className="p-4 text-sm">
+                  <ForumBody body={listResult.rules.body} />
+                </div>
+              </section>
+            ) : null}
+          </aside>
+        }
+      >
+        <ForumSubboardSelector
+          boards={category.children ?? []}
+          parentTitle={getCategoryTitle(category)}
+        />
 
-          {composeOpen && isAuthenticated && viewerCanCreateThread ? (
-            <ForumCompose
-              title={threadTitle}
-              draftKey={`symbaiex:forum:draft:thread:${categorySlug}`}
-              onTitleChange={setThreadTitle}
-              titlePlaceholder="Short, specific thread title"
-              body={threadBody}
-              onBodyChange={setThreadBody}
-              bodyPlaceholder="Open the discussion. Keep the first post concrete."
-              bodyLabel="First post"
-              submitLabel="Post thread"
-              pending={pending}
-              disabled={authLoading || !viewerCanCreateThread}
-              error={error}
-              footerActions={
+        <ForumAnnouncementPanel announcements={listResult.announcements} />
+
+        <section aria-label="Board discussions">
+          <ForumSectionHeader title="Discussions">
+            {listResult.pagination.totalItems}{" "}
+            {listResult.pagination.totalItems === 1 ? "thread" : "threads"}
+          </ForumSectionHeader>
+          <div className="min-w-0 space-y-3">
+            <div className="grid gap-3 py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
+              <form
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto]"
+                onSubmit={submitBoardSearch}
+                role="search"
+              >
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">Search this board</span>
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search this board"
+                    className="min-h-11 rounded-none border-row-border text-base md:text-sm"
+                    aria-label="Search this board"
+                  />
+                </label>
                 <Button
-                  className="rounded-none text-xs"
+                  className="min-h-11 rounded-none border-l-0 text-xs "
+                  type="submit"
+                  variant="outline"
+                  disabled={
+                    (searchPending && submittedSearchScope === searchScope) ||
+                    searchQuery.trim().length < 3
+                  }
+                >
+                  {searchPending && submittedSearchScope === searchScope
+                    ? "Searching..."
+                    : "Search"}
+                </Button>
+              </form>
+              <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
+                <Button
+                  className="min-h-11 rounded-none text-xs "
+                  type="button"
+                  disabled={authLoading || pending}
+                  onClick={toggleThreadComposer}
+                >
+                  {composeOpen && isAuthenticated && viewerCanCreateThread
+                    ? "Close thread form"
+                    : "New thread"}
+                </Button>
+                <Button
+                  className="min-h-11 rounded-none text-xs "
                   type="button"
                   variant="outline"
-                  disabled={threadBody.trim().length === 0}
-                  onClick={() => setThreadPreviewOpen((current) => !current)}
+                  disabled={authLoading || categorySubscriptionPending}
+                  onClick={toggleBoardSubscription}
                 >
-                  {threadPreviewOpen ? "Hide preview" : "Preview"}
+                  {categorySubscriptionPending
+                    ? "Saving..."
+                    : categorySubscribed
+                      ? "Unsubscribe"
+                      : "Subscribe"}
                 </Button>
-              }
-              note="Thread creation requires a signed-in SYM handle. Mention a member with @handle to send an in-app alert."
-              onSubmit={submitThread}
-            >
-              <ForumPrefixSelect
-                disabled={pending || authLoading}
-                prefixes={threadPrefixes ?? []}
-                value={threadPrefixId}
-                onChange={setThreadPrefixId}
-              />
-              <ForumPollDraft
-                disabled={!viewerCanCreatePoll}
-                enabled={pollEnabled}
-                onEnabledChange={setPollEnabled}
-                question={pollQuestion}
-                onQuestionChange={setPollQuestion}
-                options={pollOptions}
-                onOptionsChange={setPollOptions}
-              />
-              <ForumAttachmentDraftPanel
-                attachments={threadAttachments}
-                disabled={pending || authLoading || !viewerCanCreateThread}
-                onAttachmentsChange={setThreadAttachments}
-              />
-              {threadPreviewOpen ? (
-                <ThreadPreviewPanel body={threadBody} />
-              ) : null}
-            </ForumCompose>
-          ) : isAuthenticated && !viewerCanCreateThread ? (
-            <ForumStatusBox
-              title="Thread posting unavailable"
-              body={threadCreationMessage}
-              accent="canary"
-            />
-          ) : null}
+                <Button
+                  className="min-h-11 rounded-none text-xs "
+                  type="button"
+                  variant="outline"
+                  disabled={authLoading || markReadPending}
+                  onClick={markBoardRead}
+                >
+                  {markReadPending ? "Marking..." : "Mark read"}
+                </Button>
+              </div>
+            </div>
+            {boardActionError ? (
+              <p
+                className="border border-row-border p-3 text-sm text-muted-foreground"
+                role="alert"
+              >
+                {boardActionError}
+              </p>
+            ) : null}
 
-          {searchError && submittedSearchScope === searchScope ? (
-            <ForumStatusBox title="Search unavailable" body={searchError} />
-          ) : null}
+            {composeOpen && isAuthenticated && viewerCanCreateThread ? (
+              <ForumCompose
+                title={threadTitle}
+                draftKey={`symbaiex:forum:draft:thread:${categorySlug}`}
+                onTitleChange={setThreadTitle}
+                titlePlaceholder="Short, specific thread title"
+                body={threadBody}
+                onBodyChange={setThreadBody}
+                bodyPlaceholder="Open the discussion. Keep the first post concrete."
+                bodyLabel="First post"
+                submitLabel="Post thread"
+                pending={pending}
+                disabled={authLoading || !viewerCanCreateThread}
+                error={error}
+                footerActions={
+                  <Button
+                    className="rounded-none text-xs"
+                    type="button"
+                    variant="outline"
+                    disabled={threadBody.trim().length === 0}
+                    onClick={() => setThreadPreviewOpen((current) => !current)}
+                  >
+                    {threadPreviewOpen ? "Hide preview" : "Preview"}
+                  </Button>
+                }
+                note="Thread creation requires a signed-in SYM handle. Mention a member with @handle to send an in-app alert."
+                onSubmit={submitThread}
+              >
+                <ForumPrefixSelect
+                  disabled={pending || authLoading}
+                  prefixes={threadPrefixes ?? []}
+                  value={threadPrefixId}
+                  onChange={setThreadPrefixId}
+                />
+                <ForumPollDraft
+                  disabled={!viewerCanCreatePoll}
+                  enabled={pollEnabled}
+                  onEnabledChange={setPollEnabled}
+                  question={pollQuestion}
+                  onQuestionChange={setPollQuestion}
+                  options={pollOptions}
+                  onOptionsChange={setPollOptions}
+                />
+                <ForumAttachmentDraftPanel
+                  attachments={threadAttachments}
+                  disabled={pending || authLoading || !viewerCanCreateThread}
+                  onAttachmentsChange={setThreadAttachments}
+                />
+                {threadPreviewOpen ? (
+                  <ThreadPreviewPanel body={threadBody} />
+                ) : null}
+              </ForumCompose>
+            ) : isAuthenticated && !viewerCanCreateThread ? (
+              <ForumStatusBox
+                title="Thread posting unavailable"
+                body={threadCreationMessage}
+                accent="canary"
+              />
+            ) : null}
 
-          {submittedSearchScope === searchScope &&
-          submittedSearchQuery.length >= 3 &&
-          !searchError ? (
-            <ForumSearchResults
-              categorySlug={category.slug}
-              query={submittedSearchQuery}
-              searchResult={searchResult}
-              pending={searchPending}
-              onClear={clearBoardSearch}
-            />
-          ) : null}
+            {searchError && submittedSearchScope === searchScope ? (
+              <ForumStatusBox title="Search unavailable" body={searchError} />
+            ) : null}
 
-          {showBoardTools ? (
-            <ForumBoardTools
-              activePrefixes={activePrefixOptions}
-              dayFilter={selectedDayFilter}
-              filterSummary={prefixFilterSummary}
-              filtersActive={boardFiltersActive}
-              onDayFilterChange={(value) =>
-                updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
-              }
-              onPrefixFilterChange={updatePrefixFilter}
-              onSortKeyChange={(value) =>
-                updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
-              }
-              onSortOrderChange={(value) =>
-                updateBoardListParam("order", value, DEFAULT_THREAD_SORT_ORDER)
-              }
-              prefixFilter={selectedPrefixFilter}
-              sortKey={selectedSortKey}
-              sortOrder={selectedSortOrder}
-              visibleThreadCount={currentPageThreads.length}
-            />
-          ) : null}
-          {showPagination ? (
-            <ForumPaginationBar
-              buildHref={boardPageHref}
-              label="Threads"
-              nextLabel={isNewestFirstOrder ? undefined : "Next"}
-              pagination={listResult.pagination}
-              previousLabel={isNewestFirstOrder ? undefined : "Prev"}
-            />
-          ) : null}
-          {boardIsEmpty ? (
-            <ForumStatusBox
-              title={
-                hasSubboards
-                  ? `No direct threads in ${getCategoryTitle(category)}`
-                  : `No threads in ${getCategoryTitle(category)}`
-              }
-              body={
-                !isAuthenticated || viewerCanCreateThread
-                  ? hasSubboards
-                    ? "Start a broad discussion here, or choose a focused sub-board above."
-                    : "Start the first useful discussion for this board."
-                  : threadCreationMessage
-              }
-              action={
-                !isAuthenticated || viewerCanCreateThread ? (
+            {submittedSearchScope === searchScope &&
+            submittedSearchQuery.length >= 3 &&
+            !searchError ? (
+              <ForumSearchResults
+                categorySlug={category.slug}
+                query={submittedSearchQuery}
+                searchResult={searchResult}
+                pending={searchPending}
+                onClear={clearBoardSearch}
+              />
+            ) : null}
+
+            {showBoardTools ? (
+              <ForumBoardTools
+                activePrefixes={activePrefixOptions}
+                dayFilter={selectedDayFilter}
+                filterSummary={prefixFilterSummary}
+                filtersActive={boardFiltersActive}
+                onDayFilterChange={(value) =>
+                  updateBoardListParam("days", value, THREAD_DAY_FILTER_ALL)
+                }
+                onPrefixFilterChange={updatePrefixFilter}
+                onSortKeyChange={(value) =>
+                  updateBoardListParam("sort", value, DEFAULT_THREAD_SORT_KEY)
+                }
+                onSortOrderChange={(value) =>
+                  updateBoardListParam(
+                    "order",
+                    value,
+                    DEFAULT_THREAD_SORT_ORDER,
+                  )
+                }
+                prefixFilter={selectedPrefixFilter}
+                sortKey={selectedSortKey}
+                sortOrder={selectedSortOrder}
+                visibleThreadCount={currentPageThreads.length}
+              />
+            ) : null}
+            {showPagination ? (
+              <ForumPaginationBar
+                buildHref={boardPageHref}
+                label="Threads"
+                nextLabel={isNewestFirstOrder ? undefined : "Next"}
+                pagination={listResult.pagination}
+                previousLabel={isNewestFirstOrder ? undefined : "Prev"}
+              />
+            ) : null}
+            {boardIsEmpty ? (
+              <ForumStatusBox
+                title={
+                  hasSubboards
+                    ? `No direct threads in ${getCategoryTitle(category)}`
+                    : `No threads in ${getCategoryTitle(category)}`
+                }
+                body={
+                  !isAuthenticated || viewerCanCreateThread
+                    ? hasSubboards
+                      ? "Start a broad discussion here, or choose a focused sub-board above."
+                      : "Start the first useful discussion for this board."
+                    : threadCreationMessage
+                }
+                action={
+                  !isAuthenticated || viewerCanCreateThread ? (
+                    <Button
+                      className="min-h-11 rounded-none text-sm"
+                      type="button"
+                      onClick={toggleThreadComposer}
+                    >
+                      {hasSubboards
+                        ? "Start a thread here"
+                        : "Start the first thread"}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : currentPageThreads.length === 0 ? (
+              <ForumStatusBox
+                title="No matching threads"
+                body={`No threads match ${prefixFilterSummary} with the current board filters.`}
+                action={
                   <Button
                     className="min-h-11 rounded-none text-sm"
                     type="button"
-                    onClick={toggleThreadComposer}
+                    variant="outline"
+                    onClick={resetBoardView}
                   >
-                    {hasSubboards
-                      ? "Start a thread here"
-                      : "Start the first thread"}
+                    Clear filters
                   </Button>
-                ) : undefined
-              }
-            />
-          ) : currentPageThreads.length === 0 ? (
-            <ForumStatusBox
-              title="No matching threads"
-              body={`No threads match ${prefixFilterSummary} with the current board filters.`}
-              action={
-                <Button
-                  className="min-h-11 rounded-none text-sm"
-                  type="button"
-                  variant="outline"
-                  onClick={resetBoardView}
-                >
-                  Clear filters
-                </Button>
-              }
-            />
-          ) : (
-            <ForumThreadTable
-              category={category}
-              showFooter={false}
-              threads={currentPageThreads}
-            />
-          )}
-          {showPagination ? (
-            <ForumPaginationBar
-              buildHref={boardPageHref}
-              label="Threads"
-              nextLabel={isNewestFirstOrder ? undefined : "Next"}
-              pagination={listResult.pagination}
-              previousLabel={isNewestFirstOrder ? undefined : "Prev"}
-            />
-          ) : null}
-        </div>
-      </section>
+                }
+              />
+            ) : (
+              <ForumThreadTable
+                category={category}
+                showFooter={false}
+                variant="grouped"
+                threads={currentPageThreads}
+              />
+            )}
+            {showPagination ? (
+              <ForumPaginationBar
+                buildHref={boardPageHref}
+                label="Threads"
+                nextLabel={isNewestFirstOrder ? undefined : "Next"}
+                pagination={listResult.pagination}
+                previousLabel={isNewestFirstOrder ? undefined : "Prev"}
+              />
+            ) : null}
+          </div>
+        </section>
+      </ForumBodyGrid>
 
       <AuthRequiredDialog
         action={authAction}
@@ -848,35 +897,106 @@ function ForumSubboardSelector({
 }) {
   if (boards.length === 0) return null;
   return (
-    <nav aria-label={`${parentTitle} sub-boards`} className="space-y-3">
-      <h2 className="text-sm font-medium text-muted-foreground">
-        Sub-boards <span className="ml-1 text-xs">{boards.length}</span>
-      </h2>
-      <ul className="space-y-2">
-        {boards.map((board) => (
-          <li key={board.slug}>
-            <ForumLink
-              className="focus-ring group flex min-h-11 min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-2"
-              href={forumPath(board.slug)}
-              prefetch
-            >
-              <span className="min-w-0">
-                <span className="text-base font-semibold group-hover:text-primary">
-                  {getCategoryTitle(board)}
+    <nav
+      aria-label={`${parentTitle} sub-boards`}
+      className="overflow-hidden rounded-sm bg-muted/20"
+    >
+      <ForumSectionHeader title="Sub-boards">
+        {boards.length} {boards.length === 1 ? "board" : "boards"}
+      </ForumSectionHeader>
+      <ul className="px-4">
+        {boards.map((board) => {
+          const latest = getCategoryLatestThread(board);
+          return (
+            <li key={board.slug}>
+              <article className="grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-3 gap-y-1 py-3 xl:grid-cols-[24px_minmax(0,1fr)_64px_170px]">
+                <span
+                  role="img"
+                  aria-label={
+                    board.viewerUnread === undefined
+                      ? "Sub-board"
+                      : board.viewerUnread
+                        ? "Unread board"
+                        : "Read board"
+                  }
+                  className={`pt-3 ${board.viewerUnread ? "text-primary" : "text-muted-foreground"}`}
+                >
+                  <MessageSquare className="size-5" aria-hidden="true" />
                 </span>
-                {getCategoryDescription(board) ? (
-                  <span className="ml-3 text-sm text-muted-foreground">
-                    {getCategoryDescription(board)}
-                  </span>
-                ) : null}
-              </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {forumItemCount(getCategoryThreadCount(board), "thread")} ·{" "}
-                {forumItemCount(getCategoryPostCount(board), "post")}
-              </span>
-            </ForumLink>
-          </li>
-        ))}
+                <div className="min-w-0">
+                  <h3>
+                    <ForumLink
+                      className="focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere]"
+                      href={forumPath(board.slug)}
+                      prefetch
+                    >
+                      {getCategoryTitle(board)}
+                    </ForumLink>
+                  </h3>
+                  {getCategoryDescription(board) ? (
+                    <p className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                      {getCategoryDescription(board)}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 font-mono text-[10px] text-muted-foreground xl:hidden">
+                    {forumItemCount(getCategoryThreadCount(board), "thread")} ·{" "}
+                    {forumItemCount(getCategoryPostCount(board), "post")}
+                  </p>
+                  {board.children?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                      {board.children.map((child) => (
+                        <ForumLink
+                          className="focus-ring inline-flex min-h-11 items-center hover:text-primary"
+                          href={forumPath(child.slug)}
+                          key={child.slug}
+                        >
+                          {getCategoryTitle(child)}
+                        </ForumLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <dl className="hidden space-y-2 pt-3 font-mono text-[10px] text-muted-foreground xl:block">
+                  <div className="flex flex-col">
+                    <dt className="order-2">threads</dt>
+                    <dd className="order-1 text-sm tabular-nums text-foreground">
+                      {formatForumCount(getCategoryThreadCount(board))}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col">
+                    <dt className="order-2">posts</dt>
+                    <dd className="order-1 tabular-nums text-foreground">
+                      {formatForumCount(getCategoryPostCount(board))}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="col-start-2 min-w-0 xl:col-start-auto xl:pt-2">
+                  {latest ? (
+                    <>
+                      <ForumLink
+                        className="focus-ring block min-h-11 content-center break-words text-xs font-medium leading-5 hover:text-primary"
+                        href={getThreadLastPostHref(latest, board.slug)}
+                      >
+                        {latest.title}
+                      </ForumLink>
+                      <p className="text-[11px] leading-5 text-muted-foreground">
+                        {getThreadLastAuthor(latest)} ·{" "}
+                        {formatForumDateTime(getThreadLastActivityAt(latest))}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="py-2 text-xs text-muted-foreground">
+                      {getCategoryPostCount(board) > 0 ||
+                      getCategoryThreadCount(board) > 0
+                        ? "Latest activity unavailable"
+                        : "No posts yet"}
+                    </p>
+                  )}
+                </div>
+              </article>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

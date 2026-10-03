@@ -269,6 +269,7 @@ describe("forum MCP App resource", () => {
     await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 3 SYMBaiEX comments");
     expect(app.nodes.get("content")!.textContent).not.toContain("0 SYMBaiEX comments");
+    expect(app.nodes.get("content")!.querySelector("article")!.children[0].attributes["aria-label"]).toBe("Hacker News rank 1");
     const anchor = app.nodes.get("content")!.querySelector("a")!;
     expect(anchor.href).toBe("https://www.symbaiex.com/news/tools-and-people-123");
     anchor.fire("click");
@@ -396,6 +397,69 @@ describe("forum MCP App resource", () => {
     const counts = app.nodes.get("content")!.querySelector("dl")!;
     expect(counts.children.map(item => item.children.map(node => [node.tagName, node.textContent]))).toEqual([[ ["dt", "Threads"], ["dd", "12"] ], [ ["dt", "Posts"], ["dd", "34"] ]]);
     expect(app.nodes.get("content")!.find("Research")!.disabled).toBe(false);
+  });
+
+  test("keeps board hierarchy and target permissions when opening subforums", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [
+      { _id: "parent", name: "Research", slug: "research", threadCount: 12, postCount: 34 },
+      { _id: "child", parentCategoryId: "parent", name: "Working notes", slug: "working-notes", threadCount: 2, postCount: 3 },
+    ] } });
+    await app.flush();
+    app.nodes.get("content")!.find("Working notes")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toEqual({ categorySlug: "working-notes", page: 1, pageSize: 20 });
+    expect(app.nodes.get("navigation")!.find("Boards")!.attributes["aria-current"]).toBe("page");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: {
+      category: { name: "Working notes", slug: "working-notes", description: "Research in progress", viewerCanCreateThread: false,
+        ancestors: [{ name: "Community", slug: "community", kind: "section", isPostable: false }, { name: "Research", slug: "research", kind: "board" }],
+        children: [{ name: "Experiments", slug: "experiments", threadCount: 1, postCount: 2 }] },
+      threads: [], rules: { body: "Keep sources attached." }, announcements: [{ title: "Weekly reading", body: "Share your notes here." }],
+    } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("Boards/Community/Research");
+    expect(content.find("Community")).toBeUndefined();
+    expect(content.find("Create post")).toBeUndefined();
+    expect(content.textContent).toContain("Subforums");
+    expect(content.textContent).toContain("Weekly reading");
+    expect(content.querySelector("summary")!.textContent).toBe("Board rules");
+    content.find("Experiments")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toEqual({ categorySlug: "experiments", page: 1, pageSize: 20 });
+    const oldChild = app.latest("tools/call");
+    app.nodes.get("navigation")!.find("News")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { stories: [] } } });
+    await app.flush();
+    app.reply(oldChild, { structuredContent: { data: { category: { name: "Experiments", viewerCanCreateThread: true }, threads: [] } } });
+    await app.flush();
+    expect(content.querySelector("h1")!.textContent).toBe("News");
+    expect(content.find("Create post")).toBeUndefined();
+  });
+
+  test("keeps thread ownership, AI labels, and reply restrictions in the conversation layout", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("Community")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "Sources", slug: "sources", categorySlug: "research", replyCount: 2, viewCount: 8, lastPostAuthor: "Curator", lastPostAt: 1_800_000_000_000 }], isDone: true } } });
+    await app.flush();
+    const stats = app.nodes.get("content")!.querySelector("dl")!;
+    expect(stats.children.map(item => item.children.map(node => node.textContent))).toEqual([["Replies", "2"], ["Views", "8"]]);
+    app.nodes.get("content")!.find("Sources")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: {
+      category: { name: "Research", slug: "research" },
+      thread: { _id: "thread", title: "Sources", author: "Curator", body: "Original sources", viewerCanReply: false, replyCount: 2, authorIdentity: { isAgent: true } },
+      replies: { page: [{ author: "Member", body: "A human reply", agentAssisted: true }], pagination: { page: 1, totalPages: 1 } },
+    } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("Conversation2 replies");
+    expect(content.textContent).toContain("AI agent");
+    expect(content.textContent).toContain("Agent assisted");
+    expect(content.textContent).toContain("Original sources");
+    expect(content.textContent).toContain("A human reply");
+    expect(content.find("Reply")).toBeUndefined();
+    expect(content.textContent).toContain("Replies are unavailable");
   });
 
   test("negotiates the standard protocol and guards parent source, response shape and request IDs", async () => {
