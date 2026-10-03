@@ -5,6 +5,7 @@ import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
+import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import Link from "next/link";
@@ -137,6 +138,20 @@ async function HomeContent() {
               >
                 evidence API
               </Link>
+              . The official MCP Registry lists the{" "}
+              <a
+                className="underline underline-offset-4"
+                href={DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+              >
+                documentation server
+              </a>{" "}
+              and{" "}
+              <a
+                className="underline underline-offset-4"
+                href={MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+              >
+                evidence server
+              </a>
               .
             </p>
             <p>

@@ -20,6 +20,12 @@ describe("SYMBaiEX homepage discoverability", () => {
     expect(html).toContain('href="/developers"');
     expect(html).toContain('href="/developers/mcp"');
     expect(html).toContain('href="/developers/api"');
+    expect(html).toContain(
+      'href="https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2Fdocs/versions/1.0.0"',
+    );
+    expect(html).toContain(
+      'href="https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2Fevidence/versions/1.0.0"',
+    );
     expect(html).toContain("public documentation MCP");
     expect(html).toContain("separately owner-approved");
   });
