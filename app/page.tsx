@@ -116,10 +116,28 @@ async function HomeContent() {
             </p>
             <p>
               Machine integrations start with published contracts rather than
-              private infrastructure. The developer guide links the OpenAPI and
-              AsyncAPI descriptions, MCP server card, authentication guide,
-              skills, client source, quotas, and the exact boundaries of the
-              current free beta.
+              private infrastructure. Start with the{" "}
+              <Link className="underline underline-offset-4" href="/developers">
+                SYMBaiEX developer guide
+              </Link>
+              , which links the OpenAPI and AsyncAPI descriptions, MCP server
+              cards, authentication guide, skills, client source, quotas, and
+              the exact boundaries of the current free beta. Read integration
+              docs through the{" "}
+              <Link
+                className="underline underline-offset-4"
+                href="/developers/mcp"
+              >
+                public documentation MCP
+              </Link>{" "}
+              or use the separately owner-approved{" "}
+              <Link
+                className="underline underline-offset-4"
+                href="/developers/api"
+              >
+                evidence API
+              </Link>
+              .
             </p>
             <p>
               Source-linked evidence is kept distinct from opinion. Stored

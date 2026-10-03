@@ -49,7 +49,14 @@ describe("serializeJsonLd", () => {
       contactPoint: { email: "austin@symbaiex.com" },
       address: { addressLocality: "Birmingham", addressRegion: "AL" },
     });
-    expect(graph.some((entry) => entry["@type"] === "Service")).toBe(true);
+    const webApi = graph.find(
+      (entry) =>
+        Array.isArray(entry["@type"]) && entry["@type"].includes("WebAPI"),
+    );
+    expect(webApi).toMatchObject({
+      "@type": ["Service", "WebAPI"],
+      documentation: "https://www.symbaiex.com/api/agent/openapi.json",
+    });
     expect(graph.some((entry) => entry["@type"] === "DataCatalog")).toBe(true);
     expect(
       graph.some((entry) => entry["@type"] === "SoftwareApplication"),
