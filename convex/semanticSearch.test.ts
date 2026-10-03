@@ -14,6 +14,7 @@ import {
   dayKey,
   isCircuitAvailable,
   isCurrentFingerprint,
+  providerUsageSettlement,
   semanticSearchConfig,
   settlementDelta,
   settlementLocation,
@@ -131,6 +132,15 @@ describe("semantic search safety controls", () => {
     // When actual provider usage is known to be zero, the reservation can be
     // released; ambiguous provider failures retain their estimate separately.
     expect(settlementDelta(125, 0)).toBe(-125);
+  });
+
+  test("uses actual provider usage when downstream work fails", () => {
+    expect(
+      providerUsageSettlement(OPENROUTER_EMBEDDING_MODEL, 50, 100, null),
+    ).toEqual({ inputTokens: 50, settledMicroUsd: 100 });
+    expect(
+      providerUsageSettlement(OPENROUTER_EMBEDDING_MODEL, 50, 100, 30),
+    ).toEqual({ inputTokens: 30, settledMicroUsd: 1 });
   });
 
   test("binds a vector to its document revision while tolerating source metadata changes", () => {
@@ -675,6 +685,58 @@ describe("semantic search safety controls", () => {
             .unique()
         )?.status,
       ).toBe("failed");
+    });
+  });
+
+  test("failure settlement reconciles token counts even when cost rounds unchanged", async () => {
+    const t = setup();
+    const operationKey = "semantic:query:downstream-failure";
+    await t.mutation(
+      reserveUsageRef,
+      reservationArgs(operationKey, {
+        estimatedMicroUsd: 1,
+        inputTokens: 10,
+      }),
+    );
+    const settlement = providerUsageSettlement(
+      OPENROUTER_EMBEDDING_MODEL,
+      10,
+      1,
+      30,
+    );
+
+    await t.mutation(recordUsageRef, {
+      operationKey,
+      ...settlement,
+      model: OPENROUTER_EMBEDDING_MODEL,
+      outcome: "failed",
+      detail: "RAG operation failed after embedding completed.",
+    });
+
+    await t.run(async (ctx) => {
+      expect(
+        await ctx.db
+          .query("aiSpendBuckets")
+          .withIndex("by_dayKey_and_provider_and_bucket", (q) =>
+            q
+              .eq("dayKey", dayKey())
+              .eq("provider", "openrouter")
+              .eq("bucket", 15),
+          )
+          .unique(),
+      ).toMatchObject({ spentMicroUsd: 1, inputTokens: 30, requests: 1 });
+      expect(
+        await ctx.db
+          .query("semanticSearchOperations")
+          .withIndex("by_operationKey", (q) =>
+            q.eq("operationKey", operationKey),
+          )
+          .unique(),
+      ).toMatchObject({
+        status: "failed",
+        settledMicroUsd: 1,
+        settledInputTokens: 30,
+      });
     });
   });
 

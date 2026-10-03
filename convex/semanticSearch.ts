@@ -439,6 +439,24 @@ export function settlementDelta(
   return Math.max(0, actualMicroUsd) - Math.max(0, reservedMicroUsd);
 }
 
+export function providerUsageSettlement(
+  model: string,
+  reservedInputTokens: number,
+  reservedMicroUsd: number,
+  actualInputTokens: number | null,
+) {
+  if (actualInputTokens === null) {
+    return {
+      inputTokens: reservedInputTokens,
+      settledMicroUsd: reservedMicroUsd,
+    };
+  }
+  return {
+    inputTokens: actualInputTokens,
+    settledMicroUsd: estimatedModelCostMicroUsd(model, actualInputTokens, 0),
+  };
+}
+
 function isSafeNonNegativeInteger(value: number) {
   return Number.isSafeInteger(value) && value >= 0;
 }
@@ -949,7 +967,7 @@ export const recordUsage = internalMutation({
         q.eq("dayKey", day).eq("provider", "openrouter").eq("bucket", bucket),
       )
       .unique();
-    if (spend !== null && delta !== 0) {
+    if (spend !== null) {
       await ctx.db.patch("aiSpendBuckets", spend._id, {
         // Clamp protects the accounting bucket from a corrupt legacy row.
         spentMicroUsd: Math.max(0, spend.spentMicroUsd + delta),
@@ -1442,7 +1460,7 @@ export const indexPublicEvidenceDocument = internalAction({
     );
     const { rag, embeddingModel } = platform(settings.apiKey, settings.model);
     const key = `evidence-document:${document.documentId}`;
-    let inputTokens = 0;
+    let inputTokens: number | null = null;
     try {
       const embedded = await embedRagText(
         embeddingModel,
@@ -1484,10 +1502,16 @@ export const indexPublicEvidenceDocument = internalAction({
       });
       return { status: result.status, created: result.created, inputTokens };
     } catch (error) {
+      const settlement = providerUsageSettlement(
+        settings.model,
+        reservedTokens,
+        reservedMicroUsd,
+        inputTokens,
+      );
       await ctx.runMutation(recordUsageRef, {
         operationKey: indexOperationKey,
-        inputTokens: reservedTokens,
-        settledMicroUsd: reservedMicroUsd,
+        inputTokens: settlement.inputTokens,
+        settledMicroUsd: settlement.settledMicroUsd,
         model: settings.model,
         outcome: "failed",
         detail: safeError(error),
@@ -1608,12 +1632,14 @@ export const searchPublicSemantic = internalAction({
         semanticUsed: false,
         outcome: "budget_rejected" as const,
       };
+    let inputTokens: number | null = null;
     try {
       const embedded = await embedRagQuery(
         embeddingModel,
         query,
         AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       );
+      inputTokens = embedded.inputTokens;
       const result = await rag.search(ctx, {
         namespace: NAMESPACE,
         query: embedded.embedding,
@@ -1621,7 +1647,6 @@ export const searchPublicSemantic = internalAction({
         vectorScoreThreshold: 0.58,
         searchType: "vector",
       });
-      const inputTokens = embedded.inputTokens;
       await ctx.runMutation(recordUsageRef, {
         operationKey: queryOperationKey,
         inputTokens,
@@ -1662,10 +1687,16 @@ export const searchPublicSemantic = internalAction({
         outcome: "completed" as const,
       };
     } catch (error) {
+      const settlement = providerUsageSettlement(
+        settings.model,
+        reservedTokens,
+        reservedMicroUsd,
+        inputTokens,
+      );
       await ctx.runMutation(recordUsageRef, {
         operationKey: queryOperationKey,
-        inputTokens: reservedTokens,
-        settledMicroUsd: reservedMicroUsd,
+        inputTokens: settlement.inputTokens,
+        settledMicroUsd: settlement.settledMicroUsd,
         model: settings.model,
         outcome: "failed",
         detail: safeError(error),
