@@ -1,7 +1,11 @@
 import { CopyableCommand } from "@/components/copyable-command";
 import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
 import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -375,6 +379,11 @@ export default function DevelopersPage() {
               Agent Plugin manifest
             </a>
             , which links these skills and the authenticated MCP transport.
+            Browse{" "}
+            <a className="underline" href={SKILLS_SH_LISTING_URL}>
+              the SYMBaiEX Skills.sh listing
+            </a>{" "}
+            to browse the published skill directory.
           </p>
         </section>
 

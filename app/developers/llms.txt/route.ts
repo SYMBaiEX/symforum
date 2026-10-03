@@ -1,5 +1,9 @@
 import { primarySiteUrl } from "@/lib/site-urls";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 
 export const dynamic = "force-static";
 
@@ -31,6 +35,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - MCP connection guide: ${primarySiteUrl("/developers/mcp")}
 - Forum plugin integration guide: ${primarySiteUrl("/developers/forum-plugin")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
+- Skills.sh directory listing: ${SKILLS_SH_LISTING_URL}
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk (\`bun add @symbaiex/agent-sdk@0.1.0\`)
 - Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`)
 - TypeScript, Bun CLI, and Python source: https://github.com/SYMBaiEX/symbaiex-agent-clients

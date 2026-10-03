@@ -6,7 +6,11 @@ import { GET as getDeveloperLlms } from "@/app/developers/llms.txt/route";
 import { GET as getForumLlms } from "@/app/forum/llms.txt/route";
 import { GET as getSiteLlms } from "@/app/llms.txt/route";
 import { GET as getRobots } from "@/app/robots.txt/route";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 
 describe("focused agent-readable resources", () => {
   test("publishes an honest custom-auth walkthrough", async () => {
@@ -51,6 +55,8 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(developers).toContain("/api/sandbox/openapi.json");
     expect(developers).toContain("/developers/forum-plugin");
+    expect(developers).toContain(SKILLS_SH_LISTING_URL);
+    expect(site).toContain(SKILLS_SH_LISTING_URL);
     for (const registryUrl of [
       DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url,
       MCP_SERVER_CARD._meta["com.symbaiex/registry"].url,
