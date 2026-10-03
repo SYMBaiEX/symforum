@@ -71,7 +71,7 @@ describe("sitemap health and fallback", () => {
     }
   });
 
-  test("always includes the canonical research hub", async () => {
+  test("includes public machine-readable resources without exposing admin paths", async () => {
     const sitemapModule = await loadSitemapModule();
     const { default: runSitemap, resetSitemapHealthForTests } = sitemapModule;
     resetSitemapHealthForTests();
@@ -91,6 +91,25 @@ describe("sitemap health and fallback", () => {
         url: primarySiteUrl("/research/editorial-trust-and-contracts"),
       }),
     );
+
+    for (const path of [
+      "/agents.md",
+      "/auth.md",
+      "/developers/llms.txt",
+      "/llms.txt",
+      "/llms-full.txt",
+      "/skills.sh",
+    ]) {
+      expect(rows).toContainEqual(
+        expect.objectContaining({ url: primarySiteUrl(path) }),
+      );
+    }
+
+    for (const path of ["/admin", "/api/admin", "/api/admin/telemetry"]) {
+      expect(rows).not.toContainEqual(
+        expect.objectContaining({ url: primarySiteUrl(path) }),
+      );
+    }
   });
 
   test("uses stale last-known-good snapshot when a source fails", async () => {
