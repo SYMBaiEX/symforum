@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   FORUM_PLUGIN_OPERATIONS,
   FORUM_PLUGIN_TOOLS,
+  FORUM_PLUGIN_ICON,
   findForumPluginTool,
   getForumPluginOperation,
   validateForumPluginArguments,
@@ -13,8 +14,38 @@ import {
 import { forumOperationCapability } from "./forum-plugin-operation-policy";
 import { v } from "convex/values";
 import { queryGeneric } from "convex/server";
+import generated from "./forum-plugin-catalog.generated.json";
 
 describe("shared forum operation catalog", () => {
+  test("all 107 tools explicitly classify reads, destructive writes and public audiences", () => {
+    expect(FORUM_PLUGIN_TOOLS).toHaveLength(107);
+    for (const tool of FORUM_PLUGIN_TOOLS) {
+      for (const name of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const)
+        expect(typeof tool.annotations[name], `${tool.name} ${name}`).toBe("boolean");
+      const operation = findForumPluginTool(tool.name)!;
+      const domain = generated[operation.operation as keyof typeof generated];
+      if (domain) expect(tool.annotations.readOnlyHint, tool.name).toBe(domain.kind === "query");
+      if (tool.annotations.readOnlyHint) expect(tool.annotations.destructiveHint, tool.name).toBe(false);
+    }
+    const hints = (name: string) => FORUM_PLUGIN_TOOLS.find(tool => tool.name === name)!.annotations;
+    for (const name of ["forum_search", "forum_get_thread", "forum_list_news_feed", "forum_create_thread", "forum_create_reply", "forum_send_chat_message", "forum_send_private_message", "forum_update_my_forum_profile", "forum_upload_attachments"])
+      expect(hints(name).openWorldHint, name).toBe(true);
+    for (const name of ["forum_open", "forum_status", "forum_list_private_messages", "forum_get_private_message", "forum_get_my_forum_notification_preferences", "forum_set_thread_bookmark"])
+      expect(hints(name).openWorldHint, name).toBe(false);
+    for (const name of ["forum_upsert_forum_category", "forum_upsert_announcement_admin", "forum_upsert_help_document_admin", "forum_upsert_calendar_event_admin", "forum_upsert_thread_prefix_admin", "forum_upsert_board_rules_admin", "forum_send_private_message", "forum_vote_poll", "forum_delete_thread", "forum_update_thread_content", "forum_update_user_forum_role", "forum_set_thread_bookmark"])
+      expect(hints(name).destructiveHint, name).toBe(true);
+    for (const name of ["forum_create_thread", "forum_create_reply", "forum_send_chat_message", "forum_mark_private_message_read", "forum_restore_private_message", "forum_upload_attachments"])
+      expect(hints(name).destructiveHint, name).toBe(false);
+  });
+  test("entrypoint and server can share a transparent, theme-aware brand icon", () => {
+    const opener = FORUM_PLUGIN_TOOLS.find(tool => tool.name === "forum_open")!;
+    expect(opener.icons).toEqual([FORUM_PLUGIN_ICON]);
+    const svg = decodeURIComponent(FORUM_PLUGIN_ICON.src.slice("data:image/svg+xml,".length));
+    expect(svg).toContain('viewBox="0 0 20 20"');
+    expect(svg).toContain('fill="currentColor"');
+    expect(svg).not.toMatch(/<rect|https?:\/\/[^\s]+(?:href|src)=|<script/);
+    expect(opener._meta["openai/ui"]).toEqual({ entrypoints: [{ type: "global" }, { type: "thread" }] });
+  });
   test("catalog describes unlimited monthly forum use with temporary limits and unchanged authority", () => {
     const status = findForumPluginTool("forum_status")!;
     expect(status.description).toContain("no monthly usage limit");

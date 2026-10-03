@@ -4,6 +4,10 @@ vi.mock("@/lib/forum-plugin-app", () => ({
     uri: "ui://symbaiex/forum.html",
     name: "symbaiex-forum",
     mimeType: "text/html;profile=mcp-app",
+    _meta: {
+      ui: { csp: { connectDomains: [], resourceDomains: [], frameDomains: [] } },
+      "openai/ui": { availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" },
+    },
   },
   FORUM_PLUGIN_APP_HTML: "<!doctype html><title>Forum</title>",
 }));
@@ -56,6 +60,23 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("forum MCP protocol boundary", () => {
+  test("advertises canonical entrypoints and preserves resource-only display preferences", async () => {
+    const initialized = await POST(request("initialize", { protocolVersion: "2025-06-18" }));
+    const server = (await initialized.json()).result.serverInfo;
+    expect(server).toMatchObject({ name: "symbaiex-forum", version: "1.7.0" });
+    const listed = await POST(request("tools/list"));
+    const tools = (await listed.json()).result.tools;
+    const opener = tools.find((tool: { name: string }) => tool.name === "forum_open");
+    expect(opener).toMatchObject({ title: "SYMBaiEX Forum", icons: server.icons });
+    expect(opener._meta["openai/ui"]).toEqual({ entrypoints: [{ type: "global" }, { type: "thread" }] });
+    for (const method of ["resources/list", "resources/read"]) {
+      const response = await POST(request(method, method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}));
+      const result = (await response.json()).result;
+      const resource = (result.resources ?? result.contents)[0];
+      expect(resource._meta["openai/ui"]).toEqual({ availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
   test("supports public initialization, typed tools and the in-ChatGPT resource", async () => {
     const initialized = await POST(
       request("initialize", { protocolVersion: "2025-06-18" }),
@@ -94,7 +115,7 @@ describe("forum MCP protocol boundary", () => {
     const meta = protocol === "modern" ? { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } : {};
     const headers = protocol === "modern" ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "forum_open" } : undefined;
     const response = await POST(request("tools/call", { name: "forum_open", arguments: {}, ...meta }, undefined, headers));
-    expect(response.headers.get("Mcp-Server-Version")).toBe("1.6.2");
+    expect(response.headers.get("Mcp-Server-Version")).toBe("1.7.0");
     expect(await response.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: null, data: {} } } });
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
@@ -372,7 +393,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.6.2",
+            version: "1.7.0",
           },
         },
       },

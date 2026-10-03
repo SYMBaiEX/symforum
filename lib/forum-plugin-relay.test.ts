@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { FORUM_PLUGIN_RESOURCE } from "./forum-plugin-contract";
 import {
   forumPluginAuthResponse,
+  forumPluginHeaders,
   hasForumPluginAudience,
   relayForumPlugin,
 } from "./forum-plugin-relay";
@@ -19,6 +20,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("forum plugin authenticated relay", () => {
+  test("advertises the current server version and exposes authentication and retry diagnostics", () => {
+    const headers = forumPluginHeaders(new Request(FORUM_PLUGIN_RESOURCE, { headers: { origin: "https://chatgpt.com" } }));
+    expect(headers.get("Mcp-Server-Version")).toBe("1.7.0");
+    expect(headers.get("Access-Control-Allow-Origin")).toBe("https://chatgpt.com");
+    expect(headers.get("Access-Control-Expose-Headers")).toContain("retry-after");
+    expect(headers.get("Access-Control-Expose-Headers")).toContain("www-authenticate");
+  });
   test("only accepts an exact plugin resource audience before signature verification upstream", () => {
     expect(hasForumPluginAudience(token(FORUM_PLUGIN_RESOURCE))).toBe(true);
     for (const aud of [

@@ -6,6 +6,7 @@ export const FORUM_PLUGIN_APP_RESOURCE = {
   description: "Read the news, browse community discussions, and participate in the SYMBaiEX forum.",
   mimeType: "text/html;profile=mcp-app",
   _meta: {
+    "openai/ui": { availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" },
     ui: {
       prefersBorder: false,
       csp: { connectDomains: [], resourceDomains: [], frameDomains: [] },
@@ -33,6 +34,8 @@ export function forumPluginAppRuntime() {
   const pending = new Map<number, Pending>();
   let requestId = 0;
   let ready = false;
+  let fullscreenRequested = false;
+  let displayRevision = 0;
   let legacyBridge = false;
   let destroyed = false;
   let hostContext: HostContext = {};
@@ -147,12 +150,22 @@ export function forumPluginAppRuntime() {
     if (!destroyed) window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
   }
   function applyContext(next: HostContext) {
+    if (next.displayMode !== undefined) ++displayRevision;
     hostContext = { ...hostContext, ...next };
     if (hostContext.theme === "dark" || hostContext.theme === "light") document.documentElement.dataset.theme = hostContext.theme;
     root.dataset.displayMode = hostContext.displayMode ?? "inline";
-    const nextMode = hostContext.displayMode === "fullscreen" ? "inline" : "fullscreen";
-    expand.hidden = !(hostContext.availableDisplayModes ? hostContext.availableDisplayModes.includes(nextMode) : openai?.requestDisplayMode);
-    expand.textContent = hostContext.displayMode === "fullscreen" ? "Compact view" : "Expand forum";
+    expand.hidden = hostContext.displayMode === "fullscreen" || !(hostContext.availableDisplayModes ? hostContext.availableDisplayModes.includes("fullscreen") : openai?.requestDisplayMode);
+    expand.textContent = "Expand forum";
+    // The resource preference is a hint. Request the advertised mode once,
+    // without delaying authenticated bootstrap or disturbing subsequent drafts.
+    if (ready && hostContext.displayMode === "fullscreen") fullscreenRequested = true;
+    if (ready && !fullscreenRequested && hostContext.displayMode !== "fullscreen" && hostContext.availableDisplayModes?.includes("fullscreen")) {
+      fullscreenRequested = true;
+      const requestedRevision = displayRevision;
+      void request("ui/request-display-mode", { mode: "fullscreen" }).then(result => {
+        if (!destroyed && requestedRevision === displayRevision && object(result).mode === "fullscreen") applyContext({ displayMode: "fullscreen" });
+      }).catch(() => { /* Older hosts may decline; the responsive current view remains usable. */ });
+    }
   }
   function teardown() {
     destroyed = true;
@@ -824,7 +837,7 @@ export function forumPluginAppRuntime() {
       select.value = text(args.snapshotDate ?? snapshot.snapshotDate);
       select.addEventListener("change", () => run(() => navigate("news", { snapshotDate: select.value })));
       label.append(select);
-      content.append(label);
+      content.querySelector("header")!.append(label);
     }
     const stories = collection(data, ["stories"]);
     if (stories.length) appendNews(stories, false, section("Top stories", "HN activity · SYMBaiEX discussion"));
@@ -852,7 +865,7 @@ export function forumPluginAppRuntime() {
       const item = element("article", undefined, "board");
       const icon = element("span", undefined, "board-icon");
       icon.setAttribute("aria-hidden", "true");
-      if (board.viewerUnread === true) icon.className += " unread";
+      if (board.viewerUnread === true || board.viewerHasRead === false) icon.className += " unread";
       const description = element("div", undefined, "board-description");
       description.append(button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug, categoryName: board.name })), "row-title"));
       if (board.description) description.append(element("p", board.description, "excerpt"));
@@ -935,7 +948,151 @@ export function forumPluginAppRuntime() {
     else empty("No discussions found. Try a different search or start a conversation.");
     pagination(data, Number(args.page ?? 1), next => run(() => navigate("board", { ...args, page: next })));
   }
-  function renderPost(post: RecordValue, rootPost = false) {
+  // Forum content is untrusted. Build only allowlisted DOM nodes; never parse
+  // HTML or load user-supplied resources into the embedded app.
+  function contentLink(label: string, value: string) {
+    let href: string;
+    try {
+      const url = new URL(value.trim());
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return element("span", label);
+      href = url.href;
+    } catch { return element("span", label); }
+    const node = element("a", label);
+    node.href = href;
+    node.target = "_blank";
+    node.rel = "noopener noreferrer";
+    node.addEventListener("click", event => {
+      if (!ready) return;
+      event.preventDefault();
+      run(async () => {
+        if (openai?.openExternal && legacyBridge) openai.openExternal({ href });
+        else await request("ui/open-link", { url: href });
+      });
+    });
+    return node;
+  }
+  function richBody(value: unknown) {
+    type RichNode = { tag?: string; value?: string; raw?: string; children: RichNode[] };
+    const input = text(value);
+    const parsed: RichNode[] = [];
+    const stack: RichNode[] = [];
+    const tags = new Set(["b", "i", "u", "s", "mark", "kbd", "h2", "h3", "quote", "code", "list", "*", "url", "img", "spoiler", "br", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "note", "warning"]);
+    function children() { return stack.at(-1)?.children ?? parsed; }
+    function literal(raw: string) { if (raw) children().push({ raw, children: [] }); }
+    let cursor = 0;
+    for (const match of input.matchAll(/(?:\[|<)(\/?)([a-z0-9*]+)(?:=([^\]>]*))?(?:\]|>)/gi)) {
+      literal(input.slice(cursor, match.index));
+      cursor = (match.index ?? cursor) + match[0].length;
+      const name = match[2].toLowerCase();
+      const closing = match[1] === "/";
+      if (!tags.has(name) || stack.at(-1)?.tag === "code" && !(closing && name === "code")) { literal(match[0]); continue; }
+      if (closing) {
+        const index = stack.map(node => node.tag).lastIndexOf(name);
+        if (index >= 0) stack.length = index;
+        continue;
+      }
+      if (name === "*") {
+        const index = stack.map(node => node.tag).lastIndexOf("list");
+        if (index < 0) { literal(match[0]); continue; }
+        stack.length = index + 1;
+      } else if (["tr", "td", "th"].includes(name)) {
+        const parent = name === "tr" ? ["tbody", "thead", "tfoot", "table"] : ["tr"];
+        const index = stack.map(node => parent.includes(node.tag ?? "")).lastIndexOf(true);
+        if (index >= 0) stack.length = index + 1;
+      }
+      if (stack.length >= 32) { literal(match[0]); continue; }
+      const node: RichNode = { tag: name, value: match[3]?.trim(), children: [] };
+      children().push(node);
+      if (name !== "br") stack.push(node);
+    }
+    literal(input.slice(cursor));
+    function plain(nodes: RichNode[]): string { return nodes.map(node => node.raw ?? plain(node.children)).join(""); }
+    function decode(raw: string) {
+      return raw.replace(/&(amp|lt|gt|quot|apos|#39|#91|#93);/gi, entity => ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&#39;": "'", "&#91;": "[", "&#93;": "]" }[entity.toLowerCase()] ?? entity));
+    }
+    function append(nodes: RichNode[], parent: HTMLElement) {
+      for (const node of nodes) {
+        if (node.raw !== undefined) { parent.append(document.createTextNode(decode(node.raw))); continue; }
+        const tag = node.tag ?? "";
+        if (tag === "url" || tag === "img") {
+          const label = decode(plain(node.children));
+          parent.append(contentLink(tag === "img" ? "Open image ↗" : label || decode(node.value ?? ""), decode(node.value ?? label)));
+          continue;
+        }
+        if (tag === "code") {
+          const figure = element("figure");
+          figure.append(element("figcaption", node.value ? "Code · " + decode(node.value).slice(0, 24) : "Code"));
+          const pre = element("pre");
+          pre.tabIndex = 0;
+          pre.setAttribute("aria-label", "Code sample");
+          pre.append(element("code", decode(plain(node.children).replace(/^\n|\n$/g, ""))));
+          figure.append(pre);
+          parent.append(figure);
+          continue;
+        }
+        if (tag === "quote") {
+          const figure = element("figure");
+          const quote = element("blockquote");
+          append(node.children, quote);
+          figure.append(quote);
+          if (node.value) figure.append(element("figcaption", "— " + decode(node.value).slice(0, 120)));
+          parent.append(figure);
+          continue;
+        }
+        if (tag === "spoiler") {
+          const details = element("details");
+          details.append(element("summary", decode(node.value ?? "Show spoiler")));
+          const body = element("div");
+          append(node.children, body);
+          details.append(body);
+          parent.append(details);
+          continue;
+        }
+        if (tag === "table") {
+          const scroll = element("div", undefined, "rich-table");
+          const table = element("table");
+          append(node.children, table);
+          scroll.append(table);
+          parent.append(scroll);
+          continue;
+        }
+        const mapped = ({ b: "strong", i: "em", u: "u", s: "s", mark: "mark", kbd: "kbd", h2: "h2", h3: "h3", list: /^(1|a|i)$/i.test(node.value ?? "") ? "ol" : "ul", "*": "li", br: "br", thead: "thead", tbody: "tbody", tfoot: "tfoot", tr: "tr", th: "th", td: "td", note: "aside", warning: "aside" } as Record<string, string>)[tag];
+        if (!mapped) { append(node.children, parent); continue; }
+        const child = document.createElement(mapped);
+        if (tag === "note" || tag === "warning") child.className = "notice";
+        append(node.children, child);
+        parent.append(child);
+      }
+    }
+    const body = element("div", undefined, "post-body");
+    append(parsed, body);
+    return body;
+  }
+  function renderPoll(poll: RecordValue, args: RecordValue) {
+    if (!poll._id || !poll.question) return;
+    const panel = element("section", undefined, "poll-panel");
+    panel.setAttribute("aria-label", "Discussion poll");
+    panel.append(element("h2", poll.question));
+    const results = poll.viewerCanSeeResults === true;
+    panel.append(element("p", results ? text(poll.totalVotes, "0") + " votes" + (poll.status === "closed" ? " · Closed" : "") : "Results are available after voting or when the poll closes.", "muted"));
+    for (const option of collection(poll.options, [])) {
+      const row = element("div", undefined, "poll-option");
+      const selected = poll.viewerOptionId === option._id;
+      row.append(element("span", text(option.label) + (selected ? " · Your vote" : ""), "poll-label"));
+      if (results) {
+        const percent = Math.min(100, Math.max(0, Number(option.percent) || 0));
+        const meter = element("meter");
+        meter.setAttribute("min", "0"); meter.setAttribute("max", "100"); meter.setAttribute("value", String(percent));
+        meter.setAttribute("aria-label", text(option.label) + " · " + percent + "%");
+        row.append(meter, element("span", text(option.voteCount, "0") + " votes · " + percent + "%", "muted"));
+      }
+      if (permitted("feedback") && poll.viewerCanVote === true) row.append(actionButton("Vote for “" + text(option.label) + "”", "forum_vote_poll", { pollId: poll._id, optionId: option._id }, () => navigate("thread", args)));
+      panel.append(row);
+    }
+    if (!results && !actingAs.userId) panel.append(link("Connect to vote ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+    content.append(panel);
+  }
+  function renderPost(post: RecordValue, rootPost = false, readerArgs?: RecordValue) {
     const article = element("article", undefined, "post");
     const author = element("div", undefined, "post-author");
     const authorIdentity = object(post.authorIdentity);
@@ -945,13 +1102,29 @@ export function forumPluginAppRuntime() {
     if (post.createdAt) author.append(element("span", new Date(Number(post.createdAt)).toLocaleString(), "muted"));
     if (rootPost) author.append(element("span", "Original post", "badge"));
     const body = element("div", undefined, "post-content");
-    body.append(element("div", post.body ?? post.content, "post-body"));
+    body.append(richBody(post.body ?? post.content));
     article.append(author, body);
+    const attachments = element("div", undefined, "post-attachments");
     for (const attachment of collection(post.attachments, [])) {
       const label = text(attachment.filename ?? attachment.name, "Attachment");
       const url = text(attachment.url);
-      if (safeForumUrl(url)) body.append(link(label, url));
-      else body.append(element("span", label, "badge"));
+      attachments.append(url ? contentLink(label + " ↗", url) : element("span", label, "badge"));
+    }
+    if (attachments.children.length) body.append(attachments);
+    if (readerArgs && currentThread) {
+      const actions = element("footer", undefined, "actions post-actions");
+      if (permitted("participate") && currentThread.viewerCanReply !== false && currentThread.status !== "locked") actions.append(button("Quote", () => {
+        const prefix = "[quote=" + text(authorIdentity.name ?? post.author ?? post.authorName, "Member").replace(/[\[\]<>]/g, "").slice(0, 120) + "]";
+        const suffix = "[/quote]\n\n";
+        const quoted = text(post.body ?? post.content).replace(/\[\/quote\]/gi, "&#91;/quote]");
+        const maxLength = 32_000 - prefix.length - suffix.length - 1;
+        const shortened = quoted.length > maxLength;
+        openComposer("reply", { body: prefix + quoted.slice(0, maxLength) + (shortened ? "…" : "") + suffix, quoteShortened: shortened });
+      }));
+      const canonical = "https://forum.symbaiex.com/" + encodeURIComponent(text(readerArgs.categorySlug)) + "/" + encodeURIComponent(text(readerArgs.threadSlug));
+      if (post.viewerCanEdit === true && permitted("participate")) actions.append(link("Edit on forum ↗", canonical));
+      if (actingAs.userId && permitted("feedback")) actions.append(link("Report on forum ↗", canonical));
+      if (actions.children.length) article.append(actions);
     }
     return article;
   }
@@ -985,15 +1158,28 @@ export function forumPluginAppRuntime() {
     const controls = element("div", undefined, "actions");
     controls.append(button("← Board", () => run(() => navigate("board", { categorySlug: args.categorySlug }))));
     const canonical = "https://forum.symbaiex.com/" + encodeURIComponent(text(args.categorySlug)) + "/" + encodeURIComponent(text(args.threadSlug));
-    controls.append(link("Open on SYMBaiEX ↗", canonical));
-    if (permitted("personal")) controls.append(actionButton(thread.viewerBookmarked ? "Unsave thread" : "Save thread", "forum_set_thread_bookmark", { threadId: thread._id, saved: !thread.viewerBookmarked }, () => navigate("thread", args)));
+    const tools = element("details", undefined, "thread-tools");
+    tools.append(element("summary", "Thread tools"));
+    const secondary = element("div", undefined, "actions");
+    secondary.append(link("Open on SYMBaiEX ↗", canonical));
+    if (permitted("personal")) {
+      secondary.append(actionButton(thread.viewerBookmarked ? "Unsave thread" : "Save thread", "forum_set_thread_bookmark", { threadId: thread._id, saved: !thread.viewerBookmarked }, () => navigate("thread", args)));
+      secondary.append(actionButton(thread.viewerSubscribed ? "Unsubscribe" : "Subscribe", "forum_set_thread_subscription", { threadId: thread._id, subscribed: !thread.viewerSubscribed }, () => navigate("thread", args)));
+    }
+    tools.append(secondary);
+    controls.append(tools);
     if (permitted("participate") && thread.viewerCanReply !== false && thread.status !== "locked") controls.append(button("Reply", () => openComposer("reply"), "primary"));
     content.append(controls);
     const rules = object(data.rules);
-    if (rules.body) content.append(element("aside", "Board rules: " + text(rules.body), "notice"));
+    if (rules.body) {
+      const disclosure = element("details", undefined, "board-rules");
+      disclosure.append(element("summary", "Board rules"), richBody(rules.body));
+      content.append(disclosure);
+    }
+    renderPoll(object(data.poll), args);
     const posts = section("Conversation", text(thread.replyCount, "0") + " replies");
-    if (Number(args.page ?? 1) === 1) posts.append(renderPost(thread, true));
-    for (const reply of collection(data.replies)) posts.append(renderPost(reply));
+    if (Number(args.page ?? 1) === 1) posts.append(renderPost(thread, true, args));
+    for (const reply of collection(data.replies)) posts.append(renderPost(reply, false, args));
     const page = Number(object(object(data.replies).pagination).page ?? args.page ?? 1);
     pagination(data.replies, page, next => run(() => navigate("thread", { ...args, page: next })));
     if (thread.status === "locked") content.append(element("p", "This discussion is locked.", "muted"));
@@ -1101,7 +1287,16 @@ export function forumPluginAppRuntime() {
         render = () => {
           const message = object(object(result.data).message ?? result.data);
           heading(text(message.subject, "Private message"), "Private to the selected acting profile");
-          content.append(renderPost(message), button("← " + (box === "trash" ? "Trash" : box === "sent" ? "Sent" : "Inbox"), () => run(() => navigate("inbox", { box, page: args.page ?? 1 }))));
+          const controls = element("div", undefined, "actions");
+          controls.append(button("← " + (box === "trash" ? "Trash" : box === "sent" ? "Sent" : "Inbox"), () => run(() => navigate("inbox", { box, page: args.page ?? 1 }))));
+          controls.append(link("Open mailbox ↗", "https://forum.symbaiex.com/messages"));
+          if (permitted("messages")) {
+            if (box !== "trash" && message.otherUsername) controls.append(button("Reply to message", () => openComposer("message", { recipientUsername: message.otherUsername, subject: (/^Re:/i.test(text(message.subject)) ? text(message.subject) : "Re: " + text(message.subject)).slice(0, 120) }), "primary"));
+            if (box === "inbox" && message.unread === true) controls.append(actionButton("Mark as read", "forum_mark_private_message_read", { messageId: args.messageId }, () => navigate("message", args)));
+            if (box === "trash") controls.append(actionButton("Restore message", "forum_restore_private_message", { messageId: args.messageId }, () => navigate("inbox", { box: message.sourceBox === "sent" ? "sent" : "inbox", page: 1 })));
+            else controls.append(actionButton("Move to Trash", "forum_delete_private_message", { messageId: args.messageId, box }, () => navigate("inbox", { box, page: args.page ?? 1 })));
+          }
+          content.append(controls, element("p", "To " + text(message.recipientUsername, "your connected profile"), "muted"), renderPost({ ...message, author: message.senderUsername ?? message.author }));
         };
       } else if (view === "profile") {
         result = await tool("forum_get_my_forum_profile");
@@ -1109,7 +1304,7 @@ export function forumPluginAppRuntime() {
           const profile = object(object(result.data).profile ?? result.data);
           heading("My forum profile", text(actingAs.username));
           const profilePanel = section("Profile details");
-          const fields = { bio: "About", signature: "Signature", location: "Location", website: "Website" };
+          const fields = { bio: "About", signature: "Signature", location: "Location", websiteUrl: "Website" };
           let hasDetails = false;
           for (const [key, label] of Object.entries(fields)) if (profile[key]) {
             hasDetails = true;
@@ -1118,7 +1313,7 @@ export function forumPluginAppRuntime() {
             profilePanel.append(item);
           }
           if (!hasDetails) profilePanel.append(element("p", "Add a bio or signature in your forum control panel.", "empty"));
-          content.append(link("Edit profile and agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+          content.append(link("Edit forum profile ↗", "https://forum.symbaiex.com/control-panel#ucp-profile"), link("Agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
         };
       } else if (view === "info") {
         const [announcements, help, calendar] = await Promise.all([tool("forum_list_announcements"), tool("forum_list_help_documents"), tool("forum_list_calendar_events", { month: new Date().toISOString().slice(0, 7) })]);
@@ -1131,7 +1326,10 @@ export function forumPluginAppRuntime() {
             if (!rows.length) panel.append(element("p", "No items.", "empty"));
             for (const row of rows) {
               const item = element("article", undefined, "row info-row");
-              item.append(element("h3", row.title ?? row.name), element("p", row.body ?? row.description, "post-body"));
+              item.append(element("h3", row.title ?? row.name), richBody(row.body ?? row.description ?? row.excerpt));
+              if (row.startsAt) item.append(element("p", new Date(Number(row.startsAt)).toLocaleString() + (row.allDay ? " · All day" : ""), "muted"));
+              if (label === "Help") item.append(link("Read help ↗", "https://forum.symbaiex.com/help" + (row.slug ? "/" + encodeURIComponent(text(row.slug)) : "")));
+              if (label === "Calendar") item.append(link("Open calendar ↗", "https://forum.symbaiex.com/calendar"));
               panel.append(item);
             }
           }
@@ -1215,7 +1413,7 @@ export function forumPluginAppRuntime() {
     showActionResult(result);
     return result;
   }
-  function openComposer(kind: string) {
+  function openComposer(kind: string, initialFields: RecordValue = {}) {
     if (composerDraft) { report("Your draft is already open."); return; }
     ++viewRevision;
     const previousView = currentView;
@@ -1227,13 +1425,14 @@ export function forumPluginAppRuntime() {
     composerDraft = { kind, fields: {}, key: newKey() };
     heading(kind === "reply" ? "Reply to “" + text(thread?.title) + "”" : kind === "message" ? "New private message" : "Start a discussion", "Acting as " + text(actingAs.username, "your connected profile") + ". " + modeLabel.textContent);
     const form = element("form", undefined, "composer");
+    if (initialFields.quoteShortened) form.append(element("p", "This quote is an excerpt to fit the reply limit. You can trim it further before adding your response; the full post remains in the discussion.", "notice"));
     const controls: Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = {};
     function field(name: string, label: string, multiline = false, initial = "") {
       const wrap = element("label", label);
       const input = multiline ? element("textarea") : element("input");
       input.name = name;
       input.required = true;
-      input.value = initial;
+      input.value = text(initialFields[name], initial);
     if (multiline) {
       (input as HTMLTextAreaElement).rows = 10;
       (input as HTMLTextAreaElement).maxLength = kind === "message" ? 6_000 : kind === "reply" ? 32_000 : 64_000;
@@ -1257,7 +1456,7 @@ export function forumPluginAppRuntime() {
       select.append(element("option", "Choose a board"));
       (select.firstElementChild as HTMLOptionElement).value = "";
       const populate = () => {
-        for (const board of boards) {
+        for (const board of boards.filter(board => board.kind !== "section" && board.isPostable !== false && board.viewerCanCreateThread !== false)) {
           const option = element("option", board.name);
           option.value = text(board.slug);
           select.append(option);
@@ -1498,7 +1697,8 @@ export function forumPluginAppRuntime() {
   resizeObserver?.observe(root);
   compose.addEventListener("click", () => openComposer("thread"));
   expand.addEventListener("click", () => run(async () => {
-    const mode = hostContext.displayMode === "fullscreen" ? "inline" : "fullscreen";
+    const mode = "fullscreen";
+    if (hostContext.displayMode === mode) return;
     if (hostContext.availableDisplayModes?.includes(mode)) {
       const result = object(await request("ui/request-display-mode", { mode }));
       applyContext({ displayMode: text(result.mode) });
@@ -1518,7 +1718,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.6.2" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.7.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -1546,50 +1746,32 @@ export function forumPluginAppRuntime() {
   });
 }
 
-// Portable copy of the native forum tokens from app/globals.css. The parity test
-// checks both themes against that source; the sandbox cannot load site styles/fonts.
-const FORUM_PLUGIN_APP_LIGHT_THEME = `--background:0 0% 93%;--foreground:0 0% 3%;--card:0 0% 96%;--primary:319 100% 40%;--primary-foreground:0 0% 100%;--muted:0 0% 88%;--muted-foreground:0 0% 30%;--accent:174 54% 67%;--border:0 0% 72%;--input:0 0% 72%;--ring:174 54% 46%;--row-border:0 0% 64%;--accent-magenta:#fa00a8;--accent-cyan:#81d8d0;--accent-canary:#ffe14d`;
-const FORUM_PLUGIN_APP_DARK_THEME = `--background:0 0% 3%;--foreground:0 0% 98%;--card:0 0% 5%;--primary:319 100% 46%;--primary-foreground:0 0% 100%;--muted:0 0% 11%;--muted-foreground:0 0% 68%;--accent:174 54% 67%;--border:0 0% 18%;--input:0 0% 18%;--ring:174 54% 67%;--row-border:0 0% 22%`;
+// Portable copy of the scoped forum tokens from app/globals.css. The sandbox
+// uses the native system font fallback without external font or stylesheet requests.
+const FORUM_PLUGIN_APP_LIGHT_THEME = `--background:240 5% 96%;--foreground:0 0% 3%;--card:0 0% 100%;--popover:0 0% 100%;--primary:319 100% 40%;--primary-foreground:0 0% 100%;--muted:240 5% 92%;--muted-foreground:240 3% 37%;--accent:174 54% 67%;--border:240 5% 86%;--input:240 5% 82%;--ring:174 54% 46%;--row-border:0 0% 64%;--accent-magenta:#fa00a8;--accent-cyan:#81d8d0;--accent-canary:#ffe14d`;
+const FORUM_PLUGIN_APP_DARK_THEME = `--background:240 6% 5%;--foreground:0 0% 98%;--card:240 5% 9%;--popover:240 5% 11%;--primary:319.68 100% 49%;--primary-foreground:0 0% 3%;--muted:240 4% 15%;--muted-foreground:240 3% 70%;--accent:174 54% 67%;--border:240 4% 20%;--input:240 4% 27%;--ring:174 54% 67%;--row-border:0 0% 22%`;
 
 export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SYMBaiEX Forum</title>
 <style>
-/* Native forum palette, open reading layout, and deliberate spacing. */
+/* The sandbox uses the native forum's scoped palette and system font fallback. */
 :root{color-scheme:light;${FORUM_PLUGIN_APP_LIGHT_THEME};font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-feature-settings:"ss01","cv01","cv11","tnum"}
 @media(prefers-color-scheme:dark){:root{color-scheme:dark;${FORUM_PLUGIN_APP_DARK_THEME}}}
 :root[data-theme=light]{color-scheme:light;${FORUM_PLUGIN_APP_LIGHT_THEME}}
 :root[data-theme=dark]{color-scheme:dark;${FORUM_PLUGIN_APP_DARK_THEME}}
-*{box-sizing:border-box}body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground))}
-button,input,textarea,select{font:inherit}button,a,input,textarea,select{outline-offset:4px}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid hsl(var(--ring))}
-button{cursor:pointer;color:hsl(var(--foreground));background:hsl(var(--muted)/.35);border:1px solid transparent;border-radius:2px;min-height:44px;padding:10px 14px;font-size:13px;font-weight:500;touch-action:manipulation}button:hover{background:hsl(var(--muted));color:hsl(var(--primary))}button:disabled{opacity:.55;cursor:not-allowed}[hidden]{display:none!important}
-a{color:hsl(var(--foreground));text-underline-offset:3px;overflow-wrap:anywhere}a:hover{color:hsl(var(--primary))}h1,h2,h3{overflow-wrap:anywhere}h1{text-wrap:balance}h2{font-size:18px;line-height:1.4;margin:0 0 8px}h3{font-size:16px}p{margin:6px 0 12px}
-#app{margin:0 auto;min-height:540px}.masthead{display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{font-weight:800;line-height:1;letter-spacing:-1px}.brand .brand-ai{color:hsl(var(--primary))}.brand .brand-forum{letter-spacing:-.4px;margin-left:5px;color:hsl(var(--muted-foreground))}.eyebrow{font:11px/1.4 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.mast-actions,.actions,.pager{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.primary{background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-weight:600}.primary:hover{filter:brightness(.94);background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
-.workspace{display:block}#navigation button{background:transparent;color:hsl(var(--muted-foreground));padding:10px 12px}#navigation button:hover{background:hsl(var(--muted)/.55);color:hsl(var(--foreground))}.connection{display:flex;align-items:center;flex-wrap:wrap}.connection strong{overflow-wrap:anywhere;font-weight:600}.connection .eyebrow{margin:0}#mode,#connection-owner{color:hsl(var(--muted-foreground))}.posting-trust{display:flex;align-items:center;flex-wrap:wrap;width:100%;color:hsl(var(--muted-foreground))}.main{min-width:0}#search{display:flex}#query{flex:1;min-width:0;background:hsl(var(--muted)/.4);border-color:transparent}#search button{background:transparent}
-input,textarea,select{display:block;width:100%;min-width:0;max-width:100%;background:hsl(var(--background));border:1px solid hsl(var(--input));border-radius:2px;padding:11px 12px;color:hsl(var(--foreground));min-height:44px}input::placeholder,textarea::placeholder{color:hsl(var(--muted-foreground))}textarea{resize:vertical}
-.notice{background:hsl(var(--accent)/.08);overflow-wrap:anywhere}.notice:empty{display:none}.error{background:hsl(var(--primary)/.08)}.muted{color:hsl(var(--muted-foreground));font-size:12px;line-height:1.7}.source{color:hsl(var(--muted-foreground));font:11px/1.5 ui-monospace,monospace;margin-bottom:6px;overflow-wrap:anywhere}
-.forum-section{min-width:0;border-radius:2px}.section-bar{display:flex;align-items:center;flex-wrap:wrap;border-radius:2px}.section-bar h2{margin:0;font-weight:600;letter-spacing:0}.section-detail{margin-left:auto;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.section-bar button{background:transparent;padding:4px 8px;margin-left:auto;min-height:44px;font-size:12px}.board-index,.rows{display:grid;gap:0;margin:0}.board,.row{min-width:0;background:transparent}.board{display:grid}.board-icon{color:hsl(var(--muted-foreground))}.board-description,.discussion-main,.news-main{min-width:0}.board-counts,.discussion-counts{display:flex;flex-direction:column;font:10px/1.5 ui-monospace,monospace;color:hsl(var(--muted-foreground))}.board-counts dd,.discussion-counts dd{margin:0;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.board-latest{min-width:0}.latest-title{text-align:left;background:transparent;padding:0;line-height:1.5;overflow-wrap:anywhere}.latest-title:hover{background:transparent}.latest-activity{display:flex;min-width:0;color:hsl(var(--muted-foreground))}.latest-author{overflow-wrap:anywhere}.subforums{display:flex;align-items:center;flex-wrap:wrap}.subforum-link{background:transparent;padding:0}.subforum-link:hover{background:transparent}.board .row-title,.row-title{text-align:left;font-family:inherit;text-transform:none;text-decoration:none;border:0;background:transparent;padding:0;overflow-wrap:anywhere}.row-title:hover{color:hsl(var(--primary));background:transparent}.row .row-title{display:block}.excerpt{color:hsl(var(--muted-foreground));overflow-wrap:anywhere;margin:4px 0 0}.discussion-row{display:grid}.discussion-main>.muted{margin:0}.news-story{display:grid}.news-rank{display:flex;flex-direction:column;align-items:center;gap:5px;font-family:ui-monospace,monospace;color:hsl(var(--muted-foreground))}.rank-number{font-size:15px;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.rank-points{font-size:9px;white-space:normal;overflow-wrap:anywhere;max-width:100%;text-align:center}.news-main>.source,.news-main>.muted{margin:0 0 4px;font-size:11px}.news-main .row-title{display:block;align-content:center}.news-preview .row-title{font-size:14px}.feed-filters button{background:transparent;color:hsl(var(--muted-foreground))}.edition{display:flex;gap:12px;align-items:center;color:hsl(var(--muted-foreground))}.edition select{width:auto}.breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;color:hsl(var(--muted-foreground));font-size:12px}.breadcrumbs button{background:transparent;min-height:44px}.board-rules{padding:0 12px;background:hsl(var(--muted)/.18)}.board-rules summary{cursor:pointer;min-height:44px;align-content:center;font-size:12px}.board-rules summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:4px}.board-rules .post-body{font-size:13px;padding-bottom:14px}.announcement-row h3{font-size:14px;margin:0}.post{margin:0;min-width:0;background:transparent}.post-author{display:flex;flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}.post-author .muted{font-size:10px}.post-content{min-width:0}.post-body{white-space:pre-wrap;overflow-wrap:anywhere}.post-content>a,.post-content>.badge{display:inline-block;margin-top:12px;margin-right:12px}.badge{font-family:ui-monospace,monospace;line-height:1.4;background:hsl(var(--accent)/.12);color:hsl(var(--muted-foreground));border-radius:2px}
-.pager{justify-content:flex-start}.composer{display:grid;max-width:760px}.composer label{display:grid;gap:8px;font-size:13px}.composer .actions{margin-top:4px}.attachments{padding:12px 0}.empty{color:hsl(var(--muted-foreground))}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.chat-header{display:flex;align-items:center;flex-wrap:wrap}.chat-header h2{margin:0 auto 0 0;letter-spacing:0}.chat-messages{overflow-y:auto}.chat-row{display:grid}.chat-meta{display:flex;align-items:baseline;flex-wrap:wrap}.chat-meta strong{overflow-wrap:anywhere}.chat-meta time{font-size:10px}.chat-message{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.chat-row-actions{display:flex;gap:6px}.chat-form{display:flex;flex-wrap:wrap}.chat-form label+input{width:auto}.chat-access{margin:0;padding:0 10px 6px;font-size:11px}.chat-access a{display:inline-flex;align-items:center;min-height:44px}#chat-notice:empty{display:none}#chat-older{margin:4px 12px}#app[data-display-mode=fullscreen]{min-height:100vh}.main:has(.composer){padding-bottom:100px}
-/* Community workspace: a reading lane, useful navigation, and honest activity. */
-:root{font-family:"Geist",ui-sans-serif,system-ui,sans-serif;--community-backdrop:#f4f4f5;--community-panel:#fff;--community-hover:#f0f0f3;--community-primary:#fa00a8;--community-identity:#81d8d0;--community-text:#202026;--community-muted:#676771}
-@media(prefers-color-scheme:dark){:root{--community-backdrop:#0c0c0e;--community-panel:#161618;--community-hover:#202027;--community-text:#f3f3f5;--community-muted:#a2a2ad}}
-:root[data-theme=light]{--community-backdrop:#f4f4f5;--community-panel:#fff;--community-hover:#f0f0f3;--community-text:#202026;--community-muted:#676771}
-:root[data-theme=dark]{--community-backdrop:#0c0c0e;--community-panel:#161618;--community-hover:#202027;--community-text:#f3f3f5;--community-muted:#a2a2ad}
-body{background:var(--community-backdrop);color:var(--community-text)}button,a{color:inherit}.muted,.source{color:var(--community-muted)}button{border-radius:10px}button:hover{background:var(--community-hover)}.primary{border-radius:999px;background:var(--community-primary);color:#0c0c0e}.primary:hover{background:var(--community-primary);color:#0c0c0e}input,textarea,select{background:var(--community-panel);border-color:transparent;border-radius:10px}.badge{border-radius:5px}.notice{border-radius:10px;padding:12px;margin:0 0 12px}.empty{padding:24px 16px;background:var(--community-panel);border-radius:12px;font-size:13px}
-#app{max-width:1440px;min-width:0;margin:auto}.masthead{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:24px;padding:14px 24px;background:var(--community-backdrop)}.brand{font-size:23px;white-space:nowrap;letter-spacing:-.8px}.brand .brand-ai{color:var(--community-primary)}.brand .brand-forum{display:block;font-size:12px;letter-spacing:0;font-weight:500;margin:5px 0 0}.mast-actions{gap:6px}.mast-actions>button{padding:10px 14px;font-size:12px}#expand{background:transparent;color:var(--community-muted)}.product-search{min-width:0;width:100%;max-width:680px;justify-self:center}.product-search>summary{display:none}#search{margin:0;gap:0;background:var(--community-hover);border-radius:999px;min-width:0;max-width:680px;width:100%;justify-self:center}#query{font-size:14px;border:0;border-radius:999px;background:transparent;padding:12px 18px}#search button{border-radius:999px;font-size:12px;padding:10px 16px}
-.workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:0;max-width:1320px;margin:auto}.sidebar{position:sticky;top:78px;z-index:15;background:var(--community-backdrop);padding:0 20px}#navigation{display:flex;align-items:stretch;gap:8px;padding:4px 0;flex-wrap:nowrap}.primary-navigation{display:flex;gap:4px;flex:1;min-width:0}.primary-navigation>button{min-width:68px}#navigation button{font-size:13px;color:var(--community-muted);border-radius:10px}#navigation button[aria-current=page]{background:var(--community-hover);color:var(--community-text);font-weight:650}#navigation button[aria-current=page]:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--community-primary);margin-right:7px}.navigation-more{position:relative;margin-left:auto}.navigation-more summary,.connection-details summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center;padding:8px 12px;font-size:13px;font-weight:500;color:var(--community-muted)}.navigation-more summary:after{content:"⌄";margin-left:6px}.navigation-more summary::-webkit-details-marker,.connection-details summary::-webkit-details-marker{display:none}.navigation-more summary[aria-current=page]{color:var(--community-primary);background:var(--community-hover);border-radius:10px}.secondary-navigation{position:absolute;right:0;top:48px;min-width:210px;max-width:calc(100vw - 32px);max-height:65vh;overflow:auto;padding:8px;background:var(--community-panel);border-radius:12px;display:grid;z-index:30;outline:1px solid hsl(var(--border))}.secondary-navigation button{text-align:left}.navigation-more summary:focus-visible,.connection-details summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}
-.connection{margin:0;padding:4px 0 10px;gap:6px 10px;font-size:11px;min-height:42px}.connection>.eyebrow{display:none}.connection strong{font-size:12px}.connection strong:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--community-identity);margin-right:7px}#mode{font-size:11px;color:var(--community-muted)}.connection-details{margin-left:auto;position:relative}.connection-details summary{min-height:36px;padding:4px 8px;font-size:11px}.connection-detail-panel{position:absolute;right:0;top:38px;width:280px;max-width:calc(100vw - 32px);padding:14px;background:var(--community-panel);outline:1px solid hsl(var(--border));border-radius:12px;z-index:30;display:grid;gap:8px}#settings{margin:0}.posting-trust{font-size:12px;gap:8px}.main{padding:10px 20px 48px;width:100%;max-width:720px;margin:auto;min-width:0}.context-rail{display:none}
-.view-heading{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin:12px 0 16px}.view-heading h1{font-size:26px;line-height:1.3;letter-spacing:-.035em;margin:0;flex:1 1 70%;font-weight:700}.view-heading h1:focus{outline:none}.view-heading>.muted{flex:1 1 100%;margin:0;font-size:12px}.view-heading>.primary{margin-left:auto}#app:is([data-view=feed],[data-view=community]) .view-heading h1{flex:1 1 0;font-size:24px}#app:is([data-view=feed],[data-view=community]) .view-heading>.muted{display:none}.view-heading>.feed-filters{margin:0;flex:0 0 auto}#app:is([data-view=feed],[data-view=community]) .forum-section[aria-label$="discussions"]>.section-bar{display:none}.forum-section{margin:10px 0;background:transparent;overflow:visible}.section-bar{background:transparent;padding:0 2px 8px;min-height:36px;gap:8px}.section-bar h2{font-size:13px;font-weight:650;color:var(--community-muted)}.section-bar button{font-size:12px}.section-detail{font-family:inherit;font-size:11px}.board-index,.rows{padding:0;gap:10px}.row,.board{background:var(--community-panel);border-radius:12px;padding:16px}.board{grid-template-columns:38px minmax(0,1fr);gap:6px 12px;align-items:start}.board-icon{width:36px;height:36px;padding:0;background:var(--community-hover);display:flex;align-items:center;justify-content:center;border-radius:10px}.board-icon:before{content:"";width:15px;height:12px;border:1.5px solid currentColor;border-radius:3px}.board-icon.unread{background:hsl(var(--primary)/.1);color:var(--community-primary)}.board .row-title{font-size:17px;min-height:32px;line-height:1.4;font-weight:650}.board-description>.excerpt{margin:2px 0 0;font-size:13px;line-height:1.65}.subforums{gap:0 10px;margin-top:4px}.subforum-link{font-size:12px;min-height:44px;color:var(--community-muted)}.board-counts{grid-column:2;flex-direction:row;gap:16px;margin:0}.board-counts div,.discussion-counts div{display:flex;flex-direction:row;gap:5px;align-items:baseline}.board-counts dd,.discussion-counts dd{font-size:11px;order:0}.board-counts dt,.discussion-counts dt{order:1;font-size:11px}.board-latest{grid-column:2;padding:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}.latest-title{min-height:44px;font-size:12px;color:var(--community-muted)}.latest-activity{padding:0;flex-direction:row;gap:5px;font-size:11px}.latest-activity time{font-size:10px}.member-avatar{width:28px;height:28px;flex:0 0 28px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:650;letter-spacing:.02em;background:hsl(var(--accent)/.13);color:var(--community-text);border-radius:50%}.discussion-row{display:block;padding:16px 18px}.discussion-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-width:0}.discussion-meta>.muted{flex:1;min-width:0;margin:0;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.discussion-meta time{white-space:nowrap}.discussion-main .row-title{font-size:19px;font-weight:650;letter-spacing:-.025em;line-height:1.4;min-height:44px}.discussion-main>.excerpt{font-size:14px;line-height:1.7;margin:4px 0 0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;color:var(--community-muted)}.discussion-footer{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-top:12px}.discussion-action{border-radius:999px;background:var(--community-hover);min-height:44px;padding:8px 14px;font-size:12px}.discussion-counts{margin:0;flex-direction:row;gap:12px}.discussion-footer>.latest-activity{margin-left:auto}.feed-filters{margin:0 0 12px;gap:6px}.feed-filters button{padding:8px 14px;border-radius:999px;background:transparent}.feed-filters button[aria-pressed=true]{background:var(--community-hover);color:var(--community-text);font-weight:650}.news-story{grid-template-columns:44px minmax(0,1fr);gap:12px}.news-rank{padding-top:6px;min-width:0}.rank-number{font-size:17px;font-weight:650}.news-main .row-title{font-size:18px;line-height:1.45;font-weight:650;min-height:44px}.news-main>.source{font-size:11px;line-height:1.6;margin:4px 0 8px}.news-main>.muted{font-size:11px;line-height:1.7}.news-preview .row-title{font-size:15px}.edition{margin:8px 0;font-size:12px}.breadcrumbs{margin:4px 0 0;gap:4px}.breadcrumbs button{padding:4px 6px;font-size:11px}.board-rules{padding:0 14px;border-radius:10px;background:var(--community-panel);margin:12px 0}.post{display:block;background:var(--community-panel);border-radius:12px;padding:20px;margin:10px 0}.post-author{flex-direction:row;align-items:center;gap:8px;margin:0 0 12px}.post-author strong{font-size:13px}.post-author .member-avatar{align-self:center}.post-author>.muted{margin-left:auto}.post-content{padding:0;max-width:75ch}.post-body{font-size:15px;line-height:1.85}.badge{padding:3px 5px;font-size:9px}.conversation-reply{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:16px;background:var(--community-panel);border-radius:12px;margin-top:12px}.conversation-reply p{margin:0}.profile-field h3{font-size:12px;margin:0;color:var(--community-muted)}.profile-field p{margin:4px 0 0}.record-row h2{font-size:16px;margin:0}.record-row>.post-body{font-size:14px;line-height:1.7}.member-list{grid-template-columns:1fr}.member-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 12px}.member-row>.member-avatar{grid-row:1/5}.member-row>p,.member-row>a,.member-row>.badge{grid-column:2}.member-row>a{font-size:12px;min-height:44px;align-content:center}.info-row h3{margin:0;font-size:15px}.info-row>.post-body{font-size:14px}.composer{padding:16px;background:var(--community-panel);border-radius:12px;gap:16px;max-width:none}.composer textarea{min-height:230px;background:var(--community-backdrop)}.composer input,.composer select{background:var(--community-backdrop)}.composer label{font-size:13px;font-weight:550}.pager{margin-top:16px}.actions{gap:6px}.actions>a{display:inline-flex;align-items:center;min-height:44px;font-size:12px}.actions>button{border-radius:999px;padding:8px 14px}
-.forum-chat{margin:0 0 8px;background:var(--community-panel);border-radius:12px;overflow:hidden}.chat-header{padding:2px 12px;background:transparent;min-height:44px;gap:6px}.chat-header h2{font-size:12px;margin:0;white-space:nowrap}.chat-peek{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px}.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-profile,.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-latest{display:none}.chat-header:has(#chat-toggle[aria-expanded=true]) .chat-peek{display:none}.chat-header h2:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--community-identity);margin-right:7px}.chat-header button,.chat-row-actions button{min-height:44px;padding:4px 7px;background:transparent;font-size:11px}.chat-messages{max-height:76px;padding:0 12px}.chat-row{grid-template-columns:130px minmax(0,1fr);padding:5px 0;gap:8px}.chat-meta{font-size:11px;gap:4px}.chat-message{font-size:12px;line-height:1.5}.chat-form{padding:6px 12px;gap:6px}.chat-form input{font-size:14px;min-height:44px;flex:1;min-width:0;background:var(--community-backdrop);border-radius:999px}.chat-form button{min-height:44px;border-radius:999px}.chat-form>button:last-child:not(#chat-send){flex-basis:100%}#chat-notice{font-size:10px;padding:0 12px 6px}.chat-access{padding:0 12px 6px}.chat-refresh-controls{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}.chat-refresh-controls p{width:100%;font-size:11px;line-height:1.6;margin:0;overflow-wrap:anywhere}.chat-refresh-controls button,.chat-refresh-controls a{min-height:44px;font-size:11px}#chat-older{min-height:44px}.chat-row-actions{grid-column:2}
-@media(min-width:1000px){.workspace{grid-template-columns:190px minmax(0,1fr);gap:20px;padding:16px 24px}.masthead{grid-template-columns:190px minmax(0,1fr) auto}.sidebar{padding:0;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}#navigation{display:block;padding:0}.primary-navigation{display:grid;gap:4px}.primary-navigation button{width:100%;text-align:left;padding:12px 14px!important}.navigation-more{margin:12px 0 0}.navigation-more summary{padding:8px 14px;color:var(--community-muted)}.secondary-navigation{position:static;min-width:0;max-width:100%;max-height:none;outline:0;background:transparent;padding:0;gap:2px}.secondary-navigation button{padding:10px 14px!important}.connection{padding:16px 12px;margin-top:16px;background:var(--community-panel);border-radius:12px;display:block}.connection strong{display:block;font-size:12px}.connection #mode{display:block;margin:6px 0;font-size:11px;line-height:1.7}.connection-details{margin:0}.connection-details summary{padding:4px 0}.connection-detail-panel{position:static;width:auto;max-width:100%;outline:0;padding:8px 0;background:transparent;border-radius:0}.main{padding:0 0 48px;max-width:680px}.view-heading{margin-top:12px}}
-@media(min-width:1240px){.workspace{grid-template-columns:190px minmax(0,680px) 220px;justify-content:center;gap:24px}.context-rail{display:grid;gap:14px;position:sticky;top:90px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;min-width:0}.context-panel{padding:16px;background:var(--community-panel);border-radius:12px;min-width:0}.context-panel h2{font-size:13px;margin:0 0 8px;font-weight:650}.context-panel p{font-size:12px;line-height:1.8;margin:0 0 8px}.context-panel a{font-size:12px;display:inline-flex;align-items:center;min-height:44px}.context-board{display:block;width:100%;text-align:left;background:transparent;padding:10px 0;font-size:12px}.context-access{background:hsl(var(--accent)/.05)}}
-@media(max-width:680px){.masthead{padding:12px;gap:8px;grid-template-columns:minmax(0,1fr) auto}.brand{font-size:20px}.brand .brand-forum{font-size:11px;margin-top:4px}.mast-actions>button{padding:8px 12px;font-size:11px}.mast-actions{gap:0}.masthead{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px}.brand .brand-forum{display:none}.product-search{width:auto;max-width:none;position:relative}.product-search>summary{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:12px;cursor:pointer;list-style:none;padding:8px}.product-search>summary::-webkit-details-marker{display:none}.product-search>summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px}.product-search #search{position:absolute;right:0;top:50px;width:min(296px,calc(100vw - 24px));max-width:none;background:var(--community-panel);outline:1px solid hsl(var(--border));z-index:40}#query{font-size:16px;padding:10px 14px}.sidebar{padding:0 12px;top:60px}#navigation{gap:2px;padding:2px 0}.primary-navigation{gap:0;justify-content:space-between}.primary-navigation>button{padding:8px 5px!important;min-width:44px;flex:0 0 auto;font-size:12px!important}.navigation-more summary{padding:8px 6px;font-size:12px}#navigation button[aria-current=page]:before{display:none}.navigation-more summary:after{margin-left:3px}.connection{gap:2px 8px;min-height:36px;padding:0 0 4px}.connection strong{font-size:11px;max-width:calc(100% - 92px)}#mode{flex:1 1 100%;order:3;font-size:10px}.connection-details summary{min-height:36px;font-size:10px;padding:4px}.main{padding:4px 12px 28px}.view-heading{margin:0 0 6px;gap:4px 8px}.view-heading h1{font-size:23px}.view-heading>.muted{font-size:12px}.view-heading>.primary{margin-left:0}input,textarea,select,.chat-form input{font-size:16px}.row,.board{padding:14px}.board{grid-template-columns:30px minmax(0,1fr);gap:4px 10px}.board-icon{width:28px;height:28px;margin-top:6px}.board .row-title{font-size:17px;min-height:44px}.board-counts{grid-column:2;gap:12px}.board-latest{grid-column:2;display:block}.board-latest .latest-activity{display:none}.board-description>.excerpt{font-size:12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.discussion-row{display:block;padding:14px}.discussion-main .row-title{font-size:18px;min-height:44px}.discussion-main>.excerpt{font-size:14px;-webkit-line-clamp:3}.discussion-meta>.muted{font-size:10px}.discussion-footer{gap:6px 10px;margin-top:10px}.discussion-footer>.latest-activity{margin-left:0;font-size:10px}.discussion-counts{gap:10px}.post{padding:16px}.post-author{gap:6px}.post-author>.muted{margin-left:0;flex:1 1 100%;padding-left:36px}.post-body{font-size:15px}.chat-header #chat-profile{display:inline;font-size:10px}.chat-header{gap:3px;padding:2px 10px}.chat-header button{padding:4px 5px}.chat-row{grid-template-columns:minmax(0,1fr);gap:1px}.chat-row-actions{grid-column:1}.chat-messages{max-height:70px}.section-bar{padding:0 2px 6px;gap:4px}.section-detail{font-size:10px}.news-story{grid-template-columns:38px minmax(0,1fr);gap:8px}.news-main .row-title{font-size:17px}.news-rank .rank-points{font-size:8px}.breadcrumbs{gap:2px}.composer{padding:14px}.composer textarea{min-height:210px}.edition select{width:auto;max-width:calc(100% - 55px)}}
-
-/* Surface switcher and the final forum refinement layer. */
-.surface-switcher{position:relative;min-width:0;align-self:center}.surface-switcher>summary{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;list-style:none;border-radius:8px;padding:4px 0}.surface-switcher>summary::-webkit-details-marker{display:none}.surface-switcher>summary:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:4px}.surface-arrow{flex:none;color:var(--community-muted);transition:transform .15s ease}.surface-switcher[open] .surface-arrow{transform:rotate(180deg)}.surface-choices{position:absolute;left:0;top:calc(100% + 10px);width:300px;max-width:calc(100vw - 24px);padding:6px;background:var(--community-panel);border:1px solid hsl(var(--border));border-radius:14px;z-index:60;display:grid;gap:2px}.surface-choice{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;width:100%;min-height:68px;padding:12px;border-radius:9px;text-decoration:none;text-align:left;background:transparent;min-width:0}.surface-choice:hover{background:var(--community-hover);color:var(--community-text)}.surface-choice strong{font-size:14px;font-weight:650}.surface-description{grid-column:1;font-size:12px;color:var(--community-muted);font-weight:400}.surface-current{grid-column:2;grid-row:1/3;align-self:center;font-size:10px;font-weight:500;color:var(--community-muted);padding:4px 7px;background:var(--community-hover);border-radius:99px}.surface-choice[aria-current=page]{background:var(--community-hover)}.surface-native-link{display:flex;align-items:center;min-height:44px;padding:8px 12px;color:var(--community-muted);font-size:11px;text-decoration:none}
-.connection strong,#mode,.post-author strong,.member-row h2,.record-row .row-title,.conversation-reply p{min-width:0;max-width:100%;overflow-wrap:anywhere}.connection{min-width:0}.post-author{align-items:center}.post-author strong{flex:0 1 auto}.post-author>.muted{overflow-wrap:anywhere}.discussion-row{background:var(--community-panel);padding:18px 20px;border-radius:14px}.discussion-main .row-title{font-size:20px;line-height:1.35;letter-spacing:-.025em}.discussion-meta{margin-bottom:9px}.discussion-footer{gap:8px 12px;margin-top:14px}.discussion-action{font-weight:600;font-size:12px}.discussion-main>.excerpt{line-height:1.75}.board-index{gap:0;background:var(--community-panel);border-radius:14px;overflow:hidden}.board{border-radius:0;background:transparent;padding:18px 16px}.board:hover{background:var(--community-hover)}.board-counts,.discussion-counts{font-family:inherit}.board-counts dd{font-weight:650;font-size:12px}.board-counts dt{color:var(--community-muted)}.board-description>.excerpt{line-height:1.7}.board-latest{min-width:0;overflow-wrap:anywhere}.board-latest .latest-title{font-weight:500}.post{padding:22px;border-radius:14px}.post-author{padding-bottom:4px}.post-author strong{font-weight:650;font-size:14px}.post-body{font-size:15px;line-height:1.9}.post-content>a{min-height:44px;align-content:center}.conversation-reply{background:var(--community-hover);border-radius:14px}.conversation-reply>.muted{font-size:12px}.composer{padding:22px;border-radius:14px;gap:20px}.composer label{gap:10px;font-size:12px;font-weight:650}.composer input,.composer textarea,.composer select{border:1px solid hsl(var(--border));border-radius:9px}.composer textarea{min-height:260px;line-height:1.8}.composer .actions{padding-top:4px}.composer .actions button{font-weight:600}.attachments{padding:12px 0;font-size:12px}.mailbox-folders{display:flex;flex-wrap:wrap;gap:4px;width:100%;margin-top:6px}.mailbox-folders button{padding:8px 14px;border-radius:99px;font-size:12px;background:transparent;color:var(--community-muted)}.mailbox-folders button[aria-current=page]{background:var(--community-hover);color:var(--community-text);font-weight:650}.record-list,.member-list{gap:0;background:var(--community-panel);border-radius:14px;overflow:hidden}.record-row{padding:18px;border-radius:0;background:transparent}.record-row:hover{background:var(--community-hover)}.record-row>.muted{font-size:11px}.record-row.message-row>.post-body{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.7}.member-row{grid-template-columns:34px minmax(0,1fr);align-items:start}.member-row h2{font-size:14px;font-weight:650}.member-row .member-avatar{width:32px;height:32px;flex-basis:32px}.info-row h3{font-weight:650}.profile-field h3{text-transform:none;font-weight:500}.request-error{background:var(--community-panel);border-radius:14px;padding:20px;overflow-wrap:anywhere}.request-error>p{margin:0 0 12px;font-size:13px;line-height:1.75}.loading-state{display:grid;gap:10px}.loading-panel{display:grid;gap:12px;padding:20px;border-radius:14px;background:var(--community-panel)}.loading-panel span{display:block;border-radius:6px;background:var(--community-hover);animation:forum-loading 1.8s ease-in-out infinite alternate}.loading-meta{width:42%;height:16px}.loading-title{width:76%;height:25px}.loading-copy{width:92%;height:42px}.loading-action{width:100px;height:32px;border-radius:99px!important}@keyframes forum-loading{from{opacity:.55}to{opacity:1}}
-@media(min-width:760px){.board{grid-template-columns:36px minmax(0,1fr) 64px 150px;gap:12px;align-items:center}.board-description{grid-column:2}.board-counts{grid-column:3;flex-direction:column;gap:8px}.board-counts div{flex-direction:column;gap:0}.board-latest{grid-column:4;display:block}.board-latest .latest-title{font-size:11px;line-height:1.65;min-height:32px}.board-latest .latest-activity{font-size:10px;line-height:1.7;display:flex;flex-direction:column;gap:2px}.board .row-title{font-size:16px}.board-description>.excerpt{font-size:12px}}
-@media(max-width:680px){.surface-switcher>summary{gap:7px}.surface-arrow{width:14px;height:14px}.surface-choices{width:min(300px,calc(100vw - 24px));top:calc(100% + 8px)}.surface-choice{padding:12px}.connection strong{font-size:11px;overflow-wrap:anywhere}.connection-details{flex:none}.discussion-row{padding:16px;border-radius:12px}.discussion-main .row-title{font-size:18px;line-height:1.4}.discussion-meta{margin-bottom:6px}.discussion-meta>.muted{line-height:1.6}.discussion-footer{margin-top:12px;gap:6px 10px}.board{padding:15px 12px}.post{padding:18px;border-radius:12px}.post-author>.muted{padding-left:0;flex-basis:100%}.post-author strong{flex:1;min-width:0}.post-body{font-size:15px;line-height:1.85}.composer{padding:18px;gap:18px;border-radius:12px}.composer textarea{min-height:240px}.composer .actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.composer .actions>button{min-width:0}.composer .actions>.primary{grid-column:1/-1}.record-row{padding:16px}.conversation-reply{padding:16px}.conversation-reply>button{width:100%}.request-error{padding:18px}.loading-panel{padding:16px}.loading-title{width:84%}}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground))}button,input,textarea,select{font:inherit}button,a,summary{touch-action:manipulation}button{min-height:44px;padding:9px 14px;border:0;border-radius:12px;background:hsl(var(--muted)/.6);color:inherit;cursor:pointer;font-size:13px;font-weight:500}button:hover{background:hsl(var(--muted));color:hsl(var(--foreground))}button:disabled{opacity:.55;cursor:not-allowed}a{color:inherit;text-underline-offset:3px;overflow-wrap:anywhere}a:hover,.row-title:hover{color:hsl(var(--primary))}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,pre:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:3px}h1,h2,h3,p,strong{overflow-wrap:anywhere}h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.025em}h2{font-size:16px}h3{font-size:15px}p{margin:6px 0 12px}.muted,.source{color:hsl(var(--muted-foreground));font-size:12px;line-height:1.65}.source{overflow-wrap:anywhere}.primary{background:#fa00a8;color:#090909;font-weight:650;border-radius:999px}.primary:hover{background:#ed00a0;color:#090909}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#app{max-width:1680px;margin:auto;min-width:0;min-height:540px}#app[data-display-mode=fullscreen]{min-height:100vh}.masthead{position:sticky;top:0;z-index:40;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:20px;align-items:center;min-height:64px;padding:8px 24px;background:hsl(var(--card))}.brand{white-space:nowrap;font-size:22px;font-weight:800;line-height:1;letter-spacing:-.8px}.brand-ai{color:#fa00a8}.brand-forum{font-size:12px;color:hsl(var(--muted-foreground));font-weight:500;letter-spacing:0;margin-left:5px}.mast-actions,.actions,.pager{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.surface-switcher,.product-search,.connection-details,.navigation-more{position:relative;min-width:0}summary{list-style:none;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;border-radius:12px;padding:8px 10px;font-size:12px;font-weight:500}summary::-webkit-details-marker{display:none}.surface-switcher>summary{padding:4px 0}.surface-arrow{color:hsl(var(--muted-foreground));flex:none;transition:transform .15s}.surface-switcher[open] .surface-arrow{transform:rotate(180deg)}.surface-choices,.secondary-navigation,.connection-detail-panel{position:absolute;z-index:60;background:hsl(var(--popover));border:1px solid hsl(var(--border));border-radius:12px;padding:6px;box-shadow:0 12px 36px #0002}.surface-choices{left:0;top:calc(100% + 8px);width:300px;max-width:calc(100vw - 24px);display:grid;gap:2px}.surface-choice{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;text-align:left;text-decoration:none;min-height:64px;padding:12px;background:transparent}.surface-choice strong{font-size:14px}.surface-description{grid-column:1;font-size:12px;color:hsl(var(--muted-foreground));font-weight:400}.surface-current{grid-column:2;grid-row:1/3;align-self:center;font-size:10px;padding:4px 7px;border-radius:99px;background:hsl(var(--muted))}.surface-choice[aria-current=page]{background:hsl(var(--muted)/.6)}.surface-native-link{display:flex;align-items:center;min-height:44px;padding:8px 12px;font-size:12px;color:hsl(var(--muted-foreground));text-decoration:none}
+.product-search{width:100%;max-width:640px;justify-self:center}.product-search>summary{display:none}#search{display:flex;width:100%;min-width:0;background:hsl(var(--muted)/.65);border-radius:999px}#query{flex:1;min-width:0;padding:10px 16px;border:0;background:transparent;border-radius:999px}#search button{background:transparent;border-radius:999px;font-size:12px}input,textarea,select{display:block;width:100%;min-width:0;max-width:100%;min-height:44px;padding:10px 12px;border:1px solid hsl(var(--input));border-radius:10px;background:hsl(var(--card));color:inherit}input::placeholder,textarea::placeholder{color:hsl(var(--muted-foreground))}textarea{resize:vertical}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr);min-width:0}.sidebar{padding:0 24px;background:hsl(var(--background));min-width:0}#navigation{display:flex;gap:8px;align-items:center;padding:4px 0}.primary-navigation{display:flex;gap:4px;flex:1;min-width:0}#navigation button{background:transparent;color:hsl(var(--muted-foreground));padding:10px 14px}#navigation button:hover{background:hsl(var(--muted)/.55);color:hsl(var(--foreground))}#navigation button[aria-current=page]{background:hsl(var(--primary)/.1);color:hsl(var(--primary));font-weight:650}.navigation-more{margin-left:auto}.navigation-more>summary{color:hsl(var(--muted-foreground))}.navigation-more>summary:after{content:"⌄"}.navigation-more>summary[aria-current=page]{color:hsl(var(--primary))}.secondary-navigation{right:0;top:48px;min-width:210px;max-width:calc(100vw - 24px);max-height:65vh;overflow:auto;display:grid;gap:2px}.secondary-navigation button{text-align:left}.connection{display:flex;align-items:center;gap:6px 10px;min-width:0;padding:0 0 6px;min-height:36px}.connection>.eyebrow{display:none}.connection strong{font-size:11px;font-weight:600;min-width:0;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.connection strong:before{content:"";display:inline-block;width:6px;height:6px;margin-right:7px;border-radius:50%;background:#81d8d0}#mode{font-size:11px;color:hsl(var(--muted-foreground));min-width:0}.connection-details{margin-left:auto;flex:none}.connection-details>summary{font-size:11px;min-height:36px;padding:5px 8px}.connection-detail-panel{right:0;top:40px;width:300px;max-width:calc(100vw - 24px);padding:16px;display:grid;gap:10px;font-size:12px}.posting-trust{display:flex;flex-wrap:wrap;gap:6px;color:hsl(var(--muted-foreground));font-size:12px}#settings p{margin:0 0 8px}#expand{width:100%}
+.main{width:100%;min-width:0;max-width:1050px;margin:0 auto;padding:12px 24px 48px}.context-rail{display:none}.view-heading{display:flex;align-items:center;flex-wrap:wrap;gap:6px 16px;margin:8px 0 18px}.view-heading h1{font-size:28px;line-height:1.25;letter-spacing:-.035em;flex:1 1 70%}.view-heading h1:focus{outline:none}.view-heading>.muted{flex:1 1 100%;margin:0;font-size:13px}.view-heading>.primary{margin-left:auto}#app:is([data-view=feed],[data-view=community]) .view-heading h1{flex:1;font-size:24px}#app:is([data-view=feed],[data-view=community]) .view-heading>.muted{display:none}.feed-filters{margin:0;gap:4px}.feed-filters button{background:transparent;color:hsl(var(--muted-foreground));border-radius:999px;padding:8px 14px}.feed-filters button[aria-pressed=true]{background:hsl(var(--muted)/.8);color:inherit;font-weight:650}#app:is([data-view=feed],[data-view=community]) .forum-section[aria-label$="discussions"]>.section-bar{display:none}.forum-section{min-width:0;margin:16px 0}.section-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:0 2px 8px;min-height:36px}.section-bar h2{font-size:14px;letter-spacing:0}.section-detail{margin-left:auto;color:hsl(var(--muted-foreground));font-size:11px}.section-bar button{margin-left:auto;background:transparent}.rows{display:grid;gap:12px;min-width:0}.row,.post,.composer,.conversation-reply,.empty,.request-error,.loading-panel{min-width:0;border-radius:12px;background:hsl(var(--card));padding:20px}.row-title{display:block;min-height:44px;align-content:center;text-align:left;padding:0;background:transparent;border-radius:4px;border:0;overflow-wrap:anywhere;text-decoration:none;font-weight:650;font-size:18px;line-height:1.4;letter-spacing:-.02em}.row-title:hover{background:transparent}.excerpt{margin:6px 0 0;color:hsl(var(--muted-foreground));font-size:14px;line-height:1.65;overflow-wrap:anywhere}.member-avatar{width:30px;height:30px;flex:0 0 30px;display:inline-flex;align-items:center;justify-content:center;background:hsl(var(--accent)/.13);border-radius:50%;font-size:11px;font-weight:650}.discussion-meta{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:6px}.discussion-meta>.muted{flex:1;min-width:0;overflow-wrap:anywhere;margin:0;font-size:12px;line-height:1.5}.discussion-meta time{white-space:nowrap}.discussion-main{min-width:0}.discussion-main>.excerpt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}.discussion-footer{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:14px}.discussion-action,.actions button{min-height:44px;border-radius:999px;font-size:12px;padding:8px 14px}.discussion-counts,.board-counts{display:flex;gap:16px;font-size:11px;color:hsl(var(--muted-foreground));margin:0}.discussion-counts div,.board-counts div{display:flex;gap:5px;align-items:baseline}.discussion-counts dd,.board-counts dd{margin:0;order:-1;font-weight:600;color:hsl(var(--foreground));font-variant-numeric:tabular-nums}.latest-activity{display:flex;flex-wrap:wrap;gap:4px 8px;color:hsl(var(--muted-foreground));font-size:11px;min-width:0;overflow-wrap:anywhere}.discussion-footer>.latest-activity{margin-left:auto}.latest-title{font-size:12px;line-height:1.5;text-align:left;overflow-wrap:anywhere;background:transparent;padding:0}.latest-title:hover{background:transparent;color:hsl(var(--primary))}
+.board-index,.record-list,.member-list{display:grid;gap:0;background:hsl(var(--card));border-radius:12px;overflow:hidden}.board{display:grid;grid-template-columns:36px minmax(0,1fr);gap:6px 12px;padding:18px 20px;min-width:0}.board:hover,.record-row:hover{background:hsl(var(--muted)/.45)}.board-icon{width:34px;height:34px;display:grid;place-items:center;background:hsl(var(--muted)/.6);border-radius:10px;color:hsl(var(--muted-foreground));margin-top:5px}.board-icon:before{content:"";width:16px;height:13px;border:1.5px solid currentColor;border-radius:3px}.board-icon.unread{background:hsl(var(--primary)/.1);color:hsl(var(--primary))}.board-description,.board-latest{min-width:0}.board .row-title{font-size:17px}.board-description>.excerpt{font-size:13px;margin:0}.subforums{display:flex;flex-wrap:wrap;align-items:center;gap:0 10px;margin-top:4px}.subforums>.muted{font-size:11px}.subforum-link{min-height:36px;font-size:12px;padding:4px 0;background:transparent;color:hsl(var(--muted-foreground))}.board-counts,.board-latest{grid-column:2}.board-latest{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}.board-latest .latest-title{min-height:36px}.breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;gap:4px;color:hsl(var(--muted-foreground));font-size:12px;margin:0 0 6px}.breadcrumbs button{min-height:36px;background:transparent;padding:4px 6px;font-size:12px}.board-rules{background:hsl(var(--card));border-radius:12px;padding:0 16px;margin:16px 0}.board-rules>summary{padding:8px 0;font-size:12px;color:hsl(var(--muted-foreground))}.board-rules .post-body{padding-bottom:16px;font-size:13px}.announcement-row h3{font-size:14px}
+.news-story{display:grid;grid-template-columns:42px minmax(0,1fr);gap:16px}.news-main{min-width:0}.news-rank{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:10px;color:hsl(var(--muted-foreground));font-variant-numeric:tabular-nums}.rank-number{font-size:17px;font-weight:650;color:inherit}.rank-points{font-size:9px;text-align:center;max-width:100%;overflow-wrap:anywhere}.news-main>.source,.news-main>.muted{margin:4px 0 0;font-size:12px}.edition{display:flex;align-items:center;gap:12px;font-size:12px;color:hsl(var(--muted-foreground));margin:8px 0}.edition select{width:auto;max-width:100%}.news-preview .row-title{font-size:15px}
+.post{margin:12px 0;padding:24px}.post-author{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;margin-bottom:18px}.post-author strong{font-size:14px;min-width:0;max-width:100%;overflow-wrap:anywhere}.post-author>.muted{margin-left:auto;font-size:11px}.badge{display:inline-block;padding:3px 6px;border-radius:5px;background:hsl(var(--accent)/.13);color:hsl(var(--muted-foreground));font-size:10px;line-height:1.5}.post-content{min-width:0;max-width:76ch}.post-body{font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}.post-body p{margin:0 0 14px}.post-body p:last-child{margin-bottom:0}.post-body h2,.post-body h3{margin:20px 0 10px;font-size:20px}.post-body h3{font-size:17px}.post-body blockquote{margin:14px 0;padding:12px 16px;border-left:2px solid hsl(var(--primary)/.6);border-radius:0 8px 8px 0;background:hsl(var(--muted)/.45);color:hsl(var(--muted-foreground))}.post-body figure{margin:16px 0;min-width:0}.post-body figcaption{color:hsl(var(--muted-foreground));font-size:11px;margin:6px 0}.post-body pre{white-space:pre;max-width:100%;overflow-x:auto;background:hsl(var(--muted)/.5);border-radius:10px;padding:16px;font:12px/1.8 ui-monospace,SFMono-Regular,monospace;margin:0}.post-body code,.post-body kbd{font-family:ui-monospace,SFMono-Regular,monospace}.post-body ul,.post-body ol{padding-left:24px;margin:12px 0}.post-body li{margin:6px 0}.post-body li::marker{color:hsl(var(--primary))}.post-body details{background:hsl(var(--muted)/.35);border-radius:10px;padding:0 12px}.post-body details>div{padding-bottom:12px}.post-body a{color:hsl(var(--primary));text-decoration:underline}.post-body .rich-table{max-width:100%;overflow-x:auto;white-space:normal}.post-body table{border-collapse:collapse;width:100%;font-size:13px}.post-body th,.post-body td{text-align:left;padding:10px 12px;min-width:100px}.post-body th{background:hsl(var(--muted)/.6)}.post-body tr:nth-child(even){background:hsl(var(--muted)/.25)}.post-body mark{background:#ffe14d;color:#090909;border-radius:3px;padding:0 3px}.poll-panel{padding:20px;background:hsl(var(--card));border-radius:12px;margin:16px 0}.poll-panel h2{font-size:17px}.poll-option{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:10px 0}.poll-label{flex:1;min-width:0;overflow-wrap:anywhere}.poll-option button{font-size:12px}.poll-option meter{width:100%;height:12px;accent-color:#fa00a8}.thread-tools{flex:1;min-width:0}.thread-tools>summary{font-size:12px;justify-content:flex-start;color:hsl(var(--muted-foreground))}.thread-tools[open]{flex:1 1 100%}.thread-tools>.actions{padding:6px 0 10px}.view-heading:has(.edition) h1{flex:1}.view-heading>.edition{order:1;margin:0}.view-heading:has(.edition)>.muted{order:2}.post-actions{margin-top:18px}.post-actions button{font-size:12px}.post-actions a{color:hsl(var(--muted-foreground));text-decoration:none;font-size:11px}.post-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.post-attachments a{display:flex;align-items:center;min-height:44px;padding:8px 12px;border-radius:10px;background:hsl(var(--muted)/.5);font-size:12px}.conversation-reply{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px}.conversation-reply p{margin:0;min-width:0;overflow-wrap:anywhere}.record-row{border-radius:0;background:transparent;padding:18px 20px}.record-row h2{font-size:16px}.record-row>.muted{margin:4px 0 0}.record-row>.post-body{font-size:14px;line-height:1.65;margin:8px 0 0}.message-row>.post-body{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.member-row{display:grid;grid-template-columns:32px minmax(0,1fr);gap:3px 12px}.member-row>.member-avatar{grid-row:1/5}.member-row>p,.member-row>a,.member-row>.badge{grid-column:2}.member-row>a,.actions>a{display:inline-flex;align-items:center;min-height:44px;font-size:12px}.member-row>.badge{justify-self:start}.profile-field h3{font-size:12px;font-weight:500;color:hsl(var(--muted-foreground))}.profile-field p{margin:4px 0 0}.mailbox-folders{display:flex;gap:4px;flex-wrap:wrap;width:100%;margin-top:8px}.mailbox-folders button{border-radius:999px;background:transparent;color:hsl(var(--muted-foreground));font-size:12px}.mailbox-folders button[aria-current=page]{background:hsl(var(--muted)/.65);color:inherit;font-weight:650}
+.composer{display:grid;gap:20px;padding:24px;max-width:none}.composer label{display:grid;gap:8px;font-size:13px;font-weight:600}.composer textarea{min-height:280px;line-height:1.7;font-weight:400}.composer input,.composer select{font-weight:400}.attachments{padding:4px 0;font-size:12px}.composer .actions{margin-top:4px}.main:has(.composer){max-width:860px;padding-bottom:100px}.pager{margin-top:20px}.notice{border-radius:12px;padding:12px 16px;background:hsl(var(--accent)/.1);overflow-wrap:anywhere;margin:0 0 12px;font-size:13px}.notice:empty{display:none}.error{background:hsl(var(--primary)/.09)}.empty{font-size:13px;color:hsl(var(--muted-foreground));padding:28px 20px}.request-error>p{margin:0 0 12px}.loading-state{display:grid;gap:12px}.loading-panel{display:grid;gap:12px}.loading-panel span{display:block;background:hsl(var(--muted));border-radius:6px;animation:forum-loading 1.8s ease-in-out infinite alternate}.loading-meta{width:42%;height:16px}.loading-title{width:76%;height:25px}.loading-copy{width:92%;height:42px}.loading-action{width:100px;height:32px;border-radius:99px!important}@keyframes forum-loading{from{opacity:.55}to{opacity:1}}
+.forum-chat{background:hsl(var(--card));border-radius:12px;margin:0 0 14px;min-width:0}.chat-header{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:44px;padding:2px 12px}.chat-header h2{font-size:12px;letter-spacing:0;margin:0;white-space:nowrap}.chat-header h2:before{content:"";display:inline-block;width:6px;height:6px;background:#81d8d0;border-radius:50%;margin-right:7px}.chat-peek{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.chat-header button,.chat-row-actions button{min-height:44px;background:transparent;padding:6px 8px;font-size:11px}.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-profile,.chat-header:has(#chat-toggle[aria-expanded=false]) #chat-latest{display:none}.chat-header:has(#chat-toggle[aria-expanded=true]) .chat-peek{display:none}#chat-profile{font-size:11px;min-width:0;overflow-wrap:anywhere;flex:1}.chat-messages{max-height:220px;overflow-y:auto;padding:4px 16px}.chat-row{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:6px 0;min-width:0}.chat-meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;font-size:11px}.chat-meta strong{overflow-wrap:anywhere}.chat-meta time{font-size:10px}.chat-message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.6;margin:0}.chat-row-actions{display:flex;gap:4px;grid-column:2}.chat-form{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px}.chat-form input{flex:1;min-width:0;border-radius:999px;background:hsl(var(--muted)/.35)}.chat-form>button:last-child:not(#chat-send){flex-basis:100%}.chat-refresh-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:4px 16px}.chat-refresh-controls p{width:100%;font-size:11px;margin:0;overflow-wrap:anywhere}.chat-refresh-controls button,.chat-refresh-controls a{font-size:11px;min-height:44px}#chat-older{margin:4px 16px}#chat-notice{padding:0 16px 12px;font-size:11px}#chat-notice:empty{display:none}.chat-access{margin:0;padding:0 16px 8px;font-size:11px}.chat-access a{display:inline-flex;align-items:center;min-height:44px}
+@media(min-width:760px){.board{grid-template-columns:36px minmax(0,1fr) 80px 170px;align-items:center;gap:14px}.board-description{grid-column:2}.board-counts{grid-column:3;flex-direction:column;gap:6px}.board-counts div{flex-direction:column;gap:0}.board-latest{grid-column:4;display:block}.board-latest .latest-activity{display:block;font-size:11px}.board-latest .latest-title{font-size:12px}.board .row-title{font-size:16px}}
+@media(min-width:1000px){.masthead{grid-template-columns:220px minmax(0,1fr) auto}.workspace{grid-template-columns:220px minmax(0,1fr);gap:24px;padding:24px}.sidebar{position:sticky;top:88px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;padding:0}#navigation{display:block;padding:0}.primary-navigation{display:grid;gap:4px}.primary-navigation button{width:100%;text-align:left}.navigation-more{margin:16px 0 0}.navigation-more>summary{padding:8px 14px;color:hsl(var(--muted-foreground))}.secondary-navigation{position:static;min-width:0;max-width:100%;max-height:none;background:transparent;border:0;box-shadow:none;padding:0}.secondary-navigation button{font-size:12px!important}.connection{display:block;padding:16px 12px;margin-top:16px}.connection strong{display:block;font-size:12px;max-width:100%;overflow-wrap:anywhere;white-space:normal}.connection #mode{display:block;margin:6px 0;font-size:11px}.connection-details{margin:0}.connection-details>summary{padding:4px 0}.connection-detail-panel{position:static;width:auto;max-width:100%;padding:8px 0;background:transparent;border:0;box-shadow:none}.main{padding:0 0 48px}.view-heading{margin-top:0}#app[data-view=thread] .main{max-width:860px}#app:has(.composer) .main{max-width:860px}}
+@media(min-width:1440px){.workspace{grid-template-columns:220px minmax(0,1fr) 250px;gap:28px}.context-rail{display:grid;gap:20px;position:sticky;top:88px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;min-width:0}.context-panel{padding:18px;background:hsl(var(--card));border-radius:12px;min-width:0}.context-panel h2{font-size:14px;letter-spacing:0;margin-bottom:8px}.context-panel p{font-size:12px;color:hsl(var(--muted-foreground));line-height:1.7;margin:0 0 8px}.context-panel a{font-size:12px;display:inline-flex;align-items:center;min-height:44px}.context-board{display:block;width:100%;text-align:left;padding:8px 0;background:transparent;font-size:12px}#app:is([data-view=thread],[data-view=message]):not(:has(.composer)) .workspace,#app:has(.composer) .workspace{grid-template-columns:220px minmax(0,1fr)}#app:is([data-view=thread],[data-view=message]) .context-rail,#app:has(.composer) .context-rail{display:none}}
+@media(max-width:680px){.masthead{grid-template-columns:minmax(0,1fr) auto auto;gap:6px;min-height:60px;padding:8px 12px}.brand{font-size:20px}.brand-forum{display:none}.surface-switcher>summary{gap:7px}.surface-arrow{width:14px;height:14px}.mast-actions button{padding:8px 12px;font-size:11px}.product-search{width:auto;max-width:none}.product-search>summary{display:flex;align-items:center;justify-content:center;min-width:44px;padding:8px;font-size:12px}.product-search #search{position:absolute;right:0;top:50px;width:min(296px,calc(100vw - 24px));background:hsl(var(--popover));border:1px solid hsl(var(--border));z-index:50;box-shadow:0 12px 30px #0002}#query{font-size:16px;padding:10px 14px}.sidebar{padding:0 12px}#navigation{gap:2px;padding:2px 0}.primary-navigation{justify-content:space-between;gap:0}.primary-navigation>button{min-width:44px;padding:8px 5px!important;font-size:12px!important}.navigation-more>summary{font-size:12px;padding:8px 6px;gap:3px}.connection{gap:4px 8px;min-height:36px;padding-bottom:4px}.connection strong{font-size:10px;max-width:40%}#mode{font-size:10px}.connection-details>summary{font-size:10px;padding:4px;min-height:36px}.main{padding:8px 12px 32px}.view-heading{margin:0 0 12px;gap:4px 8px}.view-heading h1{font-size:24px}#app:is([data-view=feed],[data-view=community]) .view-heading h1{font-size:22px}.view-heading>.muted{font-size:12px}.feed-filters button{padding:8px 12px;font-size:12px}.row,.post,.composer,.conversation-reply,.request-error,.loading-panel{padding:16px}.rows{gap:10px}.discussion-meta>.muted{font-size:11px}.discussion-main .row-title{font-size:18px}.discussion-footer{gap:6px 10px;margin-top:12px}.discussion-footer>.latest-activity{margin-left:0}.board{grid-template-columns:30px minmax(0,1fr);gap:4px 10px;padding:16px 12px}.board-icon{width:28px;height:28px}.board-counts{gap:12px}.board-latest{display:block}.board-latest .latest-activity{font-size:10px}.board-description>.excerpt{font-size:12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.news-story{grid-template-columns:34px minmax(0,1fr);gap:10px}.news-main .row-title{font-size:17px}.rank-points{font-size:8px}.news-main>.source,.news-main>.muted{font-size:11px}.edition{flex-wrap:wrap}.edition select{max-width:calc(100% - 56px)}.post{margin:10px 0}.post-author{gap:6px;margin-bottom:14px}.post-author strong{flex:1}.post-author>.muted{margin-left:0;flex:1 1 100%}.post-body{font-size:15px;line-height:1.8}.post-body pre{padding:12px;font-size:12px}.conversation-reply>button{width:100%}.composer{gap:18px}.composer textarea{min-height:240px}.composer .actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.composer .actions>.primary{grid-column:1/-1}.composer .actions>button{min-width:0}input,textarea,select,.chat-form input{font-size:16px}.record-row{padding:16px}.member-row h2{font-size:15px}.chat-header{gap:3px;padding:2px 10px}.chat-header button{padding:6px;font-size:10px}.chat-row{grid-template-columns:minmax(0,1fr);gap:2px}.chat-row-actions{grid-column:1}.chat-messages{max-height:200px;padding:4px 12px}.chat-form{padding:10px 12px}.chat-refresh-controls{padding:4px 12px}.section-detail{font-size:10px}.breadcrumbs{gap:2px}.breadcrumbs button{font-size:11px}.surface-choices{width:min(300px,calc(100vw - 24px))}}
 @media(prefers-reduced-motion:reduce){.surface-arrow{transition:none}.loading-panel span{animation:none}}
 </style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Live chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;

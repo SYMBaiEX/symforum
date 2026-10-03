@@ -10,6 +10,12 @@ import {
 } from "./forum-plugin-schema";
 
 export const FORUM_PLUGIN_APP_URI = "ui://symbaiex/forum.html";
+// Reuse the favicon's mark, with the transparent, theme-aware entrypoint treatment.
+export const FORUM_PLUGIN_ICON = {
+  src: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g transform="scale(.3125)" fill="currentColor"><path d="M12 45V19h9l11 14V19h8v26h-8L21 31v14h-9Z"/><path d="M43 19h9v26h-9z"/></g></svg>'),
+  mimeType: "image/svg+xml",
+  sizes: ["20x20"],
+};
 export type ForumPluginOperation = {
   name: string;
   operation: string;
@@ -17,9 +23,33 @@ export type ForumPluginOperation = {
   readOnly: boolean;
   publicRead: boolean;
   destructive: boolean;
+  openWorld: boolean;
   inputSchema: ForumJsonSchema;
   description: string;
 };
+// Only these writes are additive without deleting/overwriting prior data or
+// irrevocably sending to another person's mailbox. A new mutation defaults to
+// destructive until its actual domain behavior has been reviewed.
+const ADDITIVE_WRITES = new Set([
+  "createThread", "createReply", "createReport", "createPrivateMessageReport",
+  "sendChatMessage", "markAllForumsRead", "markCategoryRead", "markThreadRead",
+  "markNotificationRead", "markPrivateMessageRead", "recordThreadView",
+  "restorePrivateMessage",
+]);
+// Public forum content and its participants are open-world, even when read-only.
+// These operations are confined to the selected profile's private state.
+const PRIVATE_ACCOUNT_OPERATIONS = new Set([
+  "status", "getMyForumNavState", "getMyForumNotificationPreferences",
+  "getMyForumProfile", "getPrivateMessage", "listPrivateMessages",
+  "listMyCategorySubscriptions", "listMyForumRelationships",
+  "listMyForumReputationHistory", "listMyForumWarnings", "listMyNotifications",
+  "listMyPendingForumContent", "listMyThreadBookmarks", "listMyThreadSubscriptions",
+  "markAllForumsRead", "markCategoryRead", "markThreadRead", "markNotificationRead",
+  "markPrivateMessageRead", "recordThreadView", "setCategorySubscription",
+  "setThreadBookmark", "setThreadSubscription", "updateForumRelationship",
+  "updateMyForumNotificationPreferences", "deletePrivateMessage",
+  "restorePrivateMessage", "createPrivateMessageReport",
+]);
 const keySchema: ForumJsonSchema = {
   type: "string",
   minLength: 8,
@@ -114,10 +144,8 @@ const domainOperations: ForumPluginOperation[] = Object.entries(generated).map(
       capability: forumOperationCapability(operation),
       readOnly,
       publicRead: forumOperationPublicRead(operation),
-      destructive:
-        /^update|^set|delete|purge|remove|merge|move|split|Moderation|Status|updateUserForum|reorder/i.test(
-          operation,
-        ),
+      destructive: !readOnly && !ADDITIVE_WRITES.has(operation),
+      openWorld: !PRIVATE_ACCOUNT_OPERATIONS.has(operation),
       inputSchema: schema,
       description: describe(operation) + (readOnly ? " Forum use has no monthly usage limit. Connected reads retain current authorization and generous short-term owner request limits." : ""),
     };
@@ -137,9 +165,10 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     readOnly: true,
     publicRead: true,
     destructive: false,
+    openWorld: false,
     inputSchema: emptySchema,
     description:
-      "Open the SYMBaiEX forum app shell inside ChatGPT. Launch verifies your connected profile without loading content; anonymous launch opens a public shell. Browse boards, read or search threads, and participate through separate tools. Supports expanded and sidebar views.",
+      "Open the SYMBaiEX forum app shell inside ChatGPT. Launch verifies your connected profile without loading content; anonymous launch opens a public shell. Browse boards, read or search threads, and participate through separate tools. The host controls the view's placement.",
   },
   {
     name: "forum_status",
@@ -148,6 +177,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     readOnly: true,
     publicRead: false,
     destructive: false,
+    openWorld: false,
     inputSchema: emptySchema,
     description:
       "View the forum connection's selected profile, capabilities, execution mode, policyVersion, current authorization status and forum usage policy (no monthly usage limit, with temporary request limits). Call this before mutations and pass its policyVersion as expectedPolicyVersion.",
@@ -160,6 +190,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     readOnly: false,
     publicRead: false,
     destructive: false,
+    openWorld: true,
     description:
       "Upload up to five ChatGPT-provided attachments, each at most 5 MiB, to the connected forum profile. Returns owned attachment references for a thread or reply. Temporary download URLs are never persisted.",
     inputSchema: {
@@ -191,7 +222,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
 ];
 export const FORUM_PLUGIN_TOOLS = FORUM_PLUGIN_OPERATIONS.map((tool) => ({
   name: tool.name,
-  ...(tool.name === "forum_open" ? { title: "SYMBaiEX Forum" } : {}),
+  ...(tool.name === "forum_open" ? { title: "SYMBaiEX Forum", icons: [FORUM_PLUGIN_ICON] } : {}),
   description: tool.description,
   inputSchema: tool.inputSchema,
   securitySchemes: [
@@ -202,7 +233,7 @@ export const FORUM_PLUGIN_TOOLS = FORUM_PLUGIN_OPERATIONS.map((tool) => ({
     readOnlyHint: tool.readOnly,
     destructiveHint: tool.destructive,
     idempotentHint: true,
-    openWorldHint: tool.operation === "uploadAttachments",
+    openWorldHint: tool.openWorld,
   },
   _meta: {
     securitySchemes: [
