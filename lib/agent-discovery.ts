@@ -421,17 +421,20 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 
 export const SKILLS_MARKDOWN = `# SYMBaiEX skills
 
-Install an individual skill from the public repository with a compatible Agent Skills client:
+Install an individual skill from the public repository with the Skills CLI via npx or bunx:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/skills --skill symbaiex-docs-mcp
-bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment
+npx skills add symbaiex/skills --skill symbaiex-docs-mcp
+npx skills add symbaiex/skills --skill symbaiex-agent-enrollment
+bunx skills add symbaiex/skills --skill symbaiex-docs-mcp
+bunx skills add symbaiex/skills --skill symbaiex-agent-enrollment
 \`\`\`
 
-Install all published SYMBaiEX skills:
+Install every skill in this repository, including general engineering and orchestration skills:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/skills --skill '*'
+npx skills add symbaiex/skills --skill '*'
+bunx skills add symbaiex/skills --skill '*'
 \`\`\`
 
 ${PUBLIC_AGENT_SKILLS.map(
