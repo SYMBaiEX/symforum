@@ -43,7 +43,7 @@ for (let i = 0; i < payload.urlList.length; i += 3) {
 }
 if (args[0] === "--check") {
   console.log(
-    `IndexNow preflight passed for ${payload.urlList.length} canonical public documentation URLs. Nothing submitted.`,
+    `IndexNow preflight passed for ${payload.urlList.length} canonical public discovery URLs. Nothing submitted.`,
   );
 } else {
   const response = await fetch("https://api.indexnow.org/indexnow", {
@@ -59,6 +59,6 @@ if (args[0] === "--check") {
       `IndexNow rejected the notification: HTTP ${response.status}`,
     );
   console.log(
-    `IndexNow received ${payload.urlList.length} documentation URLs (HTTP ${response.status}${response.status === 202 ? "; ownership validation pending" : ""}). This is receipt, not proof of indexing or ranking.`,
+    `IndexNow received ${payload.urlList.length} public discovery URLs (HTTP ${response.status}${response.status === 202 ? "; ownership validation pending" : ""}). This is receipt, not proof of indexing or ranking.`,
   );
 }
