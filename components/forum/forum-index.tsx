@@ -1,131 +1,324 @@
 "use client";
 
-import { asRoute } from "@/lib/typed-route";
-
 import { reportAppError } from "@/components/app-error-surface";
-import {
-  formatForumCount,
-  formatForumDateTime,
-  forumMemberProfilePath,
-  forumPath,
-  forumRefs,
-  getThreadAuthor,
-  getThreadStartedAt,
-  humanizeSlug,
-  type ForumOnlineSummaryRecord,
-  type ForumOverviewRecord,
-  type ForumThreadSummaryRecord,
-} from "@/components/forum/forum-refs";
-import {
-  ForumAvatar,
-  ForumAnnouncementPanel,
-  ForumLink,
-  ForumIndexTable,
-  ForumStatusBox,
-  ForumThreadPrefixBadge,
-  ForumThreadStateBadges,
-} from "@/components/forum/forum-primitives";
-import { useForegroundSnapshot } from "@/components/forum/use-foreground-snapshot";
+import { NewsFeed } from "@/components/news-feed";
 import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
+import type { NewsTimelineRecord } from "@/lib/convex-refs";
+import type { HnStory } from "@/lib/hn";
+import { newsStoryPath } from "@/lib/news-slugs";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { asRoute } from "@/lib/typed-route";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
+import { ArrowUpRight, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { ForumFeedList } from "./forum-feed-list";
+import {
+  forumHomeHref,
+  type ForumHomeView,
+  type ForumFeedSort,
+} from "./forum-home-model";
+import {
+  ForumAvatar,
+  ForumLink,
+  ForumIndexTable,
+  ForumStatusBox,
+} from "./forum-primitives";
+import {
+  formatForumCount,
+  formatForumDateTime,
+  forumAnnouncementPath,
+  forumMemberProfilePath,
+  forumPath,
+  forumRefs,
+  getCategoryTitle,
+  type ForumOnlineSummaryRecord,
+  type ForumOverviewRecord,
+} from "./forum-refs";
+import { useForegroundSnapshot } from "./use-foreground-snapshot";
 
-export function ForumIndex({ enabled }: { enabled: boolean }) {
-  if (!enabled) {
+export type ForumIndexProps = {
+  enabled: boolean;
+  view?: ForumHomeView;
+  sort?: ForumFeedSort;
+  initialStories?: HnStory[];
+  initialTimeline?: NewsTimelineRecord | null;
+};
+const views = [
+  { value: "feed", label: "Feed" },
+  { value: "news", label: "News" },
+  { value: "community", label: "Community" },
+  { value: "boards", label: "Boards" },
+] as const;
+const quietLink =
+  "focus-ring inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
+
+export function ForumIndex({
+  enabled,
+  view = "feed",
+  sort = "active",
+  initialStories = [],
+  initialTimeline = null,
+}: ForumIndexProps) {
+  if (!enabled)
     return (
-      <ForumStatusBox
-        title="Local forum disabled"
-        body="Convex is not configured in this checkout, so the public boards are visible only as a disabled shell. Connect the local backend to browse categories, open threads, and post."
-        accent="cyan"
-      />
+      <div>
+        <ForumHomeHeader view={view} sort={sort} />
+        <div className="mt-8">
+          {view === "news" ? (
+            <NewsFeed
+              enabled={false}
+              initialStories={initialStories}
+              initialTimeline={initialTimeline}
+            />
+          ) : (
+            <ForumStatusBox
+              title="Forum unavailable locally"
+              body="Connect the local backend to browse discussions and boards."
+              accent="cyan"
+            />
+          )}
+        </div>
+      </div>
     );
-  }
-
-  return <LiveForumIndex />;
+  return (
+    <LiveForumIndex
+      view={view}
+      sort={sort}
+      initialStories={initialStories}
+      initialTimeline={initialTimeline}
+    />
+  );
 }
 
-function LiveForumIndex() {
+function LiveForumIndex({
+  view = "feed",
+  sort = "active",
+  initialStories = [],
+  initialTimeline = null,
+}: Omit<ForumIndexProps, "enabled">) {
   const convex = useConvex();
   const overview = useQuery(forumRefs.overview, {});
   const loadOnlineSummary = useCallback(
     () => convex.query(forumRefs.onlineSummary, { now: Date.now() }),
     [convex],
   );
-  const handleOnlineSummaryError = useCallback((error: unknown) => {
-    reportAppError(error, {
-      scope: "forum",
-      eventType: "forum_online_summary_failed",
-      component: "ForumIndex",
-      action: "forum:onlineSummary",
-      notify: false,
-    });
-  }, []);
-  const {
-    snapshot: onlineSnapshot,
-    refreshError: onlineRefreshError,
-    refreshNow: refreshOnlineSummary,
-  } = useForegroundSnapshot("forum-index-online-summary", loadOnlineSummary, {
-    onError: handleOnlineSummaryError,
-  });
-  const online = onlineSnapshot?.data;
-
-  if (overview === undefined) {
-    return (
-      <p
-        aria-busy="true"
-        aria-live="polite"
-        className="border-y border-row-border py-2.5 font-mono text-[11px] uppercase text-muted-foreground"
-        role="status"
-      >
-        Loading forum
-      </p>
-    );
-  }
+  const handleOnlineSummaryError = useCallback(
+    (error: unknown) =>
+      reportAppError(error, {
+        scope: "forum",
+        eventType: "forum_online_summary_failed",
+        component: "ForumIndex",
+        action: "forum:onlineSummary",
+        notify: false,
+      }),
+    [],
+  );
+  const { snapshot, refreshError, refreshNow } = useForegroundSnapshot(
+    "forum-index-online-summary",
+    loadOnlineSummary,
+    { onError: handleOnlineSummaryError },
+  );
+  const news = initialTimeline?.stories.length
+    ? initialTimeline.stories
+    : initialStories;
 
   return (
-    <ForumIndexContent
-      online={online}
-      onlineRefreshError={onlineRefreshError}
-      refreshOnlineSummary={refreshOnlineSummary}
-      overview={overview}
-    />
+    <div>
+      <ForumHomeHeader overview={overview} view={view} sort={sort} />
+      <div className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,760px)_240px]">
+        <div className="min-w-0">
+          {view === "news" ? (
+            <NewsFeed
+              enabled
+              initialStories={initialStories}
+              initialTimeline={initialTimeline}
+            />
+          ) : view === "boards" ? (
+            overview === undefined ? (
+              <p
+                role="status"
+                aria-busy="true"
+                className="py-8 text-sm text-muted-foreground"
+              >
+                Loading boards…
+              </p>
+            ) : (
+              <ForumBoards overview={overview} />
+            )
+          ) : (
+            <>
+              {view === "feed" && news.length > 0 ? (
+                <section
+                  aria-labelledby="forum-news-heading"
+                  className="mb-6 rounded-lg bg-muted/35 px-4 py-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h2
+                      id="forum-news-heading"
+                      className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground"
+                    >
+                      On Hacker News
+                    </h2>
+                    <ForumLink
+                      className={quietLink}
+                      href={forumHomeHref("news")}
+                    >
+                      All news{" "}
+                      <ArrowUpRight aria-hidden="true" className="size-4" />
+                    </ForumLink>
+                  </div>
+                  <div className="space-y-1">
+                    {news.slice(0, 3).map((story) => (
+                      <article key={story.hnItemId}>
+                        <Link
+                          className="focus-ring flex min-h-11 flex-col justify-center rounded-sm hover:text-primary"
+                          href={asRoute(primarySiteUrl(newsStoryPath(story)))}
+                        >
+                          <h3 className="text-base font-semibold leading-5">
+                            {story.title}
+                          </h3>
+                          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                            {story.host ?? "Hacker News"}
+                            {typeof story.score === "number"
+                              ? ` · ${formatForumCount(story.score)} HN points`
+                              : ""}
+                            {typeof story.descendants === "number"
+                              ? ` · ${formatForumCount(story.descendants)} HN comments`
+                              : ""}
+                          </p>
+                        </Link>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+              <ForumFeedList sort={sort} communityOnly={view === "community"} />
+            </>
+          )}
+        </div>
+        <ForumHomeRail
+          overview={overview}
+          online={snapshot?.data}
+          onlineRefreshError={refreshError}
+          refreshOnlineSummary={refreshNow}
+        />
+      </div>
+    </div>
   );
 }
 
-function ForumIndexContent({
+function ForumHomeHeader({
   overview,
-  online,
-  onlineRefreshError,
-  refreshOnlineSummary,
+  view,
+  sort,
 }: {
-  overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord | undefined;
-  onlineRefreshError: boolean;
-  refreshOnlineSummary: () => void;
+  overview?: ForumOverviewRecord;
+  view: ForumHomeView;
+  sort: ForumFeedSort;
 }) {
-  const [markAllReadPending, setMarkAllReadPending] = useState(false);
-  const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const boards =
+    overview?.categories.filter(
+      (category) =>
+        category.kind !== "section" &&
+        category.isPostable !== false &&
+        category.status === "active",
+    ) ?? [];
+  return (
+    <header>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            {view === "feed"
+              ? "The feed"
+              : view === "news"
+                ? "News"
+                : view === "community"
+                  ? "Community"
+                  : "Boards"}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <ForumLink
+            aria-label="Search the forum"
+            className={quietLink}
+            href="/forum/search"
+          >
+            <Search aria-hidden="true" className="size-4" />
+            <span className="hidden sm:inline">Search</span>
+          </ForumLink>
+          <details className="relative">
+            <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+              <Plus className="size-4" aria-hidden="true" />
+              Create post
+            </summary>
+            <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg bg-popover p-3 shadow-xl ring-1 ring-row-border">
+              <p className="px-2 pb-2 text-xs text-muted-foreground">
+                Choose a board
+              </p>
+              {boards.length ? (
+                <div className="space-y-1">
+                  {boards.slice(0, 6).map((board) => (
+                    <ForumLink
+                      className={`${quietLink} flex w-full`}
+                      href={`${forumPath(board.slug)}?compose=1`}
+                      key={board.slug}
+                    >
+                      {getCategoryTitle(board)}
+                    </ForumLink>
+                  ))}
+                </div>
+              ) : (
+                <ForumLink className={quietLink} href={forumHomeHref("boards")}>
+                  Browse available boards
+                </ForumLink>
+              )}
+              <ForumLink
+                className={`${quietLink} mt-2 text-primary`}
+                href={forumHomeHref("boards")}
+              >
+                All boards{" "}
+                <ArrowUpRight aria-hidden="true" className="size-4" />
+              </ForumLink>
+            </div>
+          </details>
+        </div>
+      </div>
+      <nav aria-label="Forum views" className="mt-6 flex flex-wrap gap-1">
+        {views.map((item) => (
+          <ForumLink
+            aria-current={view === item.value ? "page" : undefined}
+            className={`${quietLink} ${view === item.value ? "bg-primary/10 font-medium text-primary" : ""}`}
+            href={forumHomeHref(item.value, sort)}
+            key={item.value}
+          >
+            {item.label}
+          </ForumLink>
+        ))}
+      </nav>
+    </header>
+  );
+}
 
+function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
+  const [pending, setPending] = useState(false);
+  const markAllForumsRead = useMutation(forumRefs.markAllForumsRead);
+  const { isAuthenticated, isLoading } = useConvexAuth();
   async function markAllRead() {
     if (!isAuthenticated) {
       toast.error("Sign in to mark all forums read");
       return;
     }
-
-    setMarkAllReadPending(true);
+    setPending(true);
     try {
       const result = await markAllForumsRead({});
       toast.success(
         result.categoryCount === 0
           ? "No visible boards to mark"
-          : `Marked ${result.categoryCount} board${
-              result.categoryCount === 1 ? "" : "s"
-            } read`,
+          : `Marked ${result.categoryCount} board${result.categoryCount === 1 ? "" : "s"} read`,
       );
     } catch (caught) {
       reportAppError(caught, {
@@ -137,410 +330,191 @@ function ForumIndexContent({
       });
       toast.error(userFacingError(caught, "Could not mark forums read"));
     } finally {
-      setMarkAllReadPending(false);
+      setPending(false);
     }
   }
-
   return (
-    <div className="space-y-2">
-      <section className="min-w-0">
-        <div className="mb-2 flex flex-col gap-2 border-b border-row-border pb-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Board index
-            </p>
-            <h2 className="mt-1 text-lg font-semibold md:text-xl">
-              Find a useful thread
-            </h2>
-            <ForumIndexSnapshot overview={overview} />
-          </div>
-          <div className="flex flex-wrap gap-2 xl:justify-end">
-            <Button
-              aria-busy={markAllReadPending}
-              className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
-              disabled={authLoading || markAllReadPending}
-              type="button"
-              variant="outline"
-              onClick={markAllRead}
-            >
-              Mark all read
-            </Button>
-          </div>
-        </div>
-        <ForumIndexTable
-          categories={overview.categories}
-          sections={overview.sections}
-        />
-      </section>
-
-      <ForumAnnouncementPanel announcements={overview.announcements} />
-
-      <ForumIndexPulse
-        online={online}
-        onlineRefreshError={onlineRefreshError}
-        refreshOnlineSummary={refreshOnlineSummary}
-        overview={overview}
-      />
-    </div>
-  );
-}
-
-function ForumIndexSnapshot({ overview }: { overview: ForumOverviewRecord }) {
-  const items = [
-    { label: "Categories", value: overview.totals.categories },
-    { label: "Threads", value: overview.totals.threads },
-    { label: "Posts", value: overview.totals.posts },
-  ];
-
-  return (
-    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
-      {items.map((item) => (
-        <div className="inline-flex items-baseline gap-1.5" key={item.label}>
-          <dt>{item.label}</dt>
-          <dd className="text-foreground">{formatForumCount(item.value)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function ForumIndexPulse({
-  overview,
-  online,
-  onlineRefreshError,
-  refreshOnlineSummary,
-}: {
-  overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord | undefined;
-  onlineRefreshError: boolean;
-  refreshOnlineSummary: () => void;
-}) {
-  return (
-    <section className="border-y border-row-border py-2">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.65fr)]">
-        <ForumIndexThreadPreview threads={overview.newestThreads} />
-        <ForumPulseSummary
-          online={online}
-          onlineRefreshError={onlineRefreshError}
-          refreshOnlineSummary={refreshOnlineSummary}
-          overview={overview}
-        />
+    <section aria-label="Board index">
+      <div className="mb-6 flex justify-end">
+        <Button
+          aria-busy={pending}
+          disabled={isLoading || pending}
+          onClick={() => void markAllRead()}
+          type="button"
+          variant="ghost"
+        >
+          {pending ? "Marking…" : "Mark all read"}
+        </Button>
       </div>
+      <ForumIndexTable
+        categories={overview.categories}
+        sections={overview.sections}
+      />
     </section>
   );
 }
 
-function ForumIndexThreadPreview({
-  threads,
-}: {
-  threads: ForumThreadSummaryRecord[];
-}) {
-  if (threads.length === 0) {
-    return (
-      <div>
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          Newest threads
-        </p>
-        <h2 className="mt-2 text-2xl font-semibold leading-tight">
-          No active threads yet.
-        </h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          No public threads are active yet. Choose a board above when you are
-          ready to start the first discussion.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Newest threads
-          </p>
-          <h2
-            className="mt-1 text-lg font-semibold"
-            id="forum-newest-threads-heading"
-          >
-            Recent activity
-          </h2>
-        </div>
-        <ForumLink
-          className="focus-ring font-mono text-[10px] uppercase text-muted-foreground hover:text-foreground"
-          href="/forum/new-posts"
-          prefetch
-        >
-          View new posts
-        </ForumLink>
-      </div>
-      <div
-        aria-labelledby="forum-newest-threads-heading"
-        className="focus-ring mt-2 max-h-[min(24rem,55vh)] divide-y divide-row-border overflow-y-auto overscroll-contain border-y border-row-border pr-2 [scrollbar-gutter:stable] sm:max-h-[26rem] xl:max-h-[28rem]"
-        role="region"
-        tabIndex={0}
-      >
-        {threads.map((thread) => (
-          <article
-            className="py-2"
-            key={`${thread.categorySlug ?? "forum"}-${thread.slug}`}
-          >
-            <div className="flex flex-wrap items-center gap-1.5">
-              <ForumThreadPrefixBadge thread={thread} />
-              <ForumLink
-                className="focus-ring min-w-0 text-sm font-semibold leading-5 hover:text-primary md:text-base"
-                href={forumPath(thread.categorySlug, thread.slug)}
-                prefetch
-              >
-                {thread.title}
-              </ForumLink>
-              <ForumThreadStateBadges thread={thread} />
-            </div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {thread.categoryName ??
-                (thread.categorySlug
-                  ? humanizeSlug(thread.categorySlug)
-                  : "Forum")}{" "}
-              / {getThreadAuthor(thread)} /{" "}
-              {formatForumDateTime(getThreadStartedAt(thread))}
-            </p>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ForumPulseSummary({
+function ForumHomeRail({
   overview,
   online,
   onlineRefreshError,
   refreshOnlineSummary,
 }: {
-  overview: ForumOverviewRecord;
-  online: ForumOnlineSummaryRecord | undefined;
+  overview?: ForumOverviewRecord;
+  online?: ForumOnlineSummaryRecord;
   onlineRefreshError: boolean;
   refreshOnlineSummary: () => void;
 }) {
-  const { statistics, totals } = overview;
-  const countLabel = online
-    ? `${formatForumCount(online.registeredCount)}${
-        online.registeredCountLimited ? "+" : ""
-      }`
-    : "—";
-  const memberCount = `${formatForumCount(statistics.memberCount)}${
-    statistics.memberCountLimited ? "+" : ""
-  }`;
-  const pulseStats = [
-    { label: "Online", value: countLabel },
-    { label: "Members", value: memberCount },
-    { label: "Threads", value: formatForumCount(totals.threads) },
-    { label: "Posts", value: formatForumCount(totals.posts) },
-  ];
-  const newestMember = statistics.newestMember ?? null;
-  const topPoster = statistics.topPoster ?? null;
-  const reputationLeader = statistics.reputationLeader ?? null;
-  const newestIsOnline =
-    online !== undefined &&
-    newestMember !== null &&
-    online.members.some((member) => member.username === newestMember.username);
-  const showNewestMember =
-    online !== undefined && newestMember !== null && !newestIsOnline;
-  const hasMemberHighlights =
-    showNewestMember || topPoster !== null || reputationLeader !== null;
-
+  const boards =
+    overview?.categories
+      .filter((category) => category.kind !== "section")
+      .slice(0, 7) ?? [];
   return (
-    <aside className="border-t border-row-border pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
-      <p className="font-mono text-[10px] uppercase text-muted-foreground">
-        Board pulse
-      </p>
-      <dl className="mt-2 grid grid-cols-4 gap-x-3">
-        {pulseStats.map((item) => (
-          <div className="min-w-0" key={item.label}>
-            <dt className="font-mono text-[10px] uppercase text-muted-foreground">
-              {item.label}
-            </dt>
-            <dd className="mt-0.5 text-base font-semibold">{item.value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      {online === undefined ? (
-        <div
-          aria-live="polite"
-          className="mt-3 flex flex-wrap items-center gap-2 border-t border-row-border pt-3 text-sm text-muted-foreground"
-          role="status"
-        >
-          <span>
-            {onlineRefreshError
-              ? "Online status unavailable."
-              : "Checking online status…"}
-          </span>
-          {onlineRefreshError ? (
-            <Button
-              className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
-              onClick={refreshOnlineSummary}
-              size="sm"
-              type="button"
-              variant="outline"
+    <aside aria-label="Forum context" className="space-y-8 text-sm">
+      <section>
+        <h2 className="mb-3 text-sm font-semibold">Boards</h2>
+        <div className="flex flex-wrap gap-1 lg:flex-col lg:items-start">
+          {boards.map((board) => (
+            <ForumLink
+              className={quietLink}
+              href={forumPath(board.slug)}
+              key={board.slug}
             >
-              Retry
-            </Button>
-          ) : null}
+              {getCategoryTitle(board)}
+            </ForumLink>
+          ))}
         </div>
-      ) : onlineRefreshError ? (
-        <div
-          aria-live="polite"
-          className="mt-3 flex flex-wrap items-center gap-2 border-t border-row-border pt-3 text-xs text-muted-foreground"
-          role="status"
+        <ForumLink
+          className={`${quietLink} mt-1 text-primary`}
+          href={forumHomeHref("boards")}
         >
-          <span>Refresh failed; showing the previous snapshot.</span>
-          <Button
-            className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
-            onClick={refreshOnlineSummary}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-
-      {online && online.members.length > 0 ? (
-        <div className="mt-3 border-t border-row-border pt-3">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Active since {formatForumDateTime(online.activeSince)}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {online.members.slice(0, 6).map((member) => (
-              <ForumOnlineMemberChip key={member.userId} member={member} />
+          Explore all boards{" "}
+          <ArrowUpRight aria-hidden="true" className="size-4" />
+        </ForumLink>
+      </section>
+      {overview?.announcements.length ? (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold">Announcements</h2>
+          <div className="space-y-4">
+            {overview.announcements.slice(0, 2).map((announcement) => (
+              <ForumLink
+                className="focus-ring block text-sm leading-6 text-muted-foreground hover:text-primary"
+                href={forumAnnouncementPath(announcement)}
+                key={announcement.slug}
+              >
+                {announcement.title}
+              </ForumLink>
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
-
-      {hasMemberHighlights ? (
-        <div className="mt-3 grid gap-3 border-t border-row-border pt-3 sm:grid-cols-3 xl:grid-cols-1">
-          {showNewestMember ? (
-            <ForumPulseMember
-              label="Newest member"
-              member={newestMember}
-              value={`Joined ${formatForumDateTime(newestMember.joinedAt)}`}
-            />
+      <section>
+        <h2 className="mb-2 text-sm font-semibold">Forum tools</h2>
+        <nav aria-label="Forum tools" className="flex flex-wrap gap-1">
+          {[
+            { href: "/forum/new-posts", label: "New posts" },
+            { href: "/forum/members", label: "Members" },
+            { href: "/forum/agents", label: "Agents" },
+            { href: "/forum/calendar", label: "Calendar" },
+            { href: "/forum/help", label: "Help" },
+            { href: "/forum/announcements", label: "Announcements" },
+          ].map((item) => (
+            <ForumLink className={quietLink} href={item.href} key={item.href}>
+              {item.label}
+            </ForumLink>
+          ))}
+        </nav>
+      </section>
+      <section>
+        <h2 className="mb-3 text-sm font-semibold">Around the forum</h2>
+        <dl className="flex gap-6">
+          <div>
+            <dt className="text-xs text-muted-foreground">Online</dt>
+            <dd className="mt-1 font-medium">
+              {online
+                ? `${formatForumCount(online.registeredCount)}${online.registeredCountLimited ? "+" : ""}`
+                : "—"}
+            </dd>
+          </div>
+          {overview ? (
+            <div>
+              <dt className="text-xs text-muted-foreground">Members</dt>
+              <dd className="mt-1 font-medium">
+                {formatForumCount(overview.statistics.memberCount)}
+                {overview.statistics.memberCountLimited ? "+" : ""}
+              </dd>
+            </div>
           ) : null}
-          <ForumPulseMember
-            label="Top poster"
-            member={topPoster}
-            value={
-              topPoster
-                ? `${formatForumCount(topPoster.postCount)} posts`
-                : undefined
-            }
-          />
-          <ForumPulseMember
-            label="Reputation"
-            member={reputationLeader}
-            value={
-              reputationLeader
-                ? formatForumSignedCount(reputationLeader.reputationScore)
-                : undefined
-            }
-          />
-        </div>
-      ) : null}
+        </dl>
+        {online === undefined || onlineRefreshError ? (
+          <div
+            role="status"
+            className="mt-3 text-xs leading-5 text-muted-foreground"
+          >
+            <p>
+              {onlineRefreshError
+                ? online
+                  ? "Refresh failed; showing the previous snapshot."
+                  : "Online status unavailable."
+                : "Checking online status…"}
+            </p>
+            {onlineRefreshError ? (
+              <button
+                className={`${quietLink} -ml-3`}
+                onClick={refreshOnlineSummary}
+                type="button"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {online?.members.length ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {online.members.slice(0, 5).map((member) => (
+              <ForumLink
+                className="focus-ring rounded-full"
+                href={forumMemberProfilePath(member.username)}
+                title={member.displayName}
+                key={member.userId}
+              >
+                <ForumAvatar
+                  className="size-8"
+                  alt={member.displayName}
+                  name={member.displayName}
+                  src={member.avatarUrl}
+                />
+              </ForumLink>
+            ))}
+          </div>
+        ) : null}
+        {online &&
+        overview?.statistics.newestMember &&
+        !online.members.some(
+          (member) =>
+            member.username === overview.statistics.newestMember!.username,
+        ) ? (
+          <div className="mt-4 text-xs leading-5 text-muted-foreground">
+            <p>Newest member</p>
+            <ForumLink
+              className="focus-ring font-medium text-foreground hover:text-primary"
+              href={forumMemberProfilePath(
+                overview.statistics.newestMember.username,
+              )}
+            >
+              {overview.statistics.newestMember.displayName}
+            </ForumLink>
+          </div>
+        ) : null}
+        {online ? (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Active since {formatForumDateTime(online.activeSince)}
+          </p>
+        ) : null}
+        <ForumLink className={`${quietLink} mt-2 -ml-3`} href="/forum/online">
+          See who’s here
+        </ForumLink>
+      </section>
     </aside>
   );
-}
-
-function ForumOnlineMemberChip({
-  member,
-}: {
-  member: ForumOnlineSummaryRecord["members"][number];
-}) {
-  return (
-    <div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
-      <ForumAvatar
-        alt={`${member.displayName} avatar`}
-        className="size-7"
-        name={member.displayName}
-        src={member.avatarUrl}
-      />
-      <div className="min-w-0">
-        <ForumLink
-          className="focus-ring block truncate text-sm font-semibold hover:text-primary"
-          href={forumMemberProfilePath(member.username)}
-          prefetch
-        >
-          {member.displayName}
-        </ForumLink>
-        <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
-          {member.location.href ? (
-            <Link
-              className="focus-ring hover:text-foreground"
-              href={asRoute(member.location.href)}
-              prefetch
-            >
-              {member.location.label}
-            </Link>
-          ) : (
-            member.location.label
-          )}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ForumPulseMember({
-  className,
-  label,
-  member,
-  value,
-}: {
-  className?: string;
-  label: string;
-  member: ForumOverviewRecord["statistics"]["newestMember"];
-  value?: string;
-}) {
-  if (!member) {
-    return null;
-  }
-
-  return (
-    <div className={className}>
-      <p className="font-mono text-[10px] uppercase text-muted-foreground">
-        {label}
-      </p>
-      <div className="mt-1 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-2">
-        <ForumAvatar
-          alt={`${member.displayName} avatar`}
-          className="size-7"
-          name={member.displayName}
-          src={member.avatarUrl}
-        />
-        <div className="min-w-0">
-          <ForumLink
-            className="focus-ring block truncate text-sm font-semibold hover:text-primary"
-            href={forumMemberProfilePath(member.username)}
-            prefetch
-          >
-            {member.displayName}
-          </ForumLink>
-          {value ? (
-            <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
-              {value}
-            </p>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function formatForumSignedCount(value: number) {
-  if (value > 0) {
-    return `+${formatForumCount(value)}`;
-  }
-  return formatForumCount(value);
 }

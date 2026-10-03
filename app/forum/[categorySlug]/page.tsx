@@ -105,18 +105,21 @@ export default async function ForumCategoryPage({ params }: PageProps) {
         ]}
       />
       <ForumUtilityNav className="mb-2" />
-      <header className="border-y border-row-border py-2">
-        <p className="page-kicker">Public board</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
+      <header className="py-2">
+        <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
           {categoryName}
         </h1>
         {description ? (
-          <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+          <p className="mt-2 max-w-[70ch] text-sm leading-6 text-muted-foreground">
             {description}
           </p>
         ) : null}
       </header>
-      <ForumThreadList categorySlug={categorySlug} enabled={enabled} />
+      <ForumThreadList
+        categorySlug={categorySlug}
+        enabled={enabled}
+        showHeading={false}
+      />
     </section>
   );
 }

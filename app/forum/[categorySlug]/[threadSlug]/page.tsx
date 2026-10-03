@@ -121,19 +121,16 @@ export default async function ForumThreadPage({ params }: PageProps) {
         ]}
       />
       <ForumUtilityNav className="mb-2" />
-      <header className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum thread</p>
-        <h1 className="mt-1 text-xl font-semibold leading-tight md:text-2xl">
+      <header className="py-2">
+        <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
           {title}
         </h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-          {description}
-        </p>
       </header>
       <ForumThreadView
         categorySlug={categorySlug}
         threadSlug={threadSlug}
         enabled={enabled}
+        showHeading={false}
       />
     </section>
   );

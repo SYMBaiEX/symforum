@@ -83,7 +83,7 @@ export function createForumBrowserTools(
         : operation.publicRead),
   ).map((operation): ForumBrowserTool => ({
     name: operation.name,
-    title: operation.operation.replace(/([a-z])([A-Z])/g, "$1 $2"),
+    title: operation.name === "forum_open" ? "SYMBaiEX Forum" : operation.operation.replace(/([a-z])([A-Z])/g, "$1 $2"),
     description: operation.description,
     inputSchema: {
       ...operation.inputSchema,

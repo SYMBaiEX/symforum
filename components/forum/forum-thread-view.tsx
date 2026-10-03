@@ -13,8 +13,6 @@ import {
   forumPostPath,
   forumRefs,
   formatForumDateTime,
-  getCategoryDescription,
-  getCategoryTitle,
   getPostNumber,
   getPostTimestamp,
   getRenderablePosts,
@@ -75,9 +73,7 @@ const ForumCompose = dynamic(
     ),
   {
     loading: () => (
-      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
-        Loading editor
-      </p>
+      <p className="py-3 text-sm text-muted-foreground">Loading editor</p>
     ),
     ssr: false,
   },
@@ -112,10 +108,12 @@ export function ForumThreadView({
   categorySlug,
   threadSlug,
   enabled,
+  showHeading = true,
 }: {
   categorySlug: string;
   threadSlug: string;
   enabled: boolean;
+  showHeading?: boolean;
 }) {
   if (!enabled) {
     return (
@@ -128,16 +126,22 @@ export function ForumThreadView({
   }
 
   return (
-    <LiveForumThreadView categorySlug={categorySlug} threadSlug={threadSlug} />
+    <LiveForumThreadView
+      categorySlug={categorySlug}
+      threadSlug={threadSlug}
+      showHeading={showHeading}
+    />
   );
 }
 
 function LiveForumThreadView({
   categorySlug,
   threadSlug,
+  showHeading,
 }: {
   categorySlug: string;
   threadSlug: string;
+  showHeading: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -1107,16 +1111,18 @@ function LiveForumThreadView({
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="border-y border-row-border py-2">
+    <div className="space-y-7">
+      <div className="py-2">
         <ForumBreadcrumbs category={category} thread={thread} />
-        <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
+        <div className="mt-3 space-y-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <ForumThreadPrefixBadge thread={thread} />
-              <h2 className="text-lg font-semibold leading-tight sm:text-xl md:text-2xl">
-                {thread.title}
-              </h2>
+              {showHeading ? (
+                <h1 className="max-w-[35ch] break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
+                  {thread.title}
+                </h1>
+              ) : null}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <ForumThreadStateBadges thread={thread} />
@@ -1185,12 +1191,6 @@ function LiveForumThreadView({
                 {ratingError}
               </p>
             ) : null}
-            {getCategoryDescription(category) ? (
-              <p className="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground md:text-sm">
-                {getCategoryTitle(category)} ·{" "}
-                {getCategoryDescription(category)}
-              </p>
-            ) : null}
           </div>
           <ForumMetricBar
             items={threadMetrics}
@@ -1203,10 +1203,8 @@ function LiveForumThreadView({
 
       {editingThread ? (
         <section className="space-y-3">
-          <div className="border-b border-row-border pb-2">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Edit thread
-            </p>
+          <div className="pb-2">
+            <p className="text-xs text-muted-foreground">Edit thread</p>
             <h2 className="mt-1 text-lg font-semibold">Starter post</h2>
           </div>
           <ForumCompose
@@ -1222,7 +1220,7 @@ function LiveForumThreadView({
             error={editThreadError}
             footerActions={
               <Button
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-none text-xs"
                 type="button"
                 variant="outline"
                 disabled={editThreadBody.trim().length === 0}
@@ -1257,9 +1255,7 @@ function LiveForumThreadView({
               onNewAttachmentsChange={setEditThreadNewAttachments}
             />
             <label className="block">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Edit reason
-              </span>
+              <span className="text-xs text-muted-foreground">Edit reason</span>
               <Input
                 className="mt-2 rounded-none border-row-border"
                 maxLength={180}
@@ -1326,7 +1322,7 @@ function LiveForumThreadView({
         </ForumLink>
       ) : null}
 
-      <section className="space-y-3">
+      <section className="space-y-8">
         <ForumPaginationBar
           buildHref={threadPageHref}
           label="Posts"
@@ -1408,7 +1404,7 @@ function LiveForumThreadView({
                       error={editPostError}
                       footerActions={
                         <Button
-                          className="rounded-none font-mono text-[10px] uppercase"
+                          className="rounded-none text-xs"
                           type="button"
                           variant="outline"
                           disabled={editPostBody.trim().length === 0}
@@ -1444,7 +1440,7 @@ function LiveForumThreadView({
                         onNewAttachmentsChange={setEditPostNewAttachments}
                       />
                       <label className="block">
-                        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           Edit reason
                         </span>
                         <Input
@@ -1494,10 +1490,8 @@ function LiveForumThreadView({
       </section>
 
       <section className="space-y-3" id="forum-reply-composer">
-        <div className="border-b border-row-border pb-2">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Reply
-          </p>
+        <div className="pb-2">
+          <p className="text-xs text-muted-foreground">Reply</p>
           <h2 className="mt-1 text-lg font-semibold">Post to thread</h2>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">
             Replies publish under your current SYM handle.
@@ -1529,7 +1523,7 @@ function LiveForumThreadView({
             error={replyError}
             footerActions={
               <Button
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-none text-xs"
                 type="button"
                 variant="outline"
                 disabled={replyBody.trim().length === 0}
@@ -1580,15 +1574,11 @@ function LiveForumThreadView({
           </DialogHeader>
           <div className="grid gap-3">
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Target
-              </span>
+              <span className="text-xs text-muted-foreground">Target</span>
               <span className="text-sm">{reportTarget?.label}</span>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Reason
-              </span>
+              <span className="text-xs text-muted-foreground">Reason</span>
               <Textarea
                 aria-describedby={
                   reportError ? "forum-report-reason-error" : undefined
@@ -1602,9 +1592,7 @@ function LiveForumThreadView({
               />
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Details
-              </span>
+              <span className="text-xs text-muted-foreground">Details</span>
               <Textarea
                 className="rounded-none border-row-border"
                 rows={4}
@@ -1664,23 +1652,17 @@ function LiveForumThreadView({
           </DialogHeader>
           <div className="grid gap-3">
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Target
-              </span>
+              <span className="text-xs text-muted-foreground">Target</span>
               <span className="text-sm">{reputationDraft?.label}</span>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Score
-              </span>
+              <span className="text-xs text-muted-foreground">Score</span>
               <span className="text-sm">
                 {reputationDraft?.score === 1 ? "+1" : "-1"}
               </span>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Comment
-              </span>
+              <span className="text-xs text-muted-foreground">Comment</span>
               <Textarea
                 aria-describedby={
                   reputationError ? "forum-reputation-error" : undefined
@@ -1793,17 +1775,15 @@ function ForumPollPanel({
   const statusId = `poll-${poll._id}-status`;
 
   return (
-    <section className="border border-row-border">
-      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-row-border px-3 py-2.5">
+    <section className="bg-muted/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2 py-2.5">
         <div>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Poll
-          </p>
+          <p className="text-xs text-muted-foreground">Poll</p>
           <h2 className="mt-1 text-base font-semibold">{poll.question}</h2>
         </div>
         {canEdit ? (
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-none text-xs"
             type="button"
             variant="outline"
             onClick={onEdit}
@@ -1845,13 +1825,11 @@ function ForumPollPanel({
                       {option.label}
                     </span>
                     {votedFor ? (
-                      <span className="font-mono text-[10px] uppercase text-primary">
-                        Your vote
-                      </span>
+                      <span className="text-xs text-primary">Your vote</span>
                     ) : null}
                   </span>
                   {resultsVisible ? (
-                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {option.voteCount} votes · {option.percent}%
                     </span>
                   ) : null}
@@ -1878,7 +1856,7 @@ function ForumPollPanel({
           {interaction.statusMessage}
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {resultsVisible
               ? `${poll.totalVotes} total votes${
                   poll.status === "closed" ? " · Closed" : ""
@@ -1887,7 +1865,7 @@ function ForumPollPanel({
           </p>
           {interaction.showVoteButton ? (
             <Button
-              className="rounded-none font-mono text-[10px] uppercase"
+              className="rounded-none text-xs"
               type="button"
               disabled={pending || interaction.voteButtonDisabled}
               onClick={onVote}
@@ -1905,7 +1883,6 @@ function ForumPollPanel({
     </section>
   );
 }
-
 
 function ForumPollEditor({
   error,
@@ -1943,20 +1920,16 @@ function ForumPollEditor({
   }
 
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-3 py-2.5">
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          Edit poll
-        </p>
+    <section className="space-y-3 bg-muted/20 p-4">
+      <div className="py-2.5">
+        <p className="text-xs text-muted-foreground">Edit poll</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Poll options can be edited until the first vote is recorded.
         </p>
       </div>
       <div className="grid gap-3 p-3">
         <label className="grid gap-2">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            Question
-          </span>
+          <span className="text-xs text-muted-foreground">Question</span>
           <Input
             className="rounded-none border-row-border"
             disabled={pending}
@@ -1965,9 +1938,7 @@ function ForumPollEditor({
           />
         </label>
         <div className="grid gap-2">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            Options
-          </span>
+          <span className="text-xs text-muted-foreground">Options</span>
           {options.map((option, index) => (
             <div className="flex gap-2" key={`edit-poll-option-${index}`}>
               <Input
@@ -1979,7 +1950,7 @@ function ForumPollEditor({
               />
               {options.length > 2 ? (
                 <Button
-                  className="rounded-none font-mono text-[10px] uppercase"
+                  className="rounded-none text-xs"
                   disabled={pending}
                   type="button"
                   variant="outline"
@@ -1992,7 +1963,7 @@ function ForumPollEditor({
           ))}
           {options.length < 8 ? (
             <Button
-              className="justify-self-start rounded-none font-mono text-[10px] uppercase"
+              className="justify-self-start rounded-none text-xs"
               disabled={pending}
               type="button"
               variant="outline"
@@ -2009,7 +1980,7 @@ function ForumPollEditor({
         ) : null}
         <div className="flex flex-wrap gap-2">
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-none text-xs"
             disabled={pending}
             type="button"
             onClick={onSave}
@@ -2017,7 +1988,7 @@ function ForumPollEditor({
             {pending ? "Saving..." : "Save poll"}
           </Button>
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-none text-xs"
             disabled={pending}
             type="button"
             variant="outline"
@@ -2043,26 +2014,24 @@ function QueuedQuotePanel({
   onRemove: (key: string) => void;
 }) {
   return (
-    <div className="border border-row-border">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border px-3 py-2.5">
+    <div className="bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 py-2.5">
         <div>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Multi-quote
-          </p>
+          <p className="text-xs text-muted-foreground">Multi-quote</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {quotes.length} selected for this reply.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-none text-xs"
             type="button"
             onClick={onInsert}
           >
             Insert quotes
           </Button>
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-none text-xs"
             type="button"
             variant="outline"
             onClick={onClear}
@@ -2071,17 +2040,15 @@ function QueuedQuotePanel({
           </Button>
         </div>
       </div>
-      <div className="divide-y divide-row-border">
+      <div className="space-y-4">
         {quotes.map((quote) => (
           <div
             className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
             key={quote.key}
           >
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              {quote.label}
-            </p>
+            <p className="text-xs text-muted-foreground">{quote.label}</p>
             <Button
-              className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+              className="h-7 rounded-none px-2 text-xs"
               type="button"
               variant="outline"
               onClick={() => onRemove(quote.key)}
@@ -2106,9 +2073,7 @@ function ReplyPreviewPanel({
 
   return (
     <section className="border border-row-border">
-      <div className="border-b border-row-border px-3 py-2.5 font-mono text-[10px] uppercase text-muted-foreground">
-        {label}
-      </div>
+      <div className="px-3 py-2.5 text-xs text-muted-foreground">{label}</div>
       <div className="p-3">
         {trimmed.length > 0 ? (
           <ForumBody body={trimmed} />
@@ -2149,10 +2114,8 @@ function ForumEditAttachmentManager({
     <section className="space-y-3">
       <div className="border border-row-border p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            {label}
-          </p>
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground">
             {existingAttachments.length + newAttachments.length}/
             {MAX_FORUM_ATTACHMENTS}
           </p>
@@ -2174,7 +2137,7 @@ function ForumEditAttachmentManager({
                     <Paperclip className="size-3.5 shrink-0" />
                     <span className="truncate">{attachment.filename}</span>
                   </span>
-                  <span className="mt-1 block font-mono text-[10px] uppercase text-muted-foreground">
+                  <span className="mt-1 block text-xs text-muted-foreground">
                     {attachment.contentType} /{" "}
                     {formatAttachmentSize(attachment.size)}
                   </span>
@@ -2225,7 +2188,7 @@ function ForumEditMetaLine({ post }: { post: ForumPostRecord }) {
 
   const editor = post.lastEditedByName ?? "unknown member";
   return (
-    <div className="mt-5 border-t border-row-border pt-3 font-mono text-[10px] uppercase leading-5 text-muted-foreground">
+    <div className="mt-5 text-xs leading-5 text-muted-foreground">
       Last edited by {editor} on {formatForumDateTime(post.lastEditedAt)}
       {post.lastEditReason ? ` / ${post.lastEditReason}` : ""}
     </div>
@@ -2275,8 +2238,8 @@ function PostActions({
     <>
       <Button
         asChild
-        className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
-        variant="outline"
+        className="min-h-11 rounded-none px-2 text-xs "
+        variant="ghost"
       >
         <a
           aria-label={`Link to post ${postNumber}`}
@@ -2286,9 +2249,9 @@ function PostActions({
         </a>
       </Button>
       <Button
-        className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+        className="min-h-11 rounded-none px-2 text-xs "
         type="button"
-        variant="outline"
+        variant="ghost"
         onClick={onCopyLink}
       >
         Copy link
@@ -2296,18 +2259,18 @@ function PostActions({
       {canQuote ? (
         <>
           <Button
-            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+            className="min-h-11 rounded-none px-2 text-xs "
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={onQuote}
           >
             Quote
           </Button>
           <Button
             aria-pressed={multiQuoteSelected}
-            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+            className="min-h-11 rounded-none px-2 text-xs "
             type="button"
-            variant={multiQuoteSelected ? "default" : "outline"}
+            variant={multiQuoteSelected ? "default" : "ghost"}
             onClick={onMultiQuote}
           >
             {multiQuoteSelected ? "Queued" : "+ Quote"}
@@ -2318,9 +2281,9 @@ function PostActions({
         <>
           <Button
             aria-pressed={viewerReputationScore === 1}
-            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+            className="min-h-11 rounded-none px-2 text-xs "
             type="button"
-            variant={viewerReputationScore === 1 ? "default" : "outline"}
+            variant={viewerReputationScore === 1 ? "default" : "ghost"}
             disabled={reputationPending}
             onClick={() => onReputation(1)}
           >
@@ -2328,9 +2291,9 @@ function PostActions({
           </Button>
           <Button
             aria-pressed={viewerReputationScore === -1}
-            className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+            className="min-h-11 rounded-none px-2 text-xs "
             type="button"
-            variant={viewerReputationScore === -1 ? "default" : "outline"}
+            variant={viewerReputationScore === -1 ? "default" : "ghost"}
             disabled={reputationPending}
             onClick={() => onReputation(-1)}
           >
@@ -2340,9 +2303,9 @@ function PostActions({
       ) : null}
       {canEdit ? (
         <Button
-          className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+          className="min-h-11 rounded-none px-2 text-xs "
           type="button"
-          variant="outline"
+          variant="ghost"
           onClick={onEdit}
         >
           Edit
@@ -2350,18 +2313,18 @@ function PostActions({
       ) : null}
       {canDelete ? (
         <Button
-          className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+          className="min-h-11 rounded-none px-2 text-xs "
           type="button"
-          variant="outline"
+          variant="ghost"
           onClick={onDelete}
         >
           Delete
         </Button>
       ) : null}
       <Button
-        className="min-h-10 rounded-none px-2 font-mono text-[10px] uppercase md:h-7 md:min-h-0"
+        className="min-h-11 rounded-none px-2 text-xs "
         type="button"
-        variant="outline"
+        variant="ghost"
         onClick={() =>
           onReport({
             entityType: postId === undefined ? "thread" : "post",
@@ -2407,18 +2370,18 @@ function ThreadActions({
     <>
       <Button
         aria-pressed={bookmarked}
-        className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
+        className="min-h-11 rounded-none px-3 text-xs"
         type="button"
-        variant="outline"
+        variant="ghost"
         disabled={bookmarkPending}
         onClick={onToggleBookmark}
       >
         {bookmarkPending ? "Saving..." : bookmarked ? "Saved" : "Save"}
       </Button>
       <Button
-        className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
+        className="min-h-11 rounded-none px-3 text-xs"
         type="button"
-        variant="outline"
+        variant="ghost"
         disabled={subscriptionPending}
         onClick={onToggleSubscription}
       >
@@ -2430,9 +2393,9 @@ function ThreadActions({
       </Button>
       {canEdit ? (
         <Button
-          className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
+          className="min-h-11 rounded-none px-3 text-xs"
           type="button"
-          variant="outline"
+          variant="ghost"
           onClick={onEdit}
         >
           Edit
@@ -2440,9 +2403,9 @@ function ThreadActions({
       ) : null}
       {canDelete ? (
         <Button
-          className="h-8 rounded-none px-3 font-mono text-[10px] uppercase"
+          className="min-h-11 rounded-none px-3 text-xs"
           type="button"
-          variant="outline"
+          variant="ghost"
           onClick={onDelete}
         >
           Delete
@@ -2511,11 +2474,9 @@ function ForumPrefixEditSelect({
 
   return (
     <label className="grid gap-2">
-      <span className="font-mono text-[10px] uppercase text-muted-foreground">
-        Prefix
-      </span>
+      <span className="text-xs text-muted-foreground">Prefix</span>
       <select
-        className="min-h-10 rounded-none border border-row-border bg-background px-3 font-mono text-[11px] uppercase text-foreground"
+        className="min-h-11 rounded-none border border-row-border bg-background px-3 text-sm text-foreground"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}

@@ -709,6 +709,73 @@
       "additionalProperties": false
     }
   },
+  "listFeedThreads": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "sort": {
+          "anyOf": [
+            {
+              "const": "new"
+            },
+            {
+              "const": "active"
+            }
+          ]
+        },
+        "communityOnly": {
+          "type": "boolean"
+        },
+        "paginationOpts": {
+          "type": "object",
+          "properties": {
+            "numItems": {
+              "type": "number"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endCursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "number"
+            },
+            "maximumRowsRead": {
+              "type": "number"
+            },
+            "maximumBytesRead": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "numItems",
+            "cursor"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "paginationOpts"
+      ],
+      "additionalProperties": false
+    }
+  },
   "listForumContentEdits": {
     "kind": "query",
     "schema": {
@@ -1119,6 +1186,22 @@
     "schema": {
       "type": "object",
       "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listNewsFeed": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "snapshotDate": {
+          "type": "string"
+        },
         "limit": {
           "type": "number"
         }

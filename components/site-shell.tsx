@@ -105,7 +105,6 @@ export function SiteShell({
   if (forumShell) {
     return (
       <ForumSiteShell
-        footerOffset={footerOffset}
         footerRef={footerRef}
         forumHost={forumHost}
         primarySiteHref={primarySiteHref}
@@ -158,13 +157,11 @@ export function SiteShell({
 
 function ForumSiteShell({
   children,
-  footerOffset,
   footerRef,
   forumHost,
   primarySiteHref,
 }: {
   children: ReactNode;
-  footerOffset: number | null;
   footerRef: RefObject<HTMLElement | null>;
   forumHost: boolean;
   primarySiteHref: string;
@@ -174,14 +171,7 @@ function ForumSiteShell({
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
       <div
-        className="relative z-10 min-h-dvh overflow-x-hidden bg-background/96 text-foreground [--site-footer-offset:3.75rem] [--site-header-offset:4rem] md:[--site-header-offset:3.75rem]"
-        style={
-          footerOffset
-            ? ({
-                "--site-footer-offset": `${footerOffset}px`,
-              } as CSSProperties)
-            : undefined
-        }
+        className="relative z-10 min-h-dvh overflow-x-hidden bg-background text-foreground [--site-footer-offset:0px] [--site-header-offset:4.5rem] md:[--site-header-offset:4.5rem]"
       >
         <WebVitalsReporter />
         <a
@@ -191,6 +181,7 @@ function ForumSiteShell({
           Skip to content
         </a>
         <SiteHeader
+          forumContext
           brandHref={forumBrandHref}
           brandLabel="SYMBaiEX Forum"
           brandPrefetch={!forumHost}
@@ -200,7 +191,7 @@ function ForumSiteShell({
         <main
           id="main-content"
           tabIndex={-1}
-          className="min-h-dvh pb-[var(--site-footer-offset)] pt-[var(--site-header-offset)] outline-none"
+          className="min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
         >
           {children}
         </main>
@@ -208,10 +199,13 @@ function ForumSiteShell({
           <AnalyticsTracker />
         </Suspense>
         <AppErrorSurface />
-        <SiteFooter
-          footerRef={footerRef}
-          agentHref="https://www.symbaiex.com/agent"
-        />
+        <footer ref={footerRef} className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 text-xs text-muted-foreground md:px-8">
+          <a className="focus-ring py-2 hover:text-foreground" href={primarySiteHref}>SYMBaiEX</a>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <a className="focus-ring py-2 hover:text-foreground" href={forumHost ? "/control-panel/agent-access" : "/forum/control-panel/agent-access"}>Agent access</a>
+            {socialItems.map(({ href, label }) => <a key={href} className="focus-ring py-2 hover:text-foreground" href={href} rel="noopener noreferrer" target="_blank">{label}</a>)}
+          </div>
+        </footer>
       </div>
     </ForumShellContextProvider>
   );
@@ -270,12 +264,14 @@ function SiteFooter({
 }
 
 function SiteHeader({
+  forumContext = false,
   brandHref,
   brandLabel,
   brandPrefetch,
   initialForumHost,
   initialPrimarySiteHref,
 }: {
+  forumContext?: boolean;
   brandHref: string;
   brandLabel: string;
   brandPrefetch: boolean;
@@ -283,17 +279,18 @@ function SiteHeader({
   initialPrimarySiteHref: string;
 }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 backdrop-blur">
+    <header className={forumContext ? "fixed inset-x-0 top-0 z-50 bg-background/95 backdrop-blur" : "fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 backdrop-blur"}>
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:px-8">
         <div className="flex min-w-0 items-center">
           <a
             href={brandHref}
-            className="focus-ring truncate font-mono text-sm font-semibold uppercase"
+            className={forumContext ? "focus-ring truncate text-xl font-extrabold tracking-tight" : "focus-ring truncate font-mono text-sm font-semibold uppercase"}
           >
-            {brandLabel}
+            {forumContext ? <>SYMB<span className="text-primary">ai</span>EX <span className="ml-1 font-normal text-muted-foreground">Forum</span></> : brandLabel}
           </a>
         </div>
         <HeaderNav
+          compact={forumContext}
           initialForumHost={initialForumHost}
           initialPrimarySiteHref={initialPrimarySiteHref}
         />

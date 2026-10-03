@@ -1,5 +1,4 @@
 import { NewsFeed } from "@/components/news-feed";
-import { SectionHeader } from "@/components/section-header";
 import { StructuredData } from "@/components/structured-data";
 import { getNewsPageData } from "@/lib/news-data";
 import type { Metadata } from "next";
@@ -48,14 +47,25 @@ export default async function NewsPage() {
 
   return (
     <>
-      <section className="page-frame page-frame-spacious">
+      <section className="page-frame page-frame-spacious max-w-[820px]">
         <StructuredData
           data={breadcrumbStructuredData([
             { name: "Home", url: primarySiteUrl("/") },
             { name: "News", url: primarySiteUrl("/news") },
           ])}
         />
-        <SectionHeader title="Daily news" headingLevel="h1" divided={false} />
+        <header className="px-3 sm:px-4">
+          <p className="mb-3 text-xs font-medium text-primary">
+            Hacker News, with the SYMBaiEX community
+          </p>
+          <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
+            The daily read
+          </h1>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+            Explore today’s stories. Follow the source or join the discussion
+            here.
+          </p>
+        </header>
         <div className="mt-8">
           <NewsFeed
             enabled={convexEnabled}

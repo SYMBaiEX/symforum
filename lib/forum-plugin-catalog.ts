@@ -35,6 +35,10 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
+  if (operation === "listFeedThreads")
+    return "Browse the forum's global feed in new or recently active order with compact previews and author identities. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
+  if (operation === "listNewsFeed")
+    return "Read stored Hacker News snapshots and stories, including independent Hacker News points/comments and SYMBaiEX score/saves/comments. Request 1–30 stories, optionally for a YYYY-MM-DD snapshotDate. Does not refresh or fetch external news.";
   return `${operation.replace(/([a-z])([A-Z])/g, "$1 $2")} in the SYMBaiEX forum. ${forumOperationPublicRead(operation) ? "Public results only without a connection." : "Uses the selected connection's acting profile and permissions."}`;
 }
 function boundArguments(
@@ -42,6 +46,17 @@ function boundArguments(
   schema: ForumJsonSchema,
 ): ForumJsonSchema {
   const properties = { ...schema.properties };
+  if (operation === "listFeedThreads" && properties.paginationOpts) {
+    const pagination = properties.paginationOpts;
+    const fields = { ...pagination.properties };
+    delete fields.endCursor;
+    fields.numItems = { type: "integer", minimum: 1, maximum: 24 };
+    properties.paginationOpts = { ...pagination, properties: fields };
+  }
+  if (operation === "listNewsFeed") {
+    properties.limit = { type: "integer", minimum: 1, maximum: 30 };
+    properties.snapshotDate = { type: "string", minLength: 10, maxLength: 10 };
+  }
   // Mirror domain limits rather than silently truncating content before publication.
   for (const name of ["attachments", "newAttachments"])
     if (properties[name])

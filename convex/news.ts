@@ -9,7 +9,7 @@ import { makeFunctionReference } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { contentSummary } from "./contentAggregates";
+import { contentSummary, contentSummaries } from "./contentAggregates";
 import {
   deleteUniversalSearchProjection,
   syncNewsStoryUniversalSearchProjection,
@@ -313,6 +313,104 @@ export const timeline = query({
     };
   },
 });
+
+/** Shared forum/news read boundary: stored HN snapshots only, never fetches. */
+export async function readForumNewsFeed(
+  ctx: QueryCtx,
+  args: { snapshotDate?: string; limit?: number },
+) {
+  if (
+    args.snapshotDate !== undefined &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(args.snapshotDate)
+  ) {
+    throw new Error("Use a YYYY-MM-DD news snapshot date.");
+  }
+  const limit = args.limit ?? 12;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 30) {
+    throw new Error("Request 1–30 news stories.");
+  }
+  const snapshots = await recentSnapshots(ctx);
+  const snapshot = args.snapshotDate
+    ? await snapshotForDate(ctx, args.snapshotDate)
+    : (snapshots.find(
+        (row) => row.status === "complete" && row.storyCount > 0,
+      ) ??
+      snapshots[0] ??
+      null);
+  const metadata = (row: Doc<"newsSnapshots">) => ({
+    snapshotDate: row.snapshotDate,
+    status: row.status,
+    storyCount: row.storyCount,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+  });
+  if (snapshot === null || snapshot.status !== "complete") {
+    return {
+      snapshots: snapshots.map(metadata),
+      snapshot: snapshot ? metadata(snapshot) : null,
+      stories: [],
+    };
+  }
+  const stories: Doc<"hnStories">[] = [];
+  let bodyCharactersRead = 0;
+  let limited = false;
+  for await (const story of ctx.db
+    .query("hnStories")
+    .withIndex("by_snapshotDate_and_rank", (q) =>
+      q.eq("snapshotDate", snapshot.snapshotDate),
+    )
+    .order("asc")) {
+    stories.push(story);
+    bodyCharactersRead += (story.text?.length ?? 0) + story.title.length;
+    // A stored document is <1 MiB. Stop before starting another read once
+    // accumulated text reaches this reserve, leaving room for shared stats.
+    if (bodyCharactersRead >= 1_000_000) {
+      limited = true;
+      break;
+    }
+    if (stories.length >= limit) break;
+  }
+  const migrations = await Promise.all(
+    ["interaction-aggregates-v1", "comment-aggregates-v1"].map((key) =>
+      ctx.db
+        .query("optimizationMigrations")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique(),
+    ),
+  );
+  // Existing detail endpoints retain legacy fallback. A multi-story feed must
+  // not multiply that fallback into 60k full comment/interaction reads.
+  const statsAvailable = migrations.every((row) => row?.status === "completed");
+  const stats = statsAvailable
+    ? await contentSummaries(
+        ctx,
+        "hnStory",
+        stories.map((story) => String(story.hnItemId)),
+      )
+    : null;
+  return {
+    snapshots: snapshots.map(metadata),
+    snapshot: metadata(snapshot),
+    limited,
+    stories: stories.map((story) => ({
+      hnItemId: story.hnItemId,
+      title: story.title,
+      rank: story.rank,
+      url: safeExternalUrl(story.url),
+      host: hostname(story.url),
+      by: story.by,
+      hnScore: story.score,
+      hnCommentCount: story.descendants,
+      timePosted: story.timePosted,
+      fetchedAt: story.fetchedAt,
+      discussionUrl: `https://news.ycombinator.com/item?id=${story.hnItemId}`,
+      platformStats: stats?.get(String(story.hnItemId)) ?? null,
+      platformStatsStatus: statsAvailable
+        ? ("available" as const)
+        : ("unavailable" as const),
+    })),
+  };
+}
 
 export const getStory = query({
   args: {

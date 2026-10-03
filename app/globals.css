@@ -254,7 +254,7 @@
 
   @media (max-width: 767px) {
     .forum-surface .page-frame {
-      @apply px-3 pb-6 pt-4;
+      @apply px-4 pb-6 pt-4;
     }
   }
 
@@ -266,13 +266,13 @@
         textarea
       ) {
       font-size: 1rem;
-      min-height: 2.5rem !important;
+      min-height: 2.75rem !important;
       touch-action: manipulation;
     }
 
     .forum-surface button {
       min-width: 2.5rem !important;
-      min-height: 2.5rem !important;
+      min-height: 2.75rem !important;
       touch-action: manipulation;
     }
   }

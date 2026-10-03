@@ -21,6 +21,8 @@ describe("shared forum operation catalog", () => {
     );
     for (const operation of [
       "listCategories",
+      "listFeedThreads",
+      "listNewsFeed",
       "search",
       "createThread",
       "createReply",
@@ -43,6 +45,7 @@ describe("shared forum operation catalog", () => {
       "ensureDefaultForumCategories",
       "listPublicSitemapRecords",
       "routeStatus",
+      "feedAuthorizationFingerprint",
       "toggleThreadSubscription",
       "toggleCategorySubscription",
       "authorizeForumAttachmentUpload",
@@ -77,6 +80,39 @@ describe("shared forum operation catalog", () => {
         (tool) => tool.name === "forum_upload_attachments",
       )?._meta,
     ).toMatchObject({ "openai/fileParams": ["files"] });
+  });
+  test("global feed and stored news share public read permissions and bounded contracts", () => {
+    for (const name of ["forum_list_feed_threads", "forum_list_news_feed"]) {
+      expect(findForumPluginTool(name)).toMatchObject({
+        capability: "read",
+        readOnly: true,
+        publicRead: true,
+        destructive: false,
+      });
+    }
+    const feed = findForumPluginTool("forum_list_feed_threads")!;
+    expect(
+      validateForumPluginArguments(feed, {
+        sort: "new",
+        communityOnly: true,
+        paginationOpts: { numItems: 12, cursor: null },
+      }),
+    ).toBeNull();
+    expect(
+      validateForumPluginArguments(feed, {
+        sort: "unread",
+        paginationOpts: { numItems: 12, cursor: null },
+      }),
+    ).not.toBeNull();
+    expect(
+      validateForumPluginArguments(feed, { sort: "active" }),
+    ).not.toBeNull();
+    expect(
+      validateForumPluginArguments(
+        findForumPluginTool("forum_list_news_feed")!,
+        { snapshotDate: "2026-10-02", limit: 12 },
+      ),
+    ).toBeNull();
   });
   test("strict typed arguments reject unknown fields, invalid unions and unsafe write retries", () => {
     const thread = findForumPluginTool("forum_create_thread")!;

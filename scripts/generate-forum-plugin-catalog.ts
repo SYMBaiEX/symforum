@@ -9,6 +9,7 @@ import { writeFileSync } from "node:fs";
 
 const excluded = new Set([
   "routeStatus",
+  "feedAuthorizationFingerprint",
   "listPublicSitemapRecords",
   "ensureDefaultForumCategories",
   "toggleThreadSubscription",

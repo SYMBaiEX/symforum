@@ -45,9 +45,7 @@ const ForumCompose = dynamic(
     ),
   {
     loading: () => (
-      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
-        Loading editor
-      </p>
+      <p className="py-3 text-sm text-muted-foreground">Loading editor</p>
     ),
     ssr: false,
   },
@@ -93,9 +91,11 @@ type ThreadSortOrder = (typeof THREAD_SORT_ORDER_OPTIONS)[number]["value"];
 export function ForumThreadList({
   categorySlug,
   enabled,
+  showHeading = true,
 }: {
   categorySlug: string;
   enabled: boolean;
+  showHeading?: boolean;
 }) {
   if (!enabled) {
     return (
@@ -114,10 +114,21 @@ export function ForumThreadList({
     );
   }
 
-  return <LiveForumThreadList categorySlug={categorySlug} />;
+  return (
+    <LiveForumThreadList
+      categorySlug={categorySlug}
+      showHeading={showHeading}
+    />
+  );
 }
 
-function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
+function LiveForumThreadList({
+  categorySlug,
+  showHeading,
+}: {
+  categorySlug: string;
+  showHeading: boolean;
+}) {
   const convex = useConvex();
   const pathname = usePathname();
   const router = useRouter();
@@ -166,7 +177,16 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   );
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [composeOpen, setComposeOpen] = useState(false);
+  const composeRequest = `${categorySlug}:${searchParams.get("compose") ?? ""}`;
+  const [previousComposeRequest, setPreviousComposeRequest] =
+    useState(composeRequest);
+  const [composeOpen, setComposeOpen] = useState(
+    () => searchParams.get("compose") === "1",
+  );
+  if (previousComposeRequest !== composeRequest) {
+    setPreviousComposeRequest(composeRequest);
+    if (searchParams.get("compose") === "1") setComposeOpen(true);
+  }
   const [threadPrefixId, setThreadPrefixId] = useState("none");
   const [threadTitle, setThreadTitle] = useState("");
   const [threadBody, setThreadBody] = useState("");
@@ -499,7 +519,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
 
   function toggleThreadComposer() {
     setError("");
-    if (composeOpen) {
+    if (composeOpen && isAuthenticated && viewerCanCreateThread) {
       setComposeOpen(false);
       return;
     }
@@ -517,20 +537,24 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="border-y border-row-border py-2">
+    <div className="space-y-7">
+      <div className="py-2">
         <ForumBreadcrumbs category={category} />
         <div className="mt-2">
-          <p className="page-kicker">Public board</p>
-          <h2 className="mt-1 text-xl font-semibold md:text-2xl">
-            {getCategoryTitle(category)}
-          </h2>
-          {getCategoryDescription(category) ? (
-            <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-              {getCategoryDescription(category)}
-            </p>
+          {showHeading ? (
+            <>
+              <p className="text-xs text-muted-foreground">Board</p>
+              <h1 className="mt-1 break-words text-[26px] font-semibold leading-8 md:text-[32px] md:leading-[38px]">
+                {getCategoryTitle(category)}
+              </h1>
+              {getCategoryDescription(category) ? (
+                <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
+                  {getCategoryDescription(category)}
+                </p>
+              ) : null}
+            </>
           ) : null}
-          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+          <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <div className="inline-flex items-baseline gap-1.5">
               <dt>Threads</dt>
               <dd className="font-semibold tabular-nums text-foreground">
@@ -562,7 +586,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
 
       <section>
         <div className="min-w-0 space-y-3">
-          <div className="grid gap-2 border-y border-row-border py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
+          <div className="grid gap-3 py-2 md:grid-cols-[minmax(12rem,1fr)_auto] md:items-center">
             <form
               className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto]"
               onSubmit={submitBoardSearch}
@@ -574,12 +598,12 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search this board"
-                  className="h-10 rounded-none border-row-border font-mono text-xs uppercase lg:h-8"
+                  className="min-h-11 rounded-none border-row-border text-base md:text-sm"
                   aria-label="Search this board"
                 />
               </label>
               <Button
-                className="min-h-10 rounded-none border-l-0 font-mono text-[10px] uppercase lg:min-h-8"
+                className="min-h-11 rounded-none border-l-0 text-xs "
                 type="submit"
                 variant="outline"
                 disabled={
@@ -594,15 +618,17 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
             </form>
             <div className="grid min-w-0 grid-cols-2 gap-1 sm:flex sm:flex-wrap md:justify-end">
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
+                className="min-h-11 rounded-none text-xs "
                 type="button"
                 disabled={authLoading || pending}
                 onClick={toggleThreadComposer}
               >
-                {composeOpen ? "Close thread form" : "New thread"}
+                {composeOpen && isAuthenticated && viewerCanCreateThread
+                  ? "Close thread form"
+                  : "New thread"}
               </Button>
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
+                className="min-h-11 rounded-none text-xs "
                 type="button"
                 variant="outline"
                 disabled={authLoading || categorySubscriptionPending}
@@ -615,7 +641,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
                     : "Subscribe"}
               </Button>
               <Button
-                className="min-h-10 rounded-none font-mono text-[10px] uppercase lg:min-h-8"
+                className="min-h-11 rounded-none text-xs "
                 type="button"
                 variant="outline"
                 disabled={authLoading || markReadPending}
@@ -634,7 +660,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
             </p>
           ) : null}
 
-          {composeOpen && viewerCanCreateThread ? (
+          {composeOpen && isAuthenticated && viewerCanCreateThread ? (
             <ForumCompose
               title={threadTitle}
               draftKey={`symbaiex:forum:draft:thread:${categorySlug}`}
@@ -650,7 +676,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
               error={error}
               footerActions={
                 <Button
-                  className="rounded-none font-mono text-[10px] uppercase"
+                  className="rounded-none text-xs"
                   type="button"
                   variant="outline"
                   disabled={threadBody.trim().length === 0}
@@ -758,7 +784,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
               action={
                 !isAuthenticated || viewerCanCreateThread ? (
                   <Button
-                    className="min-h-10 rounded-none font-mono text-xs uppercase"
+                    className="min-h-11 rounded-none text-sm"
                     type="button"
                     onClick={toggleThreadComposer}
                   >
@@ -775,7 +801,7 @@ function LiveForumThreadList({ categorySlug }: { categorySlug: string }) {
               body={`No threads match ${prefixFilterSummary} with the current board filters.`}
               action={
                 <Button
-                  className="min-h-10 rounded-none font-mono text-xs uppercase"
+                  className="min-h-11 rounded-none text-sm"
                   type="button"
                   variant="outline"
                   onClick={resetBoardView}
@@ -820,58 +846,38 @@ function ForumSubboardSelector({
   boards: ForumCategoryRecord[];
   parentTitle: string;
 }) {
-  if (boards.length === 0) {
-    return null;
-  }
-
+  if (boards.length === 0) return null;
   return (
-    <nav
-      aria-label={`${parentTitle} sub-boards`}
-      className="border-y border-row-border"
-    >
-      <div className="flex min-h-10 items-baseline justify-between gap-3 border-b border-row-border px-3 py-2">
-        <h2 className="font-mono text-xs uppercase text-primary">Sub-boards</h2>
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          {boards.length}
-        </p>
-      </div>
-      <div
-        className={`grid grid-cols-2 gap-px bg-row-border ${
-          boards.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3"
-        } xl:grid-cols-6`}
-      >
+    <nav aria-label={`${parentTitle} sub-boards`} className="space-y-3">
+      <h2 className="text-sm font-medium text-muted-foreground">
+        Sub-boards <span className="ml-1 text-xs">{boards.length}</span>
+      </h2>
+      <ul className="space-y-2">
         {boards.map((board) => (
-          <ForumLink
-            className="focus-ring group flex min-h-16 min-w-0 flex-col justify-between bg-background px-2.5 py-2 hover:bg-muted/30 md:px-3"
-            href={forumPath(board.slug)}
-            key={board.slug}
-            prefetch
-          >
-            <span>
-              <span className="block text-sm font-semibold leading-tight group-hover:text-primary md:text-base">
-                {getCategoryTitle(board)}
-              </span>
-              {getCategoryDescription(board) ? (
-                <span className="mt-1 hidden line-clamp-1 text-xs leading-5 text-muted-foreground md:block">
-                  {getCategoryDescription(board)}
+          <li key={board.slug}>
+            <ForumLink
+              className="focus-ring group flex min-h-11 min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-2"
+              href={forumPath(board.slug)}
+              prefetch
+            >
+              <span className="min-w-0">
+                <span className="text-base font-semibold group-hover:text-primary">
+                  {getCategoryTitle(board)}
                 </span>
-              ) : null}
-            </span>
-            <span className="mt-2 flex items-center justify-between gap-2 font-mono text-xs uppercase text-muted-foreground">
-              <span className="truncate">
-                {forumItemCount(getCategoryThreadCount(board), "thread")}
-                <span className="hidden sm:inline">
-                  {" "}
-                  · {forumItemCount(getCategoryPostCount(board), "post")}
-                </span>
+                {getCategoryDescription(board) ? (
+                  <span className="ml-3 text-sm text-muted-foreground">
+                    {getCategoryDescription(board)}
+                  </span>
+                ) : null}
               </span>
-              <span aria-hidden="true" className="text-primary">
-                →
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {forumItemCount(getCategoryThreadCount(board), "thread")} ·{" "}
+                {forumItemCount(getCategoryPostCount(board), "post")}
               </span>
-            </span>
-          </ForumLink>
+            </ForumLink>
+          </li>
         ))}
-      </div>
+      </ul>
     </nav>
   );
 }
@@ -931,11 +937,8 @@ function ForumBoardTools({
   const dayLabel = getThreadDayFilterLabel(dayFilter);
 
   return (
-    <details
-      className="group border-y border-row-border"
-      open={filtersActive || undefined}
-    >
-      <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-mono text-xs uppercase text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+    <details className="group py-2" open={filtersActive || undefined}>
+      <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 truncate">
           <span className="text-foreground">Filter & sort</span>
           <span className="px-2">/</span>
@@ -946,12 +949,12 @@ function ForumBoardTools({
           <span className="hidden group-open:inline">Close</span>
         </span>
       </summary>
-      <div className="grid gap-px border-t border-row-border bg-row-border font-mono text-xs uppercase text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 py-3 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
         <label className="grid gap-1 bg-background px-3 py-2">
           <span>Prefix</span>
           <select
             aria-label="Filter board by thread prefix"
-            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
             value={prefixFilter}
             onChange={(event) => onPrefixFilterChange(event.target.value)}
           >
@@ -972,7 +975,7 @@ function ForumBoardTools({
           <span>Sort by</span>
           <select
             aria-label="Sort board threads"
-            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
             value={sortKey}
             onChange={(event) =>
               onSortKeyChange(event.target.value as ThreadSortKey)
@@ -989,7 +992,7 @@ function ForumBoardTools({
           <span>Order</span>
           <select
             aria-label="Set board thread sort order"
-            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
             value={sortOrder}
             onChange={(event) =>
               onSortOrderChange(event.target.value as ThreadSortOrder)
@@ -1006,7 +1009,7 @@ function ForumBoardTools({
           <span>Date window</span>
           <select
             aria-label="Limit board threads by recent activity"
-            className="min-h-10 rounded-none border border-row-border bg-background px-2 font-mono text-xs uppercase text-foreground"
+            className="focus-ring min-h-11 rounded-none border border-row-border bg-background px-2 text-base text-foreground md:text-sm"
             value={dayFilter}
             onChange={(event) => onDayFilterChange(event.target.value)}
           >
@@ -1018,7 +1021,7 @@ function ForumBoardTools({
           </select>
         </label>
       </div>
-      <p className="border-t border-row-border px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
+      <p className="py-2 text-xs text-muted-foreground">
         Showing {visibleThreadCount} loaded{" "}
         {visibleThreadCount === 1 ? "thread" : "threads"}.
       </p>
@@ -1029,9 +1032,7 @@ function ForumBoardTools({
 function ThreadPreviewPanel({ body }: { body: string }) {
   return (
     <div className="border border-row-border p-3">
-      <p className="mb-3 font-mono text-[10px] uppercase text-muted-foreground">
-        Preview
-      </p>
+      <p className="mb-3 text-xs text-muted-foreground">Preview</p>
       <ForumBody body={body} />
     </div>
   );
@@ -1181,11 +1182,9 @@ function ForumPrefixSelect({
 
   return (
     <label className="grid gap-2">
-      <span className="font-mono text-[10px] uppercase text-muted-foreground">
-        Prefix
-      </span>
+      <span className="text-xs text-muted-foreground">Prefix</span>
       <select
-        className="min-h-10 rounded-none border border-row-border bg-background px-3 font-mono text-[11px] uppercase text-foreground"
+        className="min-h-11 rounded-none border border-row-border bg-background px-3 text-sm text-foreground"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1240,7 +1239,7 @@ function ForumPollDraft({
 
   return (
     <fieldset className="border border-row-border p-3">
-      <label className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           disabled={disabled}
@@ -1257,9 +1256,7 @@ function ForumPollDraft({
       {enabled ? (
         <div className="mt-3 grid gap-3">
           <label className="grid gap-2">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Question
-            </span>
+            <span className="text-xs text-muted-foreground">Question</span>
             <Input
               disabled={disabled}
               value={question}
@@ -1269,9 +1266,7 @@ function ForumPollDraft({
             />
           </label>
           <div className="grid gap-2">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Options
-            </span>
+            <span className="text-xs text-muted-foreground">Options</span>
             {options.map((option, index) => (
               <div key={`poll-option-${index}`} className="flex gap-2">
                 <Input
@@ -1284,7 +1279,7 @@ function ForumPollDraft({
                 />
                 {options.length > 2 ? (
                   <Button
-                    className="rounded-none font-mono text-[10px] uppercase"
+                    className="rounded-none text-xs"
                     type="button"
                     variant="outline"
                     disabled={disabled}
@@ -1297,7 +1292,7 @@ function ForumPollDraft({
             ))}
             {options.length < 8 ? (
               <Button
-                className="justify-self-start rounded-none font-mono text-[10px] uppercase"
+                className="justify-self-start rounded-none text-xs"
                 type="button"
                 variant="outline"
                 disabled={disabled}
@@ -1347,14 +1342,12 @@ function ForumSearchResults({
   }
 
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-4 py-3">
+    <section className="space-y-7">
+      <div className="py-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Search
-          </p>
+          <p className="text-xs text-muted-foreground">Search</p>
           <Button
-            className="h-7 rounded-none font-mono text-[10px] uppercase"
+            className="min-h-11 rounded-none text-xs"
             onClick={onClear}
             type="button"
             variant="ghost"
@@ -1364,16 +1357,14 @@ function ForumSearchResults({
         </div>
         <h2 className="mt-2 text-xl font-semibold">Matches for “{query}”</h2>
       </div>
-      <div className="divide-y divide-row-border">
+      <div className="space-y-7">
         {threads.map((thread) => (
-          <div key={`thread-${thread._id}`} className="px-3 py-2.5">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Thread
-            </p>
+          <div key={`thread-${thread._id}`} className="py-2">
+            <p className="text-xs text-muted-foreground">Thread</p>
             <ForumLink
               href={forumPath(categorySlug, thread.slug)}
               prefetch
-              className="focus-ring mt-2 flex flex-wrap items-center gap-2 text-base font-semibold hover:text-primary"
+              className="focus-ring mt-2 flex min-h-11 flex-wrap items-center gap-2 text-xl font-semibold leading-7 hover:text-primary"
             >
               <ForumThreadPrefixBadge thread={thread} />
               {thread.title}
@@ -1386,10 +1377,8 @@ function ForumSearchResults({
           </div>
         ))}
         {posts.map((post) => (
-          <div key={`post-${post._id}`} className="px-3 py-2.5">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Post
-            </p>
+          <div key={`post-${post._id}`} className="py-2">
+            <p className="text-xs text-muted-foreground">Post</p>
             <ForumLink
               href={forumPostPath(
                 categorySlug,
@@ -1398,7 +1387,7 @@ function ForumSearchResults({
                 post.postPage,
               )}
               prefetch
-              className="focus-ring mt-2 block text-sm font-semibold hover:text-primary"
+              className="focus-ring mt-2 inline-flex min-h-11 items-center text-sm font-semibold hover:text-primary"
             >
               {post.authorUsername ??
                 post.authorName ??

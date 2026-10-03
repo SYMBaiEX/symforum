@@ -23,6 +23,8 @@ import type { HnStory } from "@/lib/hn";
 import { emptyNewsFeedState } from "@/lib/news-feed-state";
 import { newsStoryPath } from "@/lib/news-slugs";
 import { safeExternalUrl } from "@/lib/safe-url";
+import { primarySiteUrl } from "@/lib/site-urls";
+import { asRoute } from "@/lib/typed-route";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   ArrowUpRight,
@@ -138,7 +140,7 @@ function LiveNewsFeed({
     });
     if (emptyState === "loading") {
       return (
-        <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
+        <div className="py-8 text-sm text-muted-foreground">
           Loading stories…
         </div>
       );
@@ -148,7 +150,7 @@ function LiveNewsFeed({
     }
     return (
       <div
-        className="border-y border-row-border py-5 font-mono text-[10px] uppercase leading-5 text-muted-foreground"
+        className="py-8 text-sm leading-6 text-muted-foreground"
         role="status"
       >
         The news index is temporarily unavailable. Try again shortly.
@@ -292,14 +294,13 @@ function NewsRowsView({
       ) : null}
       <div
         aria-busy={pending}
-        className={`grid gap-0.5 transition-opacity${
-          pending ? " opacity-50" : ""
-        }`}
+        aria-label="Hacker News stories"
+        className={`space-y-7 transition-opacity${pending ? " opacity-50" : ""}`}
       >
         {stories.length === 0 ? (
-          <div className="py-4 font-mono text-[10px] uppercase text-muted-foreground">
+          <p className="py-8 text-sm text-muted-foreground" role="status">
             No indexed stories for this snapshot yet.
-          </div>
+          </p>
         ) : null}
         {stories.map((story) => {
           const sourceUrl = safeExternalUrl(story.url);
@@ -311,68 +312,96 @@ function NewsRowsView({
               score: 0,
               saves: 0,
             };
+          const discussionUrl = asRoute(primarySiteUrl(newsStoryPath(story)));
+          const hnUrl = `https://news.ycombinator.com/item?id=${story.hnItemId}`;
 
           return (
             <article
               key={story.hnItemId}
-              className="group grid items-center gap-2 py-2 [content-visibility:auto] [contain-intrinsic-size:0_3.25rem] transition-colors hover:bg-muted/30 md:grid-cols-[2.75rem_minmax(0,1fr)_minmax(25rem,max-content)] md:gap-4 md:px-2"
+              className="group rounded-xl px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4"
             >
-              <div className="flex items-center font-mono text-[10px] uppercase text-muted-foreground md:justify-end md:text-right">
-                #{story.rank.toString().padStart(2, "0")}
-              </div>
-              <div className="flex min-w-0 items-center border-l border-row-border pl-4 transition-colors group-hover:border-primary md:min-h-8">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  {interactive ? (
-                    <NewsVoteControl
-                      authLoading={authLoading}
-                      entityId={entityId}
-                      initialScore={stats.score}
-                      isAuthenticated={isAuthenticated}
-                      summary={summary}
-                      title={story.title}
-                    />
-                  ) : null}
-                  <h2 className="min-w-0 flex-1 font-sans text-[13px] font-semibold leading-none md:text-sm">
+              <div className="flex items-start gap-3 sm:gap-4">
+                {interactive ? (
+                  <NewsVoteControl
+                    authLoading={authLoading}
+                    entityId={entityId}
+                    initialScore={stats.score}
+                    isAuthenticated={isAuthenticated}
+                    summary={summary}
+                    title={story.title}
+                  />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <a
+                      href={hnUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="focus-ring rounded-sm text-primary transition-colors hover:text-foreground"
+                      aria-label={`View ${story.title} on Hacker News`}
+                    >
+                      Hacker News
+                    </a>
+                    {story.host ? <span>{story.host}</span> : null}
+                  </div>
+                  <h2 className="font-sans text-xl font-semibold leading-7 tracking-[-0.02em]">
                     <Link
-                      href={newsStoryPath(story)}
+                      href={discussionUrl}
                       prefetch
-                      title={story.title}
-                      className="focus-ring block max-w-full truncate transition-colors hover:text-primary"
+                      className="focus-ring rounded-sm transition-colors hover:text-primary"
                     >
                       {story.title}
                     </Link>
                   </h2>
-                </div>
-              </div>
-              <div className="flex items-center border-l border-transparent pl-4 font-mono text-[10px] uppercase text-muted-foreground md:justify-end md:border-0 md:pl-0 md:text-right">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap md:justify-end md:whitespace-nowrap">
-                  <span>{story.host ?? "news.ycombinator.com"}</span>
-                  {story.by ? <span>by {story.by}</span> : null}
-                  <span className="inline-flex items-center gap-1">
-                    <MessageSquare className="size-3" />
-                    {compactNumber(stats.comments)} comments
-                  </span>
-                  {stats.score > 0 ? (
-                    <span>{compactNumber(stats.score)} pts</span>
-                  ) : null}
-                  {stats.saves > 0 ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Bookmark className="size-3" />
-                      {compactNumber(stats.saves)} saves
-                    </span>
-                  ) : null}
-                  {sourceUrl ? (
-                    <a
-                      href={sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="focus-ring inline-flex items-center gap-1 transition-colors hover:text-foreground"
-                      aria-label={`Open source article for ${story.title}`}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-muted-foreground">
+                    {story.score !== undefined ? (
+                      <span>{compactNumber(story.score)} HN points</span>
+                    ) : null}
+                    {story.descendants !== undefined ? (
+                      <a
+                        href={hnUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="focus-ring rounded-sm transition-colors hover:text-foreground"
+                      >
+                        {compactNumber(story.descendants)} HN comments
+                      </a>
+                    ) : null}
+                    {story.by ? <span>Submitted by {story.by}</span> : null}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted-foreground">
+                    <Link
+                      href={discussionUrl}
+                      prefetch
+                      className="focus-ring inline-flex items-center gap-1.5 rounded-sm transition-colors hover:text-foreground"
                     >
-                      source
-                      <ArrowUpRight className="size-3" />
-                    </a>
-                  ) : null}
+                      <MessageSquare aria-hidden="true" className="size-3.5" />
+                      {stats.comments > 0
+                        ? `${compactNumber(stats.comments)} SYMBaiEX comments`
+                        : "Discuss on SYMBaiEX"}
+                    </Link>
+                    {!interactive && stats.score !== 0 ? (
+                      <span>{compactNumber(stats.score)} SYMBaiEX votes</span>
+                    ) : null}
+                    {stats.saves > 0 ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Bookmark aria-hidden="true" className="size-3.5" />
+                        {compactNumber(stats.saves)} saves
+                      </span>
+                    ) : null}
+                    {sourceUrl ? (
+                      <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="focus-ring inline-flex items-center gap-1 rounded-sm transition-colors hover:text-foreground"
+                        aria-label={`Read source article for ${story.title}`}
+                      >
+                        Read source
+                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </article>
@@ -385,8 +414,8 @@ function NewsRowsView({
 
 function NewsFilterBar({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
-      <span id="news-snapshot-filter-label">Day</span>
+    <div className="mb-6 flex items-center gap-3 px-3 text-[13px] text-muted-foreground sm:px-4">
+      <span id="news-snapshot-filter-label">Edition</span>
       {children}
     </div>
   );
@@ -396,7 +425,7 @@ function DisabledSnapshotControl({ label }: { label: string }) {
   return (
     <button
       aria-labelledby="news-snapshot-filter-label"
-      className="h-7 w-[11.5rem] border border-row-border bg-background px-2 text-left font-mono text-[10px] uppercase text-muted-foreground"
+      className="h-9 w-[13rem] rounded-lg bg-muted/50 px-3 text-left text-xs text-muted-foreground"
       disabled
       type="button"
     >
@@ -420,11 +449,11 @@ function SnapshotSelect({
     <Select onValueChange={onValueChange} value={value}>
       <SelectTrigger
         aria-labelledby={ariaLabelledBy}
-        className="h-7 w-[11.5rem] rounded-none border-row-border bg-background px-2 py-0 font-mono text-[10px] uppercase shadow-none"
+        className="h-9 w-[13rem] rounded-lg border-transparent bg-muted/50 px-3 py-0 text-xs shadow-none"
       >
         <SelectValue placeholder="Select date" />
       </SelectTrigger>
-      <SelectContent align="end" className="rounded-none">
+      <SelectContent align="end" className="rounded-lg">
         <SelectGroup>
           {snapshots.map((snapshot) => {
             const disabled =
@@ -432,7 +461,7 @@ function SnapshotSelect({
             return (
               <SelectItem
                 key={snapshot.snapshotDate}
-                className="font-mono text-[10px] uppercase"
+                className="text-xs"
                 disabled={disabled}
                 value={snapshot.snapshotDate}
               >
@@ -531,13 +560,17 @@ function NewsVoteControl({
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground">
+      <div
+        className="flex w-8 shrink-0 flex-col items-center gap-1 text-xs text-muted-foreground"
+        role="group"
+        aria-label={`SYMBaiEX votes for ${title}`}
+      >
         <Button
           aria-label={
             vote === 1 ? `Remove upvote for ${title}` : `Upvote ${title}`
           }
           aria-pressed={vote === 1}
-          className="size-5 border border-row-border bg-background/60 p-0 hover:border-foreground"
+          className="size-8 rounded-lg border-0 p-0 hover:bg-muted"
           disabled={voteDisabled}
           onClick={() => void onVote(1)}
           size="icon"
@@ -546,7 +579,7 @@ function NewsVoteControl({
         >
           <ChevronUp />
         </Button>
-        <span className="min-w-4 text-center leading-none">
+        <span className="min-w-4 py-0.5 text-center font-medium leading-none">
           {compactNumber(score)}
         </span>
         <Button
@@ -554,7 +587,7 @@ function NewsVoteControl({
             vote === -1 ? `Remove downvote for ${title}` : `Downvote ${title}`
           }
           aria-pressed={vote === -1}
-          className="size-5 border border-row-border bg-background/60 p-0 hover:border-foreground"
+          className="size-8 rounded-lg border-0 p-0 hover:bg-muted"
           disabled={voteDisabled}
           onClick={() => void onVote(-1)}
           size="icon"
@@ -565,10 +598,7 @@ function NewsVoteControl({
         </Button>
       </div>
       {error ? (
-        <span
-          className="font-mono text-[10px] text-muted-foreground"
-          role="status"
-        >
+        <span className="text-xs text-muted-foreground" role="status">
           {error}
         </span>
       ) : null}

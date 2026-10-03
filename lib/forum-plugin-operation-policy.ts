@@ -14,6 +14,8 @@ const PUBLIC_READ = new Set([
   "listThreads",
   "listResearchFeedThreads",
   "listRecentThreads",
+  "listFeedThreads",
+  "listNewsFeed",
   "getThread",
   "search",
   "listMembers",

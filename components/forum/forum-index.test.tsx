@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  pathname: "/forum",
   query: vi.fn<(reference: unknown) => unknown>(() => undefined),
   pointInTimeQuery: vi.fn(),
   onlineSnapshot: {
@@ -23,7 +24,16 @@ vi.mock("./use-foreground-snapshot", () => ({
   useForegroundSnapshot: () => mocks.onlineSnapshot,
 }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/forum",
+  usePathname: () => mocks.pathname,
+}));
+vi.mock("./forum-feed-list", () => ({
+  ForumFeedList: ({
+    sort,
+    communityOnly,
+  }: {
+    sort: string;
+    communityOnly: boolean;
+  }) => <div data-feed-sort={sort} data-community-only={communityOnly} />,
 }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
@@ -54,6 +64,12 @@ const overview = {
     reputationLeader: null,
   },
 } as unknown as ForumOverviewRecord;
+
+beforeEach(() => {
+  mocks.pathname = "/forum";
+  mocks.query.mockClear();
+  mocks.pointInTimeQuery.mockClear();
+});
 
 function renderForumIndex() {
   mocks.query.mockImplementation((reference) =>
@@ -124,4 +140,71 @@ test("shows zero when an empty online snapshot loaded successfully", () => {
   expect(html).toContain("Newest member");
   expect(html).not.toContain("Checking online status");
   expect(html).not.toContain("Online status unavailable.");
+});
+
+test("home exposes real view URLs on the forum host and community filtering", () => {
+  mocks.pathname = "/";
+  mocks.query.mockImplementation(() => overview);
+  const html = renderToStaticMarkup(
+    <ForumIndex enabled view="community" sort="new" />,
+  );
+  expect(html).toContain('href="/?view=news&amp;sort=new"');
+  expect(html).toContain('aria-current="page"');
+  expect(html).toContain('data-community-only="true"');
+  expect(html).toContain('data-feed-sort="new"');
+  expect(html).not.toContain("Mark all read");
+  expect(html).not.toContain("border-b");
+  expect(html).not.toContain("divide-y");
+});
+
+test("create post routes to the existing board composer; boards preserve mark all read", () => {
+  mocks.query.mockImplementation(() => ({
+    ...overview,
+    categories: [
+      {
+        slug: "general",
+        name: "General",
+        kind: "board",
+        status: "active",
+        isPostable: true,
+      },
+    ],
+  }));
+  const html = renderToStaticMarkup(<ForumIndex enabled view="boards" />);
+  expect(html).toContain("Create post");
+  expect(html).toContain('href="/forum/general?compose=1"');
+  expect(html).toContain("Mark all read");
+  expect(html).not.toContain("data-feed-sort");
+});
+
+test("feed news preview links the real local discussion without combining HN and local scores", () => {
+  mocks.query.mockImplementation(() => overview);
+  const html = renderToStaticMarkup(
+    <ForumIndex
+      enabled
+      initialStories={[
+        {
+          hnItemId: 42,
+          rank: 1,
+          title: "A real headline",
+          host: "example.com",
+          score: 99,
+          descendants: 12,
+          platformStats: { score: 3, saves: 1, comments: 2 },
+        },
+      ]}
+    />,
+  );
+  expect(html).toContain("On Hacker News");
+  expect(html).toContain("99 HN points");
+  expect(html).toContain("12 HN comments");
+  expect(html).toMatch(/href="https:\/\/www\.symbaiex\.com\/news\//);
+  expect(html).not.toContain("102");
+});
+
+test("disabled forum uses a clear local fallback with functional view links", () => {
+  const html = renderToStaticMarkup(<ForumIndex enabled={false} />);
+  expect(html).toContain("Forum unavailable locally");
+  expect(html).toContain('href="/forum?view=news"');
+  expect(html).not.toContain("Loading discussions");
 });

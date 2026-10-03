@@ -86,7 +86,7 @@ describe("public discovery surfaces", () => {
     );
 
     expect(blogSource).toMatch(/headingLevel="h1"/);
-    expect(newsSource).toMatch(/headingLevel="h1"/);
+    expect(newsSource.match(/<h1(?:\s|>)/g)).toHaveLength(1);
     expect(newsletterSource).toMatch(/<h1[^>]*>Newsletter<\/h1>/);
   });
 
