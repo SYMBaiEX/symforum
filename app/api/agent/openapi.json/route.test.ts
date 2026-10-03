@@ -66,7 +66,7 @@ describe("agent API OpenAPI contract", () => {
     ).toMatchObject({
       minimum: 1,
       maximum: 500,
-      default: 100,
+      default: 25,
     });
     expect(document.paths["/v1/exports/{jobId}/manifest"].get.operationId).toBe(
       "getEvidenceExportManifest",

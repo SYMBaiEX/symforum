@@ -101,6 +101,7 @@ type EvidenceIdTable =
 
 const MAX_LIMIT = 50;
 const MAX_EXPORT_RECORD_LIMIT = 500;
+const DEFAULT_AGENT_EXPORT_RECORD_LIMIT = 25;
 const WEBHOOK_RESULT_VERSION = 1;
 const WEBHOOK_IDEMPOTENT_OPERATIONS = new Set<Operation>([
   "webhooks_create",
@@ -227,7 +228,7 @@ function limit(value: unknown, fallback: number) {
 }
 
 function exportRecordLimit(value: unknown) {
-  if (value === undefined) return 100;
+  if (value === undefined) return DEFAULT_AGENT_EXPORT_RECORD_LIMIT;
   if (
     !Number.isSafeInteger(value) ||
     (value as number) < 1 ||

@@ -161,6 +161,36 @@ describe("symbaiex login", () => {
     });
   });
 
+  test("leaves the default export size to the platform quota", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "symbaiex-cli-default-export-"),
+    );
+    const tokenFile = join(directory, "token");
+    await new FileTokenStore(tokenFile).setToken("test-access-token");
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({ jobId: "job-1", status: "queued" }),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const code = await run(
+      [
+        "export-create",
+        "dataset-1",
+        "--idempotency-key",
+        "export-default",
+        "--token-file",
+        tokenFile,
+      ],
+      { log: () => undefined, error: () => undefined },
+    );
+
+    expect(code).toBe(0);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).not.toHaveProperty("recordLimit");
+  });
+
   test("downloads an export only after its manifest checksum verifies", async () => {
     const directory = await mkdtemp(join(tmpdir(), "symbaiex-cli-export-"));
     const tokenFile = join(directory, "token");

@@ -579,15 +579,16 @@ export class AgentClient {
   async createExport(
     datasetId: string,
     idempotencyKey: string,
-    recordLimit = 100,
+    recordLimit?: number,
     format: "jsonl" | "parquet" = "jsonl",
     selectionStrategy: "balanced" | "recent" = "balanced",
     cursor?: string,
   ): Promise<ExportJob> {
     if (
-      !Number.isSafeInteger(recordLimit) ||
-      recordLimit < 1 ||
-      recordLimit > 500
+      recordLimit !== undefined &&
+      (!Number.isSafeInteger(recordLimit) ||
+        recordLimit < 1 ||
+        recordLimit > 500)
     )
       throw new TypeError("recordLimit must be an integer between 1 and 500");
     if (cursor !== undefined && (!cursor || cursor.length > 512))
@@ -597,7 +598,7 @@ export class AgentClient {
       body: {
         datasetId: validIdentifier(datasetId, "datasetId", 512),
         format,
-        recordLimit,
+        ...(recordLimit === undefined ? {} : { recordLimit }),
         selectionStrategy,
         ...(cursor === undefined ? {} : { cursor }),
       },

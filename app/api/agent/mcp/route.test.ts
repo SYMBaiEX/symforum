@@ -373,6 +373,12 @@ describe("evidence MCP endpoint", () => {
         properties: { limit: { maximum: 50 } },
       },
     });
+    const createExport = payload.result.tools.find(
+      (tool: { name: string }) => tool.name === "evidence_create_export",
+    );
+    expect(createExport.inputSchema).toMatchObject({
+      properties: { recordLimit: { default: 25 } },
+    });
   });
 
   test("validates and relays semantic search with MCP idempotency parity", async () => {

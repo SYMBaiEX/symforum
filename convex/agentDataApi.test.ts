@@ -25,6 +25,7 @@ afterEach(() => {
 });
 
 async function fixture(t: ReturnType<typeof setup>, evidenceScope = true) {
+  const catalog = await t.mutation(internal.evidenceJobs.ensureCatalog, {});
   const ids = await t.run(async (ctx) => {
     const ownerUserId = await ctx.db.insert("users", {
       name: "Evidence owner",
@@ -55,9 +56,13 @@ async function fixture(t: ReturnType<typeof setup>, evidenceScope = true) {
       createdAt: 1,
       updatedAt: 1,
     });
-    return { ownerUserId, agentUserId };
+    return {
+      ownerUserId,
+      agentUserId,
+      agentId: `evidence-agent-${evidenceScope}`,
+      datasetId: catalog.datasetId,
+    };
   });
-  await t.mutation(internal.evidenceJobs.ensureCatalog, {});
   const source = await t.mutation(internal.evidence.upsertSource, {
     sourceKey: "api-test-source",
     name: "API test source",
@@ -230,6 +235,99 @@ describe("agent data API dispatch", () => {
       const ledger = await ctx.db.query("apiUsageLedger").unique();
       expect(ledger?.ownerUserId).toBe(ids.ownerUserId);
       expect(ledger?.operation).toBe("evidence.search");
+    });
+  });
+
+  test("meters research creation as five units and does not recharge a replay", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+    const args = {
+      operation: "research_create" as const,
+      input: { query: "How do source citations support research quality?" },
+      idempotencyKey: "research-create-one",
+      requestFingerprint: "sha256-research-create-one",
+    };
+
+    const created = await agent.mutation(internal.agentDataApi.dispatch, args);
+    const replayed = await agent.mutation(internal.agentDataApi.dispatch, args);
+
+    expect(replayed).toEqual(created);
+    await t.run(async (ctx) => {
+      const quotaUsage = await ctx.db.query("agentQuotaUsage").collect();
+      expect(quotaUsage).toHaveLength(1);
+      expect(quotaUsage[0]).toMatchObject({
+        operation: "evidence.research_create",
+        units: 5,
+        idempotencyKey: "research-create-one",
+      });
+
+      const counter = await ctx.db
+        .query("agentQuotaUsageCounters")
+        .withIndex("by_ownerUserId_and_agentId_and_monthKey", (q) =>
+          q
+            .eq("ownerUserId", ids.ownerUserId)
+            .eq("agentId", ids.agentId)
+            .eq("monthKey", quotaUsage[0]!.monthKey),
+        )
+        .unique();
+      expect(counter?.usedUnits).toBe(5);
+
+      const ledger = await ctx.db
+        .query("apiUsageLedger")
+        .withIndex("by_ownerUserId_and_idempotencyKey", (q) =>
+          q
+            .eq("ownerUserId", ids.ownerUserId)
+            .eq("idempotencyKey", "research-create-one"),
+        )
+        .unique();
+      expect(ledger).toMatchObject({
+        operation: "evidence.research_create",
+        units: 5,
+        entryType: "debit",
+      });
+      expect(await ctx.db.query("evidenceResearchJobs").collect()).toHaveLength(
+        1,
+      );
+    });
+  });
+
+  test("defaults export size to the default per-request quota", async () => {
+    const t = setup();
+    const ids = await fixture(t);
+    const agent = t.withIdentity({ subject: ids.agentUserId });
+
+    await expect(
+      agent.mutation(internal.agentDataApi.dispatch, {
+        operation: "export_create",
+        input: { datasetId: ids.datasetId },
+        idempotencyKey: "export-default-size",
+        requestFingerprint: "sha256-export-default-size",
+      }),
+    ).resolves.toMatchObject({ status: "queued" });
+
+    await t.run(async (ctx) => {
+      const exportJob = await ctx.db
+        .query("evidenceExportJobs")
+        .withIndex("by_ownerUserId_and_idempotencyKey", (q) =>
+          q
+            .eq("ownerUserId", ids.ownerUserId)
+            .eq("idempotencyKey", "export-default-size"),
+        )
+        .unique();
+      expect(exportJob).toMatchObject({ recordLimit: 25, quotaUnits: 25 });
+
+      const quotaUsage = await ctx.db.query("agentQuotaUsage").unique();
+      expect(quotaUsage).toMatchObject({
+        operation: "evidence.export_create",
+        units: 25,
+      });
+      const ledger = await ctx.db.query("apiUsageLedger").unique();
+      expect(ledger).toMatchObject({
+        operation: "evidence.export_create",
+        units: 25,
+        entryType: "debit",
+      });
     });
   });
 

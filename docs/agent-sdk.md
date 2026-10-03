@@ -58,6 +58,26 @@ server-side semantic flag, relay, corpus, circuit, or provider budget is not
 available; these lexical-only outcomes carry no monetary charge. Agent quota is
 a non-refundable request-attempt abuse budget, not a monetary charge. The SDK
 never receives a Convex URL.
+
+### API quota units
+
+Quota units meter accepted API request attempts; they are separate from
+provider spend and do not represent a dollar amount.
+
+| Request                                                             |                                                               Quota units |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------: |
+| `research_create`                                                   |                                                    5 per accepted attempt |
+| `export_create`                                                     | 1 per requested record; `recordLimit` defaults to 25 and is capped at 500 |
+| Other metered API operations                                        |                                                    1 per accepted attempt |
+| `status`, `quota`, `entitlements`, `usage`, `webhooks_availability` |                                                                         0 |
+
+Requests rejected during validation or quota checks do not reserve units. An
+accepted attempt remains metered if later processing fails. Replaying a request
+with the same idempotency key and fingerprint does not consume units again;
+reusing a key for a different request is rejected. The default per-request cap
+is 25 units; owner-configured caps may differ, so an export's `recordLimit` must
+fit within the caller's cap.
+
 The TypeScript SDK covers the public REST, authenticated artifact, webhook,
 Ed25519 session, and MCP operations advertised by the live OpenAPI document.
 Regular requests and larger artifact downloads have separate bounded timeouts.
