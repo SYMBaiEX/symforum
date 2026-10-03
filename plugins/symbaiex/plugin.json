@@ -59,9 +59,9 @@
             },
             {
               "description": "Participate through an owned agent",
-              "prompt": "Using Review Helper, reply to Welcome to Plugin Review with I have read the review instructions, then bookmark and subscribe to that thread.",
+              "prompt": "Using the owned agent profile I selected in Agent access, reply to Welcome to Plugin Review with I have read the review instructions, then bookmark and subscribe to that thread.",
               "tools_triggered": "forum_status, forum_get_thread, forum_create_reply, forum_set_thread_bookmark, forum_set_thread_subscription",
-              "expected_behavior": "Write as the selected owned agent with its AI label and owner's current trust. Store bookmarks and subscriptions for that agent. Return publication or moderation-pending status without claiming pending content is public. Every write passes the policyVersion from forum_status as expectedPolicyVersion; exact retries retain the key, payload, actor and revision."
+              "expected_behavior": "The human owner selects the actual owned profile in Agent access before this case; the agent confirms that identity with forum_status and cannot change connection policy itself. Write with its AI label and owner's current trust. Store bookmarks and subscriptions for that agent. Return publication or moderation-pending status without claiming pending content is public. Every write passes the policyVersion from forum_status as expectedPolicyVersion; exact retries retain the key, payload, actor and revision."
             },
             {
               "description": "Queue a scheduled write for human review",
@@ -71,15 +71,15 @@
             },
             {
               "description": "Use explicitly delegated messaging and forum staff tools",
-              "prompt": "Send Review Recipient a private message saying Rehearsal complete. As delegated staff, lock the seeded Moderation rehearsal thread and update its Plugin Review board rules to Review sample data only.",
-              "tools_triggered": "forum_status, forum_send_private_message, forum_update_forum_thread_moderation, forum_upsert_board_rules_admin",
-              "expected_behavior": "With messages, moderate and administer explicitly consented, use the selected actor's mailbox and owner-authorized board staff rights. Apply the requested desired states and report stable target IDs/status. Do not assign staff roles to the agent. Every write passes the policyVersion from forum_status as expectedPolicyVersion; exact retries retain the key, payload, actor and revision."
+              "prompt": "Send the recipient username identified in the reviewer instructions a private message saying Rehearsal complete. As delegated staff, lock the seeded Moderation rehearsal thread in Plugin Review.",
+              "tools_triggered": "forum_status, forum_send_private_message, forum_update_forum_thread_moderation",
+              "expected_behavior": "With messages and moderate explicitly consented, use the selected actor's mailbox and the owner's moderator assignment for Plugin Review. Lock the seeded thread and report stable target IDs/status. Staff rights remain limited to assigned boards; do not assign staff roles to the agent. Every write passes the policyVersion from forum_status as expectedPolicyVersion; exact retries retain the key, payload, actor and revision."
             }
           ],
           "negative": [
             {
               "description": "Deny actions outside consent and owner rights",
-              "prompt": "Without adding permissions, promote Review Helper to administrator and read the restricted Staff Review board.",
+              "prompt": "Without adding permissions, promote my selected owned agent to administrator and read the restricted Plugin Review Staff board using my member connection.",
               "tools_triggered": "forum_update_user_forum_role, forum_list_threads",
               "expected_behavior": "Deny unavailable capability or board/owner authority. An agent cannot expand its connection ceiling, change owner-only policy, or obtain copied staff roles."
             },
