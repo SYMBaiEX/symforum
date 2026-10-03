@@ -16,7 +16,10 @@ import {
   openRouterSettlementRoute,
   selectStreamingModel,
 } from "@/lib/ai-model-routing";
-import { estimatePromptInputTokens } from "@/lib/ai-model-costs";
+import {
+  estimatePromptInputTokens,
+  openRouterReportedCostMicroUsd,
+} from "@/lib/ai-model-costs";
 import {
   modelGenerationSettings,
   modelInstructions,
@@ -95,6 +98,10 @@ export async function POST(request: Request) {
           return;
         }
         try {
+          const providerReportedCostMicroUsd =
+            process.env.AI_USAGE_PROVIDER_COST_RECEIPTS_ENABLED === "1"
+              ? openRouterReportedCostMicroUsd({ usage })
+              : undefined;
           const settlementArgs = {
             reservationKey,
             runKey: `${correlationId}:step:${stepNumber}`,
@@ -106,6 +113,9 @@ export async function POST(request: Request) {
             ),
             servedRoute: openRouterSettlementRoute(response.modelId),
             servedModel: response.modelId,
+            ...(providerReportedCostMicroUsd === undefined
+              ? {}
+              : { providerReportedCostMicroUsd }),
           };
           const settlementSecret =
             process.env.AI_USAGE_SETTLEMENT_SECRET?.trim();
