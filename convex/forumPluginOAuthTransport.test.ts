@@ -191,6 +191,30 @@ describe("cryptographic forum OAuth HTTP integration", () => {
       });
       expect(JSON.stringify(result)).not.toContain("private-metadata");
       expect((await call("overview", signed)).status).toBe(200);
+      const deniedWrite = await t.fetch("/plugin/forum", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Symbaiex-Forum-OAuth": signed,
+        },
+        body: JSON.stringify({
+          operation: "createThread",
+          args: {
+            categorySlug: "general",
+            title: "Still metered",
+            body: "Browsing is available, but write quotas still apply.",
+          },
+          idempotencyKey: "exhausted-write",
+          expectedPolicyVersion: 1,
+        }),
+      });
+      expect(deniedWrite.status).toBe(429);
+      expect(await deniedWrite.json()).toMatchObject({
+        code: "AGENT_QUOTA_EXCEEDED",
+        quotaReason: "hard-cap",
+        resetsAt,
+        quota: result.data.quota,
+      });
       await t.run(async (ctx) => {
         expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
         expect(
