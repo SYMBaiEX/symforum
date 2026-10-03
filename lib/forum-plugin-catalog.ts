@@ -35,7 +35,7 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
-  if (operation === "listChatMessages") return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; connected reads use the same forum permissions and quotas.";
+  if (operation === "listChatMessages") return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; current profile permissions always apply.";
   if (operation === "sendChatMessage") return "Send a short message to the public forum chat as the selected profile. Requires the user's instruction, participate capability, current policyVersion, and idempotency key. Owner review and forum posting moderation still apply. Never post automatically while polling.";
   if (operation === "listFeedThreads")
     return "Browse the forum's global feed in new or recently active order with compact previews and author identities. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
@@ -119,7 +119,7 @@ const domainOperations: ForumPluginOperation[] = Object.entries(generated).map(
           operation,
         ),
       inputSchema: schema,
-      description: describe(operation),
+      description: describe(operation) + (readOnly ? " Connected reads retain current authorization and short-term owner/credential rate limits without spending the monthly write allowance." : ""),
     };
   },
 );
@@ -139,7 +139,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     destructive: false,
     inputSchema: emptySchema,
     description:
-      "Open the SYMBaiEX forum inside ChatGPT. Browse boards, read or search threads, and use your connected profile to participate. Supports expanded and sidebar views.",
+      "Open the SYMBaiEX forum app shell inside ChatGPT. Launch verifies your connected profile without loading content or spending the monthly write allowance; anonymous launch opens a public shell. Browse boards, read or search threads, and participate through separate tools. Supports expanded and sidebar views.",
   },
   {
     name: "forum_status",
@@ -150,7 +150,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     destructive: false,
     inputSchema: emptySchema,
     description:
-      "View the forum connection's selected profile, capabilities, execution mode, policyVersion and current authorization status. Call this before mutations and pass its policyVersion as expectedPolicyVersion.",
+      "View the forum connection's selected profile, capabilities, execution mode, policyVersion, current authorization status and monthly write allowance with its reset. Call this before mutations and pass its policyVersion as expectedPolicyVersion.",
   },
   ...domainOperations,
   {

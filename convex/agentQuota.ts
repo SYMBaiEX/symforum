@@ -24,7 +24,8 @@ const usageWebhookRef = makeFunctionReference<
   {
     eventKey: string;
     eventType:
-      "evidence.usage.threshold_reached" | "evidence.usage.budget_reached";
+      | "evidence.usage.threshold_reached"
+      | "evidence.usage.budget_reached";
     payloadJson: string;
     ownerUserId: Id<"users">;
   },
@@ -47,6 +48,18 @@ export const DEFAULT_HARD_CAP_METADATA_JSON = JSON.stringify({
 });
 
 const quotaRateLimiter = new RateLimiter(components.rateLimiter, {
+  forumOwnerReads: {
+    kind: "token bucket",
+    rate: 180,
+    period: MINUTE,
+    capacity: 40,
+  },
+  forumCredentialReads: {
+    kind: "token bucket",
+    rate: 300,
+    period: MINUTE,
+    capacity: 60,
+  },
   agentQuotaRequests: {
     kind: "token bucket",
     rate: 60,
@@ -940,13 +953,92 @@ export const recordAgentUsage = consumeAgentQuota;
 /** Explicit alias for quota dashboards and future API consumers. */
 export const getQuotaStatus = getAgentQuota;
 
+/** Forum browsing uses short-term limits without consuming mutation/evidence units. */
+export async function consumeForumPluginReadRate(
+  ctx: MutationCtx,
+  principal: ForumPluginPrincipal,
+) {
+  const owner = await quotaRateLimiter.limit(ctx, "forumOwnerReads", {
+    key: principal.owner._id,
+  });
+  const credential = owner.ok
+    ? await quotaRateLimiter.limit(ctx, "forumCredentialReads", {
+        key: `${principal.owner._id}:${principal.credentialAgent.agentId}`,
+      })
+    : owner;
+  if (!credential.ok)
+    throw new ConvexError({
+      code: "AGENT_QUOTA_EXCEEDED",
+      message:
+        "Forum read rate limit reached. Retry after the indicated delay.",
+      quotaReason: "rate-limited",
+      retryAfter: credential.retryAfter,
+    });
+}
+
+/** Safe, uncharged diagnostics for the already-authorized forum principal. */
+export async function readForumPluginQuota(
+  ctx: QueryCtx | MutationCtx,
+  principal: ForumPluginPrincipal,
+  now: number,
+) {
+  const state = await readQuotaState(
+    ctx,
+    principal.credentialAgent,
+    principal.owner._id,
+    monthKeyForTimestamp(now),
+  );
+  const date = new Date(now);
+  return {
+    agentUsedUnits: state.agentUsedUnits,
+    agentLimitUnits: state.monthlyLimitUnits,
+    ownerUsedUnits: state.usedUnits,
+    ownerLimitUnits: state.hardCapUnits,
+    remainingUnits: Math.min(state.remainingUnits, state.agentRemainingUnits),
+    resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1),
+    settingsUrl: "https://www.symbaiex.com/developer",
+  };
+}
+
 /** Called only after a server-side plugin grant is resolved; human mode still spends automation quota. */
-export async function consumeForumPluginQuota(ctx: MutationCtx, principal: ForumPluginPrincipal, args: {operation: string; idempotencyKey: string; requestFingerprint?:string}) {
-  const result = await consumeAgentQuotaForRequest(ctx, {
-    agentId: principal.credentialAgent.agentId, units: 1,
-    operation: args.operation, idempotencyKey: args.idempotencyKey, requestFingerprint:args.requestFingerprint,
-    metadataJson: JSON.stringify({ connectionId: principal.connection._id, actorUserId: principal.actor._id, agentAssisted: true }),
-  }, principal);
-  if (!result.accepted) throw new ConvexError({ code: "AGENT_QUOTA_EXCEEDED", message: "Agent usage quota reached.", reason: result.reason, retryAfter: result.retryAfter });
+export async function consumeForumPluginQuota(
+  ctx: MutationCtx,
+  principal: ForumPluginPrincipal,
+  args: {
+    operation: string;
+    idempotencyKey: string;
+    requestFingerprint?: string;
+  },
+) {
+  const result = await consumeAgentQuotaForRequest(
+    ctx,
+    {
+      agentId: principal.credentialAgent.agentId,
+      units: 1,
+      operation: args.operation,
+      idempotencyKey: args.idempotencyKey,
+      requestFingerprint: args.requestFingerprint,
+      metadataJson: JSON.stringify({
+        connectionId: principal.connection._id,
+        actorUserId: principal.actor._id,
+        agentAssisted: true,
+      }),
+    },
+    principal,
+  );
+  if (!result.accepted) {
+    const quota = await readForumPluginQuota(ctx, principal, Date.now());
+    throw new ConvexError({
+      code: "AGENT_QUOTA_EXCEEDED",
+      message:
+        result.reason === "rate-limited"
+          ? "Agent request rate limit reached. Retry after the indicated delay."
+          : "Agent usage quota reached.",
+      quotaReason: result.reason,
+      retryAfter: result.retryAfter,
+      resetsAt: quota.resetsAt,
+      quota,
+    });
+  }
   return result;
 }

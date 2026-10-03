@@ -17,6 +17,7 @@ const FORUM_SUBDOMAIN_SITE_PREFIXES = [
   // causes crawler loops and this app has no separate forum metadata handler.
   "/robots.txt",
   "/sitemap.xml",
+  "/manifest.webmanifest",
 ];
 const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/about",
@@ -34,7 +35,6 @@ const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/feeds",
   "/llms-full.txt",
   "/llms.txt",
-  "/manifest.webmanifest",
   "/mcp",
   "/mcp.json",
   "/news",
@@ -43,7 +43,6 @@ const FORUM_SUBDOMAIN_PRIMARY_SITE_PREFIXES = [
   "/pricing",
   "/pricing.md",
   "/privacy",
-  "/research",
   "/sandbox",
   "/schemamap.xml",
   "/skills.sh",
@@ -94,6 +93,9 @@ export function resolveForumSubdomainRoute({
     };
   }
 
+  // /research is the public forum board, including its thread permalinks.
+  // Primary-site research links must use the primary origin explicitly;
+  // redirecting this board also redirects Next's RSC prefetch across origins.
   return {
     kind: "rewrite",
     pathname: pathname === "/" ? "/forum" : `/forum${pathname}`,

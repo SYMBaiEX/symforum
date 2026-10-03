@@ -120,6 +120,18 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("serves the forum manifest through native same-origin Next metadata", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(
+      requestFor("https://forum.symbaiex.com/manifest.webmanifest"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   test("rewrites explicit markdown aliases and negotiated markdown requests", async () => {
     const proxy = await loadProxy();
 
@@ -250,7 +262,6 @@ describe("proxy forum routing", () => {
       "/agent",
       "/agent/signup",
       "/terms",
-      "/research",
       "/auth.md",
       "/agents.md",
     ]) {
@@ -262,6 +273,34 @@ describe("proxy forum routing", () => {
         `https://www.symbaiex.com${pathname}`,
       );
     }
+  });
+
+  test.each(["/research", "/research/source-led-notes"])(
+    "Research board RSC prefetch %s stays on the forum origin",
+    async (pathname) => {
+      const proxy = await loadProxy();
+      const response = await proxy(
+        requestFor(`https://forum.symbaiex.com${pathname}?_rsc=cache`, {
+          rsc: "1",
+          "next-router-prefetch": "1",
+        }),
+      );
+
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("x-middleware-rewrite")).toBe(
+        `https://forum.symbaiex.com/forum${pathname}?_rsc=cache`,
+      );
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    },
+  );
+
+  test("primary-site Research content keeps its own route", async () => {
+    const proxy = await loadProxy();
+    const response = await proxy(
+      requestFor("https://www.symbaiex.com/research/methodology"),
+    );
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
   });
 
   test("redirects production forum primary-site routes to the canonical www host", async () => {

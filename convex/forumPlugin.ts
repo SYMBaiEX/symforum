@@ -23,7 +23,11 @@ import {
   verifiedOAuthPrincipalValidator,
 } from "./forumPluginPrincipal";
 import { withForumPluginPrincipal } from "./forumPluginContext";
-import { consumeForumPluginQuota } from "./agentQuota";
+import {
+  consumeForumPluginQuota,
+  consumeForumPluginReadRate,
+  readForumPluginQuota,
+} from "./agentQuota";
 import {
   canonicalForumJson,
   validateForumOperationArgs,
@@ -220,6 +224,7 @@ async function readOperation(
         executionMode: principal.connection.executionMode,
         policyVersion: principal.policyVersion,
         ...(await postingContext(ctx, principal)),
+        quota: await readForumPluginQuota(ctx, principal, Date.now()),
       },
     };
   }
@@ -249,20 +254,9 @@ async function readOperation(
       throw new ConvexError(
         "Connected forum reads require a transactional quota context.",
       );
-    // Read requests intentionally consume quota on every invocation. Client keys
-    // are trace-only: reusing one must not enable unlimited fresh-state polling.
-    const nonce = `${Date.now()}:${Math.random()}:${Math.random()}`;
-    await consumeForumPluginQuota(ctx as MutationCtx, principal, {
-      operation: `forum.read.${args.operation}`,
-      idempotencyKey: `plugin-read:${await sha256Base64Url(String(principal.connection._id) + ":" + principal.actor._id + ":" + args.operation + ":" + nonce)}`,
-      requestFingerprint: await sha256Base64Url(
-        canonicalForumJson({
-          operation: args.operation,
-          actor: principal.actor._id,
-          args: args.args,
-        }),
-      ),
-    });
+    // Every connected read rechecks the owner and credential rate limits. Read
+    // retries cannot bypass these limits, but browsing never spends write units.
+    await consumeForumPluginReadRate(ctx as MutationCtx, principal);
   }
   const anonymousCtx: QueryCtx = {
     ...ctx,
@@ -435,7 +429,15 @@ function relevantTargetState(key: string, value: unknown): unknown {
       "postNumber",
     ];
   else if (key.startsWith("forumChatMessages:"))
-    fields = ["_id", "categoryId", "authorId", "ownerUserId", "body", "status", "updatedAt"];
+    fields = [
+      "_id",
+      "categoryId",
+      "authorId",
+      "ownerUserId",
+      "body",
+      "status",
+      "updatedAt",
+    ];
   else if (key.startsWith("forumPolls:"))
     fields = [
       "_id",
@@ -610,14 +612,25 @@ async function runCommand(
     commandId: commandId ? String(commandId) : undefined,
     url,
   };
-  if (["sendChatMessage", "moderateChatMessage", "deleteChatMessage"].includes(operationName)) {
+  if (
+    ["sendChatMessage", "moderateChatMessage", "deleteChatMessage"].includes(
+      operationName,
+    )
+  ) {
     result.url = "https://forum.symbaiex.com/#forum-chat";
-    if (record?.status === "pending" || record?.publicationStatus === "pending_moderation") {
+    if (
+      record?.status === "pending" ||
+      record?.publicationStatus === "pending_moderation"
+    ) {
       result.publicationStatus = "pending_moderation";
       result.pendingContentUrl = result.url;
       result.moderationUrl = result.url;
-      result.message = "Saved to the chat moderation queue; not published yet. Forum staff must approve this message.";
-    } else if (record?.status === "active" || record?.publicationStatus === "published") {
+      result.message =
+        "Saved to the chat moderation queue; not published yet. Forum staff must approve this message.";
+    } else if (
+      record?.status === "active" ||
+      record?.publicationStatus === "published"
+    ) {
       result.publicationStatus = "published";
       result.message = "Published in the forum chat.";
     } else result.message = "Forum chat moderation saved.";
@@ -824,6 +837,7 @@ export const remoteExecute = internalMutation({
 });
 export const status = internalQuery({
   args: {
+    now: v.number(),
     connectionId: v.optional(v.id("forumPluginConnections")),
     ...proofArgs,
   },
@@ -848,6 +862,7 @@ export const status = internalQuery({
       executionMode: p.connection.executionMode,
       policyVersion: p.policyVersion,
       ...(await postingContext(ctx, p)),
+      quota: await readForumPluginQuota(ctx, p, args.now),
     };
   },
 });
@@ -1034,7 +1049,10 @@ export const approveCommand = mutation({
     const current = await commandResult(ctx, principal, command);
     if (command.status === "completed" || current.data) return current;
     const input = JSON.parse(command.argsJson) as Record<string, unknown>;
-    if ((await targetVersions(ctx, input, command.operation)) !== command.targetVersionsJson) {
+    if (
+      (await targetVersions(ctx, input, command.operation)) !==
+      command.targetVersionsJson
+    ) {
       await ctx.db.patch("forumPluginCommands", command._id, {
         status: "invalidated",
       });

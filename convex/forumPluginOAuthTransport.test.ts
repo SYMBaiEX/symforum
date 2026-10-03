@@ -104,7 +104,7 @@ async function fixture() {
   return { t, owner, ownerId, connectionId, issuer, token, call, jwksFetch };
 }
 describe("cryptographic forum OAuth HTTP integration", () => {
-  test("verifies a real JWKS-signed token and charges each authenticated read to owner and credential", async () => {
+  test("verifies a real JWKS-signed token and bounds authenticated browsing without monthly charges", async () => {
     const { t, ownerId, token, call, jwksFetch } = await fixture();
     const signed = await token();
     const status = await call("status", signed);
@@ -123,26 +123,85 @@ describe("cryptographic forum OAuth HTTP integration", () => {
     const second = await call("listCategories", signed);
     expect(second.status).toBe(200);
     await t.run(async (ctx) => {
-      const usage = await ctx.db.query("agentQuotaUsage").collect();
-      expect(usage).toHaveLength(2);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+      expect(await ctx.db.query("agentQuotaBudgets").collect()).toHaveLength(0);
       expect(
-        usage.every(
-          (entry) => entry.ownerUserId === ownerId && entry.units === 1,
-        ),
-      ).toBe(true);
-      expect(new Set(usage.map((entry) => entry.idempotencyKey)).size).toBe(2);
-      expect(new Set(usage.map((entry) => entry.agentId)).size).toBe(1);
-      const account = await ctx.db.query("agentQuotaBudgets").collect();
-      expect(account).toHaveLength(1);
-      expect(account[0].usedUnits).toBe(2);
-      const credentialCounters = await ctx.db
-        .query("agentQuotaUsageCounters")
-        .collect();
-      expect(credentialCounters).toHaveLength(1);
-      expect(credentialCounters[0].usedUnits).toBe(2);
+        await ctx.db.query("agentQuotaUsageCounters").collect(),
+      ).toHaveLength(0);
     });
     expect(jwksFetch).toHaveBeenCalledTimes(1);
   });
+  test.each(["human", "agent"] as const)(
+    "signed %s status reports exhausted write quota while browsing remains available",
+    async (mode) => {
+      const { t, ownerId, connectionId, token, call } = await fixture();
+      const now = Date.now();
+      const date = new Date(now);
+      const monthKey = date.toISOString().slice(0, 7);
+      const resetsAt = Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth() + 1,
+        1,
+      );
+      await t.run(async (ctx) => {
+        const connection = await ctx.db.get(
+          "forumPluginConnections",
+          connectionId,
+        );
+        const credential = await ctx.db.get(
+          "agentIdentities",
+          connection!.credentialAgentIdentityId,
+        );
+        if (mode === "agent")
+          await ctx.db.patch("forumPluginConnections", connectionId, {
+            actorMode: "agent",
+            actorUserId: credential!.userId,
+          });
+        await ctx.db.insert("agentQuotaBudgets", {
+          ownerUserId: ownerId,
+          monthKey,
+          freeAllowanceUnits: 100,
+          hardCapUnits: 1000,
+          usedUnits: 1000,
+          hardCapMetadataJson: "private-metadata",
+          createdAt: now,
+          updatedAt: now,
+        });
+        await ctx.db.insert("agentQuotaUsageCounters", {
+          ownerUserId: ownerId,
+          agentId: credential!.agentId,
+          monthKey,
+          usedUnits: 250,
+          updatedAt: now,
+        });
+      });
+      const signed = await token();
+      const response = await call("status", signed);
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.actingAs.isAgent).toBe(mode === "agent");
+      expect(result.data.quota).toEqual({
+        agentUsedUnits: 250,
+        agentLimitUnits: 250,
+        ownerUsedUnits: 1000,
+        ownerLimitUnits: 1000,
+        remainingUnits: 0,
+        resetsAt,
+        settingsUrl: "https://www.symbaiex.com/developer",
+      });
+      expect(JSON.stringify(result)).not.toContain("private-metadata");
+      expect((await call("overview", signed)).status).toBe(200);
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+        expect(
+          (await ctx.db.query("agentQuotaBudgets").unique())?.usedUnits,
+        ).toBe(1000);
+        expect(
+          (await ctx.db.query("agentQuotaUsageCounters").unique())?.usedUnits,
+        ).toBe(250);
+      });
+    },
+  );
   test("rejects expired, wrong-issuer, wrong-resource, mixed-resource and legacy-grant signed tokens without spending quota", async () => {
     const { t, issuer, token, call } = await fixture();
     const cases: JWTPayload[] = [

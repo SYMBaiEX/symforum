@@ -530,6 +530,23 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_ownerUserId_and_monthKey", ["ownerUserId", "monthKey"]),
+  // Durable operator-only receipts for the one-time forum read quota correction.
+  forumReadQuotaRefunds: defineTable({
+    connectionId: v.id("forumPluginConnections"),
+    ownerUserId: v.id("users"),
+    agentId: v.string(),
+    monthKey: v.string(),
+    fingerprint: v.string(),
+    sourceCount: v.number(),
+    refundedUnits: v.number(),
+    ownerUsedBefore: v.number(),
+    ownerUsedAfter: v.number(),
+    agentUsedBefore: v.number(),
+    agentUsedAfter: v.number(),
+    appliedAt: v.number(),
+  }).index("by_connectionId_and_monthKey_and_ownerUserId_and_agentId", [
+    "connectionId", "monthKey", "ownerUserId", "agentId",
+  ]),
   agentQuotaLimits: defineTable({
     ownerUserId: v.id("users"),
     agentId: v.string(),

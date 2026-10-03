@@ -58,6 +58,7 @@ export function forumPluginHttpError(request: Request, error: unknown) {
   let code = "PLUGIN_REQUEST_FAILED",
     message = "The forum request could not be completed.",
     status = 400;
+  const diagnostics: Record<string, unknown> = {};
   if (error instanceof ForumUploadError) {
     message = error.message;
     status = error.status;
@@ -68,6 +69,62 @@ export function forumPluginHttpError(request: Request, error: unknown) {
       const object = data as Record<string, unknown>;
       if (typeof object.code === "string") code = object.code;
       if (typeof object.message === "string") message = object.message;
+      if (code === "AGENT_QUOTA_EXCEEDED") {
+        const reason = object.quotaReason ?? object.reason;
+        if (
+          typeof reason === "string" &&
+          ["hard-cap", "agent-limit", "request-limit", "rate-limited"].includes(
+            reason,
+          )
+        )
+          diagnostics.quotaReason = reason;
+        if (
+          typeof object.retryAfter === "number" &&
+          Number.isFinite(object.retryAfter) &&
+          object.retryAfter > 0 &&
+          object.retryAfter <= 86_400_000
+        )
+          diagnostics.retryAfter = object.retryAfter;
+        if (
+          typeof object.resetsAt === "number" &&
+          Number.isSafeInteger(object.resetsAt) &&
+          object.resetsAt > 0 &&
+          object.resetsAt <= 8_640_000_000_000_000
+        )
+          diagnostics.resetsAt = object.resetsAt;
+        if (
+          object.quota &&
+          typeof object.quota === "object" &&
+          !Array.isArray(object.quota)
+        ) {
+          const quota = object.quota as Record<string, unknown>;
+          const safe: Record<string, unknown> = {};
+          for (const key of [
+            "agentUsedUnits",
+            "agentLimitUnits",
+            "ownerUsedUnits",
+            "ownerLimitUnits",
+            "remainingUnits",
+          ])
+            if (
+              typeof quota[key] === "number" &&
+              Number.isSafeInteger(quota[key]) &&
+              quota[key] >= 0 &&
+              quota[key] <= 1_000_000_000
+            )
+              safe[key] = quota[key];
+          if (
+            typeof quota.resetsAt === "number" &&
+            Number.isSafeInteger(quota.resetsAt) &&
+            quota.resetsAt > 0 &&
+            quota.resetsAt <= 8_640_000_000_000_000
+          )
+            safe.resetsAt = quota.resetsAt;
+          if (quota.settingsUrl === "https://www.symbaiex.com/developer")
+            safe.settingsUrl = quota.settingsUrl;
+          if (Object.keys(safe).length) diagnostics.quota = safe;
+        }
+      }
     }
     if (/AUTH_REQUIRED|INVALID_TOKEN|CONNECTION|CREDENTIAL/.test(code))
       status = 401;
@@ -75,11 +132,20 @@ export function forumPluginHttpError(request: Request, error: unknown) {
     else if (/QUOTA|RATE_LIMIT/.test(code)) status = 429;
     else if (/IDEMPOTENCY_CONFLICT/.test(code)) status = 409;
   }
-  const response = json(request, { code, error: message }, status);
+  const response = json(
+    request,
+    { code, error: message, ...diagnostics },
+    status,
+  );
   if (status === 401 || status === 403)
     response.headers.set(
       "WWW-Authenticate",
       `Bearer resource_metadata="${FORUM_PLUGIN_METADATA_URL}", error="${status === 401 ? "invalid_token" : "insufficient_scope"}"`,
+    );
+  if (typeof diagnostics.retryAfter === "number")
+    response.headers.set(
+      "Retry-After",
+      String(Math.max(1, Math.ceil(diagnostics.retryAfter / 1_000))),
     );
   return response;
 }
@@ -165,7 +231,10 @@ export function addForumPluginRoutes(http: HttpRouter) {
             message: "Connect your forum profile.",
           });
         if (operation.operation === "status") {
-          const state = await ctx.runQuery(internal.forumPlugin.status, proof!);
+          const state = await ctx.runQuery(internal.forumPlugin.status, {
+            ...proof!,
+            now: Date.now(),
+          });
           return json(request, {
             status: "completed",
             actingAs: state.actingAs,
