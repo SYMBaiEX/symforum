@@ -396,18 +396,18 @@ export async function runForumResearchSlot(
         "OPENROUTER_API_KEY is not configured in Convex.",
       );
     }
-    const context =
+    const [context, editorialStrategies] = await Promise.all([
       config.slug === "suki"
-        ? await ctx.runQuery(internal.forum.readSukiForumContext, {})
+        ? ctx.runQuery(internal.forum.readSukiForumContext, {})
         : config.slug === "belle"
-          ? await ctx.runQuery(internal.forum.readBelleForumContext, {})
-          : await ctx.runQuery(internal.forum.readForumAgentContext, {
+          ? ctx.runQuery(internal.forum.readBelleForumContext, {})
+          : ctx.runQuery(internal.forum.readForumAgentContext, {
               agentSlug: config.slug,
-            });
-    const editorialStrategies = await ctx.runQuery(
-      internal.forumAgentEditorialData.readEditorialStrategies,
-      { agentSlug: config.slug },
-    );
+            }),
+      ctx.runQuery(internal.forumAgentEditorialData.readEditorialStrategies, {
+        agentSlug: config.slug,
+      }),
+    ]);
     if (!context.agent.enabled) {
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
