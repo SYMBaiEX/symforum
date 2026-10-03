@@ -5,14 +5,15 @@ import {
 } from "./developer-indexnow";
 import { DEVELOPER_RESOURCES } from "./developer-resources";
 
-describe("developer documentation indexing", () => {
-  test("covers canonical public guides, not owner sessions or arbitrary URLs", () => {
+describe("developer and product discovery indexing", () => {
+  test("covers the changed homepage and canonical public guides, not owner sessions or arbitrary URLs", () => {
     const payload = developerIndexNowPayload("a".repeat(64));
     expect(payload.host).toBe("www.symbaiex.com");
     expect(payload.keyLocation).toBe(
       `https://www.symbaiex.com/indexnow-${"a".repeat(64)}.txt`,
     );
-    expect(new Set(payload.urlList).size).toBe(12);
+    expect(new Set(payload.urlList).size).toBe(13);
+    expect(payload.urlList).toContain("https://www.symbaiex.com/");
     for (const slug of Object.keys(DEVELOPER_RESOURCES))
       expect(payload.urlList).toContain(
         `https://www.symbaiex.com/developers/${slug}`,
@@ -27,7 +28,7 @@ describe("developer documentation indexing", () => {
       );
     }
     payload.urlList.pop();
-    expect(DEVELOPER_INDEX_URLS).toHaveLength(12);
+    expect(DEVELOPER_INDEX_URLS).toHaveLength(13);
     expect(DEVELOPER_INDEX_URLS).not.toContain(
       "https://www.symbaiex.com/agent/instructions",
     );
