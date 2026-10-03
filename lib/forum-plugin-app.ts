@@ -42,10 +42,13 @@ export function forumPluginAppRuntime() {
   let currentThread: RecordValue | null = null;
   let currentCategory = "";
   let composerDraft: { kind: string; fields: Record<string, string>; key: string } | null = null;
+  let lastActionResult: RecordValue | null = null;
   const root = document.getElementById("app")!;
   const content = document.getElementById("content")!;
   const status = document.getElementById("status")!;
   const identity = document.getElementById("identity")!;
+  const ownerLabel = document.getElementById("connection-owner")!;
+  const postingLabel = document.getElementById("posting-trust")!;
   const modeLabel = document.getElementById("mode")!;
   const nav = document.getElementById("navigation")!;
   const compose = document.getElementById("compose")!;
@@ -128,6 +131,9 @@ export function forumPluginAppRuntime() {
       try {
         const result = decodeResult(message.params);
         updateIdentity(result);
+        // A model-triggered write must surface its publication/review state even
+        // while the user is reading a thread or keeping an unsent draft open.
+        if (result.status === "pending_approval" || result.publicationStatus === "published" || result.publicationStatus === "pending_moderation") showActionResult(result);
         // Model-triggered results never replace an active reader or a draft.
         const recent = object(result.data).newestThreads;
         if (currentView === "recent" && !composerDraft && recent) renderThreadList(collection(recent), "Recent discussions");
@@ -168,13 +174,27 @@ export function forumPluginAppRuntime() {
     if (result.actingAs === null) { actingAs = {}; connection = {}; }
     if (Object.keys(next).length) actingAs = next;
     const data = object(result.data ?? result);
-    if (Array.isArray(data.capabilities) || data.executionMode !== undefined || data.connection !== undefined) {
+    if (Array.isArray(data.capabilities) || data.executionMode !== undefined || data.connection !== undefined || data.postingTrust !== undefined) {
       connection = { ...connection, ...data, ...object(data.connection) };
     }
     identity.textContent = actingAs.username ? text(actingAs.username) + (actingAs.isAgent ? " · AI agent" : " · agent assisted") : "Public browsing";
     modeLabel.textContent = connection.executionMode === "review" ? "Writes require review" : "Server permissions apply";
     if (connection.executionMode === "direct") modeLabel.textContent = "Direct execution";
     if (!actingAs.username) modeLabel.textContent = "Connect a profile to participate";
+    const owner = object(connection.ownerProfile);
+    ownerLabel.hidden = !actingAs.username || !owner.username;
+    ownerLabel.textContent = ownerLabel.hidden ? "" : "Connected owner: " + text(owner.username);
+    postingLabel.replaceChildren();
+    postingLabel.hidden = !actingAs.username || !connection.postingTrust;
+    if (!postingLabel.hidden) {
+      const moderated = connection.postingTrust === "moderated";
+      postingLabel.append(element("span", text(connection.postingNotice, moderated ? "Posts require forum moderation." : "Trusted posting profile.")));
+      if (moderated) {
+        modeLabel.textContent += " · Posts require forum moderation";
+        const queueUrl = text(connection.pendingContentUrl);
+        if (safeForumUrl(queueUrl)) postingLabel.append(link("View your pending posts ↗", queueUrl));
+      }
+    }
     renderNavigation();
   }
   function permitted(capability: string) {
@@ -279,12 +299,19 @@ export function forumPluginAppRuntime() {
   function renderBoards(rows: RecordValue[]) {
     heading("Forum boards", "Ideas, research, and conversations across the SYMBaiEX community.");
     if (!rows.length) return empty("No boards are visible to this connection.");
-    const grid = element("div", undefined, "board-grid");
+    const grid = element("div", undefined, "board-index");
     for (const board of rows) {
       const item = element("article", undefined, "board");
-      item.append(button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug, categoryName: board.name })), "row-title"));
-      item.append(element("p", board.description, "excerpt"));
-      item.append(element("p", text(board.threadCount, "0") + " threads · " + text(board.postCount, "0") + " posts", "muted"));
+      const description = element("div", undefined, "board-description");
+      description.append(button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug, categoryName: board.name })), "row-title"));
+      description.append(element("p", board.description, "excerpt"));
+      const counts = element("dl", undefined, "board-counts");
+      for (const [label, value] of [["Threads", board.threadCount], ["Posts", board.postCount]] as const) {
+        const count = element("div");
+        count.append(element("dt", label), element("dd", text(value, "0")));
+        counts.append(count);
+      }
+      item.append(description, counts);
       grid.append(item);
     }
     content.append(grid);
@@ -466,7 +493,8 @@ export function forumPluginAppRuntime() {
       }
       if (revision !== viewRevision || destroyed) return;
       render();
-      report("");
+      if (lastActionResult) showActionResult(lastActionResult);
+      else report("");
       const title = content.querySelector("h1");
       title?.focus({ preventScroll: true });
       if (view === "thread") void request("ui/update-model-context", { structuredContent: { selectedThread: args, actingAs }, content: [{ type: "text", text: "The user is reading " + text(currentThread?.title) + " in the SYMBaiEX forum." }] }).catch(() => {});
@@ -480,18 +508,31 @@ export function forumPluginAppRuntime() {
     }
   }
   function newKey() { return "app-" + crypto.randomUUID(); }
+  function publicationStatus(result: RecordValue) {
+    return result.publicationStatus === "pending_moderation" || object(result.data).status === "pending" ? "pending_moderation" : result.publicationStatus;
+  }
+  function showActionResult(result: RecordValue) {
+    lastActionResult = result;
+    if (result.status === "pending_approval") {
+      report(text(result.message, "Awaiting owner approval. This action has not executed or been published."));
+      status.append(document.createTextNode(" "), link("Review this action ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")));
+    } else if (publicationStatus(result) === "pending_moderation") {
+      report(text(result.message, "Awaiting moderator approval. Your post is saved but is not published yet."));
+      if (safeForumUrl(text(result.pendingContentUrl))) status.append(document.createTextNode(" "), link("View your pending posts ↗", text(result.pendingContentUrl)));
+      if (permitted("moderate") && safeForumUrl(text(result.moderationUrl))) status.append(document.createTextNode(" "), link("Open moderation queue ↗", text(result.moderationUrl)));
+    } else {
+      report(text(result.message, result.publicationStatus === "published" ? "Published on the forum." : "Saved successfully."));
+      if (safeForumUrl(text(result.url))) status.append(document.createTextNode(" "), link("View on forum ↗", text(result.url)));
+    }
+  }
   async function write(name: string, args: RecordValue, key = newKey(), expectedPolicyVersion = connection.policyVersion) {
     if (typeof expectedPolicyVersion !== "number" || !Number.isSafeInteger(expectedPolicyVersion)) throw new Error("Refresh your forum connection before sending changes.");
     const result = await tool(name, { ...args, idempotencyKey: key, expectedPolicyVersion });
     if (result.status === "pending_approval") {
       const state = object(result.data).state;
       if (state === "expired" || state === "invalidated") throw new Error("This proposal is " + state + ". Open a new draft using the current connection settings.");
-      report("Saved for owner review. This action has not executed.");
-      if (safeForumUrl(text(result.approvalUrl))) status.append(document.createTextNode(" "), link("Review in Agent access ↗", text(result.approvalUrl)));
-    } else {
-      const data = object(result.data);
-      report(data.status === "pending" ? "Submitted to forum moderation." : "Saved successfully.");
     }
+    showActionResult(result);
     return result;
   }
   function openComposer(kind: string) {
@@ -747,10 +788,14 @@ export function forumPluginAppRuntime() {
           const result = await write(kind === "reply" ? "forum_create_reply" : kind === "message" ? "forum_send_private_message" : "forum_create_thread", args, key, draftPolicyVersion);
           composerDraft = null;
           if (result.status === "pending_approval") {
-            content.replaceChildren(element("h1", "Awaiting owner review"), element("p", "Your exact action was queued. The owner can approve it in Agent access."), link("Open Agent access ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")), button("Back to forum", () => run(() => navigate("recent"))));
+            content.replaceChildren(element("h1", "Awaiting owner review"), element("p", text(result.message, "Your exact action is queued and has not executed. Approve it in Agent access.")), link("Review this action ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")), button("Back to forum", () => run(() => navigate("recent"))));
           } else {
-            const data = object(result.data);
-            content.replaceChildren(element("h1", data.status === "pending" ? "Submitted to moderation" : "Message sent"), element("p", "Your action was saved as " + text(actingAs.username) + "."), button("Back to forum", () => run(() => navigate(kind === "message" ? "inbox" : "recent"))));
+            const pendingModeration = publicationStatus(result) === "pending_moderation";
+            content.replaceChildren(element("h1", pendingModeration ? "Awaiting moderator approval" : kind === "message" ? "Message sent" : "Published on the forum"), element("p", text(result.message, pendingModeration ? "Your post is saved but is not published yet. A forum moderator needs to approve it." : "Your action was saved as " + text(actingAs.username) + ".")));
+            const resultUrl = pendingModeration ? text(result.pendingContentUrl) : text(result.url);
+            if (safeForumUrl(resultUrl)) content.append(link(pendingModeration ? "View your pending posts ↗" : "View on forum ↗", resultUrl));
+            if (pendingModeration && permitted("moderate") && safeForumUrl(text(result.moderationUrl))) content.append(link("Open moderation queue ↗", text(result.moderationUrl)));
+            content.append(button("Back to forum", () => run(() => navigate(kind === "message" ? "inbox" : "recent"))));
           }
         } catch (error) {
           await handleStaleDraft(error);
@@ -789,7 +834,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.0.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.1.0" }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -808,14 +853,39 @@ export function forumPluginAppRuntime() {
   });
 }
 
+// Portable copy of the native forum tokens from app/globals.css. The parity test
+// checks both themes against that source; the sandbox cannot load site styles/fonts.
+const FORUM_PLUGIN_APP_LIGHT_THEME = `--background:0 0% 93%;--foreground:0 0% 3%;--card:0 0% 96%;--primary:319 100% 40%;--primary-foreground:0 0% 100%;--muted:0 0% 88%;--muted-foreground:0 0% 30%;--accent:174 54% 67%;--border:0 0% 72%;--input:0 0% 72%;--ring:174 54% 46%;--row-border:0 0% 64%;--accent-magenta:#fa00a8;--accent-cyan:#81d8d0;--accent-canary:#ffe14d`;
+const FORUM_PLUGIN_APP_DARK_THEME = `--background:0 0% 3%;--foreground:0 0% 98%;--card:0 0% 5%;--primary:319 100% 46%;--primary-foreground:0 0% 100%;--muted:0 0% 11%;--muted-foreground:0 0% 68%;--accent:174 54% 67%;--border:0 0% 18%;--input:0 0% 18%;--ring:174 54% 67%;--row-border:0 0% 22%`;
+
 export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SYMBaiEX Forum</title>
 <style>
-:root{color-scheme:light dark;--bg:#f5f4ef;--panel:#fff;--ink:#22291d;--muted:#626c59;--line:#d5dbcd;--accent:#4c6424;--accent-ink:#fff;--soft:#edf1e6;font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-@media(prefers-color-scheme:dark){:root{--bg:#141810;--panel:#1c2116;--ink:#e5ebdb;--muted:#a4b295;--line:#3c4630;--accent:#c7f181;--accent-ink:#19230b;--soft:#252e1d}}
-:root[data-theme=light]{color-scheme:light;--bg:#f5f4ef;--panel:#fff;--ink:#22291d;--muted:#626c59;--line:#d5dbcd;--accent:#4c6424;--accent-ink:#fff;--soft:#edf1e6}
-:root[data-theme=dark]{color-scheme:dark;--bg:#141810;--panel:#1c2116;--ink:#e5ebdb;--muted:#a4b295;--line:#3c4630;--accent:#c7f181;--accent-ink:#19230b;--soft:#252e1d}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}button,input,textarea,select{font:inherit}button,a,input,textarea,select{outline-offset:4px}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent)}button{cursor:pointer;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:8px 12px}button:hover{background:var(--soft)}button:disabled{opacity:.55;cursor:not-allowed}[hidden]{display:none!important}a{color:var(--accent);overflow-wrap:anywhere}h1{font-size:clamp(21px,3vw,30px);line-height:1.2;margin:0 0 12px;letter-spacing:-.03em}h2{font-size:18px;margin:0 0 6px}h3{font-size:16px}p{margin:5px 0 10px}#app{max-width:1600px;margin:0 auto;min-height:540px}.masthead{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;border-bottom:1px solid var(--line);background:var(--panel)}.brand{font:800 23px/1 ui-monospace,monospace;letter-spacing:-1px}.brand span{color:var(--accent)}.eyebrow{font:11px/1.4 ui-monospace,monospace;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}.mast-actions,.actions,.pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:650}.primary:hover{filter:brightness(.95);background:var(--accent)}.workspace{display:grid;grid-template-columns:190px minmax(0,1fr)}.sidebar{padding:22px 16px;border-right:1px solid var(--line);background:var(--panel)}#navigation{display:grid;gap:5px}#navigation button{text-align:left;border-color:transparent;background:transparent}#navigation button[aria-current=page]{border-color:var(--line);background:var(--soft);font-weight:650}.connection{border-top:1px solid var(--line);margin-top:24px;padding-top:18px;font-size:12px}.connection strong{display:block;margin-bottom:8px;overflow-wrap:anywhere}#mode{display:block;color:var(--muted);margin:6px 0 12px}.main{padding:24px 28px 100px;min-width:0}#search{display:flex;gap:8px;margin-bottom:20px}#query{flex:1;min-width:0}input,textarea,select{display:block;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:10px 12px;color:var(--ink)}textarea{resize:vertical;min-height:180px}.notice{border-left:3px solid var(--accent);padding:10px 14px;margin:0 0 18px;background:var(--soft);font-size:13px;overflow-wrap:anywhere}.notice:empty{display:none}.error{border-left-color:#c95e53}.muted{color:var(--muted);font-size:13px}.board-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}.board,.post,.row{padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:6px}.rows{display:grid;gap:8px}.board .row-title,.row-title{text-align:left;font-weight:650;border:0;background:transparent;padding:0;font-size:17px}.row-title:hover{text-decoration:underline;background:transparent}.excerpt{font-size:14px;color:var(--muted);overflow-wrap:anywhere}.post{margin-top:18px}.post-author{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:15px}.post-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}.badge{font:11px/1.4 ui-monospace,monospace;background:var(--soft);border:1px solid var(--line);border-radius:3px;padding:2px 6px}.pager{justify-content:center;margin-top:20px}.composer{display:grid;gap:18px;max-width:860px}.composer label{display:grid;gap:8px;font-weight:600}.composer .actions{margin-top:4px}.empty{padding:30px 18px;border:1px dashed var(--line);color:var(--muted)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-#app[data-display-mode=fullscreen]{min-height:100vh}.main:has(.composer){padding-bottom:130px}
-@media(max-width:680px){.masthead{padding:16px;align-items:flex-start}.brand{font-size:20px}.mast-actions{gap:5px;justify-content:flex-end}.mast-actions button{font-size:12px;padding:7px 9px}.workspace{display:block}.sidebar{padding:10px 12px;border-right:0;border-bottom:1px solid var(--line)}#navigation{display:flex;gap:3px;overflow-x:auto}#navigation button{white-space:nowrap;font-size:13px;padding:7px 9px}.connection{margin-top:8px;padding-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.connection strong,#mode{margin:0}.connection .eyebrow{display:none}.main{padding:18px 16px 110px}.board,.post,.row{padding:14px}.post-author{gap:7px}#search button{padding:8px}.notice{margin-bottom:14px}}
-</style></head><body><div id="app"><header class="masthead"><div><div class="eyebrow">Community / humans + agents</div><div class="brand">SYMB<span>ai</span>EX <span>FORUM</span></div></div><div class="mast-actions"><button id="expand" type="button" hidden>Expand forum</button><button id="compose" class="primary" type="button" hidden>New discussion</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Connection</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><div id="settings"></div></div></aside><main class="main"><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;
+/* Native forum palette and compact, square forum chrome. */
+:root{color-scheme:light;${FORUM_PLUGIN_APP_LIGHT_THEME};font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-feature-settings:"ss01","cv01","cv11","tnum"}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;${FORUM_PLUGIN_APP_DARK_THEME}}}
+:root[data-theme=light]{color-scheme:light;${FORUM_PLUGIN_APP_LIGHT_THEME}}
+:root[data-theme=dark]{color-scheme:dark;${FORUM_PLUGIN_APP_DARK_THEME}}
+*{box-sizing:border-box}body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground))}
+button,input,textarea,select{font:inherit}button,a,input,textarea,select{outline-offset:4px}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid hsl(var(--ring))}
+button{cursor:pointer;color:hsl(var(--foreground));background:hsl(var(--background));border:1px solid hsl(var(--row-border));border-radius:0;min-height:40px;padding:8px 12px;font:11px/1.4 ui-monospace,monospace;text-transform:uppercase;touch-action:manipulation}
+button:hover{background:hsl(var(--muted)/.4);border-color:hsl(var(--primary))}button:disabled{opacity:.55;cursor:not-allowed}[hidden]{display:none!important}
+a{color:hsl(var(--foreground));text-underline-offset:3px;overflow-wrap:anywhere}a:hover{color:hsl(var(--primary))}
+h1{font-size:clamp(24px,3vw,36px);line-height:1.05;margin:0 0 10px;letter-spacing:-.03em;overflow-wrap:anywhere;text-wrap:balance}h2{font-size:18px;margin:0 0 6px}h3{font-size:16px}p{margin:5px 0 10px}
+#app{max-width:1280px;margin:0 auto;min-height:540px}.masthead{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;border-bottom:1px solid hsl(var(--row-border))}
+.brand{font:800 25px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:-1px}.brand .brand-ai{color:hsl(var(--primary))}.brand .brand-forum{font:12px/1.4 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;margin-left:8px;color:hsl(var(--muted-foreground))}
+.eyebrow{font:10px/1.4 ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:7px}.mast-actions,.actions,.pager{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.primary{background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-color:hsl(var(--primary));font-weight:600}.primary:hover{filter:brightness(.94);background:hsl(var(--primary))}
+.workspace{display:block}.sidebar{padding:8px 24px 0;border-bottom:1px solid hsl(var(--row-border))}#navigation{display:flex;gap:4px;flex-wrap:wrap}#navigation button{border-color:transparent;background:transparent;color:hsl(var(--muted-foreground));padding:8px 10px}#navigation button:hover{border-color:hsl(var(--row-border));color:hsl(var(--foreground))}#navigation button[aria-current=page]{border-color:hsl(var(--row-border));color:hsl(var(--foreground));background:hsl(var(--muted)/.4);font-weight:600}
+.connection{border-top:1px solid hsl(var(--row-border));margin-top:8px;padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font:10px/1.5 ui-monospace,monospace;text-transform:uppercase}.connection .eyebrow{margin:0}.connection strong{overflow-wrap:anywhere;font-weight:600}#mode{color:hsl(var(--muted-foreground));border-left:1px solid hsl(var(--row-border));padding-left:10px}#settings{margin-left:auto}#connection-owner{color:hsl(var(--muted-foreground))}.posting-trust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;color:hsl(var(--muted-foreground))}.posting-trust a{white-space:nowrap}
+.main{padding:22px 24px 64px;min-width:0}#search{display:flex;gap:0;margin-bottom:20px}#query{flex:1;min-width:0}#search button{border-left:0}
+input,textarea,select{display:block;width:100%;min-width:0;background:hsl(var(--background));border:1px solid hsl(var(--input));border-radius:0;padding:10px 12px;color:hsl(var(--foreground));min-height:40px}input::placeholder,textarea::placeholder{color:hsl(var(--muted-foreground))}textarea{resize:vertical;min-height:180px}
+.notice{border-top:1px solid hsl(var(--row-border));border-bottom:1px solid hsl(var(--row-border));padding:10px 12px;margin:0 0 18px;background:hsl(var(--accent)/.08);font-size:13px;overflow-wrap:anywhere}.notice:empty{display:none}.error{border-color:var(--accent-magenta);background:hsl(var(--primary)/.06)}.muted{color:hsl(var(--muted-foreground));font:11px/1.5 ui-monospace,monospace}
+.board-index,.rows{border-top:1px solid hsl(var(--row-border));border-bottom:1px solid hsl(var(--row-border));margin-top:16px}.board,.row{padding:12px;border-bottom:1px solid hsl(var(--row-border));background:hsl(var(--background));min-width:0}.board:last-child,.row:last-child{border-bottom:0}.board:nth-child(odd),.row:nth-child(odd){background:hsl(var(--muted)/.15)}.board{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center}.board-description{min-width:0}.board-counts{display:flex;gap:24px;margin:0;min-width:120px;text-align:center}.board-counts dt{font:10px/1.5 ui-monospace,monospace;text-transform:uppercase;color:hsl(var(--muted-foreground))}.board-counts dd{margin:4px 0 0;font-weight:600;font-variant-numeric:tabular-nums}
+.board .row-title,.row-title{text-align:left;font:600 14px/1.5 ui-sans-serif,system-ui,sans-serif;text-transform:none;border:0;background:transparent;padding:0;min-height:36px;overflow-wrap:anywhere}.row-title:hover{color:hsl(var(--primary));background:transparent}.excerpt{font-size:13px;color:hsl(var(--muted-foreground));overflow-wrap:anywhere;margin-bottom:0}
+.post{display:grid;grid-template-columns:160px minmax(0,1fr);margin-top:16px;border:1px solid hsl(var(--row-border));background:hsl(var(--background));min-width:0}.post-author{display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:hsl(var(--muted)/.15);border-right:1px solid hsl(var(--row-border));padding:16px;overflow-wrap:anywhere}.post-author strong{font-size:13px}.post-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}.post>.post-body{padding:16px;min-width:0}.post>a,.post>.badge{grid-column:2;margin:0 16px 16px}.badge{font:10px/1.4 ui-monospace,monospace;text-transform:uppercase;background:hsl(var(--muted)/.25);border:1px solid hsl(var(--row-border));border-radius:0;padding:3px 6px}
+.pager{justify-content:center;margin-top:20px}.composer{display:grid;gap:18px;max-width:860px;border-top:1px solid hsl(var(--row-border));padding-top:16px}.composer label{display:grid;gap:8px;font:11px/1.5 ui-monospace,monospace;text-transform:uppercase}.composer input,.composer select,.composer textarea{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;text-transform:none}.composer .actions{margin-top:4px}.attachments{border-block:1px solid hsl(var(--row-border));padding:12px 0}.empty{padding:22px 12px;border-block:1px solid hsl(var(--row-border));color:hsl(var(--muted-foreground))}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#app[data-display-mode=fullscreen]{min-height:100vh}.main:has(.composer){padding-bottom:100px}
+@media(max-width:680px){.masthead{padding:16px 12px;align-items:flex-start;gap:8px}.brand{font-size:22px}.brand .brand-forum{display:block;margin:7px 0 0;font-size:10px}.mast-actions{gap:5px;justify-content:flex-end}.mast-actions button{font-size:10px;padding:7px 9px}.sidebar{padding:8px 12px 0}#navigation{flex-wrap:nowrap;overflow-x:auto}#navigation button{white-space:nowrap;padding:7px 9px}.connection{gap:8px}.connection .eyebrow{display:none}#mode{border-left:0;padding:0}#settings{margin-left:0}.main{padding:18px 12px 64px}input,textarea,select,.composer input,.composer select,.composer textarea{font-size:16px}.board,.row{padding:10px}.board{grid-template-columns:minmax(0,1fr);gap:8px}.board-counts{justify-content:flex-start;gap:20px;text-align:left}.board-counts div{display:flex;align-items:baseline;gap:6px}.board-counts dd{margin:0}.post{display:block}.post-author{flex-direction:row;align-items:center;flex-wrap:wrap;border-right:0;border-bottom:1px solid hsl(var(--row-border));padding:10px 12px;gap:8px}.post>.post-body{padding:12px}.notice{margin-bottom:14px}}
+</style></head><body><div id="app"><header class="masthead"><div><div class="eyebrow">Community / humans + agents</div><div class="brand" aria-label="SYMBaiEX Forum">SYMB<span class="brand-ai">ai</span>EX <span class="brand-forum">Forum</span></div></div><div class="mast-actions"><button id="expand" type="button" hidden>Expand forum</button><button id="compose" class="primary" type="button" hidden>New discussion</button></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></aside><main class="main"><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Find discussions, ideas, research…" maxlength="500" required><button type="submit">Search</button></form><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;

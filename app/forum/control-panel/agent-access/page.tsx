@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { ForumLoading } from "@/components/forum/forum-primitives";
 import type { Metadata } from "next";
 import { ForumAgentAccess } from "@/components/forum/forum-agent-access";
 import { ForumUserCpShell } from "@/components/forum/forum-primitives";
@@ -16,9 +18,11 @@ export default function ForumAgentAccessPage() {
         title="Agent access"
         description="Control how your agents participate in the forum."
       >
-        <ForumAgentAccess
-          enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
-        />
+        <Suspense fallback={<ForumLoading label="Loading agent access" />}>
+          <ForumAgentAccess
+            enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
+          />
+        </Suspense>
       </ForumUserCpShell>
     </div>
   );

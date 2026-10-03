@@ -26,6 +26,9 @@ const rejectRef = makeFunctionReference<"mutation">(
   "forumPlugin:rejectCommand",
 );
 const listRef = makeFunctionReference<"query">("forumPlugin:listCommands");
+const pendingContentRef = makeFunctionReference<"query">(
+  "forumPlugin:listMyPendingContent",
+);
 const uploadRef = makeFunctionReference<"mutation">(
   "forumPlugin:claimPluginAttachmentUpload",
 );
@@ -203,6 +206,41 @@ function call(
 }
 
 describe("forum plugin domain transactions", () => {
+  test("reply publication receipts retain the canonical post target after editing", async () => {
+    const t = setup();
+    const seed = await fixture(t);
+    const owner = t.withIdentity({ subject: seed.owner });
+    const reply = await owner.mutation(
+      executeRef,
+      call(
+        seed,
+        "createReply",
+        {
+          threadId: seed.thread,
+          body: "A published reply.",
+        },
+        "reply-first",
+      ),
+    );
+    expect(reply.publicationStatus).toBe("published");
+    expect(reply.url).toBe(
+      `https://forum.symbaiex.com/square/discussion#post-${reply.data.postNumber}`,
+    );
+    const edited = await owner.mutation(
+      executeRef,
+      call(
+        seed,
+        "updatePostContent",
+        {
+          postId: reply.data.postId,
+          body: "A revised published reply.",
+        },
+        "reply-edit",
+      ),
+    );
+    expect(edited.publicationStatus).toBe("published");
+    expect(edited.url).toBe(reply.url);
+  });
   test.each(["agent", "human"] as const)(
     "posts as %s, spends automation quota once, preserves first-party author",
     async (mode) => {
@@ -217,6 +255,11 @@ describe("forum plugin domain transactions", () => {
       const first = await owner.mutation(executeRef, input);
       expect(first.status).toBe("completed");
       expect(first.data.status).toBe("active");
+      expect(first.publicationStatus).toBe("published");
+      expect(first.message).toBe("Published in the forum.");
+      expect(first.url).toBe(
+        "https://forum.symbaiex.com/square/plugin-discussion",
+      );
       const second = await owner.mutation(executeRef, input);
       expect(second).toEqual(first);
       await t.run(async (ctx) => {
@@ -282,42 +325,312 @@ describe("forum plugin domain transactions", () => {
       ),
     ).rejects.toThrow("Connect an active");
   });
-  test("owner trust and both owner/agent restrictions apply", async () => {
+  test.each(["human", "agent"] as const)(
+    "owner trust and both owner/agent restrictions apply in %s mode",
+    async (mode) => {
+      const t = setup();
+      const seed = await fixture(t, mode);
+      const owner = t.withIdentity({ subject: seed.owner });
+      const trustedStatus = await owner.mutation(readRef, {
+        connectionId: seed.connectionId,
+        operation: "status",
+        args: {},
+      });
+      expect(trustedStatus.data).toMatchObject({
+        postingTrust: "trusted",
+        ownerProfile: { userId: seed.owner, username: "owner" },
+      });
+      await t.run(async (ctx) => {
+        await ctx.db.patch("users", seed.owner, {
+          forumTrustRevokedAt: Date.now(),
+          forumTrustedAt: undefined,
+        });
+        await ctx.db.patch("forumCategories", seed.board, {
+          threadAccess: "members",
+        });
+      });
+      const moderatedStatus = await owner.mutation(readRef, {
+        connectionId: seed.connectionId,
+        operation: "status",
+        args: {},
+      });
+      expect(moderatedStatus.data.postingTrust).toBe("moderated");
+      expect(moderatedStatus.data.postingNotice).toContain(
+        "even in Direct execution",
+      );
+      const pending = await owner.mutation(
+        executeRef,
+        call(seed, "createThread", {
+          categorySlug: "square",
+          title: "Pending post",
+          body: "Please review this post.",
+        }),
+      );
+      expect(pending.data.status).toBe("pending");
+      expect(pending).toMatchObject({
+        status: "completed",
+        publicationStatus: "pending_moderation",
+        pendingContentUrl:
+          "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+        moderationUrl: "https://forum.symbaiex.com/moderation",
+      });
+      expect(pending.message).toContain("not published yet");
+      await t.run(async (ctx) =>
+        ctx.db.patch("users", seed.agent, { forumBannedAt: Date.now() }),
+      );
+      await expect(
+        owner.mutation(
+          executeRef,
+          call(
+            seed,
+            "setThreadBookmark",
+            { threadId: seed.thread, saved: true },
+            "restricted",
+          ),
+        ),
+      ).rejects.toThrow("restricted");
+    },
+  );
+  test("human owners find moderated content from owned profiles without gaining staff authority", async () => {
     const t = setup();
     const seed = await fixture(t);
     const owner = t.withIdentity({ subject: seed.owner });
     await t.run(async (ctx) => {
-      await ctx.db.patch("users", seed.owner, {
-        forumTrustRevokedAt: Date.now(),
-        forumTrustedAt: undefined,
+      const now = Date.now();
+      const restrictedBoard = await ctx.db.insert("forumCategories", {
+        slug: "staff-only",
+        name: "Staff",
+        description: "Restricted",
+        kind: "board",
+        status: "active",
+        viewAccess: "staff",
+        position: 2,
+        threadCount: 0,
+        postCount: 0,
+        createdAt: now,
+        updatedAt: now,
       });
-      await ctx.db.patch("forumCategories", seed.board, {
-        threadAccess: "members",
+      for (const [authorId, categoryId, slug] of [
+        [seed.owner, seed.board, "human-pending"],
+        [seed.agent, seed.board, "agent-pending"],
+        [seed.stranger, seed.board, "stranger-pending"],
+        [seed.agent, restrictedBoard, "hidden-agent-pending"],
+      ] as const) {
+        await ctx.db.insert("forumThreads", {
+          authorId,
+          categoryId,
+          categorySlug: categoryId === seed.board ? "square" : "staff-only",
+          slug,
+          title: slug,
+          body: "Sample pending content ".repeat(40),
+          searchText: slug,
+          status: "pending",
+          pinned: false,
+          replyCount: 0,
+          viewCount: 0,
+          lastPostAt: now,
+          lastPostUserId: authorId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      await ctx.db.insert("forumPosts", {
+        authorId: seed.agent,
+        categoryId: seed.board,
+        threadId: seed.thread,
+        body: "Pending agent reply",
+        postNumber: 2,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("forumPosts", {
+        authorId: seed.owner,
+        categoryId: seed.board,
+        threadId: seed.thread,
+        body: "Pending owner reply",
+        postNumber: 3,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      });
+      // Historic submissions remain inspectable even after disconnecting an agent.
+      await ctx.db.patch("agentIdentities", seed.credential, {
+        status: "revoked",
       });
     });
-    const pending = await owner.mutation(
-      executeRef,
-      call(seed, "createThread", {
-        categorySlug: "square",
-        title: "Pending post",
-        body: "Please review this post.",
-      }),
+    const result = await owner.query(pendingContentRef, {});
+    expect(result.items).toHaveLength(4);
+    expect(result.items.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["human-pending", "agent-pending", "Discussion"]),
     );
-    expect(pending.data.status).toBe("pending");
-    await t.run(async (ctx) =>
-      ctx.db.patch("users", seed.agent, { forumBannedAt: Date.now() }),
+    expect(
+      result.items.every((item: { body: string }) => item.body.length <= 500),
+    ).toBe(true);
+    expect(
+      result.items.filter(
+        (item: { actingAs: { isAgent: boolean } }) => item.actingAs.isAgent,
+      ),
+    ).toHaveLength(2);
+    expect(
+      result.items.every(
+        (item: { categoryName: string }) => item.categoryName === "Square",
+      ),
+    ).toBe(true);
+    await expect(t.query(pendingContentRef, {})).rejects.toThrow(
+      "human account",
     );
     await expect(
-      owner.mutation(
-        executeRef,
-        call(
-          seed,
-          "setThreadBookmark",
-          { threadId: seed.thread, saved: true },
-          "restricted",
+      t.withIdentity({ subject: seed.agent }).query(pendingContentRef, {}),
+    ).rejects.toThrow("human account");
+    expect(
+      (
+        await t
+          .withIdentity({ subject: seed.stranger })
+          .query(pendingContentRef, {})
+      ).items,
+    ).toHaveLength(1);
+    for (const status of ["hidden", "deleted", "pending"] as const) {
+      await t.run(async (ctx) => {
+        await ctx.db.patch("forumThreads", seed.thread, { status });
+      });
+      const withoutUnavailableParents = await owner.query(
+        pendingContentRef,
+        {},
+      );
+      expect(withoutUnavailableParents.items).toHaveLength(2);
+      expect(
+        withoutUnavailableParents.items.every(
+          (item: { kind: string }) => item.kind === "thread",
         ),
-      ),
-    ).rejects.toThrow("restricted");
+      ).toBe(true);
+      expect(
+        withoutUnavailableParents.items.some(
+          (item: { title: string }) => item.title === "Discussion",
+        ),
+      ).toBe(false);
+    }
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumThreads", seed.thread, { status: "active" });
+    });
+    const hiddenParent = await t.run(
+      async (ctx) =>
+        (await ctx.db
+          .query("forumCategories")
+          .withIndex("by_slug", (q) => q.eq("slug", "staff-only"))
+          .unique())!._id,
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", seed.board, {
+        parentCategoryId: hiddenParent,
+      });
+    });
+    expect((await owner.query(pendingContentRef, {})).items).toHaveLength(0);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumCategories", seed.board, {
+        parentCategoryId: undefined,
+      });
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("users", seed.agent, { forumBannedAt: Date.now() });
+    });
+    expect((await owner.query(pendingContentRef, {})).items).toHaveLength(2);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("users", seed.owner, {
+        forumSuspendedUntil: Date.now() + 60_000,
+      });
+    });
+    expect(await owner.query(pendingContentRef, {})).toEqual({
+      items: [],
+      limited: false,
+      restricted: true,
+    });
+  });
+  test("owner pending content inspection reports a bounded scan instead of claiming a complete queue", async () => {
+    const t = setup();
+    const seed = await fixture(t, "human");
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 25; index++) {
+        const now = Date.now() + index;
+        await ctx.db.insert("forumPosts", {
+          authorId: seed.owner,
+          categoryId: seed.board,
+          threadId: seed.thread,
+          body: `Pending ${index}`,
+          postNumber: index + 2,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+    const result = await t
+      .withIdentity({ subject: seed.owner })
+      .query(pendingContentRef, {});
+    expect(result.items).toHaveLength(12);
+    expect(result.limited).toBe(true);
+    expect(result.items[0].body).toBe("Pending 24");
+  });
+  test("owner queue bounds full-size thread and reply reads before returning excerpts", async () => {
+    const t = setup();
+    const seed = await fixture(t, "human");
+    await t.run(async (ctx) => {
+      const body = "\u0800".repeat(64_000);
+      for (let index = 0; index < 20; index++) {
+        const now = Date.now() + index;
+        const common = {
+          authorId: seed.owner,
+          categoryId: seed.board,
+          categorySlug: "square",
+          body,
+          searchText: body,
+          pinned: false,
+          replyCount: 0,
+          viewCount: 0,
+          lastPostAt: now,
+          lastPostUserId: seed.owner,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await ctx.db.insert("forumThreads", {
+          ...common,
+          slug: `large-pending-${index}`,
+          title: "Large pending thread",
+          status: "pending",
+        });
+        const parent = await ctx.db.insert("forumThreads", {
+          ...common,
+          authorId: seed.stranger,
+          slug: `large-parent-${index}`,
+          title: "Large reply parent",
+          status: "active",
+        });
+        await ctx.db.insert("forumPosts", {
+          authorId: seed.owner,
+          categoryId: seed.board,
+          threadId: parent,
+          body: body.slice(0, 32_000),
+          postNumber: 2,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+    const result = await t
+      .withIdentity({ subject: seed.owner })
+      .query(pendingContentRef, {});
+    expect(result.items).toHaveLength(24);
+    expect(
+      result.items.filter((item: { kind: string }) => item.kind === "thread"),
+    ).toHaveLength(12);
+    expect(
+      result.items.filter((item: { kind: string }) => item.kind === "reply"),
+    ).toHaveLength(12);
+    expect(
+      result.items.every((item: { body: string }) => item.body.length === 500),
+    ).toBe(true);
+    expect(result.limited).toBe(true);
   });
   test("multiple selected agents share one owner vote and cannot rate sibling content", async () => {
     const t = setup();
@@ -404,6 +717,10 @@ describe("forum plugin domain transactions", () => {
       call(seed, "setThreadBookmark", { threadId: seed.thread, saved: true }),
     );
     expect(proposal.status).toBe("pending_approval");
+    expect(proposal.approvalUrl).toBe(
+      `https://forum.symbaiex.com/control-panel/agent-access?commandId=${proposal.commandId}#review-queue`,
+    );
+    expect(proposal.message).toContain("has not executed");
     await t.run(async (ctx) => {
       expect(await ctx.db.query("forumThreadBookmarks").collect()).toHaveLength(
         0,

@@ -55,7 +55,26 @@ export type ForumProposal = {
   createdAt: number;
   expiresAt: number;
 };
+export type ForumPendingAgentContent = {
+  items: Array<{
+    id: string;
+    kind: "thread" | "reply";
+    title: string;
+    body: string;
+    categoryName: string;
+    actingAs: ForumPluginIdentity;
+    createdAt: number;
+    url: string;
+  }>;
+  limited: boolean;
+  restricted?: boolean;
+};
 export const forumPluginRefs = {
+  listMyPendingContent: makeFunctionReference<
+    "query",
+    Record<string, never>,
+    ForumPendingAgentContent
+  >("forumPlugin:listMyPendingContent"),
   listMyConnections: makeFunctionReference<
     "query",
     Record<string, never>,

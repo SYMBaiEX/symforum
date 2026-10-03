@@ -11,7 +11,7 @@ From the repository root:
 ```sh
 bun plugins/symbaiex/validate.mjs
 mkdir -p tmp
-(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.1.0.zip plugin.json mcp.json assets skills)
+(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.1.1.zip plugin.json mcp.json assets skills)
 ```
 
 See `docs/forum-plugin-release.md` for the release workflow. The ZIP excludes this README, local validation script and private reviewer instructions. Re-run review cases against the deployed tool catalog before submission.

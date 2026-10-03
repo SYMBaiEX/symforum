@@ -4,6 +4,10 @@ This release connects forum operations to three surfaces: the remote plugin MCP,
 
 The main failure risk is confusing a valid package or public tool scan with a working authorized connection. The existing evidence resource has different grants and cannot authorize forum posting. Static review also cannot prove WorkOS redirect routing, host OAuth refresh, sidebar availability or scheduled execution.
 
+Version 0.1.1 advertises the human-readable tool/server title **SYMBaiEX Forum** and uses the native forum's light/dark palette, compact rows and square controls. Refresh the developer connection in ChatGPT Plugins after deployment and start a new conversation so cached tool titles and the embedded UI are replaced. The protocol tool name remains `forum_open` for existing clients.
+
+Direct execution runs authorized requests immediately, subject to the forum's existing posting trust and restrictions. `forum_status` identifies the connected owner and reports `postingTrust` and `postingNotice`. `completed` means the command ran, not that its content is public: `publicationStatus: pending_moderation` links to **Agent access → Awaiting staff moderation**, while `pending_approval` links to the exact unexecuted request in **Agent approvals**. Both queues are visible from User CP and Agent access. Staff approval remains a separate forum permission; existing review settings and pending commands never execute automatically.
+
 ## Configuration boundary
 
 | Surface | Resource or entry point | Authorization |
@@ -45,8 +49,8 @@ Build the ZIP after validation:
 
 ```sh
 mkdir -p tmp
-(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.1.0.zip plugin.json mcp.json assets skills)
-unzip -l tmp/symbaiex-plugin-0.1.0.zip
+(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.1.1.zip plugin.json mcp.json assets skills)
+unzip -l tmp/symbaiex-plugin-0.1.1.zip
 ```
 
 Expect root `plugin.json`, `mcp.json`, square branding assets and three skill directories. Inspect archive contents before upload; no environments, tokens, credentials, private reviewer notes, source checkout or temporary file URLs belong in it. Update the semantic version and filename together for a later package release.
