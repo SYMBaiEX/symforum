@@ -289,7 +289,7 @@ function SiteHeader({
 }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-row-border/70 bg-background/92 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 md:min-h-15 md:px-8">
+      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 md:min-h-[3.75rem] md:px-8">
         <div className="flex min-w-0 items-center">
           <SiteSurfaceSwitcher
             activeSurface="blog"
