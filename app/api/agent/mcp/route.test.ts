@@ -180,6 +180,7 @@ describe("evidence MCP endpoint", () => {
       ),
     );
     const readPayload = await read.json();
+    for (const field of ["resultType", "ttlMs", "cacheScope"]) expect(readPayload.result).not.toHaveProperty(field);
     expect(readPayload.result.contents[0].text).toContain(
       "ui/notifications/tool-result",
     );
@@ -250,7 +251,9 @@ describe("evidence MCP endpoint", () => {
       modernRequest("resources/read", body, "2026-07-28", uri),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).result.contents[0].uri).toBe(uri);
+    const result = (await response.json()).result;
+    expect(result.contents[0].uri).toBe(uri);
+    expect(result).toMatchObject({ resultType: "complete", ttlMs: 300_000, cacheScope: "public" });
   });
 
   test("returns a deterministic modern tools list with explicit cache hints", async () => {

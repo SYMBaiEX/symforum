@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const SERVER_INFO = {
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
-  version: "1.8.0",
+  version: "1.8.1",
   icons: [FORUM_PLUGIN_ICON],
 };
 const instructions =
@@ -232,7 +232,12 @@ export async function POST(request: Request) {
       request,
       protocol,
       id,
-      resultEnvelope(protocol, { resources: [FORUM_PLUGIN_APP_RESOURCE] }),
+      resultEnvelope(protocol, {
+        resources: [FORUM_PLUGIN_APP_RESOURCE],
+        ...(protocol === "modern"
+          ? { ttlMs: 300_000, cacheScope: "public" }
+          : {}),
+      }),
     );
   if (body.method === "resources/read") {
     if (params.uri !== FORUM_PLUGIN_APP_URI)
@@ -248,6 +253,10 @@ export async function POST(request: Request) {
         contents: [
           { ...FORUM_PLUGIN_APP_RESOURCE, text: FORUM_PLUGIN_APP_HTML },
         ],
+        // This shell is identical for every caller; personal content loads via tools.
+        ...(protocol === "modern"
+          ? { ttlMs: 300_000, cacheScope: "public" }
+          : {}),
       }),
     );
   }

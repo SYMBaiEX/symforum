@@ -63,7 +63,7 @@ describe("forum MCP protocol boundary", () => {
   test("advertises canonical entrypoints and preserves resource-only display preferences", async () => {
     const initialized = await POST(request("initialize", { protocolVersion: "2025-06-18" }));
     const server = (await initialized.json()).result.serverInfo;
-    expect(server).toMatchObject({ name: "symbaiex-forum", version: "1.8.0" });
+    expect(server).toMatchObject({ name: "symbaiex-forum", version: "1.8.1" });
     const listed = await POST(request("tools/list"));
     const tools = (await listed.json()).result.tools;
     const opener = tools.find((tool: { name: string }) => tool.name === "forum_open");
@@ -115,7 +115,7 @@ describe("forum MCP protocol boundary", () => {
     const meta = protocol === "modern" ? { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } : {};
     const headers = protocol === "modern" ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "forum_open" } : undefined;
     const response = await POST(request("tools/call", { name: "forum_open", arguments: {}, ...meta }, undefined, headers));
-    expect(response.headers.get("Mcp-Server-Version")).toBe("1.8.0");
+    expect(response.headers.get("Mcp-Server-Version")).toBe("1.8.1");
     expect(await response.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: null, data: {} } } });
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
@@ -372,6 +372,40 @@ describe("forum MCP protocol boundary", () => {
       'error="invalid_token"',
     );
   });
+  test.each(["tools/list", "resources/list", "resources/read"])(
+    "modern %s supplies scan-required cache metadata for its static public response",
+    async (method) => {
+      const response = await POST(request(method, {
+        ...(method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}),
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      }, undefined, {
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": method,
+        ...(method === "resources/read" ? { "mcp-name": "ui://symbaiex/forum.html" } : {}),
+      }));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("mcp-protocol-version")).toBe("2026-07-28");
+      const { result, error } = await response.json();
+      expect(error).toBeUndefined();
+      expect(result).toMatchObject({ resultType: "complete", ttlMs: 300_000, cacheScope: "public" });
+      expect(result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("symbaiex-forum");
+      if (method === "resources/read") expect(result.contents[0].text).toContain("<!doctype html>");
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+  test.each(["tools/list", "resources/list", "resources/read"])(
+    "legacy %s retains its original envelope without modern cache metadata",
+    async (method) => {
+      const response = await POST(request(method, method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}));
+      expect(response.status).toBe(200);
+      const { result } = await response.json();
+      for (const field of ["resultType", "ttlMs", "cacheScope"]) expect(result).not.toHaveProperty(field);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
   test("validates modern transport headers and preserves JSON-RPC response correlation", async () => {
     const meta = {
       "io.modelcontextprotocol/protocolVersion": "2026-07-28",
@@ -393,7 +427,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.8.0",
+            version: "1.8.1",
           },
         },
       },

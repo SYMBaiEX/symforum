@@ -310,6 +310,9 @@ export async function POST(request: Request) {
           _meta: MCP_APP_RESOURCE._meta,
         },
       ],
+      ...(protocol === "modern"
+        ? { ttlMs: TOOL_LIST_TTL_MS, cacheScope: "public" }
+        : {}),
     });
   }
 
