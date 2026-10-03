@@ -4696,6 +4696,63 @@ describe("forum privacy regressions", () => {
     ).toMatchObject({ categoryName: "Public Square" });
   });
 
+  test("overview preserves visibility for newest threads beyond the category cap", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const [publicThreadId, trustedThreadId] = await t.run(async (ctx) => {
+      for (let index = 0; index < 198; index += 1) {
+        await insertCategory(ctx, {
+          slug: `overview-fill-${index}`,
+          name: `Overview filler ${index}`,
+          viewAccess: "public",
+          position: 30 + index,
+          now: 1_800_000_000_010 + index,
+        });
+      }
+      const publicCategoryId = await insertCategory(ctx, {
+        slug: "overflow-public",
+        name: "Overflow Public",
+        viewAccess: "public",
+        position: 10_000,
+        now: 1_800_000_000_300,
+      });
+      const trustedCategoryId = await insertCategory(ctx, {
+        slug: "overflow-trusted",
+        name: "Overflow Trusted",
+        viewAccess: "trusted",
+        position: 10_001,
+        now: 1_800_000_000_301,
+      });
+      return await Promise.all([
+        insertThread(ctx, {
+          categoryId: publicCategoryId,
+          categorySlug: "overflow-public",
+          slug: "public-outside-category-window",
+          title: "Public overflow thread",
+          body: "This public thread remains visible outside the category window.",
+          authorId: seed.trustedUserId,
+          now: 1_800_000_000_100,
+        }),
+        insertThread(ctx, {
+          categoryId: trustedCategoryId,
+          categorySlug: "overflow-trusted",
+          slug: "trusted-outside-category-window",
+          title: "Trusted overflow thread",
+          body: "This trusted thread remains hidden from guests.",
+          authorId: seed.trustedUserId,
+          now: 1_800_000_000_200,
+        }),
+      ]);
+    });
+
+    const overview = await t.query(api.forum.overview, {});
+
+    expect(overview.newestThreads[0]?._id).toBe(publicThreadId);
+    expect(
+      overview.newestThreads.map((thread: ForumThreadResult) => thread._id),
+    ).not.toContain(trustedThreadId);
+  });
+
   test("search filters protected boards for keyword and author searches", async () => {
     const t = setup();
     const seed = await seedForum(t);
@@ -4742,6 +4799,44 @@ describe("forum privacy regressions", () => {
         .map((post: ForumPostResult) => post.categorySlug)
         .sort(),
     ).toEqual(["public-square", "trusted-lab"]);
+  });
+
+  test("category-scoped search reuses its authorized category on both index paths", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    const guestSearch = () =>
+      t.query(api.forum.search, {
+        query: "lunar",
+        categorySlug: "trusted-lab",
+        pageSize: 10,
+      });
+    await expect(guestSearch()).rejects.toThrow("That board is not available.");
+
+    const asTrusted = t.withIdentity({
+      subject: seed.trustedUserId,
+      name: "Trusted Author",
+    });
+    const scopedSearch = async () =>
+      await asTrusted.query(api.forum.search, {
+        query: "lunar",
+        categorySlug: "trusted-lab",
+        pageSize: 10,
+      });
+    const expectTrustedResults = (
+      result: Awaited<ReturnType<typeof scopedSearch>>,
+    ) => {
+      expect(
+        result.threads.map((thread: ForumThreadResult) => thread.categorySlug),
+      ).toEqual(["trusted-lab"]);
+      expect(
+        result.posts.map((post: ForumPostResult) => post.categorySlug),
+      ).toEqual(["trusted-lab"]);
+    };
+
+    expectTrustedResults(await scopedSearch());
+    await completeForumSearchProjectionBackfill(t);
+    expectTrustedResults(await scopedSearch());
+    await expect(guestSearch()).rejects.toThrow("That board is not available.");
   });
 
   test("small relevance pages expand past private candidates without exposing them", async () => {
