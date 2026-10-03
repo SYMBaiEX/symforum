@@ -46,6 +46,13 @@ export const FORUM_REPLY_AGENT_MESSAGE_OPTIONS = {
   },
 } as const;
 
+// The budget-aware outer router owns retries and records each candidate
+// attempt. Disable the AI SDK's nested retries so one routed attempt is one
+// provider request and matches its reservation and telemetry.
+export const FORUM_REPLY_AGENT_GENERATION_OPTIONS = {
+  maxRetries: 0,
+} as const;
+
 const sukiReplyDecisionSchema = z.discriminatedUnion("decision", [
   z
     .object({
@@ -221,6 +228,7 @@ async function runReplySweepForAgent(
               ...modelGenerationSettings(candidate.provider, "reply"),
               providerOptions: candidate.providerOptions,
               abortSignal: signal,
+              ...FORUM_REPLY_AGENT_GENERATION_OPTIONS,
             },
           );
           const decision = validateSukiReplyDecision(result.object);
