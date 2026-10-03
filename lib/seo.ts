@@ -1,6 +1,8 @@
 import { forumSiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
-export const SITE_NAME = "Austin Hamilton (SYMBiEX)";
+export const SITE_NAME = "SYMBaiEX — Austin Hamilton";
+export const SITE_DESCRIPTION =
+  "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.";
 export const AUTHOR_NAME = "Austin Hamilton";
 export const AUTHOR_URL = `${PRIMARY_SITE_URL}/about`;
 
@@ -141,8 +143,7 @@ export function siteStructuredData({
         "@id": `${PRIMARY_SITE_URL}#homepage`,
         name: SITE_NAME,
         url: PRIMARY_SITE_URL,
-        description:
-          "Austin Hamilton's public engineering, AI-systems, open-source, and source-grounded research publication.",
+        description: SITE_DESCRIPTION,
         speakable: {
           "@type": "SpeakableSpecification",
           cssSelector: [".agent-ready-summary", ".agent-ready-usage"],

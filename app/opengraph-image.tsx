@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const alt =
-  "SYMBaiEX — Austin Hamilton. Software engineering, AI systems, daily Hacker News notes.";
+  "SYMBaiEX wordmark and Austin Hamilton's name on a dark background.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

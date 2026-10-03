@@ -16,6 +16,7 @@ import {
 import {
   AUTHOR_NAME,
   AUTHOR_URL,
+  SITE_DESCRIPTION,
   SITE_NAME,
   siteStructuredData,
   serializeJsonLd,
@@ -36,16 +37,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const description =
-  "A high-contrast personal blog for Austin Hamilton, software engineering, AI systems, and daily Hacker News notes.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(PRIMARY_SITE_URL),
   title: {
     default: SITE_NAME,
     template: "%s | Austin Hamilton",
   },
-  description,
+  description: SITE_DESCRIPTION,
   applicationName: "SYMBaiEX",
   authors: [{ name: AUTHOR_NAME, url: AUTHOR_URL }],
   creator: AUTHOR_NAME,
@@ -81,15 +79,15 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    siteName: "Austin Hamilton (SYMBiEX)",
-    title: "Austin Hamilton (SYMBiEX)",
-    description,
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "SYMBaiEX — Austin Hamilton. Software engineering, AI systems, daily Hacker News notes.",
+        alt: "SYMBaiEX wordmark and Austin Hamilton's name on a dark background.",
       },
     ],
     type: "website",
@@ -98,14 +96,14 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Austin Hamilton (SYMBiEX)",
-    description,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "SYMBaIEX Open Graph social image: Austin Hamilton, software engineering, AI systems, and research notes.",
+        alt: "SYMBaiEX wordmark and Austin Hamilton's name on a dark background.",
       },
     ],
     creator: "@symbiex",

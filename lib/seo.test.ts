@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   compactSeoTitle,
   developerSoftwareStructuredData,
+  SITE_DESCRIPTION,
+  SITE_NAME,
   serializeJsonLd,
   siteStructuredData,
   forumCollectionStructuredData,
@@ -26,6 +28,15 @@ describe("compactSeoTitle", () => {
   });
 });
 
+describe("publisher identity metadata", () => {
+  test("uses the public brand and a grounded homepage description", () => {
+    expect(SITE_NAME).toBe("SYMBaiEX — Austin Hamilton");
+    expect(SITE_DESCRIPTION).toBe(
+      "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.",
+    );
+  });
+});
+
 describe("serializeJsonLd", () => {
   test("escapes script-breaking characters", () => {
     const serialized = serializeJsonLd({
@@ -42,10 +53,15 @@ describe("serializeJsonLd", () => {
     const website = graph.find((entry) => entry["@type"] === "WebSite");
     expect(website).toMatchObject({
       "@id": "https://www.symbaiex.com#website",
-      name: "Austin Hamilton (SYMBiEX)",
+      name: SITE_NAME,
       alternateName: "SYMBaiEX",
     });
     expect(website).not.toHaveProperty("potentialAction");
+    const homepage = graph.find((entry) => entry["@type"] === "WebPage");
+    expect(homepage).toMatchObject({
+      name: SITE_NAME,
+      description: SITE_DESCRIPTION,
+    });
     const organization = graph.find(
       (entry) => entry["@type"] === "Organization",
     );
