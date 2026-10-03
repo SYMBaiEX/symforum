@@ -384,6 +384,7 @@ describe("AI telemetry", () => {
     expect(result.costCoverage).toEqual({
       unpricedRouteAttempts: 1,
       unpricedUsageEvents: 1,
+      providerReportedUsageEvents: 0,
     });
     expect(result.bounded).toEqual({
       routes: false,
@@ -391,6 +392,57 @@ describe("AI telemetry", () => {
       replies: false,
       usage: false,
       newsletters: false,
+    });
+  });
+
+  test("prefers provider-reported cost over model-rate estimates", async () => {
+    const t = setup();
+    const now = Date.now();
+    const ownerId = await t.run(async (ctx) =>
+      ctx.db.insert("users", {
+        name: "Owner",
+        username: "owner-provider-cost",
+        usernameNormalized: "owner-provider-cost",
+        role: "owner",
+      }),
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.insert("forumAgentUsageEvents", {
+        runKey: "provider-cost-receipt",
+        agentSlug: "suki",
+        stage: "draft",
+        model: "vendor/unlisted-model",
+        inputTokens: 100,
+        outputTokens: 50,
+        estimatedCostMicroUsd: 900,
+        providerReportedCostMicroUsd: 37,
+        durationMs: 2_000,
+        createdAt: now,
+      });
+    });
+
+    const owner = t.withIdentity({ subject: ownerId, name: "Owner" });
+    const result = await owner.query(api.aiTelemetry.snapshotAdmin, {
+      hours: 24,
+      now,
+    });
+
+    expect(result.totals).toMatchObject({
+      estimatedSpendUsd: 0.000037,
+      providerReportedSpendUsd: 0.000037,
+    });
+    expect(result.costCoverage).toEqual({
+      unpricedRouteAttempts: 0,
+      unpricedUsageEvents: 0,
+      providerReportedUsageEvents: 1,
+    });
+    expect(result.models[0]?.estimatedCostMicroUsd).toBe(37);
+    expect(result.agents[0]?.estimatedCostMicroUsd).toBe(37);
+    expect(result.stages[0]?.estimatedCostMicroUsd).toBe(37);
+    expect(result.series[0]?.estimatedCostMicroUsd).toBe(37);
+    expect(result.recent[0]).toMatchObject({
+      kind: "usage",
+      providerReportedCostMicroUsd: 37,
     });
   });
 });

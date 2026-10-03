@@ -1632,6 +1632,7 @@ export default defineSchema({
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
     estimatedCostMicroUsd: v.optional(v.number()),
+    providerReportedCostMicroUsd: v.optional(v.number()),
     qualityBefore: v.optional(v.number()),
     qualityAfter: v.optional(v.number()),
     durationMs: v.number(),

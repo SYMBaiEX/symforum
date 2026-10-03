@@ -226,6 +226,45 @@ describe("OpenRouter-only model routing", () => {
     );
   });
 
+  test("carries provider-reported cost through wrapped and multi-step results", async () => {
+    const wrapped = await runRoutedCandidates([candidate("openrouter/free")], {
+      stage: "test-provider-cost",
+      totalTimeoutMs: 5_000,
+      run: async () => ({ result: { usage: { raw: { cost: 0.0000006 } } } }),
+    });
+    expect(wrapped.route.providerReportedCostMicroUsd).toBe(1);
+
+    const multiStep = await runRoutedCandidates(
+      [candidate("openrouter/free")],
+      {
+        stage: "test-provider-cost-multi-step",
+        totalTimeoutMs: 5_000,
+        run: async () => ({
+          steps: [
+            { usage: { raw: { cost: 0.0000012 } } },
+            { usage: { raw: { cost: 0.0000013 } } },
+          ],
+        }),
+      },
+    );
+    expect(multiStep.route.providerReportedCostMicroUsd).toBe(3);
+  });
+
+  test("does not infer a partial provider bill when one tool-loop step lacks it", async () => {
+    const result = await runRoutedCandidates([candidate("openrouter/free")], {
+      stage: "test-provider-cost-incomplete",
+      totalTimeoutMs: 5_000,
+      run: async () => ({
+        usage: { raw: { cost: 0.000002 } },
+        steps: [
+          { usage: { raw: { cost: 0.000001 } } },
+          { usage: { raw: { prompt_tokens: 3, completion_tokens: 2 } } },
+        ],
+      }),
+    });
+    expect(result.route.providerReportedCostMicroUsd).toBeUndefined();
+  });
+
   test("reserves a priced paid attempt before calling its provider", async () => {
     const paid = candidate(OPENROUTER_PAID_FALLBACK_MODEL);
     const beforeAttempt = vi.fn(async () => "paid-reservation");

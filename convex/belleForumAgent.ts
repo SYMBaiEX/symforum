@@ -410,6 +410,8 @@ export const runDailyHackerNewsDigest = internalAction({
         stage: "draft",
         model: generation.route.persistedModel,
         servedModel: result.response.modelId,
+        providerReportedCostMicroUsd:
+          generation.route.providerReportedCostMicroUsd,
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
         durationMs: Date.now() - generationStartedAt,

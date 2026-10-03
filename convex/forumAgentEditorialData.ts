@@ -147,6 +147,7 @@ export const recordUsage = internalMutation({
     categorySlug: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    providerReportedCostMicroUsd: v.optional(v.number()),
     qualityBefore: v.optional(v.number()),
     qualityAfter: v.optional(v.number()),
     durationMs: v.number(),
@@ -155,6 +156,18 @@ export const recordUsage = internalMutation({
     const now = Date.now();
     const inputTokens = reportedTokenCount(args.inputTokens);
     const outputTokens = reportedTokenCount(args.outputTokens);
+    const providerReportedCostMicroUsd = args.providerReportedCostMicroUsd;
+    if (
+      providerReportedCostMicroUsd !== undefined &&
+      (!Number.isSafeInteger(providerReportedCostMicroUsd) ||
+        providerReportedCostMicroUsd < 0)
+    ) {
+      throw new ConvexError({
+        code: "AI_USAGE_PROVIDER_COST_INVALID",
+        message:
+          "Provider-reported AI cost must be a non-negative microdollar integer.",
+      });
+    }
     // Embeddings report input tokens only. Generation stages need both
     // counters before their measured cost can replace the conservative reserve.
     const usageComplete =
@@ -178,6 +191,7 @@ export const recordUsage = internalMutation({
           settlementModel: billingModel,
           inputTokens: inputTokens ?? 0,
           outputTokens: outputTokens ?? 0,
+          providerReportedCostMicroUsd,
           now,
         });
         if (!settlement.settled) return null;
@@ -213,7 +227,7 @@ export const recordUsage = internalMutation({
         dayKey: forumDayKey(now),
         provider: "openrouter",
         bucket: spendBucketForKey(args.runKey),
-        spentMicroUsd: estimatedCostMicroUsd!,
+        spentMicroUsd: providerReportedCostMicroUsd ?? estimatedCostMicroUsd!,
         inputTokens: inputTokens ?? 0,
         outputTokens: outputTokens ?? 0,
         now,
@@ -235,6 +249,9 @@ export const recordUsage = internalMutation({
       qualityBefore: args.qualityBefore,
       qualityAfter: args.qualityAfter,
       ...(estimatedCostMicroUsd === undefined ? {} : { estimatedCostMicroUsd }),
+      ...(providerReportedCostMicroUsd === undefined
+        ? {}
+        : { providerReportedCostMicroUsd }),
       durationMs: Math.max(0, Math.round(args.durationMs)),
       createdAt: now,
     };

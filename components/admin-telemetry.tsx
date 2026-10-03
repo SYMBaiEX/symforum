@@ -639,7 +639,7 @@ export function AdminTelemetry() {
               icon={ShieldCheck}
               label="Inference spend"
               value={currency(editorial?.totals.estimatedSpendUsd)}
-              detail={`${percent(editorial?.totals.revisionRate)} revision rate`}
+              detail={`Provider-reported: ${currency(editorial?.totals.providerReportedSpendUsd)} (${editorial?.costCoverage.providerReportedUsageEvents ?? 0} events) · ${percent(editorial?.totals.revisionRate)} revisions`}
             />
           </section>
           {editorial !== undefined &&

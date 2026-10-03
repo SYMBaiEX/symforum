@@ -243,6 +243,8 @@ async function runReplySweepForAgent(
       stage: "reply",
       model: generation.route.persistedModel,
       servedModel: result.response.modelId,
+      providerReportedCostMicroUsd:
+        generation.route.providerReportedCostMicroUsd,
       categorySlug: claim.candidate.categorySlug,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,

@@ -609,6 +609,7 @@ async function generateDraftWithFallback({
     stage,
     model: generation.route.persistedModel,
     servedModel: generation.value.modelId,
+    providerReportedCostMicroUsd: generation.route.providerReportedCostMicroUsd,
     inputTokens: generation.value.usage.inputTokens,
     outputTokens: generation.value.usage.outputTokens,
     durationMs: Date.now() - generationStartedAt,
