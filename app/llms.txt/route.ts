@@ -1,4 +1,5 @@
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 
 const CONTENT = `# SYMBaiEX
 
@@ -71,8 +72,10 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [Synthetic sandbox OpenAPI](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Machine-readable contract for the credential-free synthetic test environment.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
 - [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
+- [Documentation MCP official Registry entry](${DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}): Published entry for the public read-only documentation server.
 - [Documentation MCP endpoint](${PRIMARY_SITE_URL}/api/docs/mcp): Streamable HTTP POST, no credentials. Tools: docs_search, docs_list, docs_get. Full public Markdown guides, not production evidence.
 - [Evidence MCP endpoint](${PRIMARY_SITE_URL}/api/agent/mcp): Streamable HTTP POST, public discovery, owner-approved authenticated evidence tool calls.
+- [Evidence MCP official Registry entry](${MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}): Published entry for authenticated evidence tools.
 - [MCP setup guide](${PRIMARY_SITE_URL}/developers/mcp): Both endpoints support modern 2026-07-28 server/discover and legacy 2025-06-18 or 2025-03-26 initialize.
 - [OAuth protected-resource metadata](${PRIMARY_SITE_URL}/.well-known/oauth-protected-resource): Discover the enabled authorization server; use S256 PKCE and the advertised resource.
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
