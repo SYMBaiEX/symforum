@@ -1735,6 +1735,11 @@ export const convexRefs = {
     >("evidenceAdmin:backfillEvidence"),
   },
   admin: {
+    ownerConsoleRoutingControl: makeFunctionReference<
+      "query",
+      Record<string, never>,
+      { isOwner: boolean; disabledModelIds: string[] }
+    >("adminAiBudget:ownerConsoleRoutingControl"),
     reserveOwnerConsoleStep: makeFunctionReference<
       "mutation",
       { reservationKey: string; estimatedInputTokens: number },

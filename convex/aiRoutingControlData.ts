@@ -3,6 +3,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import {
   estimatedModelCostMicroUsd,
@@ -149,16 +150,18 @@ export const readRoutingControl = internalQuery({
   args: {
     now: v.number(),
   },
-  handler: async (ctx, args) => {
-    const circuits = await ctx.db
-      .query("aiProviderCircuits")
-      .withIndex("by_disabledUntil", (q) => q.gt("disabledUntil", args.now))
-      .take(20);
-    return {
-      disabledModelIds: circuits.map((circuit) => circuit.model),
-    };
-  },
+  handler: async (ctx, args) => await readRoutingControlImpl(ctx, args.now),
 });
+
+export async function readRoutingControlImpl(ctx: QueryCtx, now: number) {
+  const circuits = await ctx.db
+    .query("aiProviderCircuits")
+    .withIndex("by_disabledUntil", (q) => q.gt("disabledUntil", now))
+    .take(20);
+  return {
+    disabledModelIds: circuits.map((circuit) => circuit.model),
+  };
+}
 
 export const reserveModelCallArgs = {
   reservationKey: v.string(),
