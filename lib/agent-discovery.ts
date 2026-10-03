@@ -36,6 +36,8 @@ export const PUBLIC_AGENT_SKILLS = [
   },
 ] as const;
 
+export const SKILLS_SH_LISTING_URL = "https://skills.sh/symbaiex/skills";
+
 const skillRawUrl = (name: string) =>
   `https://raw.githubusercontent.com/SYMBaiEX/skills/master/skills/${name}/SKILL.md`;
 
@@ -430,6 +432,7 @@ ${PUBLIC_AGENT_SKILLS.map(
 ).join("\n")}
 
 Repository: https://github.com/SYMBaiEX/skills
+Skills.sh listing: ${SKILLS_SH_LISTING_URL}
 Specification: https://agentskills.io/specification
 `;
 

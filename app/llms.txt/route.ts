@@ -1,5 +1,9 @@
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 
 const CONTENT = `# SYMBaiEX
 
@@ -80,6 +84,7 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [OAuth protected-resource metadata](${PRIMARY_SITE_URL}/.well-known/oauth-protected-resource): Discover the enabled authorization server; use S256 PKCE and the advertised resource.
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
 - [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
+- [SYMBaiEX Skills.sh listing](${SKILLS_SH_LISTING_URL}): Public directory listing for the published Agent Skills.
 - [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
 - [TypeScript SDK on npm](https://www.npmjs.com/package/@symbaiex/agent-sdk): Official dependency-light public API client; pin \`@0.1.0\` for production use.
 - [Bun CLI on npm](https://www.npmjs.com/package/@symbaiex/agent-cli): Official command-line client; run \`bunx @symbaiex/agent-cli@0.1.0 manifest\`.

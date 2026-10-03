@@ -189,6 +189,7 @@ describe("agent discovery surfaces", () => {
     expect(installGuide).toContain(
       "bunx skills add SYMBaiEX/skills --skill '*'",
     );
+    expect(installGuide).toContain("https://skills.sh/symbaiex/skills");
   });
 
   test("publishes the digest-bound Agent Skills discovery index", async () => {
