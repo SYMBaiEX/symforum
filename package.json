@@ -27,6 +27,7 @@
     "typecheck:convex": "tsc --project convex/tsconfig.json --noEmit",
     "lint": "eslint .",
     "smoke:agent:public": "bun scripts/smoke-agent-api.mjs --public-only",
+    "smoke:forum:public": "bun scripts/smoke-forum-plugin.mjs",
     "smoke:agent:auth": "bun scripts/smoke-agent-api.mjs",
     "certify:agent:auth": "bun scripts/certify-agent-auth.mjs",
     "socials:dev": "bun run --cwd workers/socials dev",
