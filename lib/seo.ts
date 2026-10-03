@@ -86,7 +86,9 @@ export function compactSeoTitle(value: string, brand: string) {
   return `${truncated || normalized.slice(0, titleBudget - 1).trim()}…${suffix}`;
 }
 
-export function siteStructuredData() {
+export function siteStructuredData({
+  includeHomeProducts = false,
+}: { includeHomeProducts?: boolean } = {}) {
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -180,6 +182,7 @@ export function siteStructuredData() {
           acceptedAnswer: { "@type": "Answer", text: faq.answer },
         })),
       },
+      ...(includeHomeProducts ? developerSoftwareStructuredData() : []),
     ],
   };
 }

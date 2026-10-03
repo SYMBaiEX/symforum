@@ -33,18 +33,11 @@ describe("SYMBaiEX homepage discoverability", () => {
     expect(html).toContain("separately owner-approved");
   });
 
-  test("publishes structured data for the real official SDK and CLI", async () => {
+  test("leaves root-level JSON-LD composition to the application layout", async () => {
     const stream = await renderToReadableStream(<HomePage />);
     await stream.allReady;
     const html = await new Response(stream).text();
 
-    expect(html).toContain('id="structured-data"');
-    expect(
-      html.match(/"@type":\["SoftwareApplication","Product"\]/g),
-    ).toHaveLength(2);
-    expect(html).toContain("@symbaiex/agent-sdk");
-    expect(html).toContain("@symbaiex/agent-cli");
-    expect(html).toContain("https://www.npmjs.com/package/@symbaiex/agent-sdk");
-    expect(html).toContain("https://www.npmjs.com/package/@symbaiex/agent-cli");
+    expect(html).not.toContain('type="application/ld+json"');
   });
 });

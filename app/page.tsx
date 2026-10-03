@@ -3,20 +3,17 @@ import { DailyNewsList } from "@/components/daily-news-list";
 import { EntryRow } from "@/components/entry-row";
 import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
-import { StructuredData } from "@/components/structured-data";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
-import { developerSoftwareStructuredData } from "@/lib/seo";
 import Link from "next/link";
 
 export default function HomePage() {
   return (
     <>
       <AgentWebMcpDiscovery />
-      <StructuredData data={developerSoftwareStructuredData()} />
       <HomeIntro />
       <HomeBanner />
       <HomeContent />
