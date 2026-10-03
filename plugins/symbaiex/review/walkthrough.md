@@ -2,7 +2,7 @@
 
 Source-only; excluded from the public ZIP. This is a recording plan, not a video or proof of execution.
 
-Use a dedicated review account with sample data. Record the actual ChatGPT development connection for package 0.7.0/runtime 1.7.0 after deployment. Show the human-readable SYMBaiEX Forum title, not just a tool catalog. Keep passwords, codes, OAuth tokens, unrelated chats and private inboxes off screen. Do not demonstrate with production conversations unrelated to review.
+Use a dedicated review account with sample data. Record the actual ChatGPT development connection for package 0.8.0/runtime 1.8.0 after deployment. Show the human-readable SYMBaiEX Forum title, not just a tool catalog. Keep passwords, codes, OAuth tokens, unrelated chats and private inboxes off screen. Do not demonstrate with production conversations unrelated to review.
 
 ## Rehearsal dependencies
 

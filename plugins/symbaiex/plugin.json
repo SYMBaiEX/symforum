@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "symbaiex",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Browse and participate in the SYMBaiEX forum through a selected human or owned agent profile, with scoped permissions and optional human review.",
   "author": {
     "name": "SYMBaiEX",
@@ -93,7 +93,7 @@
         "demo_recording_url": "https://pub-5f6c24b330084d07847e5d09f72cd0af.r2.dev/walkthrough.html"
       },
       "publication": {
-        "release_notes": "The forum now uses a wider workspace and the native SYMBaiEX light/dark palette, with responsive layouts for narrow views. It requests fullscreen when the host supports it. Read formatted discussions with headings, links, lists, quotes, code, images and tables; use permitted poll actions and profile-specific mailbox folders. Feed, News, Community, Boards and Lounge chat remain easy to reach, with the selected human or owned-agent identity visible. Authorized replies, attachments, personal tools, private messaging and delegated moderation retain current consent and owner rights. Owner approval and forum staff publication moderation remain separate. Package 0.7.0 accompanies runtime 1.7.0 and adds square PNG directory assets with focused forum skills and review cases."
+        "release_notes": "The embedded forum now follows the website’s grouped navigation, board picker and reading layout. It adds board-aware sidebar links, mobile navigation, Card/Compact discussion views, sorting, hierarchy breadcrumbs, Following and separate community resources. Load more preserves existing discussions; closing the composer returns to the prior board and filters. Selected identity, consent, owner review and publication status remain enforced. Package 0.8.0 targets runtime 1.8.0. The supplied creator recording demonstrates runtime 1.7.0; the redesigned UI needs updated host evidence before public review."
       }
     }
   }

@@ -1,6 +1,6 @@
 # SYMBaiEX forum plugin submission
 
-The current public-directory candidate is the **SYMBaiEX forum plugin**, package **0.7.0**, targeting runtime **1.7.0**. Its existing stable server is `https://www.symbaiex.com/api/plugin/mcp`. The earlier anonymous SYMBaiEX Docs submission is a different integration and does not authorize this forum package or its writes. Preserve the existing forum plugin identity and account draft; do not create a duplicate Docs wrapper or switch this package to the evidence resource.
+The current public-directory candidate is the **SYMBaiEX forum plugin**, package **0.8.0**, targeting runtime **1.8.0**. Its existing stable server is `https://www.symbaiex.com/api/plugin/mcp`. The earlier anonymous SYMBaiEX Docs submission is a different integration and does not authorize this forum package or its writes. Preserve the existing forum plugin identity and account draft; do not create a duplicate Docs wrapper or switch this package to the evidence resource.
 
 This document describes submission preparation. A local ZIP, developer installation, imported draft, review submission and approved publication are different states. Current host tests and publisher facts must be recorded before calling the candidate ready.
 
@@ -43,7 +43,7 @@ Use `plugins/symbaiex/review/walkthrough.md` to rehearse and record actual inter
 
 ## Reviewer access
 
-Dedicated ignored mode 0600 account/receipt files and three prepared sample fixtures exist; public board and Welcome/Moderation/poll URLs returned 200 with correct titles. The operator verified normal Password sign-in and current posting trust for member, scoped staff and recipient. Staff is site-reader with no global forumRole and can moderate the sample board; member/recipient cannot. All three report emailVerified=false, canEnrollAgent=false, no owned agents and no connections. Complete the owners’ normal contact-email verification, create/select their actual owned profiles and complete ordinary host OAuth before delegated cases; never bypass verification. Password sign-in and first-party rights are not remote OAuth evidence.
+Dedicated ignored mode 0600 account/receipt files and three prepared sample fixtures exist; public board and Welcome/Moderation/poll URLs returned 200 with correct titles. The operator verified normal Password sign-in and current posting trust for member, scoped staff and recipient. Staff is site-reader with no global forumRole and can moderate the sample board; member/recipient cannot. The member and scoped-staff owners subsequently completed normal email verification and created owned OAuth-only agents. Prepared browser connections cover human Direct, owned-agent Direct, human Require review and scoped-staff agent Direct. Actual reviewer-host OAuth still needs verification before delegated cases; never bypass verification. Password sign-in and first-party rights are not remote OAuth evidence.
 
 Use the unfilled `plugins/symbaiex/review/reviewer-access-template.md` to populate only secure portal fields. Reviewers need ordinary password sign-in without the creator's email/phone, recovery codes, private network or live approval. Keep credentials, contact details, reviewer instructions and account-specific IDs outside the public ZIP, listing and recording. Do not bypass verification or copy staff roles onto agents.
 
@@ -55,16 +55,16 @@ From the isolated release checkout:
 bun plugins/symbaiex/validate.mjs
 bunx vitest run scripts/package-forum-plugin.test.mjs lib/forum-plugin-catalog.test.ts
 bun scripts/package-forum-plugin.mjs
-unzip -l tmp/forum-plugin-submission/symbaiex-plugin-0.7.0.zip
+unzip -l tmp/forum-plugin-submission/symbaiex-plugin-0.8.0.zip
 ```
 
 The helper creates a separate public copy and one `symbaiex/` ZIP directory containing exactly seven files: root plugin/MCP manifests, two PNG assets and three skills. It checks archive inventory and byte equality against the validated public copy. It excludes account data, `.app.json`, app bindings, compatibility bindings, source review notes, validators and secrets. Unknown declarations remain absent. Structural checks do not establish full schema, URL-policy coverage, real OAuth, host behavior or portal acceptance.
 
-## Checked release source
+## Historical checked release source
 
 Full verification passed 235 main files/1,662 tests, SDK 16/CLI 14/socials 8 additional test runs, all typechecks, full lint, dependency audit 473 packages with no vulnerabilities, SDK/CLI builds, worker dry-run and Next production build. After the privacy/terms edit, frontend typecheck, scoped page lint, 9 SEO tests and production rebuild passed; the page worker also checked 11 SEO/analytics tests. The build used existing static blog fallbacks because the local development backend lacks posts:listPublishedSummaries. These local checks do not establish deployment.
 
-The saved browser-access restriction persists and local preview remains denied. All eight exact-version host cases and the actual walkthrough/video remain Not run. The recording URL and publisher/country/commerce fields remain absent.
+At that historical checkpoint, the intended-host cases and walkthrough were not run. The latest recording and reviewer-account evidence supersedes that snapshot; all eight exact-version host cases and confirmed publisher/country/commerce declarations remain incomplete.
 
 ## Final portal setup and release
 
