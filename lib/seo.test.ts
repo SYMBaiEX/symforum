@@ -55,6 +55,15 @@ describe("serializeJsonLd", () => {
       contactPoint: { email: "austin@symbaiex.com" },
       address: { addressLocality: "Birmingham", addressRegion: "AL" },
     });
+    expect(organization).not.toHaveProperty("sameAs");
+    const person = graph.find((entry) => entry["@type"] === "Person");
+    expect(person).toMatchObject({
+      sameAs: [
+        "https://github.com/SYMBaiEX",
+        "https://www.linkedin.com/in/austinhamiltonal",
+        "https://twitter.com/symbiex",
+      ],
+    });
     const webApi = graph.find(
       (entry) =>
         Array.isArray(entry["@type"]) && entry["@type"].includes("WebAPI"),
