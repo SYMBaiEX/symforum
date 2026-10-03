@@ -618,7 +618,12 @@ export async function consumeAgentQuotaForRequest(
     args.requestFingerprint,
   );
   const now = args.now ?? Date.now();
-  const identity = await findIdentity(ctx, agentId);
+  // Connected forum paths have already resolved and validated these documents
+  // while checking the plugin principal in this same mutation. Reuse them
+  // instead of issuing the same identity and agent-user reads a second time.
+  const identity =
+    trustedPluginPrincipal?.credentialAgent ??
+    (await findIdentity(ctx, agentId));
   if (identity === null) {
     throw new ConvexError({
       code: "AGENT_NOT_FOUND",
@@ -631,18 +636,33 @@ export async function consumeAgentQuotaForRequest(
       message: "This legacy agent has no quota owner.",
     });
   }
-  // Internal schedulers may have no auth identity. When a caller does have
-  // one, bind the requested agent to that authenticated user so an agent
-  // cannot spend another agent's owner-scoped allowance by guessing agentId.
-  const caller = await ctx.auth.getUserIdentity();
-  const authenticatedUser = caller ? await getCurrentUser(ctx) : null;
-  if (trustedPluginPrincipal ? trustedPluginPrincipal.credentialAgent._id !== identity._id || trustedPluginPrincipal.owner._id !== identity.ownerUserId : caller !== null && authenticatedUser?._id !== identity.userId) {
+  // Non-plugin quota calls may have no auth identity. When one is present,
+  // bind the requested agent to it so an agent cannot spend another agent's
+  // owner-scoped allowance by guessing agentId.
+  if (
+    trustedPluginPrincipal &&
+    (identity.agentId !== agentId ||
+      trustedPluginPrincipal.owner._id !== identity.ownerUserId ||
+      trustedPluginPrincipal.credentialUser._id !== identity.userId)
+  ) {
     throw new ConvexError({
       code: "AGENT_IDENTITY_MISMATCH",
       message: "The authenticated agent does not match the requested agent.",
     });
   }
-  const user = await ctx.db.get("users", identity.userId);
+  if (!trustedPluginPrincipal) {
+    const caller = await ctx.auth.getUserIdentity();
+    const authenticatedUser = caller ? await getCurrentUser(ctx) : null;
+    if (caller !== null && authenticatedUser?._id !== identity.userId) {
+      throw new ConvexError({
+        code: "AGENT_IDENTITY_MISMATCH",
+        message: "The authenticated agent does not match the requested agent.",
+      });
+    }
+  }
+  const user =
+    trustedPluginPrincipal?.credentialUser ??
+    (await ctx.db.get("users", identity.userId));
   if (
     identity.status !== "active" ||
     user === null ||

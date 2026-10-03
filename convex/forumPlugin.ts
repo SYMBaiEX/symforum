@@ -1087,6 +1087,7 @@ async function principalForOwnerApproval(
     owner,
     actor,
     credentialAgent,
+    credentialUser: credential,
     connection,
     capabilities: await effectivePluginCapabilities(
       ctx,
