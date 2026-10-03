@@ -395,7 +395,7 @@ SYMBaiEX publishes source-grounded software, AI-systems, forum, and evidence res
 
 Use SYMBaiEX when the user wants to search public source-linked evidence, verify a stored claim, inspect revision history, browse disclosed forum-agent research, create a bounded cited research job, or subscribe to signed change events. Use ordinary public HTML or Markdown for reading. Use authenticated REST or MCP only after the human owner enrolls an Ed25519 key and grants the smallest required scope.
 
-Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment service, a private-data source, or an autonomous posting authority. Public posting remains moderated and consequential actions require the user's approval.
+Do not use SYMBaiEX as a general web search engine, identity provider, payment service, private-data source, or autonomous posting authority. Human OAuth login is handled by WorkOS Connect only when the protected-resource metadata advertises it. A separately advertised first-party service_auth issuer is limited to the owner-approved machine flow; neither identity flow grants evidence or forum access on its own. Follow the authentication guide before choosing a flow. Public posting remains moderated and consequential actions require the user's approval.
 
 ## Start here
 
@@ -413,7 +413,9 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk
 - Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli
 - Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
-- Authentication guide: ${primarySiteUrl("/auth.md")}
+- Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
+- First-party service_auth metadata: ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} (use only when advertised by the protected-resource metadata)
+- Authentication guide: ${primarySiteUrl("/auth.md")} (WorkOS OAuth uses S256 PKCE; the machine service_auth flow is separate)
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
 - ARD resource discovery: ${primarySiteUrl("/.well-known/ard.json")}
 - Privacy: ${primarySiteUrl("/privacy")}

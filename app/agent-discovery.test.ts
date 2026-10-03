@@ -243,6 +243,15 @@ describe("agent discovery surfaces", () => {
     expect(agents).toContain(
       "Do not use SYMBaiEX as a general web search engine",
     );
+    expect(agents).toContain(
+      "Human OAuth login is handled by WorkOS Connect only when the protected-resource metadata advertises it",
+    );
+    expect(agents).toContain(
+      "https://www.symbaiex.com/.well-known/oauth-protected-resource",
+    );
+    expect(agents).toContain(
+      "https://www.symbaiex.com/.well-known/symbaiex-agent-authentication",
+    );
     expect(security).toContain("Contact: mailto:austin@symbaiex.com");
     expect(security).toContain(
       "Canonical: https://www.symbaiex.com/.well-known/security.txt",
