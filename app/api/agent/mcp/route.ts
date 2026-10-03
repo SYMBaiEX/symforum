@@ -598,7 +598,7 @@ function toolInputSchema(name: (typeof TOOL_ENTRIES)[number][1]) {
             type: "integer",
             minimum: 1,
             maximum: 500,
-            default: 100,
+            default: 25,
           },
           selectionStrategy: {
             type: "string",

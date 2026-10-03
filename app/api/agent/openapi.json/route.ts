@@ -1186,7 +1186,7 @@ const OPENAPI = {
             type: "integer",
             minimum: 1,
             maximum: 500,
-            default: 100,
+            default: 25,
           },
           selectionStrategy: {
             type: "string",

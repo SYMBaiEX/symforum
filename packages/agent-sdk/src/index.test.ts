@@ -32,6 +32,29 @@ describe("AgentClient", () => {
     ]);
   });
 
+  test("leaves the default export size to the platform quota", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const client = new AgentClient({
+      fetch: async (_input, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json({ jobId: "job-1", status: "queued" });
+      },
+      tokenStore: {
+        async getToken() {
+          return "access-token";
+        },
+      },
+    });
+
+    await client.createExport("dataset-1", "export-default");
+
+    expect(requestBody).toEqual({
+      datasetId: "dataset-1",
+      format: "jsonl",
+      selectionStrategy: "balanced",
+    });
+  });
+
   test("sanitizes platform errors without exposing a token", async () => {
     const client = new AgentClient({
       fetch: async () =>

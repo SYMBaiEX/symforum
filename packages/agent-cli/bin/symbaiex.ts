@@ -306,7 +306,7 @@ function optionalLimit(args: string[]) {
 
 function optionalRecordLimit(args: string[]) {
   const value = option(args, "--records");
-  if (value === undefined) return 100;
+  if (value === undefined) return undefined;
   if (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 500)
     throw new UsageError("--records must be an integer between 1 and 500.");
   return Number(value);
@@ -359,7 +359,7 @@ Jobs: research-create, research-job, export-create, export-job, export-manifest,
 Webhooks: webhook-availability, webhook-list, webhook-health,
   webhook-history, webhook-status, webhook-test
 
-Options: --limit <1-50>, --records <1-500>, --format <jsonl|parquet>,
+Options: --limit <1-50>, --records <1-500> (default 25), --format <jsonl|parquet>,
   --selection <balanced|recent>, --cursor <opaque>, --idempotency-key <key>, --token-file <path>, --output <path>,
   --origin <origin>. Provider-capable and write commands require an explicit
   idempotency key.`;
