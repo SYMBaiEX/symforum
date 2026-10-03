@@ -34,6 +34,19 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("search_symbaiex_docs");
     expect(html).toContain("read_symbaiex_doc");
     expect(html).toContain("WorkOS Connect");
+    expect(html).toContain('toolname="search_symbaiex_public_resources"');
+    expect(html).toContain("toolparamdescription=");
+    expect(html).toContain('action="https://www.symbaiex.com/ask"');
+    expect(html).toContain('method="get"');
+    expect(html).toContain('name="query"');
+    expect(html).toMatch(/maxlength="300"/i);
+    expect(html).toContain(
+      'aria-describedby="browser-resource-search-description"',
+    );
+    expect(html).not.toContain("toolautosubmit");
+    expect(html).toContain(
+      "Submitting opens the machine-readable JSON results.",
+    );
     for (const path of [
       "api",
       "openapi",
