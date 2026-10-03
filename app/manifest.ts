@@ -1,4 +1,3 @@
-import { primarySiteUrl } from "@/lib/site-urls";
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -7,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "SYMBaiEX",
     description:
       "A high-contrast personal publication for software engineering, AI systems, and daily research notes.",
-    start_url: primarySiteUrl("/"),
+    start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: "#050505",

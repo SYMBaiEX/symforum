@@ -219,7 +219,7 @@ describe("forum plugin live chat integration", () => {
         expect(
           (await ctx.db.get("forumChatMessages", first.data.messageId))?.status,
         ).toBe("deleted");
-        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(3);
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(2);
       });
     },
   );
@@ -390,7 +390,7 @@ describe("forum plugin live chat integration", () => {
     ).rejects.toThrow(/available|access|staff/i);
     await t.run(async (ctx) => {
       expect(await ctx.db.query("forumChatMessages").collect()).toHaveLength(1);
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(1);
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
       expect(await ctx.db.query("forumPluginCommands").collect()).toEqual([]);
     });
   });

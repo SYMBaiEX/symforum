@@ -54,7 +54,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const nodes = new Map<string, Node>();
   let activeElement: Node | null = null;
   const createNode = (tag: string) => new Node(tag, node => { activeElement = node; });
-  for (const id of ["app", "content", "status", "identity", "mode", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
+  for (const id of ["app", "content", "status", "identity", "mode", "quota", "connection-owner", "posting-trust", "navigation", "forum-context", "surface-switcher", "surface-trigger", "surface-choices", "connection-details", "connection-trigger", "compose", "expand", "search", "search-panel", "query", "settings", "chat-messages", "chat-notice", "chat-form", "chat-body", "chat-send", "chat-older", "chat-moderation", "chat-profile", "chat-peek", "chat-toggle", "chat-panel", "chat-latest"]) nodes.set(id, createNode(id === "search" ? "form" : "div"));
   nodes.get("surface-switcher")!.append(nodes.get("surface-trigger")!, nodes.get("surface-choices")!);
   nodes.get("connection-details")!.append(nodes.get("connection-trigger")!);
   nodes.get("search-panel")!.append(createNode("summary"), nodes.get("search")!);
@@ -274,25 +274,84 @@ describe("forum MCP App resource", () => {
     expect(app.searchMediaListeners.size).toBe(0);
   });
 
-  test("launches with a compact chat preview and resumes polling only when chat opens", async () => {
+  test("does not read hidden chat and refreshes only while opened", async () => {
     const app = appHarness(); await app.connect(false);
     expect(app.nodes.get("chat-panel")!.hidden).toBe(true);
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-expanded="false" aria-controls="chat-panel">Open chat');
-    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(false);
-    const preview = app.sent.filter(call => call.params?.name === "forum_list_chat_messages").at(-1)!;
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
+    expect(app.sent.some(call => call.params?.name === "forum_list_chat_messages")).toBe(false);
     // A fresh preview remains text-only even if its author or body is hostile.
     app.nodes.get("chat-toggle")!.fire("click");
     const opened = app.latest("tools/call");
-    expect(opened).not.toBe(preview);
+    expect(opened.params?.name).toBe("forum_list_chat_messages");
     app.reply(opened, { structuredContent: { data: { page: [{ body: "<img src=x>", authorIdentity: { username: "Reader" } }], viewer: { canRead: true, canSend: true }, isDone: true } } });
     await app.flush();
     expect(app.nodes.get("chat-peek")!.textContent).toBe("Reader: <img src=x>");
     expect(app.nodes.get("chat-peek")!.querySelector("img")).toBeNull();
-    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(true);
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(true);
     const input = app.nodes.get("chat-body")!; input.value = "My unsent draft"; input.fire("input");
     app.nodes.get("chat-toggle")!.fire("click");
     expect(input.value).toBe("My unsent draft");
-    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 15_000)).toBe(false);
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
+  });
+
+  test("an explicit collapsed-chat refresh reads once without starting background polling", async () => {
+    const app = appHarness(); await app.connect(false);
+    expect(app.sent.some(call => call.params?.name === "forum_list_chat_messages")).toBe(false);
+    app.nodes.get("chat-latest")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_chat_messages");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ body: "Fresh preview", authorIdentity: { username: "Member" } }], viewer: { canRead: true, canSend: true }, isDone: true } } }); await app.flush();
+    expect(app.nodes.get("chat-peek")!.textContent).toBe("Member: Fresh preview");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
+  });
+
+  test("an exhausted write allowance does not disable browsing or live chat refresh", async () => {
+    const app = appHarness(); await app.connect();
+    const resetsAt = 1_800_000_000_000;
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { quota: { agentUsedUnits: 250, agentLimitUnits: 250, ownerUsedUnits: 100, ownerLimitUnits: 100, remainingUnits: 0, resetsAt, settingsUrl: "https://www.symbaiex.com/developer" } } } } });
+    await app.flush();
+    expect(app.nodes.get("quota")!.textContent).toContain("0 write allowance units remaining");
+    expect(app.nodes.get("quota")!.textContent).toContain(new Date(resetsAt).toLocaleString(undefined, { timeZoneName: "short" }));
+    expect(app.nodes.get("settings")!.textContent).toContain("Agent: 250 / 250 units used");
+    expect(app.nodes.get("settings")!.textContent).toContain("Owner: 100 / 100 units used");
+    const panel = app.nodes.get("chat-panel")!;
+    expect(panel.textContent).toContain("do not use your monthly write allowance");
+    panel.find("Pause live refresh")!.fire("click");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
+    const resume = panel.find("Resume live refresh")!;
+    expect(resume.disabled).toBe(false); resume.fire("click");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(true);
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_categories");
+  });
+
+  test("short-term read limits keep the shell mounted, give a retry delay and stop live refresh", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("chat-latest")!.fire("click");
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { code: "AGENT_QUOTA_EXCEEDED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 2500, resetsAt: 1_800_000_000_000 }, content: [{ type: "text", text: "Raw transport error" }] }); await app.flush();
+    expect(app.nodes.get("chat-notice")!.textContent).toBe("Too many forum reads. Try again in 3 seconds.");
+    expect(app.nodes.get("chat-notice")!.textContent).not.toContain("Write allowance resets");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(false);
+    expect(app.nodes.get("identity")!.textContent).toContain("Research agent");
+    expect(app.nodes.get("chat-panel")!.find("Resume live refresh")).toBeDefined();
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 2500 } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Try again in 3 seconds.");
+    expect(app.nodes.get("content")!.find("Try again")).toBeDefined();
+    expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(false);
+  });
+
+  test("monthly write quota errors preserve chat draft, show reset and keep reading live", async () => {
+    const app = appHarness(); await app.connect();
+    const input = app.nodes.get("chat-body")!; input.value = "Preserve this message"; input.fire("input");
+    app.nodes.get("chat-form")!.fire("submit"); await app.flush();
+    const resetsAt = 1_800_000_000_000;
+    app.reply(app.latest("tools/call"), { isError: true, structuredContent: { code: "AGENT_QUOTA_EXCEEDED", error: "Agent usage quota reached.", quotaReason: "hard-cap", resetsAt, quota: { remainingUnits: 0, resetsAt } } }); await app.flush();
+    expect(input.value).toBe("Preserve this message");
+    expect(app.nodes.get("chat-notice")!.textContent).toContain("Write allowance resets " + new Date(resetsAt).toLocaleString(undefined, { timeZoneName: "short" }));
+    expect(app.nodes.get("quota")!.textContent).toContain("0 write allowance units remaining");
+    expect([...app.timers.keys()].some(id => app.timerDurations.get(id) === 30_000)).toBe(true);
+    expect(app.nodes.get("chat-panel")!.find("Pause live refresh")).toBeDefined();
   });
 
   test("an explicit thread selection during connection wins over the default feed", async () => {
@@ -339,7 +398,7 @@ describe("forum MCP App resource", () => {
     const more = nav.querySelector("details")!;
     const saved = more.find("Saved")!;
     more.open = true; saved.focus();
-    const pollTimer = [...app.timers.keys()].find(id => app.timerDurations.get(id) === 15_000)!;
+    const pollTimer = [...app.timers.keys()].find(id => app.timerDurations.get(id) === 30_000)!;
     app.timers.get(pollTimer)!();
     const poll = app.latest("tools/call");
     expect(poll.params?.name).toBe("forum_list_chat_messages");
@@ -391,16 +450,15 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("content")!.textContent).not.toContain("Old restricted board");
   });
 
-  test("prioritizes forum conversations before news and preserves the correct thread target", async () => {
+  test("loads visible forum conversations without optional news reads and preserves the correct thread target", async () => {
     const app = appHarness(); await app.connect();
     app.nodes.get("navigation")!.find("Feed")!.fire("click");
-    const news = app.sent.filter(call => call.params?.name === "forum_list_news_feed").at(-1)!;
     const feed = app.sent.filter(call => call.params?.name === "forum_list_feed_threads").at(-1)!;
-    app.reply(news, { structuredContent: { data: { stories: [{ hnItemId: 42, title: "Daily story" }] } } });
     app.reply(feed, { structuredContent: { data: { page: [{ title: "Community notes", categorySlug: "general", slug: "notes", authorIdentity: { name: "Community reader" } }], isDone: true } } });
     await app.flush();
     const content = app.nodes.get("content")!;
-    expect(content.textContent.indexOf("Community notes")).toBeLessThan(content.textContent.indexOf("Daily story"));
+    expect(content.textContent).toContain("Community notes");
+    expect(app.sent.some(call => call.params?.name === "forum_list_news_feed")).toBe(false);
     content.find("Community notes")!.fire("click");
     expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", threadSlug: "notes" });
   });
@@ -481,9 +539,7 @@ describe("forum MCP App resource", () => {
     for (const [error, fallback] of [["Unknown tool forum_list_feed_threads", true], ["Permission denied: tool unavailable", false]] as const) {
       const app = appHarness(); await app.connect();
       app.nodes.get("navigation")!.find("Feed")!.fire("click");
-      const news = app.sent.filter(call => call.params?.name === "forum_list_news_feed").at(-1)!;
-      app.reply(news, { structuredContent: { data: { stories: [] } } });
-      app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: error } });
+        app.message({ jsonrpc: "2.0", id: app.latest("tools/call").id, error: { message: error } });
       await app.flush();
       expect(app.sent.some(call => call.params?.name === "forum_overview")).toBe(fallback);
       if (fallback) {
@@ -516,7 +572,7 @@ describe("forum MCP App resource", () => {
       return { structuredContent: { data: name === "forum_list_feed_threads" ? { page: [{ title: "Working conversation", categorySlug: "general", slug: "working" }], isDone: true } : { page: [], pending: [], viewer: { canRead: true, canSend: false }, isDone: true } } };
     } });
     app.timers.values().next().value!(); await app.flush();
-    expect(calls).toEqual(["forum_status", "forum_list_news_feed", "forum_list_feed_threads", "forum_list_chat_messages"]);
+    expect(calls).toEqual(["forum_status", "forum_list_feed_threads"]);
     expect(app.nodes.get("identity")!.textContent).toContain("Authenticated profile");
     expect(app.nodes.get("content")!.textContent).toContain("Working conversation");
     expect(app.nodes.get("status")!.textContent).not.toContain("no structured forum data");

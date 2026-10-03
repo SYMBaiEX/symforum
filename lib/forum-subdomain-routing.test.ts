@@ -72,6 +72,7 @@ describe("forum subdomain routing", () => {
       "/u/austin",
       "/robots.txt",
       "/sitemap.xml",
+      "/manifest.webmanifest",
     ]) {
       expect(
         resolveForumSubdomainRoute({
@@ -103,8 +104,6 @@ describe("forum subdomain routing", () => {
       "/agent",
       "/agent/signup",
       "/terms",
-      "/research",
-      "/research/methodology",
       "/auth.md",
       "/agents.md",
     ]) {
@@ -117,6 +116,26 @@ describe("forum subdomain routing", () => {
       ).toEqual({ kind: "redirect", pathname, primaryHost: true });
     }
   });
+
+  test.each(["/research", "/research/source-led-notes"])(
+    "keeps the Research board route %s on the forum origin",
+    (pathname) => {
+      expect(
+        resolveForumSubdomainRoute({
+          host: "forum.symbaiex.com",
+          nodeEnv: "production",
+          pathname,
+        }),
+      ).toEqual({ kind: "rewrite", pathname: `/forum${pathname}` });
+      expect(
+        resolveForumSubdomainRoute({
+          host: "www.symbaiex.com",
+          nodeEnv: "production",
+          pathname,
+        }),
+      ).toBeNull();
+    },
+  );
 
   test("rewrites the forum MCP alias to the bounded documentation server", () => {
     expect(

@@ -90,6 +90,48 @@ describe("forum MCP protocol boundary", () => {
     );
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+  test.each(["legacy", "modern"])("%s forum launch returns an anonymous shell without reading content", async (protocol) => {
+    const meta = protocol === "modern" ? { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } : {};
+    const headers = protocol === "modern" ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "forum_open" } : undefined;
+    const response = await POST(request("tools/call", { name: "forum_open", arguments: {}, ...meta }, undefined, headers));
+    expect(response.headers.get("Mcp-Server-Version")).toBe("1.6.1");
+    expect(await response.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: null, data: {} } } });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  test("authenticated launch validates status while all content reads retain normal dispatch", async () => {
+    vi.mocked(fetch).mockImplementation(async (_input, init) => {
+      const command = JSON.parse(String(init?.body));
+      return command.operation === "status" ? Response.json({ status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, quota: { remainingUnits: 0 } } }) : Response.json({ code: "AGENT_QUOTA_EXCEEDED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 1500 }, { status: 429, headers: { "Retry-After": "2" } });
+    });
+    const launch = await POST(request("tools/call", { name: "forum_open", arguments: {} }, token()));
+    expect(await launch.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, quota: { remainingUnits: 0 } } } } });
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ operation: "status", args: {} });
+    for (const name of ["forum_overview", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages", "forum_search"]) {
+      const response = await POST(request("tools/call", { name, arguments: name === "forum_search" ? { query: "news" } : ["forum_list_feed_threads", "forum_list_chat_messages"].includes(name) ? { paginationOpts: { numItems: 12, cursor: null } } : {} }, token()));
+      expect(await response.json()).toMatchObject({ result: { isError: true, structuredContent: { quotaReason: "rate-limited", retryAfter: 1500 } } });
+      expect(response.headers.get("Retry-After")).toBe("2");
+      expect(JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).operation).not.toBe("status");
+    }
+  });
+
+  test.each([401, 403])("forum launch preserves upstream authorization failure %i without a guest fallback", async (status) => {
+    vi.mocked(fetch).mockResolvedValue(Response.json({ error: "Denied" }, { status }));
+    const response = await POST(request("tools/call", { name: "forum_open", arguments: {} }, token()));
+    expect(response.status).toBe(status);
+    expect(response.headers.get("www-authenticate")).toContain(status === 401 ? "invalid_token" : "insufficient_scope");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  test("anonymous launcher still rejects malformed credentials, wrong audience, arguments and origin", async () => {
+    for (const authorization of ["Basic malformed", token("https://www.symbaiex.com/api/agent/mcp")]) {
+      expect((await POST(request("tools/call", { name: "forum_open", arguments: {} }, authorization))).status).toBe(401);
+    }
+    expect((await POST(request("tools/call", { name: "forum_open", arguments: {} }, undefined, { origin: "https://evil.example" }))).status).toBe(403);
+    expect(await (await POST(request("tools/call", { name: "forum_open", arguments: { categorySlug: "general" } }))).json()).toMatchObject({ error: { code: -32602 } });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
   test("returns public content anonymously but rejects private tools and evidence tokens", async () => {
     const publicRead = await POST(
       request("tools/call", { name: "forum_list_categories", arguments: {} }),
@@ -330,7 +372,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.6.0",
+            version: "1.6.1",
           },
         },
       },

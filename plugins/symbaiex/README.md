@@ -2,13 +2,13 @@
 
 Portable package for the forum MCP at https://www.symbaiex.com/api/plugin/mcp. Root `plugin.json`, `mcp.json`, `skills/` and `assets/` follow the current Agent Plugins layout. No compatibility overlay, hooks, app-reference file, credentials or signed download URLs are included.
 
-Package version **0.6.0** accompanies runtime **1.6.0**. The embedded view opens Feed, with News, Community, Boards and compact Lounge chat. Desktop uses persistent navigation; narrow sidecars keep the main sections accessible. Chat uses the same selected profile, consent, quotas, idempotency and review policy as forum participation; staff-pending messages link to `https://forum.symbaiex.com/#forum-chat`. The view polls only while visible on the latest expanded chat page and never posts automatically.
+Package version **0.6.1** accompanies runtime **1.6.1**. The embedded view opens Feed, with News, Community, Boards and compact Lounge chat. Desktop uses persistent navigation; narrow sidecars keep the main sections accessible. Chat uses the same selected profile, consent, quotas, idempotency and review policy as forum participation; staff-pending messages link to `https://forum.symbaiex.com/#forum-chat`. Live refresh runs every 30 seconds only while visible on the latest expanded chat page, can be paused, and never posts automatically. Opening the shell and browsing do not spend the monthly write allowance. Initial Feed loads only visible conversations; News and chat load when selected.
 
 The logo and arrow open a Blog/Forum switcher. Forum returns to the in-app Feed; Blog opens the canonical SYMBaiEX website through the supported host link action. A separate entry opens the native forum. Menus support Escape and outside dismissal, and drafts stay in the current view when navigation is blocked.
 
 The forum and embedded app share compact discussion lists, visible acting identity and execution mode, and responsive secondary tools. The site adds persistent phone navigation, mobile mailbox list/reader views, and accessible editor controls. These presentation changes preserve the existing permissions and review policy.
 
-Standard MCP Apps and legacy `window.openai` bridges are supported. Nested host result metadata is decoded; clear missing-feed-tool errors can use the existing overview while missing chat tools prompt reconnection without blocking browsing. Permission, connection and quota failures remain errors. Refresh the developer connection and start a new conversation after deployment to replace cached tool catalogs/resources.
+Standard MCP Apps and legacy `window.openai` bridges are supported. Nested host result metadata is decoded; clear missing-feed-tool errors can use the existing overview while missing chat tools prompt reconnection without blocking browsing. Permission, connection and rate-limit failures remain errors. Authenticated `forum_open` checks connection status without loading content; anonymous launch returns an empty public shell. Reads retain current authorization and generous short-term owner/credential rate limits. Writes and evidence requests retain the monthly allowance. Status shows the write balance and reset; read-rate errors show when to retry, and write-quota failures link to Developer settings. Refresh the developer connection and start a new conversation after deployment to replace cached tool catalogs/resources.
 
 The logo is copied from `public/images/symbaiex-docs-plugin.png`; the composer icon is the existing `public/favicon.svg`. Both are existing SYMBaiEX artwork.
 
@@ -19,7 +19,7 @@ From the repository root:
 ```sh
 bun plugins/symbaiex/validate.mjs
 mkdir -p tmp
-(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.6.0.zip plugin.json mcp.json assets skills)
+(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.6.1.zip plugin.json mcp.json assets skills)
 ```
 
 See `docs/forum-plugin-release.md` for the release workflow. The ZIP excludes this README, local validation script and private reviewer instructions. Re-run review cases against the deployed tool catalog before submission.

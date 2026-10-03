@@ -4,6 +4,8 @@ import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
+import { ConvexError } from "convex/values";
+import { forumPluginHttpError } from "./forumPluginHttp";
 const modules = {
   ...import.meta.glob("./**/*.ts"),
   ...import.meta.glob("./**/*.tsx"),
@@ -201,5 +203,95 @@ describe("forum plugin HTTP boundaries", () => {
       expect(await ctx.db.system.query("_storage").collect()).toHaveLength(0);
       expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
     });
+  });
+});
+
+test("quota HTTP diagnostics preserve allowlisted reason, millisecond delay and bounded safe fields", async () => {
+  const request = new Request("https://forum.symbaiex.com/plugin/forum");
+  const resetsAt = Date.UTC(2027, 0, 1);
+  const response = forumPluginHttpError(
+    request,
+    new ConvexError({
+      code: "AGENT_QUOTA_EXCEEDED",
+      message: "Read rate limit reached.",
+      reason: "rate-limited",
+      retryAfter: 1501,
+      resetsAt,
+      token: "secret",
+      quota: {
+        agentUsedUnits: 250,
+        agentLimitUnits: 250,
+        ownerUsedUnits: 250,
+        ownerLimitUnits: 1000,
+        remainingUnits: 0,
+        resetsAt,
+        settingsUrl: "https://www.symbaiex.com/developer",
+        hardCapMetadataJson: "secret",
+        otherCredential: "secret",
+      },
+    }),
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("Retry-After")).toBe("2");
+  expect(await response.json()).toEqual({
+    code: "AGENT_QUOTA_EXCEEDED",
+    error: "Read rate limit reached.",
+    quotaReason: "rate-limited",
+    retryAfter: 1501,
+    resetsAt,
+    quota: {
+      agentUsedUnits: 250,
+      agentLimitUnits: 250,
+      ownerUsedUnits: 250,
+      ownerLimitUnits: 1000,
+      remainingUnits: 0,
+      resetsAt,
+      settingsUrl: "https://www.symbaiex.com/developer",
+    },
+  });
+});
+
+test("quota mapper omits unknown reasons, invalid retry delays, unsafe quota values and unknown secrets", async () => {
+  for (const retryAfter of [-1, Infinity, NaN, 86_400_001]) {
+    const response = forumPluginHttpError(
+      new Request("https://forum.symbaiex.com/plugin/forum"),
+      new ConvexError({
+        code: "AGENT_QUOTA_EXCEEDED",
+        message: "Quota reached.",
+        quotaReason: "secret",
+        retryAfter,
+        resetsAt: -1,
+        quota: {
+          agentUsedUnits: -1,
+          agentLimitUnits: 1_000_000_001,
+          ownerUsedUnits: 1.5,
+          ownerLimitUnits: Infinity,
+          remainingUnits: "secret",
+          resetsAt: "secret",
+          settingsUrl: "https://attacker.test/secret",
+          token: "secret",
+        },
+      }),
+    );
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(await response.json()).toEqual({
+      code: "AGENT_QUOTA_EXCEEDED",
+      error: "Quota reached.",
+    });
+  }
+  const unknown = forumPluginHttpError(
+    new Request("https://forum.symbaiex.com/plugin/forum"),
+    new ConvexError({
+      code: "UNKNOWN_FAILURE",
+      message: "Failed.",
+      reason: "secret",
+      retryAfter: 1000,
+      quota: { agentUsedUnits: 5 },
+      token: "secret",
+    }),
+  );
+  expect(await unknown.json()).toEqual({
+    code: "UNKNOWN_FAILURE",
+    error: "Failed.",
   });
 });

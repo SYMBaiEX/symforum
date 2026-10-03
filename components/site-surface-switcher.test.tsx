@@ -1,10 +1,27 @@
 // @vitest-environment node
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, test } from "vitest";
+import { createElement, type ComponentProps } from "react";
+import { expect, test, vi } from "vitest";
 import {
   resolveSiteSurfaceForumHref,
   SiteSurfaceSwitcher,
 } from "./site-surface-switcher";
+
+const menuProps = vi.hoisted(() => ({
+  modal: undefined as boolean | undefined,
+}));
+
+vi.mock("@/components/ui/dropdown-menu", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/components/ui/dropdown-menu")>();
+  return {
+    ...actual,
+    DropdownMenu: (props: ComponentProps<typeof actual.DropdownMenu>) => {
+      menuProps.modal = props.modal;
+      return createElement(actual.DropdownMenu, props);
+    },
+  };
+});
 
 test.each(["www.symbaiex.com", "symbaiex.com"])(
   "the Blog switcher opens the canonical forum from %s",
@@ -40,4 +57,5 @@ test("the whole wordmark and arrow form one named menu trigger without navigatin
   expect(html).toContain('aria-expanded="false"');
   expect(html).toContain("lucide-chevron-down");
   expect(html).not.toContain("<a");
+  expect(menuProps.modal).toBe(false);
 });

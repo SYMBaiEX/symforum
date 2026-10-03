@@ -350,7 +350,7 @@ test("connection status tool dispatches a protected read with selected policy re
   );
 });
 
-test("browser reads spend automation quota with a fresh key per invocation", async () => {
+test("browser reads trace each invocation with a fresh connection request key", async () => {
   const execute = vi.fn().mockResolvedValue(completed);
   const tool = createForumBrowserTools(
     context,

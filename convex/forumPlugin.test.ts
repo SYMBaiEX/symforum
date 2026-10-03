@@ -1442,63 +1442,155 @@ test("a second owned agent shares the owner civic vote and sibling ratings are d
 });
 
 test.each(["human", "agent"] as const)(
-  "connected %s reads charge every invocation even when client keys repeat",
+  "connected %s navigation stays available with exhausted write quotas and rate limits every invocation",
   async (mode) => {
     const t = setup();
     const seed = await fixture(t, mode);
     const owner = t.withIdentity({ subject: seed.owner });
+    const now = Date.now();
+    const monthKey = new Date(now).toISOString().slice(0, 7);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("agentQuotaBudgets", {
+        ownerUserId: seed.owner,
+        monthKey,
+        freeAllowanceUnits: 100,
+        hardCapUnits: 1000,
+        usedUnits: 1000,
+        hardCapMetadataJson: '{"secret":true}',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("agentQuotaUsageCounters", {
+        ownerUserId: seed.owner,
+        agentId: "helper",
+        monthKey,
+        usedUnits: 250,
+        updatedAt: now,
+      });
+    });
     const input = {
       connectionId: seed.connectionId,
       expectedPolicyVersion: 1,
       operation: "getThread",
       args: { categorySlug: "square", threadSlug: "discussion" },
-      idempotencyKey: "read-once",
+      idempotencyKey: "same-read-key",
     };
-    const first = await owner.mutation(readRef, input);
-    expect(first.status).toBe("completed");
-    expect(await owner.mutation(readRef, input)).toEqual(first);
-    await t.run(async (ctx) => {
-      const usages = await ctx.db.query("agentQuotaUsage").collect();
-      expect(usages).toHaveLength(2);
-      expect(usages[0].agentId).toBe("helper");
-      expect(
-        (await ctx.db.query("agentQuotaBudgets").collect())[0].usedUnits,
-      ).toBe(2);
-    });
+    for (let i = 0; i < 20; i++)
+      expect((await owner.mutation(readRef, input)).status).toBe("completed");
     await expect(
-      owner.mutation(readRef, {
-        ...input,
-        args: { categorySlug: "square", threadSlug: "missing" },
-      }),
-    ).rejects.toThrow("not available");
-    await expect(
-      owner.mutation(readRef, {
-        ...input,
-        idempotencyKey: "missing-target",
-        args: { categorySlug: "missing", threadSlug: "missing" },
-      }),
-    ).rejects.toThrow("not available");
-    await t.run(async (ctx) => {
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(2);
-    });
-    const { idempotencyKey, ...withoutKey } = input;
-    expect((await owner.mutation(readRef, withoutKey)).status).toBe(
-      "completed",
-    );
-    await owner.mutation(readRef, { operation: "getThread", args: input.args });
-    await t.run(async (ctx) => {
-      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(3);
-      const budget = (await ctx.db.query("agentQuotaBudgets").collect())[0];
-      await ctx.db.patch("agentQuotaBudgets", budget._id, {
-        hardCapUnits: 3,
-        hardCapReachedAt: Date.now(),
-      });
-    });
-    await expect(
-      owner.mutation(readRef, {
-        ...input,
-        idempotencyKey: "quota-limited-read",
-      }),
+      owner.mutation(
+        executeRef,
+        call(seed, "createReply", {
+          threadId: seed.thread,
+          body: "Still metered",
+        }),
+      ),
     ).rejects.toThrow("quota reached");
+    // A second owner connection shares the same short-term owner limit.
+    const second = await t.run(async (ctx) => {
+      const c = await ctx.db.get("forumPluginConnections", seed.connectionId);
+      const { _id, _creationTime, ...copy } = c!;
+      void _id;
+      void _creationTime;
+      return ctx.db.insert("forumPluginConnections", copy);
+    });
+    let rejected = false;
+    for (let i = 0; i < 50; i++) {
+      try {
+        await owner.mutation(readRef, {
+          ...input,
+          connectionId: i % 2 ? second : seed.connectionId,
+        });
+      } catch (error) {
+        expect(String(error)).toContain("read rate limit");
+        rejected = true;
+        break;
+      }
+    }
+    expect(rejected).toBe(true);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+      expect(
+        (await ctx.db.query("agentQuotaBudgets").unique())?.usedUnits,
+      ).toBe(1000);
+      expect(
+        (await ctx.db.query("agentQuotaUsageCounters").unique())?.usedUnits,
+      ).toBe(250);
+      expect(await ctx.db.query("forumPluginCommands").collect()).toHaveLength(
+        0,
+      );
+    });
+  },
+);
+
+test.each(["human", "agent"] as const)(
+  "%s connection status exposes safe uncharged write-quota diagnostics, including exhaustion",
+  async (mode) => {
+    const t = setup();
+    const seed = await fixture(t, mode);
+    const owner = t.withIdentity({ subject: seed.owner });
+    const frozen = Date.UTC(2026, 11, 31, 23, 59, 59);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(frozen);
+    try {
+      const input = {
+        connectionId: seed.connectionId,
+        operation: "status",
+        args: {},
+      };
+      const initial = await owner.mutation(readRef, input);
+      expect(initial.data.quota).toEqual({
+        agentUsedUnits: 0,
+        agentLimitUnits: 250,
+        ownerUsedUnits: 0,
+        ownerLimitUnits: 1000,
+        remainingUnits: 250,
+        resetsAt: Date.UTC(2027, 0, 1),
+        settingsUrl: "https://www.symbaiex.com/developer",
+      });
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("agentQuotaBudgets").collect()).toHaveLength(
+          0,
+        );
+        expect(
+          await ctx.db.query("agentQuotaUsageCounters").collect(),
+        ).toHaveLength(0);
+        await ctx.db.insert("agentQuotaBudgets", {
+          ownerUserId: seed.owner,
+          monthKey: "2026-12",
+          freeAllowanceUnits: 100,
+          hardCapUnits: 1000,
+          usedUnits: 1000,
+          hardCapMetadataJson: "private metadata",
+          createdAt: frozen,
+          updatedAt: frozen,
+        });
+        await ctx.db.insert("agentQuotaUsageCounters", {
+          ownerUserId: seed.owner,
+          agentId: "helper",
+          monthKey: "2026-12",
+          usedUnits: 250,
+          updatedAt: frozen,
+        });
+      });
+      const exhausted = await owner.mutation(readRef, input);
+      expect(exhausted.data.quota).toEqual({
+        ...initial.data.quota,
+        agentUsedUnits: 250,
+        ownerUsedUnits: 1000,
+        remainingUnits: 0,
+      });
+      expect(JSON.stringify(exhausted)).not.toContain("private metadata");
+      await t.run(async (ctx) => {
+        expect(await ctx.db.query("agentQuotaUsage").collect()).toHaveLength(0);
+        expect(
+          (await ctx.db.query("agentQuotaBudgets").unique())?.usedUnits,
+        ).toBe(1000);
+        expect(
+          (await ctx.db.query("agentQuotaUsageCounters").unique())?.usedUnits,
+        ).toBe(250);
+      });
+    } finally {
+      clock.mockRestore();
+    }
   },
 );

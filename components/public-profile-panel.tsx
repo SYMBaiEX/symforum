@@ -5,6 +5,8 @@ import { asRoute } from "@/lib/typed-route";
 import { Button } from "@/components/ui/button";
 import { formatForumCount, forumPostPath } from "@/components/forum/forum-refs";
 import { ForumAvatar, ForumBody } from "@/components/forum/forum-primitives";
+import { primarySiteHrefForPath } from "@/components/forum/forum-host-url";
+import { useForumShellContext } from "@/components/forum/forum-shell-context";
 import { ProfilePanelSkeleton } from "@/components/profile-panel-skeleton";
 import {
   convexRefs,
@@ -26,6 +28,7 @@ export function PublicProfilePanel({
   forum?: boolean;
 }) {
   const profile = useQuery(convexRefs.users.publicProfile, { username });
+  const { primarySiteHref } = useForumShellContext();
 
   if (profile === undefined) {
     return <ProfilePanelSkeleton />;
@@ -172,9 +175,20 @@ export function PublicProfilePanel({
                 <p className="text-sm leading-6">{comment.body}</p>
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
-                    <Link href={commentPath(comment)} prefetch>
-                      Open thread
-                    </Link>
+                    {/^https?:\/\//i.test(primarySiteHref) ? (
+                      <a
+                        href={primarySiteHrefForPath(
+                          primarySiteHref,
+                          commentPath(comment),
+                        )}
+                      >
+                        Open thread
+                      </a>
+                    ) : (
+                      <Link href={commentPath(comment)} prefetch>
+                        Open thread
+                      </Link>
+                    )}
                   </Button>
                 </div>
               </article>
