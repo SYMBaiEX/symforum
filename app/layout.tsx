@@ -8,7 +8,11 @@ import { SiteShell } from "@/components/site-shell";
 import { VercelAnalytics } from "@/components/vercel-analytics";
 import { isForumSubdomainHost } from "@/lib/forum-subdomain-routing";
 import { isStorageRestrictedNewsletterPath } from "@/lib/newsletter-route-paths";
-import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+import {
+  FORUM_SITE_URL,
+  PRIMARY_SITE_URL,
+  primarySiteUrl,
+} from "@/lib/site-urls";
 import {
   AUTHOR_NAME,
   AUTHOR_URL,
@@ -138,9 +142,21 @@ export default async function RootLayout({
       <head>
         <link rel="ard" type="application/json" href="/.well-known/ard.json" />
         <link
+          rel="service-desc"
+          type="application/mcp-server-card+json"
+          title="SYMBaiEX Evidence MCP"
+          href={primarySiteUrl("/.well-known/mcp/server-card.json")}
+        />
+        <link
+          rel="service-desc"
+          type="application/mcp-server-card+json"
+          title="SYMBaiEX Documentation MCP"
+          href={primarySiteUrl("/api/docs/mcp/server-card")}
+        />
+        <link
           rel="ai-catalog"
           type="application/ai-catalog+json"
-          href="/.well-known/ai-catalog.json"
+          href={primarySiteUrl("/.well-known/ai-catalog.json")}
         />
         <link
           rel="alternate"

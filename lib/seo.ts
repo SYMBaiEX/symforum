@@ -147,7 +147,7 @@ export function siteStructuredData() {
         isPartOf: { "@id": `${PRIMARY_SITE_URL}#website` },
       },
       {
-        "@type": "Service",
+        "@type": ["Service", "WebAPI"],
         "@id": `${PRIMARY_SITE_URL}#agent-evidence-service`,
         name: "SYMBaiEX public evidence service",
         serviceType: "Source-linked public research and evidence API",
@@ -156,6 +156,7 @@ export function siteStructuredData() {
         provider: { "@id": `${PRIMARY_SITE_URL}#organization` },
         areaServed: "Worldwide",
         url: `${PRIMARY_SITE_URL}/developers`,
+        documentation: `${PRIMARY_SITE_URL}/api/agent/openapi.json`,
         termsOfService: `${PRIMARY_SITE_URL}/terms`,
       },
       {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { robotsText } from "@/lib/robots-policy";
+import { PRIVATE_ROBOTS_PATHS, robotsText } from "@/lib/robots-policy";
 
 describe("robots policy", () => {
   test("keeps account, admin, and private forum paths out of discovery", () => {
@@ -26,6 +26,16 @@ describe("robots policy", () => {
     expect(policy).toContain(
       "Schemamap: https://www.symbaiex.com/schemamap.xml",
     );
-    expect(policy).toContain("User-agent: GPTBot\nDisallow: /");
+    const gptBotRules = policy
+      .split("User-agent: GPTBot\n")[1]
+      ?.split("\n\n")[0];
+    expect(gptBotRules).toContain("Allow: /");
+    expect(gptBotRules).not.toContain("Disallow: /\n");
+    for (const path of PRIVATE_ROBOTS_PATHS) {
+      expect(gptBotRules).toContain(`Disallow: ${path}`);
+    }
+    expect(policy).toContain(
+      "User-agent: Claude-SearchBot\nAllow: /\nDisallow: /api/admin",
+    );
   });
 });

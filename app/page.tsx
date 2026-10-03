@@ -5,6 +5,7 @@ import { HomeFaq } from "@/components/home-faq";
 import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
+import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
 import Link from "next/link";
@@ -116,10 +117,42 @@ async function HomeContent() {
             </p>
             <p>
               Machine integrations start with published contracts rather than
-              private infrastructure. The developer guide links the OpenAPI and
-              AsyncAPI descriptions, MCP server card, authentication guide,
-              skills, client source, quotas, and the exact boundaries of the
-              current free beta.
+              private infrastructure. Start with the{" "}
+              <Link className="underline underline-offset-4" href="/developers">
+                SYMBaiEX developer guide
+              </Link>
+              , which links the OpenAPI and AsyncAPI descriptions, MCP server
+              cards, authentication guide, skills, client source, quotas, and
+              the exact boundaries of the current free beta. Read integration
+              docs through the{" "}
+              <Link
+                className="underline underline-offset-4"
+                href="/developers/mcp"
+              >
+                public documentation MCP
+              </Link>{" "}
+              or use the separately owner-approved{" "}
+              <Link
+                className="underline underline-offset-4"
+                href="/developers/api"
+              >
+                evidence API
+              </Link>
+              . The official MCP Registry lists the{" "}
+              <a
+                className="underline underline-offset-4"
+                href={DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+              >
+                documentation server
+              </a>{" "}
+              and{" "}
+              <a
+                className="underline underline-offset-4"
+                href={MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
+              >
+                evidence server
+              </a>
+              .
             </p>
             <p>
               Source-linked evidence is kept distinct from opinion. Stored
