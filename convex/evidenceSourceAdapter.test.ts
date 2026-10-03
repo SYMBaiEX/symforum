@@ -22,6 +22,17 @@ describe("evidence source adapter contract", () => {
     }
   });
 
+  test("allows dotted repository keys but rejects empty dotted segments", () => {
+    const dotted = { ...source, key: "github-releases-vercel-next.js" };
+    expect(validateEvidenceAdapterDescriptor(dotted)).toBe(dotted);
+
+    for (const key of ["foo.", "foo..bar", ".foo", "foo.-bar"]) {
+      expect(() =>
+        validateEvidenceAdapterDescriptor({ ...source, key }),
+      ).toThrow(/Invalid evidence source key/);
+    }
+  });
+
   test("produces deterministic detached normalized output", () => {
     const batch = normalizeEvidenceBatch(source, {
       sourceKey: source.key,

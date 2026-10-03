@@ -100,7 +100,9 @@ export function evidenceRetryPolicy(
 export function validateEvidenceAdapterDescriptor(
   descriptor: EvidenceSourceAdapterDescriptor,
 ) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(descriptor.key)) {
+  // Dots are needed for repository-derived keys such as
+  // github-releases-vercel-next.js; each dotted segment must remain nonempty.
+  if (!/^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/.test(descriptor.key)) {
     throw new Error(`Invalid evidence source key: ${descriptor.key}`);
   }
   for (const [field, value] of [

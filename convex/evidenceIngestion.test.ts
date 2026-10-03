@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   adapterCheckpointCursor,
   deriveEvidence,
+  evidenceAdapterDescriptor,
   evidenceRequestHeaders,
   parseGithubAdvisories,
   parseCrossrefWorks,
@@ -11,7 +12,9 @@ import {
   shouldEnrichDocumentVersion,
   shouldIngestSource,
   stableJson,
+  validateParsedEvidenceBatch,
 } from "./evidenceIngestion";
+import { PUBLIC_EVIDENCE_SOURCE_REGISTRY } from "./evidenceSourceRegistry";
 
 describe("evidence ingestion normalizers", () => {
   test("rejects malformed official payloads", () => {
@@ -132,6 +135,103 @@ describe("evidence ingestion normalizers", () => {
     ).toHaveLength(100);
   });
 
+  test("validates parsed batches before persistence without losing rich fields", () => {
+    const descriptor = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find(
+      (source) => source.key === "cisa-kev",
+    )!;
+    const documents = parseKevPayload({
+      vulnerabilities: [
+        {
+          cveID: "CVE-2026-12345",
+          vendorProject: "Vendor",
+          product: "Product",
+          shortDescription: "A detailed issue excerpt.",
+          dateAdded: "2026-08-01",
+          dueDate: "2026-08-15",
+        },
+      ],
+    });
+
+    const validated = validateParsedEvidenceBatch(
+      descriptor,
+      descriptor.key,
+      documents,
+    );
+    expect(validated).toBe(documents);
+    expect(validated[0]).toMatchObject({
+      externalKey: "CVE-2026-12345",
+      excerpt: "A detailed issue excerpt.",
+      searchText: expect.stringContaining("CVE-2026-12345"),
+      tags: ["cisa", "kev", "cve-2026-12345"],
+      authors: ["CISA"],
+      sourceRevision: "2026-08-01:2026-08-15",
+      metadata: { vendorProject: "Vendor", product: "Product" },
+    });
+    expect(() =>
+      validateParsedEvidenceBatch(descriptor, "other-source", documents),
+    ).toThrow(/emitted batch/);
+    expect(() =>
+      validateParsedEvidenceBatch(descriptor, descriptor.key, [
+        ...documents,
+        ...documents,
+      ]),
+    ).toThrow(/duplicate documents/);
+    expect(() =>
+      validateParsedEvidenceBatch(
+        descriptor,
+        descriptor.key,
+        Array.from({ length: descriptor.maxItemsPerRun + 1 }, (_, index) => ({
+          ...documents[0]!,
+          externalKey: `CVE-2026-${String(12345 + index).padStart(5, "0")}`,
+        })),
+      ),
+    ).toThrow(/exceeded maxItemsPerRun/);
+  });
+
+  test("uses a per-repository contract for runtime GitHub release batches", () => {
+    const descriptor = evidenceAdapterDescriptor({
+      key: "github-releases-vercel-next.js",
+      name: "GitHub releases: vercel/next.js",
+      sourceType: "api",
+      baseUrl: "https://api.github.com/repos/vercel/next.js/releases",
+      homepageUrl: "https://github.com/vercel/next.js/releases",
+      termsUrl:
+        "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      provenanceClass: "official",
+      licenseClass: "attributed",
+    });
+    expect(descriptor.key).toBe("github-releases-vercel-next.js");
+    expect(descriptor.name).toBe("GitHub releases: vercel/next.js");
+    expect(descriptor.maxItemsPerRun).toBe(30);
+
+    const releases = parseGithubReleases(
+      Array.from({ length: 31 }, (_, index) => ({
+        tag_name: `v${index + 1}.0.0`,
+        html_url: `https://github.com/vercel/next.js/releases/tag/v${index + 1}.0.0`,
+        name: `Release ${index + 1}`,
+      })),
+      "vercel/next.js",
+      31,
+    );
+    expect(releases).toHaveLength(30);
+    expect(
+      validateParsedEvidenceBatch(descriptor, descriptor.key, releases),
+    ).toBe(releases);
+    expect(() =>
+      validateParsedEvidenceBatch(
+        descriptor,
+        "github-allowlisted-releases",
+        releases,
+      ),
+    ).toThrow(/emitted batch/);
+    expect(() =>
+      validateParsedEvidenceBatch(descriptor, descriptor.key, [
+        ...releases,
+        { ...releases[0]!, externalKey: "vercel/next.js@overflow" },
+      ]),
+    ).toThrow(/exceeded maxItemsPerRun/);
+  });
+
   test("derives only explicit source facts across every allowlisted record type", () => {
     const [advisory] = parseGithubAdvisories([
       {
@@ -234,7 +334,9 @@ describe("evidence ingestion normalizers", () => {
     );
     expect(release?.metadata).toMatchObject({ assetCount: 1, bodySummary: "A bounded release summary." });
     expect(deriveEvidence(release!).claims).toEqual(
-      expect.arrayContaining([expect.objectContaining({ predicate: "targets-revision", objectText: "abc123" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ predicate: "targets-revision", objectText: "abc123" }),
+      ]),
     );
   });
 });
