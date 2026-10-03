@@ -67,7 +67,9 @@ describe("forum MCP protocol boundary", () => {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {}, resources: {} },
         serverInfo: { title: "SYMBaiEX Forum" },
-        instructions: expect.stringContaining("completed means the command ran"),
+        instructions: expect.stringContaining(
+          "completed means the command ran",
+        ),
       },
     });
     const discovered = await POST(request("tools/list"));
@@ -170,7 +172,8 @@ describe("forum MCP protocol boundary", () => {
       Response.json({
         status: "pending_approval",
         commandId: "proposal-1",
-        approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=proposal-1#review-queue",
+        approvalUrl:
+          "https://forum.symbaiex.com/control-panel/agent-access?commandId=proposal-1#review-queue",
       }),
     );
     const response = await POST(
@@ -193,7 +196,9 @@ describe("forum MCP protocol boundary", () => {
       result: {
         content: expect.arrayContaining([
           expect.objectContaining({
-            text: expect.stringContaining("This action has not run and no content has been published"),
+            text: expect.stringContaining(
+              "This action has not run and no content has been published",
+            ),
           }),
           expect.objectContaining({
             text: expect.stringContaining("commandId=proposal-1#review-queue"),
@@ -222,39 +227,62 @@ describe("forum MCP protocol boundary", () => {
     {
       status: "completed",
       publicationStatus: "pending_moderation",
-      pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
+      pendingContentUrl:
+        "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue",
       data: { threadId: "thread-1", status: "pending" },
     },
-  ])("reports moderated content as unpublished, including old retry receipts", async (receipt) => {
-    vi.mocked(fetch).mockResolvedValue(Response.json(receipt));
-    const response = await POST(request("tools/call", {
-      name: "forum_create_thread",
-      arguments: {
-        categorySlug: "general", title: "Title", body: "Body",
-        idempotencyKey: "command-123", expectedPolicyVersion: 1,
-      },
-    }, token()));
-    const body = await response.json();
-    expect(body.result.structuredContent).toEqual(receipt);
-    expect(body.result.content[0].text).toContain("not published yet");
-    expect(body.result.content[0].text).toContain("#moderation-queue");
-    expect(body.result.content[0].text).toContain("forum moderator");
-    expect(JSON.parse(body.result.content[1].text)).toEqual(receipt);
-  });
+  ])(
+    "reports moderated content as unpublished, including old retry receipts",
+    async (receipt) => {
+      vi.mocked(fetch).mockResolvedValue(Response.json(receipt));
+      const response = await POST(
+        request(
+          "tools/call",
+          {
+            name: "forum_create_thread",
+            arguments: {
+              categorySlug: "general",
+              title: "Title",
+              body: "Body",
+              idempotencyKey: "command-123",
+              expectedPolicyVersion: 1,
+            },
+          },
+          token(),
+        ),
+      );
+      const body = await response.json();
+      expect(body.result.structuredContent).toEqual(receipt);
+      expect(body.result.content[0].text).toContain("not published yet");
+      expect(body.result.content[0].text).toContain("#moderation-queue");
+      expect(body.result.content[0].text).toContain("forum moderator");
+      expect(JSON.parse(body.result.content[1].text)).toEqual(receipt);
+    },
+  );
   test("preserves authoritative successful publication in both model and structured output", async () => {
     const receipt = {
-      status: "completed", publicationStatus: "published",
+      status: "completed",
+      publicationStatus: "published",
       message: "Published to the forum.",
       data: { threadId: "thread-1", status: "active" },
     };
     vi.mocked(fetch).mockResolvedValue(Response.json(receipt));
-    const response = await POST(request("tools/call", {
-      name: "forum_create_thread",
-      arguments: {
-        categorySlug: "general", title: "Title", body: "Body",
-        idempotencyKey: "command-123", expectedPolicyVersion: 1,
-      },
-    }, token()));
+    const response = await POST(
+      request(
+        "tools/call",
+        {
+          name: "forum_create_thread",
+          arguments: {
+            categorySlug: "general",
+            title: "Title",
+            body: "Body",
+            idempotencyKey: "command-123",
+            expectedPolicyVersion: 1,
+          },
+        },
+        token(),
+      ),
+    );
     const body = await response.json();
     expect(body.result.structuredContent).toEqual(receipt);
     expect(body.result.content[0].text).toBe("Published to the forum.");
@@ -302,7 +330,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.3.0",
+            version: "1.3.1",
           },
         },
       },

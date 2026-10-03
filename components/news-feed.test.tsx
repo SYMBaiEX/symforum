@@ -164,3 +164,123 @@ test("shows a resolved empty snapshot without falling back to stale initial stor
   expect(html).toContain('role="status"');
   expect(mocks.query).toHaveBeenCalledWith(convexRefs.news.timeline, "skip");
 });
+
+test("forum news keeps ranked source and local discussion activity distinct", () => {
+  const html = renderToStaticMarkup(
+    <NewsFeed
+      enabled={false}
+      variant="forum"
+      initialStories={[
+        {
+          hnItemId: 42,
+          rank: 3,
+          title: "Forum edition story",
+          host: "example.com",
+          url: "https://example.com/story",
+          score: 321,
+          descendants: 87,
+          timePosted: Date.UTC(2026, 9, 3) / 1000,
+          platformStats: { score: 4, comments: 2, saves: 1 },
+        },
+      ]}
+    />,
+  );
+
+  expect(html).toContain('aria-label="Hacker News rank 3"');
+  expect(html).toContain("321 HN points");
+  expect(html).toContain("87 HN comments");
+  expect(html).toContain("4 SYMBaiEX votes");
+  expect(html).toContain("2 SYMBaiEX comments");
+  expect(html).toContain('dateTime="2026-10-03T00:00:00.000Z"');
+  expect(html).toContain(
+    'href="https://www.symbaiex.com/news/forum-edition-story-42"',
+  );
+  expect(html).toContain('href="https://example.com/story"');
+  expect(html).toContain('rel="noopener noreferrer"');
+});
+
+test("forum news preserves source safety and does not fabricate absent HN counts", () => {
+  const html = renderToStaticMarkup(
+    <NewsFeed
+      enabled={false}
+      variant="forum"
+      initialStories={[
+        {
+          hnItemId: 43,
+          rank: 2,
+          title: "Unsafe source",
+          url: "javascript:alert(1)",
+        },
+      ]}
+    />,
+  );
+
+  expect(html).toContain("Discuss on SYMBaiEX");
+  expect(html).not.toContain("HN points");
+  expect(html).not.toContain("HN comments");
+  expect(html).not.toContain("Read source");
+  expect(html).not.toContain("javascript:");
+});
+
+test("forum editions preserve the resolved empty state and snapshot control label", () => {
+  mocks.query.mockClear();
+  const html = renderToStaticMarkup(
+    <NewsFeed
+      enabled
+      variant="forum"
+      initialStories={[]}
+      initialTimeline={{ snapshots: [], snapshot: null, stories: [] }}
+    />,
+  );
+
+  expect(html).toContain("No indexed stories for this snapshot yet.");
+  expect(html).toContain('role="status"');
+  expect(html).toContain('id="forum-news-snapshot-filter-label"');
+  expect(html).toContain('aria-labelledby="forum-news-snapshot-filter-label"');
+  expect(mocks.query).toHaveBeenCalledWith(convexRefs.news.timeline, "skip");
+});
+
+test("forum news keeps the retry fallback interactive and local voting labels", () => {
+  mocks.query.mockClear();
+  const html = renderToStaticMarkup(
+    <NewsFeed
+      enabled
+      variant="forum"
+      initialStories={[
+        {
+          hnItemId: 44,
+          rank: 1,
+          title: "Fallback community story",
+          score: 800,
+        },
+      ]}
+      initialTimeline={null}
+    />,
+  );
+
+  expect(mocks.query).toHaveBeenCalledWith(convexRefs.news.timeline, {});
+  expect(html).toContain(
+    'aria-label="SYMBaiEX votes for Fallback community story"',
+  );
+  expect(html).toContain('aria-label="Upvote Fallback community story"');
+  expect(html).toContain('aria-pressed="false"');
+  expect(html).toContain("800 HN points");
+});
+
+test("forum news keeps a named news region while the timeline is loading", () => {
+  mocks.query.mockClear();
+  const html = renderToStaticMarkup(
+    <NewsFeed
+      enabled
+      variant="forum"
+      initialStories={[]}
+      initialTimeline={null}
+    />,
+  );
+
+  expect(html).toContain('aria-label="Hacker News stories"');
+  expect(html).toContain('role="status"');
+  expect(html).toContain("Loading stories…");
+  expect(html).not.toContain("No indexed stories");
+  expect(mocks.query).toHaveBeenCalledWith(convexRefs.news.timeline, {});
+});

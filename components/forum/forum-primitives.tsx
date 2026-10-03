@@ -11,7 +11,7 @@ import { forumHomeHref } from "@/components/forum/forum-home-model";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import usePresence from "@convex-dev/presence/react";
-import { ChevronDown, Star } from "lucide-react";
+import { ChevronDown, MessageSquare, Star } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -1655,8 +1655,10 @@ export function ForumThreadTable({
   category,
   density = "standard",
   showFooter = true,
+  variant = "stream",
   threads,
 }: {
+  variant?: "stream" | "grouped";
   category: ForumCategoryRecord | null;
   density?: "compact" | "standard";
   showFooter?: boolean;
@@ -1672,7 +1674,7 @@ export function ForumThreadTable({
   }
   return (
     <div
-      className="space-y-8"
+      className={variant === "grouped" ? "space-y-4" : "space-y-8"}
       aria-label={
         category ? `${getCategoryTitle(category)} threads` : "Forum threads"
       }
@@ -1680,11 +1682,21 @@ export function ForumThreadTable({
       {getForumThreadSections(threads).map((section) => (
         <section
           key={section.key}
-          className="space-y-7"
+          className={
+            variant === "grouped"
+              ? "overflow-hidden rounded-sm bg-muted/20"
+              : "space-y-7"
+          }
           aria-label={section.label}
         >
           {section.showHeader ? (
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3
+              className={
+                variant === "grouped"
+                  ? "bg-muted/70 px-4 py-3 text-xs font-medium"
+                  : "text-sm font-medium text-muted-foreground"
+              }
+            >
               <ForumThreadSectionLabel section={section} />
             </h3>
           ) : null}
@@ -1693,6 +1705,7 @@ export function ForumThreadTable({
               key={thread._id}
               category={category}
               density={density}
+              variant={variant}
               thread={thread}
             />
           ))}
@@ -1717,8 +1730,10 @@ export function ForumThreadTable({
 function ForumThreadRow({
   category,
   density,
+  variant,
   thread,
 }: {
+  variant: "stream" | "grouped";
   category: ForumCategoryRecord | null;
   density: "compact" | "standard";
   thread: ForumThreadSummaryRecord;
@@ -1733,6 +1748,96 @@ function ForumThreadRow({
           thread.firstUnreadPage,
         )
       : null;
+  if (variant === "grouped") {
+    return (
+      <article className="grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 lg:grid-cols-[24px_minmax(0,1fr)_74px_190px] [content-visibility:auto] [contain-intrinsic-size:0_8rem]">
+        <span
+          className={`pt-3 ${thread.viewerUnread ? "text-primary" : "text-muted-foreground"}`}
+          role="img"
+          aria-label={
+            thread.viewerUnread === undefined
+              ? "Discussion"
+              : thread.viewerUnread
+                ? "Unread thread"
+                : "Read thread"
+          }
+        >
+          <MessageSquare className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3>
+            <ForumLink
+              href={forumPath(categorySlug, thread.slug)}
+              prefetch
+              className="focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere]"
+            >
+              {thread.title}
+            </ForumLink>
+          </h3>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-muted-foreground">
+            <ForumThreadPrefixBadge thread={thread} />
+            <ForumThreadStateBadges thread={thread} />
+            <span>{getThreadAuthor(thread)}</span>
+            <span>{formatForumDateTime(getThreadStartedAt(thread))}</span>
+          </div>
+          {density === "standard" && thread.excerpt ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+              {thread.excerpt}
+            </p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+            <span className="font-mono text-[10px] lg:hidden">
+              {formatForumCount(getThreadReplyCount(thread))} replies ·{" "}
+              {formatForumCount(thread.viewCount)} views
+            </span>
+            {getThreadRatingCount(thread) > 0 ? (
+              <ForumThreadRatingSummary
+                average={getThreadRatingAverage(thread)}
+                count={getThreadRatingCount(thread)}
+              />
+            ) : null}
+            {firstUnreadHref ? (
+              <ForumLink
+                aria-label={`First unread » — Go to first unread post in ${thread.title}`}
+                href={firstUnreadHref}
+                prefetch
+                className="focus-ring inline-flex min-h-11 items-center text-primary hover:underline"
+              >
+                First unread »
+              </ForumLink>
+            ) : null}
+          </div>
+        </div>
+        <dl className="hidden space-y-2 pt-3 font-mono text-[10px] text-muted-foreground lg:block">
+          <div className="flex flex-col">
+            <dt className="order-2">replies</dt>
+            <dd className="order-1 text-sm tabular-nums text-foreground">
+              {formatForumCount(getThreadReplyCount(thread))}
+            </dd>
+          </div>
+          <div className="flex flex-col">
+            <dt className="order-2">views</dt>
+            <dd className="order-1 tabular-nums text-foreground">
+              {formatForumCount(thread.viewCount)}
+            </dd>
+          </div>
+        </dl>
+        <div className="col-start-2 min-w-0 lg:col-start-auto lg:pt-2">
+          <ForumLink
+            aria-label={`Last » — Go to last post in ${thread.title}`}
+            href={getThreadLastPostHref(thread, categorySlug)}
+            prefetch
+            className="focus-ring block min-h-11 content-center break-words text-xs font-medium leading-5 hover:text-primary"
+          >
+            {getThreadLastAuthor(thread)}
+          </ForumLink>
+          <p className="font-mono text-[10px] leading-5 text-muted-foreground">
+            {formatForumDateTime(getThreadLastActivityAt(thread))}
+          </p>
+        </div>
+      </article>
+    );
+  }
   return (
     <article className="min-w-0 [content-visibility:auto] [contain-intrinsic-size:0_10rem]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-muted-foreground">
@@ -1883,7 +1988,9 @@ export function ForumPostFrame({
   timestamp,
   postNumber,
   children,
+  variant = "plain",
 }: {
+  variant?: "plain" | "grouped";
   actions?: ReactNode;
   author: string;
   authorHref?: string;
@@ -1912,11 +2019,21 @@ export function ForumPostFrame({
 
   return (
     <article
-      className="min-w-0 py-4 [content-visibility:auto] [contain-intrinsic-size:0_24rem]"
+      className={cn(
+        "min-w-0 [content-visibility:auto] [contain-intrinsic-size:0_24rem]",
+        variant === "grouped"
+          ? "overflow-hidden rounded-sm bg-muted/20"
+          : "py-4",
+      )}
       id={id}
       aria-label={`Post ${postNumber} by ${author}`}
     >
-      <header className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <header
+        className={cn(
+          "flex flex-wrap items-center gap-3 text-xs text-muted-foreground",
+          variant === "grouped" && "bg-muted/70 px-4 py-2",
+        )}
+      >
         <ForumAvatar
           alt={`${author} avatar`}
           className="size-9 rounded-full"
@@ -1962,8 +2079,20 @@ export function ForumPostFrame({
           <span>#{postNumber}</span>
         )}
       </header>
-      <div className="mt-4 min-w-0 max-w-[70ch]">{children}</div>
-      <details className="group mt-1 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          "min-w-0 max-w-[70ch]",
+          variant === "grouped" ? "px-4 pt-5" : "mt-4",
+        )}
+      >
+        {children}
+      </div>
+      <details
+        className={cn(
+          "group mt-1 text-xs text-muted-foreground",
+          variant === "grouped" && "px-4",
+        )}
+      >
         <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center hover:text-foreground">
           About {author}
           <ChevronDown
@@ -2024,7 +2153,14 @@ export function ForumPostFrame({
         </div>
       </details>
       {actions ? (
-        <div className="mt-4 flex flex-wrap items-center gap-1">{actions}</div>
+        <div
+          className={cn(
+            "mt-4 flex flex-wrap items-center gap-1",
+            variant === "grouped" && "px-4 pb-4",
+          )}
+        >
+          {actions}
+        </div>
       ) : null}
     </article>
   );

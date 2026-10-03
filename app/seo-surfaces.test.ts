@@ -1,7 +1,11 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { metadata as aiReadableResearchMetadata } from "@/app/research/ai-readable-web/page";
 import { metadata as editorialTrustResearchMetadata } from "@/app/research/editorial-trust-and-contracts/page";
 import { metadata as contactMetadata } from "@/app/contact/page";
@@ -119,8 +123,6 @@ describe("public discovery surfaces", () => {
 
   test("interactive forum routes keep a server-rendered H1 while data loads", () => {
     const routes = [
-      "app/forum/[categorySlug]/page.tsx",
-      "app/forum/[categorySlug]/[threadSlug]/page.tsx",
       "app/forum/announcements/page.tsx",
       "app/forum/online/page.tsx",
       "app/forum/calendar/page.tsx",
@@ -132,5 +134,32 @@ describe("public discovery surfaces", () => {
         /<h1\b/,
       );
     }
+  });
+
+  test.each([
+    ["app/forum/[categorySlug]/page.tsx", "categoryName"],
+    ["app/forum/[categorySlug]/[threadSlug]/page.tsx", "title"],
+  ])(
+    "%s delegates its only page heading to the shared forum header",
+    (route, titleVariable) => {
+      const source = readFileSync(resolve(process.cwd(), route), "utf8");
+      expect(source.match(/<ForumPageHeader\b/g)).toHaveLength(1);
+      expect(source).toContain(`title={${titleVariable}}`);
+      expect(source).not.toMatch(/<h1\b/);
+      expect(source).toContain("showHeading={false}");
+    },
+  );
+
+  test("the shared forum header server-renders one titled H1 before client data loads", () => {
+    const html = renderToStaticMarkup(
+      createElement(ForumPageHeader, {
+        title: "Research & discussion",
+        view: "boards",
+        nested: true,
+      }),
+    );
+    expect(html.match(/<h1(?:\s|>)/g)).toHaveLength(1);
+    expect(html).toMatch(/<h1[^>]*>Research &amp; discussion<\/h1>/);
+    expect(html).toContain('aria-label="Forum views"');
   });
 });

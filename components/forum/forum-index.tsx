@@ -14,6 +14,12 @@ import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import { ArrowUpRight, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import {
+  ForumBodyGrid,
+  ForumPageHeader,
+  ForumSectionHeader,
+  forumQuietAction,
+} from "./forum-layout-primitives";
 import { toast } from "sonner";
 import { ForumFeedList } from "./forum-feed-list";
 import { ForumChat } from "./forum-chat";
@@ -44,14 +50,7 @@ export type ForumIndexProps = {
   initialStories?: HnStory[];
   initialTimeline?: NewsTimelineRecord | null;
 };
-const views = [
-  { value: "boards", label: "Boards" },
-  { value: "feed", label: "Feed" },
-  { value: "news", label: "News" },
-  { value: "community", label: "Community" },
-] as const;
-const quietLink =
-  "focus-ring inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
+const quietLink = forumQuietAction;
 
 export function ForumIndex({
   enabled,
@@ -67,6 +66,7 @@ export function ForumIndex({
         <div className="mt-8">
           {view === "news" ? (
             <NewsFeed
+              variant="forum"
               enabled={false}
               initialStories={initialStories}
               initialTimeline={initialTimeline}
@@ -126,86 +126,41 @@ function LiveForumIndex({
   return (
     <div>
       <ForumHomeHeader overview={overview} view={view} sort={sort} />
-      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(220px,1fr)]">
-        <div className="min-w-0">
-          {view === "boards" ? <ForumChat /> : null}
-          {view === "news" ? (
-            <NewsFeed
-              enabled
-              initialStories={initialStories}
-              initialTimeline={initialTimeline}
-            />
-          ) : view === "boards" ? (
-            overview === undefined ? (
-              <p
-                role="status"
-                aria-busy="true"
-                className="py-8 text-sm text-muted-foreground"
-              >
-                Loading boards…
-              </p>
-            ) : (
-              <ForumBoards overview={overview} />
-            )
+      <ForumBodyGrid
+        sidebar={
+          <ForumHomeRail
+            overview={overview}
+            online={snapshot?.data}
+            onlineRefreshError={refreshError}
+            refreshOnlineSummary={refreshNow}
+            news={view === "news" ? [] : news}
+          />
+        }
+      >
+        <ForumChat />
+        {view === "news" ? (
+          <NewsFeed
+            variant="forum"
+            enabled
+            initialStories={initialStories}
+            initialTimeline={initialTimeline}
+          />
+        ) : view === "boards" ? (
+          overview === undefined ? (
+            <p
+              role="status"
+              aria-busy="true"
+              className="py-8 text-sm text-muted-foreground"
+            >
+              Loading boards…
+            </p>
           ) : (
-            <>
-              {view === "feed" && news.length > 0 ? (
-                <section
-                  aria-labelledby="forum-news-heading"
-                  className="mb-6 rounded-lg bg-muted/35 px-4 py-2"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <h2
-                      id="forum-news-heading"
-                      className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground"
-                    >
-                      On Hacker News
-                    </h2>
-                    <ForumLink
-                      className={quietLink}
-                      href={forumHomeHref("news")}
-                    >
-                      All news{" "}
-                      <ArrowUpRight aria-hidden="true" className="size-4" />
-                    </ForumLink>
-                  </div>
-                  <div className="space-y-1">
-                    {news.slice(0, 3).map((story) => (
-                      <article key={story.hnItemId}>
-                        <Link
-                          className="focus-ring flex min-h-11 flex-col justify-center rounded-sm hover:text-primary"
-                          href={asRoute(primarySiteUrl(newsStoryPath(story)))}
-                        >
-                          <h3 className="text-base font-semibold leading-5">
-                            {story.title}
-                          </h3>
-                          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-                            {story.host ?? "Hacker News"}
-                            {typeof story.score === "number"
-                              ? ` · ${formatForumCount(story.score)} HN points`
-                              : ""}
-                            {typeof story.descendants === "number"
-                              ? ` · ${formatForumCount(story.descendants)} HN comments`
-                              : ""}
-                          </p>
-                        </Link>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-              <ForumFeedList sort={sort} communityOnly={view === "community"} />
-            </>
-          )}
-        </div>
-        <ForumHomeRail
-          overview={overview}
-          online={snapshot?.data}
-          onlineRefreshError={refreshError}
-          refreshOnlineSummary={refreshNow}
-          news={view === "boards" ? news : []}
-        />
-      </div>
+            <ForumBoards overview={overview} />
+          )
+        ) : (
+          <ForumFeedList sort={sort} communityOnly={view === "community"} />
+        )}
+      </ForumBodyGrid>
     </div>
   );
 }
@@ -227,20 +182,20 @@ function ForumHomeHeader({
         category.status === "active",
     ) ?? [];
   return (
-    <header>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {view === "feed"
-              ? "The feed"
-              : view === "news"
-                ? "News"
-                : view === "community"
-                  ? "Community"
-                  : "Forum"}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
+    <ForumPageHeader
+      title={
+        view === "feed"
+          ? "Feed"
+          : view === "news"
+            ? "News"
+            : view === "community"
+              ? "Community"
+              : "Forum"
+      }
+      view={view}
+      sort={sort}
+      actions={
+        <>
           <ForumLink
             aria-label="Search the forum"
             className={quietLink}
@@ -250,11 +205,11 @@ function ForumHomeHeader({
             <span className="hidden sm:inline">Search</span>
           </ForumLink>
           <details className="relative">
-            <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+            <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground">
               <Plus className="size-4" aria-hidden="true" />
               Create post
             </summary>
-            <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg bg-popover p-3 shadow-xl ring-1 ring-row-border">
+            <div className="absolute right-0 z-20 mt-2 w-72 rounded-sm bg-popover p-3 shadow-lg ring-1 ring-row-border">
               <p className="px-2 pb-2 text-xs text-muted-foreground">
                 Choose a board
               </p>
@@ -284,21 +239,9 @@ function ForumHomeHeader({
               </ForumLink>
             </div>
           </details>
-        </div>
-      </div>
-      <nav aria-label="Forum views" className="mt-2 flex flex-wrap gap-1">
-        {views.map((item) => (
-          <ForumLink
-            aria-current={view === item.value ? "page" : undefined}
-            className={`${quietLink} ${view === item.value ? "bg-primary/10 font-medium text-primary" : ""}`}
-            href={forumHomeHref(item.value, sort)}
-            key={item.value}
-          >
-            {item.label}
-          </ForumLink>
-        ))}
-      </nav>
-    </header>
+        </>
+      }
+    />
   );
 }
 
@@ -334,17 +277,18 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
   }
   return (
     <section aria-label="Board index">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">Forum index</h2>
-        <Button
-          aria-busy={pending}
-          disabled={isLoading || pending}
-          onClick={() => void markAllRead()}
-          type="button"
-          variant="ghost"
-        >
-          {pending ? "Marking…" : "Mark all read"}
-        </Button>
+      <div className="mb-2">
+        <ForumSectionHeader title="Forum index">
+          <Button
+            aria-busy={pending}
+            disabled={isLoading || pending}
+            onClick={() => void markAllRead()}
+            type="button"
+            variant="ghost"
+          >
+            {pending ? "Marking…" : "Mark all read"}
+          </Button>
+        </ForumSectionHeader>
       </div>
       <ForumGroupedBoards overview={overview} />
     </section>
@@ -369,11 +313,11 @@ function ForumHomeRail({
       .filter((category) => category.kind !== "section")
       .slice(0, 7) ?? [];
   return (
-    <aside aria-label="Forum context" className="space-y-6 text-sm">
+    <aside aria-label="Forum context" className="space-y-5 text-sm">
       {overview?.newestThreads.length ? (
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Latest activity</h2>
-          <div className="space-y-3">
+          <ForumSectionHeader title="Latest activity" />
+          <div className="space-y-2 px-3 pt-2">
             {overview.newestThreads.slice(0, 4).map((thread) => (
               <article key={thread.slug}>
                 <ForumLink
@@ -393,13 +337,12 @@ function ForumHomeRail({
       ) : null}
       {news.length ? (
         <section>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">On Hacker News</h2>
+          <ForumSectionHeader title="On Hacker News">
             <ForumLink className={quietLink} href={forumHomeHref("news")}>
               All news
             </ForumLink>
-          </div>
-          <div className="space-y-2">
+          </ForumSectionHeader>
+          <div className="space-y-2 px-3 pt-2">
             {news.slice(0, 3).map((story) => (
               <article key={story.hnItemId}>
                 <Link
@@ -413,6 +356,9 @@ function ForumHomeRail({
                   {typeof story.score === "number"
                     ? ` · ${formatForumCount(story.score)} HN points`
                     : ""}
+                  {typeof story.descendants === "number"
+                    ? ` · ${formatForumCount(story.descendants)} HN comments`
+                    : ""}
                 </p>
               </article>
             ))}
@@ -420,8 +366,8 @@ function ForumHomeRail({
         </section>
       ) : null}
       <section>
-        <h2 className="mb-3 text-sm font-semibold">Boards</h2>
-        <div className="flex flex-wrap gap-1 lg:flex-col lg:items-start">
+        <ForumSectionHeader title="Boards" />
+        <div className="mt-2 flex flex-wrap gap-1 lg:flex-col lg:items-start">
           {boards.map((board) => (
             <ForumLink
               className={quietLink}
@@ -442,8 +388,8 @@ function ForumHomeRail({
       </section>
       {overview?.announcements.length ? (
         <section>
-          <h2 className="mb-3 text-sm font-semibold">Announcements</h2>
-          <div className="space-y-4">
+          <ForumSectionHeader title="Announcements" />
+          <div className="space-y-3 px-3 pt-3">
             {overview.announcements.slice(0, 2).map((announcement) => (
               <ForumLink
                 className="focus-ring block text-sm leading-6 text-muted-foreground hover:text-primary"
@@ -457,8 +403,8 @@ function ForumHomeRail({
         </section>
       ) : null}
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Forum tools</h2>
-        <nav aria-label="Forum tools" className="flex flex-wrap gap-1">
+        <ForumSectionHeader title="Forum tools" />
+        <nav aria-label="Forum tools" className="mt-2 flex flex-wrap gap-1">
           {[
             { href: "/forum/new-posts", label: "New posts" },
             { href: "/forum/members", label: "Members" },
@@ -474,8 +420,8 @@ function ForumHomeRail({
         </nav>
       </section>
       <section>
-        <h2 className="mb-3 text-sm font-semibold">Around the forum</h2>
-        <dl className="flex gap-6">
+        <ForumSectionHeader title="Around the forum" />
+        <dl className="mt-3 flex gap-6 px-3">
           <div>
             <dt className="text-xs text-muted-foreground">Online</dt>
             <dd className="mt-1 font-medium">

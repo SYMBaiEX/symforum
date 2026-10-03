@@ -38,6 +38,11 @@ vi.mock("./forum-feed-list", () => ({
 vi.mock("./forum-chat", () => ({
   ForumChat: () => <section id="forum-chat">Lounge chat</section>,
 }));
+vi.mock("@/components/news-feed", () => ({
+  NewsFeed: ({ variant }: { variant?: string }) => (
+    <section data-news-variant={variant}>News stories</section>
+  ),
+}));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
 
@@ -102,6 +107,28 @@ test("default forum home starts with lounge chat and grouped boards while keepin
   expect(html).toContain('href="/forum?view=feed"');
   expect(html).not.toContain("data-feed-sort");
 });
+
+test.each(["feed", "news", "community"] as const)(
+  "%s keeps Lounge chat before its content and the current forum navigation",
+  (view) => {
+    mocks.query.mockImplementation((reference) =>
+      reference === forumRefs.overview ? overview : undefined,
+    );
+    const html = renderToStaticMarkup(<ForumIndex enabled view={view} />);
+    expect(html).toContain('id="forum-chat"');
+    expect(html).toContain(`href="/forum?view=${view}"`);
+    if (view === "news") {
+      expect(html).toContain('data-news-variant="forum"');
+      expect(html.indexOf('id="forum-chat"')).toBeLessThan(
+        html.indexOf('data-news-variant="forum"'),
+      );
+    } else {
+      expect(html.indexOf('id="forum-chat"')).toBeLessThan(
+        html.indexOf("data-feed-sort"),
+      );
+    }
+  },
+);
 
 test("shows loading instead of an empty online count before the first snapshot", () => {
   mocks.onlineSnapshot = {
