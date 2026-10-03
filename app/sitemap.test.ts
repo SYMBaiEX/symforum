@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { primarySiteUrl } from "@/lib/site-urls";
+import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
 
 const mocks = vi.hoisted(() => ({
   getPublishedPostSummaries: vi.fn(),
@@ -50,7 +51,27 @@ beforeEach(() => {
 });
 
 describe("sitemap health and fallback", () => {
-  test("always includes the canonical research hub", async () => {
+  test("includes every canonical developer resource route", async () => {
+    const sitemapModule = await loadSitemapModule();
+    const { default: runSitemap } = sitemapModule;
+
+    mocks.getPublishedPostSummaries.mockResolvedValue([]);
+    mocks.getPortfolioProjects.mockResolvedValue([]);
+    mocks.getPublicNewsletterIssues.mockResolvedValue([]);
+    mocks.getNewsTimeline.mockResolvedValue(null);
+    mocks.getDailyNews.mockResolvedValue([]);
+
+    const rows = await runSitemap();
+    for (const slug of Object.keys(DEVELOPER_RESOURCES)) {
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          url: primarySiteUrl(`/developers/${slug}`),
+        }),
+      );
+    }
+  });
+
+  test("includes public machine-readable resources without exposing admin paths", async () => {
     const sitemapModule = await loadSitemapModule();
     const { default: runSitemap, resetSitemapHealthForTests } = sitemapModule;
     resetSitemapHealthForTests();
@@ -70,6 +91,25 @@ describe("sitemap health and fallback", () => {
         url: primarySiteUrl("/research/editorial-trust-and-contracts"),
       }),
     );
+
+    for (const path of [
+      "/agents.md",
+      "/auth.md",
+      "/developers/llms.txt",
+      "/llms.txt",
+      "/llms-full.txt",
+      "/skills.sh",
+    ]) {
+      expect(rows).toContainEqual(
+        expect.objectContaining({ url: primarySiteUrl(path) }),
+      );
+    }
+
+    for (const path of ["/admin", "/api/admin", "/api/admin/telemetry"]) {
+      expect(rows).not.toContainEqual(
+        expect.objectContaining({ url: primarySiteUrl(path) }),
+      );
+    }
   });
 
   test("uses stale last-known-good snapshot when a source fails", async () => {

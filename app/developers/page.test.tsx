@@ -24,6 +24,16 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("@symbaiex/agent-cli@0.1.0 manifest");
     expect(html).toContain("https://www.symbaiex.com/api/docs/mcp");
     expect(html).toContain("https://www.symbaiex.com/api/agent/mcp");
+    expect(html).toContain(
+      'href="https://skills.sh/symbaiex/skills">the SYMBaiEX Skills.sh listing</a>',
+    );
+    expect(html).toContain(
+      "npx skills add symbaiex/skills --skill symbaiex-docs-mcp",
+    );
+    expect(html).toContain(
+      "npx skills add symbaiex/skills --skill symbaiex-agent-enrollment",
+    );
+    expect(html).toContain("Bun users can replace");
     for (const name of ["evidence", "docs"])
       expect(html).toContain(
         `href="https://registry.modelcontextprotocol.io/v0.1/servers/com.symbaiex.www%2F${name}/versions/1.0.0"`,
@@ -31,6 +41,19 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("search_symbaiex_docs");
     expect(html).toContain("read_symbaiex_doc");
     expect(html).toContain("WorkOS Connect");
+    expect(html).toContain('toolname="search_symbaiex_public_resources"');
+    expect(html).toContain("toolparamdescription=");
+    expect(html).toContain('action="https://www.symbaiex.com/ask"');
+    expect(html).toContain('method="get"');
+    expect(html).toContain('name="query"');
+    expect(html).toMatch(/maxlength="300"/i);
+    expect(html).toContain(
+      'aria-describedby="browser-resource-search-description"',
+    );
+    expect(html).not.toContain("toolautosubmit");
+    expect(html).toContain(
+      "Submitting opens the machine-readable JSON results.",
+    );
     for (const path of [
       "api",
       "openapi",

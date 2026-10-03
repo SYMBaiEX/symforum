@@ -7,21 +7,30 @@ describe("robots policy", () => {
     const policy = robotsText();
 
     expect(policy).toContain("User-agent: *\nAllow: /");
-    for (const path of [
-      "/api/admin",
-      "/api/agent/auth",
-      "/admin",
-      "/profile",
-      "/forum/control-panel",
-      "/forum/messages",
-      "/forum/moderation",
-      "/forum/saved",
-      "/forum/subscriptions",
-    ]) {
+    for (const path of PRIVATE_ROBOTS_PATHS) {
       expect(policy).toContain(`Disallow: ${path}`);
     }
     expect(policy).not.toContain("Disallow: /signin");
     expect(policy).not.toContain("Disallow: /agent/signup");
+    expect(policy).toContain("Disallow: /agent-auth");
+    expect(policy).toContain(
+      "Allow: /agent-auth/.well-known/oauth-authorization-server",
+    );
+    expect(policy).toContain("Allow: /agent-auth/jwks");
+    expect(policy).toContain("Disallow: /admin");
+    expect(policy).toContain("Disallow: /api/admin");
+    for (const userAgent of ["OAI-SearchBot", "ChatGPT-User"]) {
+      const rules = policy
+        .split(`User-agent: ${userAgent}\n`)[1]
+        ?.split("\n\n")[0];
+      expect(rules).toContain("Disallow: /agent-auth");
+      expect(rules).toContain(
+        "Allow: /agent-auth/.well-known/oauth-authorization-server",
+      );
+      expect(rules).toContain("Allow: /agent-auth/jwks");
+      expect(rules).toContain("Disallow: /admin");
+      expect(rules).toContain("Disallow: /api/admin");
+    }
     expect(policy).toContain("Content-Signal: search=yes, ai-train=no");
     expect(policy).toContain(
       "Schemamap: https://www.symbaiex.com/schemamap.xml",
@@ -29,11 +38,8 @@ describe("robots policy", () => {
     const gptBotRules = policy
       .split("User-agent: GPTBot\n")[1]
       ?.split("\n\n")[0];
-    expect(gptBotRules).toContain("Allow: /");
-    expect(gptBotRules).not.toContain("Disallow: /\n");
-    for (const path of PRIVATE_ROBOTS_PATHS) {
-      expect(gptBotRules).toContain(`Disallow: ${path}`);
-    }
+    expect(gptBotRules).toContain("Disallow: /");
+    expect(gptBotRules).not.toContain("Allow:");
     expect(policy).toContain(
       "User-agent: Claude-SearchBot\nAllow: /\nDisallow: /api/admin",
     );

@@ -208,6 +208,14 @@ function getMarkdownRequest(request: NextRequest) {
     request.headers.get("accept"),
     "text/markdown",
   );
+  if (
+    !explicitAlias &&
+    acceptsMarkdown &&
+    !supportedPage &&
+    !isPrivateAiReadablePath(pathname)
+  ) {
+    return null;
+  }
   if (!explicitAlias && !acceptsMarkdown && !agentMode && !agentUserAgent) {
     return null;
   }

@@ -1,10 +1,13 @@
 import { forumSiteUrl, PRIMARY_SITE_URL } from "@/lib/site-urls";
 
-export const SITE_NAME = "Austin Hamilton (SYMBiEX)";
+export const SITE_BRAND = "SYMBaiEX";
+export const SITE_NAME = `${SITE_BRAND} — Austin Hamilton`;
+export const SITE_DESCRIPTION =
+  "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.";
 export const AUTHOR_NAME = "Austin Hamilton";
 export const AUTHOR_URL = `${PRIMARY_SITE_URL}/about`;
 
-export const SITE_SAME_AS = [
+export const PERSON_SAME_AS = [
   "https://github.com/SYMBaiEX",
   "https://www.linkedin.com/in/austinhamiltonal",
   "https://twitter.com/symbiex",
@@ -104,7 +107,7 @@ export function siteStructuredData({
           "@type": "Place",
           name: "Birmingham, Alabama",
         },
-        sameAs: SITE_SAME_AS,
+        sameAs: PERSON_SAME_AS,
       },
       {
         "@type": "Organization",
@@ -126,7 +129,6 @@ export function siteStructuredData({
           addressRegion: "AL",
           addressCountry: "US",
         },
-        sameAs: SITE_SAME_AS,
       },
       {
         "@type": "WebSite",
@@ -142,8 +144,7 @@ export function siteStructuredData({
         "@id": `${PRIMARY_SITE_URL}#homepage`,
         name: SITE_NAME,
         url: PRIMARY_SITE_URL,
-        description:
-          "Austin Hamilton's public engineering, AI-systems, open-source, and source-grounded research publication.",
+        description: SITE_DESCRIPTION,
         speakable: {
           "@type": "SpeakableSpecification",
           cssSelector: [".agent-ready-summary", ".agent-ready-usage"],

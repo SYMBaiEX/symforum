@@ -173,7 +173,15 @@ describe("agent discovery surfaces", () => {
     const index = await response.json();
 
     expect(index.skills).toHaveLength(PUBLIC_AGENT_SKILLS.length);
-    expect(index.skills).toHaveLength(5);
+    expect(index.skills).toHaveLength(6);
+    expect(index.skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "symbaiex-docs-mcp",
+          description: expect.stringContaining("read-only Documentation MCP"),
+        }),
+      ]),
+    );
     expect(index.whenToUse).toContain("When to use SYMBaiEX");
     for (const skill of index.skills) {
       expect(skill.description).toMatch(/Use (for|when)/);
@@ -184,11 +192,21 @@ describe("agent discovery surfaces", () => {
 
     const installGuide = await getSkillsMarkdown().text();
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment",
+      "npx skills add symbaiex/skills --skill symbaiex-agent-enrollment",
     );
     expect(installGuide).toContain(
-      "bunx skills add SYMBaiEX/skills --skill '*'",
+      "npx skills add symbaiex/skills --skill symbaiex-docs-mcp",
     );
+    expect(installGuide).toContain(
+      "npx skills add symbaiex/skills --skill '*'",
+    );
+    expect(installGuide).toContain(
+      "bunx skills add symbaiex/skills --skill '*'",
+    );
+    expect(installGuide).toContain(
+      "including general engineering and orchestration skills",
+    );
+    expect(installGuide).toContain("https://skills.sh/symbaiex/skills");
   });
 
   test("publishes the digest-bound Agent Skills discovery index", async () => {
@@ -224,6 +242,15 @@ describe("agent discovery surfaces", () => {
     expect(agents).toContain("## When to use SYMBaiEX");
     expect(agents).toContain(
       "Do not use SYMBaiEX as a general web search engine",
+    );
+    expect(agents).toContain(
+      "Human OAuth login is handled by WorkOS Connect only when the protected-resource metadata advertises it",
+    );
+    expect(agents).toContain(
+      "https://www.symbaiex.com/.well-known/oauth-protected-resource",
+    );
+    expect(agents).toContain(
+      "https://www.symbaiex.com/.well-known/symbaiex-agent-authentication",
     );
     expect(security).toContain("Contact: mailto:austin@symbaiex.com");
     expect(security).toContain(

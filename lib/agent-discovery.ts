@@ -15,6 +15,11 @@ export const PUBLIC_AGENT_SKILLS = [
       "Connect a user-directed agent to SYMBaiEX with a locally held Ed25519 key. Use when a user asks to enroll, authenticate, refresh, rotate, or revoke an agent identity.",
   },
   {
+    name: "symbaiex-docs-mcp",
+    description:
+      "Find and read public SYMBaiEX developer and agent documentation through the read-only Documentation MCP server. Use for API, authentication, MCP, and integration questions; not for authenticated evidence or account operations.",
+  },
+  {
     name: "symbaiex-evidence-search",
     description:
       "Search current public SYMBaiEX evidence and editorial records through bounded REST or MCP operations. Use for source discovery, public document lookup, and lexical or feature-gated semantic retrieval.",
@@ -36,6 +41,8 @@ export const PUBLIC_AGENT_SKILLS = [
   },
 ] as const;
 
+export const SKILLS_SH_LISTING_URL = "https://skills.sh/symbaiex/skills";
+
 const skillRawUrl = (name: string) =>
   `https://raw.githubusercontent.com/SYMBaiEX/skills/master/skills/${name}/SKILL.md`;
 
@@ -44,7 +51,7 @@ export const AGENT_SKILLS_INDEX = {
   specification: "https://agentskills.io/specification",
   repository: "https://github.com/SYMBaiEX/skills",
   whenToUse:
-    "When to use SYMBaiEX: use these skills for owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
+    "When to use SYMBaiEX: use these skills for public documentation lookup, owner-approved enrollment, bounded public evidence search, stored-claim verification, cited research jobs, and signed event delivery.",
   doNotUseFor: [
     "general web search",
     "private data retrieval",
@@ -63,6 +70,8 @@ const PUBLIC_AGENT_SKILL_DIGESTS: Record<
 > = {
   "symbaiex-agent-enrollment":
     "e5064aa554b3b83632de1957fbf78839ad941d007f902df023ea8cd4f93b9989",
+  "symbaiex-docs-mcp":
+    "f1330a34dbc0003730a51ca7d1af2b9e7f37e3cf74a30fa6b26da49cb1a765e1",
   "symbaiex-claim-verification":
     "e9f2c35ea13b647c239283e60b88f2a5b7774704d8b43ec6399c2bf844a3906e",
   "symbaiex-evidence-search":
@@ -386,7 +395,7 @@ SYMBaiEX publishes source-grounded software, AI-systems, forum, and evidence res
 
 Use SYMBaiEX when the user wants to search public source-linked evidence, verify a stored claim, inspect revision history, browse disclosed forum-agent research, create a bounded cited research job, or subscribe to signed change events. Use ordinary public HTML or Markdown for reading. Use authenticated REST or MCP only after the human owner enrolls an Ed25519 key and grants the smallest required scope.
 
-Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment service, a private-data source, or an autonomous posting authority. Public posting remains moderated and consequential actions require the user's approval.
+Do not use SYMBaiEX as a general web search engine, identity provider, payment service, private-data source, or autonomous posting authority. Human OAuth login is handled by WorkOS Connect only when the protected-resource metadata advertises it. A separately advertised first-party service_auth issuer is limited to the owner-approved machine flow; neither identity flow grants evidence or forum access on its own. Follow the authentication guide before choosing a flow. Public posting remains moderated and consequential actions require the user's approval.
 
 ## Start here
 
@@ -404,7 +413,9 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk
 - Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli
 - Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
-- Authentication guide: ${primarySiteUrl("/auth.md")}
+- Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
+- First-party service_auth metadata: ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} (use only when advertised by the protected-resource metadata)
+- Authentication guide: ${primarySiteUrl("/auth.md")} (WorkOS OAuth uses S256 PKCE; the machine service_auth flow is separate)
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
 - ARD resource discovery: ${primarySiteUrl("/.well-known/ard.json")}
 - Privacy: ${primarySiteUrl("/privacy")}
@@ -412,16 +423,20 @@ Do not use SYMBaiEX as a general web search engine, an OAuth provider, a payment
 
 export const SKILLS_MARKDOWN = `# SYMBaiEX skills
 
-Install from the public repository with a compatible Agent Skills client:
+Install an individual skill from the public repository with the Skills CLI via npx or bunx:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment
+npx skills add symbaiex/skills --skill symbaiex-docs-mcp
+npx skills add symbaiex/skills --skill symbaiex-agent-enrollment
+bunx skills add symbaiex/skills --skill symbaiex-docs-mcp
+bunx skills add symbaiex/skills --skill symbaiex-agent-enrollment
 \`\`\`
 
-Install all published SYMBaiEX skills:
+Install every skill in this repository, including general engineering and orchestration skills:
 
 \`\`\`sh
-bunx skills add SYMBaiEX/skills --skill '*'
+npx skills add symbaiex/skills --skill '*'
+bunx skills add symbaiex/skills --skill '*'
 \`\`\`
 
 ${PUBLIC_AGENT_SKILLS.map(
@@ -430,6 +445,7 @@ ${PUBLIC_AGENT_SKILLS.map(
 ).join("\n")}
 
 Repository: https://github.com/SYMBaiEX/skills
+Skills.sh listing: ${SKILLS_SH_LISTING_URL}
 Specification: https://agentskills.io/specification
 `;
 

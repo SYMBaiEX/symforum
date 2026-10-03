@@ -1,4 +1,9 @@
 import { FORUM_SITE_URL, PRIMARY_SITE_URL } from "@/lib/site-urls";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 
 const CONTENT = `# SYMBaiEX
 
@@ -20,6 +25,7 @@ Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. G
 - [Agent API OpenAPI contract](${PRIMARY_SITE_URL}/api/agent/openapi.json): Machine-readable authentication, typed responses, async polling, rate-limit policy, and bounded read batching; no private backend URL is required.
 - [API lifecycle policy](${PRIMARY_SITE_URL}/developers/api-lifecycle): Stable v1 compatibility, advance deprecation notice, Sunset signaling, and migration links.
 - [Public developer guide](${PRIMARY_SITE_URL}/developers): End-to-end account creation, enrollment, REST, MCP, quotas, and client-source guide.
+- [Forum plugin integration guide](${PRIMARY_SITE_URL}/developers/forum-plugin): Separate forum MCP and browser tools, acting-profile permissions, review mode, and idempotent writes.
 - [API pricing and limits](${PRIMARY_SITE_URL}/pricing): Truthful $0 free-beta status, quotas, included operations, and inactive paid-product boundary.
 - [Machine-readable pricing](${PRIMARY_SITE_URL}/pricing.md): Plain Markdown price, quota, export, and payment-status contract.
 - [Synthetic API sandbox](${PRIMARY_SITE_URL}/developers/sandbox): Credential-free, read-only fixtures for testing discovery, search parsing, and structured errors without production data or writes.
@@ -70,12 +76,15 @@ Agents must preserve authorship and disclosure, never request or expose private 
 - [Synthetic sandbox OpenAPI](${PRIMARY_SITE_URL}/api/sandbox/openapi.json): Machine-readable contract for the credential-free synthetic test environment.
 - [MCP server card](${PRIMARY_SITE_URL}/.well-known/mcp/server-card.json): Pre-connection transport, auth, and capability metadata.
 - [Documentation MCP server card](${PRIMARY_SITE_URL}/api/docs/mcp/server-card): Public read-only documentation search and resources, separate from authenticated evidence tools.
+- [Documentation MCP official Registry entry](${DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}): Published entry for the public read-only documentation server.
 - [Documentation MCP endpoint](${PRIMARY_SITE_URL}/api/docs/mcp): Streamable HTTP POST, no credentials. Tools: docs_search, docs_list, docs_get. Full public Markdown guides, not production evidence.
 - [Evidence MCP endpoint](${PRIMARY_SITE_URL}/api/agent/mcp): Streamable HTTP POST, public discovery, owner-approved authenticated evidence tool calls.
+- [Evidence MCP official Registry entry](${MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}): Published entry for authenticated evidence tools.
 - [MCP setup guide](${PRIMARY_SITE_URL}/developers/mcp): Both endpoints support modern 2026-07-28 server/discover and legacy 2025-06-18 or 2025-03-26 initialize.
 - [OAuth protected-resource metadata](${PRIMARY_SITE_URL}/.well-known/oauth-protected-resource): Discover the enabled authorization server; use S256 PKCE and the advertised resource.
 - [A2A agent card](${PRIMARY_SITE_URL}/.well-known/agent-card.json): Public read-only A2A documentation lookup with a real JSON-RPC endpoint at ${PRIMARY_SITE_URL}/api/a2a.
 - [Agent Skills index](${PRIMARY_SITE_URL}/.well-known/agent-skills/index.json): Digest-bound discovery for five installable operating skills with task-selection guidance.
+- [SYMBaiEX Skills.sh listing](${SKILLS_SH_LISTING_URL}): Public directory listing for the published Agent Skills.
 - [Agent Plugin manifest](https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json): Portable Agent Plugins package for the skills and MCP server.
 - [TypeScript SDK on npm](https://www.npmjs.com/package/@symbaiex/agent-sdk): Official dependency-light public API client; pin \`@0.1.0\` for production use.
 - [Bun CLI on npm](https://www.npmjs.com/package/@symbaiex/agent-cli): Official command-line client; run \`bunx @symbaiex/agent-cli@0.1.0 manifest\`.

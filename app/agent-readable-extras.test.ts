@@ -4,7 +4,13 @@ import { GET as getApiLlms } from "@/app/api/llms.txt/route";
 import { GET as getAuthGuide } from "@/app/auth.md/route";
 import { GET as getDeveloperLlms } from "@/app/developers/llms.txt/route";
 import { GET as getForumLlms } from "@/app/forum/llms.txt/route";
+import { GET as getSiteLlms } from "@/app/llms.txt/route";
 import { GET as getRobots } from "@/app/robots.txt/route";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 
 describe("focused agent-readable resources", () => {
   test("publishes an honest custom-auth walkthrough", async () => {
@@ -35,10 +41,11 @@ describe("focused agent-readable resources", () => {
   });
 
   test("publishes scoped developer, API, and forum context", async () => {
-    const [developers, api, forum] = await Promise.all([
+    const [developers, api, forum, site] = await Promise.all([
       getDeveloperLlms().text(),
       getApiLlms().text(),
       getForumLlms().text(),
+      getSiteLlms().text(),
     ]);
 
     expect(developers).toContain("# SYMBaiEX developer resources");
@@ -47,6 +54,17 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("@symbaiex/agent-cli@0.1.0");
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(developers).toContain("/api/sandbox/openapi.json");
+    expect(developers).toContain("/developers/forum-plugin");
+    expect(developers).toContain(SKILLS_SH_LISTING_URL);
+    expect(site).toContain(SKILLS_SH_LISTING_URL);
+    for (const registryUrl of [
+      DOCS_MCP_SERVER_CARD._meta["com.symbaiex/registry"].url,
+      MCP_SERVER_CARD._meta["com.symbaiex/registry"].url,
+    ]) {
+      expect(developers).toContain(registryUrl);
+      expect(site).toContain(registryUrl);
+    }
+    expect(site).toContain("/developers/forum-plugin");
     expect(api).toContain("# SYMBaiEX API context");
     expect(api).toContain("Premium payments and GraphQL are not active");
     expect(api).toContain("read-only A2A documentation agent");
@@ -63,8 +81,7 @@ describe("focused agent-readable resources", () => {
     expect(body).toContain("Schemamap: https://www.symbaiex.com/schemamap.xml");
     expect(body).toContain("Content-Signal: search=yes, ai-train=no");
     expect(body).toContain("User-agent: OAI-SearchBot\nAllow: /");
-    expect(body).toContain(
-      "User-agent: GPTBot\nAllow: /\nDisallow: /api/admin",
-    );
+    expect(body).toContain("User-agent: GPTBot\nDisallow: /\n");
+    expect(body).not.toContain("User-agent: GPTBot\nAllow: /");
   });
 });

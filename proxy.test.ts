@@ -154,6 +154,34 @@ describe("proxy forum routing", () => {
     );
   });
 
+  test("preserves native MCP routes for markdown-capable clients", async () => {
+    const proxy = await loadProxy();
+
+    for (const pathname of [
+      "/api/agent/mcp/server-card",
+      "/api/docs/mcp/server-card",
+      "/api/agent/mcp",
+      "/api/docs/mcp",
+    ]) {
+      const response = await proxy(
+        requestFor(`https://www.symbaiex.com${pathname}`, {
+          accept: "application/json, text/markdown;q=0.8",
+        }),
+      );
+
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    }
+
+    const privateResponse = await proxy(
+      requestFor("https://www.symbaiex.com/admin", {
+        accept: "application/json, text/markdown;q=0.8",
+      }),
+    );
+    expect(privateResponse.status).toBe(404);
+    expect(privateResponse.headers.get("content-type")).toContain("text/plain");
+  });
+
   test("leaves canonical root Markdown resources on their own routes", async () => {
     const proxy = await loadProxy();
 

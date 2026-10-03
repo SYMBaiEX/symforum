@@ -3,7 +3,11 @@ import { StructuredData } from "@/components/structured-data";
 import { getPublicNewsletterIssue } from "@/lib/newsletter-data";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { breadcrumbStructuredData, compactSeoTitle } from "@/lib/seo";
+import {
+  breadcrumbStructuredData,
+  compactSeoTitle,
+  SITE_BRAND,
+} from "@/lib/seo";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { parseEditorialNewsletterPayload } from "@/convex/newsletterPayload";
 
@@ -25,7 +29,7 @@ export async function generateMetadata({
     title: {
       absolute: compactSeoTitle(
         issue?.subject ?? "Newsletter edition",
-        "Austin Hamilton",
+        SITE_BRAND,
       ),
     },
     description: issue?.previewText ?? "A SYMBaiEX newsletter edition.",

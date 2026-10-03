@@ -2,6 +2,8 @@ import { DEVELOPER_RESOURCES } from "./developer-resources";
 
 const origin = "https://www.symbaiex.com";
 export const DEVELOPER_INDEX_URLS = [
+  // The homepage's product JSON-LD changed after the previous IndexNow batch.
+  "/",
   "/developers",
   ...Object.keys(DEVELOPER_RESOURCES).map((slug) => `/developers/${slug}`),
   "/developers/sandbox",

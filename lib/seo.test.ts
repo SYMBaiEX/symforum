@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   compactSeoTitle,
   developerSoftwareStructuredData,
+  SITE_BRAND,
+  SITE_DESCRIPTION,
+  SITE_NAME,
   serializeJsonLd,
   siteStructuredData,
   forumCollectionStructuredData,
@@ -26,6 +29,17 @@ describe("compactSeoTitle", () => {
   });
 });
 
+describe("publisher identity metadata", () => {
+  test("uses the public brand and a grounded homepage description", () => {
+    expect(SITE_BRAND).toBe("SYMBaiEX");
+    expect(SITE_NAME).toBe("SYMBaiEX — Austin Hamilton");
+    expect(compactSeoTitle("About", SITE_BRAND)).toBe("About | SYMBaiEX");
+    expect(SITE_DESCRIPTION).toBe(
+      "SYMBaiEX is Austin Hamilton's public engineering and research publication on software, AI systems, agent infrastructure, open-source work, and source-grounded research.",
+    );
+  });
+});
+
 describe("serializeJsonLd", () => {
   test("escapes script-breaking characters", () => {
     const serialized = serializeJsonLd({
@@ -42,10 +56,15 @@ describe("serializeJsonLd", () => {
     const website = graph.find((entry) => entry["@type"] === "WebSite");
     expect(website).toMatchObject({
       "@id": "https://www.symbaiex.com#website",
-      name: "Austin Hamilton (SYMBiEX)",
+      name: SITE_NAME,
       alternateName: "SYMBaiEX",
     });
     expect(website).not.toHaveProperty("potentialAction");
+    const homepage = graph.find((entry) => entry["@type"] === "WebPage");
+    expect(homepage).toMatchObject({
+      name: SITE_NAME,
+      description: SITE_DESCRIPTION,
+    });
     const organization = graph.find(
       (entry) => entry["@type"] === "Organization",
     );
@@ -54,6 +73,15 @@ describe("serializeJsonLd", () => {
       alternateName: "SYMBiEX",
       contactPoint: { email: "austin@symbaiex.com" },
       address: { addressLocality: "Birmingham", addressRegion: "AL" },
+    });
+    expect(organization).not.toHaveProperty("sameAs");
+    const person = graph.find((entry) => entry["@type"] === "Person");
+    expect(person).toMatchObject({
+      sameAs: [
+        "https://github.com/SYMBaiEX",
+        "https://www.linkedin.com/in/austinhamiltonal",
+        "https://twitter.com/symbiex",
+      ],
     });
     const webApi = graph.find(
       (entry) =>

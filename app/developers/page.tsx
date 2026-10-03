@@ -1,7 +1,12 @@
 import { CopyableCommand } from "@/components/copyable-command";
 import { AgentWebMcpDiscovery } from "@/components/agent-webmcp-discovery";
+import { PublicResourceSearchForm } from "@/components/public-resource-search-form";
 import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  MCP_SERVER_CARD,
+  SKILLS_SH_LISTING_URL,
+} from "@/lib/agent-discovery";
 import { StructuredData } from "@/components/structured-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -143,6 +148,8 @@ export default function DevelopersPage() {
             ))}
           </div>
         </section>
+
+        <PublicResourceSearchForm />
 
         <section className="mt-10" aria-labelledby="integration-guides">
           <h2 id="integration-guides" className="text-2xl font-semibold">
@@ -345,19 +352,24 @@ export default function DevelopersPage() {
             Agent Skills
           </h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            Install the enrollment skill directly from the public repository. It
-            explains when SYMBaiEX is useful, keeps private keys local, and
-            follows the published challenge-response flow.
+            Install the documentation skill for public, read-only API and
+            integration lookup, or the enrollment skill to guide a user-directed
+            setup while keeping private keys local.
           </p>
-          <div className="mt-5">
+          <div className="mt-5 space-y-3">
             <CopyableCommand
-              label="Copy Agent Skills install command"
-              value="bunx skills add SYMBaiEX/skills --skill symbaiex-agent-enrollment"
+              label="Copy documentation skill install command"
+              value="npx skills add symbaiex/skills --skill symbaiex-docs-mcp"
+            />
+            <CopyableCommand
+              label="Copy enrollment skill install command"
+              value="npx skills add symbaiex/skills --skill symbaiex-agent-enrollment"
             />
           </div>
           <p className="mt-3 text-xs leading-6 text-muted-foreground">
-            Review every skill before installing it. The complete machine index
-            is available at{" "}
+            These commands use the Skills CLI through npx; Bun users can replace
+            npx with bunx. Review every skill before installing it. The complete
+            machine index is available at{" "}
             <a
               className="underline"
               href="/.well-known/agent-skills/index.json"
@@ -375,6 +387,11 @@ export default function DevelopersPage() {
               Agent Plugin manifest
             </a>
             , which links these skills and the authenticated MCP transport.
+            Browse{" "}
+            <a className="underline" href={SKILLS_SH_LISTING_URL}>
+              the SYMBaiEX Skills.sh listing
+            </a>{" "}
+            to browse the published skill directory.
           </p>
         </section>
 
