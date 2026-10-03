@@ -19,6 +19,7 @@ export type ForumPluginPrincipal = {
   owner: Doc<"users">;
   actor: Doc<"users">;
   credentialAgent: Doc<"agentIdentities">;
+  credentialUser: Doc<"users">;
   connection: Doc<"forumPluginConnections">;
   capabilities: ForumPluginCapability[];
   policyVersion: number;
@@ -192,6 +193,7 @@ export async function resolvePluginPrincipal(
     owner,
     actor,
     credentialAgent,
+    credentialUser,
     connection,
     capabilities,
     policyVersion: connection.policyVersion,
