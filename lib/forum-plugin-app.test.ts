@@ -108,6 +108,9 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const connect = async (openChat = true) => {
     reply(latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark", availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" }, hostCapabilities: { serverTools: {} } });
     await flush();
+    const fullscreen = sent.find(request => request.method === "ui/request-display-mode");
+    if (fullscreen) reply(fullscreen, { mode: "fullscreen" });
+    await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } });
     await flush();
     for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
@@ -518,7 +521,7 @@ describe("forum MCP App resource", () => {
     app.reply(app.latest("tools/call"), { structuredContent: { data: { category: { name: "Research" }, thread: { _id: "sources", title: "Sources", body: "Read these references", viewerCanReply: true }, replies: { page: [], pagination: { page: 1, totalPages: 1 } } } } });
     await app.flush();
     const content = app.nodes.get("content")!;
-    expect(content.querySelector("footer")!.textContent).toContain("Join the discussion as Research agent");
+    expect(content.textContent).toContain("Join the discussion as Research agent");
     content.find("Reply to discussion")!.fire("click");
     const body = content.byName("body")!; body.value = "My reply"; body.fire("input");
     app.nodes.get("navigation")!.find("News")!.fire("click");
@@ -773,14 +776,142 @@ describe("forum MCP App resource", () => {
   test("keeps the portable light and dark palette aligned with native forum tokens", () => {
     const nativeCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
     const declarations = (block: string) => Object.fromEntries([...block.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)].map(match => [match[1], match[2].trim()]));
-    const nativeLight = declarations(nativeCss.match(/:root\s*\{([^}]+)\}/)![1]);
-    const nativeDark = { ...nativeLight, ...declarations(nativeCss.match(/\.dark\s*\{([^}]+)\}/)![1]) };
+    const nativeBase = declarations(nativeCss.match(/:root\s*\{([^}]+)\}/)![1]);
+    const nativeLight = { ...nativeBase, ...declarations(nativeCss.match(/(?<!\.dark )\.forum-app-shell\s*\{([^}]+)\}/)![1]) };
+    const nativeDark = { ...nativeLight, ...declarations(nativeCss.match(/\.dark\s*\{([^}]+)\}/)![1]), ...declarations(nativeCss.match(/\.dark \.forum-app-shell\s*\{([^}]+)\}/)![1]) };
     for (const [theme, expected] of [["light", nativeLight], ["dark", nativeDark]] as const) {
       const portable = declarations(FORUM_PLUGIN_APP_HTML.match(new RegExp(":root\\[data-theme=" + theme + "\\]\\{([^}]+)\\}"))![1]);
       expect(Object.keys(portable).length).toBeGreaterThan(10);
       for (const [name, value] of Object.entries(portable)) expect(value, theme + " " + name).toBe(expected[name]);
     }
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="SYMBaiEX Forum"');
+  });
+
+  test("prefers fullscreen without blocking initial reads and asks only once when the host advertises it", async () => {
+    expect(FORUM_PLUGIN_APP_RESOURCE._meta["openai/ui"]).toEqual({ availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" });
+    const app = appHarness();
+    app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" } });
+    await app.flush();
+    expect(app.latest("ui/request-display-mode").params).toEqual({ mode: "fullscreen" });
+    expect(app.latest("tools/call").params!.name).toBe("forum_status");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { capabilities: ["read", "participate"], policyVersion: 1 }, actingAs: { userId: "owner", username: "Owner" } } });
+    await app.flush();
+    expect(app.latest("tools/call").params!.name).toBe("forum_list_feed_threads");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } });
+    await app.flush();
+    app.nodes.get("compose")!.fire("click");
+    const body = app.nodes.get("content")!.byName("body")!; body.value = "Fullscreen must preserve this draft";
+    app.reply(app.latest("ui/request-display-mode"), { mode: "fullscreen" });
+    await app.flush();
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "inline" } });
+    expect(app.sent.filter(message => message.method === "ui/request-display-mode")).toHaveLength(1);
+    expect(body.value).toBe("Fullscreen must preserve this draft");
+  });
+
+  test("fullscreen preference respects a host exit and ignores a delayed display response", async () => {
+    const initial = appHarness();
+    initial.reply(initial.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { availableDisplayModes: ["inline", "fullscreen"], displayMode: "fullscreen" } });
+    await initial.flush();
+    initial.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "inline" } });
+    expect(initial.sent.some(call => call.method === "ui/request-display-mode")).toBe(false);
+    expect(initial.nodes.get("app")!.dataset.displayMode).toBe("inline");
+    const delayed = appHarness();
+    delayed.reply(delayed.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { availableDisplayModes: ["inline", "fullscreen"], displayMode: "inline" } });
+    await delayed.flush();
+    const request = delayed.latest("ui/request-display-mode");
+    delayed.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { displayMode: "inline", availableDisplayModes: ["inline"] } });
+    delayed.reply(request, { mode: "fullscreen" }); await delayed.flush();
+    expect(delayed.nodes.get("app")!.dataset.displayMode).toBe("inline");
+    expect(delayed.nodes.get("expand")!.hidden).toBe(true);
+  });
+
+  test("quoting a large root post makes an explicit excerpt within reply limits", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "long-post" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { category: {}, thread: { _id: "thread", title: "Long source", author: "Austin", body: "x".repeat(64_000), viewerCanReply: true }, replies: [] } } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    content.find("Quote")!.fire("click");
+    expect(content.textContent).toContain("This quote is an excerpt to fit the reply limit");
+    expect(content.byName("body")!.value.length).toBe(32_000);
+    expect(content.byName("body")!.value.endsWith("…[/quote]\n\n")).toBe(true);
+    expect(app.sent.some(call => call.params?.name === "forum_create_reply")).toBe(false);
+  });
+
+  test("rich readers preserve forum formatting, code literals and safe host-opened attachments", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "formatted" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { category: { name: "General" }, thread: {
+      _id: "thread", title: "Formatted", author: "Austin", body: '[h2]Reading notes[/h2]\n[b]Bold[/b] and [i]italic[/i]\n[quote=Research agent]Quoted [b]source[/b][/quote]\n[code=js]<script>alert(1)</script> [b]literal[/b][/code]\n[list=1][*]First[*]Second[/list]\n[url=https://example.com/research]Read source[/url] [url=javascript:alert(1)]Unsafe[/url] [url=https://user:pass@example.com]Credentials[/url]\n[spoiler=Details]Hidden details[/spoiler]\n[table][tr][th]Topic[/th][th]Result[/th][/tr][tr][td]API[/td][td]Ready[/td][/tr][/table]',
+      viewerCanReply: true, attachments: [{ filename: "notes.pdf", url: "https://blue-fox.convex.cloud/api/storage/notes" }, { filename: "unsafe.txt", url: "javascript:alert(2)" }],
+    }, replies: [] } } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(app.nodes.get("app")!.dataset.view).toBe("thread");
+    expect(content.querySelector("h2")!.textContent).toBe("Conversation");
+    expect(content.querySelector("blockquote")!.textContent).toBe("Quoted source");
+    expect(content.querySelector("code")!.textContent).toBe("<script>alert(1)</script> [b]literal[/b]");
+    expect(content.querySelector("script")).toBeNull();
+    expect(content.querySelector("ol")!.children.map(node => node.textContent)).toEqual(["First", "Second"]);
+    expect(content.querySelector("table")!.textContent).toBe("TopicResultAPIReady");
+    const collect = (node: Node): Node[] => [node, ...node.children.flatMap(collect)];
+    const links = collect(content).filter(node => node.tagName === "a");
+    expect(links.find(node => node.textContent === "Read source")!.href).toBe("https://example.com/research");
+    expect(links.some(node => /javascript:|user:pass/.test(node.href))).toBe(false);
+    const attachment = links.find(node => node.textContent === "notes.pdf ↗")!;
+    attachment.fire("click"); await app.flush();
+    expect(app.latest("ui/open-link").params).toEqual({ url: "https://blue-fox.convex.cloud/api/storage/notes" });
+    app.reply(app.latest("ui/open-link"), {}); await app.flush();
+    expect(links.some(node => node.textContent === "unsafe.txt ↗")).toBe(false);
+    content.find("Quote")!.fire("click");
+    expect(content.byName("body")!.value).toContain("[quote=Austin][h2]Reading notes");
+    expect(content.byName("body")!.value.endsWith("[/quote]\n\n")).toBe(true);
+    expect(app.sent.some(call => call.params?.name === "forum_create_reply")).toBe(false);
+  });
+
+  test("poll readers honor result visibility and require an explicit capability-bound vote", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { data: { capabilities: ["read", "feedback"], policyVersion: 1 }, actingAs: { userId: "research-agent", username: "Research agent" } } } });
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "poll" } } });
+    const payload = { category: {}, thread: { _id: "thread", title: "Choose", body: "Which option?", viewerCanReply: false }, replies: [], poll: { _id: "poll", question: "Best approach?", status: "open", viewerCanVote: true, viewerCanSeeResults: false, totalVotes: 0, options: [{ _id: "option", label: "Research", voteCount: 0, percent: 0 }] } };
+    app.reply(app.latest("tools/call"), { structuredContent: { data: payload } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.querySelector("meter")).toBeNull();
+    content.find('Vote for “Research”')!.fire("click"); await app.flush();
+    const vote = app.latest("tools/call");
+    expect(vote.params).toMatchObject({ name: "forum_vote_poll", arguments: { pollId: "poll", optionId: "option", expectedPolicyVersion: 1 } });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_vote_poll")!, vote.params!.arguments)).toBeNull();
+    app.reply(vote, { structuredContent: { status: "pending_approval", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access" } }); await app.flush();
+    expect(content.textContent).toContain("Awaiting review");
+    expect(app.sent.filter(call => call.params?.name === "forum_get_thread")).toHaveLength(1);
+    app.nodes.get("navigation")!.find("Feed")!.fire("click"); app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "poll" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { ...payload, poll: { ...payload.poll, status: "closed", viewerCanVote: false, viewerCanSeeResults: true, totalVotes: 4, viewerOptionId: "option", options: [{ _id: "option", label: "Research", voteCount: 4, percent: 100 }] } } } }); await app.flush();
+    expect(content.textContent).toContain("4 votes · Closed");
+    expect(content.textContent).toContain("Your vote");
+    expect(content.querySelector("meter")!.attributes.value).toBe("100");
+    expect(content.find('Vote for “Research”')).toBeUndefined();
+  });
+
+  test("private message actions expose real identities, keep review explicit and preserve reply fields", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Inbox")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [{ _id: "message", subject: "Research note" }] } } }); await app.flush();
+    app.nodes.get("content")!.find("Research note")!.fire("click");
+    const message = { _id: "message", subject: "Research note", body: "[b]Private[/b] notes", senderUsername: "Austin", recipientUsername: "Research agent", otherUsername: "Austin", sourceBox: "inbox", unread: true };
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { message } } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("To Research agent");
+    expect(content.querySelector("strong")!.textContent).toBe("Austin");
+    expect(content.textContent).not.toContain("[b]");
+    expect(app.sent.some(call => call.params?.name === "forum_mark_private_message_read")).toBe(false);
+    content.find("Mark as read")!.fire("click"); await app.flush();
+    const read = app.latest("tools/call");
+    expect(read.params).toMatchObject({ name: "forum_mark_private_message_read", arguments: { messageId: "message", expectedPolicyVersion: 1 } });
+    app.reply(read, { structuredContent: { status: "pending_approval" } }); await app.flush();
+    expect(content.textContent).toContain("Awaiting review");
+    content.find("Reply to message")!.fire("click");
+    expect(content.byName("recipientUsername")!.value).toBe("Austin");
+    expect(content.byName("subject")!.value).toBe("Re: Research note");
+    expect(app.sent.some(call => call.params?.name === "forum_send_private_message")).toBe(false);
   });
 
   test("updates theme from the host without losing the active forum draft", async () => {
@@ -919,7 +1050,7 @@ describe("forum MCP App resource", () => {
   test("negotiates the standard protocol and guards parent source, response shape and request IDs", async () => {
     const app = appHarness();
     const init = app.latest("ui/initialize");
-    expect(init.params).toMatchObject({ protocolVersion: "2026-01-26", appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } });
+    expect(init.params).toMatchObject({ protocolVersion: "2026-01-26", appCapabilities: { availableDisplayModes: ["fullscreen"] } });
     app.message({ jsonrpc: "2.0", id: init.id, result: { protocolVersion: "2026-01-26" } }, {});
     app.message({ jsonrpc: "1.0", id: init.id, result: {} });
     app.message({ jsonrpc: "2.0", id: 900, result: {} });
@@ -1168,11 +1299,12 @@ describe("forum MCP App resource", () => {
     let aliasCalls = 0;
     const app = appHarness({ requestDisplayMode: async () => { aliasCalls++; return { mode: "fullscreen" }; } });
     await app.connect();
+    const displayRequests = app.sent.filter(message => message.method === "ui/request-display-mode").length;
     app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { availableDisplayModes: ["inline"], displayMode: "inline" } });
     expect(app.nodes.get("expand")!.hidden).toBe(true);
     app.nodes.get("expand")!.fire("click");
     await app.flush();
     expect(aliasCalls).toBe(0);
-    expect(app.sent.some(message => message.method === "ui/request-display-mode")).toBe(false);
+    expect(app.sent.filter(message => message.method === "ui/request-display-mode")).toHaveLength(displayRequests);
   });
 });
