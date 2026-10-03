@@ -39,7 +39,9 @@ describe("SYMBaiEX homepage discoverability", () => {
     const html = await new Response(stream).text();
 
     expect(html).toContain('id="structured-data"');
-    expect(html.match(/"@type":"SoftwareApplication"/g)).toHaveLength(2);
+    expect(
+      html.match(/"@type":\["SoftwareApplication","Product"\]/g),
+    ).toHaveLength(2);
     expect(html).toContain("@symbaiex/agent-sdk");
     expect(html).toContain("@symbaiex/agent-cli");
     expect(html).toContain("https://www.npmjs.com/package/@symbaiex/agent-sdk");

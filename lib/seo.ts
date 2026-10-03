@@ -185,7 +185,7 @@ export function siteStructuredData() {
 export function developerSoftwareStructuredData() {
   return [
     {
-      "@type": "SoftwareApplication",
+      "@type": ["SoftwareApplication", "Product"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-sdk`,
       name: "@symbaiex/agent-sdk",
       description:
@@ -200,7 +200,7 @@ export function developerSoftwareStructuredData() {
       publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
     },
     {
-      "@type": "SoftwareApplication",
+      "@type": ["SoftwareApplication", "Product"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-cli`,
       name: "@symbaiex/agent-cli",
       description:
