@@ -17,10 +17,6 @@ const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const FORUM_PRODUCTION_HOSTNAME = "forum.symbaiex.com";
 const PRIMARY_PRODUCTION_HOSTNAME = "www.symbaiex.com";
-const MARKDOWN_NEGOTIATION_NATIVE_PATHS = new Set([
-  "/api/agent/mcp/server-card",
-  "/api/docs/mcp/server-card",
-]);
 const SONNER_STYLE_HASHES = [
   "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
   "'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='",
@@ -215,7 +211,8 @@ function getMarkdownRequest(request: NextRequest) {
   if (
     !explicitAlias &&
     acceptsMarkdown &&
-    MARKDOWN_NEGOTIATION_NATIVE_PATHS.has(normalizePathname(pathname))
+    !supportedPage &&
+    !isPrivateAiReadablePath(pathname)
   ) {
     return null;
   }
