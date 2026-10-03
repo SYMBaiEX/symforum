@@ -7,6 +7,7 @@ import { GET as getAgentSkills } from "@/app/.well-known/agent-skills/route";
 import { GET as getAgentSkillsV2 } from "@/app/.well-known/agent-skills/index.json/route";
 import { GET as getAiCatalog } from "@/app/.well-known/ai-catalog.json/route";
 import { GET as getApiCatalog } from "@/app/.well-known/api-catalog/route";
+import { GET as getRootMcpCard } from "@/app/.well-known/mcp/route";
 import {
   GET as getWellKnownMcp,
   POST as postWellKnownMcp,
@@ -109,11 +110,7 @@ describe("agent discovery surfaces", () => {
     expect(card.remotes[0]).toMatchObject({
       type: "streamable-http",
       url: "https://www.symbaiex.com/api/agent/mcp",
-      supportedProtocolVersions: [
-        "2026-07-28",
-        "2025-06-18",
-        "2025-03-26",
-      ],
+      supportedProtocolVersions: ["2026-07-28", "2025-06-18", "2025-03-26"],
       headers: [
         expect.objectContaining({
           name: "Authorization",
@@ -133,6 +130,17 @@ describe("agent discovery surfaces", () => {
     expect(JSON.stringify(card)).not.toContain("oauth2");
     expect(JSON.stringify(card)).not.toContain("placeholder");
     expect(card).not.toHaveProperty("capabilities");
+  });
+
+  test("serves the product server card at the linked well-known MCP URL", async () => {
+    const response = getRootMcpCard();
+    const card = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain(
+      "application/mcp-server-card+json",
+    );
+    expect(card.serverUrl).toBe("https://www.symbaiex.com/api/agent/mcp");
   });
 
   test("keeps the well-known GET card while accepting a public MCP handshake", async () => {

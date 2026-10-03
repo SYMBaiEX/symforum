@@ -150,6 +150,12 @@ export default async function RootLayout({
         <link
           rel="service-desc"
           type="application/mcp-server-card+json"
+          title="SYMBaiEX Evidence MCP well-known endpoint"
+          href={primarySiteUrl("/.well-known/mcp")}
+        />
+        <link
+          rel="service-desc"
+          type="application/mcp-server-card+json"
           title="SYMBaiEX Documentation MCP"
           href={primarySiteUrl("/api/docs/mcp/server-card")}
         />

@@ -84,6 +84,9 @@ describe("proxy forum routing", () => {
       '<https://www.symbaiex.com/.well-known/mcp/server-card.json>; rel="service-desc"; type="application/mcp-server-card+json"',
     );
     expect(discoveryLinks).toContain(
+      '<https://www.symbaiex.com/.well-known/mcp>; rel="service-desc"; type="application/mcp-server-card+json"',
+    );
+    expect(discoveryLinks).toContain(
       '<https://www.symbaiex.com/api/docs/mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
     );
     expect(discoveryLinks).toContain(
