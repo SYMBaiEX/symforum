@@ -1,6 +1,10 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import {
+  normalizeEvidenceBatch,
+  type EvidenceSourceAdapterDescriptor,
+} from "./evidenceSourceAdapter";
+import {
   env,
   internalAction,
   internalQuery,
@@ -9,6 +13,7 @@ import {
 import {
   GITHUB_ALLOWLISTED_RELEASE_REPOSITORIES as RELEASE_REPOSITORIES,
   GITHUB_RELEASES_PER_REPOSITORY,
+  PUBLIC_EVIDENCE_SOURCE_REGISTRY,
 } from "./evidenceSourceRegistry";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -77,6 +82,62 @@ type SourceConfig = {
   provenanceClass: "official" | "research";
   licenseClass: LicenseClass;
 };
+
+export function evidenceAdapterDescriptor(
+  config: SourceConfig,
+): EvidenceSourceAdapterDescriptor {
+  const direct = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find(
+    (descriptor) => descriptor.key === config.key,
+  );
+  if (direct) return direct;
+
+  // The registry models releases as one allowlisted source, while ingestion
+  // checkpoints each repository independently. Keep that persisted identity,
+  // but apply the registry's per-repository record bound at this boundary.
+  const isAllowlistedReleaseSource = RELEASE_REPOSITORIES.some(
+    (repository) =>
+      config.key === `github-releases-${repository.replace("/", "-")}`,
+  );
+  const releaseDescriptor = PUBLIC_EVIDENCE_SOURCE_REGISTRY.find(
+    (descriptor) => descriptor.key === "github-allowlisted-releases",
+  );
+  if (isAllowlistedReleaseSource && releaseDescriptor) {
+    return {
+      ...releaseDescriptor,
+      key: config.key,
+      name: config.name,
+      maxItemsPerRun: GITHUB_RELEASES_PER_REPOSITORY,
+    };
+  }
+  throw new Error(`No evidence adapter descriptor for source ${config.key}`);
+}
+
+/** Validate the compact shared contract without replacing richer parser output. */
+export function validateParsedEvidenceBatch(
+  descriptor: EvidenceSourceAdapterDescriptor,
+  sourceKey: string,
+  documents: NormalizedDocument[],
+): NormalizedDocument[] {
+  normalizeEvidenceBatch(descriptor, {
+    sourceKey,
+    checkpoint: {},
+    documents: documents.map((document) => ({
+      sourceKey,
+      externalId: document.externalKey,
+      canonicalUrl: document.canonicalUrl,
+      title: document.title,
+      observedAt: document.sourceUpdatedAt,
+      ...(document.publishedAt === undefined
+        ? {}
+        : { publishedAt: document.publishedAt }),
+      version: document.sourceRevision,
+      attribution: descriptor.name,
+    })),
+    entities: [],
+    claims: [],
+  });
+  return documents;
+}
 
 type IngestionState = {
   etag: string;
@@ -1164,7 +1225,15 @@ async function ingest(
     });
     if (response.status === 304)
       return { ok: true, skipped: true, ingested: 0, failed: 0 };
-    const documents = parser(response.payload);
+    const descriptor = evidenceAdapterDescriptor(config);
+    const parsedDocuments = parser(response.payload);
+    // Contract validation is deliberately an all-batch preflight. Persist the
+    // original rich documents (including excerpt/search/metadata fields) below.
+    const documents = validateParsedEvidenceBatch(
+      descriptor,
+      config.key,
+      parsedDocuments,
+    );
     let ingested = 0;
     let failed = 0;
     for (const document of documents) {
