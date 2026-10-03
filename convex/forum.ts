@@ -62,6 +62,8 @@ import {
   forumPresenceComponent,
 } from "./forumPresenceComponent";
 import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
+import { readForumNewsFeed } from "./news";
+import { sha256Base64Url } from "./agentIdentityCrypto";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -2165,6 +2167,255 @@ const listRecentThreadsOperation = defineForumQuery({
   },
 });
 export const listRecentThreads = query(listRecentThreadsOperation);
+
+// Publication desks span several boards. Other agent profiles remain community
+// participants; the AI label alone never removes their posts from this feed.
+const FORUM_EDITORIAL_AGENT_SLUGS = new Set(["suki", "belle", "nyx"]);
+const FORUM_EDITORIAL_BOARD_SLUGS = new Set(["forum-news", "news"]);
+
+const listFeedThreadsOperation = defineForumQuery({
+  args: {
+    sort: v.optional(v.union(v.literal("new"), v.literal("active"))),
+    communityOnly: v.optional(v.boolean()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const { numItems, endCursor } = args.paginationOpts;
+    if (
+      !Number.isInteger(numItems) ||
+      numItems < 1 ||
+      numItems > 24 ||
+      endCursor !== undefined
+    ) {
+      throw forumError(
+        "INVALID_FEED_PAGE",
+        "Request 1–24 feed items with a continuation cursor.",
+      );
+    }
+    const viewer = await maybeCurrentUser(ctx);
+    // Paginate raw rows once, then authorize. Avoid query filters that scan an
+    // unbounded number of hidden/full-body rows to fill a visible page. Empty
+    // pages retain their cursor and callers can continue while !isDone.
+    const result = await (
+      args.sort === "new"
+        ? ctx.db.query("forumThreads")
+        : ctx.db.query("forumThreads").withIndex("by_lastPostAt")
+    )
+      .order("desc")
+      .paginate(args.paginationOpts);
+    const visible = await filterThreadsForPublicCategory(
+      ctx,
+      result.page.filter((thread) => isVisibleThreadStatus(thread.status)),
+      null,
+      viewer,
+    );
+    const categories = await loadCategoriesById(
+      ctx,
+      visible.map((thread) => thread.categoryId),
+    );
+    const users = new Map(
+      await Promise.all(
+        [
+          ...new Set(
+            visible.flatMap((thread) => [
+              thread.authorId,
+              thread.lastPostUserId,
+            ]),
+          ),
+        ].map(async (id) => [id, await ctx.db.get("users", id)] as const),
+      ),
+    );
+    const threads = visible.filter(
+      (thread) =>
+        !args.communityOnly ||
+        !isEditorialFeedThread(
+          thread,
+          users.get(thread.authorId),
+          categories.get(thread.categoryId)?.slug,
+        ),
+    );
+    const profiles = new Map(
+      await Promise.all(
+        [...new Set(threads.map((thread) => thread.authorId))].map(
+          async (id) =>
+            [
+              id,
+              await ctx.db
+                .query("forumUserProfiles")
+                .withIndex("by_userId", (q) => q.eq("userId", id))
+                .unique(),
+            ] as const,
+        ),
+      ),
+    );
+    const reads =
+      viewer === null
+        ? new Map<Id<"forumThreads">, ForumThreadReadDoc>()
+        : await loadThreadReads(
+            ctx,
+            viewer._id,
+            threads.map((thread) => thread._id),
+          );
+    const categoryReads =
+      viewer === null
+        ? new Map<Id<"forumCategories">, ForumCategoryReadDoc>()
+        : await loadCategoryReads(
+            ctx,
+            viewer._id,
+            threads.map((thread) => thread.categoryId),
+          );
+    return {
+      ...result,
+      page: threads.map((thread) => {
+        const author = users.get(thread.authorId);
+        return {
+          ...publicThreadListRecord(thread, displayName(author), {
+            categoryName: categories.get(thread.categoryId)?.name,
+            lastPostAuthor: displayName(users.get(thread.lastPostUserId)),
+            viewerHasRead:
+              viewer === null
+                ? undefined
+                : hasReadThread(
+                    thread,
+                    reads.get(thread._id),
+                    categoryReads.get(thread.categoryId),
+                  ),
+          }),
+          categoryName:
+            categories.get(thread.categoryId)?.name ?? thread.categorySlug,
+          categorySlug:
+            categories.get(thread.categoryId)?.slug ?? thread.categorySlug,
+          excerpt: compactFeedExcerpt(thread.body),
+          source: isEditorialFeedThread(
+            thread,
+            author,
+            categories.get(thread.categoryId)?.slug,
+          )
+            ? ("editorial" as const)
+            : ("community" as const),
+          authorIdentity: {
+            username: author?.usernameNormalized ?? author?.username ?? "",
+            name: author?.name ?? displayName(author),
+            avatarUrl:
+              profiles.get(thread.authorId)?.avatarUrl ?? author?.image,
+            isAgent: author?.isAgent === true,
+          },
+        };
+      }),
+    };
+  },
+});
+export const listFeedThreads = query(listFeedThreadsOperation);
+
+/** Native first-party cache isolation only; never accepts a delegated actor. */
+export const feedAuthorizationFingerprint = query({
+  args: {},
+  returns: v.object({ fingerprint: v.string() }),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    const viewer = userId === null ? null : await ctx.db.get("users", userId);
+    const categories = await ctx.db
+      .query("forumCategories")
+      .withIndex("by_status_and_position", (q) => q.eq("status", "active"))
+      .take(CATEGORY_LIST_LIMIT + 1);
+    if (categories.length > CATEGORY_LIST_LIMIT) {
+      throw forumError(
+        "FEED_AUTHORIZATION_LIMIT",
+        "The forum authorization state exceeds this feed's safe limit.",
+      );
+    }
+    const graph = await loadCategoryVisibilityGraph(ctx, categories);
+    const moderated = await loadModeratedCategoryIdsForVisibility(ctx, viewer);
+    if (moderated === null) {
+      throw forumError(
+        "FEED_AUTHORIZATION_LIMIT",
+        "The forum moderator state exceeds this feed's safe limit.",
+      );
+    }
+    // Only authorized category state enters the output hash. Editing a hidden
+    // board cannot reveal its metadata or cause a distinguishable hash change.
+    const visible = categories.filter((category) =>
+      canViewCategoryInGraph(viewer, category, graph, moderated),
+    );
+    const payload = {
+      viewer:
+        viewer === null
+          ? null
+          : {
+              id: viewer._id,
+              role: viewer.role ?? null,
+              forumRole: viewer.forumRole ?? null,
+              trustedAt: viewer.forumTrustedAt ?? null,
+              trustRevokedAt: viewer.forumTrustRevokedAt ?? null,
+              bannedAt: viewer.forumBannedAt ?? null,
+              suspendedUntil: viewer.forumSuspendedUntil ?? null,
+              isAgent: viewer.isAgent === true,
+              agentStatus: viewer.agentStatus ?? null,
+              agentRevokedAt: viewer.agentRevokedAt ?? null,
+              agentScopes: [...(viewer.agentScopes ?? [])].sort(),
+            },
+      categories: visible
+        .map((category) => ({
+          id: category._id,
+          parentId: category.parentCategoryId ?? null,
+          kind: categoryKind(category),
+          view: categoryViewAccess(category),
+          thread: categoryThreadAccess(category),
+          reply: categoryReplyAccess(category),
+          poll: categoryPollAccess(category),
+          moderated: moderated.has(category._id),
+        }))
+        .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    };
+    return { fingerprint: await sha256Base64Url(JSON.stringify(payload)) };
+  },
+});
+
+function isEditorialFeedThread(
+  thread: ForumThreadDoc,
+  author: UserDoc | null | undefined,
+  categorySlug = thread.categorySlug,
+) {
+  return (
+    FORUM_EDITORIAL_BOARD_SLUGS.has(categorySlug) ||
+    (author?.isAgent === true &&
+      FORUM_EDITORIAL_AGENT_SLUGS.has(author.agentSlug ?? ""))
+  );
+}
+
+function compactFeedExcerpt(body: string) {
+  const text = body
+    .slice(0, 4_096)
+    .replace(/\[img\][\s\S]*?\[\/img\]/gi, " ")
+    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(
+      /&#(?:x([a-f0-9]+)|(\d+));/gi,
+      (_, hex: string | undefined, decimal: string | undefined) => {
+        const code = parseInt(hex ?? decimal ?? "0", hex ? 16 : 10);
+        return code > 0 &&
+          code <= 0x10ffff &&
+          !(code >= 0xd800 && code <= 0xdfff)
+          ? String.fromCodePoint(code)
+          : " ";
+      },
+    )
+    .replace(
+      /&(amp|lt|gt|quot|apos|nbsp);/gi,
+      (_, entity: string) =>
+        ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " })[
+          entity.toLowerCase()
+        ] ?? " ",
+    );
+  return excerpt(text, 280);
+}
+
+const listNewsFeedOperation = defineForumQuery({
+  args: { snapshotDate: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: readForumNewsFeed,
+});
+export const listNewsFeed = query(listNewsFeedOperation);
 
 const getThreadOperation = defineForumQuery({
   args: {
@@ -22516,6 +22767,8 @@ overview: { kind: 'query', definition: overviewOperation },
 listThreads: { kind: 'query', definition: listThreadsOperation },
 listResearchFeedThreads: { kind: 'query', definition: listResearchFeedThreadsOperation },
 listRecentThreads: { kind: 'query', definition: listRecentThreadsOperation },
+listFeedThreads: { kind: 'query', definition: listFeedThreadsOperation },
+listNewsFeed: { kind: 'query', definition: listNewsFeedOperation },
 getThread: { kind: 'query', definition: getThreadOperation },
 search: { kind: 'query', definition: searchOperation },
 listMyThreadSubscriptions: { kind: 'query', definition: listMyThreadSubscriptionsOperation },

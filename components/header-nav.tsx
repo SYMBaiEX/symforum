@@ -86,15 +86,18 @@ const ownerNavItems = [
 ] as const;
 
 export function HeaderNav({
+  compact = false,
   initialForumHost = false,
   initialPrimarySiteHref = "/",
 }: {
+  compact?: boolean;
   initialForumHost?: boolean;
   initialPrimarySiteHref?: string;
 }) {
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
     return (
       <NavRow
+        compact={compact}
         authHref="/signin"
         authLabel="Sign in"
         initialForumHost={initialForumHost}
@@ -105,6 +108,7 @@ export function HeaderNav({
 
   return (
     <LiveHeaderNav
+      compact={compact}
       initialForumHost={initialForumHost}
       initialPrimarySiteHref={initialPrimarySiteHref}
     />
@@ -112,9 +116,11 @@ export function HeaderNav({
 }
 
 function LiveHeaderNav({
+  compact,
   initialForumHost,
   initialPrimarySiteHref,
 }: {
+  compact: boolean;
   initialForumHost: boolean;
   initialPrimarySiteHref: string;
 }) {
@@ -132,6 +138,7 @@ function LiveHeaderNav({
   if (!mounted || isLoading) {
     return (
       <NavRow
+        compact={compact}
         authPending
         initialForumHost={initialForumHost}
         initialPrimarySiteHref={initialPrimarySiteHref}
@@ -142,6 +149,7 @@ function LiveHeaderNav({
   if (isAuthenticated) {
     return (
       <NavRow
+        compact={compact}
         adminAccess={
           viewer?.canAccessAdmin === true ||
           viewer?.canAdminForum === true ||
@@ -158,6 +166,7 @@ function LiveHeaderNav({
 
   return (
     <NavRow
+      compact={compact}
       authHref="/signin"
       authLabel="Sign in"
       initialForumHost={initialForumHost}
@@ -167,6 +176,7 @@ function LiveHeaderNav({
 }
 
 function NavRow({
+  compact = false,
   adminAccess = false,
   authHref,
   authLabel,
@@ -179,6 +189,7 @@ function NavRow({
   authHref?: string;
   authLabel?: string;
   authPending?: boolean;
+  compact?: boolean;
   initialForumHost?: boolean;
   initialPrimarySiteHref?: string;
   ownerAccess?: boolean;
@@ -225,7 +236,7 @@ function NavRow({
   return (
     <nav aria-label="Primary" className="flex min-w-0 items-center gap-1.5">
       <div className="hidden min-w-0 items-center gap-1 lg:flex">
-        {navItems.map((item) => {
+        {(compact ? navItems.filter((item) => item.href === "/" || item.href === "/blog") : navItems).map((item) => {
           const href = resolveHref(item.href);
           return (
             <DesktopNavLink

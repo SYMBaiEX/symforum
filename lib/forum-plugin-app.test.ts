@@ -85,13 +85,83 @@ function appHarness(openai?: Record<string, unknown>) {
     await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1 } });
     await flush();
-    reply(latest("tools/call"), { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { threads: [], pagination: { page: 1, totalPages: 1 } } } });
+    for (const call of sent.filter(request => request.method === "tools/call" && ["forum_list_feed_threads", "forum_list_news_feed"].includes(String(request.params?.name)))) {
+      reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_news_feed" ? { stories: [], snapshots: [], snapshot: null } : { page: [], isDone: true, continueCursor: "" } } });
+    }
     await flush();
   };
   return { sent, nodes, documentElement, listeners, timers, message, reply, latest, flush, connect };
 }
 
 describe("forum MCP App resource", () => {
+  test("opens the real feed and pages through sparse community results without using unread semantics", async () => {
+    const app = appHarness();
+    await app.connect();
+    expect(app.sent.filter(call => call.method === "tools/call").map(call => call.params?.name)).toContain("forum_list_feed_threads");
+    expect(app.sent.some(call => call.params?.name === "forum_list_recent_threads")).toBe(false);
+    app.nodes.get("navigation")!.find("Community")!.fire("click");
+    const first = app.latest("tools/call");
+    expect(first.params).toEqual({ name: "forum_list_feed_threads", arguments: { sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } } });
+    app.reply(first, { structuredContent: { data: { page: [], isDone: false, continueCursor: "native-cursor" } } });
+    await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("No visible conversations on this page");
+    app.nodes.get("content")!.find("More discussions →")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: "native-cursor" } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "A real conversation", slug: "real", categorySlug: "general", authorIdentity: { name: "Agent reader", isAgent: true }, excerpt: "A clear preview" }], isDone: true, continueCursor: "" } } });
+    await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("A real conversationAgent reader · AI agent");
+    app.nodes.get("content")!.find("← Previous")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } });
+  });
+
+  test("renders stored news editions with canonical links and separates HN and local activity", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("News")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_list_news_feed", arguments: { limit: 30 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { snapshot: { snapshotDate: "2026-10-02" }, snapshots: [{ snapshotDate: "2026-10-02" }], stories: [
+      { hnItemId: 123, title: "Tools & people", host: "example.com", hnScore: 80, hnCommentCount: 40, platformStats: { comments: 3 }, platformStatsStatus: "available" },
+      { hnItemId: 124, title: "No local counts yet", hnScore: 8, platformStats: null, platformStatsStatus: "unavailable" },
+    ] } } });
+    await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 3 SYMBaiEX comments");
+    expect(app.nodes.get("content")!.textContent).not.toContain("0 SYMBaiEX comments");
+    const anchor = app.nodes.get("content")!.querySelector("a")!;
+    expect(anchor.href).toBe("https://www.symbaiex.com/news/tools-and-people-123");
+    anchor.fire("click");
+    expect(app.latest("ui/open-link").params).toEqual({ url: anchor.href });
+  });
+
+  test("drops a delayed old actor response after a policy change and clears the private reader", async () => {
+    const app = appHarness();
+    await app.connect();
+    app.nodes.get("navigation")!.find("Saved")!.fire("click");
+    const stale = app.latest("tools/call");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "new-owner", username: "New profile" }, data: { capabilities: ["read"], policyVersion: 2, executionMode: "direct" } } } });
+    expect(app.nodes.get("content")!.textContent).toContain("Connection changed");
+    app.reply(stale, { structuredContent: { actingAs: { userId: "research-agent", username: "Old agent", isAgent: true }, data: [{ title: "Old private preview", categorySlug: "private", slug: "secret" }] } });
+    await app.flush();
+    expect(app.nodes.get("identity")!.textContent).toBe("New profile · agent assisted");
+    expect(app.nodes.get("content")!.textContent).not.toContain("Old private preview");
+    expect(app.nodes.get("mode")!.textContent).toBe("Direct execution");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "research-agent", username: "Old agent" }, data: { threads: [] } } } });
+    expect(app.nodes.get("identity")!.textContent).toBe("New profile · agent assisted");
+  });
+
+  test("isolates two connections with the same actor and policy revision", async () => {
+    const app = appHarness();
+    await app.connect();
+    const status = (connectionId: string) => ({ structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: { connectionId, capabilities: ["read", "personal"], policyVersion: 1, executionMode: "direct" } } });
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: status("old-connection") });
+    app.nodes.get("navigation")!.find("Saved")!.fire("click");
+    const stale = app.latest("tools/call");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: status("new-connection") });
+    app.reply(stale, { structuredContent: { data: [{ title: "Old connection bookmark" }] } });
+    await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Connection changed");
+    expect(app.nodes.get("content")!.textContent).not.toContain("Old connection bookmark");
+  });
+
   test("ships a portable HTML resource with no external connection or frame permissions", () => {
     expect(FORUM_PLUGIN_APP_RESOURCE.uri).toBe("ui://symbaiex/forum.html");
     expect(FORUM_PLUGIN_APP_RESOURCE.mimeType).toBe("text/html;profile=mcp-app");

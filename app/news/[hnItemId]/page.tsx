@@ -93,15 +93,10 @@ export default async function NewsStoryPage({ params }: PageProps) {
   const body = stripHnHtml(story.text);
   const entityId = String(story.hnItemId);
   const sourceUrl = safeExternalUrl(story.url);
-  const stats = story.platformStats ?? {
-    comments: 0,
-    score: 0,
-    saves: 0,
-  };
 
   return (
     <>
-      <article className="page-frame">
+      <article className="page-frame max-w-[820px]">
         <StructuredData
           data={[
             {
@@ -131,27 +126,37 @@ export default async function NewsStoryPage({ params }: PageProps) {
           ]}
         />
         <div className="page-content">
-          <h1 className="page-title mt-3">{story.title}</h1>
-          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+          <Link
+            href="/news"
+            className="focus-ring mb-6 inline-flex rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            ← Daily news
+          </Link>
+          <h1 className="text-3xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
+            {story.title}
+          </h1>
+          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-[13px] leading-6 text-muted-foreground">
             <a
               href={`https://news.ycombinator.com/item?id=${story.hnItemId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+              className="focus-ring rounded-sm text-primary transition-colors hover:text-foreground"
             >
-              HN #{story.hnItemId}
+              Hacker News
             </a>
-            {story.rank ? <span>Rank {story.rank}</span> : null}
             {story.timePosted ? (
               <span>{formatDate(story.timePosted * 1000)}</span>
             ) : null}
             <span>{story.host ?? "news.ycombinator.com"}</span>
-            <span>{compactNumber(stats.score)} pts</span>
-            <span>{compactNumber(stats.comments)} comments</span>
-            <span>{compactNumber(stats.saves)} saves</span>
+            {story.score !== undefined ? (
+              <span>{compactNumber(story.score)} HN points</span>
+            ) : null}
+            {story.descendants !== undefined ? (
+              <span>{compactNumber(story.descendants)} HN comments</span>
+            ) : null}
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             {sourceUrl ? (
               <Button asChild size="sm">
                 <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
@@ -160,16 +165,18 @@ export default async function NewsStoryPage({ params }: PageProps) {
                 </a>
               </Button>
             ) : null}
-            <Button asChild variant="outline" size="sm">
-              <Link href="/news" prefetch>
-                Back to index
-              </Link>
-            </Button>
             {convexEnabled ? (
-              <InteractionBar entityType="hnStory" entityId={entityId} />
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="SYMBaiEX votes and saves"
+              >
+                <span className="text-xs text-muted-foreground">SYMBaiEX</span>
+                <InteractionBar entityType="hnStory" entityId={entityId} />
+              </div>
             ) : (
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                Connect Convex to enable voting and saves.
+              <p className="text-sm text-muted-foreground">
+                Voting and saves are temporarily unavailable.
               </p>
             )}
           </div>
@@ -185,15 +192,16 @@ export default async function NewsStoryPage({ params }: PageProps) {
               </div>
             ) : (
               <p className="text-sm leading-7 text-muted-foreground md:text-base">
-                This indexed story points to an external source article. Read
-                the source, then come back here for the SYMBiEX discussion
-                layer.
+                Read the original article at {story.host ?? "the source"}, then
+                share your thoughts with the community below.
               </p>
             )}
           </section>
 
           <section className="page-content-readable mt-10">
-            <h2 className="mb-3 font-mono text-xs uppercase">Thread</h2>
+            <h2 className="mb-5 text-xl font-semibold tracking-tight">
+              SYMBaiEX discussion
+            </h2>
             <CommentsPanel
               entityType="hnStory"
               entityId={entityId}

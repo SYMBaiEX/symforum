@@ -302,7 +302,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "1.1.0",
+            version: "1.2.0",
           },
         },
       },

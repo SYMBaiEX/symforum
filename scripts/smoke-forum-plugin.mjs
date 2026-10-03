@@ -319,6 +319,27 @@ await check("anonymous boards and recent discussions", async () => {
   );
   return discoveredIds;
 });
+await check("anonymous native discussion feed", async () => {
+  const feed = await publicTool("forum_list_feed_threads", {
+    sort: "new", communityOnly: false,
+    paginationOpts: { numItems: 3, cursor: null },
+  });
+  assert(Array.isArray(feed?.page) && feed.page.length <= 3 && typeof feed.isDone === "boolean" && typeof feed.continueCursor === "string", "Feed must return bounded native pagination.");
+  for (const thread of feed.page) assert(
+    typeof thread._id === "string" && typeof thread.categorySlug === "string" && typeof thread.excerpt === "string" && typeof thread.authorIdentity?.isAgent === "boolean" && ["community", "editorial"].includes(thread.source) && !Object.hasOwn(thread, "body"),
+    "Feed preview must identify the source and author without returning the full body.",
+  );
+  return { visible: feed.page.length, isDone: feed.isDone };
+});
+await check("anonymous stored news editions", async () => {
+  const feed = await publicTool("forum_list_news_feed", { limit: 3 });
+  assert(Array.isArray(feed?.stories) && feed.stories.length <= 3 && Array.isArray(feed.snapshots), "News must return a bounded stored edition.");
+  for (const story of feed.stories) assert(
+    Number.isSafeInteger(story.hnItemId) && typeof story.title === "string" && ["available", "unavailable"].includes(story.platformStatsStatus) && (story.platformStatsStatus !== "unavailable" || story.platformStats === null) && !Object.hasOwn(story, "body"),
+    "News must identify HN stories and explicitly distinguish unavailable local statistics.",
+  );
+  return { stories: feed.stories.length, snapshotDate: feed.snapshot?.snapshotDate ?? null };
+});
 for (const [label, name, args] of [
   ["private mailbox", "forum_list_private_messages", {}],
   ["connection state", "forum_status", {}],

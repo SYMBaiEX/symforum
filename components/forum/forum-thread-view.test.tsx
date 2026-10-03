@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ query: vi.fn(() => undefined) }));
+const mocks = vi.hoisted(() => ({
+  query: vi.fn<(reference: unknown) => unknown>(() => undefined),
+}));
 vi.mock("convex-helpers/react/cache/hooks", () => ({ useQuery: mocks.query }));
 vi.mock("convex/react", () => ({
   useMutation: () => vi.fn(),
@@ -30,4 +32,118 @@ test("opening a thread does not subscribe to an automatic full-text search", () 
     forumRefs.search,
     expect.anything(),
   );
+});
+
+beforeEach(() => {
+  mocks.query.mockReset();
+  mocks.query.mockReturnValue(undefined);
+});
+
+function configureThread(locked: boolean) {
+  mocks.query.mockImplementation((reference) =>
+    reference === forumRefs.getThread
+      ? {
+          category: { slug: "research", title: "Research" },
+          thread: {
+            _id: "thread-one",
+            slug: "example",
+            title: "A shared discussion",
+            body: "Opening message.",
+            authorUsername: "research-agent",
+            role: "AI Agent",
+            viewerCanReply: true,
+            viewerCanEdit: true,
+            locked,
+            viewerCanDelete: false,
+            authorShowSignatures: false,
+            authorSignature: "A hidden signature",
+            createdAt: 100,
+          },
+          replies: {
+            page: [
+              {
+                _id: "reply-two",
+                body: "First reply.",
+                authorUsername: "reader-one",
+                postNumber: 2,
+                createdAt: 200,
+              },
+              {
+                _id: "reply-three",
+                body: "Second reply.",
+                authorUsername: "reader-two",
+                postNumber: 3,
+                createdAt: 300,
+              },
+            ],
+            isDone: true,
+            pagination: {
+              page: 1,
+              totalPages: 1,
+              startItem: 1,
+              endItem: 3,
+              totalItems: 3,
+            },
+          },
+          poll: null,
+          rules: null,
+          announcements: [],
+        }
+      : [],
+  );
+}
+
+test("thread reading preserves one title, chronological post identities and contextual actions", () => {
+  configureThread(false);
+  const html = renderToStaticMarkup(
+    <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+  );
+  expect(html.match(/>A shared discussion<\/h1>/g)).toHaveLength(1);
+  expect(html).toContain('id="post-1"');
+  expect(html).toContain('id="post-2"');
+  expect(html).toContain('id="post-3"');
+  expect(html.indexOf("Opening message.")).toBeLessThan(
+    html.indexOf("First reply."),
+  );
+  expect(html.indexOf("First reply.")).toBeLessThan(
+    html.indexOf("Second reply."),
+  );
+  expect(html).toContain("AI Agent");
+  expect(html).not.toContain("A hidden signature");
+  expect(html).toContain(">Quote</button>");
+  expect(html).toContain(">Report</button>");
+  expect(html).toContain(">Edit</button>");
+  expect(html).not.toContain(">Delete</button>");
+});
+
+test("a newly locked thread removes quote actions without hiding existing content or reports", () => {
+  configureThread(false);
+  const openHtml = renderToStaticMarkup(
+    <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+  );
+  expect(openHtml).toContain(">Quote</button>");
+  configureThread(true);
+  const lockedHtml = renderToStaticMarkup(
+    <ForumThreadView enabled categorySlug="research" threadSlug="example" />,
+  );
+  expect(lockedHtml).not.toContain(">Quote</button>");
+  expect(lockedHtml).toContain("Replying unavailable");
+  expect(lockedHtml).toContain("First reply.");
+  expect(lockedHtml).toContain(">Report</button>");
+});
+
+test("server-rendered thread heading suppresses duplicate client heading while preserving the starter", () => {
+  configureThread(false);
+  const html = renderToStaticMarkup(
+    <ForumThreadView
+      enabled
+      categorySlug="research"
+      threadSlug="example"
+      showHeading={false}
+    />,
+  );
+  expect(html).not.toContain("<h1");
+  expect(html).toContain("Opening message.");
+  expect(html).toContain("First reply.");
+  expect(html).toContain('aria-label="Forum breadcrumb"');
 });
