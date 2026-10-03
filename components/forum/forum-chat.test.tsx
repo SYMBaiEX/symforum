@@ -21,7 +21,7 @@ vi.mock("convex/react", () => ({
 vi.mock("next/navigation", () => ({ usePathname: () => "/forum" }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
-import { ForumChat, ChatMessage } from "./forum-chat";
+import { ForumChat, ChatMessage, isForumChatAnchor } from "./forum-chat";
 import { forumChatRefs } from "./forum-chat-refs";
 
 function message(id: string, body: string, time: number): ForumChatMessage {
@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 
 test("public chat presents an honest empty state, accessible collapse and sign-in entry", () => {
-  const html = renderToStaticMarkup(<ForumChat />);
+  const html = renderToStaticMarkup(<ForumChat defaultOpen />);
   expect(html).toContain('id="forum-chat"');
   expect(html).toContain('role="log"');
   expect(html).toContain("No messages yet.");
@@ -98,7 +98,7 @@ test("descending server data displays chronologically and private pending conten
     actingAs: { userId: "actor", username: "austin", isAgent: false },
   };
   mocks.data = data;
-  const html = renderToStaticMarkup(<ForumChat />);
+  const html = renderToStaticMarkup(<ForumChat defaultOpen />);
   expect(html.indexOf("Older message")).toBeLessThan(
     html.indexOf("Newer message"),
   );
@@ -117,7 +117,7 @@ test("room access loss suppresses logs and composer instead of claiming an empty
   data.viewer.canRead = false;
   data.viewer.canSend = false;
   mocks.data = data;
-  const html = renderToStaticMarkup(<ForumChat />);
+  const html = renderToStaticMarkup(<ForumChat defaultOpen />);
   expect(html).toContain("current General board permissions");
   expect(html).not.toContain('role="log"');
   expect(html).not.toContain("No messages yet");
@@ -126,7 +126,7 @@ test("room access loss suppresses logs and composer instead of claiming an empty
 
 test("auth loading skips the subscription and staff queue stays unsubscribed until expanded", () => {
   mocks.authLoading = true;
-  let html = renderToStaticMarkup(<ForumChat />);
+  let html = renderToStaticMarkup(<ForumChat defaultOpen />);
   expect(html).toContain("Loading chat");
   expect(mocks.query).toHaveBeenLastCalledWith(
     forumChatRefs.listChatMessages,
@@ -136,7 +136,7 @@ test("auth loading skips the subscription and staff queue stays unsubscribed unt
   const data = page();
   data.viewer.canModerate = true;
   mocks.data = data;
-  html = renderToStaticMarkup(<ForumChat />);
+  html = renderToStaticMarkup(<ForumChat defaultOpen />);
   expect(html).toContain("Chat moderation");
   expect(mocks.query).toHaveBeenCalledWith(
     forumChatRefs.listChatPendingMessages,
@@ -168,4 +168,54 @@ test("messages escape plain text and identify agents and agent-assisted humans",
     />,
   );
   expect(assisted).toContain("AI assisted");
+});
+
+test("chat starts collapsed and requests only one public preview message", () => {
+  const html = renderToStaticMarkup(<ForumChat />);
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).toContain("Open chat");
+  expect(html).not.toContain('role="log"');
+  expect(mocks.query).toHaveBeenCalledWith(forumChatRefs.listChatMessages, {
+    paginationOpts: { numItems: 1, cursor: null },
+  });
+});
+
+test("collapsed preview respects revoked room access and never exposes pending messages", () => {
+  const data = page();
+  data.page = [message("public", "Public preview", 2000)];
+  data.pending = [
+    {
+      ...message("pending", "Private waiting message", 3000),
+      status: "pending",
+    },
+  ];
+  mocks.data = data;
+  const visible = renderToStaticMarkup(<ForumChat />);
+  expect(visible).toContain("Austin: Public preview");
+  expect(visible).not.toContain("Private waiting message");
+  data.viewer.canRead = false;
+  const revoked = renderToStaticMarkup(<ForumChat />);
+  expect(revoked).toContain("Chat unavailable");
+  expect(revoked).not.toContain("Public preview");
+  expect(revoked).not.toContain("Private waiting message");
+});
+
+test("collapsed preview skips old message data while authentication changes", () => {
+  const data = page();
+  data.page = [message("old", "Previous identity message", 2000)];
+  mocks.data = data;
+  mocks.authLoading = true;
+  const html = renderToStaticMarkup(<ForumChat />);
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    forumChatRefs.listChatMessages,
+    "skip",
+  );
+  expect(html).not.toContain("Previous identity message");
+});
+
+test("canonical lounge deep links open chat while unrelated anchors leave disclosure state alone", () => {
+  expect(isForumChatAnchor("#forum-chat")).toBe(true);
+  expect(isForumChatAnchor("")).toBe(false);
+  expect(isForumChatAnchor("#post-1")).toBe(false);
+  expect(isForumChatAnchor("#forum-chat-content")).toBe(false);
 });

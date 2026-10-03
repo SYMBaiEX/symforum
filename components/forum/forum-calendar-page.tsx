@@ -55,7 +55,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-sm bg-background py-2">
+      <div className="rounded-xl bg-card py-2">
         <div className="mt-1.5 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold md:text-2xl">
@@ -65,7 +65,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
           <div className="flex gap-2">
             <Button
               asChild={previousMonth !== null}
-              className="h-7 rounded-sm px-2 text-xs"
+              className="h-7 rounded-xl px-2 text-xs"
               disabled={previousMonth === null}
               size="sm"
               variant="outline"
@@ -83,7 +83,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             </Button>
             <Button
               asChild={nextMonth !== null}
-              className="h-7 rounded-sm px-2 text-xs"
+              className="h-7 rounded-xl px-2 text-xs"
               disabled={nextMonth === null}
               size="sm"
               variant="outline"
@@ -100,7 +100,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
         </div>
       </div>
 
-      <section className="min-w-0 rounded-sm bg-background">
+      <section className="forum-panel min-w-0">
         <div className="md:hidden">
           <div className="grid grid-cols-7 bg-muted/35 text-center text-xs text-muted-foreground">
             {WEEKDAY_LABELS.map((label) => (
@@ -113,7 +113,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-14 min-w-0 rounded-sm bg-muted/35 p-1.5",
+                  "min-h-14 min-w-0 rounded-xl bg-muted/35 p-1.5",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}
@@ -124,7 +124,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                     aria-label={`${day.events.length} ${
                       day.events.length === 1 ? "event" : "events"
                     }`}
-                    className="mt-1 inline-flex min-w-5 items-center justify-center rounded-sm bg-primary/10 px-1 text-xs font-medium text-primary"
+                    className="mt-1 inline-flex min-w-5 items-center justify-center rounded-xl bg-primary/10 px-1 text-xs font-medium text-primary"
                   >
                     {day.events.length}
                   </span>
@@ -145,7 +145,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-24 min-w-0 rounded-sm bg-muted/35 p-2",
+                  "min-h-24 min-w-0 rounded-xl bg-muted/35 p-2",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}
@@ -154,7 +154,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                 <div className="mt-2 space-y-1">
                   {day.events.slice(0, 3).map((event) => (
                     <ForumLink
-                      className="focus-ring block truncate rounded-sm bg-primary/10 px-1.5 py-2 text-xs text-primary hover:bg-primary/15"
+                      className="focus-ring block truncate rounded-xl bg-primary/10 px-1.5 py-2 text-xs text-primary hover:bg-primary/15"
                       href={forumCalendarEventPath(event)}
                       key={event._id}
                       prefetch
@@ -180,7 +180,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
           body="This month has no active forum events yet."
         />
       ) : (
-        <section className="min-w-0 rounded-sm bg-background">
+        <section className="forum-panel min-w-0">
           <div className="grid grid-cols-[8rem_minmax(0,1fr)] bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
             <span>Date</span>
             <span>Event</span>
@@ -196,7 +196,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                   <p>{formatCalendarTime(event)}</p>
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">
+                  <h2 className="text-base font-semibold">
                     <ForumLink href={forumCalendarEventPath(event)} prefetch>
                       {event.title}
                     </ForumLink>
@@ -207,7 +207,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
                 </div>
                 <Button
                   asChild
-                  className="h-7 rounded-sm px-2 text-xs"
+                  className="h-7 rounded-xl px-2 text-xs"
                   size="sm"
                   variant="outline"
                 >

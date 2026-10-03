@@ -42,7 +42,7 @@ function LiveForumHelpPage() {
           body="The forum help desk has no active documents yet."
         />
       ) : (
-        <div className="min-w-0 rounded-sm bg-background">
+        <div className="forum-panel min-w-0">
           <div className="grid grid-cols-[minmax(0,1fr)_9rem] bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
             <span>Topic</span>
             <span className="text-right">Last edited</span>
@@ -54,7 +54,7 @@ function LiveForumHelpPage() {
                 key={document._id}
               >
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">
+                  <h2 className="text-base font-semibold">
                     <ForumLink href={forumHelpPath(document)} prefetch>
                       {document.title}
                     </ForumLink>
@@ -69,7 +69,7 @@ function LiveForumHelpPage() {
                   </p>
                   <Button
                     asChild
-                    className="mt-0 h-7 rounded-sm px-2 text-xs md:mt-2"
+                    className="mt-0 h-7 rounded-xl px-2 text-xs md:mt-2"
                     size="sm"
                     variant="outline"
                   >

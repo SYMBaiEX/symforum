@@ -181,7 +181,7 @@ function ForumSiteShell({
         <main
           id="main-content"
           tabIndex={-1}
-          className="min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
+          className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none lg:ml-[220px]"
         >
           {children}
         </main>
@@ -191,7 +191,7 @@ function ForumSiteShell({
         <AppErrorSurface />
         <footer
           ref={footerRef}
-          className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:pb-8"
+          className="forum-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:ml-[220px] lg:pb-8"
         >
           <a
             className="focus-ring py-2 hover:text-foreground"

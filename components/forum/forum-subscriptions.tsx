@@ -217,7 +217,7 @@ function LiveForumSubscriptions() {
         title="Sign in required"
         body="Use a SYM handle to save and review subscribed threads."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
@@ -320,14 +320,14 @@ function ForumNotificationPanel({
         : `${unreadLabel} unread forum alert${unreadCount === 1 ? "" : "s"} from watched activity and direct mentions.`;
 
   return (
-    <section className="min-w-0 rounded-sm bg-background">
+    <section className="forum-panel min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
         <div>
-          <h2 className="text-xs text-muted-foreground">Forum notifications</h2>
+          <h2 className="text-sm font-semibold">Forum notifications</h2>
           <p className="mt-1 text-sm text-muted-foreground">{unreadCopy}</p>
         </div>
         <Button
-          className="h-8 rounded-sm text-xs"
+          className="h-8 rounded-xl text-xs"
           disabled={unreadCount === 0 || pendingNotificationId !== null}
           onClick={onMarkAllRead}
           size="sm"
@@ -384,14 +384,14 @@ function ForumNotificationRow({
         : "Reply";
 
   return (
-    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-sm hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center">
+    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-xl hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center">
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">
           {notificationLabel} / {notification.categoryName} /{" "}
           {notification.actor}
         </p>
         <ForumLink
-          className="focus-ring mt-1 block truncate text-sm font-semibold hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
           href={href}
           onClick={() => onMarkRead(notification)}
           prefetch
@@ -405,7 +405,7 @@ function ForumNotificationRow({
       <div className="flex flex-wrap gap-2 md:justify-end">
         <Button
           asChild
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           size="sm"
           variant="outline"
         >
@@ -418,7 +418,7 @@ function ForumNotificationRow({
           </ForumLink>
         </Button>
         <Button
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           disabled={pending}
           onClick={() => onMarkRead(notification)}
           size="sm"
@@ -450,9 +450,9 @@ function ForumCategorySubscriptionPanel({
   }
 
   return (
-    <section className="min-w-0 rounded-sm bg-background">
+    <section className="forum-panel min-w-0">
       <div className="px-4 py-3">
-        <h2 className="text-xs text-muted-foreground">Watched boards</h2>
+        <h2 className="text-sm font-semibold">Watched boards</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           New-topic alerts from boards you follow.
         </p>
@@ -483,11 +483,11 @@ function ForumCategorySubscriptionRow({
   const latestThread = getCategoryLatestThread(category);
 
   return (
-    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-sm hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_10rem_auto] md:items-center">
+    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-xl hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_10rem_auto] md:items-center">
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">Watched board</p>
+        <p className="text-sm font-semibold">Watched board</p>
         <ForumLink
-          className="focus-ring mt-1 block truncate text-sm font-semibold hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
           href={forumPath(category.slug)}
           prefetch
         >
@@ -499,7 +499,7 @@ function ForumCategorySubscriptionRow({
           </p>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2 bg-transparent text-center text-xs text-muted-foreground md:grid-cols-1">
+      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         <div className="bg-background px-3 py-2">
           <p>Threads</p>
           <p className="mt-1 text-foreground">
@@ -517,7 +517,7 @@ function ForumCategorySubscriptionRow({
         {latestThread ? (
           <Button
             asChild
-            className="h-7 rounded-sm text-xs"
+            className="h-7 rounded-xl text-xs"
             size="sm"
             variant="outline"
           >
@@ -531,7 +531,7 @@ function ForumCategorySubscriptionRow({
         ) : null}
         <Button
           asChild
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           size="sm"
           variant="outline"
         >
@@ -540,7 +540,7 @@ function ForumCategorySubscriptionRow({
           </ForumLink>
         </Button>
         <Button
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           disabled={pending}
           onClick={() => onUnsubscribe(category)}
           size="sm"
@@ -573,9 +573,9 @@ function ForumThreadSubscriptionPanel({
   }
 
   return (
-    <section className="min-w-0 rounded-sm bg-background">
+    <section className="forum-panel min-w-0">
       <div className="px-4 py-3">
-        <h2 className="text-xs text-muted-foreground">Watched threads</h2>
+        <h2 className="text-sm font-semibold">Watched threads</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Reply alerts from threads you follow.
         </p>
@@ -618,13 +618,13 @@ function ForumThreadSubscriptionRow({
   const lastPostHref = getThreadLastPostHref(thread, categorySlug);
 
   return (
-    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-sm hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_8rem_8rem_11rem_auto] md:items-center">
+    <div className="forum-list-row grid min-w-0 grid-cols-2 gap-3 p-4 sm:grid-cols-3 [&>div:first-child]:col-span-full [&>div:last-child]:col-span-full">
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">
           Watched thread / {thread.categoryName ?? categorySlug ?? "Forum"}
         </p>
         <ForumLink
-          className="focus-ring mt-1 block truncate text-sm font-semibold hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
           href={threadHref}
           prefetch
         >
@@ -636,7 +636,7 @@ function ForumThreadSubscriptionRow({
           </p>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2 bg-transparent text-center text-xs text-muted-foreground md:grid-cols-1">
+      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         <div className="bg-background px-3 py-2">
           <p>Replies</p>
           <p className="mt-1 text-foreground">
@@ -665,17 +665,17 @@ function ForumThreadSubscriptionRow({
       <div className="flex flex-wrap gap-2 md:justify-end">
         <Button
           asChild
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           size="sm"
           variant="outline"
         >
           <ForumLink href={lastPostHref} prefetch>
-            Last
+            Latest reply
           </ForumLink>
         </Button>
         <Button
           asChild
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           size="sm"
           variant="outline"
         >
@@ -684,7 +684,7 @@ function ForumThreadSubscriptionRow({
           </ForumLink>
         </Button>
         <Button
-          className="h-7 rounded-sm text-xs"
+          className="h-7 rounded-xl text-xs"
           disabled={pending || !threadId}
           onClick={() => onUnsubscribe(thread)}
           size="sm"

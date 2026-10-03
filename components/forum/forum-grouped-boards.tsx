@@ -45,15 +45,15 @@ export function ForumGroupedBoards({
         <section
           key={group.section?.slug ?? `group-${index}`}
           aria-label={`${group.section ? getCategoryTitle(group.section) : "Main"} boards`}
-          className="forum-workspace overflow-hidden rounded-sm"
+          className="overflow-hidden rounded-xl bg-card p-2 sm:p-3"
         >
-          <div className="forum-section-header flex min-h-11 items-center gap-2.5 px-3 py-2 sm:px-4">
+          <div className="flex min-h-11 items-center gap-2.5 px-2 py-2 sm:px-3">
             <span
-              className="size-2 shrink-0"
+              className="size-2 shrink-0 rounded-full"
               aria-hidden="true"
               style={{ backgroundColor: accents[index % accents.length] }}
             />
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-base font-semibold tracking-tight">
               {group.section ? getCategoryTitle(group.section) : "Main boards"}
             </h2>
             <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -61,7 +61,7 @@ export function ForumGroupedBoards({
               {group.boards.length === 1 ? "board" : "boards"}
             </span>
           </div>
-          <ul className="px-1 py-1 sm:px-2">
+          <ul className="py-1">
             {group.boards.map((category) => (
               <li key={category.slug}>
                 <GroupedBoardRow category={category} />
@@ -128,9 +128,9 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
       : null,
   ].filter(Boolean);
   return (
-    <article className="forum-list-row grid min-w-0 grid-cols-[32px_minmax(0,1fr)] items-start gap-x-2.5 rounded-sm px-2 py-2 hover:bg-muted/40 focus-within:bg-muted/40 sm:grid-cols-[40px_minmax(0,1fr)] sm:gap-x-3 sm:px-3 lg:grid-cols-[40px_minmax(0,1fr)_64px_180px] xl:grid-cols-[40px_minmax(0,1fr)_72px_210px]">
+    <article className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)] items-start gap-x-3 rounded-lg px-2 py-3 hover:bg-muted/50 focus-within:bg-muted/50 sm:grid-cols-[40px_minmax(0,1fr)] sm:px-3 xl:grid-cols-[40px_minmax(0,1fr)_56px_160px]">
       <span
-        className={`mt-1.5 flex size-8 items-center justify-center rounded-sm sm:size-10 ${isUnread ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"}`}
+        className={`mt-1.5 flex size-9 items-center justify-center rounded-full sm:size-10 ${isUnread ? "bg-primary/10 text-primary" : "bg-accent/15 text-foreground"}`}
         role="img"
         aria-label={
           hasReadState(category)
@@ -148,7 +148,7 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
         <h3>
           <ForumLink
             href={forumPath(category.slug)}
-            className="focus-ring inline-flex min-h-11 max-w-full items-center text-[15px] font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere] sm:text-base"
+            className="focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere] sm:text-base"
           >
             {getCategoryTitle(category)}
           </ForumLink>
@@ -163,7 +163,7 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
             {access.join(" · ")}
           </p>
         ) : null}
-        <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px] leading-5 text-muted-foreground lg:hidden">
+        <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px] leading-5 text-muted-foreground xl:hidden">
           <span>
             {formatForumCount(getCategoryThreadCount(category))} threads
           </span>
@@ -180,11 +180,11 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
               {category.children.length === 1 ? "subforum" : "subforums"}
               <span className="sr-only"> in {getCategoryTitle(category)}</span>
             </summary>
-            <ul className="mb-1 flex flex-wrap gap-x-4 text-xs">
+            <ul className="mb-1 flex flex-wrap gap-2 text-xs">
               {category.children.map((child) => (
                 <li key={child.slug}>
                   <ForumLink
-                    className="focus-ring inline-flex min-h-11 items-center gap-2 hover:text-primary"
+                    className="forum-action-pill focus-ring inline-flex min-h-11 items-center gap-2 px-3 hover:text-primary"
                     href={forumPath(child.slug)}
                   >
                     {getCategoryTitle(child)}
@@ -199,7 +199,7 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
           </details>
         ) : null}
       </div>
-      <dl className="hidden pt-2 text-right font-mono text-[10px] text-muted-foreground lg:block">
+      <dl className="hidden pt-2 text-right font-mono text-[10px] text-muted-foreground xl:block">
         <div className="flex flex-col">
           <dt className="order-2">threads</dt>
           <dd className="order-1 text-sm tabular-nums text-foreground">
@@ -213,7 +213,7 @@ function GroupedBoardRow({ category }: { category: ForumCategoryRecord }) {
           </dd>
         </div>
       </dl>
-      <div className="col-start-2 min-w-0 lg:col-start-auto lg:pt-1">
+      <div className="col-start-2 min-w-0 xl:col-start-auto xl:pt-1">
         {latest ? (
           <>
             <p className="sr-only">Latest thread</p>

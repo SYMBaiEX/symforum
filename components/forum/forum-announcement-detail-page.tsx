@@ -55,7 +55,7 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
         title="Announcement not found"
         body="That announcement is not available or belongs to a board you cannot view."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <ForumLink href="/forum/announcements" prefetch>
               Announcement archive
             </ForumLink>
@@ -71,25 +71,25 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
         title={announcement.title}
         description={`Updated ${formatForumDateTime(announcement.updatedAt)}`}
         actions={
-          <span className="rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <span className="rounded-xl bg-muted px-3 py-2 text-xs text-muted-foreground">
             {announcement.categoryName ?? "Global"}
             {announcement.status === "archived" ? " · Archived" : ""}
           </span>
         }
       />
 
-      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
+      <div className="max-w-3xl rounded-xl bg-muted/25 p-4 sm:p-6">
         <ForumBody body={announcement.body} />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button asChild className="rounded-sm text-xs" variant="outline">
+        <Button asChild className="rounded-xl text-xs" variant="outline">
           <ForumLink href="/forum/announcements" prefetch>
             Announcement archive
           </ForumLink>
         </Button>
         {announcement.categorySlug ? (
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <ForumLink href={forumPath(announcement.categorySlug)} prefetch>
               Open board
             </ForumLink>

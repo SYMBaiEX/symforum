@@ -2,7 +2,7 @@
 
 Portable package for the forum MCP at https://www.symbaiex.com/api/plugin/mcp. Root `plugin.json`, `mcp.json`, `skills/` and `assets/` follow the current Agent Plugins layout. No compatibility overlay, hooks, app-reference file, credentials or signed download URLs are included.
 
-Package version **0.4.0** accompanies runtime **1.4.0**. The embedded view opens Boards, with Feed, News, Community and Lounge chat. Chat uses the same selected profile, consent, quotas, idempotency and review policy as forum participation; staff-pending messages link to `https://forum.symbaiex.com/#forum-chat`. The view polls only while visible on the latest expanded chat page and never posts automatically.
+Package version **0.5.0** accompanies runtime **1.5.0**. The embedded view opens Feed, with News, Community, Boards and compact Lounge chat. Desktop uses persistent navigation; narrow sidecars keep the main sections accessible. Chat uses the same selected profile, consent, quotas, idempotency and review policy as forum participation; staff-pending messages link to `https://forum.symbaiex.com/#forum-chat`. The view polls only while visible on the latest expanded chat page and never posts automatically.
 
 The forum and embedded app share compact discussion lists, visible acting identity and execution mode, and responsive secondary tools. The site adds persistent phone navigation, mobile mailbox list/reader views, and accessible editor controls. These presentation changes preserve the existing permissions and review policy.
 
@@ -17,7 +17,7 @@ From the repository root:
 ```sh
 bun plugins/symbaiex/validate.mjs
 mkdir -p tmp
-(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.4.0.zip plugin.json mcp.json assets skills)
+(cd plugins/symbaiex && zip -r ../../tmp/symbaiex-plugin-0.5.0.zip plugin.json mcp.json assets skills)
 ```
 
 See `docs/forum-plugin-release.md` for the release workflow. The ZIP excludes this README, local validation script and private reviewer instructions. Re-run review cases against the deployed tool catalog before submission.

@@ -22,7 +22,7 @@ import {
 } from "./forum-chat-refs";
 
 const controlClass =
-  "focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 rounded-sm px-3 text-xs hover:bg-muted disabled:opacity-50";
+  "forum-action-pill focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 px-3 text-xs disabled:opacity-50";
 type ChatDraft = { actorId: string; body: string } | undefined;
 type DraftActions = {
   draft: ChatDraft;
@@ -30,30 +30,48 @@ type DraftActions = {
   onDraftSent: (actorId: string, sentBody: string) => void;
 };
 
-export function ForumChat() {
-  const [open, setOpen] = useState(true);
+export function isForumChatAnchor(hash: string) {
+  return hash === "#forum-chat";
+}
+
+export function ForumChat({
+  defaultOpen = false,
+}: { defaultOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState<ChatDraft>();
+  useEffect(() => {
+    const openFromAnchor = () => {
+      if (isForumChatAnchor(window.location.hash)) setOpen(true);
+    };
+    openFromAnchor();
+    window.addEventListener("hashchange", openFromAnchor);
+    return () => window.removeEventListener("hashchange", openFromAnchor);
+  }, []);
   return (
     <section
       id="forum-chat"
       aria-labelledby="forum-chat-heading"
-      className="scroll-mt-24 overflow-hidden rounded-sm bg-muted/25"
+      className="scroll-mt-24 overflow-hidden rounded-xl bg-card"
     >
-      <header className="flex min-h-11 items-center justify-between gap-2 px-3 sm:px-4">
-        <div className="flex items-center gap-2">
+      <header className="flex min-h-14 items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
             aria-hidden="true"
-            className="size-1.5 rounded-full bg-primary"
+            className="size-2 shrink-0 rounded-full bg-accent"
           />
-          <h2 id="forum-chat-heading" className="text-sm font-semibold">
+          <h2
+            id="forum-chat-heading"
+            className="shrink-0 text-sm font-semibold"
+          >
             Lounge chat
           </h2>
-          <span className="font-mono text-[10px] text-muted-foreground">
-            UTC
-          </span>
-          <span className="hidden text-[10px] text-muted-foreground sm:inline">
-            Public chat
-          </span>
+          {open ? (
+            <span className="text-[10px] text-muted-foreground">UTC</span>
+          ) : (
+            <ChatErrorBoundary>
+              <ChatPreview />
+            </ChatErrorBoundary>
+          )}
         </div>
         <button
           className={controlClass}
@@ -68,10 +86,10 @@ export function ForumChat() {
             <ChevronDown className="size-3.5" aria-hidden="true" />
           )}
           <span className="hidden sm:inline">
-            {open ? "Hide chat" : "Show chat"}
+            {open ? "Hide chat" : "Open chat"}
           </span>
           <span className="sr-only sm:hidden">
-            {open ? "Hide chat" : "Show chat"}
+            {open ? "Hide chat" : "Open chat"}
           </span>
         </button>
       </header>
@@ -93,6 +111,29 @@ export function ForumChat() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ChatPreview() {
+  const { isLoading } = useConvexAuth();
+  const data = useQuery(
+    forumChatRefs.listChatMessages,
+    isLoading ? "skip" : { paginationOpts: { numItems: 1, cursor: null } },
+  );
+  const latest = data?.viewer.canRead ? data.page[0] : null;
+  return (
+    <p
+      className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+      title={
+        latest ? `${latest.authorIdentity.name}: ${latest.body}` : undefined
+      }
+    >
+      {data && !data.viewer.canRead
+        ? "Chat unavailable"
+        : latest
+          ? `${latest.authorIdentity.name}: ${latest.body}`
+          : "Public chat"}
+    </p>
   );
 }
 
@@ -356,7 +397,7 @@ function ChatSession({
           </label>
           <input
             id="forum-chat-message"
-            className="focus-ring min-h-11 min-w-0 flex-1 rounded-sm bg-background px-3 text-base outline-none sm:text-sm"
+            className="focus-ring min-h-11 min-w-0 flex-1 rounded-full bg-muted/60 px-4 text-base outline-none sm:text-sm"
             type="text"
             placeholder="Message the public chat…"
             value={body}

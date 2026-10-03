@@ -101,7 +101,7 @@ function ForumRecentThreadsHeader({
       title={title}
       description={description}
       actions={
-        <span className="rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-3 py-2 text-xs text-muted-foreground">
           {mode === "new" ? "Unread activity" : "Daily activity"}
         </span>
       }
@@ -176,7 +176,7 @@ function ForumRecentActivitySummary({
       : "n/a";
 
   return (
-    <section className="flex flex-col gap-1.5 rounded-sm bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+    <section className="flex flex-col gap-1.5 rounded-xl bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
       <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <div className="inline-flex items-baseline gap-1.5">
           <dt>Matching</dt>

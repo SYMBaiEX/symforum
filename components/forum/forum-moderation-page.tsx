@@ -53,7 +53,7 @@ function LiveForumModerationPanel() {
         title="Sign in required"
         body="Use a staff account to open the forum Moderator CP."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }

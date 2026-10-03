@@ -1446,9 +1446,7 @@ export function ForumThreadTable({
         <section
           key={section.key}
           className={
-            variant === "grouped"
-              ? "min-w-0 rounded-sm bg-background/60"
-              : "min-w-0"
+            variant === "grouped" ? "forum-panel min-w-0 !p-0" : "min-w-0"
           }
           aria-label={section.label}
         >
@@ -1502,6 +1500,8 @@ function ForumThreadRow({
   thread: ForumThreadSummaryRecord;
 }) {
   const categorySlug = thread.categorySlug ?? category?.slug;
+  const displayAuthor =
+    thread.authorDisplayName ?? thread.authorName ?? getThreadAuthor(thread);
   const firstUnreadHref =
     thread.viewerUnread === true && thread.firstUnreadPostNumber
       ? forumPostPath(
@@ -1514,22 +1514,22 @@ function ForumThreadRow({
   return (
     <article
       className={cn(
-        "forum-discussion-row grid min-w-0 grid-cols-[36px_minmax(0,1fr)] items-start gap-x-3 px-2 py-3 transition-colors hover:bg-muted/45 sm:grid-cols-[40px_minmax(0,1fr)_64px_170px] sm:px-4",
+        "forum-discussion-row grid min-w-0 grid-cols-[32px_minmax(0,1fr)] items-start gap-x-3 rounded-xl px-3 py-3 transition-colors hover:bg-muted/45 sm:grid-cols-[36px_minmax(0,1fr)_48px_125px] sm:px-4",
         isPinnedThread(thread) && "bg-primary/[0.035]",
         variant === "stream" && "sm:px-2",
       )}
     >
-      <div className="relative pt-2">
+      <div className="relative pt-1">
         {thread.viewerUnread === false ? (
           <span className="sr-only" aria-label="Read thread" role="img">
             Read thread
           </span>
         ) : null}
         <ForumAvatar
-          alt={`${getThreadAuthor(thread)} avatar`}
-          name={getThreadAuthor(thread)}
+          alt={`${displayAuthor} avatar`}
+          name={displayAuthor}
           src={thread.authorImage}
-          className="size-9 rounded-full sm:size-10"
+          className="size-8 rounded-full sm:size-9"
         />
         {thread.viewerUnread ? (
           <span
@@ -1551,7 +1551,7 @@ function ForumThreadRow({
         </h3>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-muted-foreground">
           <span className="min-w-0 [overflow-wrap:anywhere]">
-            {getThreadAuthor(thread)}
+            {displayAuthor}
           </span>
           {category === null && thread.categorySlug ? (
             <>
@@ -1577,9 +1577,11 @@ function ForumThreadRow({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-          <span className="font-mono text-[11px] sm:hidden">
-            {formatForumCount(getThreadReplyCount(thread))} replies ·{" "}
-            {formatForumCount(thread.viewCount)} views
+          <span className="text-[11px] sm:hidden">
+            {formatForumCount(getThreadReplyCount(thread))} replies
+            {typeof thread.viewCount === "number" && thread.viewCount > 0 ? (
+              <> · {formatForumCount(thread.viewCount)} views</>
+            ) : null}
           </span>
           {getThreadRatingCount(thread) > 0 ? (
             <ForumThreadRatingSummary
@@ -1599,19 +1601,21 @@ function ForumThreadRow({
           ) : null}
         </div>
       </div>
-      <dl className="hidden gap-1 pt-3 text-center sm:grid">
+      <dl className="hidden gap-1 pt-2 text-center sm:grid">
         <div className="flex flex-col gap-1">
           <dt className="order-2 text-[10px] text-muted-foreground">replies</dt>
           <dd className="order-1 font-mono text-base font-medium tabular-nums">
             {formatForumCount(getThreadReplyCount(thread))}
           </dd>
         </div>
-        <div>
-          <dt className="sr-only">Views</dt>
-          <dd className="text-[11px] text-muted-foreground">
-            {formatForumCount(thread.viewCount)} views
-          </dd>
-        </div>
+        {typeof thread.viewCount === "number" && thread.viewCount > 0 ? (
+          <div>
+            <dt className="sr-only">Views</dt>
+            <dd className="text-[11px] text-muted-foreground">
+              {formatForumCount(thread.viewCount)} views
+            </dd>
+          </div>
+        ) : null}
       </dl>
       <div className="col-start-2 flex min-w-0 items-center gap-x-2 sm:col-start-auto sm:block sm:pt-1">
         <ForumLink
@@ -1625,7 +1629,7 @@ function ForumThreadRow({
               <span className="sm:hidden">Latest: </span>
               {getThreadLastAuthor(thread)}
             </span>
-            <span className="ml-2 font-mono text-[10px] sm:ml-0 sm:mt-1 sm:block">
+            <span className="ml-2 text-[10px] sm:ml-0 sm:mt-1 sm:block">
               {formatForumDateTime(getThreadLastActivityAt(thread))}
             </span>
           </span>
@@ -1754,9 +1758,7 @@ export function ForumPostFrame({
     <article
       className={cn(
         "forum-reader min-w-0 scroll-mt-32",
-        variant === "grouped"
-          ? "rounded-sm bg-background px-3 py-4 sm:px-5 sm:py-5"
-          : "py-4",
+        variant === "grouped" ? "forum-post-card forum-panel !py-3" : "py-4",
       )}
       id={id}
       aria-label={`Post ${postNumber} by ${author}`}
@@ -1804,7 +1806,7 @@ export function ForumPostFrame({
         </div>
         {id ? (
           <a
-            className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center hover:text-primary"
+            className="forum-action-pill focus-ring inline-flex min-h-11 min-w-11 items-center justify-center hover:text-primary"
             href={`#${id}`}
             aria-label={`Permalink to post ${postNumber}`}
           >
@@ -1817,86 +1819,74 @@ export function ForumPostFrame({
       <div
         className={cn(
           "min-w-0 max-w-[75ch] text-[15px] leading-7",
-          variant === "grouped" ? "pt-3 sm:pl-[52px]" : "mt-4",
+          variant === "grouped" ? "pt-3" : "mt-4",
         )}
       >
         {children}
       </div>
-      <details
-        className={cn(
-          "group mt-1 text-xs text-muted-foreground",
-          variant === "grouped" && "sm:pl-[52px]",
-        )}
-      >
-        <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center hover:text-foreground">
-          About {author}
-          <ChevronDown
-            aria-hidden="true"
-            className="ml-1.5 size-3.5 transition-transform group-open:rotate-180"
-          />
-        </summary>
-        <div className="mb-5 bg-muted/30 px-4 py-3">
-          <dl className="flex flex-wrap gap-x-5 gap-y-2">
-            {showRoleStat ? (
-              <div className="inline-flex gap-1.5">
-                <dt>Role</dt>
-                <dd className="text-foreground">{normalizedRole}</dd>
+      <footer className="mt-3 flex flex-wrap items-center gap-1">
+        {actions}
+        <details className="group min-w-0 text-xs text-muted-foreground open:basis-full">
+          <summary className="focus-ring inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full px-2 hover:bg-muted/40 hover:text-foreground [overflow-wrap:anywhere]">
+            About {author}
+            <ChevronDown
+              aria-hidden="true"
+              className="ml-1.5 size-3.5 transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <div className="mb-3 rounded-xl bg-muted/30 px-4 py-3">
+            <dl className="flex flex-wrap gap-x-5 gap-y-2">
+              {showRoleStat ? (
+                <div className="inline-flex gap-1.5">
+                  <dt>Role</dt>
+                  <dd className="text-foreground">{normalizedRole}</dd>
+                </div>
+              ) : null}
+              {typeof postCount === "number" ? (
+                <div className="inline-flex gap-1.5">
+                  <dt>Posts</dt>
+                  <dd className="text-foreground">
+                    {formatForumCount(postCount)}
+                  </dd>
+                </div>
+              ) : null}
+              {typeof reputationScore === "number" ? (
+                <div className="inline-flex gap-1.5">
+                  <dt>Reputation</dt>
+                  <dd className="text-foreground">
+                    {reputationScore > 0 ? "+" : ""}
+                    {formatForumCount(reputationScore)}
+                  </dd>
+                </div>
+              ) : null}
+              {location ? (
+                <div className="inline-flex gap-1.5">
+                  <dt>Location</dt>
+                  <dd className="break-words text-foreground">{location}</dd>
+                </div>
+              ) : null}
+              {typeof joinedAt === "number" ? (
+                <div className="inline-flex gap-1.5">
+                  <dt>Joined</dt>
+                  <dd className="text-foreground">
+                    {formatForumDateTime(joinedAt)}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+            <ForumAuthorRailShortcuts author={author} authorHref={authorHref} />
+            {signature ? (
+              <div className="mt-3">
+                <p className="mb-2 font-medium">Signature</p>
+                <ForumBody
+                  body={signature}
+                  className="text-sm leading-6 text-muted-foreground"
+                />
               </div>
             ) : null}
-            {typeof postCount === "number" ? (
-              <div className="inline-flex gap-1.5">
-                <dt>Posts</dt>
-                <dd className="text-foreground">
-                  {formatForumCount(postCount)}
-                </dd>
-              </div>
-            ) : null}
-            {typeof reputationScore === "number" ? (
-              <div className="inline-flex gap-1.5">
-                <dt>Reputation</dt>
-                <dd className="text-foreground">
-                  {reputationScore > 0 ? "+" : ""}
-                  {formatForumCount(reputationScore)}
-                </dd>
-              </div>
-            ) : null}
-            {location ? (
-              <div className="inline-flex gap-1.5">
-                <dt>Location</dt>
-                <dd className="break-words text-foreground">{location}</dd>
-              </div>
-            ) : null}
-            {typeof joinedAt === "number" ? (
-              <div className="inline-flex gap-1.5">
-                <dt>Joined</dt>
-                <dd className="text-foreground">
-                  {formatForumDateTime(joinedAt)}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-          <ForumAuthorRailShortcuts author={author} authorHref={authorHref} />
-          {signature ? (
-            <div className="mt-3">
-              <p className="mb-2 font-medium">Signature</p>
-              <ForumBody
-                body={signature}
-                className="text-sm leading-6 text-muted-foreground"
-              />
-            </div>
-          ) : null}
-        </div>
-      </details>
-      {actions ? (
-        <div
-          className={cn(
-            "mt-2 flex flex-wrap items-center gap-1",
-            variant === "grouped" && "sm:pl-[52px]",
-          )}
-        >
-          {actions}
-        </div>
-      ) : null}
+          </div>
+        </details>
+      </footer>
     </article>
   );
 }

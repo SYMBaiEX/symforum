@@ -172,7 +172,7 @@ function LiveForumControlPanel() {
         title="Sign in required"
         body="Use a SYM handle to edit your forum title, signature, and display settings."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
@@ -278,11 +278,8 @@ function LiveForumControlPanel() {
         reputationEntriesCount={reputationEntriesCount}
         warnings={warnings}
       />
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div
-          className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-          id="ucp-profile"
-        >
+      <section className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="forum-panel scroll-mt-24 p-4" id="ucp-profile">
           <ForumProfileForm
             profile={profile}
             avatarUrl={avatarUrl}
@@ -333,7 +330,7 @@ function LiveForumControlPanel() {
           />
           {error ? (
             <p
-              className="mt-3 rounded-sm bg-muted/35 p-4 text-sm text-muted-foreground"
+              className="mt-3 rounded-xl bg-card p-4 text-sm text-muted-foreground"
               role="alert"
             >
               {error}
@@ -342,20 +339,20 @@ function LiveForumControlPanel() {
           {saved ? (
             <p
               aria-live="polite"
-              className="mt-3 rounded-sm bg-muted/35 p-4 text-xs text-muted-foreground"
+              className="mt-3 rounded-xl bg-card p-4 text-xs text-muted-foreground"
               role="status"
             >
               Forum profile saved
             </p>
           ) : null}
           <div className="mt-3 flex flex-wrap justify-end gap-2">
-            <Button asChild className="rounded-sm text-xs" variant="outline">
+            <Button asChild className="rounded-xl text-xs" variant="outline">
               <ForumLink href="/forum/subscriptions" prefetch>
                 Subscriptions
               </ForumLink>
             </Button>
             <Button
-              className="rounded-sm text-xs"
+              className="rounded-xl text-xs"
               type="button"
               disabled={pending}
               onClick={saveProfile}
@@ -386,10 +383,7 @@ function LiveForumControlPanel() {
           />
           <ForumPendingContentPanel pendingContent={pendingContent} />
           <ForumWarningHistory profile={profile} warnings={warnings} />
-          <section
-            className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-            id="ucp-signature"
-          >
+          <section className="forum-panel scroll-mt-24 p-4" id="ucp-signature">
             <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
               <div>
                 <p className="text-xs text-muted-foreground">
@@ -397,11 +391,11 @@ function LiveForumControlPanel() {
                 </p>
                 <h2 className="mt-2 text-lg font-semibold">Author rail</h2>
               </div>
-              <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+              <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
                 {showSignatures ? "Shown on posts" : "Hidden on posts"}
               </span>
             </div>
-            <div className="mt-3 rounded-sm bg-muted/35 p-4">
+            <div className="mt-3 rounded-xl bg-card p-4">
               {hasSignaturePreview ? (
                 <ForumBody
                   body={signature}
@@ -496,37 +490,38 @@ function ForumControlPanelDirectory({
   return (
     <section
       aria-label="User control panel directory"
-      className="min-w-0 rounded-sm bg-background"
+      className="forum-panel min-w-0"
       id="ucp-index"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
         <div>
           <p className="text-xs text-muted-foreground">User CP</p>
-          <h2 className="mt-1 text-sm font-semibold uppercase tracking-normal">
-            Settings sections
-          </h2>
+          <h2 className="mt-1 text-sm font-semibold">Settings sections</h2>
         </div>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="rounded-sm bg-muted px-2 py-1">
+          <span className="rounded-xl bg-muted px-2 py-1">
             {profile.threadCount} threads
           </span>
-          <span className="rounded-sm bg-muted px-2 py-1">
+          <span className="rounded-xl bg-muted px-2 py-1">
             {profile.postCount} posts
           </span>
-          <span className="rounded-sm bg-muted px-2 py-1">
+          <span className="rounded-xl bg-muted px-2 py-1">
             {profile.reputationScore > 0 ? "+" : ""}
             {profile.reputationScore} rep
           </span>
         </div>
       </div>
-      <nav aria-label="Settings sections" className="flex flex-wrap gap-2 p-3">
+      <nav
+        aria-label="Settings sections"
+        className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4"
+      >
         {navItems.map((item) => (
           <a
-            className="focus-ring group min-h-11 min-w-[8rem] flex-1 rounded-sm bg-muted/35 px-3 py-2 hover:bg-muted/60"
+            className="focus-ring group min-h-11 min-w-0 rounded-xl bg-muted/35 px-3 py-2 hover:bg-primary/5"
             href={item.href}
             key={item.href}
           >
-            <span className="block text-xs text-muted-foreground group-hover:text-foreground">
+            <span className="block text-sm font-medium text-foreground">
               {item.label}
             </span>
             <span
@@ -615,12 +610,12 @@ function ForumProfileForm({
         <p className="text-xs text-muted-foreground">Signed in as</p>
         <p className="mt-1 text-xl font-semibold">{profile.username}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+          <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
             {profile.trusted ? "Trusted member" : "Forum access pending"}
           </span>
         </div>
       </div>
-      <div className="grid gap-3 rounded-sm bg-muted/35 p-4 md:grid-cols-[5rem_minmax(0,1fr)]">
+      <div className="grid gap-3 rounded-xl bg-card p-4 md:grid-cols-[5rem_minmax(0,1fr)]">
         <ForumAvatar
           alt={`${profile.username} avatar`}
           className="size-20"
@@ -635,7 +630,7 @@ function ForumProfileForm({
               maxLength={500}
               onChange={(event) => onAvatarUrlChange(event.target.value)}
               placeholder={profile.authAvatarUrl ?? "https://..."}
-              className="rounded-sm border-row-border"
+              className="rounded-xl border-row-border"
             />
           </label>
           <label className="grid gap-2">
@@ -645,7 +640,7 @@ function ForumProfileForm({
               maxLength={240}
               onChange={(event) => onWebsiteUrlChange(event.target.value)}
               placeholder="https://symbaiex.com"
-              className="rounded-sm border-row-border"
+              className="rounded-xl border-row-border"
             />
           </label>
         </div>
@@ -657,7 +652,7 @@ function ForumProfileForm({
           maxLength={40}
           onChange={(event) => onCustomTitleChange(event.target.value)}
           placeholder={profile.rank}
-          className="rounded-sm border-row-border"
+          className="rounded-xl border-row-border"
         />
       </label>
       <div className="grid gap-3 md:grid-cols-3">
@@ -668,7 +663,7 @@ function ForumProfileForm({
             maxLength={80}
             onChange={(event) => onLocationChange(event.target.value)}
             placeholder="Austin, TX"
-            className="rounded-sm border-row-border"
+            className="rounded-xl border-row-border"
           />
         </label>
         <label className="grid gap-2">
@@ -678,13 +673,13 @@ function ForumProfileForm({
             maxLength={10}
             onChange={(event) => onBirthdayChange(event.target.value)}
             placeholder="YYYY-MM-DD"
-            className="rounded-sm border-row-border"
+            className="rounded-xl border-row-border"
           />
         </label>
         <label className="grid gap-2">
           <span className="text-xs text-muted-foreground">Timezone</span>
           <select
-            className="focus-ring h-10 rounded-sm border border-row-border bg-background px-3 text-sm outline-none"
+            className="focus-ring h-10 rounded-xl border border-row-border bg-background px-3 text-sm outline-none"
             value={timeZone}
             onChange={(event) => onTimeZoneChange(event.target.value)}
           >
@@ -705,7 +700,7 @@ function ForumProfileForm({
           rows={4}
           onChange={(event) => onBioChange(event.target.value)}
           placeholder="Old web profile blurb, project notes, links, or whatever belongs under your handle."
-          className="rounded-sm border-row-border"
+          className="rounded-xl border-row-border"
         />
         <span className="text-xs leading-5 text-muted-foreground">
           {bio.length}/800 characters
@@ -719,7 +714,7 @@ function ForumProfileForm({
           rows={7}
           onChange={(event) => onSignatureChange(event.target.value)}
           placeholder="[b]Build notes[/b]\nhttps://symbaiex.com"
-          className="rounded-sm border-row-border"
+          className="rounded-xl border-row-border"
         />
         <span className="text-xs leading-5 text-muted-foreground">
           {signature.length}/900 characters
@@ -727,7 +722,7 @@ function ForumProfileForm({
       </label>
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input
-          className="size-4 rounded-sm border-row-border accent-primary"
+          className="size-4 rounded-xl border-row-border accent-primary"
           type="checkbox"
           checked={showSignatures}
           onChange={(event) => onShowSignaturesChange(event.target.checked)}
@@ -768,16 +763,13 @@ function ForumNotificationPreferencesPanel({
   const disableEmailNewThreads = loading || !emailAvailable;
 
   return (
-    <section
-      className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-      id="ucp-notifications"
-    >
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-notifications">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
         <div>
           <p className="text-xs text-muted-foreground">Notifications</p>
           <h2 className="mt-2 text-lg font-semibold">Forum alerts</h2>
         </div>
-        <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
           {loading
             ? "Syncing"
             : emailAvailable
@@ -787,7 +779,7 @@ function ForumNotificationPreferencesPanel({
               : "No email"}
         </span>
       </div>
-      <div className="mt-3 space-y-1 rounded-sm bg-muted/20">
+      <div className="mt-3 space-y-1 rounded-xl bg-muted/20">
         <ForumNotificationToggle
           checked={draft.inAppReplies}
           disabled={loading}
@@ -825,24 +817,24 @@ function ForumNotificationPreferencesPanel({
         />
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span className="rounded-sm bg-muted px-2 py-1">
+        <span className="rounded-xl bg-muted px-2 py-1">
           {emailDeliveryEnabled
             ? "Email sending enabled"
             : "Email sending disabled"}
         </span>
-        <span className="rounded-sm bg-muted px-2 py-1">
+        <span className="rounded-xl bg-muted px-2 py-1">
           {emailAvailable ? "Email queued" : "No destination"}
         </span>
       </div>
       {error ? (
-        <p className="mt-3 rounded-sm bg-muted/35 p-4 text-sm text-muted-foreground">
+        <p className="mt-3 rounded-xl bg-card p-4 text-sm text-muted-foreground">
           {error}
         </p>
       ) : null}
       {saved ? (
         <p
           aria-live="polite"
-          className="mt-3 rounded-sm bg-muted/35 p-4 text-xs text-muted-foreground"
+          className="mt-3 rounded-xl bg-card p-4 text-xs text-muted-foreground"
           role="status"
         >
           Notification settings saved
@@ -850,7 +842,7 @@ function ForumNotificationPreferencesPanel({
       ) : null}
       <div className="mt-3 flex justify-end">
         <Button
-          className="rounded-sm text-xs"
+          className="rounded-xl text-xs"
           type="button"
           disabled={pending || loading}
           onClick={onSave}
@@ -878,7 +870,7 @@ function ForumNotificationToggle({
   return (
     <label className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 bg-background p-3">
       <input
-        className="size-4 rounded-sm border-row-border accent-primary disabled:opacity-50"
+        className="size-4 rounded-xl border-row-border accent-primary disabled:opacity-50"
         type="checkbox"
         checked={checked}
         disabled={disabled}
@@ -953,10 +945,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
 
   if (!trusted) {
     return (
-      <section
-        className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-        id="ucp-lists"
-      >
+      <section className="forum-panel scroll-mt-24 p-4" id="ucp-lists">
         <p className="text-xs text-muted-foreground">User lists</p>
         <h2 className="mt-2 text-lg font-semibold">Locked</h2>
       </section>
@@ -967,13 +956,13 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
   const ignored = relationships?.ignored ?? [];
 
   return (
-    <section className="scroll-mt-24 rounded-sm bg-muted/35 p-4" id="ucp-lists">
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-lists">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
         <div>
           <p className="text-xs text-muted-foreground">User lists</p>
           <h2 className="mt-2 text-lg font-semibold">Buddies / ignore</h2>
         </div>
-        <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
           {relationships === undefined
             ? "Syncing"
             : `${buddies.length} / ${ignored.length}`}
@@ -990,12 +979,12 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
               setNotice("");
             }}
             placeholder="sym-austin"
-            className="rounded-sm border-row-border"
+            className="rounded-xl border-row-border"
           />
         </label>
         <div className="flex flex-wrap gap-2">
           <Button
-            className="rounded-sm text-xs"
+            className="rounded-xl text-xs"
             type="button"
             disabled={pendingKey !== null || relationships === undefined}
             onClick={() => {
@@ -1005,7 +994,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
             Add buddy
           </Button>
           <Button
-            className="rounded-sm text-xs"
+            className="rounded-xl text-xs"
             type="button"
             variant="outline"
             disabled={pendingKey !== null || relationships === undefined}
@@ -1017,12 +1006,12 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
           </Button>
         </div>
         {error ? (
-          <p className="rounded-sm bg-muted/35 p-4 text-sm text-muted-foreground">
+          <p className="rounded-xl bg-card p-4 text-sm text-muted-foreground">
             {error}
           </p>
         ) : null}
         {notice ? (
-          <p className="rounded-sm bg-muted/35 p-4 text-xs text-muted-foreground">
+          <p className="rounded-xl bg-card p-4 text-xs text-muted-foreground">
             {notice}
           </p>
         ) : null}
@@ -1066,7 +1055,7 @@ function ForumRelationshipList({
 }) {
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2">
         <h3 className="text-xs text-muted-foreground">{title}</h3>
         <span className="text-xs text-muted-foreground">
           {records === undefined ? "..." : records.length}
@@ -1121,7 +1110,7 @@ function ForumRelationshipRow({
           </p>
         </div>
         <Button
-          className="rounded-sm text-xs"
+          className="rounded-xl text-xs"
           type="button"
           variant="outline"
           disabled={pending}
@@ -1150,16 +1139,13 @@ function ForumReputationHistoryPanel({
       : given.length + received.length;
 
   return (
-    <section
-      className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-      id="ucp-reputation"
-    >
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-reputation">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
         <div>
           <p className="text-xs text-muted-foreground">Reputation</p>
           <h2 className="mt-2 text-lg font-semibold">Member ledger</h2>
         </div>
-        <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
           {totalShown === undefined ? "Syncing" : `${totalShown} shown`}
         </span>
       </div>
@@ -1190,7 +1176,7 @@ function ForumReputationHistoryColumn({
 }) {
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2">
         <h3 className="text-xs text-muted-foreground">{title}</h3>
         <span className="text-xs text-muted-foreground">
           {records === undefined ? "..." : records.length}
@@ -1240,8 +1226,8 @@ function ForumReputationHistoryRow({
           <span
             className={
               record.score > 0
-                ? "rounded-sm bg-muted px-2 py-1 text-xs text-foreground"
-                : "rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground"
+                ? "rounded-xl bg-muted px-2 py-1 text-xs text-foreground"
+                : "rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground"
             }
           >
             {scoreLabel}
@@ -1315,7 +1301,7 @@ function ForumPendingContentPanel({
         ].sort((left, right) => right.createdAt - left.createdAt);
 
   return (
-    <section className="scroll-mt-24 rounded-sm bg-muted/35 p-4" id="ucp-queue">
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-queue">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
         <div>
           <p className="text-xs text-muted-foreground">Moderation queue</p>
@@ -1323,7 +1309,7 @@ function ForumPendingContentPanel({
             Awaiting staff moderation
           </h2>
         </div>
-        <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
           {pendingContent === undefined
             ? "Syncing"
             : `${entries.length} pending`}
@@ -1338,11 +1324,11 @@ function ForumPendingContentPanel({
           No threads or replies are waiting on moderation.
         </p>
       ) : (
-        <div className="mt-3 space-y-1 rounded-sm bg-muted/20">
+        <div className="mt-3 space-y-1 rounded-xl bg-muted/20">
           {entries.map((entry) => (
             <article className="grid gap-2 bg-background p-3" key={entry.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+                <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
                   {entry.type}
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -1382,16 +1368,13 @@ function ForumWarningHistory({
   const summary = forumWarningSummary(warnings, profile);
 
   return (
-    <section
-      className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-      id="ucp-warnings"
-    >
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-warnings">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3">
         <div>
           <p className="text-xs text-muted-foreground">Warning history</p>
           <h2 className="mt-2 text-lg font-semibold">Account notices</h2>
         </div>
-        <span className="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <span className="rounded-xl bg-muted px-2 py-1 text-xs text-muted-foreground">
           {warnings === undefined ? "Syncing" : `${summary.shownTotal} shown`}
         </span>
       </div>
@@ -1432,7 +1415,7 @@ function ForumWarningHistory({
           No forum warnings on this account.
         </p>
       ) : (
-        <div className="mt-3 space-y-1 rounded-sm bg-muted/20">
+        <div className="mt-3 space-y-1 rounded-xl bg-muted/20">
           {warnings.map((warning) => (
             <ForumWarningRow key={warning._id} warning={warning} />
           ))}
@@ -1573,7 +1556,7 @@ function ForumWarningContextLinks({
   return (
     <div className="grid gap-2 pt-3 text-xs text-muted-foreground">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-sm bg-muted px-2 py-1">{contextScope}</span>
+        <span className="rounded-xl bg-muted px-2 py-1">{contextScope}</span>
         {href ? (
           <ForumLink
             className="focus-ring min-w-0 break-words hover:text-foreground"
@@ -1640,10 +1623,7 @@ function forumWarningContextLabel(warning: ForumWarningRecord) {
 function ForumAccessPanel({ profile }: { profile: MyForumProfileRecord }) {
   const { trusted, activeWarningCount, activeWarningPoints } = profile;
   return (
-    <section
-      className="scroll-mt-24 rounded-sm bg-muted/35 p-4"
-      id="ucp-access"
-    >
+    <section className="forum-panel scroll-mt-24 p-4" id="ucp-access">
       <p className="text-xs text-muted-foreground">Forum access</p>
       <h2 className="mt-2 text-lg font-semibold">
         {trusted ? "Trusted member" : "Approval pending"}

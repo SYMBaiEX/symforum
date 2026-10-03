@@ -13,7 +13,6 @@ import {
   ForumBody,
   ForumLink,
   ForumLoading,
-  ForumMetricBar,
   ForumPaginationBar,
   ForumStatusBox,
 } from "@/components/forum/forum-primitives";
@@ -51,7 +50,7 @@ const ForumCompose = dynamic(
     ),
   {
     loading: () => (
-      <p className="rounded-sm bg-background py-3 text-xs text-muted-foreground">
+      <p className="rounded-xl bg-card py-3 text-xs text-muted-foreground">
         Loading editor
       </p>
     ),
@@ -297,7 +296,7 @@ function LiveForumMessages() {
       recipientInputRef.current?.focus();
     } else if (
       selectedMessageId &&
-      window.matchMedia("(max-width: 1279px)").matches
+      window.matchMedia("(max-width: 1535px)").matches
     ) {
       messageDetailRef.current?.focus();
     }
@@ -322,7 +321,7 @@ function LiveForumMessages() {
         title="Sign in required"
         body="Use a SYM handle to send and read private forum messages."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
@@ -345,7 +344,7 @@ function LiveForumMessages() {
         title="Private messages locked"
         body="Private messages open after the site owner approves your forum access. You can still read public boards while your account is waiting."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <ForumLink href="/forum" prefetch>
               Back to forum
             </ForumLink>
@@ -773,48 +772,38 @@ function LiveForumMessages() {
 
   return (
     <div className="space-y-3">
-      <ForumMetricBar
-        items={[
-          {
-            label: "Unread",
-            value: messages.unreadCountLimited
-              ? `${messages.unreadCount}+`
-              : messages.unreadCount,
-          },
-          { label: "Mailbox", value: mailboxLabel(box) },
-          {
-            label: "PM storage",
-            value: messages.quota.limited
-              ? `${messages.quota.used}+/${messages.quota.limit}`
-              : `${messages.quota.used}/${messages.quota.limit}`,
-          },
-          {
-            label: "Shown",
-            value: messages.messagesLimited
-              ? `${messages.messages.length}+`
-              : messages.messages.length,
-          },
-        ]}
-      />
-      <div className="rounded-sm bg-muted/35 p-4">
-        <div
-          className="h-1.5 rounded-sm bg-muted"
-          role="progressbar"
-          aria-label="Mailbox storage"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={messages.quota.percent}
-        >
-          <div
-            aria-hidden="true"
-            className="h-full bg-primary"
-            style={{ width: `${messages.quota.percent}%` }}
-          />
+      <div className="forum-toolbar flex flex-wrap items-center justify-between gap-2 p-3">
+        <div>
+          <h2 className="text-sm font-semibold">{mailboxLabel(box)}</h2>
+          <p className="text-xs text-muted-foreground">
+            {messages.unreadCount}
+            {messages.unreadCountLimited ? "+" : ""} unread ·{" "}
+            {messages.messages.length}
+            {messages.messagesLimited ? "+" : ""} in this view
+          </p>
         </div>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
+        <div className="max-w-40 flex-1 min-w-[7rem]">
+          <p className="mb-1.5 text-[11px] text-muted-foreground">
+            Storage {messages.quota.used}
+            {messages.quota.limited ? "+" : ""}/{messages.quota.limit}
+          </p>
+          <div
+            className="h-1 rounded-full bg-muted"
+            role="progressbar"
+            aria-label="Mailbox storage"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={messages.quota.percent}
+          >
+            <div
+              aria-hidden="true"
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${messages.quota.percent}%` }}
+            />
+          </div>
+        </div>
         <Button
-          className="rounded-sm text-xs"
+          className="forum-action-pill text-sm"
           type="button"
           variant={composeOpen ? "default" : "outline"}
           onClick={() => {
@@ -833,24 +822,21 @@ function LiveForumMessages() {
       {notice ? (
         <p
           aria-live="polite"
-          className="rounded-sm bg-muted/35 p-4 text-xs text-muted-foreground"
+          className="rounded-xl bg-card p-4 text-xs text-muted-foreground"
           role="status"
         >
           {notice}
         </p>
       ) : null}
       {error && !composeOpen ? (
-        <p
-          className="rounded-sm bg-muted/35 p-4 text-sm text-primary"
-          role="alert"
-        >
+        <p className="rounded-xl bg-card p-4 text-sm text-primary" role="alert">
           {error}
         </p>
       ) : null}
       {messages.unreadCountLimited || messages.messagesLimited ? (
         <p
           aria-live="polite"
-          className="rounded-sm bg-muted/35 p-4 text-sm leading-6 text-muted-foreground"
+          className="rounded-xl bg-card p-4 text-sm leading-6 text-muted-foreground"
           role="status"
         >
           This mailbox has more history. Use the message pager to move through
@@ -858,7 +844,7 @@ function LiveForumMessages() {
         </p>
       ) : null}
       {composeOpen ? (
-        <section className="min-w-0 rounded-sm bg-background">
+        <section className="forum-panel min-w-0">
           <div className="px-3 py-2">
             <p className="text-xs text-muted-foreground">
               Compose private message
@@ -889,7 +875,7 @@ function LiveForumMessages() {
                       }
                       aria-expanded={showRecipientSuggestions}
                       aria-invalid={invalidField === "recipient"}
-                      className="rounded-sm border-row-border"
+                      className="rounded-xl border-row-border"
                       placeholder="sym-123"
                       role="combobox"
                       value={recipientUsername}
@@ -955,7 +941,7 @@ function LiveForumMessages() {
                       error ? "private-message-error" : undefined
                     }
                     aria-invalid={invalidField === "subject"}
-                    className="rounded-sm border-row-border"
+                    className="rounded-xl border-row-border"
                     maxLength={120}
                     value={subject}
                     onChange={(event) => setSubject(event.target.value)}
@@ -978,7 +964,7 @@ function LiveForumMessages() {
                 errorId="private-message-error"
                 footerActions={
                   <Button
-                    className="rounded-sm text-xs"
+                    className="rounded-xl text-xs"
                     disabled={sendPending || body.trim().length === 0}
                     type="button"
                     variant="outline"
@@ -1003,14 +989,14 @@ function LiveForumMessages() {
       ) : null}
       <div
         className={cn(
-          "gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]",
-          composeOpen ? "hidden xl:grid" : "grid",
+          "gap-4 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]",
+          composeOpen ? "hidden 2xl:grid" : "grid",
         )}
       >
         <section
           className={cn(
-            "min-w-0 rounded-sm bg-background",
-            selectedMessageId && "hidden xl:block",
+            "forum-panel min-w-0",
+            selectedMessageId && "hidden 2xl:block",
           )}
         >
           <div className="flex flex-wrap gap-1 p-3">
@@ -1026,7 +1012,7 @@ function LiveForumMessages() {
           </div>
           <form className="flex flex-wrap gap-2 p-3" onSubmit={searchMessages}>
             <Input
-              className="min-w-0 flex-1 rounded-sm border-row-border"
+              className="min-w-0 flex-1 rounded-xl border-row-border"
               maxLength={120}
               aria-label="Search messages"
               placeholder="Search messages"
@@ -1034,7 +1020,7 @@ function LiveForumMessages() {
               onChange={(event) => setSearchDraft(event.target.value)}
             />
             <Button
-              className="rounded-sm text-xs"
+              className="rounded-xl text-xs"
               type="submit"
               variant="outline"
             >
@@ -1043,7 +1029,7 @@ function LiveForumMessages() {
             {searchQuery ? (
               <Button
                 asChild
-                className="rounded-sm text-xs"
+                className="rounded-xl text-xs"
                 type="button"
                 variant="outline"
               >
@@ -1060,7 +1046,7 @@ function LiveForumMessages() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  className="h-7 rounded-sm px-2.5 text-xs"
+                  className="h-7 rounded-xl px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || allVisibleMessagesSelected
                   }
@@ -1072,7 +1058,7 @@ function LiveForumMessages() {
                   Select all visible
                 </Button>
                 <Button
-                  className="h-7 rounded-sm px-2.5 text-xs"
+                  className="h-7 rounded-xl px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || selectedMessageCount === 0
                   }
@@ -1085,7 +1071,7 @@ function LiveForumMessages() {
                 </Button>
                 {box === "trash" ? (
                   <Button
-                    className="h-7 rounded-sm px-2.5 text-xs"
+                    className="h-7 rounded-xl px-2.5 text-xs"
                     disabled={
                       bulkActionPending !== null || selectedMessageCount === 0
                     }
@@ -1100,7 +1086,7 @@ function LiveForumMessages() {
                 ) : null}
                 {box === "inbox" && selectedUnreadInboxMessages.length > 0 ? (
                   <Button
-                    className="h-7 rounded-sm px-2.5 text-xs"
+                    className="h-7 rounded-xl px-2.5 text-xs"
                     disabled={bulkActionPending !== null}
                     size="sm"
                     type="button"
@@ -1113,7 +1099,7 @@ function LiveForumMessages() {
                   </Button>
                 ) : null}
                 <Button
-                  className="h-7 rounded-sm px-2.5 text-xs"
+                  className="h-7 rounded-xl px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || selectedMessageCount === 0
                   }
@@ -1138,7 +1124,7 @@ function LiveForumMessages() {
               </p>
               <div>
                 <Button
-                  className="rounded-sm text-xs"
+                  className="rounded-xl text-xs"
                   type="button"
                   variant="outline"
                   onClick={() => setComposeOpen(true)}
@@ -1177,13 +1163,13 @@ function LiveForumMessages() {
           tabIndex={-1}
           aria-label="Selected private message"
           className={cn(
-            "focus-ring min-w-0 rounded-sm bg-background",
-            !selectedMessageId && "hidden xl:block",
+            "focus-ring forum-panel min-w-0",
+            !selectedMessageId && "hidden 2xl:block",
           )}
         >
           {selectedMessageId ? (
             <ForumLink
-              className="focus-ring mb-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-primary xl:hidden"
+              className="focus-ring mb-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-primary 2xl:hidden"
               href={messageHref(box, undefined, page, searchQuery)}
               prefetch
             >
@@ -1209,7 +1195,7 @@ function LiveForumMessages() {
               action={
                 <Button
                   asChild
-                  className="rounded-sm text-xs"
+                  className="rounded-xl text-xs"
                   variant="outline"
                 >
                   <ForumLink
@@ -1237,7 +1223,7 @@ function LiveForumMessages() {
           }
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-sm border-row-border sm:rounded-sm [&_button]:min-h-11">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border-row-border sm:rounded-xl [&_button]:min-h-11">
           <DialogHeader>
             <DialogTitle>Report private message</DialogTitle>
             <DialogDescription>
@@ -1246,7 +1232,7 @@ function LiveForumMessages() {
           </DialogHeader>
           <form className="grid gap-3" onSubmit={submitPrivateMessageReport}>
             {reportMessage ? (
-              <div className="rounded-sm bg-muted/35 p-4">
+              <div className="rounded-xl bg-card p-4">
                 <p className="text-xs text-muted-foreground">
                   From {reportMessage.otherUsername}
                 </p>
@@ -1262,7 +1248,7 @@ function LiveForumMessages() {
                   reportError ? "private-message-report-error" : undefined
                 }
                 aria-invalid={reportError ? true : undefined}
-                className="rounded-sm border-row-border"
+                className="rounded-xl border-row-border"
                 maxLength={160}
                 placeholder="Spam, harassment, doxxing, etc."
                 value={reportReason}
@@ -1272,7 +1258,7 @@ function LiveForumMessages() {
             <label className="grid gap-2">
               <span className="text-xs text-muted-foreground">Details</span>
               <Textarea
-                className="rounded-sm border-row-border"
+                className="rounded-xl border-row-border"
                 maxLength={1000}
                 rows={4}
                 value={reportDetails}
@@ -1281,7 +1267,7 @@ function LiveForumMessages() {
             </label>
             {reportError ? (
               <p
-                className="rounded-sm bg-muted/35 p-4 text-sm text-primary"
+                className="rounded-xl bg-card p-4 text-sm text-primary"
                 id="private-message-report-error"
                 role="alert"
               >
@@ -1290,7 +1276,7 @@ function LiveForumMessages() {
             ) : null}
             <DialogFooter>
               <Button
-                className="rounded-sm text-xs"
+                className="rounded-xl text-xs"
                 disabled={reportPending}
                 type="button"
                 variant="outline"
@@ -1299,7 +1285,7 @@ function LiveForumMessages() {
                 Cancel
               </Button>
               <Button
-                className="rounded-sm text-xs"
+                className="rounded-xl text-xs"
                 disabled={reportPending}
                 type="submit"
               >
@@ -1337,7 +1323,7 @@ function MailboxTab({
     <Button
       asChild
       className={cn(
-        "h-7 rounded-sm px-2.5 text-xs",
+        "h-7 rounded-xl px-2.5 text-xs",
         active && "border-foreground bg-foreground text-background",
       )}
       size="sm"
@@ -1374,8 +1360,8 @@ function MessageListRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[2.5rem_minmax(0,1fr)]",
-        selected && "bg-muted/45",
+        "forum-list-row grid grid-cols-[2.5rem_minmax(0,1fr)]",
+        selected && "bg-primary/5",
         message.unread && "border-l-2 border-l-primary",
       )}
     >
@@ -1427,7 +1413,7 @@ function MessageListRow({
 
 function PrivateMessagePreview({ body }: { body: string }) {
   return (
-    <div className="rounded-sm bg-muted/35 p-4">
+    <div className="rounded-xl bg-card p-4">
       <p className="mb-3 text-xs text-muted-foreground">Preview</p>
       <ForumBody body={body} />
     </div>
@@ -1480,7 +1466,7 @@ function MessageDetail({
         <div className="flex flex-wrap gap-2">
           {message.box === "trash" ? (
             <Button
-              className="rounded-sm text-xs"
+              className="rounded-xl text-xs"
               disabled={deletePending || restorePending}
               type="button"
               variant="outline"
@@ -1490,7 +1476,7 @@ function MessageDetail({
             </Button>
           ) : null}
           <Button
-            className="rounded-sm text-xs"
+            className="rounded-xl text-xs"
             disabled={deletePending || restorePending}
             type="button"
             variant={confirmDelete ? "default" : "outline"}
@@ -1504,7 +1490,7 @@ function MessageDetail({
           </Button>
           {confirmDelete ? (
             <Button
-              className="rounded-sm text-xs"
+              className="rounded-xl text-xs"
               disabled={deletePending || restorePending}
               type="button"
               variant="outline"
@@ -1515,7 +1501,7 @@ function MessageDetail({
           ) : null}
         </div>
         <Button
-          className="rounded-sm text-xs"
+          className="rounded-xl text-xs"
           disabled={restorePending}
           type="button"
           variant="outline"
@@ -1525,7 +1511,7 @@ function MessageDetail({
         </Button>
         {message.box === "inbox" && message.sourceBox === "inbox" ? (
           <Button
-            className="rounded-sm text-xs"
+            className="rounded-xl text-xs"
             type="button"
             variant="outline"
             onClick={onReport}

@@ -50,7 +50,7 @@ function LiveForumCalendarDetailPage({ slug }: { slug: string }) {
         title="Calendar event not found"
         body="That event is no longer active on the forum calendar."
         action={
-          <Button asChild className="rounded-sm text-xs" variant="outline">
+          <Button asChild className="rounded-xl text-xs" variant="outline">
             <ForumLink href="/forum/calendar" prefetch>
               Calendar
             </ForumLink>
@@ -67,11 +67,11 @@ function LiveForumCalendarDetailPage({ slug }: { slug: string }) {
         description={formatCalendarEventRange(event)}
       />
 
-      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
+      <div className="max-w-3xl rounded-xl bg-muted/25 p-4 sm:p-6">
         <ForumBody body={event.body} />
       </div>
 
-      <Button asChild className="rounded-sm text-xs" variant="outline">
+      <Button asChild className="rounded-xl text-xs" variant="outline">
         <ForumLink href={`/forum/calendar?month=${event.month}`} prefetch>
           Calendar
         </ForumLink>

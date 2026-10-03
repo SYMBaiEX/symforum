@@ -122,7 +122,7 @@ function ForumOnlineRoster({
 
   return (
     <div className="space-y-3">
-      <section className="min-w-0 rounded-sm bg-background">
+      <section className="forum-panel min-w-0">
         <div className="px-3 py-2">
           <p className="text-xs text-muted-foreground">Who&apos;s online</p>
           <h2 className="mt-1 text-xl font-semibold md:text-2xl">
@@ -242,7 +242,7 @@ function ForumOnlineDesktopRow({
   member: ForumOnlineMemberRecord;
 }) {
   return (
-    <tr className="rounded-sm hover:bg-muted/45">
+    <tr className="rounded-xl hover:bg-muted/45">
       <th
         className="px-3 py-2.5 text-left align-middle font-normal"
         scope="row"
@@ -270,9 +270,9 @@ function ForumOnlineDesktopRow({
 
 function ForumOnlineMobileRow({ member }: { member: ForumOnlineMemberRecord }) {
   return (
-    <article className="grid gap-3 px-3 py-3 rounded-sm hover:bg-muted/45">
+    <article className="grid gap-3 px-3 py-3 rounded-xl hover:bg-muted/45">
       <ForumOnlineIdentity member={member} size="mobile" />
-      <div className="min-w-0 rounded-sm bg-background">
+      <div className="forum-panel min-w-0">
         <div className="px-3 py-2">
           <ForumOnlineLocation location={member.location} />
         </div>

@@ -92,7 +92,7 @@ export default async function ForumThreadPage({ params }: PageProps) {
   const canonical = `https://forum.symbaiex.com/${encodeURIComponent(categorySlug)}/${encodeURIComponent(threadSlug)}`;
 
   return (
-    <section className="page-frame page-frame-dense">
+    <section className="forum-thread-page page-frame page-frame-dense">
       <StructuredData
         data={[
           {

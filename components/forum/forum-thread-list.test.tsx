@@ -150,7 +150,15 @@ test("board navigation carries sub-board and latest post targets while retaining
             },
           ],
           rules: { title: "Research guidelines", body: "Cite your sources." },
-          announcements: [],
+          announcements: [
+            {
+              _id: "announcement-one",
+              title: "Board update",
+              slug: "board-update",
+              updatedAt: 100,
+              body: "An update.",
+            },
+          ],
           pagination: {
             page: 2,
             totalPages: 3,
@@ -183,6 +191,11 @@ test("board navigation carries sub-board and latest post targets while retaining
   );
   expect(html).toContain('aria-label="Board information"');
   expect(html).toContain("Cite your sources.");
+  expect(html.indexOf("A research topic")).toBeLessThan(
+    html.indexOf("Board announcements"),
+  );
+  expect(html).toContain('aria-label="Submit board search"');
+  expect(html).toContain('aria-label="Filter board by thread prefix"');
   expect(html.match(/>Research<\/h1>/g)).toHaveLength(1);
   expect(mocks.query).toHaveBeenCalledWith(forumRefs.listThreads, {
     categorySlug: "research",
