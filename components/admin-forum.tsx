@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./admin-forum.module.css";
+
 import { reportAppError } from "@/components/app-error-surface";
 import { FORUM_CALENDAR_TIME_ZONE } from "@/components/forum/forum-refs";
 import { Badge } from "@/components/ui/badge";
@@ -1941,7 +1943,13 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
   }
 
   return (
-    <section className="mt-10 border-y border-row-border py-6">
+    <section
+      className={
+        moderationOnly
+          ? styles.moderation
+          : "mt-10 border-y border-row-border py-6"
+      }
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -1980,6 +1988,28 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
           </div>
         ) : null}
       </div>
+
+      {moderationOnly ? (
+        <nav
+          aria-label="Moderation queues"
+          className="mt-4 flex flex-wrap gap-2"
+        >
+          {[
+            ["threads", "Threads"],
+            ["replies", "Replies"],
+            ["reports", "Reports"],
+            ["history", "History"],
+          ].map(([id, label]) => (
+            <a
+              key={id}
+              className="focus-ring inline-flex min-h-11 items-center rounded-sm bg-muted px-3 text-sm font-medium hover:bg-primary/10 hover:text-primary"
+              href={`#moderation-${id}`}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="mt-5 grid gap-3 font-mono text-[10px] uppercase text-muted-foreground md:grid-cols-5">
         <Metric
@@ -2794,8 +2824,8 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
                               {moderator.displayName}
                             </p>
                             <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                              {moderator.username ?? moderator.userId} • assigned{" "}
-                              {formatShortDate(moderator.assignedAt)}
+                              {moderator.username ?? moderator.userId} •
+                              assigned {formatShortDate(moderator.assignedAt)}
                             </p>
                           </div>
                           <Button
@@ -3441,7 +3471,10 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
         </>
       ) : null}
 
-      <section className="mt-8 border-y border-row-border py-4">
+      <section
+        id={moderationOnly ? "moderation-threads" : undefined}
+        className="mt-8 border-y border-row-border py-4"
+      >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -3651,7 +3684,10 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
         </div>
       </section>
 
-      <section className="mt-8 border-y border-row-border py-4">
+      <section
+        id={moderationOnly ? "moderation-replies" : undefined}
+        className="mt-8 border-y border-row-border py-4"
+      >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -3835,7 +3871,10 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
         </div>
       </section>
 
-      <section className="mt-8 border-y border-row-border py-4">
+      <section
+        id={moderationOnly ? "moderation-reports" : undefined}
+        className="mt-8 border-y border-row-border py-4"
+      >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -3911,7 +3950,10 @@ export function AdminForum({ mode = "full" }: { mode?: AdminForumMode } = {}) {
         </div>
       </section>
 
-      <section className="mt-8 border-y border-row-border py-4">
+      <section
+        id={moderationOnly ? "moderation-history" : undefined}
+        className="mt-8 border-y border-row-border py-4"
+      >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs uppercase text-muted-foreground">

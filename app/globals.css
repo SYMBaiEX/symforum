@@ -130,7 +130,8 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    background: radial-gradient(
+    background:
+      radial-gradient(
         ellipse at center,
         transparent 46%,
         hsl(var(--vignette-color) / var(--vignette-opacity)) 100%
@@ -213,11 +214,91 @@
   }
 
   .forum-surface {
-    @apply min-w-0 overflow-x-clip;
+    @apply min-w-0;
   }
 
   .forum-surface .page-frame-dense {
-    @apply py-4 md:py-6;
+    @apply py-4 md:py-5;
+  }
+
+  .forum-app-shell .forum-topbar button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border: 0;
+    touch-action: manipulation;
+  }
+
+  .forum-bottom-nav {
+    box-shadow: 0 -6px 16px hsl(var(--background) / 0.85);
+  }
+
+  .forum-surface :where(section, article, aside, form, fieldset) {
+    min-width: 0;
+  }
+
+  .forum-workspace {
+    @apply min-w-0;
+  }
+
+  .forum-list-row {
+    @apply min-w-0;
+  }
+
+  .forum-list-row:nth-child(even) {
+    background: hsl(var(--muted) / 0.2);
+  }
+
+  .forum-list-row:hover,
+  .forum-list-row:focus-within {
+    background: hsl(var(--muted) / 0.45);
+  }
+
+  .forum-form-section {
+    @apply min-w-0 rounded-sm bg-muted/25;
+  }
+
+  .forum-section-header {
+    @apply min-w-0;
+  }
+
+  .forum-context-panel .forum-section-header {
+    @apply px-0;
+  }
+
+  .forum-surface :where(h1, h2, h3, p, dd, .forum-list-row) {
+    overflow-wrap: anywhere;
+  }
+
+  .forum-app-shell :where([id], a, button, input, textarea, select, summary) {
+    scroll-margin-top: calc(5rem + env(safe-area-inset-top));
+    scroll-margin-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
+  .forum-shell-menu :where(a, button) {
+    touch-action: manipulation;
+  }
+
+  .forum-shell-menu a {
+    overflow-wrap: anywhere;
+  }
+
+  .forum-member-profile
+    :where([class*="border-row-border"], [class*="divide-row-border"] > *) {
+    border-width: 0;
+  }
+
+  .forum-member-profile .uppercase {
+    font-family: var(--font-geist-sans), sans-serif;
+    font-size: 0.75rem;
+    text-transform: none;
+  }
+
+  .forum-member-profile :where(a, button) {
+    overflow-wrap: anywhere;
+  }
+
+  .forum-member-profile section > dl.grid-cols-3 {
+    @apply bg-muted/35;
   }
 
   .forum-surface :where(img, video, iframe, pre, table) {
@@ -271,7 +352,7 @@
     }
 
     .forum-surface button {
-      min-width: 2.5rem !important;
+      min-width: 2.75rem !important;
       min-height: 2.75rem !important;
       touch-action: manipulation;
     }

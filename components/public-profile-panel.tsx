@@ -18,7 +18,13 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export function PublicProfilePanel({ username }: { username: string }) {
+export function PublicProfilePanel({
+  username,
+  forum = false,
+}: {
+  username: string;
+  forum?: boolean;
+}) {
   const profile = useQuery(convexRefs.users.publicProfile, { username });
 
   if (profile === undefined) {
@@ -40,8 +46,20 @@ export function PublicProfilePanel({ username }: { username: string }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-12">
-      <section className="lg:col-span-5">
+    <div
+      className={
+        forum
+          ? "forum-member-profile grid min-w-0 gap-6 lg:grid-cols-12"
+          : "grid gap-4 lg:grid-cols-12"
+      }
+    >
+      <section
+        className={
+          forum
+            ? "min-w-0 rounded-sm bg-muted/25 p-4 lg:col-span-4"
+            : "lg:col-span-5"
+        }
+      >
         <p className="font-mono text-xs uppercase text-muted-foreground">
           Public profile
         </p>
@@ -91,18 +109,30 @@ export function PublicProfilePanel({ username }: { username: string }) {
         ) : null}
       </section>
 
-      <section className="lg:col-span-7">
+      <section className={forum ? "min-w-0 lg:col-span-8" : "lg:col-span-7"}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              Recent comments
-            </p>
-            <h3 className="mt-1 text-xl font-semibold">Latest notes</h3>
+            {forum ? (
+              <h3 className="text-lg font-semibold">Forum activity</h3>
+            ) : (
+              <>
+                <p className="font-mono text-xs uppercase text-muted-foreground">
+                  Recent comments
+                </p>
+                <h3 className="mt-1 text-xl font-semibold">Latest notes</h3>
+              </>
+            )}
           </div>
         </div>
         <div className="mt-3 space-y-3">
           <section className="border-b border-row-border pb-3">
-            <p className="font-mono text-xs uppercase text-muted-foreground">
+            <p
+              className={
+                forum
+                  ? "sr-only"
+                  : "font-mono text-xs uppercase text-muted-foreground"
+              }
+            >
               Forum activity
             </p>
             <div className="mt-2 grid gap-3 lg:grid-cols-2">
@@ -125,6 +155,9 @@ export function PublicProfilePanel({ username }: { username: string }) {
             </div>
           </section>
 
+          {forum ? (
+            <h3 className="pt-3 text-sm font-semibold">Site comments</h3>
+          ) : null}
           {profile.recentComments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No public comments yet.

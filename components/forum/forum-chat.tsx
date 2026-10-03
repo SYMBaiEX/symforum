@@ -37,11 +37,14 @@ export function ForumChat() {
     <section
       id="forum-chat"
       aria-labelledby="forum-chat-heading"
-      className="mb-5 scroll-mt-24 overflow-hidden rounded-sm bg-muted/20"
+      className="scroll-mt-24 overflow-hidden rounded-sm bg-muted/25"
     >
-      <header className="flex min-h-11 items-center justify-between gap-3 bg-muted/70 px-3 sm:px-4">
+      <header className="flex min-h-11 items-center justify-between gap-2 px-3 sm:px-4">
         <div className="flex items-center gap-2">
-          <span aria-hidden="true" className="size-2 bg-primary" />
+          <span
+            aria-hidden="true"
+            className="size-1.5 rounded-full bg-primary"
+          />
           <h2 id="forum-chat-heading" className="text-sm font-semibold">
             Lounge chat
           </h2>
@@ -64,7 +67,12 @@ export function ForumChat() {
           ) : (
             <ChevronDown className="size-3.5" aria-hidden="true" />
           )}
-          {open ? "Hide chat" : "Show chat"}
+          <span className="hidden sm:inline">
+            {open ? "Hide chat" : "Show chat"}
+          </span>
+          <span className="sr-only sm:hidden">
+            {open ? "Hide chat" : "Show chat"}
+          </span>
         </button>
       </header>
       {open ? (
@@ -304,7 +312,7 @@ function ChatSession({
         aria-relevant="additions text"
         tabIndex={0}
         onScroll={rememberScroll}
-        className="focus-ring h-28 overflow-y-auto overscroll-contain px-3 py-2 text-xs [overflow-anchor:none] sm:px-4"
+        className="focus-ring max-h-28 overflow-y-auto overscroll-contain px-3 pb-1 text-xs [overflow-anchor:none] sm:max-h-32 sm:px-4"
       >
         {messages.length ? (
           messages.map((message) => (
@@ -316,9 +324,7 @@ function ChatSession({
             />
           ))
         ) : (
-          <p className="py-7 text-center text-xs text-muted-foreground">
-            No messages yet.
-          </p>
+          <p className="py-2 text-xs text-muted-foreground">No messages yet.</p>
         )}
       </div>
       {!data.isDone ? (
@@ -343,7 +349,7 @@ function ChatSession({
       {data.viewer.canSend ? (
         <form
           onSubmit={submit}
-          className="flex items-center gap-2 px-3 py-1 sm:px-4"
+          className="flex items-center gap-2 px-3 pb-3 pt-2 sm:px-4"
         >
           <label className="sr-only" htmlFor="forum-chat-message">
             Message the public lounge
@@ -367,16 +373,21 @@ function ChatSession({
           />
           <button
             className={`${controlClass} bg-primary text-primary-foreground hover:bg-primary/90`}
+            aria-label={
+              sending ? "Sending lounge message" : "Send lounge message"
+            }
             disabled={sending || !body.trim()}
             aria-busy={sending}
             type="submit"
           >
             <Send className="size-3.5" aria-hidden="true" />
-            {sending ? "Sending…" : "Send"}
+            <span className="hidden sm:inline">
+              {sending ? "Sending…" : "Send"}
+            </span>
           </button>
         </form>
       ) : (
-        <div className="flex min-h-12 items-center px-4 text-xs text-muted-foreground">
+        <div className="flex min-h-11 items-center px-3 pb-1 text-xs text-muted-foreground sm:px-4">
           {data.viewer.actingAs ? (
             "Chat posting is unavailable for this profile."
           ) : (

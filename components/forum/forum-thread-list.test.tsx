@@ -165,6 +165,12 @@ test("board navigation carries sub-board and latest post targets while retaining
     <ForumThreadList categorySlug="research" enabled />,
   );
   expect(html).toContain('aria-label="Research sub-boards"');
+  expect(html).toMatch(/<details[^>]*aria-label="Sub-board selector"[^>]*>/);
+  const subboardDisclosureTag = html.match(
+    /<details[^>]*aria-label="Sub-board selector"[^>]*>/,
+  )?.[0];
+  expect(subboardDisclosureTag).not.toMatch(/\sopen(?:[=\s>])/);
+  expect(html).toContain("Systems, Updates");
   expect(html).toContain('href="/forum/systems"');
   expect(html).toContain('href="/forum/compilers"');
   expect(html).toContain(

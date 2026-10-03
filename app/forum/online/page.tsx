@@ -1,3 +1,4 @@
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { ForumOnlinePage } from "@/components/forum/forum-online-page";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
 import type { Metadata } from "next";
@@ -12,17 +13,12 @@ export const metadata: Metadata = {
 
 export default function ForumOnlineRoute() {
   return (
-    <section className="page-frame page-frame-dense">
+    <section className="page-frame page-frame-dense forum-workspace space-y-4">
       <ForumUtilityNav className="mb-2" />
-      <header className="border-y border-row-border py-2">
-        <p className="page-kicker">Who&apos;s online</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
-          Active members
-        </h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-          Registered forum members active in the current presence window.
-        </p>
-      </header>
+      <ForumPageHeader
+        title="Active members"
+        description="See who is here and what they are reading."
+      />
       <ForumOnlinePage enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
     </section>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import { asRoute } from "@/lib/typed-route";
 
 import { AdminForum } from "@/components/admin-forum";
@@ -18,18 +20,10 @@ export function ForumModerationPage({ enabled }: { enabled: boolean }) {
   return (
     <div className="space-y-3">
       <ForumUtilityNav />
-      <section className="border-y border-row-border py-2">
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          Moderator CP
-        </p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">
-          Forum moderation
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-sm leading-5 text-muted-foreground">
-          Review reports, pending threads and replies, warnings, move tools, and
-          the forum audit trail in one place.
-        </p>
-      </section>
+      <ForumPageHeader
+        title="Forum moderation"
+        description="Review reports, pending posts, warnings, and moderation history."
+      />
       {enabled ? (
         <LiveForumModerationPanel />
       ) : (
@@ -59,11 +53,7 @@ function LiveForumModerationPanel() {
         title="Sign in required"
         body="Use a staff account to open the forum Moderator CP."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }

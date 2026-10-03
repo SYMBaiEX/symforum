@@ -122,13 +122,11 @@ function ForumOnlineRoster({
 
   return (
     <div className="space-y-3">
-      <section className="border border-row-border">
-        <div className="border-b border-row-border px-3 py-2">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Who&apos;s online
-          </p>
+      <section className="min-w-0 rounded-sm bg-background">
+        <div className="px-3 py-2">
+          <p className="text-xs text-muted-foreground">Who&apos;s online</p>
           <h2 className="mt-1 text-xl font-semibold md:text-2xl">
-            Active members
+            Live presence
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
             Registered forum members active since{" "}
@@ -144,7 +142,7 @@ function ForumOnlineRoster({
           </p>
         </div>
         <ForumMetricBar
-          className="border-0 border-b border-row-border"
+          className="border-0"
           items={[
             {
               label: "Registered",
@@ -160,7 +158,7 @@ function ForumOnlineRoster({
             },
           ]}
         />
-        <div className="grid gap-px border-b border-row-border bg-row-border md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+        <div className="grid gap-2 bg-muted/25 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
           <ForumOnlineSignal
             label="Active since"
             value={formatForumDateTime(online.activeSince)}
@@ -170,7 +168,7 @@ function ForumOnlineRoster({
         </div>
         {online.members.length > 0 ? (
           <>
-            <div className="divide-y divide-row-border md:hidden">
+            <div className="space-y-1 md:hidden">
               {online.members.map((member) => (
                 <ForumOnlineMobileRow key={member.userId} member={member} />
               ))}
@@ -178,7 +176,7 @@ function ForumOnlineRoster({
             <table className="hidden w-full table-fixed border-collapse md:table">
               <caption className="sr-only">Online forum members</caption>
               <thead>
-                <tr className="border-b border-row-border font-mono text-[10px] uppercase text-muted-foreground">
+                <tr className="text-xs text-muted-foreground">
                   <th className="px-3 py-2 text-left font-normal" scope="col">
                     Roster
                   </th>
@@ -205,7 +203,7 @@ function ForumOnlineRoster({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-row-border">
+              <tbody className="space-y-1">
                 {online.members.map((member) => (
                   <ForumOnlineDesktopRow key={member.userId} member={member} />
                 ))}
@@ -232,9 +230,7 @@ function ForumOnlineRoster({
 function ForumOnlineSignal({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-background px-3 py-2">
-      <p className="font-mono text-[10px] uppercase text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-sm font-medium">{value}</p>
     </div>
   );
@@ -246,7 +242,7 @@ function ForumOnlineDesktopRow({
   member: ForumOnlineMemberRecord;
 }) {
   return (
-    <tr className="odd:bg-muted/15">
+    <tr className="rounded-sm hover:bg-muted/45">
       <th
         className="px-3 py-2.5 text-left align-middle font-normal"
         scope="row"
@@ -256,19 +252,17 @@ function ForumOnlineDesktopRow({
       <td className="px-3 py-2.5 align-middle">
         <ForumOnlineLocation location={member.location} />
       </td>
-      <td className="px-3 py-2.5 align-middle font-mono text-[11px] uppercase">
+      <td className="px-3 py-2.5 align-middle text-xs">
         {formatForumCount(member.postCount)}
       </td>
-      <td className="px-3 py-2.5 align-middle font-mono text-[11px] uppercase">
+      <td className="px-3 py-2.5 align-middle text-xs">
         {formatForumReputation(member.reputationScore)}
       </td>
       <td className="px-3 py-2.5 align-middle">
         <p className="text-sm font-medium">
           {formatForumDateTime(member.lastSeenAt)}
         </p>
-        <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
-          Last active
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Last active</p>
       </td>
     </tr>
   );
@@ -276,13 +270,13 @@ function ForumOnlineDesktopRow({
 
 function ForumOnlineMobileRow({ member }: { member: ForumOnlineMemberRecord }) {
   return (
-    <article className="grid gap-3 px-3 py-3 odd:bg-muted/15">
+    <article className="grid gap-3 px-3 py-3 rounded-sm hover:bg-muted/45">
       <ForumOnlineIdentity member={member} size="mobile" />
-      <div className="border border-row-border">
-        <div className="border-b border-row-border px-3 py-2">
+      <div className="min-w-0 rounded-sm bg-background">
+        <div className="px-3 py-2">
           <ForumOnlineLocation location={member.location} />
         </div>
-        <dl className="grid gap-px bg-row-border text-center font-mono text-[10px] uppercase text-muted-foreground sm:grid-cols-3">
+        <dl className="grid gap-2 bg-transparent text-center text-xs text-muted-foreground sm:grid-cols-3">
           <ForumOnlineStat label="Posts">
             {formatForumCount(member.postCount)}
           </ForumOnlineStat>
@@ -320,10 +314,10 @@ function ForumOnlineIdentity({
         >
           {member.displayName}
         </ForumLink>
-        <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           /members/{member.username}
         </p>
-        <p className="mt-1 break-words font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-1 break-words text-xs text-muted-foreground">
           {member.rank}
           {member.customTitle ? ` / ${member.customTitle}` : ""}
         </p>
@@ -339,7 +333,7 @@ function ForumOnlineLocation({
 }) {
   return (
     <div className="min-w-0">
-      <p className="font-mono text-[10px] uppercase text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {formatPresenceLocationType(location.type)}
       </p>
       <p className="mt-1 truncate text-sm font-semibold">

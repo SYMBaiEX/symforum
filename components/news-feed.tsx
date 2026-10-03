@@ -502,14 +502,14 @@ function ForumNewsRows({
   return (
     <section
       aria-label="Hacker News stories"
-      className="overflow-hidden rounded-sm bg-muted/20"
+      className="forum-workspace overflow-hidden rounded-sm"
     >
       <ForumSectionHeader title="Hacker News">
         {onSnapshotChange ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
               id="forum-news-snapshot-filter-label"
-              className="font-mono text-[11px] text-muted-foreground"
+              className="text-xs text-muted-foreground"
             >
               Edition
             </span>
@@ -537,10 +537,10 @@ function ForumNewsRows({
       </ForumSectionHeader>
       <div
         aria-busy={pending}
-        className={`px-3 transition-opacity sm:px-4${pending ? " opacity-50" : ""}`}
+        className={`px-1 py-1 transition-opacity sm:px-2${pending ? " opacity-50" : ""}`}
       >
         {stories.length === 0 ? (
-          <p className="py-8 text-sm text-muted-foreground" role="status">
+          <p className="px-3 py-8 text-sm text-muted-foreground" role="status">
             No indexed stories for this snapshot yet.
           </p>
         ) : null}
@@ -558,19 +558,59 @@ function ForumNewsRows({
               : new Date(story.timePosted * 1000);
           const validDate =
             postedAt && !Number.isNaN(postedAt.valueOf()) ? postedAt : null;
-
           return (
             <article
               key={story.hnItemId}
-              className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-start gap-x-3 py-3 sm:gap-x-4"
+              className="forum-list-row grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-2 rounded-sm px-2 py-2 hover:bg-muted/40 focus-within:bg-muted/40 sm:grid-cols-[32px_minmax(0,1fr)] sm:gap-x-3 sm:px-3"
             >
-              <div className="flex flex-col items-center">
-                <span
-                  className="inline-flex h-5 items-center font-mono text-[10px] tabular-nums text-muted-foreground"
-                  aria-label={`Hacker News rank ${story.rank}`}
+              <span
+                className="inline-flex min-h-11 items-center justify-center font-mono text-xs tabular-nums text-muted-foreground"
+                aria-label={`Hacker News rank ${story.rank}`}
+              >
+                {story.rank}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold leading-5 tracking-tight sm:text-base sm:leading-6">
+                  <Link
+                    href={discussionUrl}
+                    prefetch
+                    className="focus-ring inline-flex min-h-11 max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
+                  >
+                    {story.title}
+                  </Link>
+                </h3>
+                <a
+                  href={hnUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="focus-ring -mt-1 inline-flex min-h-11 max-w-full flex-wrap items-center gap-x-3 text-[11px] leading-5 text-muted-foreground hover:text-foreground"
+                  aria-label={`View ${story.title} on Hacker News`}
                 >
-                  #{story.rank}
-                </span>
+                  {story.host ? (
+                    <span className="break-all">{story.host}</span>
+                  ) : null}
+                  {validDate ? (
+                    <time
+                      className="font-mono text-[10px]"
+                      dateTime={validDate.toISOString()}
+                    >
+                      {validDate.toISOString().slice(0, 10)}
+                    </time>
+                  ) : null}
+                  {story.by ? (
+                    <span className="break-all">by {story.by}</span>
+                  ) : null}
+                  {story.score !== undefined ? (
+                    <span>{compactNumber(story.score)} HN points</span>
+                  ) : null}
+                  <span>
+                    {story.descendants !== undefined
+                      ? `${compactNumber(story.descendants)} HN comments`
+                      : "Hacker News"}
+                  </span>
+                </a>
+              </div>
+              <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground sm:col-start-2 sm:col-span-1 sm:gap-x-4">
                 {interactive ? (
                   <NewsVoteControl
                     authLoading={authLoading}
@@ -581,81 +621,49 @@ function ForumNewsRows({
                     title={story.title}
                     variant="forum"
                   />
+                ) : stats.score !== 0 ? (
+                  <span>{compactNumber(stats.score)} SYMBaiEX votes</span>
                 ) : null}
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold leading-6">
-                  <Link
-                    href={discussionUrl}
-                    prefetch
-                    className="focus-ring inline-flex min-h-11 max-w-full items-center [overflow-wrap:anywhere] hover:text-primary"
-                  >
-                    {story.title}
-                  </Link>
-                </h3>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-3 font-mono text-[10px] leading-5 text-muted-foreground">
-                  {story.host ? (
-                    <span className="break-all">{story.host}</span>
-                  ) : null}
-                  {validDate ? (
-                    <time dateTime={validDate.toISOString()}>
-                      {validDate.toISOString().slice(0, 10)}
-                    </time>
-                  ) : null}
-                  {story.by ? (
-                    <span className="break-all">by {story.by}</span>
-                  ) : null}
-                  {story.score !== undefined ? (
-                    <span>{compactNumber(story.score)} HN points</span>
-                  ) : null}
-                  <a
-                    href={hnUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="focus-ring inline-flex min-h-11 items-center hover:text-foreground"
-                    aria-label={`View ${story.title} on Hacker News`}
-                  >
-                    {story.descendants !== undefined
-                      ? `${compactNumber(story.descendants)} HN comments`
-                      : "Hacker News"}
-                  </a>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
-                  <Link
-                    href={discussionUrl}
-                    prefetch
-                    className="focus-ring inline-flex min-h-11 items-center gap-1.5 hover:text-primary"
-                  >
-                    <MessageSquare
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0"
-                    />
+                <Link
+                  href={discussionUrl}
+                  prefetch
+                  className="focus-ring inline-flex min-h-11 items-center gap-1.5 hover:text-primary"
+                  aria-label={`${stats.comments} SYMBaiEX comments on ${story.title}`}
+                >
+                  <MessageSquare
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0"
+                  />
+                  <span className="sm:hidden">
+                    {stats.comments > 0
+                      ? `${compactNumber(stats.comments)} comments`
+                      : "Discuss"}
+                  </span>
+                  <span className="hidden sm:inline">
                     {stats.comments > 0
                       ? `${compactNumber(stats.comments)} SYMBaiEX comments`
                       : "Discuss on SYMBaiEX"}
-                  </Link>
-                  {!interactive && stats.score !== 0 ? (
-                    <span>{compactNumber(stats.score)} SYMBaiEX votes</span>
-                  ) : null}
-                  {stats.saves > 0 ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Bookmark aria-hidden="true" className="size-3.5" />
-                      {compactNumber(stats.saves)} saves
-                    </span>
-                  ) : null}
-                  {sourceUrl ? (
-                    <a
-                      href={sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="focus-ring inline-flex min-h-11 items-center gap-1 hover:text-foreground"
-                      aria-label={`Read source article for ${story.title}`}
-                    >
-                      Read source
-                      <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                    </a>
-                  ) : null}
-                </div>
+                  </span>
+                </Link>
+                {stats.saves > 0 ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Bookmark aria-hidden="true" className="size-3.5" />
+                    {compactNumber(stats.saves)}
+                    <span className="sr-only"> saves</span>
+                  </span>
+                ) : null}
+                {sourceUrl ? (
+                  <a
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center gap-1 hover:text-foreground"
+                    aria-label={`Read source article for ${story.title}`}
+                  >
+                    <span className="hidden sm:inline">Read source</span>
+                    <ArrowUpRight aria-hidden="true" className="size-4" />
+                  </a>
+                ) : null}
               </div>
             </article>
           );
@@ -839,7 +847,7 @@ function NewsVoteControl({
       <div
         className={
           variant === "forum"
-            ? "flex w-11 shrink-0 flex-col items-center font-mono text-xs text-muted-foreground"
+            ? "inline-flex shrink-0 items-center rounded-sm bg-muted/50 font-mono text-xs text-muted-foreground"
             : "flex w-8 shrink-0 flex-col items-center gap-1 text-xs text-muted-foreground"
         }
         role="group"

@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import {
   forumPath,
   forumPostPath,
@@ -38,11 +40,7 @@ const SEARCH_PAGE_SIZES = [12, 24, 30] as const;
 type ForumSearchResultType = "all" | "threads" | "replies";
 type ForumSearchTarget = "all" | "titles" | "bodies";
 type ForumSearchSortKey =
-  | "relevance"
-  | "newest"
-  | "oldest"
-  | "replies"
-  | "views";
+  "relevance" | "newest" | "oldest" | "replies" | "views";
 const ALL_DATES = "all";
 const SEARCH_TARGET_OPTIONS = [
   { value: "all", label: "Titles + bodies" },
@@ -119,24 +117,28 @@ function LiveForumSearchPage() {
     () =>
       canRunSearch
         ? {
-        query: submittedQuery,
-        ...(submittedCategory === ALL_BOARDS
-          ? {}
-          : { categorySlug: submittedCategory }),
-        ...(submittedResultType === ALL_RESULTS
-          ? {
-              threadPage: submittedThreadPage,
-              replyPage: submittedReplyPage,
-            }
-          : { page: submittedPage }),
-        pageSize: submittedPageSize,
-        resultType: submittedResultType,
-        ...(submittedAuthor.length === 0 ? {} : { author: submittedAuthor }),
-        ...(submittedTarget === "all" ? {} : { target: submittedTarget }),
-        ...(submittedSortKey === "relevance"
-          ? {}
-          : { sortKey: submittedSortKey }),
-        ...(submittedDays === ALL_DATES ? {} : { days: Number(submittedDays) }),
+            query: submittedQuery,
+            ...(submittedCategory === ALL_BOARDS
+              ? {}
+              : { categorySlug: submittedCategory }),
+            ...(submittedResultType === ALL_RESULTS
+              ? {
+                  threadPage: submittedThreadPage,
+                  replyPage: submittedReplyPage,
+                }
+              : { page: submittedPage }),
+            pageSize: submittedPageSize,
+            resultType: submittedResultType,
+            ...(submittedAuthor.length === 0
+              ? {}
+              : { author: submittedAuthor }),
+            ...(submittedTarget === "all" ? {} : { target: submittedTarget }),
+            ...(submittedSortKey === "relevance"
+              ? {}
+              : { sortKey: submittedSortKey }),
+            ...(submittedDays === ALL_DATES
+              ? {}
+              : { days: Number(submittedDays) }),
           }
         : null,
     [
@@ -281,42 +283,37 @@ function LiveForumSearchPage() {
 
   return (
     <div className="space-y-3">
-      <section className="border-y border-row-border">
-        <div className="border-b border-row-border px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase text-muted-foreground">
-            Search
-          </p>
-          <h1 className="mt-1 text-xl font-semibold md:text-2xl">
-            Find threads and replies
-          </h1>
-        </div>
-        <form className="space-y-3 p-3" onSubmit={submitSearch}>
+      <section className="rounded-sm bg-background">
+        <ForumPageHeader
+          title="Search the forum"
+          description="Find a discussion, a reply, or a familiar voice."
+        />
+        <form
+          className="forum-form-section mt-4 space-y-4 p-4"
+          onSubmit={submitSearch}
+        >
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_14rem_10rem_11rem] xl:items-end">
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Keywords
-              </span>
+              <span className="text-xs text-muted-foreground">Keywords</span>
               <Input
                 value={query}
                 minLength={2}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search titles, bodies, and replies"
-                className="rounded-none border-row-border"
+                className="rounded-sm border-row-border"
               />
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Board
-              </span>
+              <span className="text-xs text-muted-foreground">Board</span>
               <Select value={categorySlug} onValueChange={setCategorySlug}>
                 <SelectTrigger
                   aria-describedby="forum-search-board-help"
                   aria-label="Filter forum search by board"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="All public boards" />
                 </SelectTrigger>
-                <SelectContent className="max-h-96 rounded-none border-row-border">
+                <SelectContent className="max-h-96 rounded-sm border-row-border">
                   <SelectItem value={ALL_BOARDS}>All public boards</SelectItem>
                   {categorySlug !== ALL_BOARDS &&
                   !boardOptions.some((board) => board.slug === categorySlug) ? (
@@ -333,9 +330,7 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Type
-              </span>
+              <span className="text-xs text-muted-foreground">Type</span>
               <Select
                 value={resultType}
                 onValueChange={(value) =>
@@ -344,11 +339,11 @@ function LiveForumSearchPage() {
               >
                 <SelectTrigger
                   aria-label="Filter forum search by result type"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="All results" />
                 </SelectTrigger>
-                <SelectContent className="rounded-none border-row-border">
+                <SelectContent className="rounded-sm border-row-border">
                   <SelectItem value="all">All results</SelectItem>
                   <SelectItem value="threads">Threads</SelectItem>
                   <SelectItem value="replies">Replies</SelectItem>
@@ -356,9 +351,7 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Search in
-              </span>
+              <span className="text-xs text-muted-foreground">Search in</span>
               <Select
                 value={target}
                 onValueChange={(value) =>
@@ -367,11 +360,11 @@ function LiveForumSearchPage() {
               >
                 <SelectTrigger
                   aria-label="Choose forum search target"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="Titles + bodies" />
                 </SelectTrigger>
-                <SelectContent className="rounded-none border-row-border">
+                <SelectContent className="rounded-sm border-row-border">
                   {SEARCH_TARGET_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -381,9 +374,7 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Sort
-              </span>
+              <span className="text-xs text-muted-foreground">Sort</span>
               <Select
                 value={sortKey}
                 onValueChange={(value) =>
@@ -392,11 +383,11 @@ function LiveForumSearchPage() {
               >
                 <SelectTrigger
                   aria-label="Sort forum search results"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="Relevance" />
                 </SelectTrigger>
-                <SelectContent className="rounded-none border-row-border">
+                <SelectContent className="rounded-sm border-row-border">
                   {SEARCH_SORT_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -406,17 +397,15 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Date
-              </span>
+              <span className="text-xs text-muted-foreground">Date</span>
               <Select value={days} onValueChange={setDays}>
                 <SelectTrigger
                   aria-label="Filter forum search results by date"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="Any date" />
                 </SelectTrigger>
-                <SelectContent className="rounded-none border-row-border">
+                <SelectContent className="rounded-sm border-row-border">
                   {SEARCH_DAY_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -426,17 +415,15 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Page size
-              </span>
+              <span className="text-xs text-muted-foreground">Page size</span>
               <Select value={pageSize} onValueChange={setPageSize}>
                 <SelectTrigger
                   aria-label="Set forum search page size"
-                  className="rounded-none border-row-border"
+                  className="rounded-sm border-row-border"
                 >
                   <SelectValue placeholder="12" />
                 </SelectTrigger>
-                <SelectContent className="rounded-none border-row-border">
+                <SelectContent className="rounded-sm border-row-border">
                   {SEARCH_PAGE_SIZES.map((size) => (
                     <SelectItem key={size} value={String(size)}>
                       {size}
@@ -446,22 +433,20 @@ function LiveForumSearchPage() {
               </Select>
             </label>
             <label className="grid gap-2 md:col-span-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Author
-              </span>
+              <span className="text-xs text-muted-foreground">Author</span>
               <Input
                 aria-describedby="forum-search-author-help"
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
                 placeholder="optional handle"
-                className="rounded-none border-row-border"
+                className="rounded-sm border-row-border"
               />
             </label>
           </div>
-          <div className="flex flex-col gap-2 border-t border-row-border pt-2.5 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 pt-2.5 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p
-                className="font-mono text-[10px] uppercase text-muted-foreground"
+                className="text-xs text-muted-foreground"
                 id="forum-search-board-help"
               >
                 {categories === undefined
@@ -477,11 +462,11 @@ function LiveForumSearchPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button className="rounded-none" type="submit">
+              <Button className="rounded-sm" type="submit">
                 Search
               </Button>
               <Button
-                className="rounded-none"
+                className="rounded-sm"
                 disabled={!hasCustomFilters}
                 onClick={resetSearchForm}
                 type="button"
@@ -654,13 +639,11 @@ function SearchResultSection({
 }) {
   const hasResults = pagination.totalItems > 0;
   return (
-    <section className="border border-row-border">
-      <div className="border-b border-row-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
-        {heading}
-      </div>
+    <section className="min-w-0 rounded-sm bg-background">
+      <div className="px-3 py-2 text-xs text-muted-foreground">{heading}</div>
       {hasResults ? (
         <>
-          <div className="divide-y divide-row-border">{children}</div>
+          <div className="space-y-1">{children}</div>
           <ForumPaginationBar
             buildHref={buildHref}
             className="border-x-0 border-b-0"
@@ -686,15 +669,12 @@ function SearchRow({
   href: string;
   label: string;
   thread:
-    | ForumSearchRecord["threads"][number]
-    | ForumSearchRecord["posts"][number];
+    ForumSearchRecord["threads"][number] | ForumSearchRecord["posts"][number];
   title: string;
 }) {
   return (
-    <article className="px-3 py-2.5 odd:bg-muted/15">
-      <p className="font-mono text-[10px] uppercase text-muted-foreground">
-        {label}
-      </p>
+    <article className="px-3 py-2.5 rounded-sm hover:bg-muted/45">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <ForumLink
         href={href}
         prefetch
@@ -708,7 +688,7 @@ function SearchRow({
           {excerpt}
         </p>
       ) : null}
-      <p className="mt-1.5 font-mono text-[10px] uppercase text-muted-foreground">
+      <p className="mt-1.5 text-xs text-muted-foreground">
         {searchHitMetadata(thread)}
       </p>
     </article>
@@ -717,8 +697,7 @@ function SearchRow({
 
 function searchHitMetadata(
   hit:
-    | ForumSearchRecord["threads"][number]
-    | ForumSearchRecord["posts"][number],
+    ForumSearchRecord["threads"][number] | ForumSearchRecord["posts"][number],
 ) {
   if (isSearchPostHit(hit)) {
     const postNumber =
@@ -742,8 +721,7 @@ function searchHitMetadata(
 
 function isSearchPostHit(
   hit:
-    | ForumSearchRecord["threads"][number]
-    | ForumSearchRecord["posts"][number],
+    ForumSearchRecord["threads"][number] | ForumSearchRecord["posts"][number],
 ): hit is ForumSearchRecord["posts"][number] {
   return "threadSlug" in hit;
 }

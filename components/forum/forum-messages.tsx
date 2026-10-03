@@ -51,7 +51,7 @@ const ForumCompose = dynamic(
     ),
   {
     loading: () => (
-      <p className="border-y border-row-border py-3 font-mono text-[10px] uppercase text-muted-foreground">
+      <p className="rounded-sm bg-background py-3 text-xs text-muted-foreground">
         Loading editor
       </p>
     ),
@@ -144,6 +144,8 @@ function LiveForumMessages() {
     useState(0);
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const recipientInputRef = useRef<HTMLInputElement | null>(null);
+  const messageDetailRef = useRef<HTMLElement | null>(null);
+  const mailboxReady = messages !== undefined;
 
   const selectedListRecord = useMemo(
     () =>
@@ -227,7 +229,9 @@ function LiveForumMessages() {
       .slice(0, 10);
   }, [recipientSuggestions, recipientUsername]);
   const showRecipientSuggestions =
-    recipientPickerFocused && filteredRecipientSuggestions.length > 0;
+    !sendPending &&
+    recipientPickerFocused &&
+    filteredRecipientSuggestions.length > 0;
   const signInHref = useMemo(() => {
     const query = searchParams.toString();
     const redirectTo = `${pathname ?? "/forum/messages"}${query ? `?${query}` : ""}`;
@@ -289,6 +293,17 @@ function LiveForumMessages() {
   }, [box, selectedMessageId]);
 
   useEffect(() => {
+    if (composeOpen) {
+      recipientInputRef.current?.focus();
+    } else if (
+      selectedMessageId &&
+      window.matchMedia("(max-width: 1279px)").matches
+    ) {
+      messageDetailRef.current?.focus();
+    }
+  }, [composeOpen, selectedMessageId, mailboxReady]);
+
+  useEffect(() => {
     setActiveRecipientSuggestionIndex((current) => {
       if (filteredRecipientSuggestions.length === 0) {
         return 0;
@@ -307,11 +322,7 @@ function LiveForumMessages() {
         title="Sign in required"
         body="Use a SYM handle to send and read private forum messages."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <Link href={asRoute(signInHref)}>Sign in</Link>
           </Button>
         }
@@ -334,11 +345,7 @@ function LiveForumMessages() {
         title="Private messages locked"
         body="Private messages open after the site owner approves your forum access. You can still read public boards while your account is waiting."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <ForumLink href="/forum" prefetch>
               Back to forum
             </ForumLink>
@@ -354,6 +361,7 @@ function LiveForumMessages() {
 
   async function sendMessage(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
+    if (sendPending) return;
     if (recipientUsername.trim().length === 0) {
       setInvalidField("recipient");
       setError("Add a recipient before sending.");
@@ -788,8 +796,15 @@ function LiveForumMessages() {
           },
         ]}
       />
-      <div className="border border-row-border p-3">
-        <div className="h-2 border border-row-border">
+      <div className="rounded-sm bg-muted/35 p-4">
+        <div
+          className="h-1.5 rounded-sm bg-muted"
+          role="progressbar"
+          aria-label="Mailbox storage"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={messages.quota.percent}
+        >
           <div
             aria-hidden="true"
             className="h-full bg-primary"
@@ -799,7 +814,7 @@ function LiveForumMessages() {
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <Button
-          className="rounded-none font-mono text-[10px] uppercase"
+          className="rounded-sm text-xs"
           type="button"
           variant={composeOpen ? "default" : "outline"}
           onClick={() => {
@@ -818,7 +833,7 @@ function LiveForumMessages() {
       {notice ? (
         <p
           aria-live="polite"
-          className="border border-row-border p-3 font-mono text-[10px] uppercase text-muted-foreground"
+          className="rounded-sm bg-muted/35 p-4 text-xs text-muted-foreground"
           role="status"
         >
           {notice}
@@ -826,7 +841,7 @@ function LiveForumMessages() {
       ) : null}
       {error && !composeOpen ? (
         <p
-          className="border border-row-border p-3 text-sm text-primary"
+          className="rounded-sm bg-muted/35 p-4 text-sm text-primary"
           role="alert"
         >
           {error}
@@ -835,16 +850,170 @@ function LiveForumMessages() {
       {messages.unreadCountLimited || messages.messagesLimited ? (
         <p
           aria-live="polite"
-          className="border border-row-border p-3 text-sm leading-6 text-muted-foreground"
+          className="rounded-sm bg-muted/35 p-4 text-sm leading-6 text-muted-foreground"
           role="status"
         >
           This mailbox has more history. Use the message pager to move through
           older undeleted messages.
         </p>
       ) : null}
-      <div className="grid gap-3 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-        <section className="border border-row-border">
-          <div className="flex flex-wrap gap-1 border-b border-row-border p-3">
+      {composeOpen ? (
+        <section className="min-w-0 rounded-sm bg-background">
+          <div className="px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Compose private message
+            </p>
+          </div>
+          <form className="p-3" onSubmit={sendMessage} aria-busy={sendPending}>
+            <fieldset className="grid min-w-0 gap-3" disabled={sendPending}>
+              <legend className="sr-only">Private message draft</legend>
+              <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+                <label className="grid gap-2">
+                  <span className="text-xs text-muted-foreground">To</span>
+                  <div className="relative">
+                    <Input
+                      ref={recipientInputRef}
+                      aria-activedescendant={
+                        showRecipientSuggestions
+                          ? `private-message-recipient-option-${activeRecipientSuggestionIndex}`
+                          : undefined
+                      }
+                      aria-autocomplete="list"
+                      aria-controls={
+                        showRecipientSuggestions
+                          ? "private-message-recipient-suggestions"
+                          : undefined
+                      }
+                      aria-describedby={
+                        error ? "private-message-error" : undefined
+                      }
+                      aria-expanded={showRecipientSuggestions}
+                      aria-invalid={invalidField === "recipient"}
+                      className="rounded-sm border-row-border"
+                      placeholder="sym-123"
+                      role="combobox"
+                      value={recipientUsername}
+                      onBlur={() => setRecipientPickerFocused(false)}
+                      onChange={(event) =>
+                        updateRecipientUsername(event.target.value)
+                      }
+                      onFocus={() => setRecipientPickerFocused(true)}
+                      onKeyDown={handleRecipientKeyDown}
+                    />
+                    {showRecipientSuggestions ? (
+                      <div
+                        className="absolute inset-x-0 top-full z-20 mt-1 border border-row-border bg-background"
+                        id="private-message-recipient-suggestions"
+                        role="listbox"
+                      >
+                        {filteredRecipientSuggestions.map(
+                          (suggestion, index) => (
+                            <button
+                              key={`${suggestion.source}:${suggestion.username}`}
+                              aria-selected={
+                                index === activeRecipientSuggestionIndex
+                              }
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3  px-3 py-2 text-left last:border-b-0",
+                                index === activeRecipientSuggestionIndex
+                                  ? "bg-muted/55"
+                                  : "hover:bg-muted/35",
+                              )}
+                              id={`private-message-recipient-option-${index}`}
+                              role="option"
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                applyRecipientSuggestion(suggestion.username);
+                              }}
+                              onMouseEnter={() =>
+                                setActiveRecipientSuggestionIndex(index)
+                              }
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold">
+                                  {suggestion.title}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {suggestion.detail}
+                                </span>
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {suggestion.source}
+                              </span>
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-xs text-muted-foreground">Subject</span>
+                  <Input
+                    aria-describedby={
+                      error ? "private-message-error" : undefined
+                    }
+                    aria-invalid={invalidField === "subject"}
+                    className="rounded-sm border-row-border"
+                    maxLength={120}
+                    value={subject}
+                    onChange={(event) => setSubject(event.target.value)}
+                  />
+                </label>
+              </div>
+              <ForumCompose
+                body={body}
+                bodyAriaDescribedBy={
+                  error ? "private-message-error" : undefined
+                }
+                bodyAriaInvalid={invalidField === "body"}
+                bodyLabel="Message"
+                bodyMaxLength={6000}
+                bodyPlaceholder="Write your private message"
+                bodyRows={7}
+                bodyTextareaRef={bodyRef}
+                disabled={sendPending}
+                error={error}
+                errorId="private-message-error"
+                footerActions={
+                  <Button
+                    className="rounded-sm text-xs"
+                    disabled={sendPending || body.trim().length === 0}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setMessagePreviewOpen((current) => !current)}
+                  >
+                    {messagePreviewOpen ? "Hide preview" : "Preview"}
+                  </Button>
+                }
+                pending={sendPending}
+                pendingLabel="Sending..."
+                submitLabel="Send message"
+                onBodyChange={setBody}
+                onSubmit={() => sendMessage()}
+              >
+                {messagePreviewOpen ? (
+                  <PrivateMessagePreview body={body} />
+                ) : null}
+              </ForumCompose>
+            </fieldset>
+          </form>
+        </section>
+      ) : null}
+      <div
+        className={cn(
+          "gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]",
+          composeOpen ? "hidden xl:grid" : "grid",
+        )}
+      >
+        <section
+          className={cn(
+            "min-w-0 rounded-sm bg-background",
+            selectedMessageId && "hidden xl:block",
+          )}
+        >
+          <div className="flex flex-wrap gap-1 p-3">
             <MailboxTab
               box="inbox"
               currentBox={box}
@@ -855,19 +1024,17 @@ function LiveForumMessages() {
             <MailboxTab box="sent" currentBox={box} query={searchQuery} />
             <MailboxTab box="trash" currentBox={box} query={searchQuery} />
           </div>
-          <form
-            className="flex flex-wrap gap-2 border-b border-row-border p-3"
-            onSubmit={searchMessages}
-          >
+          <form className="flex flex-wrap gap-2 p-3" onSubmit={searchMessages}>
             <Input
-              className="min-w-0 flex-1 rounded-none border-row-border"
+              className="min-w-0 flex-1 rounded-sm border-row-border"
               maxLength={120}
+              aria-label="Search messages"
               placeholder="Search messages"
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
             />
             <Button
-              className="rounded-none font-mono text-[10px] uppercase"
+              className="rounded-sm text-xs"
               type="submit"
               variant="outline"
             >
@@ -876,7 +1043,7 @@ function LiveForumMessages() {
             {searchQuery ? (
               <Button
                 asChild
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-sm text-xs"
                 type="button"
                 variant="outline"
               >
@@ -887,13 +1054,13 @@ function LiveForumMessages() {
             ) : null}
           </form>
           {messages.messages.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-row-border p-3">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+              <p className="text-xs text-muted-foreground">
                 {selectedMessageCount}/{messages.messages.length} selected
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  className="h-7 rounded-none px-2.5 font-mono text-[10px] uppercase"
+                  className="h-7 rounded-sm px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || allVisibleMessagesSelected
                   }
@@ -905,7 +1072,7 @@ function LiveForumMessages() {
                   Select all visible
                 </Button>
                 <Button
-                  className="h-7 rounded-none px-2.5 font-mono text-[10px] uppercase"
+                  className="h-7 rounded-sm px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || selectedMessageCount === 0
                   }
@@ -918,7 +1085,7 @@ function LiveForumMessages() {
                 </Button>
                 {box === "trash" ? (
                   <Button
-                    className="h-7 rounded-none px-2.5 font-mono text-[10px] uppercase"
+                    className="h-7 rounded-sm px-2.5 text-xs"
                     disabled={
                       bulkActionPending !== null || selectedMessageCount === 0
                     }
@@ -933,7 +1100,7 @@ function LiveForumMessages() {
                 ) : null}
                 {box === "inbox" && selectedUnreadInboxMessages.length > 0 ? (
                   <Button
-                    className="h-7 rounded-none px-2.5 font-mono text-[10px] uppercase"
+                    className="h-7 rounded-sm px-2.5 text-xs"
                     disabled={bulkActionPending !== null}
                     size="sm"
                     type="button"
@@ -946,7 +1113,7 @@ function LiveForumMessages() {
                   </Button>
                 ) : null}
                 <Button
-                  className="h-7 rounded-none px-2.5 font-mono text-[10px] uppercase"
+                  className="h-7 rounded-sm px-2.5 text-xs"
                   disabled={
                     bulkActionPending !== null || selectedMessageCount === 0
                   }
@@ -971,7 +1138,7 @@ function LiveForumMessages() {
               </p>
               <div>
                 <Button
-                  className="rounded-none font-mono text-[10px] uppercase"
+                  className="rounded-sm text-xs"
                   type="button"
                   variant="outline"
                   onClick={() => setComposeOpen(true)}
@@ -981,7 +1148,7 @@ function LiveForumMessages() {
               </div>
             </div>
           ) : (
-            <div className="divide-y divide-row-border">
+            <div className="space-y-1">
               {messages.messages.map((message) => (
                 <MessageListRow
                   key={message._id}
@@ -1005,7 +1172,24 @@ function LiveForumMessages() {
             pagination={messages.pagination}
           />
         </section>
-        <section className="border border-row-border">
+        <section
+          ref={messageDetailRef}
+          tabIndex={-1}
+          aria-label="Selected private message"
+          className={cn(
+            "focus-ring min-w-0 rounded-sm bg-background",
+            !selectedMessageId && "hidden xl:block",
+          )}
+        >
+          {selectedMessageId ? (
+            <ForumLink
+              className="focus-ring mb-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-primary xl:hidden"
+              href={messageHref(box, undefined, page, searchQuery)}
+              prefetch
+            >
+              ← Back to {mailboxLabel(box).toLowerCase()}
+            </ForumLink>
+          ) : null}
           {visibleMessage ? (
             <MessageDetail
               confirmDelete={deleteConfirmMessageId === visibleMessage._id}
@@ -1025,7 +1209,7 @@ function LiveForumMessages() {
               action={
                 <Button
                   asChild
-                  className="rounded-none font-mono text-[10px] uppercase"
+                  className="rounded-sm text-xs"
                   variant="outline"
                 >
                   <ForumLink
@@ -1045,145 +1229,6 @@ function LiveForumMessages() {
           )}
         </section>
       </div>
-      {composeOpen ? (
-        <section className="border border-row-border">
-          <div className="border-b border-row-border px-3 py-2">
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Compose private message
-            </p>
-          </div>
-          <form className="grid gap-3 p-3" onSubmit={sendMessage}>
-            <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-              <label className="grid gap-2">
-                <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                  To
-                </span>
-                <div className="relative">
-                  <Input
-                    ref={recipientInputRef}
-                    aria-activedescendant={
-                      showRecipientSuggestions
-                        ? `private-message-recipient-option-${activeRecipientSuggestionIndex}`
-                        : undefined
-                    }
-                    aria-autocomplete="list"
-                    aria-controls={
-                      showRecipientSuggestions
-                        ? "private-message-recipient-suggestions"
-                        : undefined
-                    }
-                    aria-describedby={
-                      error ? "private-message-error" : undefined
-                    }
-                    aria-expanded={showRecipientSuggestions}
-                    aria-invalid={invalidField === "recipient"}
-                    className="rounded-none border-row-border"
-                    placeholder="sym-123"
-                    role="combobox"
-                    value={recipientUsername}
-                    onBlur={() => setRecipientPickerFocused(false)}
-                    onChange={(event) =>
-                      updateRecipientUsername(event.target.value)
-                    }
-                    onFocus={() => setRecipientPickerFocused(true)}
-                    onKeyDown={handleRecipientKeyDown}
-                  />
-                  {showRecipientSuggestions ? (
-                    <div
-                      className="absolute inset-x-0 top-full z-20 mt-1 border border-row-border bg-background"
-                      id="private-message-recipient-suggestions"
-                      role="listbox"
-                    >
-                      {filteredRecipientSuggestions.map((suggestion, index) => (
-                        <button
-                          key={`${suggestion.source}:${suggestion.username}`}
-                          aria-selected={
-                            index === activeRecipientSuggestionIndex
-                          }
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 border-b border-row-border px-3 py-2 text-left last:border-b-0",
-                            index === activeRecipientSuggestionIndex
-                              ? "bg-muted/55"
-                              : "hover:bg-muted/35",
-                          )}
-                          id={`private-message-recipient-option-${index}`}
-                          role="option"
-                          type="button"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            applyRecipientSuggestion(suggestion.username);
-                          }}
-                          onMouseEnter={() =>
-                            setActiveRecipientSuggestionIndex(index)
-                          }
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-semibold">
-                              {suggestion.title}
-                            </span>
-                            <span className="block truncate font-mono text-[10px] uppercase text-muted-foreground">
-                              {suggestion.detail}
-                            </span>
-                          </span>
-                          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                            {suggestion.source}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </label>
-              <label className="grid gap-2">
-                <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                  Subject
-                </span>
-                <Input
-                  aria-describedby={error ? "private-message-error" : undefined}
-                  aria-invalid={invalidField === "subject"}
-                  className="rounded-none border-row-border"
-                  maxLength={120}
-                  value={subject}
-                  onChange={(event) => setSubject(event.target.value)}
-                />
-              </label>
-            </div>
-            <ForumCompose
-              body={body}
-              bodyAriaDescribedBy={error ? "private-message-error" : undefined}
-              bodyAriaInvalid={invalidField === "body"}
-              bodyLabel="Message"
-              bodyMaxLength={6000}
-              bodyPlaceholder="Write your private message"
-              bodyRows={7}
-              bodyTextareaRef={bodyRef}
-              disabled={sendPending}
-              error={error}
-              errorId="private-message-error"
-              footerActions={
-                <Button
-                  className="rounded-none font-mono text-[10px] uppercase"
-                  disabled={body.trim().length === 0}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setMessagePreviewOpen((current) => !current)}
-                >
-                  {messagePreviewOpen ? "Hide preview" : "Preview"}
-                </Button>
-              }
-              pending={sendPending}
-              pendingLabel="Sending..."
-              submitLabel="Send message"
-              onBodyChange={setBody}
-              onSubmit={() => sendMessage()}
-            >
-              {messagePreviewOpen ? (
-                <PrivateMessagePreview body={body} />
-              ) : null}
-            </ForumCompose>
-          </form>
-        </section>
-      ) : null}
       <Dialog
         open={reportMessage !== null}
         onOpenChange={(open) => {
@@ -1192,7 +1237,7 @@ function LiveForumMessages() {
           }
         }}
       >
-        <DialogContent className="rounded-none border-row-border sm:rounded-none">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-sm border-row-border sm:rounded-sm [&_button]:min-h-11">
           <DialogHeader>
             <DialogTitle>Report private message</DialogTitle>
             <DialogDescription>
@@ -1201,8 +1246,8 @@ function LiveForumMessages() {
           </DialogHeader>
           <form className="grid gap-3" onSubmit={submitPrivateMessageReport}>
             {reportMessage ? (
-              <div className="border border-row-border p-3">
-                <p className="font-mono text-[10px] uppercase text-muted-foreground">
+              <div className="rounded-sm bg-muted/35 p-4">
+                <p className="text-xs text-muted-foreground">
                   From {reportMessage.otherUsername}
                 </p>
                 <p className="mt-1 text-sm font-semibold">
@@ -1211,15 +1256,13 @@ function LiveForumMessages() {
               </div>
             ) : null}
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Reason
-              </span>
+              <span className="text-xs text-muted-foreground">Reason</span>
               <Input
                 aria-describedby={
                   reportError ? "private-message-report-error" : undefined
                 }
                 aria-invalid={reportError ? true : undefined}
-                className="rounded-none border-row-border"
+                className="rounded-sm border-row-border"
                 maxLength={160}
                 placeholder="Spam, harassment, doxxing, etc."
                 value={reportReason}
@@ -1227,11 +1270,9 @@ function LiveForumMessages() {
               />
             </label>
             <label className="grid gap-2">
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                Details
-              </span>
+              <span className="text-xs text-muted-foreground">Details</span>
               <Textarea
-                className="rounded-none border-row-border"
+                className="rounded-sm border-row-border"
                 maxLength={1000}
                 rows={4}
                 value={reportDetails}
@@ -1240,7 +1281,7 @@ function LiveForumMessages() {
             </label>
             {reportError ? (
               <p
-                className="border border-row-border p-3 text-sm text-primary"
+                className="rounded-sm bg-muted/35 p-4 text-sm text-primary"
                 id="private-message-report-error"
                 role="alert"
               >
@@ -1249,7 +1290,7 @@ function LiveForumMessages() {
             ) : null}
             <DialogFooter>
               <Button
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-sm text-xs"
                 disabled={reportPending}
                 type="button"
                 variant="outline"
@@ -1258,7 +1299,7 @@ function LiveForumMessages() {
                 Cancel
               </Button>
               <Button
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-sm text-xs"
                 disabled={reportPending}
                 type="submit"
               >
@@ -1296,7 +1337,7 @@ function MailboxTab({
     <Button
       asChild
       className={cn(
-        "h-7 rounded-none px-2.5 font-mono text-[10px] uppercase",
+        "h-7 rounded-sm px-2.5 text-xs",
         active && "border-foreground bg-foreground text-background",
       )}
       size="sm"
@@ -1338,7 +1379,7 @@ function MessageListRow({
         message.unread && "border-l-2 border-l-primary",
       )}
     >
-      <label className="flex items-start justify-center border-r border-row-border px-3 py-3">
+      <label className="flex items-start justify-center px-3 py-3">
         <input
           aria-label={`Select private message: ${message.subject}`}
           checked={checked}
@@ -1361,12 +1402,10 @@ function MessageListRow({
             {message.subject}
           </p>
           {message.unread ? (
-            <span className="font-mono text-[10px] uppercase text-primary">
-              Unread
-            </span>
+            <span className="text-xs text-primary">Unread</span>
           ) : null}
         </div>
-        <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {message.box === "trash"
             ? `${mailboxLabel(message.sourceBox)} copy / `
             : ""}
@@ -1388,10 +1427,8 @@ function MessageListRow({
 
 function PrivateMessagePreview({ body }: { body: string }) {
   return (
-    <div className="border border-row-border p-3">
-      <p className="mb-3 font-mono text-[10px] uppercase text-muted-foreground">
-        Preview
-      </p>
+    <div className="rounded-sm bg-muted/35 p-4">
+      <p className="mb-3 text-xs text-muted-foreground">Preview</p>
       <ForumBody body={body} />
     </div>
   );
@@ -1424,26 +1461,26 @@ function MessageDetail({
     message.box === "trash" ? "Confirm permanent delete" : "Confirm move";
   return (
     <article>
-      <div className="border-b border-row-border px-3 py-2.5">
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
+      <div className="px-3 py-2.5">
+        <p className="text-xs text-muted-foreground">
           {message.box === "trash"
             ? `${mailboxLabel(message.sourceBox)} copy / `
             : ""}
           {messageDirectionLabel(message)} {message.otherUsername}
         </p>
         <h2 className="mt-2 text-xl font-semibold">{message.subject}</h2>
-        <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           {formatForumDateTime(message.createdAt)}
         </p>
       </div>
       <div className="px-3 py-3">
         <ForumBody body={message.body ?? message.excerpt ?? ""} />
       </div>
-      <div className="flex flex-wrap justify-between gap-2 border-t border-row-border px-4 py-3">
+      <div className="flex flex-wrap justify-between gap-2 px-4 py-3">
         <div className="flex flex-wrap gap-2">
           {message.box === "trash" ? (
             <Button
-              className="rounded-none font-mono text-[10px] uppercase"
+              className="rounded-sm text-xs"
               disabled={deletePending || restorePending}
               type="button"
               variant="outline"
@@ -1453,7 +1490,7 @@ function MessageDetail({
             </Button>
           ) : null}
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-sm text-xs"
             disabled={deletePending || restorePending}
             type="button"
             variant={confirmDelete ? "default" : "outline"}
@@ -1467,7 +1504,7 @@ function MessageDetail({
           </Button>
           {confirmDelete ? (
             <Button
-              className="rounded-none font-mono text-[10px] uppercase"
+              className="rounded-sm text-xs"
               disabled={deletePending || restorePending}
               type="button"
               variant="outline"
@@ -1478,7 +1515,7 @@ function MessageDetail({
           ) : null}
         </div>
         <Button
-          className="rounded-none font-mono text-[10px] uppercase"
+          className="rounded-sm text-xs"
           disabled={restorePending}
           type="button"
           variant="outline"
@@ -1488,7 +1525,7 @@ function MessageDetail({
         </Button>
         {message.box === "inbox" && message.sourceBox === "inbox" ? (
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-sm text-xs"
             type="button"
             variant="outline"
             onClick={onReport}

@@ -23,7 +23,7 @@ export default async function ForumConnectPage({
   )
     notFound();
   return (
-    <section className="page-frame page-frame-spacious max-w-2xl space-y-8">
+    <section className="forum-surface page-frame page-frame-dense max-w-3xl space-y-5">
       <h1 className="page-title-display">Connect your forum profile</h1>
       <p className="page-lede">
         Browse, post, and interact with the SYMBaiEX forum through ChatGPT or

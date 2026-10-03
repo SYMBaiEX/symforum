@@ -17,7 +17,6 @@ import {
   ForumThreadStateBadges,
 } from "./forum-primitives";
 import {
-  formatForumDateTime,
   forumPath,
   forumMemberProfilePath,
   getThreadReplyCount,
@@ -60,11 +59,11 @@ function FeedLoading() {
     <div
       aria-busy="true"
       role="status"
-      className="overflow-hidden rounded-sm bg-muted/20"
+      className="forum-workspace overflow-hidden rounded-sm"
     >
       <span className="sr-only">Loading discussions</span>
       <div aria-hidden="true" className="h-12 bg-muted/70" />
-      <div className="space-y-8 px-4 py-6 sm:px-5">
+      <div className="space-y-5 px-3 py-4 sm:px-4">
         {[1, 2, 3].map((item) => (
           <div
             aria-hidden="true"
@@ -190,10 +189,10 @@ export function LiveFeed({
     <section
       aria-label={communityOnly ? "Community discussions" : "Forum discussions"}
       aria-busy={Boolean(pending)}
-      className="overflow-hidden rounded-sm bg-muted/20"
+      className="forum-workspace overflow-hidden rounded-sm"
     >
       <ForumSectionHeader
-        title={communityOnly ? "Community conversations" : "From the forum"}
+        title={communityOnly ? "Community conversations" : "Discussions"}
       >
         <div className="flex max-w-full items-center gap-1">
           <nav aria-label="Sort discussions" className="flex gap-1">
@@ -221,7 +220,14 @@ export function LiveFeed({
             type="button"
           >
             <RefreshCw aria-hidden="true" className="size-3.5" />
-            {pending === "refresh" ? "Refreshing…" : "Refresh"}
+            <span className="hidden sm:inline">
+              {pending === "refresh" ? "Refreshing…" : "Refresh"}
+            </span>
+            <span className="sr-only sm:hidden">
+              {pending === "refresh"
+                ? "Refreshing discussions"
+                : "Refresh discussions"}
+            </span>
           </button>
         </div>
       </ForumSectionHeader>
@@ -272,7 +278,7 @@ export function LiveFeed({
           </ForumLink>
         </div>
       ) : null}
-      <ul className="px-2 py-2 sm:px-3">
+      <ul className="px-1 py-1 sm:px-2">
         {result?.page.map((thread) => (
           <li key={thread._id}>
             <ForumFeedArticle thread={thread} />
@@ -300,15 +306,15 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
   const author = thread.authorIdentity;
   const replies = getThreadReplyCount(thread);
   return (
-    <article className="group grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-x-3 rounded-sm px-2 py-4 transition-colors hover:bg-background/55 focus-within:bg-background/55 sm:gap-x-4">
+    <article className="forum-list-row group grid min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-x-2.5 rounded-sm px-2 py-3 transition-colors hover:bg-muted/45 focus-within:bg-muted/45 sm:grid-cols-[40px_minmax(0,1fr)] sm:gap-x-3 sm:px-3">
       <ForumAvatar
         alt=""
-        className="mt-3 size-7 rounded-sm"
+        className="mt-1.5 size-8 rounded-full sm:size-10"
         name={author.name}
         src={author.avatarUrl}
       />
       <div className="min-w-0">
-        <h3 className="text-lg font-semibold leading-6 tracking-tight sm:text-xl sm:leading-7">
+        <h3 className="text-[15px] font-semibold leading-5 tracking-tight sm:text-base sm:leading-6">
           <ForumLink
             className="focus-ring inline-flex min-h-11 items-center break-words py-1 hover:text-primary [overflow-wrap:anywhere]"
             href={href}
@@ -316,9 +322,9 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
             {thread.title}
           </ForumLink>
         </h3>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 font-mono text-[11px] leading-5 text-muted-foreground">
+        <div className="-mt-1 flex min-w-0 flex-wrap items-center gap-x-2 text-xs leading-5 text-muted-foreground">
           <ForumLink
-            className="focus-ring inline-flex min-h-11 min-w-11 items-center break-words text-foreground hover:text-primary [overflow-wrap:anywhere]"
+            className="focus-ring inline-flex min-h-11 items-center break-words font-medium text-foreground hover:text-primary [overflow-wrap:anywhere]"
             href={forumMemberProfilePath(author.username)}
           >
             {author.name}
@@ -328,34 +334,55 @@ export function ForumFeedArticle({ thread }: { thread: ForumFeedThread }) {
               AI
             </span>
           ) : null}
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true" className="text-muted-foreground/60">
+            in
+          </span>
           <ForumLink
-            className="focus-ring inline-flex min-h-11 min-w-11 items-center break-words hover:text-primary [overflow-wrap:anywhere]"
+            className="focus-ring inline-flex min-h-11 items-center break-words hover:text-primary [overflow-wrap:anywhere]"
             href={forumPath(thread.categorySlug)}
           >
             {thread.categoryName}
           </ForumLink>
-          {thread.createdAt ? (
-            <time dateTime={new Date(thread.createdAt).toISOString()}>
-              {formatForumDateTime(thread.createdAt)}
-            </time>
-          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 empty:hidden">
           <ForumThreadPrefixBadge thread={thread} />
           <ForumThreadStateBadges thread={thread} />
         </div>
         {thread.excerpt ? (
-          <p className="mt-1 line-clamp-3 max-w-prose whitespace-pre-line break-words text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+          <p className="line-clamp-2 max-w-prose whitespace-pre-line break-words text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere] sm:line-clamp-3">
             {thread.excerpt}
           </p>
         ) : null}
-        <ForumLink className={`${actionClass} mt-1 -ml-3`} href={href}>
-          <MessageSquare aria-hidden="true" className="size-3.5" />
-          {replies > 0
-            ? `${replies} ${replies === 1 ? "reply" : "replies"}`
-            : "Join the conversation"}
-        </ForumLink>
+        <div className="mt-1 flex min-w-0 items-center justify-between gap-x-2">
+          <ForumLink
+            className={`${actionClass} -ml-3`}
+            href={href}
+            aria-label={
+              replies > 0
+                ? `${replies} replies to ${thread.title}`
+                : `Reply to ${thread.title}`
+            }
+          >
+            <MessageSquare aria-hidden="true" className="size-3.5" />
+            {replies > 0
+              ? `${replies} ${replies === 1 ? "reply" : "replies"}`
+              : "Reply"}
+          </ForumLink>
+          {thread.createdAt ? (
+            <time
+              className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground"
+              dateTime={new Date(thread.createdAt).toISOString()}
+              title={new Date(thread.createdAt).toUTCString()}
+              aria-label={`Posted ${new Date(thread.createdAt).toUTCString()}`}
+            >
+              {new Intl.DateTimeFormat("en", {
+                month: "short",
+                day: "numeric",
+                timeZone: "UTC",
+              }).format(thread.createdAt)}
+            </time>
+          ) : null}
+        </div>
       </div>
     </article>
   );

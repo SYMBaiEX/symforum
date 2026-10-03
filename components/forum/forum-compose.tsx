@@ -109,6 +109,7 @@ export function ForumCompose({
   onTitleChange?: (value: string) => void;
 }) {
   const bodyInputId = useId();
+  const controlsDisabled = disabled || pending;
   const [draftHydrated, setDraftHydrated] = useState(draftKey === undefined);
   const titleEnabled =
     typeof title === "string" && typeof onTitleChange === "function";
@@ -187,7 +188,7 @@ export function ForumCompose({
     }
   }
   function appendMarkup(open: string, close: string, sample: string) {
-    if (disabled) {
+    if (controlsDisabled) {
       return;
     }
     const next =
@@ -198,72 +199,97 @@ export function ForumCompose({
   }
 
   return (
-    <div className="border border-row-border p-3">
+    <div
+      className="forum-composer min-w-0 rounded-sm bg-background p-3 sm:p-5"
+      aria-busy={pending}
+    >
       {titleEnabled ? (
         <label className="block">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+          <span className="text-xs font-medium text-muted-foreground">
             {titleLabel ?? "Title"}
           </span>
           <Input
-            disabled={disabled}
+            disabled={controlsDisabled}
             value={title}
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder={titlePlaceholder}
-            className="mt-2 rounded-none border-row-border"
+            className="mt-2 min-h-11 rounded-sm border-0 bg-muted/40 px-3 text-base focus-visible:ring-1 focus-visible:ring-primary"
           />
         </label>
       ) : null}
       <div className={`block ${titleEnabled ? "mt-3" : ""}`}>
         <label
-          className="font-mono text-[10px] uppercase text-muted-foreground"
+          className="text-xs font-medium text-muted-foreground"
           htmlFor={bodyInputId}
         >
           {bodyLabel}
         </label>
         <div
           aria-label="Forum formatting toolbar"
-          className="mt-2 flex flex-wrap gap-2"
+          className="mt-2 flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-sm bg-muted/40 p-1"
           role="toolbar"
+          onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+              return;
+            const buttons = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                "button:not(:disabled)",
+              ),
+            );
+            const index = buttons.indexOf(event.target as HTMLButtonElement);
+            if (index < 0 || buttons.length === 0) return;
+            event.preventDefault();
+            const nextIndex =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? buttons.length - 1
+                  : (index +
+                      (event.key === "ArrowRight" ? 1 : -1) +
+                      buttons.length) %
+                    buttons.length;
+            buttons[nextIndex]?.focus();
+          }}
         >
           <ToolbarButton
             ariaLabel="Insert section heading"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Heading2 className="size-3.5" />}
             onClick={() => appendMarkup("[h2]", "[/h2]", "Section heading")}
           />
           <ToolbarButton
             ariaLabel="Insert bold markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Bold className="size-3.5" />}
             onClick={() => appendMarkup("[b]", "[/b]", "bold text")}
           />
           <ToolbarButton
             ariaLabel="Insert italic markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Italic className="size-3.5" />}
             onClick={() => appendMarkup("[i]", "[/i]", "italic text")}
           />
           <ToolbarButton
             ariaLabel="Insert underline markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Underline className="size-3.5" />}
             onClick={() => appendMarkup("[u]", "[/u]", "underlined text")}
           />
           <ToolbarButton
             ariaLabel="Insert strike markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Strikethrough className="size-3.5" />}
             onClick={() => appendMarkup("[s]", "[/s]", "struck text")}
           />
           <ToolbarButton
             ariaLabel="Insert code block markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Code2 className="size-3.5" />}
             onClick={() => appendMarkup("[code]\n", "\n[/code]", "code")}
           />
           <ToolbarButton
             ariaLabel="Insert quote markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Quote className="size-3.5" />}
             onClick={() =>
               appendMarkup("[quote]\n", "\n[/quote]", "quoted text")
@@ -271,7 +297,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert link markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<LinkIcon className="size-3.5" />}
             onClick={() =>
               appendMarkup("[url=https://example.com]", "[/url]", "link text")
@@ -279,7 +305,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert image markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<ImageIcon className="size-3.5" />}
             onClick={() =>
               appendMarkup("[img]", "[/img]", "https://example.com/image.jpg")
@@ -287,7 +313,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert list markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<List className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -299,7 +325,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert numbered list markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<ListOrdered className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -311,7 +337,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert note markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Info className="size-3.5" />}
             onClick={() =>
               appendMarkup("[note]\n", "\n[/note]", "Useful context")
@@ -319,7 +345,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert spoiler markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<EyeOff className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -331,7 +357,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert comparison table markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Table2 className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -343,7 +369,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert signal chart markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<BarChart3 className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -355,7 +381,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert action sequence markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Workflow className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -367,7 +393,7 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert decision matrix markup"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<GitCompareArrows className="size-3.5" />}
             onClick={() =>
               appendMarkup(
@@ -379,13 +405,13 @@ export function ForumCompose({
           />
           <ToolbarButton
             ariaLabel="Insert horizontal rule"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Minus className="size-3.5" />}
             onClick={() => appendMarkup("", "", "[hr]")}
           />
           <ToolbarButton
             ariaLabel="Insert smilie"
-            disabled={disabled}
+            disabled={controlsDisabled}
             label={<Smile className="size-3.5" />}
             onClick={() => appendMarkup("", "", ":)")}
           />
@@ -395,22 +421,22 @@ export function ForumCompose({
           id={bodyInputId}
           aria-describedby={bodyAriaDescribedBy}
           aria-invalid={bodyAriaInvalid}
-          disabled={disabled}
+          disabled={controlsDisabled}
           maxLength={bodyMaxLength}
           value={body}
           onChange={(event) => onBodyChange(event.target.value)}
           placeholder={bodyPlaceholder}
           rows={bodyRows}
-          className="mt-2 rounded-none border-row-border"
+          className="min-h-40 resize-y rounded-none rounded-b-sm border-0 bg-muted/25 px-3 py-3 text-base leading-7 focus-visible:ring-1 focus-visible:ring-primary"
         />
-        <details className="mt-2 border border-row-border bg-muted/15">
-          <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center justify-between px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground marker:content-none">
+        <details className="mt-1">
+          <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between px-1 py-2 text-xs text-muted-foreground marker:content-none">
             Formatting help
             <span aria-hidden="true" className="text-primary">
               +
             </span>
           </summary>
-          <p className="border-t border-row-border px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+          <p className="px-1 py-2.5 text-xs leading-5 text-muted-foreground">
             Use headings, bold, italic, quotes, code, links, images, bullet or
             numbered lists, notes, warnings, spoilers, tables, signal charts,
             action sequences, decision matrices, keyboard keys, highlights, and
@@ -419,27 +445,35 @@ export function ForumCompose({
           </p>
         </details>
       </div>
-      {children ? <div className="mt-3">{children}</div> : null}
+      {children ? (
+        <fieldset
+          className="mt-3 min-w-0 space-y-3"
+          disabled={controlsDisabled}
+        >
+          <legend className="sr-only">Post options</legend>
+          {children}
+        </fieldset>
+      ) : null}
       {note ? (
         <p className="mt-3 text-xs leading-6 text-muted-foreground">{note}</p>
       ) : null}
       {error ? (
         <p
           id={errorId}
-          className="mt-3 border border-row-border p-3 text-sm text-muted-foreground"
+          className="mt-3 rounded-sm bg-accent-canary/10 p-3 text-sm text-foreground"
           role="alert"
         >
           {error}
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase text-muted-foreground">
-          Classic board format
+        <p className="text-xs font-medium text-muted-foreground">
+          BBCode supported
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {footerActions}
           <Button
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="min-h-11 rounded-sm px-4 text-sm font-medium"
             type="button"
             onClick={() => {
               void submitWithDraftCleanup();
@@ -561,7 +595,7 @@ export function ForumAttachmentDraftPanel({
   }
 
   return (
-    <section className="border border-row-border p-3">
+    <section className="min-w-0 rounded-sm bg-muted/25 p-3">
       <ForumAgentAttachmentPicker />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -573,7 +607,7 @@ export function ForumAttachmentDraftPanel({
           </p>
         </div>
         <Button
-          className="rounded-none font-mono text-[10px] uppercase"
+          className="min-h-11 rounded-sm text-xs"
           disabled={
             disabled ||
             uploading ||
@@ -619,10 +653,10 @@ export function ForumAttachmentDraftPanel({
         <div className="mt-3 grid gap-2">
           {attachments.map((attachment) => (
             <div
-              className="flex flex-wrap items-center justify-between gap-2 border border-row-border px-3 py-2"
+              className="flex min-w-0 items-center justify-between gap-2 rounded-sm bg-background px-3 py-2"
               key={attachment.storageId}
             >
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                   <Paperclip className="size-3.5 shrink-0" />
                   <span className="truncate">{attachment.filename}</span>
@@ -688,7 +722,7 @@ function ToolbarButton({
   return (
     <Button
       aria-label={ariaLabel}
-      className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+      className="size-11 shrink-0 rounded-sm border-0 bg-transparent p-0 text-muted-foreground shadow-none hover:bg-background hover:text-foreground"
       disabled={disabled}
       type="button"
       variant="outline"

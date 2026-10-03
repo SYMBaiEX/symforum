@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import {
   formatForumCount,
   formatForumDateTime,
@@ -95,17 +97,15 @@ function ForumRecentThreadsHeader({
   title: string;
 }) {
   return (
-    <section className="grid gap-1.5 border-y border-row-border py-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-4">
-      <div>
-        <p className="page-kicker">
+    <ForumPageHeader
+      title={title}
+      description={description}
+      actions={
+        <span className="rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
           {mode === "new" ? "Unread activity" : "Daily activity"}
-        </p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">{title}</h1>
-      </div>
-      <p className="max-w-2xl text-sm leading-5 text-muted-foreground md:text-right">
-        {description}
-      </p>
-    </section>
+        </span>
+      }
+    />
   );
 }
 
@@ -176,8 +176,8 @@ function ForumRecentActivitySummary({
       : "n/a";
 
   return (
-    <section className="flex flex-col gap-1.5 border-y border-row-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+    <section className="flex flex-col gap-1.5 rounded-sm bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <div className="inline-flex items-baseline gap-1.5">
           <dt>Matching</dt>
           <dd className="font-semibold tabular-nums text-foreground">
@@ -200,7 +200,7 @@ function ForumRecentActivitySummary({
           </dd>
         </div>
       </dl>
-      <p className="font-mono text-[10px] uppercase leading-5 text-muted-foreground">
+      <p className="text-xs leading-5 text-muted-foreground">
         {recentThreads.label}
         {recentThreads.since
           ? ` / Since ${formatForumDateTime(recentThreads.since)}`

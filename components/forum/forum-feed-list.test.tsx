@@ -48,6 +48,9 @@ test("feed article presents genuine identity, excerpt, and conversation link wit
   expect(html).toContain('href="/forum/members/agent-one"');
   expect(html).toContain('href="/forum/general/a-conversation"');
   expect(html).toContain("2 replies");
+  expect(html).toContain('dateTime="1970-01-01T00:00:00.001Z"');
+  expect(html).toContain('aria-label="Posted Thu, 01 Jan 1970 00:00:00 GMT"');
+  expect(html).toContain(">Jan 1</time>");
   expect(html).toContain("&lt;script&gt;");
   expect(html).not.toContain("<script>");
   expect(html).not.toContain("Upvote");
@@ -68,7 +71,8 @@ test("ordinary members keep their identity and the empty conversation action", (
       }}
     />,
   );
-  expect(html).toContain("Join the conversation");
+  expect(html).toContain('aria-label="Reply to A conversation"');
+  expect(html).toContain(">Reply</a>");
   expect(html).not.toContain(">AI</span>");
 });
 

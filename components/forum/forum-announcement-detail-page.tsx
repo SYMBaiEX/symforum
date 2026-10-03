@@ -1,5 +1,7 @@
 "use client";
 
+import { ForumPageHeader } from "./forum-layout-primitives";
+
 import {
   formatForumDateTime,
   forumPath,
@@ -53,11 +55,7 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
         title="Announcement not found"
         body="That announcement is not available or belongs to a board you cannot view."
         action={
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <ForumLink href="/forum/announcements" prefetch>
               Announcement archive
             </ForumLink>
@@ -69,46 +67,29 @@ function LiveForumAnnouncementDetailPage({ slug }: { slug: string }) {
 
   return (
     <article className="space-y-3">
-      <div className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum bulletin</p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold md:text-2xl">
-            {announcement.title}
-          </h1>
-          <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-            {announcement.categoryName ?? "global"}
+      <ForumPageHeader
+        title={announcement.title}
+        description={`Updated ${formatForumDateTime(announcement.updatedAt)}`}
+        actions={
+          <span className="rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {announcement.categoryName ?? "Global"}
+            {announcement.status === "archived" ? " · Archived" : ""}
           </span>
-          {announcement.status === "archived" ? (
-            <span className="border border-row-border px-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-              archived
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-2 font-mono text-[10px] uppercase text-muted-foreground">
-          Updated {formatForumDateTime(announcement.updatedAt)}
-        </p>
-      </div>
+        }
+      />
 
-      <div className="border-y border-row-border py-3">
+      <div className="max-w-3xl rounded-sm bg-muted/25 p-4 sm:p-6">
         <ForumBody body={announcement.body} />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          asChild
-          className="rounded-none font-mono text-[10px] uppercase"
-          variant="outline"
-        >
+        <Button asChild className="rounded-sm text-xs" variant="outline">
           <ForumLink href="/forum/announcements" prefetch>
             Announcement archive
           </ForumLink>
         </Button>
         {announcement.categorySlug ? (
-          <Button
-            asChild
-            className="rounded-none font-mono text-[10px] uppercase"
-            variant="outline"
-          >
+          <Button asChild className="rounded-sm text-xs" variant="outline">
             <ForumLink href={forumPath(announcement.categorySlug)} prefetch>
               Open board
             </ForumLink>

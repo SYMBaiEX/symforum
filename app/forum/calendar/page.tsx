@@ -1,3 +1,4 @@
+import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
 import { ForumCalendarPage } from "@/components/forum/forum-calendar-page";
 import { normalizeForumCalendarMonthParam } from "@/components/forum/forum-refs";
 import { ForumUtilityNav } from "@/components/forum/forum-primitives";
@@ -22,7 +23,7 @@ export default async function ForumCalendarRoute({ searchParams }: PageProps) {
   const month = normalizeForumCalendarMonthParam(rawMonth);
 
   return (
-    <section className="page-frame page-frame-dense">
+    <section className="page-frame page-frame-dense forum-workspace space-y-4">
       <StructuredData
         data={forumCollectionStructuredData(
           "Forum Calendar",
@@ -31,13 +32,10 @@ export default async function ForumCalendarRoute({ searchParams }: PageProps) {
         )}
       />
       <ForumUtilityNav className="mb-2" />
-      <header className="border-y border-row-border py-2">
-        <p className="page-kicker">Forum calendar</p>
-        <h1 className="mt-1 text-xl font-semibold md:text-2xl">Calendar</h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-5 text-muted-foreground">
-          Community events, meetups, publishing windows, and forum reminders.
-        </p>
-      </header>
+      <ForumPageHeader
+        title="Calendar"
+        description="Community events, meetups, and reminders."
+      />
       <ForumCalendarPage
         enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)}
         month={month}

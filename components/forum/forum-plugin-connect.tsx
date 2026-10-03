@@ -37,7 +37,7 @@ export function ForumPluginConnect({
     const destination = `/agent/forum-connect${externalAuthId ? `?external_auth_id=${encodeURIComponent(externalAuthId)}` : ""}`;
     return (
       <Link
-        className="focus-ring underline"
+        className="focus-ring inline-flex min-h-11 items-center text-sm font-medium text-primary underline"
         href={asRoute(`/signin?redirectTo=${encodeURIComponent(destination)}`)}
       >
         Sign in to connect your forum profile
@@ -54,7 +54,7 @@ export function ForumPluginConnect({
         Start the SYMBaiEX connection from ChatGPT or Codex, then return here to
         choose your profile and permissions.{" "}
         <Link
-          className="focus-ring underline"
+          className="focus-ring inline-flex min-h-11 items-center text-sm font-medium text-primary underline"
           href="/forum/control-panel/agent-access"
         >
           Manage existing forum connections
@@ -83,14 +83,14 @@ export function ForumPluginConnect({
     }
   }
   return (
-    <form onSubmit={connect} className="space-y-5">
+    <form onSubmit={connect} className="forum-workspace space-y-5">
       <ForumConnectionFields
         value={draft}
         onChange={setDraft}
         agents={agents}
         disabled={busy}
       />
-      <p className="text-sm leading-6 text-muted-foreground">
+      <p className="rounded-sm bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
         The selected profile owns the posts, saved items, and inbox this
         connection accesses. Your account ID and contact email are shared with
         WorkOS to finish authorization. You can disconnect or reduce access from
@@ -106,7 +106,7 @@ export function ForumPluginConnect({
         </p>
       )}
       <Button
-        className="rounded-none font-mono text-[10px] uppercase"
+        className="min-h-11 w-full rounded-sm text-sm sm:w-auto"
         type="submit"
         disabled={busy || !draft.capabilities.length}
       >
