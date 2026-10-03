@@ -35,6 +35,11 @@ describe("SYMBaiEX homepage discoverability", () => {
     expect(html).toContain("public documentation MCP");
     expect(html).toContain("machine-readable server card");
     expect(html).toContain("separately owner-approved");
+    expect(html).toContain('toolname="search_symbaiex_public_resources"');
+    expect(html).toContain('action="https://www.symbaiex.com/ask"');
+    expect(html).toContain('method="get"');
+    expect(html).toContain('name="query"');
+    expect(html).not.toContain("toolautosubmit");
   });
 
   test("leaves root-level JSON-LD composition to the application layout", async () => {
