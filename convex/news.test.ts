@@ -171,6 +171,75 @@ describe("news search projection refresh", () => {
     });
   });
 
+  test("refreshes same-day stories in place and preserves projection identity", async () => {
+    const t = setup();
+    await t.mutation(internal.news.storeSnapshot, {
+      snapshotDate: "2026-09-22",
+      startedAt: 1,
+      stories: [
+        {
+          hnItemId: 42,
+          snapshotDate: "2026-09-22",
+          rank: 1,
+          title: "Original signal",
+          score: 10,
+          fetchedAt: 2,
+        },
+      ],
+    });
+    const originalStory = await t.run((ctx) =>
+      ctx.db
+        .query("hnStories")
+        .withIndex("by_snapshotDate_and_rank", (q) =>
+          q.eq("snapshotDate", "2026-09-22"),
+        )
+        .unique(),
+    );
+
+    await t.mutation(internal.news.storeSnapshot, {
+      snapshotDate: "2026-09-22",
+      startedAt: 3,
+      stories: [
+        {
+          hnItemId: 42,
+          snapshotDate: "2026-09-22",
+          rank: 2,
+          title: "Refreshed signal",
+          score: 12,
+          fetchedAt: 4,
+        },
+      ],
+    });
+
+    const { stories, projection } = await t.run(async (ctx) => ({
+      stories: await ctx.db
+        .query("hnStories")
+        .withIndex("by_snapshotDate_and_rank", (q) =>
+          q.eq("snapshotDate", "2026-09-22"),
+        )
+        .collect(),
+      projection: await ctx.db
+        .query("universalSearchProjections")
+        .withIndex("by_recordKey", (q) => q.eq("recordKey", "news_story:42"))
+        .unique(),
+    }));
+
+    expect(stories).toHaveLength(1);
+    expect(stories[0]).toMatchObject({
+      _id: originalStory?._id,
+      rank: 2,
+      title: "Refreshed signal",
+      score: 12,
+      fetchedAt: 4,
+    });
+    expect(projection).toMatchObject({
+      newsStoryId: originalStory?._id,
+      newsSnapshotDate: "2026-09-22",
+      title: "Refreshed signal",
+      updatedAt: 4,
+    });
+  });
+
   test("gets the newest fetched story version without scanning old snapshots", async () => {
     const t = setup();
     await t.run(async (ctx) => {
