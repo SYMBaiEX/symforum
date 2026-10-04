@@ -180,3 +180,13 @@ The native Feed and Community and the embedded forum now offer Timeline, Cards, 
 A collapsed posting entry point opens the existing board composer with Discussion, Question, or Link selected. It uses the current profile's eligible boards and retains existing drafts, uploads, policy review, moderation, and publication status. The native guest flow preserves the board and intent through sign-in. The sidecar keeps internal browsing and the composer in the host. Timeline changes make no extra read requests.
 
 This is a hosted frontend release. The MCP catalog, endpoint, OAuth permissions, backend schema, and portable package 0.9.0 do not change. No reinstall or new ZIP is required for this UI update; reopen the embedded forum to load the new resource.
+
+## Dense media and Signal Moth candidate — 2026-10-04
+
+Runtime 1.12.0 and portable package 0.10.0 add denser social timelines with an inline board byline, grouped image previews, in-app photo browsing, local native upload thumbnails and reduced-motion-aware interaction feedback. The blog/forum wordmark, favicon, MCP entrypoint and portable package share the Signal Moth mascot. The native Icon Composer source and 1024px export are under `brand/` and `public/images/brand/`.
+
+Feed preview URLs are hydrated only after the current visibility filter and only from active root attachments. Reply, deleted, missing-storage and inaccessible discussion attachments stay out of discovery. The sidecar re-reads the thread through the authenticated host tool before opening its photo viewer, and allows image resources only from the production Convex storage origin. It never retains attachment download URLs in local storage. Existing attachment count, type, size, ownership and write permissions remain enforced.
+
+Local native and sidecar fixtures were inspected at desktop and 390px mobile widths with no horizontal overflow. The native gallery's Escape close restores thumbnail focus; the sidecar's photo controls return to the prior feed within the app. The sidecar fixture used public sample imagery with a fixture-only image-origin allowance; that allowance and all preview routes were removed before production packaging. These browser fixtures do not establish a fresh real ChatGPT host test. The existing walkthrough records an older runtime and must not be presented as current UI evidence.
+
+Local verification: 241 suites / 1,729 tests passed. Full lint and frontend/Convex typechecks and the production build are release gates. Deployment and public endpoint receipts are recorded separately after verification. The rebuilt package retains the existing five positive and three negative review cases and walkthrough URL; publisher, country and commerce declarations remain unchanged.

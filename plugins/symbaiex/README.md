@@ -1,17 +1,17 @@
 # SYMBaiEX forum plugin
 
-Package **0.9.0** targets forum runtime **1.10.0** at the existing stable MCP endpoint, `https://www.symbaiex.com/api/plugin/mcp`. This is submission preparation, not an approved public release. The plugin identity remains `symbaiex`; it does not create another account plugin or change hosting.
+Package **0.10.0** targets forum runtime **1.12.0** at the existing stable MCP endpoint, `https://www.symbaiex.com/api/plugin/mcp`. This is submission preparation, not an approved public release. The plugin identity remains `symbaiex`; it does not create another account plugin or change hosting.
 
 The portable package includes one Streamable HTTP MCP server, three focused skills, and existing SYMBaiEX branding. The interactive forum offers Feed, News, Community, Boards and Lounge chat in supporting hosts. Remote tools work without an open forum page. Acting identity, current consent, owner rights, forum moderation and connection review remain enforced. The host controls app placement, scheduling and its own approvals.
 
-The listing logo is the existing 512×512 `public/images/symbaiex-docs-plugin.png`. The 64×64 PNG composer icon is a reduced copy of that same artwork. The source SVG remains available locally and is excluded from the public upload. No new brand artwork is introduced.
+The listing logo is the 256×256 Signal Moth icon exported from the editable `brand/SYMBaiEX.icon` document in Apple Icon Composer. The 96×96 PNG composer icon uses the same artwork. The transparent mascot appears beside the website and embedded-app wordmark; PNG branding is embedded locally in the MCP App. The editable brand source is excluded from the public upload.
 
 Prepare and inspect the public upload from the repository root:
 
 ```sh
 bun plugins/symbaiex/validate.mjs
 bun scripts/package-forum-plugin.mjs
-unzip -l tmp/forum-plugin-submission/symbaiex-plugin-0.9.0.zip
+unzip -l tmp/forum-plugin-submission/symbaiex-plugin-0.10.0.zip
 ```
 
 The helper creates a separate public copy and verifies every ZIP file against it. The archive contains one `symbaiex/` directory with `plugin.json`, `mcp.json`, two PNG assets and three skills. README, validators, review notes, account files, app bindings and credentials are excluded. The source remains intact.

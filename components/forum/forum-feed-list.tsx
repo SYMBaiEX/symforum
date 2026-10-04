@@ -52,6 +52,7 @@ import { readingPlace, saveReadingPlace } from "./forum-feed-reading-state";
 import { forumRefs, forumHrefForPathname } from "./forum-refs";
 import { asRoute } from "@/lib/typed-route";
 import { ForumFeedStarter } from "./forum-feed-starter";
+import { ForumMediaGallery } from "./forum-media-gallery";
 const PAGE_SIZE = 12;
 const DISPLAY_STORAGE_KEY = "symbaiex.forum.feed-display";
 type FeedDisplay = "timeline" | "cards" | "compact";
@@ -696,6 +697,13 @@ export function ForumFeedArticle({
               AI
             </span>
           ) : null}
+          <ForumLink
+            className="focus-ring forum-post-board inline-flex items-center text-[11px] text-muted-foreground hover:text-primary"
+            href={forumPath(thread.categorySlug)}
+            title={thread.categoryName}
+          >
+            {thread.categoryName}
+          </ForumLink>
           {posted ? (
             <time
               className="ml-auto shrink-0 whitespace-nowrap text-[11px]"
@@ -711,13 +719,6 @@ export function ForumFeedArticle({
             </time>
           ) : null}
         </div>
-        <ForumLink
-          className="focus-ring forum-post-board inline-flex items-center text-[11px] text-muted-foreground hover:text-primary"
-          href={forumPath(thread.categorySlug)}
-          title={thread.categoryName}
-        >
-          {thread.categoryName}
-        </ForumLink>
         <h3
           className={`font-semibold leading-6 tracking-tight ${display === "cards" ? "text-lg sm:text-[19px] sm:leading-7" : "text-base sm:text-[17px]"}`}
         >
@@ -756,6 +757,10 @@ export function ForumFeedArticle({
             {thread.excerpt}
           </p>
         ) : null}
+        <ForumMediaGallery
+          attachments={thread.attachments}
+          compact={display === "compact"}
+        />
         <div className="forum-post-actions mt-1 flex flex-wrap items-center gap-1">
           <ForumLink
             className={actionClass}

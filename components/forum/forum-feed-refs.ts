@@ -1,11 +1,15 @@
 import { makeFunctionReference } from "convex/server";
-import type { ForumThreadSummaryRecord } from "./forum-refs";
+import type {
+  ForumThreadSummaryRecord,
+  ForumAttachmentRecord,
+} from "./forum-refs";
 
 export type ForumFeedThread = ForumThreadSummaryRecord & {
   _id: string;
   categorySlug: string;
   categoryName: string;
   excerpt: string;
+  attachments?: ForumAttachmentRecord[];
   source: "community" | "editorial";
   kind?: "discussion" | "question" | "link" | "showcase";
   sourceUrl?: string;

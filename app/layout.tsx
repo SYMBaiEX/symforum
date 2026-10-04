@@ -110,6 +110,7 @@ export const metadata: Metadata = {
     creator: "@symbiex",
   },
   icons: {
+    apple: "/apple-touch-icon.png",
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon.svg", type: "image/svg+xml" },

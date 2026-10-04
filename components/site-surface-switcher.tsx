@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 export function resolveSiteSurfaceForumHref(href: string, hostname: string) {
@@ -66,15 +67,13 @@ export function SiteSurfaceSwitcher({
             className,
           )}
         >
-          {showForumMark ? (
-            <span className="forum-brand-mark hidden size-9 items-center justify-center rounded-xl bg-primary/10 text-primary sm:flex">
-              <MessageSquare
-                className="size-5"
-                strokeWidth={2.5}
-                aria-hidden="true"
-              />
-            </span>
-          ) : null}
+          <Image
+            src="/images/brand/signal-moth.png"
+            width={40}
+            height={40}
+            alt=""
+            className={`symbaiex-mascot size-9 shrink-0 object-contain ${showForumMark ? "forum-brand-mark" : ""}`}
+          />
           <span className="whitespace-nowrap font-extrabold tracking-tight">
             SYMB<span className="text-primary">ai</span>EX
           </span>

@@ -149,6 +149,32 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
 }
 
 describe("forum MCP App resource", () => {
+  test("feed photos reauthorize into an internal gallery, browse locally and return without opening an external page", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Feed")!.fire("click");
+    const attachments = [1,2].map(n => ({ filename: `photo-${n}.png`, altText: `Photo ${n}`, contentType: "image/png", url: `https://strong-bee-384.convex.cloud/api/storage/photo-${n}` }));
+    const unsafe = [{ filename: "unsafe.svg", contentType: "image/svg+xml", url: "javascript:alert(1)" }, { filename: "tracker.png", contentType: "image/png", url: "https://tracker.example/image" }];
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "thread", title: "Photos", slug: "photos", categorySlug: "general", attachments: [...attachments, ...unsafe] }], isDone: true } } }); await app.flush();
+    const grid = app.nodes.get("content")!.querySelector(".media-grid")!;
+    expect(grid.children).toHaveLength(2); expect(grid.children[0].querySelector("img")!.attributes.src).toBe(attachments[0].url);
+    grid.children[0].fire("click"); await app.flush();
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_thread", arguments: { categorySlug: "general", threadSlug: "photos", page: 1, pageSize: 20 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { title: "Photos", attachments }, replies: [] } } }); await app.flush();
+    const calls = app.sent.length;
+    app.nodes.get("content")!.find("Next image")!.fire("click");
+    expect(app.nodes.get("content")!.querySelector(".media-viewer img")!.attributes.src).toBe(attachments[1].url);
+    expect(app.sent).toHaveLength(calls);
+    app.nodes.get("content")!.find("Close photos")!.fire("click"); await app.flush();
+    expect(app.nodes.get("app")!.dataset.view).toBe("feed"); expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+  test("an image viewer cannot reuse preview URLs after the authorized content read removes them", async () => {
+    const app = appHarness(); await app.connect(false); app.nodes.get("navigation")!.find("Feed")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "Photos", slug: "photos", categorySlug: "general", attachments: [{ filename: "photo.png", contentType: "image/png", url: "https://strong-bee-384.convex.cloud/api/storage/photo" }] }], isDone: true } } }); await app.flush();
+    app.nodes.get("content")!.querySelector(".media-tile")!.fire("click"); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { title: "Photos", attachments: [] } } } }); await app.flush();
+    expect(app.nodes.get("content")!.querySelector("img")).toBeNull(); expect(app.nodes.get("content")!.textContent).toContain("no longer available");
+  });
+
   test("news discussion stays inside the sidecar and starts an exact reviewed local action", async () => {
     const app = appHarness(); await app.connect(false);
     app.nodes.get("navigation")!.find("News")!.fire("click");
@@ -1296,7 +1322,7 @@ describe("forum MCP App resource", () => {
   test("ships a portable HTML resource with no external connection or frame permissions", () => {
     expect(FORUM_PLUGIN_APP_RESOURCE.uri).toBe("ui://symbaiex/forum.html");
     expect(FORUM_PLUGIN_APP_RESOURCE.mimeType).toBe("text/html;profile=mcp-app");
-    expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [] });
+    expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp).toEqual({ connectDomains: [], resourceDomains: ["https://strong-bee-384.convex.cloud"], frameDomains: [] });
     expect(FORUM_PLUGIN_APP_HTML.startsWith("<!doctype html>")).toBe(true);
     expect(FORUM_PLUGIN_APP_HTML).not.toMatch(/innerHTML|<iframe|fetch\(|XMLHttpRequest|accessToken|authorization:/i);
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="Forum sections"');

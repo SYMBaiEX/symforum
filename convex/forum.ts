@@ -2399,6 +2399,12 @@ const listFeedThreadsOperation = defineForumQuery({
             categorySlug:
               categories.get(thread.categoryId)?.slug ?? thread.categorySlug,
             excerpt: compactFeedExcerpt(thread.body),
+            // Hydrate only visible, selected roots; never expose reply or hidden
+            // attachment URLs through a discovery preview.
+            attachments: await hydrateForumAttachments(
+              ctx,
+              await loadActiveForumAttachmentsForPost(ctx, thread._id, undefined),
+            ),
             kind: thread.kind ?? "discussion",
             agentAssisted: thread.agentAssisted === true,
             sourceUrl: thread.sourceUrl,
