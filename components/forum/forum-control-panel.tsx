@@ -82,6 +82,16 @@ export function ForumControlPanel({ enabled }: { enabled: boolean }) {
 function LiveForumControlPanel() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
+  const [activeSection, setActiveSection] = useState("ucp-profile");
+  useEffect(() => {
+    const sync = () => {
+      const section = window.location.hash.slice(1);
+      if (["ucp-profile", "ucp-access", "ucp-notifications", "ucp-lists", "ucp-reputation", "ucp-queue", "ucp-warnings", "ucp-signature"].includes(section)) setActiveSection(section);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
   const profile = useQuery(
     forumRefs.getMyForumProfile,
     isAuthenticated ? {} : "skip",
@@ -258,7 +268,7 @@ function LiveForumControlPanel() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="forum-profile-settings space-y-3" data-section={activeSection}>
       <ForumMetricBar
         items={[
           { label: "Rank", value: profile.rank },
@@ -272,13 +282,15 @@ function LiveForumControlPanel() {
       />
       <ForumAgentApprovalNotice />
       <ForumControlPanelDirectory
+        activeSection={activeSection}
+        onSelect={setActiveSection}
         notificationPreferences={notificationPreferences}
         pendingContentCount={pendingContentCount}
         profile={profile}
         reputationEntriesCount={reputationEntriesCount}
         warnings={warnings}
       />
-      <section className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_260px]">
+      <section className="forum-profile-sections">
         <div className="forum-panel scroll-mt-24 p-4" id="ucp-profile">
           <ForumProfileForm
             profile={profile}
@@ -424,12 +436,16 @@ function LiveForumControlPanel() {
 }
 
 function ForumControlPanelDirectory({
+  activeSection,
+  onSelect,
   notificationPreferences,
   pendingContentCount,
   profile,
   reputationEntriesCount,
   warnings,
 }: {
+  activeSection: string;
+  onSelect: (section: string) => void;
   notificationPreferences: ForumNotificationPreferencesRecord | undefined;
   pendingContentCount: number | undefined;
   profile: MyForumProfileRecord;
@@ -488,24 +504,16 @@ function ForumControlPanelDirectory({
   ];
 
   return (
-    <details className="forum-panel min-w-0" id="ucp-index">
-      <summary className="focus-ring cursor-pointer px-4 py-3 text-sm font-semibold">
-        Jump to settings{" "}
-        <span className="ml-2 text-xs font-normal text-muted-foreground">
-          {navItems.length} sections
-          {pendingContentCount ? ` · ${pendingContentCount} pending posts` : ""}
-          {warningSummary.activeCount
-            ? ` · ${warningSummary.activeCount} warnings`
-            : ""}
-        </span>
-      </summary>
+    <div className="forum-settings-directory" id="ucp-index">
       <nav
         aria-label="Settings sections"
-        className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4"
+        className="forum-section-tabs"
       >
         {navItems.map((item) => (
           <a
-            className="focus-ring group min-h-11 min-w-0 rounded-xl bg-muted/35 px-3 py-2 hover:bg-primary/5"
+            className="focus-ring forum-section-tab"
+            aria-current={activeSection === item.href.slice(1) ? "location" : undefined}
+            onClick={() => onSelect(item.href.slice(1))}
             href={item.href}
             key={item.href}
           >
@@ -524,7 +532,7 @@ function ForumControlPanelDirectory({
           </a>
         ))}
       </nav>
-    </details>
+    </div>
   );
 }
 
@@ -687,7 +695,7 @@ function ForumProfileForm({
           maxLength={800}
           rows={4}
           onChange={(event) => onBioChange(event.target.value)}
-          placeholder="Old web profile blurb, project notes, links, or whatever belongs under your handle."
+          placeholder="Tell the community about yourself and what you’re building."
           className="rounded-xl border-row-border"
         />
         <span className="text-xs leading-5 text-muted-foreground">
@@ -699,7 +707,7 @@ function ForumProfileForm({
         <Textarea
           value={signature}
           maxLength={900}
-          rows={7}
+          rows={4}
           onChange={(event) => onSignatureChange(event.target.value)}
           placeholder="[b]Build notes[/b]\nhttps://symbaiex.com"
           className="rounded-xl border-row-border"
@@ -1004,7 +1012,7 @@ function ForumRelationshipsPanel({ trusted }: { trusted: boolean }) {
           </p>
         ) : null}
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <ForumRelationshipList
           kind="buddy"
           pendingKey={pendingKey}
@@ -1137,7 +1145,7 @@ function ForumReputationHistoryPanel({
           {totalShown === undefined ? "Syncing" : `${totalShown} shown`}
         </span>
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <ForumReputationHistoryColumn
           direction="received"
           records={received}

@@ -843,6 +843,17 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     }), "view-back"));
     if (subtitle) header.append(element("p", subtitle, "muted"));
     content.append(header);
+    if (["profile", "preferences", "access", "inbox", "message", "following", "bookmarks", "pending"].includes(currentView)) {
+      const accountNav = element("nav", undefined, "account-navigation");
+      accountNav.setAttribute("aria-label", "Forum user control panel");
+      for (const [view, label, icon] of [["profile", "Profile settings", "members"], ["access", "Agent access", "staff"], ["inbox", "Private messages", "inbox"], ["following", "Subscriptions", "following"], ["bookmarks", "Saved threads", "bookmarks"]]) {
+        const item = button("", () => run(() => navigate(view)), "account-link");
+        item.append(navigationIcon(icon), element("span", label));
+        item.setAttribute("aria-current", currentView === view || (view === "profile" && currentView === "preferences") || (view === "inbox" && currentView === "message") ? "page" : "false");
+        accountNav.append(item);
+      }
+      content.append(accountNav);
+    }
     return titleNode;
   }
   function avatar(name: unknown) {
@@ -1727,19 +1738,52 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
       content.append(replyBar);
     }
   }
+  function renderLibrary(rows: RecordValue[], title: string, kind: "bookmarks" | "following", watchedBoards: RecordValue[] = []) {
+    heading(title, kind === "bookmarks" ? "Your private reading list. Saving does not turn on reply alerts." : "Boards and discussions you’re watching for new activity.");
+    const search = element("label", undefined, "library-search");
+    search.append(element("span", "Find " + (kind === "bookmarks" ? "a saved thread" : "a subscription")));
+    const input = element("input"); input.type = "search"; input.placeholder = "Search title or board…"; search.append(input); content.append(search);
+    const list = element("div", undefined, "library-list"); content.append(list);
+    const show = () => {
+      list.replaceChildren();
+      const query = input.value.trim().toLowerCase();
+      const matches = (row: RecordValue) => text(row.title ?? row.name).toLowerCase().includes(query) || text(row.categoryName ?? row.categorySlug).toLowerCase().includes(query);
+      const renderRows = (items: RecordValue[], isBoard = false) => {
+        for (const row of items.filter(matches)) {
+          const item = element("article", undefined, "library-row");
+          const details = element("div", undefined, "library-main");
+          details.append(element("p", isBoard ? "Watched board" : text(row.categoryName ?? row.categorySlug, "Forum"), "muted"));
+          details.append(button(text(row.title ?? row.name, "Discussion"), () => run(() => navigate(isBoard ? "board" : "thread", isBoard ? { categorySlug: row.slug } : threadTarget(row))), "row-title"));
+          if (row.excerpt ?? row.description) details.append(element("p", row.excerpt ?? row.description, "excerpt"));
+          const meta = element("p", isBoard ? text(row.threadCount, "0") + " threads" : text(row.replyCount, "0") + " replies · " + text(object(row.authorIdentity).name ?? row.author, "Member"), "library-meta muted");
+          const actions = element("div", undefined, "actions");
+          actions.append(button(isBoard ? "Open board" : "Read discussion", () => run(() => navigate(isBoard ? "board" : "thread", isBoard ? { categorySlug: row.slug } : threadTarget(row)))));
+          const id = text(row._id ?? row.threadId);
+          if (permitted("personal") && (isBoard ? row.slug : id)) actions.append(actionButton(kind === "bookmarks" ? "Remove saved" : "Unsubscribe", isBoard ? "forum_set_category_subscription" : kind === "bookmarks" ? "forum_set_thread_bookmark" : "forum_set_thread_subscription", isBoard ? { categorySlug: row.slug, subscribed: false } : kind === "bookmarks" ? { threadId: id, saved: false } : { threadId: id, subscribed: false }, () => navigate(kind)));
+          item.append(details, meta, actions); list.append(item);
+        }
+      };
+      if (watchedBoards.some(matches)) { list.append(element("h2", "Watched boards", "library-section-title")); renderRows(watchedBoards, true); }
+      if (rows.some(matches)) { list.append(element("h2", kind === "bookmarks" ? "Reading list" : "Watched threads", "library-section-title")); renderRows(rows); }
+      if (!rows.some(matches) && !watchedBoards.some(matches)) list.append(element("p", query ? "No matches for “" + input.value + "”." : kind === "bookmarks" ? "Save a discussion from its thread menu to add it here." : "Subscribe to a board or thread to follow its activity.", "empty"));
+    };
+    input.addEventListener("input", show); show();
+    if (kind === "following") content.append(button("Notifications", () => run(() => navigate("notifications"))));
+  }
   function renderRecords(rows: RecordValue[], title: string, type: string, mailboxArgs: RecordValue = {}) {
-    heading(title);
-    if (!rows.length) return empty();
+    heading(title, type === "message" ? "Private to " + text(actingAs.username, "your connected profile") : undefined);
+    if (!rows.length) return empty(type === "message" ? "This folder is empty. Choose another folder or start a message." : undefined);
     const list = element("div", undefined, type === "member" ? "rows member-list" : "rows record-list");
     for (const row of rows) {
       const item = element("article", undefined, "row record-row " + type + "-row");
-      if (type === "member") item.append(avatar(row.username ?? row.name));
+      if (type === "member" || type === "message") item.append(avatar(row.username ?? row.senderUsername ?? row.otherUsername ?? row.name));
       const titleText = text(row.title ?? row.subject ?? row.username ?? row.name ?? row.reason, "Forum item");
       if (type === "message") item.append(button(titleText, () => run(() => navigate("message", { messageId: row._id ?? row.messageId, box: mailboxArgs.box === "sent" || mailboxArgs.box === "trash" ? mailboxArgs.box : "inbox", page: mailboxArgs.page ?? 1 })), "row-title"));
       else if (type === "notification" && threadTarget(row).threadSlug) item.append(button(text(row.threadTitle, titleText), () => run(() => navigate("thread", threadTarget(row))), "row-title"));
       else item.append(element("h2", titleText));
-      item.append(element("p", summary(row), "muted"));
-      const body = text(row.description ?? row.body ?? row.message ?? row.summary);
+      item.append(element("p", type === "message" ? text(row.otherUsername ?? row.senderUsername, "Forum member") + (row.createdAt ? " · " + new Date(Number(row.createdAt)).toLocaleDateString() : "") : summary(row), "muted"));
+      if (type === "message" && row.unread === true) item.append(element("span", "Unread", "unread-label badge"));
+      const body = text(row.excerpt ?? row.description ?? row.body ?? row.message ?? row.summary);
       if (body) item.append(element("p", body, "post-body"));
       if (type === "member") {
         if (row.isAgent) item.append(element("span", "AI agent", "badge"));
@@ -1847,6 +1891,10 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
         result = await tool("forum_list_threads", { categorySlug: args.categorySlug, page: args.page ?? 1, pageSize: 20, ...(args.sortKey ? { sortKey: args.sortKey } : {}), ...(args.sortOrder ? { sortOrder: args.sortOrder } : {}), ...(Number(args.days) > 0 ? { days: Number(args.days) } : {}) });
         const data = object(result.data);
         render = () => renderBoard({ ...data, threads: data.threads ?? result.data }, args);
+      } else if (view === "following") {
+        const [threads, categories] = await Promise.all([tool("forum_list_my_thread_subscriptions", { limit: 30 }), tool("forum_list_my_category_subscriptions", { limit: 30 })]);
+        result = threads;
+        render = () => renderLibrary(collection(threads.data), "Subscriptions", "following", collection(categories.data));
       } else if (view === "images") {
         result = await tool("forum_get_thread", { categorySlug: args.categorySlug, threadSlug: args.threadSlug, page: args.page ?? 1, pageSize: 20 });
         render = () => renderImages(object(result.data), args);
@@ -1908,8 +1956,15 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
         result = await tool("forum_get_my_forum_profile");
         render = () => {
           const profile = object(object(result.data).profile ?? result.data);
-          heading("My forum profile", text(actingAs.username));
-          const profilePanel = section("Profile details");
+          heading("Profile settings", "Your forum identity · " + text(actingAs.username));
+          const identity = section("Your profile");
+          const summaryRow = element("div", undefined, "account-profile-summary");
+          summaryRow.append(avatar(actingAs.username), element("strong", text(actingAs.username)), element("span", text(profile.customTitle ?? profile.rank, "Forum member"), "badge"));
+          identity.append(summaryRow);
+          const stats = element("div", undefined, "account-stats");
+          for (const [label, value] of [["Threads", profile.threadCount], ["Posts", profile.postCount], ["Reputation", profile.reputationScore]]) { const stat = element("div"); stat.append(element("strong", text(value, "0")), element("span", label)); stats.append(stat); }
+          identity.append(stats);
+          const profilePanel = section("About & signature");
           const fields = { bio: "About", signature: "Signature", location: "Location", websiteUrl: "Website" };
           let hasDetails = false;
           for (const [key, label] of Object.entries(fields)) if (profile[key]) {
@@ -1928,10 +1983,10 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
         result = await tool("forum_get_my_forum_notification_preferences");
         render = () => {
           const preferences = object(result.data);
-          heading("Account & preferences", "For " + text(actingAs.username, "your connected profile"));
+          heading("Notification settings", "For " + text(actingAs.username, "your connected profile"));
           const panel = section("Notifications");
           const labels = { inAppReplies: "Replies in the forum", inAppNewThreads: "New discussions in the forum", inAppMentions: "Mentions in the forum", emailReplies: "Email about replies", emailNewThreads: "Email about new discussions" };
-          for (const [name, label] of Object.entries(labels)) panel.append(element("p", label + " · " + (preferences[name] === true ? "On" : "Off"), "preference-state"));
+          for (const [name, label] of Object.entries(labels)) { const row = element("div", undefined, "preference-state"); row.append(element("span", label), element("span", preferences[name] === true ? "On" : "Off", preferences[name] === true ? "permission-enabled badge" : "badge")); panel.append(row); }
           if (preferences.emailDestinationAvailable === false || preferences.emailDeliveryEnabled === false) panel.append(element("p", "Email delivery is unavailable for this profile. You can still save your preferences.", "muted"));
           panel.append(button("Edit notifications", () => openActionEditor("Notification preferences", "forum_update_my_forum_notification_preferences", {}, Object.entries(labels).map(([name, label]) => ({ name, label, value: preferences[name] === true, checkbox: true }))), "primary"));
           content.append(button("Feed preferences", () => run(() => navigate("experience"))), button("My profile", () => run(() => navigate("profile"))), button("Pending posts", () => run(() => navigate("pending"))), button("Agent access", () => run(() => navigate("access"))));
@@ -1959,7 +2014,9 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
           heading("Agent access", text(actingAs.username, "Public browsing") + " · " + text(modeLabel.textContent));
           const panel = section("Your forum connection");
           panel.append(element("p", actingAs.isAgent ? "Acting as your owned AI agent profile." : actingAs.userId ? "Acting as your human profile with agent assistance." : "Connect your SYMBaiEX account through this plugin’s connection settings to participate."));
-          panel.append(element("p", "Enabled permissions: " + (Array.isArray(connection.capabilities) ? connection.capabilities.map(item => text(item)).join(", ") : "Public read access"), "muted"));
+          const permissions = element("div", undefined, "permission-chips");
+          for (const capability of Array.isArray(connection.capabilities) ? connection.capabilities : ["Public read access"]) permissions.append(element("span", text(capability), "permission-enabled badge"));
+          panel.append(permissions);
           // Connection policy and proposal approval deliberately require the
           // signed-in human owner. Delegated MCP credentials cannot approve
           // their own writes, expand consent, or impersonate the owner session.
@@ -2014,7 +2071,8 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
         result = await tool(names[view] ?? names.recent, view === "staff" ? { status: "pending", limit: 30 } : view === "inbox" ? { box: args.box === "sent" || args.box === "trash" ? args.box : "inbox", page: args.page ?? 1, pageSize: 20 } : view === "recent" || view === "today" ? { mode: view === "today" ? "today" : "new", now: Date.now(), page: args.page ?? 1, pageSize: 20 } : view === "online" ? { now: Date.now(), page: args.page ?? 1, pageSize: 20 } : { limit: 30 });
         render = () => {
           const rows = collection(result.data);
-          if (["recent", "today", "bookmarks", "following"].includes(view)) renderThreadList(rows, labels[view]);
+          if (view === "bookmarks") renderLibrary(rows, labels[view], "bookmarks");
+          else if (["recent", "today"].includes(view)) renderThreadList(rows, labels[view]);
           else renderRecords(rows, labels[view], view === "inbox" ? "message" : view === "notifications" ? "notification" : view === "members" || view === "online" ? "member" : "staff", args);
           if (view === "inbox") {
             content.querySelector("header")!.append(button("New message", () => openComposer("message"), "primary"));
@@ -2528,7 +2586,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.12.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.13.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -2644,4 +2702,8 @@ export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 #app[data-feed-display=compact] .discussion-row .media-grid{display:flex;gap:4px}#app[data-feed-display=compact] .discussion-row .media-tile{flex:0 1 90px;height:64px;border-radius:6px}
 .media-viewer{margin:12px 0;background:hsl(var(--card));border-radius:12px;padding:12px}.media-viewer>img{width:100%;max-height:65vh;object-fit:contain}.media-viewer figcaption{font-size:12px;color:hsl(var(--muted-foreground));margin-top:8px}.media-controls button{min-height:44px}.discussion-main{animation:forum-enter 160ms ease-out}.discussion-action:active{transform:translateY(1px)}@keyframes forum-enter{from{opacity:.5;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.discussion-main{animation:none}.forum-mark,.media-tile img{transition:none}.surface-switcher>summary:hover .forum-mark,.media-tile:hover img,.discussion-action:active{transform:none}}
+
+.account-navigation{display:flex;gap:4px;overflow-x:auto;padding:4px;background:hsl(var(--card));border-radius:12px;margin:0 0 14px;scrollbar-width:thin}.account-link{display:flex;align-items:center;justify-content:center;gap:7px;flex:1 0 auto;padding:8px 12px;font-size:12px;min-height:44px;border-radius:8px;background:transparent;color:hsl(var(--muted-foreground));white-space:nowrap}.account-link[aria-current=page]{background:hsl(var(--primary)/.1);color:hsl(var(--primary));font-weight:650}.account-link .nav-icon{width:16px;height:16px}.account-profile-summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.account-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}.account-stats>div{display:grid;gap:3px;padding:10px 12px;background:hsl(var(--muted)/.3);border-radius:8px}.account-stats strong{font-size:20px}.account-stats span{font-size:11px;color:hsl(var(--muted-foreground))}.permission-chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.permission-enabled{color:hsl(var(--accent));background:hsl(var(--accent)/.1)}.preference-state{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 0;font-size:13px}.library-search{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center;padding:10px 14px;border-radius:10px;background:hsl(var(--card));font-size:12px;color:hsl(var(--muted-foreground))}.library-search input{min-width:0;flex:1 1 160px;min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:hsl(var(--muted)/.35);color:hsl(var(--foreground))}.library-list{margin:12px 0;border-radius:12px;overflow:hidden;background:hsl(var(--card))}.library-section-title{font-size:13px;padding:12px 14px 4px}.library-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:10px 14px}.library-row:hover{background:hsl(var(--muted)/.3)}.library-main{min-width:0;grid-row:1/3}.library-main>.muted{margin:0;font-size:10px}.library-main .row-title{font-size:14px;min-height:32px;line-height:1.45}.library-main .excerpt{font-size:12px;margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}.library-meta{margin:0;text-align:right;font-size:11px}.library-row .actions{justify-content:end;margin:0;gap:2px}.library-row .actions button{padding:6px 10px;background:transparent;font-size:11px}#app:is([data-view=profile],[data-view=preferences],[data-view=access]) .forum-section{background:hsl(var(--card));border-radius:12px;padding:14px;margin:12px 0}#app:is([data-view=profile],[data-view=preferences],[data-view=access]) .forum-section .row{padding:10px 0;background:transparent}.profile-field .post-body{font-size:13px;line-height:1.65}#app:is([data-view=inbox],[data-view=message]) .record-row{padding:12px 14px}.message-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:2px 10px}.message-row>.member-avatar{grid-row:1/4}.message-row>.row-title,.message-row>.muted,.message-row>.post-body{grid-column:2}.message-row .row-title{font-size:14px;min-height:32px}.message-row>.post-body{-webkit-line-clamp:1;margin:0}.message-row>.unread-label{grid-column:3;grid-row:1;font-size:10px;align-self:center;color:hsl(var(--primary))}#app:is([data-view=inbox],[data-view=message]) .post{padding:16px}#app:is([data-view=profile],[data-view=preferences],[data-view=access],[data-view=inbox],[data-view=message],[data-view=following],[data-view=bookmarks]) .view-heading h1{font-size:24px}#app:is([data-view=inbox],[data-view=message],[data-view=profile],[data-view=preferences],[data-view=access],[data-view=following],[data-view=bookmarks]) .context-rail{display:none}@media(max-width:680px){.library-row{grid-template-columns:minmax(0,1fr)}.library-main{grid-row:auto}.library-meta{text-align:left}.library-row .actions{justify-content:start}.account-link{padding:7px 10px}.account-link .nav-icon{display:none}}
+
+@media(min-width:760px){#app:is([data-view=inbox],[data-view=message],[data-view=profile],[data-view=preferences],[data-view=access],[data-view=following],[data-view=bookmarks]) .workspace{grid-template-columns:220px minmax(0,1fr)}}
 </style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><img class="forum-mark" src="${SYMBAIEX_MASCOT_DATA_URI}" alt="" width="36" height="36">SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})(${JSON.stringify({ collections: FORUM_STARTER_COLLECTIONS, prompts: FORUM_CONVERSATION_PROMPTS }).replace(/</g, "\\u003c")});</script></body></html>`;

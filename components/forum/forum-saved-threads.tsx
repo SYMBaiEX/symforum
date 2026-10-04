@@ -14,11 +14,9 @@ import {
   getThreadLastPostHref,
   getThreadReplyCount,
   getThreadStartedAt,
-  type ForumCategoryRecord,
   type ForumThreadSummaryRecord,
 } from "@/components/forum/forum-refs";
 import {
-  ForumBreadcrumbs,
   ForumLink,
   ForumLoading,
   ForumStatusBox,
@@ -32,11 +30,6 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const savedCategory: ForumCategoryRecord = {
-  slug: "saved",
-  name: "Saved threads",
-  description: "Your private reading list from across the forum.",
-};
 
 export function ForumSavedThreads({ enabled }: { enabled: boolean }) {
   if (!enabled) {
@@ -55,6 +48,7 @@ export function ForumSavedThreads({ enabled }: { enabled: boolean }) {
 function LiveForumSavedThreads() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
+  const [filterQuery, setFilterQuery] = useState("");
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const bookmarks = useQuery(
@@ -129,8 +123,8 @@ function LiveForumSavedThreads() {
   }
 
   return (
-    <div className="space-y-3">
-      <ForumBreadcrumbs category={savedCategory} />
+    <div className="forum-account-library space-y-3">
+      <label className="forum-library-search"><span>Find in saved threads</span><input className="focus-ring" type="search" placeholder="Search title or board…" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} /></label>
       {actionError ? (
         <p
           className="border border-row-border px-3 py-2.5 text-sm text-muted-foreground"
@@ -157,13 +151,14 @@ function LiveForumSavedThreads() {
       ) : (
         <section className="forum-panel min-w-0">
           <div className="px-4 py-3">
-            <h2 className="text-sm font-semibold">Saved threads</h2>
+            <h2 className="text-sm font-semibold">Reading list <span className="forum-count-badge">{bookmarks.threads.length}</span></h2>
             <p className="mt-1 text-sm text-muted-foreground">
               A private reading list. Saving does not turn on reply alerts.
             </p>
           </div>
-          <div className="space-y-1">
-            {bookmarks.threads.map((thread) => {
+          {filterQuery && !bookmarks.threads.some((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase())) ? <p className="px-4 py-5 text-sm text-muted-foreground" role="status">No saved threads match “{filterQuery}”.</p> : null}
+          <div className="space-y-0">
+            {bookmarks.threads.filter((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase())).map((thread) => {
               const threadId = thread._id;
               return (
                 <SavedThreadRow
@@ -195,46 +190,46 @@ function SavedThreadRow({
   const lastPostHref = getThreadLastPostHref(thread, categorySlug);
 
   return (
-    <div className="forum-list-row grid min-w-0 grid-cols-2 gap-3 p-4 sm:grid-cols-3 [&>div:first-child]:col-span-full [&>div:last-child]:col-span-full">
+    <div className="forum-library-row forum-list-row grid min-w-0 gap-2 px-4 py-3">
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">
           Saved thread / {thread.categoryName ?? categorySlug ?? "Forum"}
         </p>
         <ForumLink
-          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary"
           href={threadHref}
           prefetch
         >
           {thread.title}
         </ForumLink>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-        <div className="bg-background px-3 py-2">
+      <div className="forum-library-counts text-xs text-muted-foreground">
+        <div className="">
           <p>Replies</p>
           <p className="mt-1 text-foreground">
             {formatForumCount(getThreadReplyCount(thread))}
           </p>
         </div>
-        <div className="bg-background px-3 py-2">
+        <div className="">
           <p>Views</p>
           <p className="mt-1 text-foreground">
             {formatForumCount(thread.viewCount)}
           </p>
         </div>
       </div>
-      <div className="text-xs leading-5 text-muted-foreground">
+      <div className="forum-library-activity text-xs leading-5 text-muted-foreground">
         <p>Starter</p>
         <p className="truncate text-foreground">{getThreadAuthor(thread)}</p>
         <p>{formatForumDateTime(getThreadStartedAt(thread))}</p>
       </div>
-      <div className="text-xs leading-5 text-muted-foreground">
+      <div className="forum-library-activity text-xs leading-5 text-muted-foreground">
         <p>Last post</p>
         <p className="truncate text-foreground">
           {getThreadLastAuthor(thread)}
         </p>
         <p>{formatForumDateTime(getThreadLastActivityAt(thread))}</p>
       </div>
-      <div className="flex flex-wrap gap-2 md:justify-end">
+      <div className="forum-library-actions flex flex-wrap gap-1">
         <Button
           asChild
           className="h-7 rounded-xl text-xs"

@@ -34,7 +34,7 @@ export function forumPluginHeaders(request: Request) {
     "Access-Control-Expose-Headers":
       "www-authenticate, mcp-server-name, mcp-server-version, mcp-protocol-version, retry-after",
     "Mcp-Server-Name": "symbaiex-forum",
-    "Mcp-Server-Version": "1.12.0",
+    "Mcp-Server-Version": "1.13.0",
   });
   const origin = request.headers.get("origin");
   if (origin && isAllowedForumPluginOrigin(request))

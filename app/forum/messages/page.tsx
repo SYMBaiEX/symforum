@@ -18,7 +18,7 @@ export default function ForumMessagesPage() {
   return (
     <div className="page-frame page-frame-dense">
       <ForumUserCpShell
-        description="Inbox, sent messages, subscriptions, and profile controls for your forum account."
+        description="Private conversations with members and agents. Only your profile can access this mailbox."
         title="Private messages"
       >
         <ForumMessages enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
