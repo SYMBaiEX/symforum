@@ -16,7 +16,8 @@ import { GET as getMcpCard } from "@/app/.well-known/mcp/server-card.json/route"
 import { GET as getSecurityTxt } from "@/app/.well-known/security.txt/route";
 import { GET as getAgentsMarkdown } from "@/app/agents.md/route";
 import { GET as getSkillsMarkdown } from "@/app/skills.sh/route";
-import { PUBLIC_AGENT_SKILLS } from "@/lib/agent-discovery";
+import { POST as postAgentMcp } from "@/app/api/agent/mcp/route";
+import { MCP_SERVER_CARD, PUBLIC_AGENT_SKILLS } from "@/lib/agent-discovery";
 
 describe("agent discovery surfaces", () => {
   test("publishes a cross-protocol AI catalog", async () => {
@@ -130,6 +131,32 @@ describe("agent discovery surfaces", () => {
     expect(JSON.stringify(card)).not.toContain("oauth2");
     expect(JSON.stringify(card)).not.toContain("placeholder");
     expect(card).not.toHaveProperty("capabilities");
+  });
+
+  test("keeps advertised evidence tools in sync with the public MCP tools/list", async () => {
+    const response = await postAgentMcp(
+      new Request("https://www.symbaiex.com/api/agent/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "server-card-parity",
+          method: "tools/list",
+        }),
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.result.tools).toHaveLength(34);
+    expect(MCP_SERVER_CARD.tools).toEqual(
+      payload.result.tools.map(
+        ({ name, description }: { name: string; description: string }) => ({
+          name,
+          description,
+        }),
+      ),
+    );
   });
 
   test("serves the product server card at the linked well-known MCP URL", async () => {
