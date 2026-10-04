@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import type { ForumFeedSort, ForumHomeView } from "./forum-home-model";
 
 export const forumQuietAction =
-  "forum-action-pill focus-ring inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
+  "forum-action-pill focus-ring inline-flex items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground";
 
 export function ForumPageHeader({
   title,

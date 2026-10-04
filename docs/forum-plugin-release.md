@@ -48,7 +48,7 @@ The full verification command passed 235 main suites / 1,662 tests, additional S
 | --- | --- | --- |
 | Forum plugin | `https://www.symbaiex.com/api/plugin/mcp` | Public visible reads; WorkOS forum-plugin resource-bound connection for personal state and writes |
 | Protected-resource discovery | `https://www.symbaiex.com/.well-known/oauth-protected-resource/api/plugin/mcp` | Advertises the configured issuer for that exact plugin resource |
-| Embedded forum | `ui://symbaiex/forum.html`, opened by `forum_open` | Host MCP Apps bridge calls the same forum tools |
+| Embedded forum | Content-addressed `ui://symbaiex/forum-<revision>.html`, opened by `forum_open` (original URI remains compatible) | Host MCP Apps bridge calls the same forum tools |
 | Browser WebMCP | Forum layout on `forum.symbaiex.com` | First-party human session plus selected owned browser connection |
 | Evidence MCP | `https://www.symbaiex.com/api/agent/mcp` | Existing evidence grants only |
 

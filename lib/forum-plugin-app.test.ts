@@ -1371,7 +1371,7 @@ describe("forum MCP App resource", () => {
     expect(nativeCss).toContain('@import "../styles/forum-shared.css"');
     expect(FORUM_PLUGIN_APP_HTML).toContain(sharedCss);
     expect(FORUM_PLUGIN_APP_HTML).toContain('data-forum-plugin');
-    expect(sharedCss).toContain('.dark .forum-app-shell, :root[data-forum-plugin][data-theme=dark]');
+    expect(sharedCss).toContain('.dark .forum-app-shell, .dark [data-surface=forum], :root[data-forum-plugin][data-theme=dark]');
     expect(sharedCss).toContain(':is(.forum-media-grid,.media-grid)');
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="SYMBaiEX Forum"');
   });

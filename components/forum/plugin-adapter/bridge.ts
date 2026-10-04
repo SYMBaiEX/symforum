@@ -176,7 +176,7 @@ export class ForumHostBridge {
           "ui/initialize",
           {
             protocolVersion: "2026-01-26",
-            appInfo: { name: "SYMBaiEX Forum", version: "2.0.0" },
+            appInfo: { name: "SYMBaiEX Forum", version: "2.1.0" },
             appCapabilities: { availableDisplayModes: ["fullscreen"] },
           },
           this.host.callTool ? 2000 : 20_000,

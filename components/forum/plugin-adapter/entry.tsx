@@ -286,7 +286,7 @@ function App() {
         >
           <ForumLayout>
             <div
-              data-native-forum-runtime="2.0.0"
+              data-native-forum-runtime="2.1.0"
               data-connection-revision={revision}
             >
               {error ? (

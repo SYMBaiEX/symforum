@@ -229,7 +229,7 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
           </Button>
         </ForumSectionHeader>
       </div>
-      <div className="mb-3 flex min-w-0 items-center gap-2 rounded-xl bg-card px-3">
+      <div className="forum-search-field mb-3 flex min-w-0 items-center gap-2 rounded-xl bg-card px-3">
         <Search
           className="size-4 shrink-0 text-muted-foreground"
           aria-hidden="true"

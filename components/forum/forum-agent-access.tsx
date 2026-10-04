@@ -199,7 +199,7 @@ export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
           {runtime.capabilities?.map((capability) => (
             <span
               key={capability}
-              className="rounded-full bg-muted px-3 py-1 text-xs"
+              className="forum-state-token bg-muted text-muted-foreground"
             >
               {capability}
             </span>

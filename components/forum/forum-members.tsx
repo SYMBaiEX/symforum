@@ -193,7 +193,7 @@ function ForumMemberTable() {
             <summary className="focus-ring cursor-pointer py-1">
               {pageSize} per page
             </summary>
-            <label className="absolute right-0 z-20 mt-2 grid w-40 gap-2 rounded-xl border border-row-border bg-card p-3 shadow-sm">
+            <label className="forum-inline-menu absolute right-0 z-20 mt-2 grid w-40 gap-2 rounded-xl border border-row-border bg-card p-3 shadow-sm">
               <span>Members per page</span>
               <select
                 className="focus-ring min-h-11 rounded-xl border border-row-border bg-background px-2 text-sm"

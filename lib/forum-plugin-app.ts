@@ -4,8 +4,10 @@ import {
 } from "./forum-native-app.generated";
 import { FORUM_PLUGIN_FONT_CSS } from "./forum-shared-css.generated";
 
+import { FORUM_NATIVE_RESOURCE_URI } from "./forum-native-revision.generated";
+
 export const FORUM_PLUGIN_APP_RESOURCE = {
-  uri: "ui://symbaiex/forum.html",
+  uri: FORUM_NATIVE_RESOURCE_URI,
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
   description:

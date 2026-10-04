@@ -69,7 +69,7 @@ if (!resource || !metadataUrl)
   );
 const resourcePath = new URL(resource).pathname;
 const metadataPath = new URL(metadataUrl).pathname;
-const appUri = "ui://symbaiex/forum.html";
+let appUri;
 const evidenceResource = "https://www.symbaiex.com/api/agent/mcp";
 const checks = [];
 const discoveredIds = { boardIds: [], threadIds: [] };
@@ -280,8 +280,9 @@ await check("complete typed forum tool catalog", async () => {
     }
   }
   const open = requireTool("forum_open");
+  appUri = open._meta?.ui?.resourceUri;
   assert(
-    open._meta?.ui?.resourceUri === appUri &&
+    typeof appUri === "string" && /^ui:\/\/symbaiex\/forum-[a-f0-9]{12}\.html$/.test(appUri) &&
       open._meta?.["openai/ui"]?.entrypoints?.some(
         (entry) => entry.type === "global",
       ),

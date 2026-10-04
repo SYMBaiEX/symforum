@@ -210,7 +210,7 @@ export function ForumNavigationLayout({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="focus-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
+                className="forum-primary-action focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground sm:px-4"
                 aria-label="Create post"
               >
                 <Plus aria-hidden="true" className="size-[18px]" />

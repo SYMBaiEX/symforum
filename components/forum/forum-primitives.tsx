@@ -20,6 +20,7 @@ import {
   ReactNode,
   useEffect,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -106,7 +107,9 @@ export function ForumStatusBox({
         accent === "magenta" && "border-primary/50 bg-primary/10",
       )}
     >
-      <p className="forum-status-title text-sm font-semibold text-foreground">{title}</p>
+      <p className="forum-status-title text-sm font-semibold text-foreground">
+        {title}
+      </p>
       <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
         {body}
       </p>
@@ -710,7 +713,12 @@ export function ForumUserCpShell({
     <div className="forum-account-space">
       <ForumChrome />
       <header className="forum-account-heading">
-        <ForumLink href="/forum" className="focus-ring text-xs text-muted-foreground hover:text-foreground">← Back to forum</ForumLink>
+        <ForumLink
+          href="/forum"
+          className="focus-ring text-xs text-muted-foreground hover:text-foreground"
+        >
+          ← Back to forum
+        </ForumLink>
         <h1>{title}</h1>
         <p>{description}</p>
       </header>
@@ -914,12 +922,12 @@ export function ForumThreadPrefixBadge({
   return (
     <span
       className={cn(
-        "inline-flex min-h-5 shrink-0 items-center px-1.5 text-xs leading-none text-muted-foreground",
+        "forum-prefix-badge inline-flex min-h-5 shrink-0 items-center px-1.5 text-xs leading-none text-muted-foreground",
         className,
       )}
       style={
         prefix.color
-          ? { borderColor: prefix.color, color: prefix.color }
+          ? ({ "--forum-prefix-color": prefix.color } as CSSProperties)
           : undefined
       }
     >
@@ -964,7 +972,7 @@ function ForumStateToken({
   return (
     <span
       className={cn(
-        "inline-flex min-h-5 items-center px-1.5 text-xs leading-none",
+        "forum-state-token inline-flex min-h-5 items-center px-1.5 text-xs leading-none",
         tone === "muted" && "bg-muted/50 text-muted-foreground",
         tone === "primary" && "bg-primary/10 text-primary",
         tone === "primarySolid" && "bg-primary text-primary-foreground",

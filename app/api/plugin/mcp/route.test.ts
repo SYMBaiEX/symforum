@@ -5,8 +5,13 @@ vi.mock("@/lib/forum-plugin-app", () => ({
     name: "symbaiex-forum",
     mimeType: "text/html;profile=mcp-app",
     _meta: {
-      ui: { csp: { connectDomains: [], resourceDomains: [], frameDomains: [] } },
-      "openai/ui": { availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" },
+      ui: {
+        csp: { connectDomains: [], resourceDomains: [], frameDomains: [] },
+      },
+      "openai/ui": {
+        availableDisplayModes: ["fullscreen"],
+        preferredDisplayMode: "fullscreen",
+      },
     },
   },
   FORUM_PLUGIN_APP_HTML: "<!doctype html><title>Forum</title>",
@@ -17,6 +22,7 @@ vi.mock("@/lib/forum-plugin-files", () => ({
   ),
 }));
 import { GET, POST } from "./route";
+import { FORUM_PLUGIN_APP_URI } from "@/lib/forum-plugin-catalog";
 import { FORUM_PLUGIN_RESOURCE } from "@/lib/forum-plugin-contract";
 import { importForumPluginAttachments } from "@/lib/forum-plugin-files";
 function request(
@@ -60,20 +66,64 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("forum MCP protocol boundary", () => {
+  test.each([
+    FORUM_PLUGIN_APP_URI,
+    "ui://symbaiex/forum.html",
+    "ui://symbaiex/forum-012345abcdef.html",
+  ])(
+    "refreshes current and installed resource URI %s without changing correlation",
+    async (uri) => {
+      const response = await POST(request("resources/read", { uri }));
+      expect((await response.json()).result.contents[0]).toMatchObject({
+        uri,
+        text: expect.stringContaining("<!doctype html>"),
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+  test.each([
+    "ui://other/forum.html",
+    "ui://symbaiex/forum-bad.html",
+    "ui://symbaiex/forum.html?token=secret",
+  ])("rejects unrelated resource URI %s", async (uri) => {
+    expect(
+      await (await POST(request("resources/read", { uri }))).json(),
+    ).toMatchObject({ error: { code: -32602 } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
   test("advertises canonical entrypoints and preserves resource-only display preferences", async () => {
-    const initialized = await POST(request("initialize", { protocolVersion: "2025-06-18" }));
+    const initialized = await POST(
+      request("initialize", { protocolVersion: "2025-06-18" }),
+    );
     const server = (await initialized.json()).result.serverInfo;
-    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.0.0" });
+    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.1.0" });
     const listed = await POST(request("tools/list"));
     const tools = (await listed.json()).result.tools;
-    const opener = tools.find((tool: { name: string }) => tool.name === "forum_open");
-    expect(opener).toMatchObject({ title: "SYMBaiEX Forum", icons: server.icons });
-    expect(opener._meta["openai/ui"]).toEqual({ entrypoints: [{ type: "global" }, { type: "thread" }] });
+    const opener = tools.find(
+      (tool: { name: string }) => tool.name === "forum_open",
+    );
+    expect(opener).toMatchObject({
+      title: "SYMBaiEX Forum",
+      icons: server.icons,
+    });
+    expect(opener._meta["openai/ui"]).toEqual({
+      entrypoints: [{ type: "global" }, { type: "thread" }],
+    });
     for (const method of ["resources/list", "resources/read"]) {
-      const response = await POST(request(method, method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}));
+      const response = await POST(
+        request(
+          method,
+          method === "resources/read"
+            ? { uri: "ui://symbaiex/forum.html" }
+            : {},
+        ),
+      );
       const result = (await response.json()).result;
       const resource = (result.resources ?? result.contents)[0];
-      expect(resource._meta["openai/ui"]).toEqual({ availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" });
+      expect(resource._meta["openai/ui"]).toEqual({
+        availableDisplayModes: ["fullscreen"],
+        preferredDisplayMode: "fullscreen",
+      });
     }
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -102,7 +152,7 @@ describe("forum MCP protocol boundary", () => {
     expect(
       tools.find((tool: { name: string }) => tool.name === "forum_open")._meta
         .ui.resourceUri,
-    ).toBe("ui://symbaiex/forum.html");
+    ).toBe(FORUM_PLUGIN_APP_URI);
     const resource = await POST(
       request("resources/read", { uri: "ui://symbaiex/forum.html" }),
     );
@@ -111,45 +161,191 @@ describe("forum MCP protocol boundary", () => {
     );
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
-  test.each(["legacy", "modern"])("%s forum launch returns an anonymous shell without reading content", async (protocol) => {
-    const meta = protocol === "modern" ? { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } : {};
-    const headers = protocol === "modern" ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "forum_open" } : undefined;
-    const response = await POST(request("tools/call", { name: "forum_open", arguments: {}, ...meta }, undefined, headers));
-    expect(response.headers.get("Mcp-Server-Version")).toBe("2.0.0");
-    expect(await response.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: null, data: {} } } });
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
+  test.each(["legacy", "modern"])(
+    "%s forum launch returns an anonymous shell without reading content",
+    async (protocol) => {
+      const meta =
+        protocol === "modern"
+          ? {
+              _meta: {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+              },
+            }
+          : {};
+      const headers =
+        protocol === "modern"
+          ? {
+              "mcp-protocol-version": "2026-07-28",
+              "mcp-method": "tools/call",
+              "mcp-name": "forum_open",
+            }
+          : undefined;
+      const response = await POST(
+        request(
+          "tools/call",
+          { name: "forum_open", arguments: {}, ...meta },
+          undefined,
+          headers,
+        ),
+      );
+      expect(response.headers.get("Mcp-Server-Version")).toBe("2.1.0");
+      expect(await response.json()).toMatchObject({
+        result: {
+          structuredContent: { status: "completed", actingAs: null, data: {} },
+        },
+      });
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    },
+  );
 
   test("authenticated launch validates status while all content reads retain normal dispatch", async () => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const command = JSON.parse(String(init?.body));
-      return command.operation === "status" ? Response.json({ status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } }) : Response.json({ code: "FORUM_RATE_LIMITED", error: "Too many forum reads.", quotaReason: "rate-limited", retryAfter: 1500 }, { status: 429, headers: { "Retry-After": "2" } });
+      return command.operation === "status"
+        ? Response.json({
+            status: "completed",
+            actingAs: { userId: "owner" },
+            data: {
+              policyVersion: 2,
+              usagePolicy: {
+                scope: "forum",
+                monthlyLimit: null,
+                readRequestsPerMinute: 600,
+                writeRequestsPerMinute: 120,
+                ownerScoped: true,
+              },
+            },
+          })
+        : Response.json(
+            {
+              code: "FORUM_RATE_LIMITED",
+              error: "Too many forum reads.",
+              quotaReason: "rate-limited",
+              retryAfter: 1500,
+            },
+            { status: 429, headers: { "Retry-After": "2" } },
+          );
     });
-    const launch = await POST(request("tools/call", { name: "forum_open", arguments: {} }, token()));
-    expect(await launch.json()).toMatchObject({ result: { structuredContent: { status: "completed", actingAs: { userId: "owner" }, data: { policyVersion: 2, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } } } });
-    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ operation: "status", args: {} });
-    for (const name of ["forum_overview", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages", "forum_search"]) {
-      const response = await POST(request("tools/call", { name, arguments: name === "forum_search" ? { query: "news" } : ["forum_list_feed_threads", "forum_list_chat_messages"].includes(name) ? { paginationOpts: { numItems: 12, cursor: null } } : {} }, token()));
-      expect(await response.json()).toMatchObject({ result: { isError: true, structuredContent: { quotaReason: "rate-limited", retryAfter: 1500 } } });
+    const launch = await POST(
+      request("tools/call", { name: "forum_open", arguments: {} }, token()),
+    );
+    expect(await launch.json()).toMatchObject({
+      result: {
+        structuredContent: {
+          status: "completed",
+          actingAs: { userId: "owner" },
+          data: {
+            policyVersion: 2,
+            usagePolicy: {
+              scope: "forum",
+              monthlyLimit: null,
+              readRequestsPerMinute: 600,
+              writeRequestsPerMinute: 120,
+              ownerScoped: true,
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual(
+      { operation: "status", args: {} },
+    );
+    for (const name of [
+      "forum_overview",
+      "forum_list_feed_threads",
+      "forum_list_news_feed",
+      "forum_list_chat_messages",
+      "forum_search",
+    ]) {
+      const response = await POST(
+        request(
+          "tools/call",
+          {
+            name,
+            arguments:
+              name === "forum_search"
+                ? { query: "news" }
+                : [
+                      "forum_list_feed_threads",
+                      "forum_list_chat_messages",
+                    ].includes(name)
+                  ? { paginationOpts: { numItems: 12, cursor: null } }
+                  : {},
+          },
+          token(),
+        ),
+      );
+      expect(await response.json()).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: { quotaReason: "rate-limited", retryAfter: 1500 },
+        },
+      });
       expect(response.headers.get("Retry-After")).toBe("2");
-      expect(JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body)).operation).not.toBe("status");
+      expect(
+        JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body))
+          .operation,
+      ).not.toBe("status");
     }
   });
 
-  test.each([401, 403])("forum launch preserves upstream authorization failure %i without a guest fallback", async (status) => {
-    vi.mocked(fetch).mockResolvedValue(Response.json({ error: "Denied" }, { status }));
-    const response = await POST(request("tools/call", { name: "forum_open", arguments: {} }, token()));
-    expect(response.status).toBe(status);
-    expect(response.headers.get("www-authenticate")).toContain(status === 401 ? "invalid_token" : "insufficient_scope");
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
-  });
+  test.each([401, 403])(
+    "forum launch preserves upstream authorization failure %i without a guest fallback",
+    async (status) => {
+      vi.mocked(fetch).mockResolvedValue(
+        Response.json({ error: "Denied" }, { status }),
+      );
+      const response = await POST(
+        request("tools/call", { name: "forum_open", arguments: {} }, token()),
+      );
+      expect(response.status).toBe(status);
+      expect(response.headers.get("www-authenticate")).toContain(
+        status === 401 ? "invalid_token" : "insufficient_scope",
+      );
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    },
+  );
 
   test("anonymous launcher still rejects malformed credentials, wrong audience, arguments and origin", async () => {
-    for (const authorization of ["Basic malformed", token("https://www.symbaiex.com/api/agent/mcp")]) {
-      expect((await POST(request("tools/call", { name: "forum_open", arguments: {} }, authorization))).status).toBe(401);
+    for (const authorization of [
+      "Basic malformed",
+      token("https://www.symbaiex.com/api/agent/mcp"),
+    ]) {
+      expect(
+        (
+          await POST(
+            request(
+              "tools/call",
+              { name: "forum_open", arguments: {} },
+              authorization,
+            ),
+          )
+        ).status,
+      ).toBe(401);
     }
-    expect((await POST(request("tools/call", { name: "forum_open", arguments: {} }, undefined, { origin: "https://evil.example" }))).status).toBe(403);
-    expect(await (await POST(request("tools/call", { name: "forum_open", arguments: { categorySlug: "general" } }))).json()).toMatchObject({ error: { code: -32602 } });
+    expect(
+      (
+        await POST(
+          request(
+            "tools/call",
+            { name: "forum_open", arguments: {} },
+            undefined,
+            { origin: "https://evil.example" },
+          ),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      await (
+        await POST(
+          request("tools/call", {
+            name: "forum_open",
+            arguments: { categorySlug: "general" },
+          }),
+        )
+      ).json(),
+    ).toMatchObject({ error: { code: -32602 } });
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
@@ -375,34 +571,60 @@ describe("forum MCP protocol boundary", () => {
   test.each(["tools/list", "resources/list", "resources/read"])(
     "modern %s supplies scan-required cache metadata for its static public response",
     async (method) => {
-      const response = await POST(request(method, {
-        ...(method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}),
-        _meta: {
-          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-          "io.modelcontextprotocol/clientCapabilities": {},
-        },
-      }, undefined, {
-        "mcp-protocol-version": "2026-07-28",
-        "mcp-method": method,
-        ...(method === "resources/read" ? { "mcp-name": "ui://symbaiex/forum.html" } : {}),
-      }));
+      const response = await POST(
+        request(
+          method,
+          {
+            ...(method === "resources/read"
+              ? { uri: "ui://symbaiex/forum.html" }
+              : {}),
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+              "io.modelcontextprotocol/clientCapabilities": {},
+            },
+          },
+          undefined,
+          {
+            "mcp-protocol-version": "2026-07-28",
+            "mcp-method": method,
+            ...(method === "resources/read"
+              ? { "mcp-name": "ui://symbaiex/forum.html" }
+              : {}),
+          },
+        ),
+      );
       expect(response.status).toBe(200);
       expect(response.headers.get("mcp-protocol-version")).toBe("2026-07-28");
       const { result, error } = await response.json();
       expect(error).toBeUndefined();
-      expect(result).toMatchObject({ resultType: "complete", ttlMs: 300_000, cacheScope: "public" });
-      expect(result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("symbaiex-forum");
-      if (method === "resources/read") expect(result.contents[0].text).toContain("<!doctype html>");
+      expect(result).toMatchObject({
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: "public",
+      });
+      expect(result._meta["io.modelcontextprotocol/serverInfo"].name).toBe(
+        "symbaiex-forum",
+      );
+      if (method === "resources/read")
+        expect(result.contents[0].text).toContain("<!doctype html>");
       expect(fetch).not.toHaveBeenCalled();
     },
   );
   test.each(["tools/list", "resources/list", "resources/read"])(
     "legacy %s retains its original envelope without modern cache metadata",
     async (method) => {
-      const response = await POST(request(method, method === "resources/read" ? { uri: "ui://symbaiex/forum.html" } : {}));
+      const response = await POST(
+        request(
+          method,
+          method === "resources/read"
+            ? { uri: "ui://symbaiex/forum.html" }
+            : {},
+        ),
+      );
       expect(response.status).toBe(200);
       const { result } = await response.json();
-      for (const field of ["resultType", "ttlMs", "cacheScope"]) expect(result).not.toHaveProperty(field);
+      for (const field of ["resultType", "ttlMs", "cacheScope"])
+        expect(result).not.toHaveProperty(field);
       expect(fetch).not.toHaveBeenCalled();
     },
   );
@@ -427,7 +649,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "2.0.0",
+            version: "2.1.0",
           },
         },
       },

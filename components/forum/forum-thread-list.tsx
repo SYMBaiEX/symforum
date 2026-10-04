@@ -610,7 +610,7 @@ function LiveForumThreadList({
         <summary className="forum-action-pill focus-ring inline-flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground hover:text-foreground">
           Board tools <ChevronDown className="size-3.5" aria-hidden="true" />
         </summary>
-        <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-xl bg-card p-2 shadow-lg">
+        <div className="forum-inline-menu absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-xl bg-card p-2 shadow-lg">
           <Button
             className="forum-action-pill min-h-11 rounded-full px-4 text-xs"
             type="button"
@@ -1237,7 +1237,7 @@ function ForumBoardTools({
           aria-hidden="true"
         />
       </summary>
-      <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-card p-3 shadow-lg">
+      <div className="forum-inline-menu absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-card p-3 shadow-lg">
         <p className="mb-2 text-xs leading-5 text-muted-foreground">
           {filterSummary} · {sortLabel} · {orderLabel} · {dayLabel}
         </p>
