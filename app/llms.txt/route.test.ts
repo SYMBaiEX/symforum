@@ -42,6 +42,7 @@ describe("llms agent operating contract", () => {
     expect(content).toContain("MCP well-known discovery card");
     expect(content).toContain("https://www.symbaiex.com/.well-known/mcp");
     expect(content).toContain("https://www.symbaiex.com/developers/webmcp");
+    expect(content).toContain("https://www.symbaiex.com/developers/cli");
     expect(content).toContain("/.well-known/mcp/server-card.json");
     expect(content).toContain("/mcp/server-card");
     expect(content).toContain("/.well-known/agent-skills");

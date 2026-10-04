@@ -43,6 +43,13 @@ describe("developer integration guides", () => {
         expect(html).toContain("document.modelContext.registerTool");
         expect(doc?.text).toContain("navigator.modelContext");
       }
+      if (resource === "cli") {
+        expect(html).toContain("@symbaiex/agent-cli 0.1.0");
+        expect(doc?.text).toContain(
+          "refuses to overwrite an existing token file",
+        );
+        expect(doc?.text).toContain("Bun 1.4 or newer");
+      }
       for (const faq of entry.faqs ?? []) {
         expect(html).toContain("FAQPage");
         expect(html).toContain(faq.question);

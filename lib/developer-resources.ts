@@ -46,6 +46,43 @@ export const DEVELOPER_RESOURCES = {
       ["Developer guide", "/developers"],
     ],
   },
+  cli: {
+    title: "SYMBaiEX Bun CLI",
+    summary:
+      "Install the published @symbaiex/agent-cli package and use its current 0.1.0 release for common public API reads without configuring a Convex URL.",
+    details: [
+      "The published npm release is @symbaiex/agent-cli 0.1.0. With Bun 1.4 or newer, run bunx @symbaiex/agent-cli@0.1.0 manifest to inspect the public API manifest, bunx @symbaiex/agent-cli@0.1.0 quota to inspect the authorized account's quota, or bunx @symbaiex/agent-cli@0.1.0 universal-search \"zero trust\" to search public evidence. Run the package's help command for its supported command list. Pin the exact 0.1.0 version in repeatable automation because 0.x releases can introduce breaking changes.",
+      "The CLI defaults to the canonical https://www.symbaiex.com API origin and never needs a Convex deployment URL. Its --origin option is limited to the platform's canonical origins in production; an exact localhost origin is available only for local development. Read the live API manifest and OpenAPI contract before relying on a capability, because the server's feature flags, scopes, and quotas are authoritative.",
+      "For authenticated use, pipe an owner-approved access token to the login command through standard input; do not put a token in a command-line argument or prompt. The CLI writes it to ~/.config/symbaiex/token with restrictive 0600 permissions, creates a private parent directory, and refuses to overwrite an existing token file. Use --token-file to select a different secret-managed path. Commands do not print the token. Protect the token file and revoke the grant when it is no longer needed.",
+      "The current 0.1.0 README focuses on manifest and quota discovery, evidence search, and webhook operational reads. Its webhook status and test commands require an explicit --idempotency-key; they are not permission to modify a subscription without the owner-approved scope. For Ed25519 challenge signing, token refresh, binary artifacts, MCP, and other write operations, the package README directs integrators to the TypeScript or Python SDK so the caller controls signing, secret storage, and retry policy.",
+    ],
+    faqs: [
+      {
+        question: "Which Bun CLI release is currently published?",
+        answer:
+          "The npm registry currently lists @symbaiex/agent-cli 0.1.0. Pin that version for reproducible use and check the package page before upgrading.",
+      },
+      {
+        question: "Does the CLI require a Convex URL or expose my token?",
+        answer:
+          "No. It targets the public SYMBaiEX origin by default, stores an approved token in a private local file when you log in through standard input, and does not print the token.",
+      },
+    ],
+    links: [
+      [
+        "Published CLI package on npm",
+        "https://www.npmjs.com/package/@symbaiex/agent-cli",
+      ],
+      [
+        "CLI package README and source",
+        "https://github.com/SYMBaiEX/symbaiex-agent-clients/tree/main/packages/agent-cli",
+      ],
+      ["Live API manifest", "/api/agent"],
+      ["OpenAPI contract", "/api/agent/openapi.json"],
+      ["Authentication guide", "/developers/authentication"],
+      ["CLI quickstart on the developer index", "/developers"],
+    ],
+  },
   openapi: {
     title: "SYMBaiEX OpenAPI documentation",
     summary:

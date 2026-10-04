@@ -64,6 +64,7 @@ describe("SYMBaiEX developer resources page", () => {
       "api",
       "openapi",
       "authentication",
+      "cli",
       "mcp",
       "webhooks",
       "api-lifecycle",
