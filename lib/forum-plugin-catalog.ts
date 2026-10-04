@@ -65,6 +65,10 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
+  if (operation === "overview")
+    return "Read the forum home summary: visible boards and their section hierarchy, active global announcements, recently active threads, board/thread/post totals and community statistics. Use this to browse the forum landing page; read full discussions with forum_get_thread. Anonymous calls include public boards only, and connected calls respect the selected profile's visibility. Takes no arguments and makes no changes.";
+  if (operation === "adminOverview")
+    return "Read the forum staff dashboard: boards with assigned moderators, recent threads and replies, and counts of pending, hidden, pinned and locked content. Results respect the owner's current staff and board authority, and pending-content counts are bounded. Requires a connected profile with explicitly consented forum administration access. Takes no arguments and makes no changes.";
   if (operation === "getMyForumNavState")
     return "Read the selected profile's username, rank, post and reputation totals, forum permission flags, and unread notification and private-message counts. Use these counts for forum header and navigation badges. Requires a connected profile with personal access. Does not return message contents or mark items read.";
   if (operation === "listCategoryOptions")
