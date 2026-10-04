@@ -599,6 +599,17 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("content")!.textContent).toContain("First discussion");
   });
 
+  test("feed settings closes with Escape and outside click and restores keyboard focus", async () => {
+    const app = appHarness(); await app.connect(false);
+    const menu = app.nodes.get("content")!.querySelector(".feed-settings")!;
+    const trigger = menu.firstElementChild!;
+    menu.open = true; menu.find("Feed preferences")!.focus();
+    app.documentEvent("keydown", app.activeElement, "Escape");
+    expect(menu.open).toBe(false); expect(app.activeElement).toBe(trigger);
+    menu.open = true; app.documentEvent("click", app.nodes.get("identity")!);
+    expect(menu.open).toBe(false);
+  });
+
   test("delayed launch metadata cannot restore a prior actor's board rail", async () => {
     const app = appHarness();
     app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } }); await app.flush();

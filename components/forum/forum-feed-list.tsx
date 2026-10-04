@@ -454,8 +454,10 @@ export function LiveFeed({
         >
           {display === "timeline" ? (
             <Rows3 className="size-4" aria-hidden="true" />
-          ) : (
+          ) : display === "compact" ? (
             <LayoutList className="size-4" aria-hidden="true" />
+          ) : (
+            <AlignLeft className="size-4" aria-hidden="true" />
           )}
         </button>
         <button

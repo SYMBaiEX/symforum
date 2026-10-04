@@ -55,6 +55,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
   let navigationState = "";
   let contextState = "";
   let moreNavigation: HTMLDetailsElement | null = null;
+  let feedSettings: HTMLDetailsElement | null = null;
   let desktopNavigationOpened = false;
   let connection: RecordValue = {};
   let actingAs: RecordValue = {};
@@ -770,6 +771,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
       { panel: surfaceSwitcher, trigger: surfaceTrigger, enabled: true },
       { panel: searchPanel, trigger: searchPanel.firstElementChild as HTMLElement, enabled: searchMedia?.matches === true },
       { panel: connectionDetails, trigger: connectionTrigger, enabled: true },
+      ...(feedSettings ? [{ panel: feedSettings, trigger: feedSettings.firstElementChild as HTMLElement, enabled: true }] : []),
       ...(moreNavigation ? [{ panel: moreNavigation, trigger: moreNavigation.firstElementChild as HTMLElement, enabled: navigationMedia?.matches !== true }] : []),
     ];
   }
@@ -821,6 +823,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     content.replaceChildren(loading);
   }
   function heading(title: string, subtitle?: string) {
+    feedSettings = null;
     content.replaceChildren();
     const header = element("header", undefined, "view-heading");
     const titleNode = element("h1", title);
@@ -1035,6 +1038,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     authors.append(authorSelect); discovery.append(authors);
     if (permitted("personal")) {
       const settings = element("details", undefined, "feed-settings");
+      feedSettings = settings;
       settings.append(element("summary", "Feed settings"));
       const options = element("div", undefined, "feed-settings-options");
       options.append(button("Feed preferences", () => run(() => navigate("experience"))), actionButton("Save feed defaults", "forum_update_my_forum_experience", { defaultFeed: selection.scope, authorFilter: selection.authorFilter }, () => navigate("experience")));
