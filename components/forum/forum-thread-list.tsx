@@ -1093,7 +1093,7 @@ function ForumSubboardSelector({
             const latest = getCategoryLatestThread(board);
             return (
               <li key={board.slug}>
-                <article className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)] gap-x-3 py-3 sm:grid-cols-[36px_minmax(0,1fr)_180px]">
+                <article className="forum-subboard-row grid min-w-0 grid-cols-[36px_minmax(0,1fr)] gap-x-3 py-3 sm:grid-cols-[36px_minmax(0,1fr)_180px]">
                   <span
                     role="img"
                     aria-label={

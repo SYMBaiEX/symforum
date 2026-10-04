@@ -8,12 +8,11 @@ import type { NewsTimelineRecord } from "@/lib/convex-refs";
 import type { HnStory } from "@/lib/hn";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
-import { ArrowUpRight, Users, Search, X } from "lucide-react";
+import { ArrowUpRight, Users, Search, X, CheckCheck } from "lucide-react";
 import { useCallback, useState } from "react";
 import {
   ForumBodyGrid,
   ForumPageHeader,
-  ForumSectionHeader,
   forumQuietAction,
 } from "./forum-layout-primitives";
 import { toast } from "sonner";
@@ -176,7 +175,7 @@ function ForumHomeHeader({
             ? "News"
             : view === "community"
               ? "Community"
-              : "Forum"
+              : "Boards"
       }
       view={view}
     />
@@ -215,46 +214,50 @@ function ForumBoards({ overview }: { overview: ForumOverviewRecord }) {
     }
   }
   return (
-    <section aria-label="Board index">
-      <div className="mb-2">
-        <ForumSectionHeader title="Forum index">
-          <Button
-            aria-busy={pending}
-            disabled={isLoading || pending}
-            onClick={() => void markAllRead()}
-            type="button"
-            variant="ghost"
-          >
+    <section aria-label="Board index" className="forum-board-index">
+      <div className="forum-board-toolbar mb-3 flex items-center gap-2">
+        <div className="forum-search-field flex-1 flex min-w-0 items-center gap-2 rounded-xl bg-card px-3">
+          <Search
+            className="size-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <label className="sr-only" htmlFor="forum-board-filter">
+            Filter boards and subforums
+          </label>
+          <input
+            id="forum-board-filter"
+            type="search"
+            className="focus-ring min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
+            placeholder="Find a board or subforum…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query ? (
+            <button
+              type="button"
+              className="focus-ring flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+              aria-label="Clear board filter"
+              onClick={() => setQuery("")}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        <Button
+          aria-label={pending ? "Marking all boards read" : "Mark all read"}
+          title="Mark all boards read"
+          aria-busy={pending}
+          disabled={isLoading || pending}
+          onClick={() => void markAllRead()}
+          type="button"
+          variant="ghost"
+          className="shrink-0"
+        >
+          <CheckCheck className="size-4" aria-hidden="true" />
+          <span className="hidden sm:inline">
             {pending ? "Marking…" : "Mark all read"}
-          </Button>
-        </ForumSectionHeader>
-      </div>
-      <div className="forum-search-field mb-3 flex min-w-0 items-center gap-2 rounded-xl bg-card px-3">
-        <Search
-          className="size-4 shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <label className="sr-only" htmlFor="forum-board-filter">
-          Filter boards and subforums
-        </label>
-        <input
-          id="forum-board-filter"
-          type="search"
-          className="focus-ring min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
-          placeholder="Find a board or subforum…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        {query ? (
-          <button
-            type="button"
-            className="focus-ring flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground"
-            aria-label="Clear board filter"
-            onClick={() => setQuery("")}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        ) : null}
+          </span>
+        </Button>
       </div>
       <ForumGroupedBoards overview={overview} query={query} />
     </section>
@@ -280,7 +283,10 @@ function ForumHomeRail({
     ? "Top contributor"
     : "Reputation leader";
   return (
-    <aside aria-label="Forum context" className="space-y-4 text-sm">
+    <aside
+      aria-label="Forum context"
+      className="forum-home-context space-y-4 text-sm"
+    >
       <section className="forum-panel">
         <div className="flex items-center gap-2">
           <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">

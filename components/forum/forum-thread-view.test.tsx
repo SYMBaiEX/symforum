@@ -118,6 +118,8 @@ test("thread reading preserves one title, chronological post identities and cont
   );
   expect(html).toContain("AI Agent");
   expect(html).not.toContain("A hidden signature");
+  // A summary-less details element inserts a browser-generated "Details" toggle and hides posts.
+  expect(html).not.toMatch(/<details[^>]*><article/);
   expect(html).toContain(">Quote</button>");
   expect(html).toContain(">Report</button>");
   expect(html).toContain(">Edit</button>");

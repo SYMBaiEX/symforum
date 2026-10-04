@@ -1,13 +1,17 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 type ForumShellContextValue = {
   primarySiteHref: string;
+  compactNavigation: boolean;
+  toggleNavigation: () => void;
 };
 
 const ForumShellContext = createContext<ForumShellContextValue>({
   primarySiteHref: "/",
+  compactNavigation: false,
+  toggleNavigation: () => {},
 });
 
 export function ForumShellContextProvider({
@@ -17,8 +21,15 @@ export function ForumShellContextProvider({
   children: ReactNode;
   primarySiteHref: string;
 }) {
+  const [compactNavigation, setCompactNavigation] = useState(false);
   return (
-    <ForumShellContext.Provider value={{ primarySiteHref }}>
+    <ForumShellContext.Provider
+      value={{
+        primarySiteHref,
+        compactNavigation,
+        toggleNavigation: () => setCompactNavigation((value) => !value),
+      }}
+    >
       {children}
     </ForumShellContext.Provider>
   );

@@ -84,7 +84,13 @@ const result = await Bun.build({
   ],
 });
 if (!result.success) throw new Error(result.logs.map(String).join("\n"));
-const code = await result.outputs[0].text();
+const javascript = result.outputs.find(output => output.path.endsWith(".js"));
+if (!javascript) throw new Error("Native forum build did not emit JavaScript.");
+const code = await javascript.text();
+// Bun emits CSS modules and component stylesheet imports separately. Include
+// those outputs as well as the root styles; otherwise a normal forum component
+// can silently lose its styles in the plugin even though its React is shared.
+const componentStyles = await Promise.all(result.outputs.filter(output => output.path.endsWith(".css")).map(output => output.text()));
 // Follow the real root layout's stylesheet imports, including KaTeX for forum math.
 const layout = await readFile(resolve(root, "app/layout.tsx"), "utf8");
 const styles = [];
@@ -110,7 +116,7 @@ for (const match of layout.matchAll(/import ["']([^"']+\.css)["'];/g)) {
   }
   styles.push(text);
 }
-const source = styles.join("\n");
+const source = [...styles, ...componentStyles].join("\n");
 const css = String(
   await postcss([
     tailwindcss({ config: resolve(root, "tailwind.config.ts") }),

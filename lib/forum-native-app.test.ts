@@ -68,6 +68,12 @@ describe("automatic native forum parity", () => {
       "forum-site-shell",
     );
   });
+  test("includes component CSS modules under the class names emitted in the native React bundle", () => {
+    const jumps = FORUM_NATIVE_APP_JS.match(/jumps:"([^"]+)"/);
+    expect(jumps).not.toBeNull();
+    expect(FORUM_NATIVE_APP_CSS).toContain(`.${jumps![1]}{`);
+    expect(FORUM_NATIVE_APP_CSS).toContain(`.${jumps![1]} a`);
+  });
   test("retains strict network isolation and allows only forum storage and brand assets", () => {
     expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp.connectDomains).toEqual([]);
     expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp.frameDomains).toEqual([]);

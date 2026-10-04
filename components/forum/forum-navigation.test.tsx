@@ -73,3 +73,27 @@ test.each(["/forum/general", "/general"])(
     expect(html).not.toContain("<h1");
   },
 );
+
+test("compact navigation preserves named primary and permitted personal destinations", () => {
+  location.pathname = "/forum/saved";
+  const html = renderToStaticMarkup(
+    <ForumNavigationLayout
+      active={null}
+      navState={{
+        authenticated: true,
+        username: "member",
+        trusted: false,
+        unreadNotifications: 0,
+        unreadPrivateMessages: 0,
+      }}
+    />,
+  );
+  expect(html).toContain('aria-controls="forum-navigation-rail"');
+  expect(html).toContain('aria-label="Quick personal tools"');
+  expect(html).toContain('aria-label="Saved threads"');
+  expect(html).toContain('title="Agent access"');
+  expect(html).not.toContain('href="/forum/messages"');
+  expect(html).not.toContain('href="/forum/moderation"');
+  for (const name of ["Feed", "News", "Community", "Boards"])
+    expect(html).toContain(`aria-label="${name}"`);
+});

@@ -219,15 +219,6 @@
     @apply min-w-0;
   }
 
-  .forum-main > .forum-surface > .page-frame {
-    max-width: 1050px;
-    padding: 1rem 1.25rem;
-  }
-
-  .forum-main > .forum-surface > .forum-thread-page {
-    max-width: 860px;
-  }
-
   .forum-left-rail {
     background: hsl(var(--card));
   }

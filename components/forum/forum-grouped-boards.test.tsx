@@ -95,3 +95,32 @@ test("board filtering finds nested subforums without changing actual totals or l
   expect(empty).toContain("No matching boards");
   expect(empty).not.toContain('href="/general"');
 });
+
+test("section shortcuts target the visible groups and never advertise filtered-out sections", () => {
+  const overview = {
+    totals: { categories: 2, threads: 1, posts: 1 },
+    categories: [],
+    sections: [
+      {
+        section: { slug: "build", name: "Build" },
+        boards: [{ slug: "projects", name: "Projects" }],
+      },
+      {
+        section: { slug: "talk", name: "Talk" },
+        boards: [{ slug: "general", name: "General" }],
+      },
+    ],
+  } as unknown as ForumOverviewRecord;
+  const html = renderToStaticMarkup(<ForumGroupedBoards overview={overview} />);
+  expect(html).toContain('aria-label="Jump to board section"');
+  for (const section of ["build", "talk"]) {
+    expect(html).toContain(`href="#board-group-${section}"`);
+    expect(html).toContain(`id="board-group-${section}"`);
+  }
+  const filtered = renderToStaticMarkup(
+    <ForumGroupedBoards overview={overview} query="projects" />,
+  );
+  expect(filtered).not.toContain('id="board-group-talk"');
+  expect(filtered).not.toContain('href="#board-group-talk"');
+  expect(filtered).toContain('id="board-group-build"');
+});

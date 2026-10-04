@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "npm-run-all --parallel dev:frontend dev:backend",
-    "dev:frontend": "bun run ui:sync && next dev",
+    "dev:frontend": "bun run ui:sync && npm-run-all --parallel ui:watch dev:next",
     "dev:backend": "convex dev",
     "env:check": "bun scripts/sync-convex-env.mjs --check",
     "env:push": "bun scripts/sync-convex-env.mjs",
@@ -36,7 +36,9 @@
     "socials:deploy": "bun run --cwd workers/socials deploy",
     "verify": "bun run ui:check && bun run deps:audit && bun run typecheck && bun run typecheck:convex && bun run lint && bun run test && bun run --cwd packages/agent-sdk build && bun run --cwd packages/agent-sdk test && bun run --cwd packages/agent-cli build && bun run --cwd packages/agent-cli test && bun run socials:typecheck && bun run socials:test && bun run --cwd workers/socials deploy:dry && bun run build",
     "ui:sync": "bun scripts/sync-forum-ui.mjs && bun scripts/build-native-forum-app.mjs",
-    "ui:check": "bun scripts/sync-forum-ui.mjs --check && bun scripts/build-native-forum-app.mjs --check"
+    "ui:check": "bun scripts/sync-forum-ui.mjs --check && bun scripts/build-native-forum-app.mjs --check",
+    "ui:watch": "bun scripts/watch-forum-ui.mjs",
+    "dev:next": "next dev"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.53",

@@ -64,7 +64,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { isAuthRequiredError, userFacingError } from "@/lib/auth-errors";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
-import { Paperclip, Star, X } from "lucide-react";
+import { Paperclip, Star, X, ChevronDown } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1406,21 +1406,15 @@ function LiveForumThreadView({
             const reputationTargetKey = `${postId === null ? "thread" : "post"}:${postId ?? thread._id}`;
 
             return (
-              <details
+              <ForumReplyContainer
                 key={post._id ?? `post-${index}`}
-                open
-                className="min-w-0"
-                style={{ marginLeft: depth * 16 }}
-                onToggle={(event) => {
-                  if (replyLayout !== "context" && !event.currentTarget.open)
-                    event.currentTarget.open = true;
-                }}
+                depth={depth}
+                summary={
+                  replyLayout === "context" && post.parentPostId
+                    ? `Reply by ${getThreadAuthor(post)} · #${postNumber}`
+                    : undefined
+                }
               >
-                {replyLayout === "context" && post.parentPostId ? (
-                  <summary className="focus-ring flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-3 text-xs text-muted-foreground">
-                    Reply by {getThreadAuthor(post)} · #{postNumber}
-                  </summary>
-                ) : null}
                 <ForumPostFrame
                   variant="grouped"
                   id={`post-${postNumber}`}
@@ -1653,7 +1647,7 @@ function LiveForumThreadView({
                     </>
                   )}
                 </ForumPostFrame>
-              </details>
+              </ForumReplyContainer>
             );
           })
         )}
@@ -2848,4 +2842,31 @@ function currentForumRedirectTo(
   const query = searchParams.toString();
   const hash = typeof window === "undefined" ? "" : window.location.hash;
   return `${pathname ?? fallback}${query ? `?${query}` : ""}${hash}`;
+}
+
+function ForumReplyContainer({
+  depth,
+  summary,
+  children,
+}: {
+  depth: number;
+  summary?: string;
+  children: React.ReactNode;
+}) {
+  const style = { marginLeft: depth * 16 };
+  if (!summary)
+    return (
+      <div className="min-w-0" style={style}>
+        {children}
+      </div>
+    );
+  return (
+    <details open className="min-w-0" style={style}>
+      <summary className="forum-action-pill focus-ring flex min-h-11 cursor-pointer items-center gap-2 px-3 text-xs text-muted-foreground">
+        {summary}
+        <ChevronDown className="size-3" aria-hidden="true" />
+      </summary>
+      {children}
+    </details>
+  );
 }
