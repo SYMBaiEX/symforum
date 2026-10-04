@@ -16,6 +16,7 @@ const PUBLIC_READ = new Set([
   "listRecentThreads",
   "listFeedThreads",
   "listNewsFeed",
+  "getNewsDiscussion",
   "listChatMessages",
   "getThread",
   "search",
@@ -70,7 +71,12 @@ const ATTACHMENTS = new Set([
   "uploadAttachments",
 ]);
 const PERSONAL = new Set([
+  "getMyForumExperience",
+  "updateMyForumExperience",
+  "listMyForumCatchUp",
   "recordPresence",
+  "recordForumExperienceEvent",
+  "markChatRead",
   "markNotificationRead",
   "recordThreadView",
   "markThreadRead",

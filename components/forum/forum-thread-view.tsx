@@ -1,4 +1,7 @@
 "use client";
+import { forumReplyBranches } from "./forum-reply-branches";
+import { forumExperienceRefs } from "./forum-experience-refs";
+import { convexRefs } from "@/lib/convex-refs";
 
 import { ForumPageHeader, ForumSectionHeader } from "./forum-layout-primitives";
 
@@ -192,6 +195,16 @@ function LiveForumThreadView({
   const deletePost = useMutation(forumRefs.deletePost);
   const createReport = useMutation(forumRefs.createReport);
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const viewer = useQuery(
+    convexRefs.users.maybeViewer,
+    isAuthenticated ? {} : "skip",
+  );
+  const acceptAnswer = useMutation(forumExperienceRefs.accept);
+  const [answerPending, setAnswerPending] = useState(false);
+  const [replyLayout, setReplyLayout] = useState<"chronological" | "context">(
+    "chronological",
+  );
+  const [replyTo, setReplyTo] = useState<ForumPostRecord>();
   const [replyBody, setReplyBody] = useState("");
   const [replyAttachments, setReplyAttachments] = useState<
     ForumAttachmentDraft[]
@@ -407,12 +420,16 @@ function LiveForumThreadView({
     try {
       const result = await reply({
         threadId,
+        ...(replyTo?._id && forumPostId(replyTo)
+          ? { parentPostId: replyTo._id }
+          : {}),
         body: replyBody.trim(),
         attachments: replyAttachments.map(({ storageId, filename }) => ({
           storageId,
           filename,
         })),
       });
+      setReplyTo(undefined);
       setReplyBody("");
       setReplyAttachments([]);
       setQueuedQuotes([]);
@@ -420,7 +437,7 @@ function LiveForumThreadView({
       setReplyError("");
       if (result.status === "pending") {
         setReplyError(
-          "Reply submitted for approval. It will appear after a moderator approves it.",
+          "Awaiting moderator review. Find your reply in Account & preferences → Pending content.",
         );
         return true;
       }
@@ -1325,160 +1342,318 @@ function LiveForumThreadView({
             previousLabel="Earlier"
           />
         ) : null}
+        {detail.acceptedAnswer ? (
+          <section className="forum-post-card mb-4 bg-accent/5 p-4">
+            <h2 className="text-sm font-semibold text-accent">
+              Accepted answer by {detail.acceptedAnswer.author}
+            </h2>
+            <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">
+              {detail.acceptedAnswer.body}
+            </p>
+            <ForumLink
+              href={forumPostPath(
+                category.slug,
+                thread.slug,
+                detail.acceptedAnswer.postNumber,
+                detail.acceptedAnswer.postPage,
+              )}
+              className="focus-ring inline-flex min-h-11 items-center text-sm text-accent"
+            >
+              Read the answer →
+            </ForumLink>
+          </section>
+        ) : null}
+        {thread.sourceUrl ? (
+          <a
+            href={thread.sourceUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+            className="focus-ring mb-3 inline-flex min-h-11 max-w-full items-center break-all text-sm text-accent"
+          >
+            Read source article ↗
+          </a>
+        ) : null}
+        <div
+          className="mb-3 flex items-center gap-2"
+          role="group"
+          aria-label="Reply layout"
+        >
+          {(["chronological", "context"] as const).map((layout) => (
+            <button
+              className={`forum-action-pill focus-ring min-h-11 px-3 text-xs ${replyLayout === layout ? "text-primary" : "text-muted-foreground"}`}
+              type="button"
+              key={layout}
+              aria-pressed={replyLayout === layout}
+              onClick={() => setReplyLayout(layout)}
+            >
+              {layout === "context" ? "Replies with context" : "Chronological"}
+            </button>
+          ))}
+        </div>
         {posts.length === 0 ? (
           <ForumStatusBox
             title="Thread body"
             body="The thread loaded, but no root post or replies were returned."
           />
         ) : (
-          posts.map((post, index) => {
+          (replyLayout === "context"
+            ? forumReplyBranches(posts)
+            : posts.map((post) => ({ post, depth: 0 }))
+          ).map(({ post, depth }, index) => {
             const postNumber = getPostNumber(post, index);
             const quoteKey = getPostQuoteKey(post, postNumber);
             const postId = forumPostId(post);
             const reputationTargetKey = `${postId === null ? "thread" : "post"}:${postId ?? thread._id}`;
 
             return (
-              <ForumPostFrame
-                variant="grouped"
+              <details
                 key={post._id ?? `post-${index}`}
-                id={`post-${postNumber}`}
-                actions={
-                  <PostActions
-                    post={post}
-                    postNumber={postNumber}
-                    threadId={thread._id}
-                    canDelete={post.viewerCanDelete === true}
-                    canEdit={post.viewerCanEdit === true}
-                    canGiveReputation={post.viewerCanGiveReputation === true}
-                    canQuote={viewerCanReply}
-                    multiQuoteSelected={queuedQuoteKeys.has(quoteKey)}
-                    reputationPending={
-                      reputationPendingKey === reputationTargetKey
-                    }
-                    viewerReputationScore={
-                      (post.viewerReputationScore ?? 0) as ReputationScore
-                    }
-                    onDelete={() => removePost(post)}
-                    onCopyLink={() =>
-                      copyPostPermalink(postNumber, post.postPage)
-                    }
-                    onEdit={() => openPostEditor(post)}
-                    onMultiQuote={() => toggleQueuedQuote(post, postNumber)}
-                    onQuote={() => quotePost(post)}
-                    onReputation={(score) =>
-                      openReputationDialog(post, score, postNumber)
-                    }
-                    onReport={(target) => openReport(target)}
-                  />
-                }
-                author={
-                  post.authorDisplayName ??
-                  post.authorName ??
-                  post.createdByName ??
-                  post.author ??
-                  getThreadAuthor(post)
-                }
-                authorHref={profileHref(post.authorUsername)}
-                avatarUrl={post.authorImage}
-                location={post.authorLocation}
-                joinedAt={post.authorJoinedAt}
-                postCount={post.authorPostCount}
-                rank={post.authorRank}
-                reputationScore={post.authorReputationScore}
-                role={post.role}
-                signature={
-                  post.authorShowSignatures === false
-                    ? undefined
-                    : post.authorSignature
-                }
-                timestamp={formatForumDateTime(getPostTimestamp(post))}
-                postNumber={postNumber}
+                open
+                className="min-w-0"
+                style={{ marginLeft: depth * 16 }}
+                onToggle={(event) => {
+                  if (replyLayout !== "context" && !event.currentTarget.open)
+                    event.currentTarget.open = true;
+                }}
               >
-                {editingPostId !== null &&
-                editingPostId === forumPostId(post) ? (
-                  <div className="space-y-3">
-                    <ForumCompose
-                      body={editPostBody}
-                      bodyLabel={`Reply #${postNumber}`}
-                      bodyPlaceholder="Edit the reply body."
-                      bodyRows={6}
-                      disabled={editPostPending}
-                      error={editPostError}
-                      footerActions={
+                {replyLayout === "context" && post.parentPostId ? (
+                  <summary className="focus-ring flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-3 text-xs text-muted-foreground">
+                    Reply by {getThreadAuthor(post)} · #{postNumber}
+                  </summary>
+                ) : null}
+                <ForumPostFrame
+                  variant="grouped"
+                  id={`post-${postNumber}`}
+                  actions={
+                    <div className="flex flex-wrap items-center gap-1">
+                      {viewerCanReply && postId ? (
                         <Button
-                          className="min-h-11 rounded-full px-4 text-xs"
                           type="button"
-                          variant="outline"
-                          disabled={editPostBody.trim().length === 0}
-                          onClick={() =>
-                            setEditPostPreviewOpen((current) => !current)
-                          }
+                          variant="ghost"
+                          className="min-h-11 rounded-full text-xs"
+                          onClick={() => {
+                            setReplyTo(post);
+                            document
+                              .getElementById("forum-reply-composer")
+                              ?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                              });
+                            replyTextareaRef.current?.focus();
+                          }}
                         >
-                          {editPostPreviewOpen ? "Hide preview" : "Preview"}
+                          Reply
                         </Button>
-                      }
-                      note={
-                        "Reply edits keep the original post number and can update attachments."
-                      }
-                      pending={editPostPending}
-                      submitLabel="Save reply"
-                      onBodyChange={setEditPostBody}
-                      onSubmit={() => submitPostEdit(editingPostId)}
-                    >
-                      {editPostPreviewOpen ? (
-                        <ReplyPreviewPanel
-                          body={editPostBody}
-                          label={`Reply #${postNumber} preview`}
-                        />
                       ) : null}
-                      <ForumEditAttachmentManager
-                        disabled={editPostPending}
-                        existingAttachments={editPostExistingAttachments}
-                        label="Current attachments"
-                        newAttachments={editPostNewAttachments}
-                        onExistingAttachmentsChange={
-                          setEditPostExistingAttachments
+                      {thread.viewerCanAcceptAnswer && postId ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={answerPending}
+                          className="min-h-11 rounded-full text-xs text-accent"
+                          onClick={async () => {
+                            if (answerPending) return;
+                            setAnswerPending(true);
+                            try {
+                              await acceptAnswer({
+                                threadId: thread._id,
+                                postId:
+                                  thread.acceptedPostId === postId
+                                    ? null
+                                    : postId,
+                              });
+                            } catch (caught) {
+                              setReplyError(
+                                userFacingError(
+                                  caught,
+                                  "Could not select the answer.",
+                                ),
+                              );
+                            } finally {
+                              setAnswerPending(false);
+                            }
+                          }}
+                        >
+                          {thread.acceptedPostId === postId
+                            ? "Clear accepted answer"
+                            : "Accept answer"}
+                        </Button>
+                      ) : null}
+                      <PostActions
+                        post={post}
+                        postNumber={postNumber}
+                        threadId={thread._id}
+                        canDelete={post.viewerCanDelete === true}
+                        canEdit={post.viewerCanEdit === true}
+                        canGiveReputation={
+                          post.viewerCanGiveReputation === true
                         }
-                        onNewAttachmentsChange={setEditPostNewAttachments}
+                        canQuote={viewerCanReply}
+                        multiQuoteSelected={queuedQuoteKeys.has(quoteKey)}
+                        reputationPending={
+                          reputationPendingKey === reputationTargetKey
+                        }
+                        viewerReputationScore={
+                          (post.viewerReputationScore ?? 0) as ReputationScore
+                        }
+                        onDelete={() => removePost(post)}
+                        onCopyLink={() =>
+                          copyPostPermalink(postNumber, post.postPage)
+                        }
+                        onEdit={() => openPostEditor(post)}
+                        onMultiQuote={() => toggleQueuedQuote(post, postNumber)}
+                        onQuote={() => quotePost(post)}
+                        onReputation={(score) =>
+                          openReputationDialog(post, score, postNumber)
+                        }
+                        onReport={(target) => openReport(target)}
                       />
-                      <label className="block">
-                        <span className="text-xs text-muted-foreground">
-                          Edit reason
-                        </span>
-                        <Input
-                          className="mt-2 rounded-none border-row-border"
-                          maxLength={180}
-                          placeholder="Optional: typo, corrected link, added context"
-                          value={editPostReason}
-                          onChange={(event) =>
-                            setEditPostReason(event.target.value)
+                    </div>
+                  }
+                  author={
+                    post.authorDisplayName ??
+                    post.authorName ??
+                    post.createdByName ??
+                    post.author ??
+                    getThreadAuthor(post)
+                  }
+                  authorHref={profileHref(post.authorUsername)}
+                  avatarUrl={post.authorImage}
+                  location={post.authorLocation}
+                  joinedAt={post.authorJoinedAt}
+                  postCount={post.authorPostCount}
+                  rank={post.authorRank}
+                  reputationScore={post.authorReputationScore}
+                  role={post.role}
+                  signature={
+                    post.authorShowSignatures === false
+                      ? undefined
+                      : post.authorSignature
+                  }
+                  timestamp={formatForumDateTime(getPostTimestamp(post))}
+                  postNumber={postNumber}
+                >
+                  {post.authorIsAgent ? (
+                    <p className="mb-2 text-xs font-medium text-accent">
+                      AI agent
+                    </p>
+                  ) : post.agentAssisted ? (
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      Posted with agent assistance
+                    </p>
+                  ) : null}
+                  {thread.acceptedPostId === postId ? (
+                    <p className="mb-3 text-sm font-semibold text-accent">
+                      Accepted answer
+                    </p>
+                  ) : null}
+                  {post.replyContext ? (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      In reply to{" "}
+                      <ForumLink
+                        className="focus-ring underline"
+                        href={forumPostPath(
+                          category.slug,
+                          thread.slug,
+                          post.replyContext.postNumber,
+                          post.replyContext.postPage,
+                        )}
+                      >
+                        {post.replyContext.author} · #
+                        {post.replyContext.postNumber}
+                      </ForumLink>
+                    </p>
+                  ) : post.parentPostId ? (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Earlier reply is unavailable.
+                    </p>
+                  ) : null}
+                  {editingPostId !== null &&
+                  editingPostId === forumPostId(post) ? (
+                    <div className="space-y-3">
+                      <ForumCompose
+                        body={editPostBody}
+                        bodyLabel={`Reply #${postNumber}`}
+                        bodyPlaceholder="Edit the reply body."
+                        bodyRows={6}
+                        disabled={editPostPending}
+                        error={editPostError}
+                        footerActions={
+                          <Button
+                            className="min-h-11 rounded-full px-4 text-xs"
+                            type="button"
+                            variant="outline"
+                            disabled={editPostBody.trim().length === 0}
+                            onClick={() =>
+                              setEditPostPreviewOpen((current) => !current)
+                            }
+                          >
+                            {editPostPreviewOpen ? "Hide preview" : "Preview"}
+                          </Button>
+                        }
+                        note={
+                          "Reply edits keep the original post number and can update attachments."
+                        }
+                        pending={editPostPending}
+                        submitLabel="Save reply"
+                        onBodyChange={setEditPostBody}
+                        onSubmit={() => submitPostEdit(editingPostId)}
+                      >
+                        {editPostPreviewOpen ? (
+                          <ReplyPreviewPanel
+                            body={editPostBody}
+                            label={`Reply #${postNumber} preview`}
+                          />
+                        ) : null}
+                        <ForumEditAttachmentManager
+                          disabled={editPostPending}
+                          existingAttachments={editPostExistingAttachments}
+                          label="Current attachments"
+                          newAttachments={editPostNewAttachments}
+                          onExistingAttachmentsChange={
+                            setEditPostExistingAttachments
                           }
+                          onNewAttachmentsChange={setEditPostNewAttachments}
                         />
-                      </label>
-                    </ForumCompose>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingPostId(null);
-                        setEditPostReason("");
-                        setEditPostExistingAttachments([]);
-                        setEditPostNewAttachments([]);
-                        setEditPostPreviewOpen(false);
-                        setEditPostError("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <ForumBody body={post.body} />
-                    <ForumAttachmentList attachments={post.attachments} />
-                    <ForumEditMetaLine post={post} />
-                  </>
-                )}
-              </ForumPostFrame>
+                        <label className="block">
+                          <span className="text-xs text-muted-foreground">
+                            Edit reason
+                          </span>
+                          <Input
+                            className="mt-2 rounded-none border-row-border"
+                            maxLength={180}
+                            placeholder="Optional: typo, corrected link, added context"
+                            value={editPostReason}
+                            onChange={(event) =>
+                              setEditPostReason(event.target.value)
+                            }
+                          />
+                        </label>
+                      </ForumCompose>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPostId(null);
+                          setEditPostReason("");
+                          setEditPostExistingAttachments([]);
+                          setEditPostNewAttachments([]);
+                          setEditPostPreviewOpen(false);
+                          setEditPostError("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <ForumBody body={post.body} />
+                      <ForumAttachmentList attachments={post.attachments} />
+                      <ForumEditMetaLine post={post} />
+                    </>
+                  )}
+                </ForumPostFrame>
+              </details>
             );
           })
         )}
@@ -1535,9 +1710,17 @@ function LiveForumThreadView({
           <ForumCompose
             body={replyBody}
             bodyTextareaRef={replyTextareaRef}
-            draftKey={`symbaiex:forum:draft:reply:${thread._id}`}
+            draftKey={
+              viewer
+                ? `symbaiex:forum:draft:reply:${viewer._id}:${thread._id}`
+                : undefined
+            }
             onBodyChange={setReplyBody}
-            bodyLabel="Join the discussion"
+            bodyLabel={
+              replyTo
+                ? `Reply to ${getThreadAuthor(replyTo)}`
+                : "Join the discussion"
+            }
             bodyPlaceholder="Share your reply…"
             submitLabel="Post reply"
             pending={pending}
@@ -1557,6 +1740,20 @@ function LiveForumThreadView({
             note="Mention a member with @handle to send an in-app alert."
             onSubmit={() => submitReply(thread._id)}
           >
+            {replyTo ? (
+              <div className="rounded-xl bg-muted/50 p-3">
+                <p className="line-clamp-2 text-sm text-muted-foreground">
+                  {replyTo.body}
+                </p>
+                <button
+                  className="focus-ring min-h-11 text-xs text-primary"
+                  type="button"
+                  onClick={() => setReplyTo(undefined)}
+                >
+                  Reply to thread instead
+                </button>
+              </div>
+            ) : null}
             <ForumAttachmentDraftPanel
               attachments={replyAttachments}
               disabled={pending || authLoading}

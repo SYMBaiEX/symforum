@@ -1623,3 +1623,44 @@ test.each(["human", "agent"] as const)(
     }
   },
 );
+
+
+describe("forum community experience through delegated tools", () => {
+  test("reviewed accepted answers execute once and invalidate changed targets", async () => {
+    const t = setup(), seed = await fixture(t, "human", true);
+    const postId = await t.run(async ctx => {
+      await ctx.db.patch("forumThreads", seed.thread, { authorId: seed.owner, kind: "question" });
+      return ctx.db.insert("forumPosts", { threadId: seed.thread, categoryId: seed.board, authorId: seed.stranger, body: "A useful answer", status: "active", postNumber: 2, createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    const owner = t.withIdentity({ subject: seed.owner });
+    const queued = await owner.mutation(executeRef, call(seed, "setAcceptedAnswer", { threadId: seed.thread, postId }, "accept-answer"));
+    expect(queued.status).toBe("pending_approval");
+    const approved = await owner.mutation(approveRef, { commandId: queued.commandId });
+    expect(approved.status).toBe("completed");
+    expect(await owner.mutation(approveRef, { commandId: queued.commandId })).toEqual(approved);
+    await t.run(async ctx => {
+      expect((await ctx.db.get("forumThreads", seed.thread))?.acceptedPostId).toBe(postId);
+      const counters = await ctx.db.query("forumExperienceDailyCounters").collect();
+      expect(counters.find(row => row.event === "answer_selected")).toMatchObject({ count: 1, actorKind: "assisted" });
+    });
+    const clear = await owner.mutation(executeRef, call(seed, "setAcceptedAnswer", { threadId: seed.thread, postId: null }, "clear-answer"));
+    await t.run(ctx => ctx.db.patch("forumThreads", seed.thread, { status: "hidden" }));
+    expect((await owner.mutation(approveRef, { commandId: clear.commandId })).data.state).toBe("invalidated");
+  });
+  test("human and owned-agent preferences remain separate and duplicate receipts do not recount events", async () => {
+    const t = setup(), seed = await fixture(t, "agent");
+    const owner = t.withIdentity({ subject: seed.owner });
+    const command = call(seed, "updateMyForumExperience", { defaultFeed: "following", authorFilter: "humans" }, "agent-preferences");
+    await owner.mutation(executeRef, command);
+    await t.run(async ctx => {
+      expect(await ctx.db.query("forumExperienceSettings").collect()).toMatchObject([{ userId: seed.agent, defaultFeed: "following" }]);
+      await ctx.db.patch("forumPluginConnections", seed.connectionId, { actorUserId: seed.owner, actorMode: "human", policyVersion: 2 });
+    });
+    const prefs = await owner.mutation(readRef, { connectionId: seed.connectionId, operation: "getMyForumExperience", args: {} });
+    expect(prefs.data.defaultFeed).toBe("discover");
+    const event = { ...call(seed, "recordForumExperienceEvent", { event: "feed_open" }, "one-feed-visit"), expectedPolicyVersion: 2 };
+    const result = await owner.mutation(executeRef, event);
+    expect(await owner.mutation(executeRef, event)).toEqual(result);
+    await t.run(async ctx => { expect(await ctx.db.query("forumExperienceDailyCounters").collect()).toMatchObject([{ event: "feed_open", count: 1, actorKind: "assisted" }]); });
+  });
+});

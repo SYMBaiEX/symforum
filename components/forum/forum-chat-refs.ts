@@ -4,6 +4,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 export type ForumChatMessage = {
   _id: Id<"forumChatMessages">;
   body: string;
+  replyTo?: { _id: string; body: string } | null;
   status: "active" | "pending" | "hidden" | "deleted";
   createdAt: number;
   updatedAt: number;
@@ -20,6 +21,9 @@ export type ForumChatPendingPage = {
   pageStatus?: "SplitRecommended" | "SplitRequired" | null;
 };
 export type ForumChatPage = ForumChatPendingPage & {
+  unreadCount?: number;
+  unreadLimited?: boolean;
+  mentionCount?: number;
   pending: ForumChatMessage[];
   pendingLimited: boolean;
   viewer: {
@@ -40,9 +44,44 @@ export type ForumChatSendReceipt = {
   moderationUrl?: string;
 };
 export const forumChatRefs = {
-  listChatMessages: makeFunctionReference<"query", ChatPaginationArgs, ForumChatPage>("forum:listChatMessages"),
-  sendChatMessage: makeFunctionReference<"mutation", { body: string }, ForumChatSendReceipt>("forum:sendChatMessage"),
-  deleteChatMessage: makeFunctionReference<"mutation", { messageId: Id<"forumChatMessages"> }, { messageId: string; status: "deleted"; publicationStatus: "deleted"; url: string }>("forum:deleteChatMessage"),
-  listChatPendingMessages: makeFunctionReference<"query", ChatPaginationArgs, ForumChatPendingPage>("forum:listChatPendingMessages"),
-  moderateChatMessage: makeFunctionReference<"mutation", { messageId: Id<"forumChatMessages">; status: "active" | "hidden" }, { messageId: string; status: "active" | "hidden"; publicationStatus: "published" | "hidden"; url: string }>("forum:moderateChatMessage"),
+  markChatRead: makeFunctionReference<
+    "mutation",
+    { messageId: Id<"forumChatMessages"> },
+    { lastReadAt: number }
+  >("forum:markChatRead"),
+  listChatMessages: makeFunctionReference<
+    "query",
+    ChatPaginationArgs,
+    ForumChatPage
+  >("forum:listChatMessages"),
+  sendChatMessage: makeFunctionReference<
+    "mutation",
+    { body: string; replyToId?: Id<"forumChatMessages"> },
+    ForumChatSendReceipt
+  >("forum:sendChatMessage"),
+  deleteChatMessage: makeFunctionReference<
+    "mutation",
+    { messageId: Id<"forumChatMessages"> },
+    {
+      messageId: string;
+      status: "deleted";
+      publicationStatus: "deleted";
+      url: string;
+    }
+  >("forum:deleteChatMessage"),
+  listChatPendingMessages: makeFunctionReference<
+    "query",
+    ChatPaginationArgs,
+    ForumChatPendingPage
+  >("forum:listChatPendingMessages"),
+  moderateChatMessage: makeFunctionReference<
+    "mutation",
+    { messageId: Id<"forumChatMessages">; status: "active" | "hidden" },
+    {
+      messageId: string;
+      status: "active" | "hidden";
+      publicationStatus: "published" | "hidden";
+      url: string;
+    }
+  >("forum:moderateChatMessage"),
 };

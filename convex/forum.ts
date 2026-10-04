@@ -1,3 +1,9 @@
+import { countForumExperience } from "./forumExperienceMetrics";
+import {
+  diversifyForumPage,
+  forumSourceDomain,
+  isForumDiscoveryBoard,
+} from "../lib/forum-experience";
 import { forumPluginPrincipal, forumUserPrincipal, principalForumUser } from "./forumPluginContext";
 import { defineForumQuery, defineForumMutation } from './forumOperationDefinitions';
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
@@ -808,6 +814,10 @@ type ForumThreadListSource = Pick<
   | "prefixColor"
   | "slug"
   | "title"
+  | "kind"
+  | "sourceUrl"
+  | "agentAssisted"
+  | "acceptedPostId"
   | "authorId"
   | "status"
   | "pinned"
@@ -1574,6 +1584,7 @@ const overviewOperation = defineForumQuery({
       fallbackVisibleThreads.map((thread) => thread._id),
     );
     const newestThreads = newestThreadCandidates
+      .filter((thread) => isForumDiscoveryBoard(thread.categorySlug))
       .filter(
         (thread) =>
           visibleBoardCategoryIds.has(thread.categoryId) ||
@@ -1879,35 +1890,41 @@ const listThreadsOperation = defineForumQuery({
       ),
       rules:
         rules === null ? null : publicForumBoardRulesRecord(rules, category),
-      activityThreads: activityThreads.map((thread) =>
-        publicThreadListRecord(thread, authorsById.get(thread.authorId), {
-          lastPostAuthor: authorsById.get(thread.lastPostUserId),
-          lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
-          viewerHasRead:
-            viewer === null
-              ? undefined
-              : hasReadThread(
-                  thread,
-                  readsByThreadId.get(thread._id),
-                  categoryRead,
-                ),
-          firstUnreadPostNumber: firstUnreadByThreadId.get(thread._id),
-        }),
+      activityThreads: await Promise.all(
+        activityThreads.map(async (thread) => ({
+          ...(await publicThreadIdentity(ctx, thread)),
+          ...publicThreadListRecord(thread, authorsById.get(thread.authorId), {
+            lastPostAuthor: authorsById.get(thread.lastPostUserId),
+            lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
+            viewerHasRead:
+              viewer === null
+                ? undefined
+                : hasReadThread(
+                    thread,
+                    readsByThreadId.get(thread._id),
+                    categoryRead,
+                  ),
+            firstUnreadPostNumber: firstUnreadByThreadId.get(thread._id),
+          }),
+        })),
       ),
-      threads: threads.map((thread) =>
-        publicThreadListRecord(thread, authorsById.get(thread.authorId), {
-          lastPostAuthor: authorsById.get(thread.lastPostUserId),
-          lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
-          viewerHasRead:
-            viewer === null
-              ? undefined
-              : hasReadThread(
-                  thread,
-                  readsByThreadId.get(thread._id),
-                  categoryRead,
-                ),
-          firstUnreadPostNumber: firstUnreadByThreadId.get(thread._id),
-        }),
+      threads: await Promise.all(
+        threads.map(async (thread) => ({
+          ...(await publicThreadIdentity(ctx, thread)),
+          ...publicThreadListRecord(thread, authorsById.get(thread.authorId), {
+            lastPostAuthor: authorsById.get(thread.lastPostUserId),
+            lastPostTarget: lastPostTargetsByThreadId.get(thread._id),
+            viewerHasRead:
+              viewer === null
+                ? undefined
+                : hasReadThread(
+                    thread,
+                    readsByThreadId.get(thread._id),
+                    categoryRead,
+                  ),
+            firstUnreadPostNumber: firstUnreadByThreadId.get(thread._id),
+          }),
+        })),
       ),
       pagination: paginationRecord({
         page,
@@ -2194,7 +2211,14 @@ const FORUM_EDITORIAL_BOARD_SLUGS = new Set(["forum-news", "news"]);
 
 const listFeedThreadsOperation = defineForumQuery({
   args: {
-    sort: v.optional(v.union(v.literal("new"), v.literal("active"))),
+    sort: v.optional(
+      v.union(v.literal("new"), v.literal("active"), v.literal("unanswered")),
+    ),
+    scope: v.optional(v.union(v.literal("discover"), v.literal("following"))),
+    authorFilter: v.optional(
+      v.union(v.literal("all"), v.literal("humans"), v.literal("agents")),
+    ),
+    now: v.optional(v.number()),
     communityOnly: v.optional(v.boolean()),
     paginationOpts: paginationOptsValidator,
   },
@@ -2212,6 +2236,16 @@ const listFeedThreadsOperation = defineForumQuery({
       );
     }
     const viewer = await maybeCurrentUser(ctx);
+    if (args.scope === "following" && viewer === null) {
+      throw forumError(
+        "SIGN_IN_REQUIRED",
+        "Sign in to see the boards and people you follow.",
+      );
+    }
+    const experience = viewer
+      ? await loadForumExperience(ctx, viewer._id)
+      : null;
+
     // Paginate raw rows once, then authorize. Avoid query filters that scan an
     // unbounded number of hidden/full-body rows to fill a visible page. Empty
     // pages retain their cursor and callers can continue while !isDone.
@@ -2244,15 +2278,74 @@ const listFeedThreadsOperation = defineForumQuery({
         ].map(async (id) => [id, await ctx.db.get("users", id)] as const),
       ),
     );
-    const threads = visible.filter(
-      (thread) =>
-        !args.communityOnly ||
-        !isEditorialFeedThread(
-          thread,
-          users.get(thread.authorId),
-          categories.get(thread.categoryId)?.slug,
-        ),
-    );
+    const following = viewer
+      ? await loadForumFollowing(ctx, viewer._id, visible)
+      : null;
+    const filter = args.authorFilter ?? experience?.authorFilter ?? "all";
+    const mutedWords =
+      !experience?.mutedUntil || !args.now || experience.mutedUntil > args.now
+        ? (experience?.mutedWords ?? [])
+        : [];
+    const candidates = visible.filter((thread) => {
+      const author = users.get(thread.authorId);
+      const slug =
+        categories.get(thread.categoryId)?.slug ?? thread.categorySlug;
+      if (args.scope !== "following" && !isForumDiscoveryBoard(slug)) return false;
+      if (args.communityOnly && isEditorialFeedThread(thread, author, slug))
+        return false;
+      if (filter === "humans" && author?.isAgent === true) return false;
+      if (filter === "agents" && author?.isAgent !== true) return false;
+      if (following?.ignored.has(thread.authorId)) return false;
+      if (
+        args.scope === "following" &&
+        !following?.boards.has(thread.categoryId) &&
+        !following?.members.has(thread.authorId) &&
+        !following?.threads.has(thread._id)
+      )
+        return false;
+      if (
+        args.sort === "unanswered" &&
+        (thread.replyCount > 0 ||
+          thread.acceptedPostId ||
+          thread.kind !== "question")
+      )
+        return false;
+      const text =
+        `${thread.title} ${compactFeedExcerpt(thread.body)}`.toLowerCase();
+      return !mutedWords.some((word) => text.includes(word));
+    });
+    // Only discovery pages diversify; chronological and followed views retain exact order.
+    const ownerKeys = new Map<Id<"users">, string>();
+    if (
+      args.scope !== "following" &&
+      args.sort !== "new" &&
+      args.sort !== "unanswered"
+    ) {
+      for (const id of new Set(candidates.map((thread) => thread.authorId))) {
+        const author = users.get(id);
+        const identity = author?.isAgent
+          ? await ctx.db
+              .query("agentIdentities")
+              .withIndex("by_userId", (q) => q.eq("userId", id))
+              .unique()
+          : null;
+        ownerKeys.set(id, String(identity?.ownerUserId ?? id));
+      }
+    }
+    const threads =
+      args.scope !== "following" &&
+      args.sort !== "new" &&
+      args.sort !== "unanswered"
+        ? diversifyForumPage(
+            candidates,
+            (thread) =>
+              ownerKeys.get(thread.authorId) ?? String(thread.authorId),
+            (thread) => ({
+              board: thread.categorySlug,
+              source: forumSourceDomain(thread.sourceUrl) || "community",
+            }),
+          )
+        : candidates;
     const profiles = new Map(
       await Promise.all(
         [...new Set(threads.map((thread) => thread.authorId))].map(
@@ -2285,42 +2378,50 @@ const listFeedThreadsOperation = defineForumQuery({
           );
     return {
       ...result,
-      page: threads.map((thread) => {
-        const author = users.get(thread.authorId);
-        return {
-          ...publicThreadListRecord(thread, displayName(author), {
-            categoryName: categories.get(thread.categoryId)?.name,
-            lastPostAuthor: displayName(users.get(thread.lastPostUserId)),
-            viewerHasRead:
-              viewer === null
-                ? undefined
-                : hasReadThread(
-                    thread,
-                    reads.get(thread._id),
-                    categoryReads.get(thread.categoryId),
-                  ),
-          }),
-          categoryName:
-            categories.get(thread.categoryId)?.name ?? thread.categorySlug,
-          categorySlug:
-            categories.get(thread.categoryId)?.slug ?? thread.categorySlug,
-          excerpt: compactFeedExcerpt(thread.body),
-          source: isEditorialFeedThread(
-            thread,
-            author,
-            categories.get(thread.categoryId)?.slug,
-          )
-            ? ("editorial" as const)
-            : ("community" as const),
-          authorIdentity: {
-            username: author?.usernameNormalized ?? author?.username ?? "",
-            name: author?.name ?? displayName(author),
-            avatarUrl:
-              profiles.get(thread.authorId)?.avatarUrl ?? author?.image,
-            isAgent: author?.isAgent === true,
-          },
-        };
-      }),
+      page: await Promise.all(
+        threads.map(async (thread) => {
+          const author = users.get(thread.authorId);
+          return {
+            ...publicThreadListRecord(thread, displayName(author), {
+              categoryName: categories.get(thread.categoryId)?.name,
+              lastPostAuthor: displayName(users.get(thread.lastPostUserId)),
+              viewerHasRead:
+                viewer === null
+                  ? undefined
+                  : hasReadThread(
+                      thread,
+                      reads.get(thread._id),
+                      categoryReads.get(thread.categoryId),
+                    ),
+            }),
+            categoryName:
+              categories.get(thread.categoryId)?.name ?? thread.categorySlug,
+            categorySlug:
+              categories.get(thread.categoryId)?.slug ?? thread.categorySlug,
+            excerpt: compactFeedExcerpt(thread.body),
+            kind: thread.kind ?? "discussion",
+            agentAssisted: thread.agentAssisted === true,
+            sourceUrl: thread.sourceUrl,
+            viewerBookmarked:
+              viewer !== null &&
+              (await loadThreadBookmark(ctx, viewer._id, thread._id)) !== null,
+            source: isEditorialFeedThread(
+              thread,
+              author,
+              categories.get(thread.categoryId)?.slug,
+            )
+              ? ("editorial" as const)
+              : ("community" as const),
+            authorIdentity: {
+              username: author?.usernameNormalized ?? author?.username ?? "",
+              name: author?.name ?? displayName(author),
+              avatarUrl:
+                profiles.get(thread.authorId)?.avatarUrl ?? author?.image,
+              isAgent: author?.isAgent === true,
+            },
+          };
+        }),
+      ),
     };
   },
 });
@@ -2592,7 +2693,47 @@ const getThreadOperation = defineForumQuery({
       attachmentsByPostKey.set(postId, attachments);
     }
 
+    const replyContexts = new Map<
+      Id<"forumPosts">,
+      { postNumber: number; postPage: number; author: string }
+    >();
+    for (const id of new Set(
+      pagePosts.flatMap((post) =>
+        post.parentPostId ? [post.parentPostId] : [],
+      ),
+    )) {
+      const parent = await ctx.db.get("forumPosts", id);
+      if (parent?.threadId === thread._id && parent.status === "active") {
+        const author = await ctx.db.get("users", parent.authorId);
+        replyContexts.set(id, {
+          postNumber: parent.postNumber ?? 2,
+          postPage: pageForPostNumber(parent.postNumber ?? 2, POST_PAGE_SIZE),
+          author: author?.name ?? displayName(author),
+        });
+      }
+    }
+    const acceptedPost = thread.acceptedPostId
+      ? await ctx.db.get("forumPosts", thread.acceptedPostId)
+      : null;
+    const acceptedAnswer =
+      acceptedPost?.status === "active" && acceptedPost.threadId === thread._id
+        ? acceptedPost
+        : null;
     return {
+      acceptedAnswer: acceptedAnswer
+        ? {
+            _id: acceptedAnswer._id,
+            body: acceptedAnswer.body,
+            postNumber: acceptedAnswer.postNumber,
+            postPage: pageForPostNumber(
+              acceptedAnswer.postNumber ?? 2,
+              POST_PAGE_SIZE,
+            ),
+            author:
+              (await ctx.db.get("users", acceptedAnswer.authorId))?.name ??
+              displayName(await ctx.db.get("users", acceptedAnswer.authorId)),
+          }
+        : null,
       category: await publicCategoryRecordWithAncestors(ctx, category, viewer),
       announcements: announcements.map((announcement) =>
         publicForumAnnouncementRecord(
@@ -2602,60 +2743,72 @@ const getThreadOperation = defineForumQuery({
       ),
       rules:
         rules === null ? null : publicForumBoardRulesRecord(rules, category),
-      thread: publicThreadDetailRecord(
-        thread,
-        authorsById.get(thread.authorId),
-        authorsById.get(thread.lastPostUserId),
-        {
-          viewerCanModerate: viewerCanModerateCategory,
-          viewerCanReply:
-            thread.status === "active" &&
-            canReplyInCategory(viewer, category, viewerCanModerateCategory),
-          viewerCanEdit: canEditThread(
-            viewer,
-            thread,
-            category,
-            viewerCanModerateCategory,
-          ),
-          viewerCanDelete: canDeleteThread(
-            viewer,
-            thread,
-            category,
-            viewerCanModerateCategory,
-          ),
-          viewerHasRead:
-            viewer === null
-              ? undefined
-              : hasReadThread(thread, readState, categoryRead),
-          viewerSubscribed: subscription?.status === "active",
-          viewerBookmarked: bookmark !== null,
-          viewerCanRateThread:
-            viewer !== null &&
-            viewer._id !== thread.authorId &&
-            isTrustedForumUser(viewer) &&
-            (await canUseForumParticipation(ctx, viewer)),
-          viewerRating: viewerThreadRating?.score ?? 0,
-          viewerCanGiveReputation:
-            viewerCanUseReputation &&
-            canGiveForumReputation(viewer, thread.authorId),
-          viewerReputationScore:
-            viewerReputationsByTargetKey.get(
-              buildThreadReputationTargetKey(thread._id),
-            )?.score ?? 0,
-          authorProfile: forumProfilesByUserId.get(thread.authorId),
-          authorIdentity: authorIdentitiesById.get(thread.authorId),
-          firstUnreadPostNumber: firstUnreadNumber,
-          attachments: attachmentsByPostKey.get("root"),
-          lastEditedByName:
-            thread.lastEditedBy === undefined
-              ? undefined
-              : authorsById.get(thread.lastEditedBy),
-        },
-      ),
+      thread: {
+        ...publicThreadDetailRecord(
+          thread,
+          authorsById.get(thread.authorId),
+          authorsById.get(thread.lastPostUserId),
+          {
+            viewerCanModerate: viewerCanModerateCategory,
+            viewerCanReply:
+              thread.status === "active" &&
+              canReplyInCategory(viewer, category, viewerCanModerateCategory),
+            viewerCanEdit: canEditThread(
+              viewer,
+              thread,
+              category,
+              viewerCanModerateCategory,
+            ),
+            viewerCanDelete: canDeleteThread(
+              viewer,
+              thread,
+              category,
+              viewerCanModerateCategory,
+            ),
+            viewerHasRead:
+              viewer === null
+                ? undefined
+                : hasReadThread(thread, readState, categoryRead),
+            viewerSubscribed: subscription?.status === "active",
+            viewerBookmarked: bookmark !== null,
+            viewerCanRateThread:
+              viewer !== null &&
+              viewer._id !== thread.authorId &&
+              isTrustedForumUser(viewer) &&
+              (await canUseForumParticipation(ctx, viewer)),
+            viewerRating: viewerThreadRating?.score ?? 0,
+            viewerCanGiveReputation:
+              viewerCanUseReputation &&
+              canGiveForumReputation(viewer, thread.authorId),
+            viewerReputationScore:
+              viewerReputationsByTargetKey.get(
+                buildThreadReputationTargetKey(thread._id),
+              )?.score ?? 0,
+            authorProfile: forumProfilesByUserId.get(thread.authorId),
+            authorIdentity: authorIdentitiesById.get(thread.authorId),
+            firstUnreadPostNumber: firstUnreadNumber,
+            attachments: attachmentsByPostKey.get("root"),
+            lastEditedByName:
+              thread.lastEditedBy === undefined
+                ? undefined
+                : authorsById.get(thread.lastEditedBy),
+          },
+        ),
+        acceptedPostId: acceptedAnswer?._id,
+        viewerCanAcceptAnswer:
+          thread.kind === "question" &&
+          thread.status === "active" &&
+          viewer !== null &&
+          (viewer._id === thread.authorId || viewerCanModerateCategory) &&
+          (await canUseForumParticipation(ctx, viewer)),
+      },
       poll,
       replies: {
-        page: pagePosts.map((post, index) =>
-          publicPostRecord(post, authorsById.get(post.authorId), {
+        page: pagePosts.map((post, index) => ({
+          replyContext: post.parentPostId
+            ? (replyContexts.get(post.parentPostId) ?? null)
+            : null,
+          ...publicPostRecord(post, authorsById.get(post.authorId), {
             viewerCanEdit: canEditPost(
               viewer,
               post,
@@ -2686,7 +2839,7 @@ const getThreadOperation = defineForumQuery({
                 ? undefined
                 : authorsById.get(post.lastEditedBy),
           }),
-        ),
+        })),
         isDone: page >= totalPages,
         pagination: paginationRecord({
           page,
@@ -3361,7 +3514,7 @@ const getMyForumNavStateOperation = defineForumQuery({
       canAdmin: canAdminForum(user),
       canManageBoards: canAdminForum(user),
       username: displayName(user),
-      rank: forumRankForPostCount(postCount),
+      rank: forumRankForReputation(profileReputationScore(profile)),
       postCount,
       reputationScore: profileReputationScore(profile),
       unreadNotifications: notificationSummary.unreadCount,
@@ -4438,6 +4591,15 @@ export const cleanupForumAttachmentStorage = internalMutation({
 
 const createThreadOperation = defineForumMutation({
   args: {
+    kind: v.optional(
+      v.union(
+        v.literal("discussion"),
+        v.literal("question"),
+        v.literal("link"),
+        v.literal("showcase"),
+      ),
+    ),
+    sourceUrl: v.optional(v.string()),
     categorySlug: v.string(),
     prefixId: v.optional(v.union(v.id("forumThreadPrefixes"), v.null())),
     title: v.string(),
@@ -4471,6 +4633,11 @@ const createThreadOperation = defineForumMutation({
       await assertForumParticipationAllowed(ctx, user, "start new threads");
     }
     const title = normalizeTitle(args.title);
+    const sourceUrl = args.sourceUrl
+      ? normalizeForumSourceUrl(args.sourceUrl)
+      : undefined;
+    if (args.kind === "link" && !sourceUrl)
+      throw forumError("INVALID_LINK", "Add an http or https source link.");
     const body = normalizeThreadBody(args.body);
     const poll = normalizePollInput(args.poll);
     if (
@@ -4542,11 +4709,14 @@ const createThreadOperation = defineForumMutation({
     const threadId = await ctx.db.insert("forumThreads", {
       categoryId: category._id,
       categorySlug: category.slug,
+      kind: args.kind ?? "discussion",
+      ...(sourceUrl ? { sourceUrl } : {}),
       ...prefixSnapshot,
       slug,
       title,
       body,
       authorId: user._id,
+      ...(forumPluginPrincipal(ctx) ? { agentAssisted: true } : {}),
       status: initialStatus,
       pinned: false,
       replyCount: 0,
@@ -4563,6 +4733,11 @@ const createThreadOperation = defineForumMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await countForumExperience(
+      ctx,
+      user,
+      initialStatus === "active" ? "thread_published" : "thread_pending",
+    );
     await syncForumThreadEditorialDigest(ctx, threadId);
     await syncForumThreadSearchProjection(ctx, threadId);
 
@@ -4930,6 +5105,7 @@ export const updateForumRelationship = mutation(updateForumRelationshipOperation
 
 const createReplyOperation = defineForumMutation({
   args: {
+    parentPostId: v.optional(v.id("forumPosts")),
     threadId: v.id("forumThreads"),
     body: v.string(),
     attachments: v.optional(v.array(attachmentInputValidator)),
@@ -4975,6 +5151,18 @@ const createReplyOperation = defineForumMutation({
 
     if (!userCanModerateCategory) {
       await assertForumParticipationAllowed(ctx, user, "reply to threads");
+    }
+    if (args.parentPostId) {
+      const parent = await ctx.db.get("forumPosts", args.parentPostId);
+      if (
+        !parent ||
+        parent.threadId !== thread._id ||
+        parent.status !== "active"
+      )
+        throw forumError(
+          "REPLY_TARGET_UNAVAILABLE",
+          "That reply is no longer available in this discussion.",
+        );
     }
     const body = normalizeReplyBody(args.body);
     const attachments = await normalizeForumAttachmentInputs(
@@ -5022,12 +5210,19 @@ const createReplyOperation = defineForumMutation({
       threadId: thread._id,
       categoryId: category._id,
       authorId: user._id,
+      ...(forumPluginPrincipal(ctx) ? { agentAssisted: true } : {}),
+      ...(args.parentPostId ? { parentPostId: args.parentPostId } : {}),
       body,
       postNumber,
       status: initialStatus,
       createdAt: now,
       updatedAt: now,
     });
+    await countForumExperience(
+      ctx,
+      user,
+      initialStatus === "active" ? "reply_published" : "reply_pending",
+    );
     await syncForumPostSearchProjection(ctx, postId);
     await insertForumAttachments(ctx, {
       attachments,
@@ -5683,6 +5878,7 @@ const setThreadBookmarkOperation = defineForumMutation({
     }
 
     const now = Date.now();
+    await countForumExperience(ctx, user, "saved");
     const bookmarkId = await ctx.db.insert("forumThreadBookmarks", {
       userId: user._id,
       threadId: thread._id,
@@ -9766,6 +9962,10 @@ function forumThreadEditorialDigestValues(thread: ForumThreadDoc) {
     prefixColor: thread.prefixColor,
     slug: thread.slug,
     title: thread.title,
+    kind: thread.kind,
+    sourceUrl: thread.sourceUrl,
+    agentAssisted: thread.agentAssisted,
+    acceptedPostId: thread.acceptedPostId,
     authorId: thread.authorId,
     status: thread.status,
     pinned: thread.pinned,
@@ -9798,6 +9998,10 @@ function forumThreadListSourceFromDigest(
     prefixColor: digest.prefixColor,
     slug: digest.slug,
     title: digest.title,
+    kind: digest.kind,
+    sourceUrl: digest.sourceUrl,
+    agentAssisted: digest.agentAssisted,
+    acceptedPostId: digest.acceptedPostId,
     authorId: digest.authorId,
     status: digest.status,
     pinned: digest.pinned ?? false,
@@ -16821,6 +17025,8 @@ async function loadPublicUserIdentitiesById(
       userId,
       {
         username: user?.usernameNormalized ?? user?.username ?? user?.name,
+        name: user?.name ?? user?.username,
+        isAgent: user?.isAgent === true,
         image: user?.image,
         joinedAt: user?._creationTime,
       },
@@ -19705,7 +19911,7 @@ async function hydrateCategoryModeratorRecords(
         _id: assignment._id,
         userId: assignment.userId,
         username: user?.usernameNormalized ?? user?.username,
-        displayName: displayName(user),
+        displayName: user?.name ?? displayName(user),
         assignedAt: assignment.createdAt,
         assignedBy: assignment.assignedBy,
         assignedByName: displayName(assignedBy),
@@ -19918,6 +20124,9 @@ function publicThreadListRecord(
     replyCount: thread.replyCount,
     viewCount: thread.viewCount,
     ratingCount: thread.ratingCount ?? 0,
+    kind: thread.kind ?? "discussion",
+    sourceUrl: thread.sourceUrl,
+    agentAssisted: thread.agentAssisted === true,
     ratingAverage: threadRatingAverage(thread),
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
@@ -19934,6 +20143,19 @@ function publicThreadListRecord(
       firstUnreadPostNumber === undefined
         ? undefined
         : pageForPostNumber(firstUnreadPostNumber, POST_PAGE_SIZE),
+  };
+}
+
+async function publicThreadIdentity(
+  ctx: QueryCtx | MutationCtx,
+  thread: { authorId: Id<"users">; agentAssisted?: boolean },
+) {
+  const user = await ctx.db.get("users", thread.authorId);
+  return {
+    authorDisplayName: user?.name ?? displayName(user),
+    authorUsername: user?.username,
+    authorIsAgent: user?.isAgent === true,
+    agentAssisted: thread.agentAssisted === true,
   };
 }
 
@@ -19956,6 +20178,8 @@ function publicThreadDetailRecord(
     authorProfile?: ForumUserProfileDoc;
     authorIdentity?: {
       username?: string;
+      name?: string;
+      isAgent?: boolean;
       image?: string;
       joinedAt?: number;
     };
@@ -20084,6 +20308,8 @@ function publicPostRecord(
     authorProfile?: ForumUserProfileDoc;
     authorIdentity?: {
       username?: string;
+      name?: string;
+      isAgent?: boolean;
       image?: string;
       joinedAt?: number;
     };
@@ -20100,6 +20326,8 @@ function publicPostRecord(
     categoryId: post.categoryId,
     authorId: post.authorId,
     body: post.body,
+    parentPostId: post.parentPostId,
+    agentAssisted: post.agentAssisted === true,
     postNumber,
     postPage:
       postNumber === undefined
@@ -20322,6 +20550,8 @@ function publicAuthorForumProfile(
   author?: string,
   identity?: {
     username?: string;
+    name?: string;
+    isAgent?: boolean;
     image?: string;
     joinedAt?: number;
   },
@@ -20337,7 +20567,8 @@ function publicAuthorForumProfile(
     authorSignature:
       profile?.showSignatures === false ? undefined : profile?.signature,
     authorShowSignatures: profile?.showSignatures ?? true,
-    authorDisplayName: author ?? UNKNOWN_AUTHOR,
+    authorDisplayName: identity?.name ?? author ?? UNKNOWN_AUTHOR,
+    authorIsAgent: identity?.isAgent === true,
     authorUsername: identity?.username,
     authorImage: profile?.avatarUrl ?? identity?.image,
     authorLocation: profile?.location,
@@ -20361,7 +20592,7 @@ function myForumProfileRecord(
     threadCount: profile?.threadCount ?? 0,
     postCount,
     reputationScore: profileReputationScore(profile),
-    rank: forumRankForPostCount(postCount),
+    rank: forumRankForReputation(profileReputationScore(profile)),
     trusted: isTrustedForumUser(user),
     activeWarningCount: warningSummary.activeWarningCount,
     activeWarningPoints: warningSummary.activeWarningPoints,
@@ -20429,10 +20660,10 @@ function publicForumRelationshipRecord(
     targetUserId: relationship.targetUserId,
     kind: relationship.kind,
     username: publicForumUsername(targetUser),
-    displayName: displayName(targetUser),
+    displayName: targetUser.name ?? displayName(targetUser),
     avatarUrl: profile?.avatarUrl ?? targetUser.image,
     customTitle: profile?.customTitle,
-    rank: forumRankForPostCount(postCount),
+    rank: forumRankForReputation(profileReputationScore(profile)),
     postCount,
     reputationScore: profileReputationScore(profile),
     createdAt: relationship.createdAt,
@@ -20449,11 +20680,11 @@ function publicForumMemberRecord(
   return {
     _id: profile?._id ?? user._id,
     username: publicForumUsername(user),
-    displayName: displayName(user),
+    displayName: user?.name ?? displayName(user),
     avatarUrl: profile?.avatarUrl ?? user.image,
     customTitle: profile?.customTitle,
     location: profile?.location,
-    rank: forumRankForPostCount(counts.postCount),
+    rank: forumRankForReputation(profileReputationScore(profile)),
     threadCount: counts.threadCount,
     postCount: counts.postCount,
     reputationScore: profileReputationScore(profile),
@@ -20581,10 +20812,10 @@ function publicForumStatisticsMemberRecord(
   return {
     userId: user._id,
     username: publicForumUsername(user),
-    displayName: displayName(user),
+    displayName: user?.name ?? displayName(user),
     avatarUrl: profile?.avatarUrl ?? user.image,
     customTitle: profile?.customTitle,
-    rank: forumRankForPostCount(postCount),
+    rank: forumRankForReputation(profileReputationScore(profile)),
     threadCount,
     postCount,
     reputationScore: profileReputationScore(profile),
@@ -20810,10 +21041,10 @@ function publicForumPresenceMemberRecord(
   return {
     userId: user._id,
     username: publicForumUsername(user),
-    displayName: displayName(user),
+    displayName: user?.name ?? displayName(user),
     avatarUrl: profile?.avatarUrl ?? user.image,
     customTitle: profile?.customTitle,
-    rank: forumRankForPostCount(postCount),
+    rank: forumRankForReputation(profileReputationScore(profile)),
     postCount,
     reputationScore: profileReputationScore(profile),
     lastSeenAt: presence.lastSeenAt,
@@ -20908,19 +21139,13 @@ function publicForumUsername(user: UserDoc) {
   );
 }
 
-function forumRankForPostCount(postCount: number) {
-  if (postCount >= 1_000) {
-    return "Forum Elder";
-  }
-  if (postCount >= 250) {
-    return "Senior Member";
-  }
-  if (postCount >= 50) {
-    return "Full Member";
-  }
-  if (postCount >= 10) {
-    return "Member";
-  }
+function forumRankForReputation(score: number) {
+  // Posting volume stays visible as history, but recognition comes from
+  // existing member feedback; this label never grants trust or staff authority.
+  if (score >= 100) return "Forum Mentor";
+  if (score >= 25) return "Community Guide";
+  if (score >= 5) return "Helpful Contributor";
+  if (score >= 1) return "Member";
   return "New Member";
 }
 
@@ -22222,7 +22447,16 @@ async function recomputeThreadActivity(
     .take(1);
 
   const newestReply = latestPost[0];
+  const accepted = thread.acceptedPostId
+    ? await ctx.db.get("forumPosts", thread.acceptedPostId)
+    : null;
   await ctx.db.patch("forumThreads", threadId, {
+    ...(thread.acceptedPostId &&
+    (!accepted ||
+      accepted.status !== "active" ||
+      accepted.threadId !== thread._id)
+      ? { acceptedPostId: undefined }
+      : {}),
     lastPostId: newestReply?._id,
     lastPostAt: newestReply?.createdAt ?? thread.createdAt,
     lastPostUserId: newestReply?.authorId ?? thread.authorId,
@@ -22778,13 +23012,576 @@ export const forumChatOperations = createForumChatOperations({
   isTrustedForumUser,
   enforcePendingForumSubmissionLimits,
 });
-export const listChatMessages = query(forumChatOperations.listChatMessages.definition);
-export const sendChatMessage = mutation(forumChatOperations.sendChatMessage.definition);
-export const deleteChatMessage = mutation(forumChatOperations.deleteChatMessage.definition);
-export const listChatPendingMessages = query(forumChatOperations.listChatPendingMessages.definition);
-export const moderateChatMessage = mutation(forumChatOperations.moderateChatMessage.definition);
+export const listChatMessages = query(
+  forumChatOperations.listChatMessages.definition,
+);
+export const markChatRead = mutation(
+  forumChatOperations.markChatRead.definition,
+);
+export const sendChatMessage = mutation(
+  forumChatOperations.sendChatMessage.definition,
+);
+export const deleteChatMessage = mutation(
+  forumChatOperations.deleteChatMessage.definition,
+);
+export const listChatPendingMessages = query(
+  forumChatOperations.listChatPendingMessages.definition,
+);
+export const moderateChatMessage = mutation(
+  forumChatOperations.moderateChatMessage.definition,
+);
+
+function normalizeForumSourceUrl(value: string) {
+  if (value.length > 2_048)
+    throw forumError("INVALID_LINK", "The source URL is too long.");
+  try {
+    const url = new URL(value.trim());
+    if (
+      !["https:", "http:"].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
+      throw new Error("protocol");
+    url.hash = "";
+    return url.href;
+  } catch {
+    throw forumError(
+      "INVALID_LINK",
+      "Use an http or https source link without credentials.",
+    );
+  }
+}
+
+async function loadForumExperience(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+) {
+  return ctx.db
+    .query("forumExperienceSettings")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+}
+async function loadForumFollowing(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  threads: ForumThreadDoc[],
+) {
+  // Membership checks are bounded by this feed page, not the member's entire
+  // subscription history. Large followed lists never prevent ordinary browsing.
+  const boards = new Set<Id<"forumCategories">>();
+  const followedThreads = new Set<Id<"forumThreads">>();
+  const members = new Set<Id<"users">>();
+  const ignored = new Set<Id<"users">>();
+  await Promise.all([
+    ...[...new Set(threads.map((t) => t.categoryId))].map(
+      async (categoryId) => {
+        const row = await ctx.db
+          .query("forumCategorySubscriptions")
+          .withIndex("by_userId_and_categoryId", (q) =>
+            q.eq("userId", userId).eq("categoryId", categoryId),
+          )
+          .unique();
+        if (row?.status === "active") boards.add(categoryId);
+      },
+    ),
+    ...threads.map(async (thread) => {
+      const row = await ctx.db
+        .query("forumThreadSubscriptions")
+        .withIndex("by_userId_and_threadId", (q) =>
+          q.eq("userId", userId).eq("threadId", thread._id),
+        )
+        .unique();
+      if (row?.status === "active") followedThreads.add(thread._id);
+    }),
+    ...[...new Set(threads.map((t) => t.authorId))].map(
+      async (targetUserId) => {
+        const [buddy, ignore] = await Promise.all(
+          ["buddy", "ignore"].map((kind) =>
+            ctx.db
+              .query("forumUserRelationships")
+              .withIndex("by_userId_and_targetUserId_and_kind", (q) =>
+                q
+                  .eq("userId", userId)
+                  .eq("targetUserId", targetUserId)
+                  .eq("kind", kind as "buddy" | "ignore"),
+              )
+              .unique(),
+          ),
+        );
+        if (buddy) members.add(targetUserId);
+        if (ignore) ignored.add(targetUserId);
+      },
+    ),
+  ]);
+  return { boards, threads: followedThreads, members, ignored };
+}
+const getMyForumExperienceOperation = defineForumQuery({
+  args: {},
+  handler: async (ctx) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to personalize your forum.",
+    );
+    const [settings, boards, members] = await Promise.all([
+      loadForumExperience(ctx, viewer._id),
+      listMyCategorySubscriptionsOperation.handler(ctx, { limit: 100 }),
+      listMyForumRelationshipsOperation.handler(ctx, {}),
+    ]);
+    return {
+      defaultFeed: settings?.defaultFeed ?? ("discover" as const),
+      authorFilter: settings?.authorFilter ?? ("all" as const),
+      mutedWords: settings?.mutedWords ?? [],
+      mutedUntil: settings?.mutedUntil,
+      onboardingCompleted: settings?.onboardingCompleted ?? false,
+      followingBoards: boards.categories,
+      followingMembers: members.buddies,
+    };
+  },
+});
+export const getMyForumExperience = query(getMyForumExperienceOperation);
+const updateMyForumExperienceOperation = defineForumMutation({
+  args: {
+    defaultFeed: v.optional(
+      v.union(v.literal("discover"), v.literal("following")),
+    ),
+    authorFilter: v.optional(
+      v.union(v.literal("all"), v.literal("humans"), v.literal("agents")),
+    ),
+    mutedWords: v.optional(v.array(v.string())),
+    mutedUntil: v.optional(v.union(v.number(), v.null())),
+    onboardingCompleted: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to personalize your forum.",
+    );
+    await assertForumParticipationAllowed(
+      ctx,
+      viewer,
+      "update forum preferences",
+    );
+    if (
+      args.mutedWords &&
+      (args.mutedWords.length > 20 ||
+        args.mutedWords.some((word) => !word.trim() || word.trim().length > 80))
+    )
+      throw forumError(
+        "INVALID_MUTE",
+        "Add up to 20 words or phrases, each 1–80 characters.",
+      );
+    if (
+      typeof args.mutedUntil === "number" &&
+      (!Number.isFinite(args.mutedUntil) || args.mutedUntil <= Date.now())
+    )
+      throw forumError(
+        "INVALID_MUTE",
+        "Choose a future time for the mute to expire.",
+      );
+    const existing = await loadForumExperience(ctx, viewer._id);
+    const data = {
+      userId: viewer._id,
+      defaultFeed:
+        args.defaultFeed ?? existing?.defaultFeed ?? ("discover" as const),
+      authorFilter:
+        args.authorFilter ?? existing?.authorFilter ?? ("all" as const),
+      mutedWords: args.mutedWords
+        ? [...new Set(args.mutedWords.map((word) => word.trim().toLowerCase()))]
+        : (existing?.mutedWords ?? []),
+      mutedUntil:
+        args.mutedUntil === null
+          ? undefined
+          : (args.mutedUntil ?? existing?.mutedUntil),
+      onboardingCompleted:
+        args.onboardingCompleted ?? existing?.onboardingCompleted ?? false,
+      updatedAt: Date.now(),
+    };
+    if (!forumPluginPrincipal(ctx))
+      await consumeNativeForumWriteRateIfNeeded(ctx, viewer);
+    if (existing)
+      await ctx.db.patch("forumExperienceSettings", existing._id, data);
+    else await ctx.db.insert("forumExperienceSettings", data);
+    return { ...data, userId: viewer._id };
+  },
+});
+export const updateMyForumExperience = mutation(
+  updateMyForumExperienceOperation,
+);
+const listMyForumCatchUpOperation = defineForumQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireSignedInUser(ctx, "Sign in to catch up on your forum.");
+    const limit = clampLimit(args.limit, 24, 50);
+    const [following, saved, pending] = await Promise.all([
+      listMyThreadSubscriptionsOperation.handler(ctx, { limit }),
+      listMyThreadBookmarksOperation.handler(ctx, { limit }),
+      listMyPendingForumContentOperation.handler(ctx, { limit }),
+    ]);
+    const threads = following.threads.filter((thread) => thread.viewerUnread);
+    return {
+      threads,
+      saved: saved.threads,
+      pending,
+      summary: {
+        unread: threads.length,
+        saved: saved.threads.length,
+        pending: pending.threads.length + pending.posts.length,
+      },
+      bounded: true,
+    };
+  },
+});
+export const listMyForumCatchUp = query(listMyForumCatchUpOperation);
+const setAcceptedAnswerOperation = defineForumMutation({
+  args: {
+    threadId: v.id("forumThreads"),
+    postId: v.union(v.id("forumPosts"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to choose an answer.",
+    );
+    const thread = await ctx.db.get("forumThreads", args.threadId);
+    if (!thread || thread.status !== "active" || thread.kind !== "question")
+      throw forumError(
+        "QUESTION_UNAVAILABLE",
+        "Choose an answer on an open question.",
+      );
+    const category = await requireVisibleCategoryById(
+      ctx,
+      thread.categoryId,
+      viewer,
+    );
+    await assertForumParticipationAllowed(
+      ctx,
+      viewer,
+      "choose an accepted answer",
+    );
+    if (
+      viewer._id !== thread.authorId &&
+      !(await canModerateCategory(ctx, viewer, category))
+    )
+      throw forumError(
+        "UNAUTHORIZED",
+        "Only the question author or an authorized moderator can choose its answer.",
+      );
+    if (args.postId) {
+      const post = await ctx.db.get("forumPosts", args.postId);
+      if (!post || post.threadId !== thread._id || post.status !== "active")
+        throw forumError(
+          "ANSWER_UNAVAILABLE",
+          "Choose a published reply from this question.",
+        );
+    }
+    if (thread.acceptedPostId !== (args.postId ?? undefined)) {
+      if (!forumPluginPrincipal(ctx))
+        await consumeNativeForumWriteRateIfNeeded(ctx, viewer);
+      if (args.postId)
+        await countForumExperience(ctx, viewer, "answer_selected");
+      await ctx.db.patch("forumThreads", thread._id, {
+        acceptedPostId: args.postId ?? undefined,
+        updatedAt: Date.now(),
+      });
+      await syncForumThreadEditorialDigest(ctx, thread._id);
+      await recordModerationLog(ctx, {
+        actorUserId: viewer._id,
+        entityType: "forumThread",
+        entityId: thread._id,
+        eventType: "forum_answer_selected",
+        message: args.postId
+          ? "Accepted answer selected"
+          : "Accepted answer cleared",
+        categoryId: category._id,
+        threadId: thread._id,
+        metadata: {
+          postId: args.postId,
+          agentAssisted: forumPluginPrincipal(ctx) !== null,
+        },
+      });
+    }
+    return {
+      threadId: thread._id,
+      acceptedPostId: args.postId,
+      status: "active" as const,
+      url: `https://forum.symbaiex.com/${thread.categorySlug}/${thread.slug}`,
+    };
+  },
+});
+export const setAcceptedAnswer = mutation(setAcceptedAnswerOperation);
+
+const getNewsDiscussionOperation = defineForumQuery({
+  args: { hnItemId: v.number() },
+  handler: async (ctx, args) => {
+    const story = await ctx.db
+      .query("hnStories")
+      .withIndex("by_hnItemId_and_fetchedAt", (q) =>
+        q.eq("hnItemId", args.hnItemId),
+      )
+      .order("desc")
+      .first();
+    if (!story)
+      throw forumError(
+        "NEWS_UNAVAILABLE",
+        "This story is not in the news index.",
+      );
+    const viewer = await maybeCurrentUser(ctx);
+    const mapping = await ctx.db
+      .query("forumNewsDiscussions")
+      .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
+      .unique();
+    const thread = mapping
+      ? await ctx.db.get("forumThreads", mapping.threadId)
+      : null;
+    const visible = thread
+      ? await filterThreadsForPublicCategory(
+          ctx,
+          [thread].filter((t) => isVisibleThreadStatus(t.status)),
+          null,
+          viewer,
+        )
+      : [];
+    const ownedPending =
+      thread?.status === "pending" &&
+      viewer?._id === thread.authorId &&
+      (await canViewCategoryWithAncestors(
+        ctx,
+        viewer,
+        await ctx.db.get("forumCategories", thread.categoryId),
+      ));
+    return {
+      story: {
+        hnItemId: story.hnItemId,
+        title: story.title,
+        url: story.url,
+        host: story.host,
+        by: story.by,
+        timePosted: story.timePosted,
+        hnScore: story.score,
+        hnCommentCount: story.descendants,
+      },
+      discussion:
+        visible.length || ownedPending
+          ? {
+              threadId: thread!._id,
+              categorySlug: thread!.categorySlug,
+              threadSlug: thread!.slug,
+              title: thread!.title,
+              status: thread!.status,
+              replyCount: thread!.replyCount,
+              url: `https://forum.symbaiex.com/${thread!.categorySlug}/${thread!.slug}`,
+            }
+          : null,
+    };
+  },
+});
+export const getNewsDiscussion = query(getNewsDiscussionOperation);
+const createNewsDiscussionOperation = defineForumMutation({
+  args: { hnItemId: v.number(), categorySlug: v.string(), body: v.string() },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to discuss this story.",
+    );
+    await assertForumParticipationAllowed(
+      ctx,
+      viewer,
+      "start a news discussion",
+    );
+    const category = await requireVisibleCategory(
+      ctx,
+      args.categorySlug,
+      viewer,
+    );
+    if (!(await canViewCategoryWithAncestors(ctx, null, category, true)))
+      throw forumError(
+        "PUBLIC_BOARD_REQUIRED",
+        "News discussions belong in a public board.",
+      );
+    const mapping = await ctx.db
+      .query("forumNewsDiscussions")
+      .withIndex("by_hnItemId", (q) => q.eq("hnItemId", args.hnItemId))
+      .unique();
+    if (mapping) {
+      const thread = await ctx.db.get("forumThreads", mapping.threadId);
+      if (thread) {
+        await requireVisibleCategoryById(ctx, thread.categoryId, viewer);
+        if (
+          !isVisibleThreadStatus(thread.status) &&
+          !(thread.status === "pending" && thread.authorId === viewer._id)
+        )
+          throw forumError(
+            "DISCUSSION_UNAVAILABLE",
+            "This story's discussion is awaiting moderation or unavailable.",
+          );
+        return {
+          threadId: thread._id,
+          categorySlug: thread.categorySlug,
+          threadSlug: thread.slug,
+          status: thread.status,
+          existing: true,
+        };
+      }
+      throw forumError(
+        "DISCUSSION_UNAVAILABLE",
+        "This story's discussion is unavailable.",
+      );
+    }
+    const story = await ctx.db
+      .query("hnStories")
+      .withIndex("by_hnItemId_and_fetchedAt", (q) =>
+        q.eq("hnItemId", args.hnItemId),
+      )
+      .order("desc")
+      .first();
+    if (!story)
+      throw forumError(
+        "NEWS_UNAVAILABLE",
+        "This story is not in the news index.",
+      );
+    const result = await createThreadOperation.handler(ctx, {
+      categorySlug: args.categorySlug,
+      title: story.title.slice(0, 160),
+      body: args.body,
+      kind: "link",
+      sourceUrl:
+        story.url ?? `https://news.ycombinator.com/item?id=${story.hnItemId}`,
+    });
+    await ctx.db.patch("forumThreads", result.threadId, {
+      newsItemId: story.hnItemId,
+    });
+    await ctx.db.insert("forumNewsDiscussions", {
+      hnItemId: story.hnItemId,
+      threadId: result.threadId,
+      createdAt: Date.now(),
+    });
+    return { ...result, existing: false };
+  },
+});
+export const createNewsDiscussion = mutation(createNewsDiscussionOperation);
+const createThreadFromChatOperation = defineForumMutation({
+  args: {
+    categorySlug: v.string(),
+    title: v.string(),
+    messageIds: v.array(v.id("forumChatMessages")),
+  },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to save a chat as a thread.",
+    );
+    if (
+      !args.messageIds.length ||
+      args.messageIds.length > 10 ||
+      new Set(args.messageIds).size !== args.messageIds.length
+    )
+      throw forumError(
+        "INVALID_CHAT_SELECTION",
+        "Choose 1–10 different published chat messages.",
+      );
+    const room = await requireVisibleCategory(ctx, "general", viewer);
+    const rows = await Promise.all(
+      args.messageIds.map((id) => ctx.db.get("forumChatMessages", id)),
+    );
+    if (
+      rows.some(
+        (row) => !row || row.categoryId !== room._id || row.status !== "active",
+      )
+    )
+      throw forumError(
+        "CHAT_UNAVAILABLE",
+        "Only published messages from a visible Lounge can become a thread.",
+      );
+    const messages = await Promise.all(
+      rows.map(async (row) => {
+        const author = await ctx.db.get("users", row!.authorId);
+        const name = author?.name ?? author?.username ?? "Member";
+        return `**${name.replace(/[\[\]*_`]/g, "")}**${author?.isAgent ? " (AI)" : ""} · ${new Date(row!.createdAt).toISOString()}\n\n${row!.body
+          .split("\n")
+          .map((line) => `> ${line}`)
+          .join("\n")}`;
+      }),
+    );
+    return createThreadOperation.handler(ctx, {
+      categorySlug: args.categorySlug,
+      title: args.title,
+      body: `From the [Lounge](https://forum.symbaiex.com/#forum-chat), selected by @${viewer.username ?? "member"}.\n\n${messages.join("\n\n")}\n\nContinue the conversation here.`,
+    });
+  },
+});
+export const createThreadFromChat = mutation(createThreadFromChatOperation);
+
+const recordForumExperienceEventOperation = defineForumMutation({
+  args: {
+    event: v.union(
+      v.literal("feed_open"),
+      v.literal("composer_open"),
+      v.literal("pending_open"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Sign in to record a forum visit.",
+    );
+    if (!forumPluginPrincipal(ctx))
+      await consumeNativeForumWriteRateIfNeeded(ctx, viewer);
+    await countForumExperience(ctx, viewer, args.event);
+    return { recorded: true };
+  },
+});
+export const recordForumExperienceEvent = mutation(
+  recordForumExperienceEventOperation,
+);
+export const getForumExperienceMetrics = query({
+  args: { sinceDay: v.string() },
+  handler: async (ctx, args) => {
+    const viewer = await requireSignedInUser(
+      ctx,
+      "Forum staff access is required.",
+    );
+    if (!(await canModerateAnyForumCategory(ctx, viewer)))
+      throw forumError("UNAUTHORIZED", "Forum staff access is required.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.sinceDay))
+      throw forumError("INVALID_DATE", "Use a YYYY-MM-DD date.");
+    const rows = await ctx.db
+      .query("forumExperienceDailyCounters")
+      .withIndex("by_dayKey", (q) => q.gte("dayKey", args.sinceDay))
+      .take(1001);
+    return { rows: rows.slice(0, 1000), limited: rows.length > 1000 };
+  },
+});
 
 export const forumOperations = {
+  recordForumExperienceEvent: {
+    kind: "mutation",
+    definition: recordForumExperienceEventOperation,
+  },
+  getNewsDiscussion: { kind: "query", definition: getNewsDiscussionOperation },
+  createNewsDiscussion: {
+    kind: "mutation",
+    definition: createNewsDiscussionOperation,
+  },
+  createThreadFromChat: {
+    kind: "mutation",
+    definition: createThreadFromChatOperation,
+  },
+  getMyForumExperience: {
+    kind: "query",
+    definition: getMyForumExperienceOperation,
+  },
+  updateMyForumExperience: {
+    kind: "mutation",
+    definition: updateMyForumExperienceOperation,
+  },
+  listMyForumCatchUp: {
+    kind: "query",
+    definition: listMyForumCatchUpOperation,
+  },
+  setAcceptedAnswer: {
+    kind: "mutation",
+    definition: setAcceptedAnswerOperation,
+  },
 ...forumChatOperations,
 setCategorySubscription: { kind: "mutation", definition: setCategorySubscriptionOperation },
 setThreadSubscription: { kind: "mutation", definition: setThreadSubscriptionOperation },

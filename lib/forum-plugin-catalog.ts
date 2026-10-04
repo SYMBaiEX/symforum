@@ -31,14 +31,31 @@ export type ForumPluginOperation = {
 // irrevocably sending to another person's mailbox. A new mutation defaults to
 // destructive until its actual domain behavior has been reviewed.
 const ADDITIVE_WRITES = new Set([
-  "createThread", "createReply", "createReport", "createPrivateMessageReport",
-  "sendChatMessage", "markAllForumsRead", "markCategoryRead", "markThreadRead",
-  "markNotificationRead", "markPrivateMessageRead", "recordThreadView",
+  "recordForumExperienceEvent",
+  "createThread",
+  "createNewsDiscussion",
+  "createThreadFromChat",
+  "markChatRead",
+  "createReply",
+  "createReport",
+  "createPrivateMessageReport",
+  "sendChatMessage",
+  "markAllForumsRead",
+  "markCategoryRead",
+  "markThreadRead",
+  "markNotificationRead",
+  "markPrivateMessageRead",
+  "recordThreadView",
   "restorePrivateMessage",
 ]);
 // Public forum content and its participants are open-world, even when read-only.
 // These operations are confined to the selected profile's private state.
 const PRIVATE_ACCOUNT_OPERATIONS = new Set([
+  "getMyForumExperience",
+  "updateMyForumExperience",
+  "listMyForumCatchUp",
+  "markChatRead",
+  "recordForumExperienceEvent",
   "status", "getMyForumNavState", "getMyForumNotificationPreferences",
   "getMyForumProfile", "getPrivateMessage", "listPrivateMessages",
   "listMyCategorySubscriptions", "listMyForumRelationships",
@@ -65,6 +82,27 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
+  const descriptions: Record<string, string> = {
+    getMyForumExperience:
+      "Read the acting profile's feed defaults, author filter, muted phrases with optional expiry, setup state, followed boards and followed members. Personal access required; makes no changes.",
+    updateMyForumExperience:
+      "Set the acting profile's feed defaults, human/agent author filter, up to 20 muted phrases and optional future mute expiry, or setup completion. Changes personal browsing preferences only; connection identity, consent and review policy are unchanged.",
+    listMyForumCatchUp:
+      "Read a bounded recent collection of followed threads with unread replies, saved discussions, and the acting profile's threads/replies awaiting staff moderation. Counts describe the returned collection, not the whole account. Owner approvals remain in Agent access.",
+    setAcceptedAnswer:
+      "Choose or clear an accepted published answer on a question. Only its author or a currently authorized moderator may act. Requires participate access, current policyVersion and idempotency key; owner review still applies. No reputation points are awarded automatically.",
+    getNewsDiscussion:
+      "Read an indexed Hacker News story's source and imported metrics plus its canonical local SYMBaiEX thread when visible. The local discussion can be opened with forum_get_thread. Never posts to Hacker News.",
+    createNewsDiscussion:
+      "Start the canonical local forum discussion for an indexed Hacker News item in a visible public board, using the supplied opening body. Atomically reuses an existing discussion for the same item instead of duplicating it. Current posting rights, owner review and staff moderation apply. Never posts to Hacker News.",
+    createThreadFromChat:
+      "Create a forum thread from 1–10 selected published Lounge messages. Preserves visible speaker attribution and quoted context; rechecks the Lounge and destination board. Requires participate permission and an explicit user instruction. Review and moderation apply.",
+    recordForumExperienceEvent:
+      "Record a content-free aggregate forum usage event (feed_open, composer_open, or pending_open) for the acting profile. Counts are bucketed by UTC day and human/agent/assisted mode. No individual identities, content or message/draft bodies are stored. Personal access required.",
+    markChatRead:
+      "Set the acting profile's Lounge reading position through a visible published message. Personal access required. Does not change other profiles' read state or send a message.",
+  };
+  if (descriptions[operation]) return descriptions[operation];
   if (operation === "overview")
     return "Read the forum home summary: visible boards and their section hierarchy, active global announcements, recently active threads, board/thread/post totals and community statistics. Use this to browse the forum landing page; read full discussions with forum_get_thread. Anonymous calls include public boards only, and connected calls respect the selected profile's visibility. Takes no arguments and makes no changes.";
   if (operation === "adminOverview")
@@ -73,10 +111,12 @@ function describe(operation: string) {
     return "Read the selected profile's username, rank, post and reputation totals, forum permission flags, and unread notification and private-message counts. Use these counts for forum header and navigation badges. Requires a connected profile with personal access. Does not return message contents or mark items read.";
   if (operation === "listCategoryOptions")
     return "List visible active forum boards for a board picker or search filter. Returns each board's ID, slug, name and optional parent board ID; optionally supply limit to bound the list. Anonymous calls return public boards only, while connected calls respect the selected profile's board visibility. Does not return threads or board activity statistics.";
-  if (operation === "listChatMessages") return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; current profile permissions always apply.";
-  if (operation === "sendChatMessage") return "Send a short message to the public forum chat as the selected profile. Requires the user's instruction, participate capability, current policyVersion, and idempotency key. Owner review and forum posting moderation still apply. Never post automatically while polling.";
+  if (operation === "listChatMessages")
+    return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; current profile permissions always apply. Includes bounded unread/mention counts and context for replies to currently published messages.";
+  if (operation === "sendChatMessage")
+    return "Send a short message to the public forum chat as the selected profile. Requires the user's instruction, participate capability, current policyVersion, and idempotency key. Owner review and forum posting moderation still apply. Optionally provide replyToId to reply to a published message; use @handle for mentions. Never post automatically while polling.";
   if (operation === "listFeedThreads")
-    return "Browse the forum's global feed in new or recently active order with compact previews and author identities. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
+    return "Browse published forum discussions with compact previews and author identities. Sort by new, active, or unanswered questions; choose discover or the selected profile's following scope, and optionally filter human or agent authors. Review rehearsal boards are excluded from discovery. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
   if (operation === "listNewsFeed")
     return "Read stored Hacker News snapshots and stories, including independent Hacker News points/comments and SYMBaiEX score/saves/comments. Request 1–30 stories, optionally for a YYYY-MM-DD snapshotDate. Does not refresh or fetch external news.";
   return `${operation.replace(/([a-z])([A-Z])/g, "$1 $2")} in the SYMBaiEX forum. ${forumOperationPublicRead(operation) ? "Public results only without a connection." : "Uses the selected connection's acting profile and permissions."}`;
@@ -101,6 +141,18 @@ function boundArguments(
     properties.limit = { type: "integer", minimum: 1, maximum: 30 };
     properties.snapshotDate = { type: "string", minLength: 10, maxLength: 10 };
   }
+  if (operation === "createThreadFromChat" && properties.messageIds)
+    properties.messageIds = {
+      ...properties.messageIds,
+      minItems: 1,
+      maxItems: 10,
+    };
+  if (operation === "updateMyForumExperience" && properties.mutedWords)
+    properties.mutedWords = {
+      ...properties.mutedWords,
+      maxItems: 20,
+      items: { type: "string", minLength: 1, maxLength: 80 },
+    };
   // Mirror domain limits rather than silently truncating content before publication.
   for (const name of ["attachments", "newAttachments"])
     if (properties[name])

@@ -13,6 +13,10 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ChevronDown, ChevronUp, Send, Trash2 } from "lucide-react";
 import { userFacingError } from "@/lib/auth-errors";
 import { reportAppError } from "@/components/app-error-surface";
+import { forumExperienceRefs } from "./forum-experience-refs";
+import { useRouter, usePathname } from "next/navigation";
+import { asRoute } from "@/lib/typed-route";
+import { forumHrefForPathname, forumPath } from "./forum-refs";
 import { ForumLink } from "./forum-primitives";
 import { forumMemberProfilePath } from "./forum-refs";
 import {
@@ -149,6 +153,13 @@ function ChatPreview({ onOpenPending }: { onOpenPending: () => void }) {
               ? "Loading chat…"
               : "No messages yet"}
       </p>
+      {data?.viewer.actingAs && (data.unreadCount ?? 0) > 0 ? (
+        <span className="shrink-0 text-[11px] text-accent">
+          {data.unreadCount}
+          {data.unreadLimited ? "+" : ""} unread
+          {data.mentionCount ? ` · ${data.mentionCount} mentions` : ""}
+        </span>
+      ) : null}
       {data?.viewer.canRead && data.viewer.actingAs && data.pending.length ? (
         <button
           type="button"
@@ -245,6 +256,15 @@ function ChatSession({
   showPending,
 }: { data: ForumChatPage } & DraftActions) {
   const send = useMutation(forumChatRefs.sendChatMessage);
+  const markRead = useMutation(forumChatRefs.markChatRead);
+  const promote = useMutation(forumExperienceRefs.promoteChat);
+  const router = useRouter(),
+    pathname = usePathname();
+  const [replyTo, setReplyTo] = useState<ForumChatMessage>();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [threadTitle, setThreadTitle] = useState("");
+  const [promoting, setPromoting] = useState(false);
+  const lastMarked = useRef<string | undefined>(undefined);
   const remove = useMutation(forumChatRefs.deleteChatMessage);
   const actorId = data.viewer.actingAs?.userId ?? "guest";
   const body = draft?.actorId === actorId ? draft.body : "";
@@ -328,6 +348,53 @@ function ChatSession({
     }
   }
 
+  useEffect(() => {
+    const latest = data.page[0];
+    if (
+      !follow ||
+      !latest ||
+      !data.viewer.actingAs ||
+      document.visibilityState !== "visible" ||
+      lastMarked.current === latest._id
+    )
+      return;
+    lastMarked.current = latest._id;
+    void markRead({ messageId: latest._id }).catch(() => {
+      lastMarked.current = undefined;
+    });
+  }, [data.page, data.viewer.actingAs, follow, markRead]);
+  async function startThread() {
+    if (promoting || !selected.length) return;
+    setPromoting(true);
+    setError(undefined);
+    try {
+      const result = await promote({
+        categorySlug: "general",
+        title: threadTitle,
+        messageIds: selected,
+      });
+      if (result.status === "pending") {
+        setReceipt(
+          "Awaiting moderator review. Find the new thread in Account & preferences → Pending content.",
+        );
+        setSelected([]);
+      } else
+        router.push(
+          asRoute(
+            forumHrefForPathname(
+              forumPath(result.categorySlug, result.threadSlug),
+              pathname,
+            ),
+          ),
+        );
+    } catch (caught) {
+      setError(
+        userFacingError(caught, "Could not save the conversation as a thread."),
+      );
+    } finally {
+      setPromoting(false);
+    }
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (sendLock.current || sending || !data.viewer.canSend || !body.trim())
@@ -338,7 +405,11 @@ function ChatSession({
     setError(undefined);
     setReceipt(undefined);
     try {
-      const result = await send({ body: sentBody });
+      const result = await send({
+        body: sentBody,
+        ...(replyTo ? { replyToId: replyTo._id } : {}),
+      });
+      setReplyTo(undefined);
       onDraftSent(actorId, sentBody);
       if (!mounted.current) return;
       setReceipt(
@@ -398,6 +469,38 @@ function ChatSession({
               message={message}
               deleting={deletingId === message._id}
               onDelete={() => void deleteMessage(message._id)}
+              onReply={
+                data.viewer.canSend
+                  ? () => {
+                      setReplyTo(message);
+                      document.getElementById("forum-chat-message")?.focus();
+                    }
+                  : undefined
+              }
+              onMention={
+                data.viewer.canSend
+                  ? () => {
+                      onDraftChange(
+                        actorId,
+                        `${body}${body ? " " : ""}@${message.authorIdentity.username} `,
+                      );
+                      document.getElementById("forum-chat-message")?.focus();
+                    }
+                  : undefined
+              }
+              onSelect={
+                data.viewer.canSend
+                  ? () =>
+                      setSelected((current) =>
+                        current.includes(message._id)
+                          ? current.filter((id) => id !== message._id)
+                          : current.length < 10
+                            ? [...current, message._id]
+                            : current,
+                      )
+                  : undefined
+              }
+              selected={selected.includes(message._id)}
             />
           ))
         ) : (
@@ -422,6 +525,58 @@ function ChatSession({
         >
           {unseen} new {unseen === 1 ? "message" : "messages"} ↓
         </button>
+      ) : null}
+      {selected.length ? (
+        <form
+          className="rounded-xl bg-muted/30 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void startThread();
+          }}
+        >
+          <label className="block text-xs text-muted-foreground">
+            Save {selected.length} selected messages as a General thread
+            <input
+              className="focus-ring mt-2 min-h-11 w-full rounded-xl bg-card px-3 text-base"
+              required
+              minLength={4}
+              maxLength={160}
+              value={threadTitle}
+              placeholder="Give the conversation a title"
+              onChange={(e) => setThreadTitle(e.target.value)}
+            />
+          </label>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="submit"
+              disabled={promoting}
+              className={`${controlClass} text-primary`}
+            >
+              {promoting ? "Creating…" : "Create thread"}
+            </button>
+            <button
+              type="button"
+              className={controlClass}
+              onClick={() => setSelected([])}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {replyTo ? (
+        <div className="flex items-center gap-2 px-4 pt-2 text-xs">
+          <p className="min-w-0 flex-1 truncate text-muted-foreground">
+            Reply to {replyTo.authorIdentity.name}: {replyTo.body}
+          </p>
+          <button
+            type="button"
+            className={controlClass}
+            onClick={() => setReplyTo(undefined)}
+          >
+            Cancel reply
+          </button>
+        </div>
       ) : null}
       {data.viewer.canSend ? (
         <form
@@ -558,7 +713,15 @@ export function ChatMessage({
   message,
   deleting,
   onDelete,
+  onReply,
+  onMention,
+  onSelect,
+  selected,
 }: {
+  onReply?: () => void;
+  onMention?: () => void;
+  onSelect?: () => void;
+  selected?: boolean;
   message: ForumChatMessage;
   deleting: boolean;
   onDelete: () => void;
@@ -597,7 +760,44 @@ export function ChatMessage({
           </span>
         ) : null}
         <span className="text-muted-foreground">: </span>
+        {message.replyTo ? (
+          <span className="mb-1 block truncate text-[11px] text-muted-foreground">
+            ↳ {message.replyTo.body}
+          </span>
+        ) : null}
         {message.body}
+        {onReply || onMention || onSelect ? (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {onReply ? (
+              <button
+                type="button"
+                className="focus-ring min-h-11 px-2 text-[11px] text-muted-foreground sm:min-h-7"
+                onClick={onReply}
+              >
+                Reply
+              </button>
+            ) : null}
+            {onMention ? (
+              <button
+                type="button"
+                className="focus-ring min-h-11 px-2 text-[11px] text-muted-foreground sm:min-h-7"
+                onClick={onMention}
+              >
+                Mention
+              </button>
+            ) : null}
+            {onSelect ? (
+              <button
+                type="button"
+                aria-pressed={selected}
+                className={`focus-ring min-h-11 px-2 text-[11px] sm:min-h-7 ${selected ? "text-primary" : "text-muted-foreground"}`}
+                onClick={onSelect}
+              >
+                {selected ? "Selected for thread" : "Save to thread"}
+              </button>
+            ) : null}
+          </span>
+        ) : null}
       </div>
       {message.canDelete ? (
         <button

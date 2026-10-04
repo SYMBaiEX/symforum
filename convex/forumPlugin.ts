@@ -357,13 +357,37 @@ async function targetVersions(
     }
   }
   await visit(args);
-  if (operationName === "sendChatMessage") {
+  if (
+    operationName === "sendChatMessage" ||
+    operationName === "createThreadFromChat"
+  ) {
     // The public chat always writes to General even though its typed payload
     // contains only body. Bind review to that exact board and hierarchy.
     targets["forumCategories:implicitChatGeneral"] = await ctx.db
       .query("forumCategories")
       .withIndex("by_slug", (q) => q.eq("slug", "general"))
       .unique();
+  }
+  if (
+    operationName === "createNewsDiscussion" &&
+    typeof args.hnItemId === "number"
+  ) {
+    targets["newsStory"] = await ctx.db
+      .query("hnStories")
+      .withIndex("by_hnItemId_and_fetchedAt", (q) =>
+        q.eq("hnItemId", args.hnItemId as number),
+      )
+      .order("desc")
+      .first();
+    const mapping = await ctx.db
+      .query("forumNewsDiscussions")
+      .withIndex("by_hnItemId", (q) =>
+        q.eq("hnItemId", args.hnItemId as number),
+      )
+      .unique();
+    targets["newsDiscussion"] = mapping
+      ? await ctx.db.get("forumThreads", mapping.threadId)
+      : null;
   }
   for (const key of ["categorySlug", "recipientUsername", "username"]) {
     if (typeof args[key] !== "string") continue;
@@ -392,7 +416,8 @@ async function targetVersions(
 function relevantTargetState(key: string, value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   const document = value as Record<string, unknown>;
-  let fields: string[] | null = null;
+  let fields: string[] | null =
+    key === "newsStory" ? ["hnItemId", "title", "url"] : null;
   if (key.startsWith("forumCategories:") || key === "categorySlug")
     fields = [
       "_id",
@@ -417,6 +442,9 @@ function relevantTargetState(key: string, value: unknown): unknown {
       "prefixId",
       "status",
       "pinned",
+      "kind",
+      "sourceUrl",
+      "acceptedPostId",
     ];
   else if (key.startsWith("forumPosts:"))
     fields = [
@@ -635,6 +663,8 @@ async function runCommand(
   if (
     [
       "createThread",
+      "createNewsDiscussion",
+      "createThreadFromChat",
       "createReply",
       "updateThreadContent",
       "updatePostContent",

@@ -70,6 +70,8 @@ export function ForumCompose({
   children,
   disabled = false,
   draftKey,
+  draftData,
+  onDraftDataChange,
   error,
   errorId,
   footerActions,
@@ -95,6 +97,8 @@ export function ForumCompose({
   children?: ReactNode;
   disabled?: boolean;
   draftKey?: string;
+  draftData?: Record<string, string>;
+  onDraftDataChange?: (data: Record<string, string>) => void;
   error?: string;
   errorId?: string;
   footerActions?: ReactNode;
@@ -141,6 +145,7 @@ export function ForumCompose({
           body?: unknown;
           title?: unknown;
           version?: unknown;
+          data?: Record<string, string>;
         };
         if (
           draft.version !== undefined &&
@@ -148,6 +153,11 @@ export function ForumCompose({
         ) {
           return;
         }
+        if (
+          draft.data &&
+          Object.values(draft.data).every((value) => typeof value === "string")
+        )
+          onDraftDataChange?.(draft.data);
         if (body.trim().length === 0 && typeof draft.body === "string") {
           onBodyChange(draft.body);
         }
@@ -164,7 +174,15 @@ export function ForumCompose({
     } finally {
       setHydratedDraftKey(draftKey);
     }
-  }, [body, draftKey, onBodyChange, onTitleChange, title, titleEnabled]);
+  }, [
+    body,
+    draftKey,
+    onBodyChange,
+    onTitleChange,
+    title,
+    titleEnabled,
+    onDraftDataChange,
+  ]);
 
   useEffect(() => {
     if (!draftKey || hydratedDraftKey !== draftKey) {
@@ -184,6 +202,7 @@ export function ForumCompose({
         JSON.stringify({
           version: FORUM_DRAFT_SCHEMA_VERSION,
           body,
+          ...(draftData ? { data: draftData } : {}),
           ...(titleEnabled ? { title } : {}),
           savedAt: Date.now(),
         }),
@@ -193,7 +212,7 @@ export function ForumCompose({
       setDraftSaved(false);
       // Storage can be unavailable in private or sandboxed browsers.
     }
-  }, [body, hydratedDraftKey, draftKey, title, titleEnabled]);
+  }, [body, hydratedDraftKey, draftKey, title, titleEnabled, draftData]);
 
   async function submitWithDraftCleanup() {
     if (controlsDisabled) return;
