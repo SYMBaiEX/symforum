@@ -65,6 +65,10 @@ const policySchema: ForumJsonSchema = {
     "The policyVersion returned by forum_status for the selected acting profile. Read status before writing; if policy changes, refresh status and reconfirm the action.",
 };
 function describe(operation: string) {
+  if (operation === "getMyForumNavState")
+    return "Read the selected profile's username, rank, post and reputation totals, forum permission flags, and unread notification and private-message counts. Use these counts for forum header and navigation badges. Requires a connected profile with personal access. Does not return message contents or mark items read.";
+  if (operation === "listCategoryOptions")
+    return "List visible active forum boards for a board picker or search filter. Returns each board's ID, slug, name and optional parent board ID; optionally supply limit to bound the list. Anonymous calls return public boards only, while connected calls respect the selected profile's board visibility. Does not return threads or board activity statistics.";
   if (operation === "listChatMessages") return "Read the forum's public live chat with current author identities. Results are newest first; paginate up to 60 messages. Poll only while the user has the chat open; current profile permissions always apply.";
   if (operation === "sendChatMessage") return "Send a short message to the public forum chat as the selected profile. Requires the user's instruction, participate capability, current policyVersion, and idempotency key. Owner review and forum posting moderation still apply. Never post automatically while polling.";
   if (operation === "listFeedThreads")
