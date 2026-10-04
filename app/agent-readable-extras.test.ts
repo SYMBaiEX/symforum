@@ -8,6 +8,7 @@ import { GET as getSiteLlms } from "@/app/llms.txt/route";
 import { GET as getRobots } from "@/app/robots.txt/route";
 import {
   DOCS_MCP_SERVER_CARD,
+  MCP_ALIAS_SERVER_CARD,
   MCP_SERVER_CARD,
   SKILLS_SH_LISTING_URL,
 } from "@/lib/agent-discovery";
@@ -68,6 +69,10 @@ describe("focused agent-readable resources", () => {
     }
     expect(site).toContain("/developers/forum-plugin");
     expect(site).toContain("/.well-known/mcp");
+    expect(site).toContain("/mcp/server-card");
+    expect(MCP_ALIAS_SERVER_CARD.remotes[0].url).toBe(
+      MCP_ALIAS_SERVER_CARD.serverUrl,
+    );
     expect(site).toContain("https://www.symbaiex.com/developers/webmcp");
     expect(api).toContain("# SYMBaiEX API context");
     expect(api).toContain("/.well-known/mcp");

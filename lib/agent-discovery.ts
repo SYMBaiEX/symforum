@@ -172,6 +172,18 @@ export const MCP_SERVER_CARD = {
   },
 } as const;
 
+/** The short /mcp endpoint is an alias for the canonical evidence MCP route. */
+export const MCP_ALIAS_SERVER_CARD = {
+  ...MCP_SERVER_CARD,
+  serverUrl: primarySiteUrl("/mcp"),
+  remotes: [
+    {
+      ...MCP_SERVER_CARD.remotes[0],
+      url: primarySiteUrl("/mcp"),
+    },
+  ],
+} as const;
+
 export const DOCS_MCP_SERVER_CARD = {
   $schema:
     "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
@@ -246,7 +258,7 @@ export const AI_CATALOG = {
       identifier: "urn:air:symbaiex.com:mcp:evidence",
       displayName: "SYMBaiEX Evidence MCP",
       type: "application/mcp-server-card+json",
-      url: primarySiteUrl("/api/agent/mcp/server-card"),
+      url: primarySiteUrl("/mcp/server-card"),
       description:
         "Authenticated MCP tools for current public evidence, claims, research jobs, exports, usage, and webhooks.",
       tags: ["evidence", "research", "mcp"],
@@ -409,6 +421,7 @@ Do not use SYMBaiEX as a general web search engine, identity provider, payment s
 - Synthetic API sandbox: ${primarySiteUrl("/api/sandbox")} (credential-free, read-only, synthetic fixtures only)
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - MCP endpoint server card: ${primarySiteUrl("/api/agent/mcp/server-card")}
+- MCP short-endpoint server card: ${primarySiteUrl("/mcp/server-card")} (same evidence service as /api/agent/mcp)
 - Documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
 - Agent skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - Agent Plugin: https://raw.githubusercontent.com/SYMBaiEX/skills/master/plugin.json
@@ -461,6 +474,7 @@ export const DISCOVERY_LINK_HEADER = [
   `<${primarySiteUrl("/api/agent/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
   `<${primarySiteUrl("/.well-known/mcp/server-card.json")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
   `<${primarySiteUrl("/.well-known/mcp")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
+  `<${primarySiteUrl("/mcp/server-card")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
   `<${primarySiteUrl("/api/docs/mcp/server-card")}>; rel="service-desc"; type="application/mcp-server-card+json"`,
   `<${primarySiteUrl("/api/sandbox/openapi.json")}>; rel="service-desc"; type="application/vnd.oai.openapi+json"`,
 ].join(", ");
