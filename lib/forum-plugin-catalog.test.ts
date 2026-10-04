@@ -40,10 +40,11 @@ describe("shared forum operation catalog", () => {
   test("entrypoint and server can share a transparent, theme-aware brand icon", () => {
     const opener = FORUM_PLUGIN_TOOLS.find(tool => tool.name === "forum_open")!;
     expect(opener.icons).toEqual([FORUM_PLUGIN_ICON]);
-    const svg = decodeURIComponent(FORUM_PLUGIN_ICON.src.slice("data:image/svg+xml,".length));
-    expect(svg).toContain('viewBox="0 0 20 20"');
-    expect(svg).toContain('fill="currentColor"');
-    expect(svg).not.toMatch(/<rect|https?:\/\/[^\s]+(?:href|src)=|<script/);
+    expect(FORUM_PLUGIN_ICON.mimeType).toBe("image/png");
+    expect(FORUM_PLUGIN_ICON.sizes).toEqual(["256x256"]);
+    const png = Buffer.from(FORUM_PLUGIN_ICON.src.split(",")[1], "base64");
+    expect(png.subarray(1,4).toString()).toBe("PNG");
+    expect(png.readUInt32BE(16)).toBe(256);
     expect(opener._meta["openai/ui"]).toEqual({ entrypoints: [{ type: "global" }, { type: "thread" }] });
   });
   test("catalog describes unlimited monthly forum use with temporary limits and unchanged authority", () => {

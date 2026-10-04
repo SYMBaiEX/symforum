@@ -563,6 +563,26 @@ export function ForumAttachmentDraftPanel({
   const authToken = useAuthToken();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>(
+    {},
+  );
+  const previewUrls = useRef(new Map<string, string>());
+  useEffect(() => {
+    const urls = previewUrls.current;
+    return () => {
+      for (const url of urls.values()) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
+  useEffect(() => {
+    const retained = new Set(attachments.map((file) => file.storageId));
+    for (const [id, url] of previewUrls.current) {
+      if (!retained.has(id)) {
+        URL.revokeObjectURL(url);
+        previewUrls.current.delete(id);
+      }
+    }
+  }, [attachments]);
   const usedAttachmentSlots =
     Math.max(0, reservedAttachmentSlots) + attachments.length;
 
@@ -627,6 +647,18 @@ export function ForumAttachmentDraftPanel({
           typeof claimed.size !== "number"
         ) {
           throw new Error("Attachment upload returned an invalid response.");
+        }
+        if (
+          ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
+            contentType,
+          )
+        ) {
+          const url = URL.createObjectURL(file);
+          previewUrls.current.set(claimed.storageId, url);
+          setImagePreviews((previous) => ({
+            ...previous,
+            [claimed.storageId!]: url,
+          }));
         }
         uploaded.push({
           storageId: claimed.storageId,
@@ -718,6 +750,14 @@ export function ForumAttachmentDraftPanel({
               className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-card px-3 py-2"
               key={attachment.storageId}
             >
+              {imagePreviews[attachment.storageId] ? (
+                // eslint-disable-next-line @next/next/no-img-element -- Temporary local File preview, revoked on removal or teardown.
+                <img
+                  src={imagePreviews[attachment.storageId]}
+                  alt={attachment.filename}
+                  className="size-14 shrink-0 rounded-lg object-cover"
+                />
+              ) : null}
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                   <Paperclip className="size-3.5 shrink-0" />

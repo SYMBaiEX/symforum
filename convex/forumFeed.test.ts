@@ -104,6 +104,32 @@ async function fixture(t: Backend) {
 const page = { numItems: 12, cursor: null };
 
 describe("global forum feed", () => {
+  test("feed previews hydrate only active root attachments on currently visible discussions", async () => {
+    const t = setup(); const seed = await fixture(t);
+    const ids = await t.run(async ctx => {
+      const visible = await thread(ctx, seed.category, seed.author, 1);
+      const hidden = await thread(ctx, seed.category, seed.author, 2, { status: "hidden" });
+      const privateBoard = await board(ctx, "private", { viewAccess: "trusted" });
+      const restricted = await thread(ctx, privateBoard, seed.author, 3);
+      const reply = await ctx.db.insert("forumPosts", { threadId: visible, categoryId: seed.category, authorId: seed.author, body: "Reply", status: "active", postNumber: 2, createdAt: 1, updatedAt: 1 });
+      const storageId = await ctx.storage.store(new Blob(["image"]));
+      const insert = (threadId: Id<"forumThreads">, filename: string, extra = {}) => ctx.db.insert("forumAttachments", { threadId, categoryId: seed.category, authorId: seed.author, storageId, filename, contentType: "image/png", size: 5, status: "active", createdAt: 1, updatedAt: 1, ...extra });
+      const root = await insert(visible, "visible.png");
+      await insert(visible, "deleted.png", { status: "deleted" });
+      await insert(visible, "reply.png", { postId: reply });
+      await insert(hidden, "hidden.png"); await insert(restricted, "restricted.png");
+      const missing = await ctx.storage.store(new Blob(["deleted storage"])); await ctx.storage.delete(missing);
+      await insert(visible, "missing.png", { storageId: missing });
+      return { root, visible };
+    });
+    const result = await t.query(api.forum.listFeedThreads, { paginationOpts: page });
+    expect(result.page.map(row => row._id)).toEqual([ids.visible]);
+    expect(result.page[0].attachments.map(file => file._id)).toEqual([ids.root]);
+    expect(result.page[0].attachments[0]).toMatchObject({ filename: "visible.png", contentType: "image/png", url: expect.stringMatching(/^https:/) });
+    await t.run(ctx => ctx.db.patch("forumThreads", ids.visible, { status: "hidden" }));
+    expect((await t.query(api.forum.listFeedThreads, { paginationOpts: page })).page).toEqual([]);
+  });
+
   test("native fingerprint isolates viewer identity, trust, role, restrictions and visible board permissions without reading content", async () => {
     const t = setup();
     const seed = await fixture(t);

@@ -1,3 +1,4 @@
+import { SYMBAIEX_MASCOT_DATA_URI } from "./symbaiex-brand";
 import { FORUM_STARTER_COLLECTIONS, FORUM_CONVERSATION_PROMPTS } from "./forum-experience";
 
 /** Portable MCP App. All forum data travels through the host's authenticated tools. */
@@ -11,7 +12,7 @@ export const FORUM_PLUGIN_APP_RESOURCE = {
     "openai/ui": { availableDisplayModes: ["fullscreen"], preferredDisplayMode: "fullscreen" },
     ui: {
       prefersBorder: false,
-      csp: { connectDomains: [], resourceDomains: [], frameDomains: [] },
+      csp: { connectDomains: [], resourceDomains: ["https://strong-bee-384.convex.cloud"], frameDomains: [] },
     },
   },
 } as const;
@@ -784,6 +785,13 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     }
   }
   function onPopupKey(event: KeyboardEvent) {
+    if (currentView === "images") {
+      if (event.key === "Escape") { event.preventDefault(); content.querySelector<HTMLButtonElement>(".media-controls button")?.click(); return; }
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        const buttons = content.querySelectorAll<HTMLButtonElement>(".media-controls button");
+        buttons[event.key === "ArrowRight" ? 2 : 1]?.click(); event.preventDefault(); return;
+      }
+    }
     if (event.key !== "Escape") return;
     if (!postChoices.hidden) { postChoices.hidden = true; compose.setAttribute("aria-expanded", "false"); compose.focus(); event.preventDefault(); return; }
     const entries = popupEntries().filter(entry => entry.enabled && entry.panel.open);
@@ -911,12 +919,13 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
       meta.append(avatar(author.name ?? record.author ?? record.username), authorLine);
       if (username) authorLine.append(element("span", "@" + username, "discussion-handle"));
       main.append(meta);
-      if (target.categorySlug) main.append(button(text(record.categoryName, text(target.categorySlug)), () => run(() => navigate("board", { categorySlug: target.categorySlug, categoryName: record.categoryName })), "discussion-board"));
+      if (target.categorySlug) authorLine.append(button(text(record.categoryName, text(target.categorySlug)), () => run(() => navigate("board", { categorySlug: target.categorySlug, categoryName: record.categoryName })), "discussion-board"));
       const open = button((record.pinned ? "◆ " : "") + text(record.title, "Discussion"), () => run(() => navigate("thread", target)), "row-title");
       open.disabled = !available;
       main.append(open);
       const excerpt = text(record.snippet ?? record.excerpt ?? record.body);
       if (excerpt) main.append(element("p", excerpt.slice(0, 420), "excerpt"));
+      if (available) appendMedia(record.attachments, target, main);
       item.append(main);
       const footer = element("footer", undefined, "discussion-footer");
       const read = button(record.replyCount === undefined ? "Read discussion" : Number(record.replyCount) === 0 ? "Discuss" : Number(record.replyCount) === 1 ? "1 reply" : text(record.replyCount) + " replies", () => run(() => navigate("thread", target)), "discussion-action");
@@ -1498,6 +1507,62 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     if (!results && !actingAs.userId) panel.append(link("Connect to vote ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
     content.append(panel);
   }
+  const imageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  function attachmentUrl(value: unknown) {
+    try {
+      const url = new URL(text(value));
+      return url.origin === "https://strong-bee-384.convex.cloud" && !url.username && !url.password ? url.href : null;
+    } catch { return null; }
+  }
+  function imageAttachments(value: unknown) {
+    return collection(value, []).slice(0, 5).filter(file => imageTypes.has(text(file.contentType)) && attachmentUrl(file.url));
+  }
+  function appendMedia(value: unknown, target: RecordValue, parent: HTMLElement) {
+    const images = imageAttachments(value);
+    if (images.length) {
+      const grid = element("div", undefined, "media-grid"); grid.setAttribute("data-count", String(images.length));
+      images.forEach((file, index) => {
+        const tile = button("", () => run(() => navigate("images", { ...target, imageIndex: index })), "media-tile");
+        tile.setAttribute("aria-label", "View image " + (index + 1) + " of " + images.length + ": " + text(file.altText ?? file.filename));
+        const image = element("img"); image.setAttribute("src", attachmentUrl(file.url)!); image.setAttribute("alt", text(file.altText ?? file.filename));
+        image.setAttribute("loading", "lazy"); image.setAttribute("decoding", "async"); image.setAttribute("referrerpolicy", "no-referrer");
+        tile.append(image, element("span", (index + 1) + "/" + images.length, "media-number")); grid.append(tile);
+      });
+      parent.append(grid);
+    }
+    const files = element("div", undefined, "post-attachments");
+    for (const file of collection(value, []).slice(0, 5)) {
+      if (imageTypes.has(text(file.contentType))) continue;
+      const url = text(file.url);
+      if (url) files.append(contentLink(text(file.filename, "Attachment") + " ↗", url));
+    }
+    if (files.children.length) parent.append(files);
+  }
+  function renderImages(data: RecordValue, args: RecordValue) {
+    // A fresh authorized content read prevents stale feed previews opening media
+    // after a thread, board or acting profile loses access.
+    const post = args.postId ? collection(data.posts ?? data.replies).find(post => post._id === args.postId) : object(data.thread);
+    const images = imageAttachments(post?.attachments);
+    heading("Photos", text(object(data.thread).title));
+    if (!images.length) { empty("These images are no longer available to this profile."); return; }
+    let index = Math.max(0, Math.min(images.length - 1, Number(args.imageIndex) || 0));
+    const viewer = element("figure", undefined, "media-viewer");
+    const controls = element("div", undefined, "actions media-controls");
+    const close = button("Close photos", () => run(async () => {
+      const previous = routeHistory[historyIndex - 1];
+      if (previous) await navigate(previous.view, previous.args, "back");
+      else await navigate("thread", args);
+    }));
+    function show() {
+      const file = images[index];
+      const image = element("img"); image.setAttribute("src", attachmentUrl(file.url)!); image.setAttribute("alt", text(file.altText ?? file.filename)); image.setAttribute("referrerpolicy", "no-referrer");
+      const caption = element("figcaption", (index + 1) + " / " + images.length + " · " + text(file.altText ?? file.filename) + (file.credit ? " · " + text(file.credit) : "")); caption.setAttribute("aria-live", "polite");
+      viewer.replaceChildren(image, caption);
+    }
+    controls.append(close);
+    if (images.length > 1) controls.append(button("Previous image", () => { index = (index + images.length - 1) % images.length; show(); }), button("Next image", () => { index = (index + 1) % images.length; show(); }));
+    content.append(controls, viewer); show(); close.focus();
+  }
   function renderPost(post: RecordValue, rootPost = false, readerArgs?: RecordValue, parent?: RecordValue) {
     const article = element("article", undefined, "post");
     if (rootPost || Number.isSafeInteger(post.postNumber)) article.id = "post-" + text(post.postNumber, "1");
@@ -1519,13 +1584,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     }
     body.append(richBody(post.body ?? post.content));
     article.append(author, body);
-    const attachments = element("div", undefined, "post-attachments");
-    for (const attachment of collection(post.attachments, [])) {
-      const label = text(attachment.filename ?? attachment.name, "Attachment");
-      const url = text(attachment.url);
-      attachments.append(url ? contentLink(label + " ↗", url) : element("span", label, "badge"));
-    }
-    if (attachments.children.length) body.append(attachments);
+    if (readerArgs) appendMedia(post.attachments, { ...readerArgs, ...(!rootPost ? { postId: post._id } : {}) }, body);
     if (readerArgs && currentThread) {
       const actions = element("footer", undefined, "actions post-actions");
       if (permitted("participate") && currentThread.viewerCanReply !== false && currentThread.status !== "locked") {
@@ -1788,6 +1847,9 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
         result = await tool("forum_list_threads", { categorySlug: args.categorySlug, page: args.page ?? 1, pageSize: 20, ...(args.sortKey ? { sortKey: args.sortKey } : {}), ...(args.sortOrder ? { sortOrder: args.sortOrder } : {}), ...(Number(args.days) > 0 ? { days: Number(args.days) } : {}) });
         const data = object(result.data);
         render = () => renderBoard({ ...data, threads: data.threads ?? result.data }, args);
+      } else if (view === "images") {
+        result = await tool("forum_get_thread", { categorySlug: args.categorySlug, threadSlug: args.threadSlug, page: args.page ?? 1, pageSize: 20 });
+        render = () => renderImages(object(result.data), args);
       } else if (view === "thread") {
         result = await tool("forum_get_thread", { categorySlug: args.categorySlug, threadSlug: args.threadSlug, page: args.page ?? 1, pageSize: 20 });
         render = () => renderThread(object(result.data), args);
@@ -2466,7 +2528,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.11.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.12.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -2572,4 +2634,14 @@ export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 @media(min-width:1100px){.main{padding:12px 20px 48px}.context-rail{padding-top:12px}}
 @media(max-width:680px){.feed-starter{padding:8px 12px}.feed-starter-summary{gap:8px}.feed-starter-summary>span:not(.member-avatar){font-size:13px}.discussion-footer button{min-height:44px!important}.discussion-byline{gap:4px 6px}.discussion-handle{max-width:24%}.discussion-author{font-size:12px;max-width:45%}.feed-starter-options select{font-size:16px}.view-heading .feed-filters{order:0;flex-basis:auto;width:auto}.view-heading .feed-filters button{font-size:11px;padding:8px}.view-heading .feed-display{order:1}.discussion-main .row-title{font-size:17px}}
 
-</style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><svg class="forum-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" stroke="currentColor" stroke-width="1.7"/></svg>SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})(${JSON.stringify({ collections: FORUM_STARTER_COLLECTIONS, prompts: FORUM_CONVERSATION_PROMPTS }).replace(/</g, "\\u003c")});</script></body></html>`;
+/* Shared media layout and denser social hierarchy. */
+.forum-mark{display:inline-block;padding:0;background:transparent;border-radius:0;width:36px;height:36px;object-fit:contain;transition:transform 180ms ease;filter:drop-shadow(0 2px 2px #0002)}.surface-switcher>summary:hover .forum-mark{transform:rotate(-5deg) translateY(-1px)}
+#app[data-feed-display=timeline]:is([data-view=feed],[data-view=community]) .discussion-row{padding:8px 12px 8px 52px}
+#app[data-feed-display=timeline]:is([data-view=feed],[data-view=community]) .discussion-meta>.member-avatar{left:12px;top:10px;width:32px;height:32px}
+#app[data-feed-display=timeline]:is([data-view=feed],[data-view=community]) .discussion-main .row-title{font-size:16px;line-height:20px;min-height:28px;padding:3px 0}
+.discussion-byline .discussion-board{display:inline;min-height:0;padding:0;order:2;max-width:32%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.discussion-main .excerpt{margin:2px 0 4px;line-height:20px}.feed-starter{padding:6px 12px;box-shadow:0 2px 10px hsl(var(--primary)/.04)}
+.media-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;border-radius:10px;overflow:hidden;margin:6px 0}.media-grid[data-count="1"]{grid-template-columns:1fr}.media-tile{position:relative;padding:0;height:110px;min-width:0;overflow:hidden;border-radius:0;background:hsl(var(--muted))}.media-grid[data-count="1"] .media-tile{height:clamp(160px,27vw,280px)}.media-grid[data-count="3"]>:first-child,.media-grid[data-count="5"]>:first-child{grid-row:span 2;height:223px}.media-tile img{width:100%;height:100%;object-fit:cover;transition:transform 180ms ease,filter 180ms ease}.media-tile:hover img{transform:scale(1.025);filter:brightness(1.04)}.media-number{position:absolute;bottom:6px;right:6px;padding:2px 6px;border-radius:5px;background:#0009;color:white;font-size:10px}
+#app[data-feed-display=compact] .discussion-row .media-grid{display:flex;gap:4px}#app[data-feed-display=compact] .discussion-row .media-tile{flex:0 1 90px;height:64px;border-radius:6px}
+.media-viewer{margin:12px 0;background:hsl(var(--card));border-radius:12px;padding:12px}.media-viewer>img{width:100%;max-height:65vh;object-fit:contain}.media-viewer figcaption{font-size:12px;color:hsl(var(--muted-foreground));margin-top:8px}.media-controls button{min-height:44px}.discussion-main{animation:forum-enter 160ms ease-out}.discussion-action:active{transform:translateY(1px)}@keyframes forum-enter{from{opacity:.5;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.discussion-main{animation:none}.forum-mark,.media-tile img{transition:none}.surface-switcher>summary:hover .forum-mark,.media-tile:hover img,.discussion-action:active{transform:none}}
+</style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><img class="forum-mark" src="${SYMBAIEX_MASCOT_DATA_URI}" alt="" width="36" height="36">SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})(${JSON.stringify({ collections: FORUM_STARTER_COLLECTIONS, prompts: FORUM_CONVERSATION_PROMPTS }).replace(/</g, "\\u003c")});</script></body></html>`;

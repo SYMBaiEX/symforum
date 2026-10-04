@@ -1,4 +1,5 @@
 "use client";
+import { ForumMediaGallery } from "./forum-media-gallery";
 
 import { Button } from "@/components/ui/button";
 import { ForumAgentContextStrip } from "@/components/forum/forum-webmcp";
@@ -2044,101 +2045,7 @@ export function ForumAttachmentList({
 }: {
   attachments?: ForumAttachmentRecord[];
 }) {
-  if (!attachments || attachments.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-4 border-t border-row-border pt-2.5">
-      <p className="mb-3 text-xs text-muted-foreground">Attached files</p>
-      <div className="grid gap-2">
-        {attachments.map((attachment) => {
-          const isImage = attachment.contentType.startsWith("image/");
-          const attachmentLabel = decodeForumEntities(
-            attachment.altText || attachment.filename,
-          );
-          const attachmentCredit = attachment.credit
-            ? decodeForumEntities(attachment.credit)
-            : undefined;
-          if (isImage) {
-            return (
-              <figure
-                className="border border-row-border bg-muted/10 p-3"
-                key={attachment._id}
-              >
-                <a
-                  className="focus-ring block"
-                  href={attachment.url}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- Convex attachment URLs are signed runtime URLs. */}
-                  <img
-                    alt={
-                      attachment.altText
-                        ? decodeForumEntities(attachment.altText)
-                        : ""
-                    }
-                    className="max-h-[34rem] w-full object-contain"
-                    loading="lazy"
-                    src={safeImageUrl(attachment.url) ?? attachment.url}
-                  />
-                </a>
-                <figcaption className="mt-3 flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {attachmentLabel} · {formatFileSize(attachment.size)}
-                  </span>
-                  {attachment.sourceUrl ? (
-                    <a
-                      className="text-xs text-primary hover:underline"
-                      href={attachment.sourceUrl}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      {attachmentCredit || "Image source"}
-                    </a>
-                  ) : attachmentCredit ? (
-                    <span className="text-xs">{attachmentCredit}</span>
-                  ) : null}
-                </figcaption>
-              </figure>
-            );
-          }
-          return (
-            <a
-              className="focus-ring grid gap-3 border border-row-border p-3 hover:border-foreground sm:grid-cols-[4.5rem_minmax(0,1fr)]"
-              href={attachment.url}
-              key={attachment._id}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              <span className="flex aspect-square items-center justify-center border border-row-border bg-muted/20 text-xs text-muted-foreground">
-                File
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-foreground">
-                  {decodeForumEntities(attachment.filename)}
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {attachment.contentType} / {formatFileSize(attachment.size)}
-                </span>
-              </span>
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function formatFileSize(size: number) {
-  if (size >= 1024 * 1024) {
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (size >= 1024) {
-    return `${Math.ceil(size / 1024)} KB`;
-  }
-  return `${size} B`;
+  return <ForumMediaGallery attachments={attachments} />;
 }
 
 export function ForumAvatar({

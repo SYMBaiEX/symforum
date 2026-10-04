@@ -25,7 +25,7 @@ test("public ZIP uses a separate exact inventory and excludes private/source-onl
     await writeFile(resolve(source, ".env"), "DO_NOT_PACKAGE_TEST_SENTINEL");
     await writeFile(resolve(source, "reviewer-instructions.txt"), "DO_NOT_PACKAGE_TEST_SENTINEL");
     const result = await packageForumPlugin({ source, outputDirectory: resolve(directory, "output") });
-    assert.equal(result.version, "0.9.0");
+    assert.equal(result.version, "0.10.0");
     assert.equal(result.files, 7);
     assert.equal(result.readiness, "incomplete_submission_preparation");
     assert.ok(result.publicCopy !== source);

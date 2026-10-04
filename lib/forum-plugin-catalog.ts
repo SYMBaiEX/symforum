@@ -1,3 +1,4 @@
+import { SYMBAIEX_ICON_DATA_URI } from "./symbaiex-brand";
 import generated from "./forum-plugin-catalog.generated.json";
 import {
   forumOperationCapability,
@@ -10,11 +11,11 @@ import {
 } from "./forum-plugin-schema";
 
 export const FORUM_PLUGIN_APP_URI = "ui://symbaiex/forum.html";
-// Reuse the favicon's mark, with the transparent, theme-aware entrypoint treatment.
+/** Same Signal Moth icon as the website and portable plugin package. */
 export const FORUM_PLUGIN_ICON = {
-  src: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g transform="scale(.3125)" fill="currentColor"><path d="M12 45V19h9l11 14V19h8v26h-8L21 31v14h-9Z"/><path d="M43 19h9v26h-9z"/></g></svg>'),
-  mimeType: "image/svg+xml",
-  sizes: ["20x20"],
+  src: SYMBAIEX_ICON_DATA_URI,
+  mimeType: "image/png",
+  sizes: ["256x256"],
 };
 export type ForumPluginOperation = {
   name: string;
