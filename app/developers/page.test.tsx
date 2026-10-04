@@ -13,8 +13,8 @@ describe("SYMBaiEX developer resources page", () => {
     await stream.allReady;
     const html = await new Response(stream).text();
 
-    expect(metadata.title).toBe("SYMBaiEX developer resources");
-    expect(metadata.description).toContain("OpenAPI 3.1");
+    expect(metadata.title).toBe("SYMBaiEX Developer API, MCP, SDK & CLI");
+    expect(metadata.description).toContain("WebMCP");
     expect(html).toContain("<h1");
     expect(html).toContain("SYMBaiEX developer resources");
     expect(html).toContain("SoftwareApplication");
@@ -24,6 +24,8 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("@symbaiex/agent-cli@0.1.0 manifest");
     expect(html).toContain("https://www.symbaiex.com/api/docs/mcp");
     expect(html).toContain("https://www.symbaiex.com/api/agent/mcp");
+    expect(html).toContain('href="/.well-known/mcp"');
+    expect(html).toContain('href="/developers/webmcp"');
     expect(html).toContain(
       'href="https://skills.sh/symbaiex/skills">the SYMBaiEX Skills.sh listing</a>',
     );

@@ -25,6 +25,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - API lifecycle and deprecation policy: ${primarySiteUrl("/developers/api-lifecycle")}
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
 - Synthetic sandbox OpenAPI: ${primarySiteUrl("/api/sandbox/openapi.json")}
+- MCP well-known discovery card: ${primarySiteUrl("/.well-known/mcp")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP endpoint (Streamable HTTP POST, no credentials): ${primarySiteUrl("/api/docs/mcp")}
 - Public documentation MCP server card: ${primarySiteUrl("/api/docs/mcp/server-card")}
@@ -33,6 +34,7 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - Official MCP Registry entry for evidence tools: ${MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
 - OAuth protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - MCP connection guide: ${primarySiteUrl("/developers/mcp")}
+- WebMCP browser tools guide: ${primarySiteUrl("/developers/webmcp")}
 - Forum plugin integration guide: ${primarySiteUrl("/developers/forum-plugin")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - Skills.sh directory listing: ${SKILLS_SH_LISTING_URL}

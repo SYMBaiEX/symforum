@@ -12,7 +12,9 @@ describe("developer and product discovery indexing", () => {
     expect(payload.keyLocation).toBe(
       `https://www.symbaiex.com/indexnow-${"a".repeat(64)}.txt`,
     );
-    expect(new Set(payload.urlList).size).toBe(18);
+    expect(new Set(payload.urlList).size).toBe(
+      11 + Object.keys(DEVELOPER_RESOURCES).length,
+    );
     expect(payload.urlList).toContain("https://www.symbaiex.com/");
     for (const path of [
       "/agents.md",
@@ -38,7 +40,9 @@ describe("developer and product discovery indexing", () => {
       );
     }
     payload.urlList.pop();
-    expect(DEVELOPER_INDEX_URLS).toHaveLength(18);
+    expect(DEVELOPER_INDEX_URLS).toHaveLength(
+      11 + Object.keys(DEVELOPER_RESOURCES).length,
+    );
     expect(DEVELOPER_INDEX_URLS).not.toContain(
       "https://www.symbaiex.com/agent/instructions",
     );

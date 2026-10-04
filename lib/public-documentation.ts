@@ -26,6 +26,7 @@ No credentials are needed. List tools, call docs_search with {"query":"authentic
 
 Endpoint: ${primarySiteUrl("/api/agent/mcp")}
 Server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
+Well-known discovery card: ${primarySiteUrl("/.well-known/mcp")}
 
 Discovery is public. Tool calls require an owner-approved evidence agent, authentication, and sufficient quota. Follow ${primarySiteUrl("/.well-known/oauth-protected-resource")} for advertised WorkOS Connect OAuth, or ${primarySiteUrl("/auth.md")} for Ed25519 credentials. Only the human owner can approve an identity and scopes. OAuth identity scopes do not grant administrator or forum privileges.
 
@@ -55,6 +56,7 @@ Install the published versions with bun add @symbaiex/agent-sdk@0.1.0 or run bun
 ## Browser tools
 
 On browsers implementing WebMCP, the homepage, /agent, and /developers register discover_symbaiex_agent_access, search_symbaiex_docs, and read_symbaiex_doc. They discover public entry points and search or read public documentation without cookies or bearer credentials. Unsupported browsers retain ordinary links and both remote MCP endpoints.
+See ${primarySiteUrl("/developers/webmcp")} for implementation details and the browser-availability boundary.
 `;
 
 export function developerResourceMarkdown(
@@ -67,6 +69,12 @@ export function developerResourceMarkdown(
     entry.summary,
     "## Integration guidance",
     ...(entry.details ?? []),
+    ...(entry.faqs?.length
+      ? [
+          "## Frequently asked questions",
+          ...entry.faqs.flatMap((faq) => [`### ${faq.question}`, faq.answer]),
+        ]
+      : []),
     "## Canonical resources",
     ...entry.links.map(
       ([label, href]) => `- [${label}](${primarySiteUrl(href)})`,

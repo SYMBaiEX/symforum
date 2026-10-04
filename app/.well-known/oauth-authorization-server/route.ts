@@ -1,18 +1,44 @@
 import { workosMetadata } from "@/lib/workos-discovery";
+import { workosConfig } from "@/lib/workos-config";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const config = workosConfig(process.env);
+    if (!config) {
+      return Response.json(
+        { error: "not_found", message: "OAuth is not enabled." },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+            "Access-Control-Allow-Origin": "*",
+            "X-Content-Type-Options": "nosniff",
+          },
+        },
+      );
+    }
+
+    const issuerMetadataUrl = new URL(config.metadata);
+    if (new URL(request.url).origin !== config.issuer) {
+      return new Response(null, {
+        status: 307,
+        headers: {
+          Location: issuerMetadataUrl.href,
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+
     const metadata = await workosMetadata();
     return Response.json(
-      metadata ?? { error: "not_found", message: "OAuth is not enabled." },
+      metadata,
       {
-        status: metadata ? 200 : 404,
         headers: {
-          "Cache-Control": metadata
-            ? "public, max-age=60, s-maxage=300"
-            : "no-store",
+          "Cache-Control": "public, max-age=60, s-maxage=300",
           "Access-Control-Allow-Origin": "*",
           "X-Content-Type-Options": "nosniff",
         },
@@ -36,8 +62,8 @@ export async function GET() {
   }
 }
 
-export async function HEAD() {
-  const response = await GET();
+export async function HEAD(request: Request) {
+  const response = await GET(request);
   return new Response(null, {
     status: response.status,
     headers: response.headers,

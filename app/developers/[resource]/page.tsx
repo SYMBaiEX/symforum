@@ -61,6 +61,23 @@ export default async function DeveloperResourcePage({
             url: primarySiteUrl(`/developers/${resource}`),
             isPartOf: { "@id": `${primarySiteUrl("/")}#website` },
           },
+          ...(entry.faqs?.length
+            ? [
+                {
+                  "@type": "FAQPage",
+                  "@id": `${primarySiteUrl(`/developers/${resource}`)}#faq`,
+                  url: primarySiteUrl(`/developers/${resource}`),
+                  mainEntity: entry.faqs.map((faq) => ({
+                    "@type": "Question",
+                    name: faq.question,
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: faq.answer,
+                    },
+                  })),
+                },
+              ]
+            : []),
           breadcrumbStructuredData([
             { name: "Home", url: primarySiteUrl("/") },
             { name: "Developers", url: primarySiteUrl("/developers") },
@@ -84,6 +101,23 @@ export default async function DeveloperResourcePage({
             {detail}
           </p>
         ))}
+        {entry.faqs?.length ? (
+          <section className="mt-10" aria-labelledby="resource-faq">
+            <h2 id="resource-faq" className="text-2xl font-semibold">
+              Frequently asked questions
+            </h2>
+            <div className="mt-4 space-y-6">
+              {entry.faqs.map((faq) => (
+                <div key={faq.question}>
+                  <h3 className="font-semibold">{faq.question}</h3>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {faq.answer}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <section className="mt-10" aria-labelledby="canonical-resources">
           <h2 id="canonical-resources" className="text-2xl font-semibold">
             Canonical resources

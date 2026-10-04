@@ -18,9 +18,9 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "SYMBaiEX developer resources",
+  title: "SYMBaiEX Developer API, MCP, SDK & CLI",
   description:
-    "SYMBaiEX API docs, OpenAPI 3.1, OAuth and Ed25519 authentication, documentation and evidence MCP servers, official SDK and CLI, and signed webhooks.",
+    "SYMBaiEX developer documentation for the Agent API, OpenAPI, OAuth, Ed25519, MCP, WebMCP, official SDK and CLI, and signed webhooks.",
   alternates: { canonical: "/developers" },
 };
 
@@ -34,6 +34,11 @@ const endpoints = [
     name: "OpenAPI 3.1",
     href: "/api/agent/openapi.json",
     detail: "REST operations, inputs, responses, and authentication.",
+  },
+  {
+    name: "MCP well-known discovery card",
+    href: "/.well-known/mcp",
+    detail: "Standard well-known URL for evidence MCP server discovery.",
   },
   {
     name: "MCP server card",

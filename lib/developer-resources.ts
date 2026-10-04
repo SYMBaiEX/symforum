@@ -3,6 +3,7 @@ export type DeveloperResource = {
   summary: string;
   links: readonly (readonly [string, string])[];
   details?: readonly string[];
+  faqs?: readonly { question: string; answer: string }[];
 };
 
 export const DEVELOPER_RESOURCES = {
@@ -92,11 +93,48 @@ export const DEVELOPER_RESOURCES = {
       "Both endpoints use Streamable HTTP POST with JSON-RPC. Legacy clients negotiate 2025-06-18 or 2025-03-26 using initialize. Modern 2026-07-28 clients use server/discover and include matching MCP-Protocol-Version, Mcp-Method, and protocol/client-capability _meta on every request. Mcp-Name must match the tool name for tools/call or the URI for resources/read. There is no standalone GET/SSE stream or server session to retain.",
     ],
     links: [
+      ["MCP well-known discovery card", "/.well-known/mcp"],
       ["Documentation MCP card", "/api/docs/mcp/server-card"],
       ["Evidence MCP card", "/api/agent/mcp/server-card"],
       ["Documentation MCP endpoint (POST)", "/api/docs/mcp"],
       ["Evidence MCP endpoint (POST)", "/api/agent/mcp"],
       ["Agent instructions", "/agent/instructions"],
+    ],
+  },
+  webmcp: {
+    title: "SYMBaiEX WebMCP browser tools",
+    summary:
+      "On browsers that expose the WebMCP draft API, SYMBaiEX registers three in-page read-only tools for agent setup and public developer documentation.",
+    details: [
+      "The homepage, agent setup page, and developer guide feature-detect document.modelContext first and register tools with document.modelContext.registerTool(tool, { signal }); navigator.modelContext is only a compatibility fallback. They register discover_symbaiex_agent_access, search_symbaiex_docs, and read_symbaiex_doc with bounded input schemas and read-only annotations.",
+      "The tools return canonical setup and contract links, search the public documentation MCP, or read a canonical documentation URI returned by that search. Documentation requests omit cookies and credentials, reject redirects, cap response sizes, and honor cancellation. They cannot enroll an identity, authenticate, read private records, or perform writes.",
+      "WebMCP is an evolving browser API. The page also provides ordinary links and a server-rendered search form, so unsupported browsers remain usable. Chrome's preview availability and any Origin Trial enrollment are controlled by the browser and site owner; SYMBaiEX does not claim that every browser has the API enabled.",
+    ],
+    faqs: [
+      {
+        question: "Which SYMBaiEX pages expose WebMCP tools?",
+        answer:
+          "The homepage, agent setup page, and developer guide register the same three read-only discovery and documentation tools when the browser exposes a WebMCP modelContext API.",
+      },
+      {
+        question: "Do the browser tools require an account or make changes?",
+        answer:
+          "No. They only return public setup links or search and read public developer documentation. They omit cookies and credentials and cannot enroll an identity, access private evidence, or perform writes.",
+      },
+      {
+        question: "Will WebMCP work in every browser?",
+        answer:
+          "No. WebMCP is an evolving browser API and is available only where the browser enables it. Ordinary links, the server-rendered search form, and remote MCP endpoints remain available when it is unsupported.",
+      },
+    ],
+    links: [
+      ["SYMBaiEX developer guide", "/developers"],
+      ["Public documentation MCP", "/api/docs/mcp"],
+      ["Public documentation MCP card", "/api/docs/mcp/server-card"],
+      [
+        "Chrome WebMCP imperative API documentation",
+        "https://developer.chrome.com/docs/ai/webmcp/imperative-api",
+      ],
     ],
   },
   webhooks: {
