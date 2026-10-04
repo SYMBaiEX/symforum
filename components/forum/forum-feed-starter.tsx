@@ -31,7 +31,7 @@ export function ForumFeedStarter() {
           <MessageSquare className="size-4" aria-hidden="true" />
         </span>
         <span className="text-sm text-muted-foreground">
-          What are you building or thinking about?
+          Start a conversation…
         </span>
         <span className="flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-primary">
           Post <Plus className="size-4" aria-hidden="true" />

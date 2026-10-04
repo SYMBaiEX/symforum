@@ -762,7 +762,7 @@ export function ForumFeedArticle({
         ) : null}
         {thread.excerpt ? (
           <p
-            className={`mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
+            className={`forum-post-body-preview mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
           >
             {thread.excerpt}
           </p>

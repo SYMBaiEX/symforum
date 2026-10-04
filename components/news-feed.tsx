@@ -565,7 +565,7 @@ function ForumNewsRows({
           return (
             <article
               key={story.hnItemId}
-              className="forum-post-card grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-2 p-4 sm:gap-x-3 sm:p-5"
+              className="forum-news-story forum-post-card grid min-w-0 grid-cols-[24px_minmax(0,1fr)] gap-x-2 p-4 sm:gap-x-3 sm:p-5"
             >
               <span
                 className="inline-flex min-h-11 items-center justify-center font-mono text-xs tabular-nums text-muted-foreground"

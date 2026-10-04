@@ -15,6 +15,8 @@ import {
   Mail,
   Megaphone,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   MessageSquare,
   Newspaper,
   Search,
@@ -47,11 +49,26 @@ import {
 } from "./forum-refs";
 import { primarySiteHrefForPath } from "./forum-host-url";
 import { useForumShellContext } from "./forum-shell-context";
-import { FORUM_PERSONAL_NAVIGATION, FORUM_PRIMARY_NAVIGATION } from "@/lib/forum-navigation-model";
+import {
+  FORUM_PERSONAL_NAVIGATION,
+  FORUM_PRIMARY_NAVIGATION,
+} from "@/lib/forum-navigation-model";
 import { cn } from "@/lib/utils";
 
-const navigationIcons = { feed: MessageSquare, news: Newspaper, community: Users, boards: LayoutList, bookmarks: Bookmark, following: Bell, inbox: Mail, agents: Bot };
-const views = FORUM_PRIMARY_NAVIGATION.map(item => ({ ...item, icon: navigationIcons[item.icon] }));
+const navigationIcons = {
+  feed: MessageSquare,
+  news: Newspaper,
+  community: Users,
+  boards: LayoutList,
+  bookmarks: Bookmark,
+  following: Bell,
+  inbox: Mail,
+  agents: Bot,
+};
+const views = FORUM_PRIMARY_NAVIGATION.map((item) => ({
+  ...item,
+  icon: navigationIcons[item.icon],
+}));
 
 type NavState = {
   authenticated: boolean;
@@ -138,7 +155,8 @@ export function ForumNavigationLayout({
   overview?: ForumOverviewRecord;
 }) {
   const pathname = usePathname();
-  const { primarySiteHref } = useForumShellContext();
+  const { primarySiteHref, compactNavigation, toggleNavigation } =
+    useForumShellContext();
   const signInHref = `/signin?${new URLSearchParams({ redirectTo: pathname ?? "/forum" })}`;
   const boards =
     overview?.categories.filter(
@@ -174,13 +192,32 @@ export function ForumNavigationLayout({
   return (
     <>
       <header className="forum-topbar fixed inset-x-0 top-0 z-50 bg-card pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center gap-2 px-3 sm:gap-3 sm:px-5 lg:gap-5">
+        <div className="forum-topbar-inner flex items-center gap-2 px-3 sm:gap-3">
+          <button
+            type="button"
+            onClick={toggleNavigation}
+            aria-label={
+              compactNavigation ? "Expand navigation" : "Collapse navigation"
+            }
+            aria-expanded={!compactNavigation}
+            aria-controls="forum-navigation-rail"
+            className={`${iconControl} forum-navigation-toggle hidden md:inline-flex`}
+            title={
+              compactNavigation ? "Expand navigation" : "Collapse navigation"
+            }
+          >
+            {compactNavigation ? (
+              <PanelLeftOpen className="size-[18px]" aria-hidden="true" />
+            ) : (
+              <PanelLeftClose className="size-[18px]" aria-hidden="true" />
+            )}
+          </button>
           <SiteSurfaceSwitcher
             activeSurface="forum"
             blogHref={primarySiteHref}
             forumHref={forumHrefForPathname("/forum", pathname)}
             showForumMark
-            className="mr-auto text-lg lg:mr-0 lg:w-[200px] lg:text-xl"
+            className="forum-brand mr-auto text-lg sm:mr-2"
           />
           <form
             action={forumHrefForPathname("/forum/search", pathname)}
@@ -348,11 +385,23 @@ export function ForumNavigationLayout({
                 </DropdownMenuLabel>
                 {navState?.authenticated ? (
                   <>
-                    {FORUM_PERSONAL_NAVIGATION.filter(item => !item.trusted || navState.trusted).map(item => (
-                      <ForumMenuLink key={item.view} href={item.href} icon={navigationIcons[item.icon]}>
+                    {FORUM_PERSONAL_NAVIGATION.filter(
+                      (item) => !item.trusted || navState.trusted,
+                    ).map((item) => (
+                      <ForumMenuLink
+                        key={item.view}
+                        href={item.href}
+                        icon={navigationIcons[item.icon]}
+                      >
                         {item.label}
-                        {item.view === "inbox" && navState.unreadPrivateMessages > 0 && <MenuCount count={navState.unreadPrivateMessages} />}
-                        {item.view === "following" && navState.unreadNotifications > 0 && <MenuCount count={navState.unreadNotifications} />}
+                        {item.view === "inbox" &&
+                          navState.unreadPrivateMessages > 0 && (
+                            <MenuCount count={navState.unreadPrivateMessages} />
+                          )}
+                        {item.view === "following" &&
+                          navState.unreadNotifications > 0 && (
+                            <MenuCount count={navState.unreadNotifications} />
+                          )}
                       </ForumMenuLink>
                     ))}
                     {navState.canModerate && (
@@ -404,7 +453,8 @@ export function ForumNavigationLayout({
         </div>
       </header>
       <aside
-        className="forum-left-rail fixed bottom-0 top-[var(--site-header-offset)] z-30 hidden w-[220px] overflow-y-auto overscroll-contain px-3 py-5 lg:block"
+        id="forum-navigation-rail"
+        className="forum-left-rail fixed bottom-0 top-[var(--site-header-offset)] z-30 hidden overflow-y-auto overscroll-contain md:block"
         aria-label="Forum navigation"
       >
         <nav aria-label="Forum sections" className="space-y-1">
@@ -412,22 +462,60 @@ export function ForumNavigationLayout({
             <ForumLink
               key={value}
               href={forumHomeHref(value)}
+              title={label}
+              aria-label={label}
               aria-current={active === value ? "page" : undefined}
               className={cn("forum-rail-link", active === value && "is-active")}
             >
               <Icon aria-hidden="true" className="size-[19px]" />
-              <span>{label}</span>
+              <span className="forum-nav-label">{label}</span>
             </ForumLink>
           ))}
         </nav>
-        <div className="mt-6">
-          <p className="forum-rail-heading">Your space</p>
+        {navState?.authenticated && (
+          <nav
+            aria-label="Quick personal tools"
+            className="forum-compact-shortcuts"
+          >
+            {FORUM_PERSONAL_NAVIGATION.filter(
+              (item) =>
+                ["catch-up", "bookmarks", "access", "inbox"].includes(
+                  item.view,
+                ) &&
+                (!item.trusted || navState.trusted),
+            ).map((item) => {
+              const Icon = navigationIcons[item.icon];
+              return (
+                <ForumLink
+                  key={item.view}
+                  href={item.href}
+                  className="forum-rail-link"
+                  aria-label={item.label}
+                  title={item.label}
+                  aria-current={path === item.href ? "page" : undefined}
+                >
+                  <Icon className="size-[18px]" aria-hidden="true" />
+                </ForumLink>
+              );
+            })}
+          </nav>
+        )}
+        <RailGroup label="Your space" open>
           {navState?.authenticated ? (
             <nav aria-label="Personal forum tools" className="space-y-1">
-              {FORUM_PERSONAL_NAVIGATION.filter(item => !item.trusted || navState.trusted).map(item => (
-                <ForumRailLink key={item.view} href={item.href} icon={navigationIcons[item.icon]}>
+              {FORUM_PERSONAL_NAVIGATION.filter(
+                (item) => !item.trusted || navState.trusted,
+              ).map((item) => (
+                <ForumRailLink
+                  key={item.view}
+                  href={item.href}
+                  icon={navigationIcons[item.icon]}
+                >
                   {item.label}
-                  {item.view === "inbox" && navState.unreadPrivateMessages > 0 && <MenuCount count={navState.unreadPrivateMessages} />}
+                  {item.view === "inbox" &&
+                    navState.unreadPrivateMessages > 0 && (
+                      <MenuCount count={navState.unreadPrivateMessages} />
+                    )}
                 </ForumRailLink>
               ))}
               {navState.canModerate && (
@@ -442,15 +530,20 @@ export function ForumNavigationLayout({
               Sign in to join in
             </ForumLink>
           )}
-        </div>
+        </RailGroup>
         {boards.length > 0 && (
-          <div className="mt-6">
-            <p className="forum-rail-heading">Boards</p>
+          <RailGroup
+            label="Boards"
+            open={active === "boards"}
+            count={rootBoards.length}
+          >
             <nav aria-label="Boards" className="space-y-1">
               {rootBoards.map((board) => (
                 <ForumLink
                   key={board._id}
                   href={forumPath(board.slug)}
+                  title={getCategoryTitle(board)}
+                  aria-label={getCategoryTitle(board)}
                   className={cn(
                     "forum-rail-link",
                     currentBoard?._id === board._id && "is-active",
@@ -465,17 +558,18 @@ export function ForumNavigationLayout({
                   >
                     {getCategoryTitle(board).slice(0, 1)}
                   </span>
-                  <span className="truncate">{getCategoryTitle(board)}</span>
+                  <span className="forum-nav-label truncate">
+                    {getCategoryTitle(board)}
+                  </span>
                 </ForumLink>
               ))}
               <ForumRailLink href={forumHomeHref("boards")} icon={Compass}>
                 Browse all boards
               </ForumRailLink>
             </nav>
-          </div>
+          </RailGroup>
         )}
-        <div className="mt-6">
-          <p className="forum-rail-heading">Community</p>
+        <RailGroup label="Explore" open={active === "community"}>
           <nav aria-label="Community resources" className="space-y-1">
             <ForumRailLink href="/forum/members" icon={Users}>
               Members
@@ -493,9 +587,9 @@ export function ForumNavigationLayout({
               Help & rules
             </ForumRailLink>
           </nav>
-        </div>
+        </RailGroup>
         <a
-          className="focus-ring mt-6 block px-3 py-3 text-xs text-muted-foreground hover:text-foreground"
+          className="forum-rail-home focus-ring mt-4 block px-3 py-3 text-xs text-muted-foreground hover:text-foreground"
           href={primarySiteHref}
         >
           SYMBaiEX home ↗
@@ -503,7 +597,7 @@ export function ForumNavigationLayout({
       </aside>
       <nav
         aria-label="Forum sections on mobile"
-        className="forum-bottom-nav fixed inset-x-0 bottom-0 z-50 bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="forum-bottom-nav fixed inset-x-0 bottom-0 z-50 bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <div className="mx-auto grid max-w-lg grid-cols-4 px-2">
           {views.map(({ value, label, icon: Icon }) => (
@@ -564,6 +658,7 @@ function ForumRailLink({
   return (
     <ForumLink
       href={href}
+      title={typeof children === "string" ? children : undefined}
       aria-current={active ? "page" : undefined}
       className={cn("forum-rail-link", active && "is-active")}
     >
@@ -578,5 +673,33 @@ function MenuCount({ count }: { count: number }) {
     <span className="ml-auto font-mono text-xs text-primary">
       {count > 99 ? "99+" : count}
     </span>
+  );
+}
+
+function RailGroup({
+  label,
+  open,
+  count,
+  children,
+}: {
+  label: string;
+  open?: boolean;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="forum-rail-group group/rail" open={open || undefined}>
+      <summary className="forum-rail-heading focus-ring flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+        <span className="flex-1">{label}</span>
+        {count !== undefined && (
+          <span className="font-mono text-[10px] tabular-nums">{count}</span>
+        )}
+        <ChevronDown
+          className="size-3 transition-transform group-open/rail:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      {children}
+    </details>
   );
 }

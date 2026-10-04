@@ -96,7 +96,7 @@ describe("forum MCP protocol boundary", () => {
       request("initialize", { protocolVersion: "2025-06-18" }),
     );
     const server = (await initialized.json()).result.serverInfo;
-    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.1.0" });
+    expect(server).toMatchObject({ name: "symbaiex-forum", version: "2.2.0" });
     const listed = await POST(request("tools/list"));
     const tools = (await listed.json()).result.tools;
     const opener = tools.find(
@@ -189,7 +189,7 @@ describe("forum MCP protocol boundary", () => {
           headers,
         ),
       );
-      expect(response.headers.get("Mcp-Server-Version")).toBe("2.1.0");
+      expect(response.headers.get("Mcp-Server-Version")).toBe("2.2.0");
       expect(await response.json()).toMatchObject({
         result: {
           structuredContent: { status: "completed", actingAs: null, data: {} },
@@ -649,7 +649,7 @@ describe("forum MCP protocol boundary", () => {
         _meta: {
           "io.modelcontextprotocol/serverInfo": {
             name: "symbaiex-forum",
-            version: "2.1.0",
+            version: "2.2.0",
           },
         },
       },

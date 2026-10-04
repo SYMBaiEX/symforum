@@ -36,7 +36,9 @@ export function ForumPageHeader({
           ) : null}
         </div>
         {actions ? (
-          <div className="forum-page-actions flex flex-wrap items-center gap-2">{actions}</div>
+          <div className="forum-page-actions flex flex-wrap items-center gap-2">
+            {actions}
+          </div>
         ) : null}
       </div>
     </header>
@@ -54,17 +56,17 @@ export function ForumBodyGrid({
   const contextId = useId();
   return (
     <div
-      className={`forum-body-grid mt-4 grid items-start gap-5 xl:gap-6 ${sidebar ? "xl:grid-cols-[minmax(0,1fr)_260px]" : ""}`}
+      className={`forum-body-grid grid items-start ${sidebar ? "forum-has-context" : ""}`}
     >
-      <div className="min-w-0 space-y-4">{children}</div>
+      <div className="forum-body-content min-w-0">{children}</div>
       {sidebar ? (
-        <div className="forum-context-panel min-w-0 xl:sticky xl:top-[calc(var(--site-header-offset)+1.5rem)]">
+        <div className="forum-context-panel min-w-0">
           <button
             type="button"
             aria-expanded={contextOpen}
             aria-controls={contextId}
             onClick={() => setContextOpen((open) => !open)}
-            className="focus-ring flex min-h-11 w-full items-center justify-between rounded-xl bg-card px-4 text-sm font-medium xl:hidden"
+            className="forum-context-toggle focus-ring flex min-h-11 w-full items-center justify-between rounded-xl bg-card px-4 text-sm font-medium"
           >
             Around the forum
             <ChevronDown
@@ -74,7 +76,7 @@ export function ForumBodyGrid({
           </button>
           <div
             id={contextId}
-            className={`${contextOpen ? "block pt-3" : "hidden"} xl:block xl:pt-0`}
+            className={`forum-context-content ${contextOpen ? "is-open" : ""}`}
           >
             {sidebar}
           </div>

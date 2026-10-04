@@ -1,6 +1,9 @@
 "use client";
 import { type ReactNode, type RefObject, Suspense } from "react";
-import { ForumShellContextProvider } from "./forum-shell-context";
+import {
+  ForumShellContextProvider,
+  useForumShellContext,
+} from "./forum-shell-context";
 import { ForumNavigation } from "./forum-navigation";
 import { ForumLink } from "./forum-link";
 import { AppErrorSurface } from "@/components/app-error-surface";
@@ -26,7 +29,7 @@ export function ForumSiteShell({
   return (
     <ForumShellContextProvider primarySiteHref={primarySiteHref}>
       <SurfaceScope.Provider value="forum">
-        <div className="forum-app-shell relative z-10 min-h-dvh min-w-0 bg-background text-foreground [--site-footer-offset:0px] [--site-header-offset:calc(4rem+env(safe-area-inset-top))]">
+        <ForumShellFrame>
           <WebVitalsReporter />
           <a
             href="#main-content"
@@ -38,7 +41,7 @@ export function ForumSiteShell({
           <main
             id="main-content"
             tabIndex={-1}
-            className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none lg:ml-[220px]"
+            className="forum-main min-h-[calc(100dvh-6rem)] pt-[var(--site-header-offset)] outline-none"
           >
             {children}
           </main>
@@ -48,7 +51,7 @@ export function ForumSiteShell({
           <AppErrorSurface />
           <footer
             ref={footerRef}
-            className="forum-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:ml-[220px] lg:pb-8"
+            className="forum-footer flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 text-xs text-muted-foreground md:px-8 lg:pb-8"
           >
             <a
               className="focus-ring py-2 hover:text-foreground"
@@ -80,8 +83,20 @@ export function ForumSiteShell({
               ))}
             </div>
           </footer>
-        </div>
+        </ForumShellFrame>
       </SurfaceScope.Provider>
     </ForumShellContextProvider>
+  );
+}
+
+function ForumShellFrame({ children }: { children: ReactNode }) {
+  const { compactNavigation } = useForumShellContext();
+  return (
+    <div
+      data-navigation={compactNavigation ? "compact" : "expanded"}
+      className="forum-app-shell relative z-10 min-h-dvh min-w-0 bg-background text-foreground [--site-footer-offset:0px]"
+    >
+      {children}
+    </div>
   );
 }

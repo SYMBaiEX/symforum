@@ -1,5 +1,6 @@
 "use client";
 
+import directoryStyles from "./forum-directory-jumps.module.css";
 import { ForumLink, ForumStatusBox } from "./forum-primitives";
 import { ChevronDown, MessageSquare } from "lucide-react";
 import {
@@ -58,14 +59,32 @@ export function ForumGroupedBoards({
       />
     );
   return (
-    <div className="space-y-4">
+    <div className="forum-board-directory">
+      {visibleGroups.length > 1 && (
+        <nav
+          aria-label="Jump to board section"
+          className={directoryStyles.jumps}
+        >
+          <span className="text-[11px] text-muted-foreground">Jump to</span>
+          {visibleGroups.map((group, index) => (
+            <a
+              key={group.section?.slug ?? index}
+              href={`#board-group-${group.section?.slug ?? index}`}
+              className="focus-ring"
+            >
+              {group.section ? getCategoryTitle(group.section) : "Main"}
+            </a>
+          ))}
+        </nav>
+      )}
       {visibleGroups.map((group, index) => (
         <section
+          id={`board-group-${group.section?.slug ?? index}`}
           key={group.section?.slug ?? `group-${index}`}
           aria-label={`${group.section ? getCategoryTitle(group.section) : "Main"} boards`}
-          className="overflow-hidden rounded-xl bg-card p-2 sm:p-3"
+          className="forum-board-group overflow-hidden"
         >
-          <div className="flex min-h-11 items-center gap-2.5 px-2 py-2 sm:px-3">
+          <div className="forum-board-group-heading flex items-center gap-2.5">
             <span
               className="size-2 shrink-0 rounded-full"
               aria-hidden="true"
@@ -165,9 +184,9 @@ function GroupedBoardRow({
       : null,
   ].filter(Boolean);
   return (
-    <article className="grid min-w-0 grid-cols-[36px_minmax(0,1fr)] items-start gap-x-3 rounded-lg px-2 py-3 hover:bg-muted/50 focus-within:bg-muted/50 sm:grid-cols-[40px_minmax(0,1fr)] sm:px-3 xl:grid-cols-[40px_minmax(0,1fr)_56px_160px]">
+    <article className="forum-directory-row grid min-w-0 grid-cols-[36px_minmax(0,1fr)] items-start gap-x-3 rounded-lg px-2 py-3 hover:bg-muted/50 focus-within:bg-muted/50 sm:grid-cols-[40px_minmax(0,1fr)] sm:px-3 xl:grid-cols-[40px_minmax(0,1fr)_56px_160px]">
       <span
-        className={`mt-1.5 flex size-9 items-center justify-center rounded-full sm:size-10 ${isUnread ? "bg-primary/10 text-primary" : "bg-accent/15 text-foreground"}`}
+        className={`forum-board-glyph mt-1.5 flex size-9 items-center justify-center rounded-full sm:size-10 ${isUnread ? "bg-primary/10 text-primary" : "bg-accent/15 text-foreground"}`}
         role="img"
         aria-label={
           hasReadState(category)
@@ -185,13 +204,13 @@ function GroupedBoardRow({
         <h3>
           <ForumLink
             href={forumPath(category.slug)}
-            className="focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere] sm:text-base"
+            className="forum-board-title focus-ring inline-flex min-h-11 max-w-full items-center text-base font-semibold leading-5 hover:text-primary [overflow-wrap:anywhere] sm:text-base"
           >
             {getCategoryTitle(category)}
           </ForumLink>
         </h3>
         {getCategoryDescription(category) ? (
-          <p className="-mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          <p className="forum-board-description -mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
@@ -208,7 +227,7 @@ function GroupedBoardRow({
         </div>
         {category.children?.length ? (
           <details
-            className="group/subforums mt-0.5"
+            className="forum-subforum-list group/subforums mt-0.5"
             open={searching || undefined}
           >
             <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
@@ -239,7 +258,7 @@ function GroupedBoardRow({
           </details>
         ) : null}
       </div>
-      <dl className="hidden pt-2 text-right font-mono text-[10px] text-muted-foreground xl:block">
+      <dl className="forum-board-counts hidden pt-2 text-right font-mono text-[10px] text-muted-foreground xl:block">
         <div className="flex flex-col">
           <dt className="order-2">threads</dt>
           <dd className="order-1 text-sm tabular-nums text-foreground">
@@ -253,7 +272,7 @@ function GroupedBoardRow({
           </dd>
         </div>
       </dl>
-      <div className="col-start-2 min-w-0 xl:col-start-auto xl:pt-1">
+      <div className="forum-board-latest col-start-2 min-w-0 xl:col-start-auto xl:pt-1">
         {latest ? (
           <>
             <p className="sr-only">Latest thread</p>

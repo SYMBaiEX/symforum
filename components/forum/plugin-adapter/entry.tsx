@@ -279,16 +279,16 @@ function App() {
           uploadFiles: (files) => forumHost.uploadFiles(files),
         }}
       >
-        <ForumSiteShell
-          footerRef={footerRef}
-          forumHost={false}
-          primarySiteHref="https://www.symbaiex.com"
+        <div
+          data-native-forum-runtime="2.2.0"
+          data-connection-revision={revision}
         >
-          <ForumLayout>
-            <div
-              data-native-forum-runtime="2.1.0"
-              data-connection-revision={revision}
-            >
+          <ForumSiteShell
+            footerRef={footerRef}
+            forumHost={false}
+            primarySiteHref="https://www.symbaiex.com"
+          >
+            <ForumLayout>
               {error ? (
                 <section className="page-frame page-frame-dense">
                   <ForumStatusBox title="Connection unavailable" body={error} />
@@ -304,9 +304,9 @@ function App() {
                   <ForumLoading label="Connecting to SYMBaiEX Forum" />
                 </section>
               )}
-            </div>
-          </ForumLayout>
-        </ForumSiteShell>
+            </ForumLayout>
+          </ForumSiteShell>
+        </div>
       </ForumRuntimeContext.Provider>
     </ThemeProvider>
   );

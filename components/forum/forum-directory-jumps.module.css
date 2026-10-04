@@ -1,0 +1,23 @@
+/* Component styles follow the forum into the sandboxed plugin build. */
+.jumps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.jumps > span { flex-shrink: 0; margin-right: 4px; }
+.jumps a {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+.jumps a:hover { color: hsl(var(--accent)); background: hsl(var(--accent)/.08); }
+@media (max-width: 767px),(pointer: coarse) { .jumps a { min-height: 44px; } }
