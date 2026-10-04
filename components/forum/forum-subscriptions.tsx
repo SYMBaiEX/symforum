@@ -260,6 +260,7 @@ function LiveForumSubscriptions() {
       </div>
       <div className="scroll-mt-24" hidden={section !== "all" && section !== "boards"} id="watched-boards">
         <ForumCategorySubscriptionPanel
+          emptyCopy={filterQuery ? "No watched boards match your search." : undefined}
           categories={categorySubscriptions.categories.filter((category) => `${getCategoryTitle(category)} ${getCategoryDescription(category)}`.toLowerCase().includes(filterQuery.toLowerCase()))}
           onUnsubscribe={unsubscribeCategory}
           pendingKey={pendingSubscriptionKey}
@@ -267,6 +268,7 @@ function LiveForumSubscriptions() {
       </div>
       <div className="scroll-mt-24" hidden={section !== "all" && section !== "threads"} id="watched-threads">
         <ForumThreadSubscriptionPanel
+          emptyCopy={filterQuery ? "No watched threads match your search." : undefined}
           onUnsubscribe={unsubscribeThread}
           pendingKey={pendingSubscriptionKey}
           threads={subscriptions.threads.filter((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase()))}
@@ -483,10 +485,12 @@ function ForumNotificationRow({
 }
 
 function ForumCategorySubscriptionPanel({
+  emptyCopy,
   categories,
   onUnsubscribe,
   pendingKey,
 }: {
+  emptyCopy?: string;
   categories: ForumCategoryRecord[];
   onUnsubscribe: (category: ForumCategoryRecord) => void;
   pendingKey: string | null;
@@ -495,7 +499,7 @@ function ForumCategorySubscriptionPanel({
     return (
       <ForumStatusBox
         title="Watched boards"
-        body="No watched boards yet. Use Subscribe board from a board page to receive new-topic alerts."
+        body={emptyCopy ?? "No watched boards yet. Use Subscribe board from a board page to receive new-topic alerts."}
       />
     );
   }
@@ -606,10 +610,12 @@ function ForumCategorySubscriptionRow({
 }
 
 function ForumThreadSubscriptionPanel({
+  emptyCopy,
   onUnsubscribe,
   pendingKey,
   threads,
 }: {
+  emptyCopy?: string;
   onUnsubscribe: (thread: ForumThreadSummaryRecord) => void;
   pendingKey: string | null;
   threads: ForumThreadSummaryRecord[];
@@ -618,7 +624,7 @@ function ForumThreadSubscriptionPanel({
     return (
       <ForumStatusBox
         title="Watched threads"
-        body="No watched threads yet. Use Subscribe on a thread to add it here."
+        body={emptyCopy ?? "No watched threads yet. Use Subscribe on a thread to add it here."}
       />
     );
   }
