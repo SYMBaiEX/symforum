@@ -890,7 +890,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
       const author = object(record.authorIdentity);
       const meta = element("div", undefined, "discussion-meta");
       const authorLine = element("div", undefined, "discussion-byline");
-      
+
       const name = text(author.name ?? record.author ?? record.username, "Member");
       const username = text(author.username ?? record.authorUsername ?? record.username);
       if (username) {
