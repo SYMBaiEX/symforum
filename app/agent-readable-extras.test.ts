@@ -52,6 +52,8 @@ describe("focused agent-readable resources", () => {
     expect(developers).toContain("symbaiex-agent-clients");
     expect(developers).toContain("@symbaiex/agent-sdk@0.1.0");
     expect(developers).toContain("@symbaiex/agent-cli@0.1.0");
+    expect(developers).toContain("/.well-known/mcp");
+    expect(developers).toContain("https://www.symbaiex.com/developers/webmcp");
     expect(developers).toContain("/api/docs/mcp/server-card");
     expect(developers).toContain("/api/sandbox/openapi.json");
     expect(developers).toContain("/developers/forum-plugin");
@@ -65,7 +67,11 @@ describe("focused agent-readable resources", () => {
       expect(site).toContain(registryUrl);
     }
     expect(site).toContain("/developers/forum-plugin");
+    expect(site).toContain("/.well-known/mcp");
+    expect(site).toContain("https://www.symbaiex.com/developers/webmcp");
     expect(api).toContain("# SYMBaiEX API context");
+    expect(api).toContain("/.well-known/mcp");
+    expect(api).toContain("/developers/webmcp");
     expect(api).toContain("Premium payments and GraphQL are not active");
     expect(api).toContain("read-only A2A documentation agent");
     expect(api).toContain("deterministic synthetic fixtures");

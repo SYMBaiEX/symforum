@@ -423,6 +423,10 @@ function applySecurityHeaders(
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   response.headers.set("X-Content-Type-Options", "nosniff");
+  const webMcpTrialToken = webMcpOriginTrialToken(request);
+  if (webMcpTrialToken) {
+    response.headers.set("Origin-Trial", webMcpTrialToken);
+  }
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set(
     "Permissions-Policy",
@@ -444,6 +448,28 @@ function applySecurityHeaders(
     );
   }
   return response;
+}
+
+function webMcpOriginTrialToken(request?: NextRequest) {
+  const token = process.env.WEBMCP_ORIGIN_TRIAL_TOKEN?.trim();
+  if (
+    !request ||
+    !token ||
+    token.length > 4096 ||
+    /[^\x21-\x7e]/.test(token) ||
+    request.method !== "GET" ||
+    request.nextUrl.hostname !== PRIMARY_PRODUCTION_HOSTNAME ||
+    !acceptsMediaType(request.headers.get("accept"), "text/html") ||
+    getMarkdownRequest(request) !== null ||
+    !["/", "/agent", "/developers", "/forum"].some(
+      (path) =>
+        request.nextUrl.pathname === path ||
+        (path === "/forum" && request.nextUrl.pathname.startsWith("/forum/")),
+    )
+  ) {
+    return null;
+  }
+  return token;
 }
 
 function markdownAlternateLink(request: NextRequest) {

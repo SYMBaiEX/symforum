@@ -35,7 +35,15 @@ describe("truthful WorkOS discovery", () => {
     vi.stubEnv("WORKOS_CONNECT_ENABLED", "false");
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
-    expect((await authorizationMetadata()).status).toBe(404);
+    expect(
+      (
+        await authorizationMetadata(
+          new Request(
+            "https://www.symbaiex.com/.well-known/oauth-authorization-server",
+          ),
+        )
+      ).status,
+    ).toBe(404);
     expect(
       await (
         await resourceMetadata(
@@ -64,14 +72,42 @@ describe("truthful WorkOS discovery", () => {
       }),
     ).toThrow();
   });
-  test("preserves upstream issuer and fields, publishes OAuth scopes and keeps application permission separate", async () => {
+  test("redirects aliases to the actual issuer and preserves its metadata", async () => {
     enabled();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Response.json(metadata)),
     );
-    expect(await (await authorizationMetadata()).json()).toEqual(metadata);
-    expect(await (await authorizationHead()).text()).toBe("");
+    const alias = await authorizationMetadata(
+      new Request(
+        "https://www.symbaiex.com/.well-known/oauth-authorization-server",
+      ),
+    );
+    expect(alias.status).toBe(307);
+    expect(alias.headers.get("location")).toBe(
+      `${issuer}/.well-known/oauth-authorization-server`,
+    );
+    expect(alias.headers.get("cache-control")).toBe("no-store");
+    expect(await alias.text()).toBe("");
+    expect(fetch).not.toHaveBeenCalled();
+
+    const issuerResponse = await authorizationMetadata(
+      new Request(`${issuer}/.well-known/oauth-authorization-server`),
+    );
+    expect(issuerResponse.status).toBe(200);
+    expect(await issuerResponse.json()).toEqual(metadata);
+
+    const head = await authorizationHead(
+      new Request(
+        "https://www.symbaiex.com/.well-known/oauth-authorization-server",
+        { method: "HEAD" },
+      ),
+    );
+    expect(head.status).toBe(307);
+    expect(head.headers.get("location")).toBe(
+      `${issuer}/.well-known/oauth-authorization-server`,
+    );
+    expect(await head.text()).toBe("");
     expect(
       await (
         await resourceMetadata(
@@ -115,7 +151,9 @@ describe("truthful WorkOS discovery", () => {
       "fetch",
       vi.fn(async () => Response.json(data)),
     );
-    const response = await authorizationMetadata();
+    const response = await authorizationMetadata(
+      new Request(`${issuer}/.well-known/oauth-authorization-server`),
+    );
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.text()).not.toContain("evil.example");

@@ -53,6 +53,48 @@ describe("proxy forum routing", () => {
     authState.authenticated = false;
     authState.middlewareOptions = null;
     delete process.env.NEXT_PUBLIC_CONVEX_URL;
+    delete process.env.WEBMCP_ORIGIN_TRIAL_TOKEN;
+  });
+
+  test("scopes an opt-in WebMCP trial token to canonical HTML tool pages", async () => {
+    process.env.WEBMCP_ORIGIN_TRIAL_TOKEN = "owner-issued-trial-token";
+    const proxy = await loadProxy();
+    const page = await proxy(
+      requestFor("https://www.symbaiex.com/developers", {
+        accept: "text/html",
+      }),
+    );
+    expect(page.headers.get("origin-trial")).toBe("owner-issued-trial-token");
+
+    const markdown = await proxy(
+      requestFor("https://www.symbaiex.com/developers?mode=agent", {
+        accept: "text/html",
+      }),
+    );
+    expect(markdown.headers.get("origin-trial")).toBeNull();
+
+    const api = await proxy(
+      requestFor("https://www.symbaiex.com/api/agent", {
+        accept: "application/json",
+      }),
+    );
+    expect(api.headers.get("origin-trial")).toBeNull();
+
+    const forumHost = await proxy(
+      requestFor("https://forum.symbaiex.com/developers", {
+        accept: "text/html",
+      }),
+    );
+    expect(forumHost.headers.get("origin-trial")).toBeNull();
+  });
+
+  test("does not emit an absent or malformed WebMCP Origin Trial token", async () => {
+    process.env.WEBMCP_ORIGIN_TRIAL_TOKEN = "invalid\nheader";
+    const proxy = await loadProxy();
+    const response = await proxy(
+      requestFor("https://www.symbaiex.com/", { accept: "text/html" }),
+    );
+    expect(response.headers.get("origin-trial")).toBeNull();
   });
 
   test("keeps auth cookies after the browser session closes", async () => {

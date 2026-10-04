@@ -4,7 +4,10 @@ import DeveloperResourcePage, {
   generateMetadata,
   generateStaticParams,
 } from "./page";
-import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
+import {
+  DEVELOPER_RESOURCES,
+  type DeveloperResource,
+} from "@/lib/developer-resources";
 import { publicDocumentation } from "@/lib/public-documentation";
 
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -23,7 +26,7 @@ describe("developer integration guides", () => {
       );
       await stream.allReady;
       const html = await new Response(stream).text();
-      const entry =
+      const entry: DeveloperResource =
         DEVELOPER_RESOURCES[resource as keyof typeof DEVELOPER_RESOURCES];
       expect(html).toContain(entry.title);
       expect(html).toContain("Integration guidance");
@@ -34,7 +37,19 @@ describe("developer integration guides", () => {
         d.uri.endsWith(`/developers/${resource}`),
       );
       expect(doc?.text.length).toBeGreaterThan(900);
-      for (const detail of entry.details) expect(doc?.text).toContain(detail);
+      for (const detail of entry.details ?? [])
+        expect(doc?.text).toContain(detail);
+      if (resource === "webmcp") {
+        expect(html).toContain("document.modelContext.registerTool");
+        expect(doc?.text).toContain("navigator.modelContext");
+      }
+      for (const faq of entry.faqs ?? []) {
+        expect(html).toContain("FAQPage");
+        expect(html).toContain(faq.question);
+        expect(html).toContain(faq.answer);
+        expect(doc?.text).toContain(faq.question);
+        expect(doc?.text).toContain(faq.answer);
+      }
       expect((await generateMetadata({ params })).alternates?.canonical).toBe(
         `/developers/${resource}`,
       );

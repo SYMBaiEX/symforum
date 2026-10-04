@@ -11,12 +11,14 @@ The stable public machine surface is ${primarySiteUrl("/api/agent")}. Use the ve
 - OpenAPI: ${primarySiteUrl("/api/agent/openapi.json")}
 - AsyncAPI: ${primarySiteUrl("/api/agent/asyncapi.json")}
 - Synthetic sandbox OpenAPI: ${primarySiteUrl("/api/sandbox/openapi.json")}
+- MCP well-known discovery card: ${primarySiteUrl("/.well-known/mcp")}
 - MCP server card: ${primarySiteUrl("/.well-known/mcp/server-card.json")}
 - Public documentation MCP: ${primarySiteUrl("/api/docs/mcp/server-card")}
 - Public documentation A2A agent: ${primarySiteUrl("/.well-known/agent-card.json")}
 - Authentication: ${primarySiteUrl("/auth.md")}
 - Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - API lifecycle and deprecation policy: ${primarySiteUrl("/developers/api-lifecycle")}
+- WebMCP browser tools guide: ${primarySiteUrl("/developers/webmcp")}
 
 ## REST execution
 
