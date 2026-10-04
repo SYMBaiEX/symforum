@@ -42,6 +42,8 @@ export const PUBLIC_AGENT_SKILLS = [
 ] as const;
 
 export const SKILLS_SH_LISTING_URL = "https://skills.sh/symbaiex/skills";
+export const GLAMA_EVIDENCE_LISTING_URL =
+  "https://glama.ai/mcp/connectors/com.symbaiex.www/evidence";
 
 const skillRawUrl = (name: string) =>
   `https://raw.githubusercontent.com/SYMBaiEX/skills/master/skills/${name}/SKILL.md`;

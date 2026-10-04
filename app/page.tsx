@@ -6,7 +6,11 @@ import { HomeBanner } from "@/components/home-banner";
 import { SectionHeader } from "@/components/section-header";
 import { Button } from "@/components/ui/button";
 import { PublicResourceSearchForm } from "@/components/public-resource-search-form";
-import { DOCS_MCP_SERVER_CARD, MCP_SERVER_CARD } from "@/lib/agent-discovery";
+import {
+  DOCS_MCP_SERVER_CARD,
+  GLAMA_EVIDENCE_LISTING_URL,
+  MCP_SERVER_CARD,
+} from "@/lib/agent-discovery";
 import { primarySiteUrl } from "@/lib/site-urls";
 import { getLatestPosts } from "@/lib/blog-data";
 import { getDailyNews } from "@/lib/news-data";
@@ -162,7 +166,14 @@ async function HomeContent() {
               >
                 evidence server
               </a>
-              .
+              . A third-party Glama directory page also lists the evidence
+              server as a connector:{" "}
+              <a
+                className="underline underline-offset-4"
+                href={GLAMA_EVIDENCE_LISTING_URL}
+              >
+                SYMBaiEX Evidence MCP on Glama
+              </a>
             </p>
             <p>
               Source-linked evidence is kept distinct from opinion. Stored
