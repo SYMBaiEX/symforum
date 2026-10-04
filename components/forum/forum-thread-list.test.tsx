@@ -24,7 +24,11 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/forum/research",
 }));
 vi.mock("next/dynamic", () => ({
-  default: () => () => <div data-testid="composer" />,
+  default:
+    () =>
+    ({ children }: { children?: import("react").ReactNode }) => (
+      <div data-testid="composer">{children}</div>
+    ),
 }));
 vi.mock("next/image", () => ({ default: () => null }));
 
@@ -213,3 +217,24 @@ test("board navigation carries sub-board and latest post targets while retaining
     days: 7,
   });
 });
+
+test.each(["question", "link", "invalid"])(
+  "social composer deep link uses only supported intents (%s)",
+  (kind) => {
+    configureBoard(true);
+    mocks.authenticated = true;
+    mocks.params = `compose=1&kind=${kind}`;
+    const html = renderToStaticMarkup(
+      <ForumThreadList categorySlug="research" enabled />,
+    );
+    const expected =
+      kind === "invalid"
+        ? "Discussion"
+        : kind === "question"
+          ? "Question"
+          : "Link";
+    expect(html).toMatch(
+      new RegExp(`aria-pressed="true"[^>]*>${expected}</button>`),
+    );
+  },
+);

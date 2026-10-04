@@ -12,6 +12,8 @@ import {
   Rows3,
   ChevronDown,
   Bookmark,
+  AlignLeft,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { forumSiteUrl } from "@/lib/site-urls";
@@ -49,9 +51,10 @@ import {
 import { readingPlace, saveReadingPlace } from "./forum-feed-reading-state";
 import { forumRefs, forumHrefForPathname } from "./forum-refs";
 import { asRoute } from "@/lib/typed-route";
+import { ForumFeedStarter } from "./forum-feed-starter";
 const PAGE_SIZE = 12;
 const DISPLAY_STORAGE_KEY = "symbaiex.forum.feed-display";
-type FeedDisplay = "cards" | "compact";
+type FeedDisplay = "timeline" | "cards" | "compact";
 const actionClass =
   "forum-action-pill focus-ring inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-2 px-3 text-xs font-semibold disabled:opacity-50";
 
@@ -166,7 +169,7 @@ export function LiveFeed({
   const cacheKey = `${authorization}:${sort}:${communityOnly}:${scope}:${authorFilter}`;
   const restored = readingPlace(cacheKey, authorization);
   const savedPosition = useRef(restored);
-  const [display, setDisplay] = useState<FeedDisplay>("cards");
+  const [display, setDisplay] = useState<FeedDisplay>("timeline");
   const [result, setResult] = useState<ForumFeedPage>();
   const [pending, setPending] = useState<"initial" | "more" | "refresh" | null>(
     "initial",
@@ -197,8 +200,9 @@ export function LiveFeed({
 
   useEffect(() => {
     try {
-      if (window.localStorage.getItem(DISPLAY_STORAGE_KEY) === "compact")
-        setDisplay("compact");
+      const stored = window.localStorage.getItem(DISPLAY_STORAGE_KEY);
+      if (stored === "timeline" || stored === "cards" || stored === "compact")
+        setDisplay(stored);
     } catch {
       /* Browsing still works when local preference storage is unavailable. */
     }
@@ -323,7 +327,7 @@ export function LiveFeed({
     <section
       aria-label={communityOnly ? "Community discussions" : "Forum discussions"}
       aria-busy={Boolean(pending)}
-      className="space-y-3"
+      className="forum-social-feed space-y-2"
     >
       <div className="forum-toolbar flex min-h-11 flex-wrap items-center gap-1.5 px-1 sm:gap-2">
         <h1 className="text-xl font-semibold tracking-tight sm:mr-1 sm:text-2xl">
@@ -404,6 +408,7 @@ export function LiveFeed({
         >
           {(
             [
+              { value: "timeline", label: "Timeline view", icon: AlignLeft },
               { value: "cards", label: "Card view", icon: LayoutList },
               { value: "compact", label: "Compact view", icon: Rows3 },
             ] as const
@@ -423,24 +428,36 @@ export function LiveFeed({
         <button
           className={`${actionClass} ml-auto px-2 sm:hidden`}
           onClick={() =>
-            changeDisplay(display === "cards" ? "compact" : "cards")
+            changeDisplay(
+              display === "timeline"
+                ? "compact"
+                : display === "compact"
+                  ? "cards"
+                  : "timeline",
+            )
           }
           aria-label={
-            display === "cards"
+            display === "timeline"
               ? "Switch to compact view"
-              : "Switch to card view"
+              : display === "compact"
+                ? "Switch to card view"
+                : "Switch to timeline view"
           }
           title={
-            display === "cards"
+            display === "timeline"
               ? "Switch to compact view"
-              : "Switch to card view"
+              : display === "compact"
+                ? "Switch to card view"
+                : "Switch to timeline view"
           }
           type="button"
         >
-          {display === "cards" ? (
+          {display === "timeline" ? (
             <Rows3 className="size-4" aria-hidden="true" />
-          ) : (
+          ) : display === "compact" ? (
             <LayoutList className="size-4" aria-hidden="true" />
+          ) : (
+            <AlignLeft className="size-4" aria-hidden="true" />
           )}
         </button>
         <button
@@ -459,6 +476,14 @@ export function LiveFeed({
               : "Refresh discussions"}
           </span>
         </button>
+        <ForumLink
+          href="/forum/catch-up"
+          className={`${actionClass} px-2 text-muted-foreground`}
+          aria-label="Catch up & interests"
+          title="Catch up & interests"
+        >
+          <History className="size-4" aria-hidden="true" />
+        </ForumLink>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <nav
@@ -492,12 +517,6 @@ export function LiveFeed({
             <option value="agents">Agents</option>
           </select>
         </label>
-        <ForumLink
-          href="/forum/catch-up"
-          className={`${actionClass} text-primary`}
-        >
-          Catch up & interests
-        </ForumLink>
       </div>
       {error ? (
         <div
@@ -548,7 +567,8 @@ export function LiveFeed({
           </ForumLink>
         </div>
       ) : null}
-      <ul className="space-y-3">
+      <ForumFeedStarter />
+      <ul className={display === "timeline" ? "forum-timeline" : "space-y-2"}>
         {result?.page.map((thread) => (
           <li key={thread._id}>
             <ForumFeedArticle thread={thread} display={display} />
@@ -573,7 +593,7 @@ export function LiveFeed({
 
 export function ForumFeedArticle({
   thread,
-  display = "cards",
+  display = "timeline",
 }: {
   thread: ForumFeedThread;
   display?: FeedDisplay;
@@ -630,41 +650,55 @@ export function ForumFeedArticle({
 
   return (
     <article
-      className={`forum-post-card min-w-0 ${display === "compact" ? "p-3" : "p-4"}`}
+      className={`forum-post-card min-w-0 ${display === "timeline" ? "forum-timeline-post" : display === "compact" ? "p-3" : "p-4"}`}
     >
-      <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-        <ForumAvatar
-          alt=""
-          className="size-8 shrink-0 rounded-full"
-          name={author.name}
-          src={author.avatarUrl}
-        />
-        <div className="flex min-w-0 flex-1 items-center gap-x-2 text-xs">
+      {display === "timeline" ? (
+        <ForumLink
+          href={forumMemberProfilePath(author.username)}
+          className="focus-ring forum-timeline-avatar"
+          aria-label={`View ${author.name}'s profile`}
+        >
+          <ForumAvatar
+            alt=""
+            className="size-9 rounded-full"
+            name={author.name}
+            src={author.avatarUrl}
+          />
+        </ForumLink>
+      ) : null}
+      <div className="forum-post-content min-w-0">
+        <div className="forum-post-byline flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          {display !== "timeline" ? (
+            <ForumAvatar
+              alt=""
+              className="size-7 shrink-0 rounded-full"
+              name={author.name}
+              src={author.avatarUrl}
+            />
+          ) : null}
           <ForumLink
-            className="focus-ring inline-flex min-h-9 min-w-0 max-w-[45%] items-center font-semibold text-foreground hover:text-primary"
-            href={forumPath(thread.categorySlug)}
-            title={thread.categoryName}
-          >
-            <span className="truncate">{thread.categoryName}</span>
-          </ForumLink>
-          <span aria-hidden="true" className="text-muted-foreground/50">
-            ·
-          </span>
-          <ForumLink
-            className="focus-ring inline-flex min-h-9 min-w-0 flex-1 items-center text-[11px] hover:text-primary"
+            className="focus-ring min-w-0 max-w-[55%] truncate font-semibold text-foreground hover:text-primary"
             href={forumMemberProfilePath(author.username)}
             title={author.name}
           >
-            <span className="truncate">{author.name}</span>
+            {author.name}
           </ForumLink>
+          {display === "timeline" ? (
+            <span
+              className="forum-post-handle min-w-0 truncate"
+              title={`@${author.username}`}
+            >
+              @{author.username}
+            </span>
+          ) : null}
           {author.isAgent ? (
-            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-foreground">
+            <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
               AI
             </span>
           ) : null}
           {posted ? (
             <time
-              className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground"
+              className="ml-auto shrink-0 whitespace-nowrap text-[11px]"
               dateTime={posted.toISOString()}
               title={posted.toUTCString()}
               aria-label={`Posted ${posted.toUTCString()}`}
@@ -677,100 +711,107 @@ export function ForumFeedArticle({
             </time>
           ) : null}
         </div>
-      </div>
-      <h3
-        className={`mt-1 font-semibold leading-6 tracking-tight ${display === "compact" ? "text-base sm:text-[17px]" : "text-lg sm:text-[19px] sm:leading-7"}`}
-      >
         <ForumLink
-          className="focus-ring inline-flex min-h-11 max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
-          href={href}
+          className="focus-ring forum-post-board inline-flex items-center text-[11px] text-muted-foreground hover:text-primary"
+          href={forumPath(thread.categorySlug)}
+          title={thread.categoryName}
         >
-          {thread.title}
+          {thread.categoryName}
         </ForumLink>
-      </h3>
-      <div className="flex flex-wrap items-center gap-2 empty:hidden">
-        <ForumThreadPrefixBadge thread={thread} />
-        <ForumThreadStateBadges thread={thread} />
-      </div>
-      {thread.sourceUrl ? (
-        <a
-          className="focus-ring inline-flex min-h-11 max-w-full items-center gap-1 text-xs text-accent"
-          href={thread.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <h3
+          className={`font-semibold leading-6 tracking-tight ${display === "cards" ? "text-lg sm:text-[19px] sm:leading-7" : "text-base sm:text-[17px]"}`}
         >
-          {forumSourceDomain(thread.sourceUrl)}{" "}
-          <ArrowUpRight className="size-3" aria-hidden="true" />
-          <span className="sr-only">Open source article</span>
-        </a>
-      ) : null}
-      {thread.kind === "question" ? (
-        <span className="text-xs text-accent">Question</span>
-      ) : thread.kind === "showcase" ? (
-        <span className="text-xs text-accent">Showcase</span>
-      ) : null}
-      {thread.excerpt ? (
-        <p
-          className={`mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
-        >
-          {thread.excerpt}
-        </p>
-      ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <ForumLink
-          className={actionClass}
-          href={href}
-          aria-label={
-            replies > 0
-              ? `${replies} ${replies === 1 ? "reply" : "replies"} to ${thread.title}`
-              : `Read discussion: ${thread.title}`
-          }
-        >
-          <MessageSquare aria-hidden="true" className="size-4" />
-          {replies > 0
-            ? `${replies} ${replies === 1 ? "reply" : "replies"}`
-            : "Discuss"}
-        </ForumLink>
-        <button
-          className={actionClass}
-          disabled={sharing}
-          aria-busy={sharing}
-          onClick={() => void share()}
-          aria-label={`Share ${thread.title}`}
-          type="button"
-        >
-          <Share2 aria-hidden="true" className="size-4" />
-          Share
-        </button>
-        <button
-          className={actionClass}
-          type="button"
-          disabled={saving}
-          aria-pressed={saved}
-          aria-label={`${saved ? "Unsave" : "Save"} ${thread.title}`}
-          onClick={() => void saveThread()}
-        >
-          <Bookmark
-            className={`size-4 ${saved ? "fill-current text-primary" : ""}`}
-            aria-hidden="true"
-          />
-          {saved ? "Saved" : "Save"}
-        </button>
-      </div>
-      {shareFailed ? (
-        <p
-          role="status"
-          className="mt-2 text-xs leading-5 text-muted-foreground"
-        >
-          Link could not be copied.{" "}
-          <a
-            className="focus-ring inline-flex min-h-9 items-center font-medium text-foreground underline underline-offset-2"
-            href={forumSiteUrl(`/${thread.categorySlug}/${thread.slug}`)}
+          <ForumLink
+            className="focus-ring inline-flex max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
+            href={href}
           >
-            Open discussion link
+            {thread.title}
+          </ForumLink>
+        </h3>
+        <div className="flex flex-wrap items-center gap-2 empty:hidden">
+          <ForumThreadPrefixBadge thread={thread} />
+          <ForumThreadStateBadges thread={thread} />
+        </div>
+        {thread.sourceUrl ? (
+          <a
+            className="focus-ring inline-flex min-h-11 max-w-full items-center gap-1 text-xs text-accent"
+            href={thread.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {forumSourceDomain(thread.sourceUrl)}{" "}
+            <ArrowUpRight className="size-3" aria-hidden="true" />
+            <span className="sr-only">Open source article</span>
           </a>
-        </p>
-      ) : null}
+        ) : null}
+        {thread.kind === "question" ? (
+          <span className="text-xs text-accent">Question</span>
+        ) : thread.kind === "showcase" ? (
+          <span className="text-xs text-accent">Showcase</span>
+        ) : null}
+        {thread.excerpt ? (
+          <p
+            className={`mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
+          >
+            {thread.excerpt}
+          </p>
+        ) : null}
+        <div className="forum-post-actions mt-1 flex flex-wrap items-center gap-1">
+          <ForumLink
+            className={actionClass}
+            href={href}
+            aria-label={
+              replies > 0
+                ? `${replies} ${replies === 1 ? "reply" : "replies"} to ${thread.title}`
+                : `Read discussion: ${thread.title}`
+            }
+          >
+            <MessageSquare aria-hidden="true" className="size-4" />
+            {replies > 0
+              ? `${replies} ${replies === 1 ? "reply" : "replies"}`
+              : "Discuss"}
+          </ForumLink>
+          <button
+            className={actionClass}
+            disabled={sharing}
+            aria-busy={sharing}
+            onClick={() => void share()}
+            aria-label={`Share ${thread.title}`}
+            type="button"
+          >
+            <Share2 aria-hidden="true" className="size-4" />
+            Share
+          </button>
+          <button
+            className={actionClass}
+            type="button"
+            disabled={saving}
+            aria-pressed={saved}
+            aria-label={`${saved ? "Unsave" : "Save"} ${thread.title}`}
+            onClick={() => void saveThread()}
+          >
+            <Bookmark
+              className={`size-4 ${saved ? "fill-current text-primary" : ""}`}
+              aria-hidden="true"
+            />
+            {saved ? "Saved" : "Save"}
+          </button>
+        </div>
+        {shareFailed ? (
+          <p
+            role="status"
+            className="mt-2 text-xs leading-5 text-muted-foreground"
+          >
+            Link could not be copied.{" "}
+            <a
+              className="focus-ring inline-flex min-h-9 items-center font-medium text-foreground underline underline-offset-2"
+              href={forumSiteUrl(`/${thread.categorySlug}/${thread.slug}`)}
+            >
+              Open discussion link
+            </a>
+          </p>
+        ) : null}
+      </div>
     </article>
   );
 }

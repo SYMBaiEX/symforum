@@ -574,6 +574,42 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("app")!.dataset.feedDisplay).toBe("compact");
   });
 
+  test("timeline is the default and its post entry opens the existing board composer with the chosen intent", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Boards")!.fire("click"); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { categories: [{ _id: "general", slug: "general", name: "General", isPostable: true, viewerCanCreateThread: true }] } } }); await app.flush();
+    app.nodes.get("navigation")!.find("Feed")!.fire("click"); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    expect(app.nodes.get("app")!.dataset.feedDisplay).toBe("timeline");
+    app.nodes.get("content")!.find("Ask a question")!.fire("click");
+    expect(app.nodes.get("content")!.byName("categorySlug")!.value).toBe("general");
+    expect(app.nodes.get("content")!.byName("kind")!.value).toBe("question");
+    expect(app.nodes.get("content")!.find("Submit for review")).toBeDefined();
+  });
+
+  test("timeline Save uses a desired state and leaves reviewed actions visibly queued", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Feed")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "one", title: "First discussion", slug: "first", categorySlug: "general", viewerBookmarked: false }], isDone: true } } }); await app.flush();
+    const save = app.nodes.get("content")!.find("Save")!;
+    save.fire("click"); await app.flush();
+    expect(app.latest("tools/call").params).toMatchObject({ name: "forum_set_thread_bookmark", arguments: { threadId: "one", saved: true, expectedPolicyVersion: 1, idempotencyKey: expect.any(String) } });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "pending_approval", reviewUrl: "https://forum.symbaiex.com/control-panel/agent-access" } }); await app.flush();
+    expect(save.textContent).toBe("Awaiting review");
+    expect(app.nodes.get("content")!.textContent).toContain("First discussion");
+  });
+
+  test("feed settings closes with Escape and outside click and restores keyboard focus", async () => {
+    const app = appHarness(); await app.connect(false);
+    const menu = app.nodes.get("content")!.querySelector(".feed-settings")!;
+    const trigger = menu.firstElementChild!;
+    menu.open = true; menu.find("Feed preferences")!.focus();
+    app.documentEvent("keydown", app.activeElement, "Escape");
+    expect(menu.open).toBe(false); expect(app.activeElement).toBe(trigger);
+    menu.open = true; app.documentEvent("pointerdown", app.nodes.get("identity")!);
+    expect(menu.open).toBe(false);
+  });
+
   test("delayed launch metadata cannot restore a prior actor's board rail", async () => {
     const app = appHarness();
     app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } }); await app.flush();

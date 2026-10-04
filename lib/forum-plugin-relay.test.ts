@@ -22,7 +22,7 @@ afterEach(() => {
 describe("forum plugin authenticated relay", () => {
   test("advertises the current server version and exposes authentication and retry diagnostics", () => {
     const headers = forumPluginHeaders(new Request(FORUM_PLUGIN_RESOURCE, { headers: { origin: "https://chatgpt.com" } }));
-    expect(headers.get("Mcp-Server-Version")).toBe("1.10.0");
+    expect(headers.get("Mcp-Server-Version")).toBe("1.11.0");
     expect(headers.get("Access-Control-Allow-Origin")).toBe("https://chatgpt.com");
     expect(headers.get("Access-Control-Expose-Headers")).toContain("retry-after");
     expect(headers.get("Access-Control-Expose-Headers")).toContain("www-authenticate");
