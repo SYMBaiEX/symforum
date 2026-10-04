@@ -47,14 +47,11 @@ import {
 } from "./forum-refs";
 import { primarySiteHrefForPath } from "./forum-host-url";
 import { useForumShellContext } from "./forum-shell-context";
+import { FORUM_PERSONAL_NAVIGATION, FORUM_PRIMARY_NAVIGATION } from "@/lib/forum-navigation-model";
 import { cn } from "@/lib/utils";
 
-const views = [
-  { value: "feed", label: "Feed", icon: MessageSquare },
-  { value: "news", label: "News", icon: Newspaper },
-  { value: "community", label: "Community", icon: Users },
-  { value: "boards", label: "Boards", icon: LayoutList },
-] as const;
+const navigationIcons = { feed: MessageSquare, news: Newspaper, community: Users, boards: LayoutList, bookmarks: Bookmark, following: Bell, inbox: Mail, agents: Bot };
+const views = FORUM_PRIMARY_NAVIGATION.map(item => ({ ...item, icon: navigationIcons[item.icon] }));
 
 type NavState = {
   authenticated: boolean;
@@ -351,40 +348,13 @@ export function ForumNavigationLayout({
                 </DropdownMenuLabel>
                 {navState?.authenticated ? (
                   <>
-                    <ForumMenuLink href="/forum/catch-up" icon={Bell}>
-                      Catch up & interests
-                    </ForumMenuLink>
-                    <ForumMenuLink href="/forum/control-panel" icon={Settings2}>
-                      Account & preferences
-                    </ForumMenuLink>
-                    <ForumMenuLink href="/forum/saved" icon={Bookmark}>
-                      Saved threads
-                    </ForumMenuLink>
-                    {navState.trusted && (
-                      <>
-                        <ForumMenuLink href="/forum/messages" icon={Mail}>
-                          Inbox
-                          {navState.unreadPrivateMessages > 0 && (
-                            <MenuCount count={navState.unreadPrivateMessages} />
-                          )}
-                        </ForumMenuLink>
-                        <ForumMenuLink
-                          href="/forum/subscriptions"
-                          icon={MessageSquare}
-                        >
-                          Watched threads
-                          {navState.unreadNotifications > 0 && (
-                            <MenuCount count={navState.unreadNotifications} />
-                          )}
-                        </ForumMenuLink>
-                      </>
-                    )}
-                    <ForumMenuLink
-                      href="/forum/control-panel/agent-access"
-                      icon={Bot}
-                    >
-                      Agent access & approvals
-                    </ForumMenuLink>
+                    {FORUM_PERSONAL_NAVIGATION.filter(item => !item.trusted || navState.trusted).map(item => (
+                      <ForumMenuLink key={item.view} href={item.href} icon={navigationIcons[item.icon]}>
+                        {item.label}
+                        {item.view === "inbox" && navState.unreadPrivateMessages > 0 && <MenuCount count={navState.unreadPrivateMessages} />}
+                        {item.view === "following" && navState.unreadNotifications > 0 && <MenuCount count={navState.unreadNotifications} />}
+                      </ForumMenuLink>
+                    ))}
                     {navState.canModerate && (
                       <ForumMenuLink
                         href="/forum/moderation"
@@ -454,31 +424,12 @@ export function ForumNavigationLayout({
           <p className="forum-rail-heading">Your space</p>
           {navState?.authenticated ? (
             <nav aria-label="Personal forum tools" className="space-y-1">
-              <ForumRailLink href="/forum/catch-up" icon={Bell}>
-                Catch up & interests
-              </ForumRailLink>
-              <ForumRailLink href="/forum/saved" icon={Bookmark}>
-                Saved threads
-              </ForumRailLink>
-              {navState.trusted && (
-                <>
-                  <ForumRailLink href="/forum/subscriptions" icon={Bell}>
-                    Following
-                  </ForumRailLink>
-                  <ForumRailLink href="/forum/messages" icon={Mail}>
-                    Inbox
-                    {navState.unreadPrivateMessages > 0 && (
-                      <MenuCount count={navState.unreadPrivateMessages} />
-                    )}
-                  </ForumRailLink>
-                </>
-              )}
-              <ForumRailLink
-                href="/forum/control-panel/agent-access"
-                icon={Bot}
-              >
-                Agent access
-              </ForumRailLink>
+              {FORUM_PERSONAL_NAVIGATION.filter(item => !item.trusted || navState.trusted).map(item => (
+                <ForumRailLink key={item.view} href={item.href} icon={navigationIcons[item.icon]}>
+                  {item.label}
+                  {item.view === "inbox" && navState.unreadPrivateMessages > 0 && <MenuCount count={navState.unreadPrivateMessages} />}
+                </ForumRailLink>
+              ))}
               {navState.canModerate && (
                 <ForumRailLink href="/forum/moderation" icon={ShieldCheck}>
                   Moderation

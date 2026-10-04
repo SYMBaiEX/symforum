@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import usePresence from "@convex-dev/presence/react";
-import { Bookmark, Bot, ChevronDown, Mail, MessageSquare, Star, UserRound, Bell } from "lucide-react";
+import { ChevronDown, MessageSquare, Star } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -706,16 +706,6 @@ export function ForumUserCpShell({
   description: string;
   title: string;
 }) {
-  const pathname = usePathname();
-  const normalizedPathname = normalizedForumPathname(pathname);
-  const items = [
-    { href: "/forum/control-panel", label: "Profile settings", icon: UserRound },
-    { href: "/forum/control-panel/agent-access", label: "Agent access", icon: Bot },
-    { href: "/forum/messages", label: "Private messages", icon: Mail },
-    { href: "/forum/subscriptions", label: "Subscriptions", icon: Bell },
-    { href: "/forum/saved", label: "Saved threads", icon: Bookmark },
-  ];
-
   return (
     <div className="forum-account-space">
       <ForumChrome />
@@ -724,18 +714,6 @@ export function ForumUserCpShell({
         <h1>{title}</h1>
         <p>{description}</p>
       </header>
-      <nav aria-label="Forum user control panel" className="forum-account-navigation">
-        {items.map(({ href, label, icon: Icon }) => (
-          <ForumLink
-            aria-current={normalizedPathname === href ? "page" : undefined}
-            className="focus-ring forum-account-link"
-            href={href} key={href} prefetch
-          >
-            <Icon aria-hidden="true" size={16} />
-            <span>{label}</span>
-          </ForumLink>
-        ))}
-      </nav>
       <div className="forum-account-content">{children}</div>
     </div>
   );

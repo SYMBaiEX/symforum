@@ -82,7 +82,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   };
   const navigationMediaListeners = new Set<() => void>();
   const navigationMedia = {
-    matches: initialWidth !== undefined && initialWidth >= 1000,
+    matches: initialWidth !== undefined && initialWidth >= 1024,
     addEventListener(_name: string, callback: () => void) { navigationMediaListeners.add(callback); },
     removeEventListener(_name: string, callback: () => void) { navigationMediaListeners.delete(callback); },
   };
@@ -145,7 +145,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     const choice = nodes.get("post-choices")!.find("General") ?? nodes.get("post-choices")!.querySelector("button");
     choice?.fire("click");
   };
-  return { setScroll(top: number) { window.scrollY = top; }, scrolls, beginPostDraft, sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
+  return { setScroll(top: number) { window.scrollY = top; }, scrolls, beginPostDraft, sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1024; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
@@ -418,7 +418,7 @@ describe("forum MCP App resource", () => {
 
   test("profile editing preserves profile fields and reuses unchanged retry keys", async () => {
     const app = appHarness(); await app.connect(false);
-    app.nodes.get("navigation")!.find("My profile")!.fire("click");
+    app.nodes.get("navigation")!.find("Profile settings")!.fire("click");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { bio: "Old bio", birthday: "2000-01-01", signature: "Signature", showSignatures: true } } }); await app.flush();
     app.nodes.get("content")!.find("Edit profile")!.fire("click");
     const form = app.nodes.get("content")!.querySelector("form")!;
@@ -439,10 +439,9 @@ describe("forum MCP App resource", () => {
 
   test("notification preferences use desired states and queue review without approving", async () => {
     const app = appHarness(); await app.connect(false);
-    app.nodes.get("navigation")!.querySelector("a")!;
-    const account = app.nodes.get("navigation")!.children[1].querySelector(".secondary-navigation")!;
-    const findLink = (node: Node): Node | undefined => node.tagName === "a" && node.textContent === "Account & preferences" ? node : node.children.map(findLink).find(Boolean);
-    findLink(account)!.fire("click");
+    app.nodes.get("navigation")!.find("Profile settings")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { username: "research-agent" } } }); await app.flush();
+    app.nodes.get("content")!.find("Notification preferences")!.fire("click");
     expect(app.latest("tools/call").params?.name).toBe("forum_get_my_forum_notification_preferences");
     app.reply(app.latest("tools/call"), { structuredContent: { data: { inAppReplies: true, inAppMentions: true, emailReplies: false } } }); await app.flush();
     app.nodes.get("content")!.find("Edit notifications")!.fire("click");
@@ -513,8 +512,7 @@ describe("forum MCP App resource", () => {
   test("guest account navigation explains connection inside the sidecar", async () => {
     const app = appHarness(); await app.connect(false);
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: ["read"] } } } });
-    const findLink = (node: Node): Node | undefined => node.tagName === "a" && node.textContent === "Account & preferences" ? node : node.children.map(findLink).find(Boolean);
-    findLink(app.nodes.get("navigation")!)!.fire("click");
+    app.nodes.get("navigation")!.find("Agent access")!.fire("click");
     expect(app.latest("tools/call").params?.name).toBe("forum_status");
     app.reply(app.latest("tools/call"), { structuredContent: { actingAs: null, data: { capabilities: ["read"] } } }); await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("Connect your SYMBaiEX account through this plugin");
@@ -533,7 +531,7 @@ describe("forum MCP App resource", () => {
     ] } }); await app.flush();
     const nav = app.nodes.get("navigation")!;
     expect(overview).toBeDefined();
-    expect(nav.textContent).toContain("Your spaceCatch up & interestsSaved threadsFollowingInboxAgent access");
+    expect(nav.textContent).toContain("Your spaceCatch up & interestsProfile settingsSaved threadsFollowingInboxAgent access");
     expect(nav.textContent).toContain("CommunityFind your communitiesMembers & agentsAnnouncementsCalendarHelp & rules");
     expect(nav.find("GGeneral")).toBeDefined();
     expect(nav.find("SSupport")).toBeUndefined();
@@ -564,7 +562,8 @@ describe("forum MCP App resource", () => {
       { _id: "saved-two", title: "Agent notes", categorySlug: "general", slug: "notes" },
     ] } } }); await app.flush();
     const content = app.nodes.get("content")!;
-    expect(content.textContent).toContain("Profile settingsAgent accessPrivate messagesSubscriptionsSaved threads");
+    expect(content.querySelector(".account-navigation")).toBeNull();
+    expect(app.nodes.get("navigation")!.find("Profile settings")).toBeDefined();
     const search = content.querySelector("input")!;
     const before = app.sent.length;
     search.value = "build"; search.fire("input");
@@ -1366,18 +1365,29 @@ describe("forum MCP App resource", () => {
     expect(FORUM_PLUGIN_APP_HTML).toContain("focus-visible");
   });
 
-  test("keeps the portable light and dark palette aligned with native forum tokens", () => {
+  test("ships exactly the canonical forum stylesheet in the portable resource", () => {
+    const sharedCss = readFileSync(new URL("../styles/forum-shared.css", import.meta.url), "utf8");
     const nativeCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-    const declarations = (block: string) => Object.fromEntries([...block.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)].map(match => [match[1], match[2].trim()]));
-    const nativeBase = declarations(nativeCss.match(/:root\s*\{([^}]+)\}/)![1]);
-    const nativeLight = { ...nativeBase, ...declarations(nativeCss.match(/(?<!\.dark )\.forum-app-shell\s*\{([^}]+)\}/)![1]) };
-    const nativeDark = { ...nativeLight, ...declarations(nativeCss.match(/\.dark\s*\{([^}]+)\}/)![1]), ...declarations(nativeCss.match(/\.dark \.forum-app-shell\s*\{([^}]+)\}/)![1]) };
-    for (const [theme, expected] of [["light", nativeLight], ["dark", nativeDark]] as const) {
-      const portable = declarations(FORUM_PLUGIN_APP_HTML.match(new RegExp(":root\\[data-theme=" + theme + "\\]\\{([^}]+)\\}"))![1]);
-      expect(Object.keys(portable).length).toBeGreaterThan(10);
-      for (const [name, value] of Object.entries(portable)) expect(value, theme + " " + name).toBe(expected[name]);
-    }
+    expect(nativeCss).toContain('@import "../styles/forum-shared.css"');
+    expect(FORUM_PLUGIN_APP_HTML).toContain(sharedCss);
+    expect(FORUM_PLUGIN_APP_HTML).toContain('data-forum-plugin');
+    expect(sharedCss).toContain('.dark .forum-app-shell, :root[data-forum-plugin][data-theme=dark]');
+    expect(sharedCss).toContain(':is(.forum-media-grid,.media-grid)');
     expect(FORUM_PLUGIN_APP_HTML).toContain('aria-label="SYMBaiEX Forum"');
+  });
+
+  test("account destinations stay in the sidebar and never open an external page", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Agent access")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_status");
+    app.reply(app.latest("tools/call"), { structuredContent: { actingAs: { username: "research-agent", userId: "research-agent" }, data: { capabilities: ["read", "personal", "messages"], policyVersion: 1 } } }); await app.flush();
+    expect(app.nodes.get("content")!.querySelector(".account-navigation")).toBeNull();
+    app.nodes.get("navigation")!.find("Inbox")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_private_messages");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { messages: [] } } }); await app.flush();
+    app.nodes.get("navigation")!.find("Profile settings")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_get_my_forum_profile");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
   });
 
   test("prefers fullscreen without blocking initial reads and asks only once when the host advertises it", async () => {
