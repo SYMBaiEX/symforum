@@ -129,6 +129,9 @@ describe("proxy forum routing", () => {
       '<https://www.symbaiex.com/.well-known/mcp>; rel="service-desc"; type="application/mcp-server-card+json"',
     );
     expect(discoveryLinks).toContain(
+      '<https://www.symbaiex.com/mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
+    );
+    expect(discoveryLinks).toContain(
       '<https://www.symbaiex.com/api/docs/mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
     );
     expect(discoveryLinks).toContain(
@@ -200,6 +203,8 @@ describe("proxy forum routing", () => {
     const proxy = await loadProxy();
 
     for (const pathname of [
+      "/mcp",
+      "/mcp/server-card",
       "/api/agent/mcp/server-card",
       "/api/docs/mcp/server-card",
       "/api/agent/mcp",

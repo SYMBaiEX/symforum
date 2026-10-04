@@ -35,7 +35,7 @@ describe("agent discovery surfaces", () => {
           url: "https://www.symbaiex.com/api/agent/openapi.json",
         }),
         expect.objectContaining({
-          url: "https://www.symbaiex.com/api/agent/mcp/server-card",
+          url: "https://www.symbaiex.com/mcp/server-card",
         }),
         expect.objectContaining({
           url: "https://www.symbaiex.com/api/docs/mcp/server-card",

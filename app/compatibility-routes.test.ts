@@ -59,17 +59,18 @@ describe("agent-facing compatibility routes", () => {
     });
   });
 
-  test("serves the same MCP card and public handshake from conventional root paths", async () => {
+  test("serves endpoint-matched MCP cards and a public handshake from root paths", async () => {
     const [card, jsonCard] = await Promise.all([
       getRootMcp(),
       getRootMcpJson(),
     ]);
     await expect(card.json()).resolves.toMatchObject({
-      serverUrl: "https://www.symbaiex.com/api/agent/mcp",
+      serverUrl: "https://www.symbaiex.com/mcp",
       transport: "streamable-http",
     });
     await expect(jsonCard.json()).resolves.toMatchObject({
       name: "com.symbaiex.www/evidence",
+      serverUrl: "https://www.symbaiex.com/api/agent/mcp",
     });
 
     const handshake = await postRootMcp(
@@ -95,6 +96,8 @@ describe("agent-facing compatibility routes", () => {
     const body = await response.text();
     expect(response.headers.get("content-type")).toContain("text/markdown");
     expect(body).toContain("# SYMBaiEX agent operating instructions");
-    expect(body).toContain("use only authorization_servers actually advertised");
+    expect(body).toContain(
+      "use only authorization_servers actually advertised",
+    );
   });
 });

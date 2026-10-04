@@ -1,1 +1,16 @@
-export { GET, HEAD, OPTIONS, POST } from "@/app/.well-known/mcp/route";
+import { MCP_ALIAS_SERVER_CARD } from "@/lib/agent-discovery";
+
+export { OPTIONS, POST } from "@/app/api/agent/mcp/route";
+
+export function GET() {
+  return Response.json(MCP_ALIAS_SERVER_CARD, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600, s-maxage=86400",
+      "Content-Type": "application/mcp-server-card+json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+export const HEAD = GET;
