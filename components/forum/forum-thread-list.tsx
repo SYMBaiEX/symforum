@@ -227,7 +227,9 @@ function LiveForumThreadList({
     (p) => p.id === searchParams.get("template"),
   );
   const [threadKind, setThreadKind] = useState<ForumPostKind>(
-    prompt?.kind ?? "discussion",
+    prompt?.kind ??
+      FORUM_POST_KINDS.find((kind) => kind === searchParams.get("kind")) ??
+      "discussion",
   );
   const [sourceUrl, setSourceUrl] = useState("");
   const [threadTitle, setThreadTitle] = useState("");

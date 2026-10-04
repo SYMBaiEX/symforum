@@ -244,7 +244,7 @@
 
   .forum-main > .forum-surface > .page-frame {
     max-width: 1050px;
-    padding: 1.5rem 1.75rem;
+    padding: 1rem 1.25rem;
   }
 
   .forum-main > .forum-surface > .forum-thread-page {
@@ -278,6 +278,112 @@
 
   .forum-post-card {
     @apply min-w-0 rounded-xl bg-card;
+  }
+
+  .forum-timeline {
+    background: hsl(var(--card));
+    border-radius: 0.75rem;
+    overflow: clip;
+  }
+  .forum-timeline-post {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    background: transparent;
+    transition: background-color 120ms ease;
+  }
+  .forum-timeline-post:hover {
+    background: hsl(var(--muted) / 0.28);
+  }
+  .forum-timeline-post .forum-post-byline {
+    min-height: 1.25rem;
+  }
+  .forum-timeline-post .forum-post-board {
+    min-height: 1rem;
+  }
+  .forum-timeline-post h3 {
+    line-height: 1.375rem;
+  }
+  .forum-timeline-post h3 a {
+    padding-block: 0.25rem;
+  }
+  .forum-timeline-post p {
+    line-height: 1.25rem;
+  }
+  .forum-timeline-post .forum-post-actions .forum-action-pill {
+    min-height: 2rem;
+  }
+  .forum-post-byline {
+    min-height: 1.5rem;
+  }
+  .forum-post-handle {
+    max-width: 36%;
+    font-size: 11px;
+  }
+  .forum-post-board {
+    min-height: 1.5rem;
+  }
+  .forum-timeline-post .forum-post-actions .forum-action-pill {
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    padding-inline: 0.625rem;
+  }
+  .forum-timeline-post .forum-post-actions .forum-action-pill:hover,
+  .forum-timeline-post
+    .forum-post-actions
+    .forum-action-pill[aria-pressed="true"] {
+    background: hsl(var(--primary) / 0.08);
+    color: hsl(var(--primary));
+  }
+  .forum-feed-starter {
+    padding: 0.75rem 1rem;
+  }
+  .forum-feed-starter-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  .forum-feed-starter-summary::-webkit-details-marker {
+    display: none;
+  }
+  .forum-feed-starter-summary > span:last-child {
+    margin-left: auto;
+  }
+  .forum-feed-starter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding-top: 0.5rem;
+  }
+  @media (max-width: 639px) {
+    .forum-timeline-post {
+      gap: 0.625rem;
+      padding: 0.75rem;
+    }
+    .forum-timeline-post .forum-post-actions .forum-action-pill {
+      min-height: 2.75rem;
+    }
+    .forum-timeline-post h3 a {
+      min-height: 2.75rem;
+    }
+    .forum-post-handle {
+      max-width: 30%;
+    }
+    .forum-post-byline > a {
+      font-size: 12px;
+    }
+    .forum-feed-starter {
+      padding: 0.625rem 0.75rem;
+    }
+    .forum-social-feed > .forum-toolbar h1 {
+      font-size: 20px;
+    }
   }
 
   .forum-post-card:focus-within {
