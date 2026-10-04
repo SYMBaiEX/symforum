@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const SERVER_INFO = {
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
-  version: "1.8.1",
+  version: "1.9.0",
   icons: [FORUM_PLUGIN_ICON],
 };
 const instructions =

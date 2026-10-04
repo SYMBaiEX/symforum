@@ -12,6 +12,7 @@ class Node {
   listeners = new Map<string, Array<(event: { preventDefault(): void }) => void>>();
   value = "";
   disabled = false;
+  checked = false;
   hidden = false;
   name = "";
   open = false;
@@ -143,6 +144,137 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
 }
 
 describe("forum MCP App resource", () => {
+  test("member links stay in the sidecar and Back restores the directory", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Members & agents")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { members: [{ username: "suki", displayName: "Suki", postCount: 12, threadCount: 4 }] } } }); await app.flush();
+    app.nodes.get("content")!.querySelector("a")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_list_members", arguments: { query: "suki", pageSize: 100, page: 1 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { members: [{ username: "suki", displayName: "Suki", postCount: 12, threadCount: 4, location: "Online" }] } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("12 posts · 4 discussions");
+    expect(app.nodes.get("content")!.find("Send message")).toBeDefined();
+    app.nodes.get("content")!.find("← Back")!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_members");
+    expect(app.latest("tools/call").params?.arguments).toEqual({ limit: 30 });
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("help summaries open the full document internally", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Help & rules")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [{ title: "Forum rules", slug: "rules", excerpt: "Short summary" }] } }); await app.flush();
+    app.nodes.get("content")!.find("Read help")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_help_document", arguments: { slug: "rules" } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { title: "Forum rules", body: "[b]Full rules[/b]" } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Full rules");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("profile editing preserves profile fields and reuses unchanged retry keys", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("My profile")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { bio: "Old bio", birthday: "2000-01-01", signature: "Signature", showSignatures: true } } }); await app.flush();
+    app.nodes.get("content")!.find("Edit profile")!.fire("click");
+    const form = app.nodes.get("content")!.querySelector("form")!;
+    const bio = form.byName("bio")!; bio.value = "New bio"; bio.fire("input");
+    form.fire("submit"); await app.flush();
+    const first = app.latest("tools/call");
+    expect(first.params?.name).toBe("forum_update_my_forum_profile");
+    expect(first.params?.arguments).toMatchObject({ bio: "New bio", birthday: "2000-01-01", signature: "Signature", showSignatures: true, expectedPolicyVersion: 1 });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_update_my_forum_profile")!, first.params?.arguments)).toBeNull();
+    app.reply(first, { isError: true, structuredContent: { error: "Temporary failure" } }); await app.flush();
+    form.fire("submit"); await app.flush();
+    expect(app.latest("tools/call").params?.arguments).toEqual(first.params?.arguments);
+    expect(bio.value).toBe("New bio");
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "completed", data: {} } }); await app.flush();
+    expect(app.latest("tools/call").params?.name).toBe("forum_get_my_forum_profile");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("notification preferences use desired states and queue review without approving", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.querySelector("a")!;
+    const account = app.nodes.get("navigation")!.children[1].querySelector(".secondary-navigation")!;
+    const findLink = (node: Node): Node | undefined => node.tagName === "a" && node.textContent === "Account & preferences" ? node : node.children.map(findLink).find(Boolean);
+    findLink(account)!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_get_my_forum_notification_preferences");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { inAppReplies: true, inAppMentions: true, emailReplies: false } } }); await app.flush();
+    app.nodes.get("content")!.find("Edit notifications")!.fire("click");
+    const form = app.nodes.get("content")!.querySelector("form")!;
+    form.byName("emailReplies")!.checked = true; form.byName("emailReplies")!.fire("change");
+    form.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_update_my_forum_notification_preferences");
+    expect(command.params?.arguments).toMatchObject({ inAppReplies: true, inAppMentions: true, emailReplies: true, inAppNewThreads: false, emailNewThreads: false });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_update_my_forum_notification_preferences")!, command.params?.arguments)).toBeNull();
+    app.reply(command, { structuredContent: { status: "pending_approval", commandId: "queued", approvalUrl: "https://forum.symbaiex.com/control-panel/agent-access?commandId=queued#review-queue" } }); await app.flush();
+    expect(app.latest("tools/call").params?.name).toBe("forum_status");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { capabilities: ["personal"], policyVersion: 1 } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Only the signed-in human owner can approve");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+    expect(app.sent.some(call => /approve|policy|consent/.test(String(call.params?.name)))).toBe(false);
+  });
+
+  test("post editing uses the selected post and preserves the draft across policy reductions", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "reader" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "thread-1", title: "Reader", body: "Original", viewerCanEdit: true, attachments: [{ storageId: "file", filename: "notes.txt" }] }, replies: { page: [] } } } }); await app.flush();
+    app.nodes.get("content")!.find("Edit")!.fire("click");
+    const form = app.nodes.get("content")!.querySelector("form")!;
+    form.byName("body")!.value = "Changed body"; form.byName("body")!.fire("input");
+    form.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_update_thread_content");
+    expect(command.params?.arguments).toMatchObject({ threadId: "thread-1", title: "Reader", body: "Changed body" });
+    expect(command.params?.arguments).not.toHaveProperty("attachmentIdsToKeep");
+    expect(command.params?.arguments).not.toHaveProperty("attachments");
+    expect(validateForumPluginArguments(findForumPluginTool("forum_update_thread_content")!, command.params?.arguments)).toBeNull();
+    app.reply(command, { isError: true, structuredContent: { error: "Retry later" } }); await app.flush();
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: { userId: "research-agent" }, data: { capabilities: ["read"], policyVersion: 2 } } } });
+    const before = app.sent.length;
+    form.fire("submit"); await app.flush();
+    expect(app.sent.length).toBe(before);
+    expect(form.byName("body")!.value).toBe("Changed body");
+    expect(app.nodes.get("status")!.textContent).toContain("permissions changed");
+    expect(app.nodes.get("content")!.find("Cancel")).toBeDefined();
+  });
+
+  test("canonical links in a post navigate through authorized tools without opening a browser", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "reader" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "thread-1", title: "Reader", body: "[url=https://forum.symbaiex.com/another-board/sources?page=2]Related discussion[/url]" }, replies: { page: [] } } } }); await app.flush();
+    app.nodes.get("content")!.querySelector(".post-content a")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_thread", arguments: { categorySlug: "another-board", threadSlug: "sources", page: 2, pageSize: 20 } });
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("host deep links select internal routes and cannot navigate external URLs or discard drafts", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { "openai/deepLink": { url: "/general/sources?page=2" } } });
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_thread", arguments: { categorySlug: "general", threadSlug: "sources", page: 2, pageSize: 20 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "sources", title: "Sources", body: "Sources" }, replies: { page: [] } } } }); await app.flush();
+    const before = app.sent.length;
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { "openai/deepLink": { url: "//malicious.example/general" } } });
+    expect(app.sent.length).toBe(before);
+    app.nodes.get("content")!.find("Reply")!.fire("click");
+    const body = app.nodes.get("content")!.byName("body")!; body.value = "Preserve this draft"; body.fire("input");
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { "openai/deepLink": { url: "/help/rules" } } });
+    expect(app.nodes.get("content")!.byName("body")).toBe(body);
+    expect(app.nodes.get("status")!.textContent).toContain("Close or submit your draft");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("guest account navigation explains connection inside the sidecar", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: ["read"] } } } });
+    const findLink = (node: Node): Node | undefined => node.tagName === "a" && node.textContent === "Account & preferences" ? node : node.children.map(findLink).find(Boolean);
+    findLink(app.nodes.get("navigation")!)!.fire("click");
+    expect(app.latest("tools/call").params?.name).toBe("forum_status");
+    app.reply(app.latest("tools/call"), { structuredContent: { actingAs: null, data: { capabilities: ["read"] } } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Connect your SYMBaiEX account through this plugin");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
   test("launch board navigation matches the website groups and selects a parent while reading a sub-board", async () => {
     const app = appHarness(undefined, 1280); await app.connect(false);
     const overview = app.sent.find(call => call.params?.name === "forum_overview")!;
@@ -156,7 +288,7 @@ describe("forum MCP App resource", () => {
     const nav = app.nodes.get("navigation")!;
     expect(overview).toBeDefined();
     expect(nav.textContent).toContain("Your spaceSaved threadsFollowingInboxAgent access");
-    expect(nav.textContent).toContain("CommunityMembersAgentsAnnouncementsCalendarHelp & rules");
+    expect(nav.textContent).toContain("CommunityMembers & agentsAnnouncementsCalendarHelp & rules");
     expect(nav.find("GGeneral")).toBeDefined();
     expect(nav.find("SSupport")).toBeUndefined();
     app.nodes.get("content")!.find("Support")!.fire("click");
@@ -330,7 +462,7 @@ describe("forum MCP App resource", () => {
 
   test("navigation clears stale content while loading and retry preserves the failed target", async () => {
     const app = appHarness(); await app.connect(false);
-    app.nodes.get("navigation")!.find("Members")!.fire("click");
+    app.nodes.get("navigation")!.find("Members & agents")!.fire("click");
     const members = app.latest("tools/call");
     app.reply(members, { structuredContent: { data: { members: [{ username: "Visible member" }] } } }); await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("Visible member");
@@ -647,9 +779,10 @@ describe("forum MCP App resource", () => {
     if (guest && status === "active") {
       expect(content.textContent).not.toContain("unavailable");
       const connect = content.children.at(-1)!.querySelector("a")!;
-      expect(connect.textContent).toBe("Connect your profile to reply. ↗");
+      expect(connect.textContent).toBe("Connect your profile to reply.");
       connect.fire("click");
-      expect(app.latest("ui/open-link").params).toEqual({ url: "https://forum.symbaiex.com/control-panel/agent-access" });
+      expect(app.latest("tools/call").params?.name).toBe("forum_status");
+      expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
     } else expect(content.textContent).not.toContain("Connect your profile to reply.");
   });
 
@@ -870,7 +1003,8 @@ describe("forum MCP App resource", () => {
     const anchor = app.nodes.get("content")!.querySelector("a")!;
     expect(anchor.href).toBe("https://www.symbaiex.com/news/tools-and-people-123");
     anchor.fire("click");
-    expect(app.latest("ui/open-link").params).toEqual({ url: anchor.href });
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_list_news_feed", arguments: { snapshotDate: "2026-10-02", limit: 30 } });
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
   });
 
   test("drops a delayed old actor response after a policy change and clears the private reader", async () => {
@@ -1086,7 +1220,8 @@ describe("forum MCP App resource", () => {
     expect(app.nodes.get("mode")!.textContent).toBe("Direct execution · Posts require forum moderation");
     expect(app.nodes.get("posting-trust")!.textContent).toContain("awaiting forum posting trust");
     app.nodes.get("posting-trust")!.querySelector("a")!.fire("click");
-    expect(app.latest("ui/open-link").params).toEqual({ url: pendingContentUrl });
+    expect(app.latest("tools/call").params?.name).toBe("forum_list_my_pending_forum_content");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { threads: [], posts: [] } } }); await app.flush();
     expect(app.nodes.get("status")!.textContent).toBe(receipt);
 
     app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { actingAs: null, data: { capabilities: [], postingTrust: "moderated" } } } });
@@ -1229,7 +1364,7 @@ describe("forum MCP App resource", () => {
     await app.connect();
     app.nodes.get("navigation")!.find("Boards")!.fire("click");
     const stale = app.latest("tools/call");
-    app.nodes.get("navigation")!.find("Members")!.fire("click");
+    app.nodes.get("navigation")!.find("Members & agents")!.fire("click");
     const latest = app.latest("tools/call");
     app.reply(latest, { structuredContent: { status: "completed", data: { members: [{ username: '<img src=x onerror="alert(1)">', bio: "test" }] } } });
     await app.flush();
@@ -1304,7 +1439,8 @@ describe("forum MCP App resource", () => {
     const reviewLink = app.nodes.get("status")!.querySelector("a")!;
     expect(reviewLink.href).toBe(approvalUrl);
     reviewLink.fire("click");
-    expect(app.latest("ui/open-link").params).toEqual({ url: approvalUrl });
+    expect(app.latest("tools/call").params?.name).toBe("forum_status");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
   });
 
   test("distinguishes completed moderation submissions from published composer posts", async () => {
