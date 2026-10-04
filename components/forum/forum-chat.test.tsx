@@ -18,7 +18,10 @@ vi.mock("convex/react", () => ({
   },
   useMutation: () => vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/forum" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/forum",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
 import { ForumChat, ChatMessage, isForumChatAnchor } from "./forum-chat";

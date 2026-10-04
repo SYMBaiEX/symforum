@@ -18,11 +18,24 @@ vi.mock("convex/react", () => ({
     isLoading: mocks.authLoading,
   }),
   useQuery: (...args: unknown[]) => {
-    mocks.authorizationQuery(...args);
-    return mocks.authorization;
+    if (args[0] === forumFeedRefs.authorizationFingerprint) {
+      mocks.authorizationQuery(...args);
+      return mocks.authorization;
+    }
+    return {
+      defaultFeed: "discover",
+      authorFilter: "all",
+      mutedWords: [],
+      followingBoards: [],
+      followingMembers: [],
+    };
   },
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/forum" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/forum",
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/image", () => ({ default: () => null }));
 

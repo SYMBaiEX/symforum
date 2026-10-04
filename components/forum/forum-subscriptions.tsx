@@ -338,6 +338,12 @@ function ForumNotificationPanel({
   unreadCount: number;
   unreadCountLimited: boolean;
 }) {
+  const [filter, setFilter] = useState<
+    "all" | "reply" | "mention" | "newThread"
+  >("all");
+  const visibleNotifications = notifications.filter(
+    (item) => filter === "all" || item.type === filter,
+  );
   const unreadLabel = unreadCountLimited
     ? `${unreadCount}+`
     : String(unreadCount);
@@ -368,7 +374,42 @@ function ForumNotificationPanel({
       {error ? (
         <p className="px-3 py-2.5 text-sm text-primary">{error}</p>
       ) : null}
-      {notifications.length === 0 ? (
+      <nav
+        aria-label="Notification categories"
+        className="flex flex-wrap gap-1 px-3 pb-2"
+      >
+        {(
+          [
+            { value: "all", label: "All" },
+            { value: "reply", label: "Replies" },
+            { value: "mention", label: "Mentions" },
+            { value: "newThread", label: "Following" },
+          ] as const
+        ).map((item) => (
+          <button
+            type="button"
+            key={item.value}
+            className={`forum-action-pill focus-ring min-h-11 px-3 text-xs ${filter === item.value ? "text-primary" : "text-muted-foreground"}`}
+            aria-pressed={filter === item.value}
+            onClick={() => setFilter(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
+        <ForumLink
+          href="/forum/messages"
+          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-xs"
+        >
+          Messages
+        </ForumLink>
+        <ForumLink
+          href="/forum/control-panel"
+          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-xs"
+        >
+          Notification settings
+        </ForumLink>
+      </nav>
+      {visibleNotifications.length === 0 ? (
         <p className="px-3 py-3 text-sm text-muted-foreground">
           {limited
             ? "No visible notifications were found in the latest bounded scan."
@@ -376,7 +417,7 @@ function ForumNotificationPanel({
         </p>
       ) : (
         <div className="space-y-1">
-          {notifications.map((notification) => (
+          {visibleNotifications.map((notification) => (
             <ForumNotificationRow
               key={notification._id}
               notification={notification}

@@ -190,10 +190,10 @@ test("forum news keeps ranked source and local discussion activity distinct", ()
   expect(html).toContain("321 HN points");
   expect(html).toContain("87 HN comments");
   expect(html).toContain("4 SYMBaiEX votes");
-  expect(html).toContain("2 SYMBaiEX comments");
+  expect(html).toContain("Discuss on SYMBaiEX");
   expect(html).toContain('dateTime="2026-10-03T00:00:00.000Z"');
   expect(html).toContain(
-    'href="https://www.symbaiex.com/news/forum-edition-story-42"',
+    'href="/stories/42"',
   );
   expect(html).toContain('href="https://example.com/story"');
   expect(html).toContain('rel="noopener noreferrer"');

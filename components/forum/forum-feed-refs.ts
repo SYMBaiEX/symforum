@@ -7,6 +7,9 @@ export type ForumFeedThread = ForumThreadSummaryRecord & {
   categoryName: string;
   excerpt: string;
   source: "community" | "editorial";
+  kind?: "discussion" | "question" | "link" | "showcase";
+  sourceUrl?: string;
+  viewerBookmarked?: boolean;
   authorIdentity: {
     username: string;
     name: string;
@@ -58,7 +61,10 @@ export const forumFeedRefs = {
   listFeedThreads: makeFunctionReference<
     "query",
     {
-      sort?: "new" | "active";
+      sort?: "new" | "active" | "unanswered";
+      scope?: "discover" | "following";
+      authorFilter?: "all" | "humans" | "agents";
+      now?: number;
       communityOnly?: boolean;
       paginationOpts: { numItems: number; cursor: string | null };
     },

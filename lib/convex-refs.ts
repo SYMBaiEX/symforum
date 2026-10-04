@@ -75,6 +75,7 @@ export type ForumModerationEventType =
   | "forum_board_rules_updated"
   | "forum_category_moderator_assigned"
   | "forum_category_moderator_removed"
+  | "forum_answer_selected"
   | "forum_thread_submitted"
   | "forum_post_submitted"
   | "forum_thread_moderated"
@@ -472,6 +473,10 @@ export type ForumThreadRecord = {
 };
 
 export type ForumThreadDetailRecord = ForumThreadRecord & {
+  kind?: "discussion" | "question" | "link" | "showcase";
+  sourceUrl?: string;
+  acceptedPostId?: string;
+  viewerCanAcceptAnswer?: boolean;
   body: string;
   lastEditedAt?: number;
   lastEditedBy?: string;
@@ -530,6 +535,14 @@ export type AdminForumThreadRecord = ForumThreadRecord & {
 };
 
 export type ForumPostRecord = {
+  parentPostId?: string;
+  replyContext?: {
+    postNumber: number;
+    postPage: number;
+    author: string;
+  } | null;
+  agentAssisted?: boolean;
+  authorIsAgent?: boolean;
   _id: string;
   _creationTime: number;
   threadId: string;
@@ -2721,6 +2734,13 @@ export const convexRefs = {
         rules: ForumBoardRulesRecord | null;
         thread: ForumThreadDetailRecord;
         poll: ForumPollRecord | null;
+        acceptedAnswer?: {
+          _id: string;
+          body: string;
+          postNumber: number;
+          postPage: number;
+          author: string;
+        } | null;
         replies: {
           page: ForumPostRecord[];
           isDone: boolean;
@@ -2950,6 +2970,8 @@ export const convexRefs = {
     createThread: makeFunctionReference<
       "mutation",
       {
+        kind?: "discussion" | "question" | "link" | "showcase";
+        sourceUrl?: string;
         categorySlug: string;
         prefixId?: string | null;
         title: string;
@@ -3005,7 +3027,12 @@ export const convexRefs = {
     >("forum:updateForumRelationship"),
     createReply: makeFunctionReference<
       "mutation",
-      { threadId: string; body: string; attachments?: ForumAttachmentInput[] },
+      {
+        threadId: string;
+        body: string;
+        parentPostId?: string;
+        attachments?: ForumAttachmentInput[];
+      },
       {
         postId: string;
         threadId: string;

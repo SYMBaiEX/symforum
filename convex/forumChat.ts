@@ -102,22 +102,47 @@ export function createForumChatOperations(access: Access) {
   }
   async function messages(ctx: Context, rows: Message[], actor: User | null, moderator: boolean) {
     const principal = forumPluginPrincipal(ctx);
-    const mayDelete = !principal || principal.capabilities.includes("participate");
-    const users = new Map(await Promise.all([...new Set(rows.map(row => row.authorId))]
-      .map(async id => [id, await ctx.db.get("users", id)] as const)));
-    return rows.map(row => {
-      const author = users.get(row.authorId);
-      return {
-        _id: row._id, body: row.body, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt,
-        agentAssisted: row.agentAssisted === true,
-        authorIdentity: {
-          userId: row.authorId, username: author?.username ?? author?.name ?? "member",
-          name: author?.name ?? author?.username ?? "Member", isAgent: author?.isAgent === true,
-          ...(author?.image ? { avatarUrl: author.image } : {}),
-        },
-        canDelete: mayDelete && actor !== null && (actor._id === row.authorId || moderator),
-      };
-    });
+    const mayDelete =
+      !principal || principal.capabilities.includes("participate");
+    const users = new Map(
+      await Promise.all(
+        [...new Set(rows.map((row) => row.authorId))].map(
+          async (id) => [id, await ctx.db.get("users", id)] as const,
+        ),
+      ),
+    );
+    return Promise.all(
+      rows.map(async (row) => {
+        const parent = row.replyToId
+          ? await ctx.db.get("forumChatMessages", row.replyToId)
+          : null;
+        const replyTo =
+          parent?.status === "active" && parent.categoryId === row.categoryId
+            ? { _id: parent._id, body: parent.body.slice(0, 160) }
+            : null;
+        const author = users.get(row.authorId);
+        return {
+          _id: row._id,
+          body: row.body,
+          replyTo,
+          status: row.status,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          agentAssisted: row.agentAssisted === true,
+          authorIdentity: {
+            userId: row.authorId,
+            username: author?.username ?? author?.name ?? "member",
+            name: author?.name ?? author?.username ?? "Member",
+            isAgent: author?.isAgent === true,
+            ...(author?.image ? { avatarUrl: author.image } : {}),
+          },
+          canDelete:
+            mayDelete &&
+            actor !== null &&
+            (actor._id === row.authorId || moderator),
+        };
+      }),
+    );
   }
   async function admitNative(ctx: MutationCtx, actor: User) {
     // The plugin dispatcher admits writes before invoking this domain handler.
@@ -137,22 +162,93 @@ export function createForumChatOperations(access: Access) {
         if (!(error instanceof ConvexError)) throw error;
         // Missing and inaccessible rooms have the same public response. Read no
         // message or author records until current room authorization succeeds.
-        return { page: [], isDone: true, continueCursor: "", pending: [], pendingLimited: false,
-          viewer: { canRead: false, canSend: false, canModerate: false, postingTrust: "moderated" as const,
-            actingAs: actor ? { userId: actor._id, username: actor.username ?? actor.name ?? "member", isAgent: actor.isAgent === true } : null } };
+        return {
+          page: [],
+          unreadCount: 0,
+          unreadLimited: false,
+          mentionCount: 0,
+          isDone: true,
+          continueCursor: "",
+          pending: [],
+          pendingLimited: false,
+          viewer: {
+            canRead: false,
+            canSend: false,
+            canModerate: false,
+            postingTrust: "moderated" as const,
+            actingAs: actor
+              ? {
+                  userId: actor._id,
+                  username: actor.username ?? actor.name ?? "member",
+                  isAgent: actor.isAgent === true,
+                }
+              : null,
+          },
+        };
       }
-      const result = await ctx.db.query("forumChatMessages")
-        .withIndex("by_categoryId_and_status_and_createdAt", q => q.eq("categoryId", info.category._id).eq("status", "active"))
-        .order("desc").paginate(args.paginationOpts);
-      const pending = actor ? await ctx.db.query("forumChatMessages")
-        .withIndex("by_categoryId_and_authorId_and_status_and_createdAt", q => q.eq("categoryId", info.category._id).eq("authorId", actor._id).eq("status", "pending"))
-        .order("desc").take(11) : [];
-      const all = await messages(ctx, [...result.page, ...pending.slice(0, 10)], actor, info.canModerate);
-      return { ...result, page: all.slice(0, result.page.length), pending: all.slice(result.page.length), pendingLimited: pending.length > 10, viewer: await viewer(ctx, actor, info) };
+      const result = await ctx.db
+        .query("forumChatMessages")
+        .withIndex("by_categoryId_and_status_and_createdAt", (q) =>
+          q.eq("categoryId", info.category._id).eq("status", "active"),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+      const pending = actor
+        ? await ctx.db
+            .query("forumChatMessages")
+            .withIndex(
+              "by_categoryId_and_authorId_and_status_and_createdAt",
+              (q) =>
+                q
+                  .eq("categoryId", info.category._id)
+                  .eq("authorId", actor._id)
+                  .eq("status", "pending"),
+            )
+            .order("desc")
+            .take(11)
+        : [];
+      const readMarker = actor
+        ? await ctx.db
+            .query("forumChatReadMarkers")
+            .withIndex("by_userId", (q) => q.eq("userId", actor._id))
+            .unique()
+        : null;
+      const unread = result.page.filter(
+        (row) =>
+          row.authorId !== actor?._id &&
+          row.createdAt > (readMarker?.lastReadAt ?? 0),
+      );
+      const mentions = actor?.username
+        ? unread.filter((row) =>
+            row.body
+              .toLowerCase()
+              .match(/@[a-z0-9_-]+/g)
+              ?.includes(`@${actor.username!.toLowerCase()}`),
+          ).length
+        : 0;
+      const all = await messages(
+        ctx,
+        [...result.page, ...pending.slice(0, 10)],
+        actor,
+        info.canModerate,
+      );
+      return {
+        ...result,
+        unreadCount: unread.length,
+        unreadLimited: !result.isDone,
+        mentionCount: mentions,
+        page: all.slice(0, result.page.length),
+        pending: all.slice(result.page.length),
+        pendingLimited: pending.length > 10,
+        viewer: await viewer(ctx, actor, info),
+      };
     },
   });
   const sendChatMessage = defineForumMutation({
-    args: { body: v.string() },
+    args: {
+      body: v.string(),
+      replyToId: v.optional(v.id("forumChatMessages")),
+    },
     handler: async (ctx, args) => {
       const body = args.body.trim();
       if (body.length < 1 || body.length > 2000) fail("INVALID_INPUT", "Chat messages must contain 1 to 2000 characters.");
@@ -163,6 +259,18 @@ export function createForumChatOperations(access: Access) {
       if (!access.canReplyInCategory(info.permissionActor, info.category, info.canModerate)
         || !access.canReplyInCategory(owner, info.category, info.canModerate)) {
         fail("FORUM_PERMISSION_REQUIRED", "You do not have permission to chat in General.");
+      }
+      if (args.replyToId) {
+        const parent = await ctx.db.get("forumChatMessages", args.replyToId);
+        if (
+          !parent ||
+          parent.categoryId !== info.category._id ||
+          parent.status !== "active"
+        )
+          fail(
+            "CHAT_UNAVAILABLE",
+            "Reply to a published message in this Lounge.",
+          );
       }
       const capacities = await Promise.all([
         chatRateLimiter.limit(ctx, "forumChatOwner", { key: owner._id }),
@@ -175,6 +283,7 @@ export function createForumChatOperations(access: Access) {
       const now = Date.now();
       const principal = forumPluginPrincipal(ctx);
       const messageId = await ctx.db.insert("forumChatMessages", {
+        ...(args.replyToId ? { replyToId: args.replyToId } : {}),
         categoryId: info.category._id, authorId: actor._id, ownerUserId: owner._id, body, status, createdAt: now, updatedAt: now,
         ...(principal ? { connectionId: principal.connection._id, agentAssisted: true } : {}),
       });
@@ -244,7 +353,40 @@ export function createForumChatOperations(access: Access) {
       return { messageId: row._id, status: args.status, publicationStatus: args.status === "active" ? "published" as const : "hidden" as const, url: CHAT_URL };
     },
   });
+  const markChatRead = defineForumMutation({
+    args: { messageId: v.id("forumChatMessages") },
+    handler: async (ctx, args) => {
+      const actor = await access.requireSignedInUser(
+        ctx,
+        "Sign in to keep your place in chat.",
+      );
+      const info = await room(ctx, actor);
+      const message = await ctx.db.get("forumChatMessages", args.messageId);
+      if (
+        !message ||
+        message.categoryId !== info.category._id ||
+        message.status !== "active"
+      )
+        fail("CHAT_UNAVAILABLE", "That published message is unavailable.");
+      const existing = await ctx.db
+        .query("forumChatReadMarkers")
+        .withIndex("by_userId", (q) => q.eq("userId", actor._id))
+        .unique();
+      const lastReadAt = Math.max(existing?.lastReadAt ?? 0, message.createdAt);
+      if (existing)
+        await ctx.db.patch("forumChatReadMarkers", existing._id, {
+          lastReadAt,
+        });
+      else
+        await ctx.db.insert("forumChatReadMarkers", {
+          userId: actor._id,
+          lastReadAt,
+        });
+      return { lastReadAt };
+    },
+  });
   return {
+    markChatRead: { kind: "mutation" as const, definition: markChatRead },
     listChatMessages: { kind: "query" as const, definition: listChatMessages },
     sendChatMessage: { kind: "mutation" as const, definition: sendChatMessage },
     deleteChatMessage: { kind: "mutation" as const, definition: deleteChatMessage },

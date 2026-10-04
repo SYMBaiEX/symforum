@@ -1029,6 +1029,17 @@ export default defineSchema({
   forumThreads: defineTable({
     categoryId: v.id("forumCategories"),
     categorySlug: v.string(),
+    kind: v.optional(
+      v.union(
+        v.literal("discussion"),
+        v.literal("question"),
+        v.literal("link"),
+        v.literal("showcase"),
+      ),
+    ),
+    sourceUrl: v.optional(v.string()),
+    acceptedPostId: v.optional(v.id("forumPosts")),
+    newsItemId: v.optional(v.number()),
     prefixId: v.optional(v.id("forumThreadPrefixes")),
     prefixSlug: v.optional(v.string()),
     prefixLabel: v.optional(v.string()),
@@ -1037,6 +1048,7 @@ export default defineSchema({
     title: v.string(),
     body: v.string(),
     authorId: v.id("users"),
+    agentAssisted: v.optional(v.boolean()),
     status: v.union(
       v.literal("pending"),
       v.literal("active"),
@@ -1114,7 +1126,18 @@ export default defineSchema({
     prefixColor: v.optional(v.string()),
     slug: v.string(),
     title: v.string(),
+    kind: v.optional(
+      v.union(
+        v.literal("discussion"),
+        v.literal("question"),
+        v.literal("link"),
+        v.literal("showcase"),
+      ),
+    ),
+    sourceUrl: v.optional(v.string()),
+    acceptedPostId: v.optional(v.id("forumPosts")),
     authorId: v.id("users"),
+    agentAssisted: v.optional(v.boolean()),
     status: v.union(
       v.literal("pending"),
       v.literal("active"),
@@ -1163,11 +1186,12 @@ export default defineSchema({
   }).index("by_threadId", ["threadId"]),
   // General-board live chat. Status indexes keep public and moderator reads bounded.
   forumChatMessages: defineTable({
+    replyToId: v.optional(v.id("forumChatMessages")),
     categoryId: v.id("forumCategories"),
     authorId: v.id("users"),
+    agentAssisted: v.optional(v.boolean()),
     ownerUserId: v.id("users"),
     connectionId: v.optional(v.id("forumPluginConnections")),
-    agentAssisted: v.optional(v.boolean()),
     body: v.string(),
     status: v.union(v.literal("active"), v.literal("pending"), v.literal("hidden"), v.literal("deleted")),
     createdAt: v.number(),
@@ -1178,9 +1202,11 @@ export default defineSchema({
     .index("by_categoryId_and_status_and_createdAt", ["categoryId", "status", "createdAt"])
     .index("by_categoryId_and_authorId_and_status_and_createdAt", ["categoryId", "authorId", "status", "createdAt"]),
   forumPosts: defineTable({
+    parentPostId: v.optional(v.id("forumPosts")),
     threadId: v.id("forumThreads"),
     categoryId: v.id("forumCategories"),
     authorId: v.id("users"),
+    agentAssisted: v.optional(v.boolean()),
     body: v.string(),
     postNumber: v.optional(v.number()),
     status: v.union(
@@ -2017,6 +2043,44 @@ export default defineSchema({
     .index("by_userId_and_threadId", ["userId", "threadId"])
     .index("by_userId_and_updatedAt", ["userId", "updatedAt"])
     .index("by_threadId_and_updatedAt", ["threadId", "updatedAt"]),
+  forumNewsDiscussions: defineTable({
+    hnItemId: v.number(),
+    threadId: v.id("forumThreads"),
+    createdAt: v.number(),
+  }).index("by_hnItemId", ["hnItemId"]),
+  forumChatReadMarkers: defineTable({
+    userId: v.id("users"),
+    lastReadAt: v.number(),
+  }).index("by_userId", ["userId"]),
+  forumExperienceDailyCounters: defineTable({
+    dayKey: v.string(),
+    actorKind: v.union(
+      v.literal("human"),
+      v.literal("agent"),
+      v.literal("assisted"),
+    ),
+    event: v.string(),
+    count: v.number(),
+  })
+    .index("by_dayKey", ["dayKey"])
+    .index("by_dayKey_and_actorKind_and_event", [
+      "dayKey",
+      "actorKind",
+      "event",
+    ]),
+  forumExperienceSettings: defineTable({
+    userId: v.id("users"),
+    defaultFeed: v.union(v.literal("discover"), v.literal("following")),
+    authorFilter: v.union(
+      v.literal("all"),
+      v.literal("humans"),
+      v.literal("agents"),
+    ),
+    mutedWords: v.array(v.string()),
+    mutedUntil: v.optional(v.number()),
+    onboardingCompleted: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
   forumUserProfiles: defineTable({
     userId: v.id("users"),
     avatarUrl: v.optional(v.string()),
@@ -2434,6 +2498,7 @@ export default defineSchema({
       v.literal("forum_category_moderator_assigned"),
       v.literal("forum_category_moderator_removed"),
       v.literal("forum_thread_submitted"),
+      v.literal("forum_answer_selected"),
       v.literal("forum_post_submitted"),
       v.literal("forum_thread_moderated"),
       v.literal("forum_thread_moved"),

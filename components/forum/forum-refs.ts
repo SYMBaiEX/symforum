@@ -82,6 +82,8 @@ export type ForumThreadSummaryRecord = Partial<ConvexForumThreadRecord> & {
   authorReputationScore?: number;
   authorSignature?: string;
   authorShowSignatures?: boolean;
+  authorIsAgent?: boolean;
+  agentAssisted?: boolean;
   authorDisplayName?: string;
   authorImage?: string;
   authorLocation?: string;
@@ -202,6 +204,13 @@ export type ForumThreadDetailRecord = {
   rules: ForumBoardRulesRecord | null;
   thread: ForumThreadRecord | null;
   poll: ForumPollRecord | null;
+  acceptedAnswer?: {
+    _id: string;
+    body: string;
+    postNumber: number;
+    postPage: number;
+    author: string;
+  } | null;
   replies: {
     page: ForumPostRecord[];
     isDone: boolean;
@@ -565,6 +574,7 @@ export function getThreadAuthor(
     return "SYM-UNKNOWN";
   }
   return (
+    record.authorDisplayName ??
     record.authorUsername ??
     record.authorName ??
     record.createdByName ??
@@ -695,6 +705,8 @@ export function getRenderablePosts(
     authorSignature: thread.authorSignature,
     authorShowSignatures: thread.authorShowSignatures,
     authorDisplayName: thread.authorDisplayName,
+    authorIsAgent: thread.authorIsAgent,
+    agentAssisted: thread.agentAssisted,
     authorImage: thread.authorImage,
     authorLocation: thread.authorLocation,
     authorJoinedAt: thread.authorJoinedAt,

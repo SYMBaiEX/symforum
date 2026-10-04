@@ -29,6 +29,29 @@
       "additionalProperties": false
     }
   },
+  "createNewsDiscussion": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "hnItemId": {
+          "type": "number"
+        },
+        "categorySlug": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "hnItemId",
+        "categorySlug",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
   "createPrivateMessageReport": {
     "kind": "mutation",
     "schema": {
@@ -58,6 +81,11 @@
     "schema": {
       "type": "object",
       "properties": {
+        "parentPostId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "threadId": {
           "type": "string",
           "minLength": 1,
@@ -144,6 +172,25 @@
     "schema": {
       "type": "object",
       "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "const": "discussion"
+            },
+            {
+              "const": "question"
+            },
+            {
+              "const": "link"
+            },
+            {
+              "const": "showcase"
+            }
+          ]
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
         "categorySlug": {
           "type": "string"
         },
@@ -215,6 +262,35 @@
         "categorySlug",
         "title",
         "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createThreadFromChat": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "categorySlug": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "messageIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 8192
+        }
+      },
+      "required": [
+        "categorySlug",
+        "title",
+        "messageIds"
       ],
       "additionalProperties": false
     }
@@ -414,6 +490,15 @@
       "additionalProperties": false
     }
   },
+  "getMyForumExperience": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
   "getMyForumNavState": {
     "kind": "query",
     "schema": {
@@ -438,6 +523,21 @@
       "type": "object",
       "properties": {},
       "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getNewsDiscussion": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "hnItemId": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "hnItemId"
+      ],
       "additionalProperties": false
     }
   },
@@ -846,8 +946,37 @@
             },
             {
               "const": "active"
+            },
+            {
+              "const": "unanswered"
             }
           ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "const": "discover"
+            },
+            {
+              "const": "following"
+            }
+          ]
+        },
+        "authorFilter": {
+          "anyOf": [
+            {
+              "const": "all"
+            },
+            {
+              "const": "humans"
+            },
+            {
+              "const": "agents"
+            }
+          ]
+        },
+        "now": {
+          "type": "number"
         },
         "communityOnly": {
           "type": "boolean"
@@ -1194,6 +1323,19 @@
     }
   },
   "listMyCategorySubscriptions": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listMyForumCatchUp": {
     "kind": "query",
     "schema": {
       "type": "object",
@@ -1572,6 +1714,23 @@
       "additionalProperties": false
     }
   },
+  "markChatRead": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
   "markNotificationRead": {
     "kind": "mutation",
     "schema": {
@@ -1805,6 +1964,31 @@
       "additionalProperties": false
     }
   },
+  "recordForumExperienceEvent": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "anyOf": [
+            {
+              "const": "feed_open"
+            },
+            {
+              "const": "composer_open"
+            },
+            {
+              "const": "pending_open"
+            }
+          ]
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "additionalProperties": false
+    }
+  },
   "recordPresence": {
     "kind": "mutation",
     "schema": {
@@ -2029,6 +2213,11 @@
       "properties": {
         "body": {
           "type": "string"
+        },
+        "replyToId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         }
       },
       "required": [
@@ -2056,6 +2245,36 @@
         "recipientUsername",
         "subject",
         "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setAcceptedAnswer": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "postId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "threadId",
+        "postId"
       ],
       "additionalProperties": false
     }
@@ -2419,6 +2638,59 @@
         "warningId",
         "status"
       ],
+      "additionalProperties": false
+    }
+  },
+  "updateMyForumExperience": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "defaultFeed": {
+          "anyOf": [
+            {
+              "const": "discover"
+            },
+            {
+              "const": "following"
+            }
+          ]
+        },
+        "authorFilter": {
+          "anyOf": [
+            {
+              "const": "all"
+            },
+            {
+              "const": "humans"
+            },
+            {
+              "const": "agents"
+            }
+          ]
+        },
+        "mutedWords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8192
+        },
+        "mutedUntil": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onboardingCompleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
       "additionalProperties": false
     }
   },

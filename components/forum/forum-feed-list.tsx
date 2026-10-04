@@ -1,6 +1,7 @@
 "use client";
+import { forumSourceDomain } from "@/lib/forum-experience";
 
-import { useConvex, useConvexAuth, useQuery } from "convex/react";
+import { useConvex, useConvexAuth, useQuery, useMutation } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MessageSquare,
@@ -10,6 +11,7 @@ import {
   LayoutList,
   Rows3,
   ChevronDown,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import { forumSiteUrl } from "@/lib/site-urls";
@@ -37,6 +39,16 @@ import {
   type ForumFeedSort,
 } from "./forum-home-model";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { forumExperienceRefs } from "./forum-experience-refs";
+import {
+  FORUM_AUTHOR_FILTERS,
+  type ForumAuthorFilter,
+  type ForumFeedScope,
+} from "@/lib/forum-experience";
+import { readingPlace, saveReadingPlace } from "./forum-feed-reading-state";
+import { forumRefs, forumHrefForPathname } from "./forum-refs";
+import { asRoute } from "@/lib/typed-route";
 const PAGE_SIZE = 12;
 const DISPLAY_STORAGE_KEY = "symbaiex.forum.feed-display";
 type FeedDisplay = "cards" | "compact";
@@ -55,13 +67,34 @@ export function ForumFeedList({
     forumFeedRefs.authorizationFingerprint,
     isLoading ? "skip" : {},
   );
-  if (isLoading || authorization === undefined)
+  const params = useSearchParams();
+  const experience = useQuery(
+    forumExperienceRefs.get,
+    isAuthenticated ? {} : "skip",
+  );
+  const scope: ForumFeedScope =
+    isAuthenticated &&
+    (params.get("scope") ?? experience?.defaultFeed) === "following"
+      ? "following"
+      : "discover";
+  const authorFilter: ForumAuthorFilter =
+    FORUM_AUTHOR_FILTERS.find(
+      (value) => value === (params.get("authors") ?? experience?.authorFilter),
+    ) ?? "all";
+  if (
+    isLoading ||
+    authorization === undefined ||
+    (isAuthenticated && experience === undefined)
+  )
     return <FeedLoading communityOnly={communityOnly} />;
   return (
     <LiveFeed
-      key={`${sort}:${communityOnly}:${isAuthenticated}:${authorization.fingerprint}`}
+      key={`${sort}:${communityOnly}:${scope}:${authorFilter}:${authorization.fingerprint}`}
       sort={sort}
       communityOnly={communityOnly}
+      authorization={authorization.fingerprint}
+      scope={scope}
+      authorFilter={authorFilter}
     />
   );
 }
@@ -106,11 +139,33 @@ function FeedLoading({ communityOnly }: { communityOnly: boolean }) {
 export function LiveFeed({
   sort,
   communityOnly,
+  authorization = "guest",
+  scope = "discover",
+  authorFilter = "all",
 }: {
   sort: ForumFeedSort;
   communityOnly: boolean;
+  authorization?: string;
+  scope?: ForumFeedScope;
+  authorFilter?: ForumAuthorFilter;
 }) {
   const convex = useConvex();
+  const { isAuthenticated } = useConvexAuth();
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const record = useMutation(forumExperienceRefs.event);
+  const recorded = useRef(false);
+  useEffect(() => {
+    if (isAuthenticated && !recorded.current) {
+      recorded.current = true;
+      void record({ event: "feed_open" }).catch(() => {});
+    }
+  }, [isAuthenticated, record]);
+  const updatePreferences = useMutation(forumExperienceRefs.update);
+  const cacheKey = `${authorization}:${sort}:${communityOnly}:${scope}:${authorFilter}`;
+  const restored = readingPlace(cacheKey, authorization);
+  const savedPosition = useRef(restored);
   const [display, setDisplay] = useState<FeedDisplay>("cards");
   const [result, setResult] = useState<ForumFeedPage>();
   const [pending, setPending] = useState<"initial" | "more" | "refresh" | null>(
@@ -121,7 +176,24 @@ export function LiveFeed({
   const failedMode = useRef<"more" | "refresh">("refresh");
   const generation = useRef(0);
   const busy = useRef(false);
-  const pageCount = useRef(1);
+  const pageCount = useRef(restored?.pages ?? 1);
+  const restorePending = useRef(true);
+  useEffect(() => {
+    const capture = () =>
+      saveReadingPlace(cacheKey, pageCount.current, window.scrollY);
+    window.addEventListener("forum:reading-navigation", capture);
+    return () =>
+      window.removeEventListener("forum:reading-navigation", capture);
+  }, [cacheKey]);
+  useEffect(() => {
+    if (!result || !restorePending.current) return;
+    restorePending.current = false;
+    const frame = requestAnimationFrame(() => {
+      if (savedPosition.current)
+        window.scrollTo({ top: savedPosition.current.y, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [result]);
 
   useEffect(() => {
     try {
@@ -146,14 +218,19 @@ export function LiveFeed({
       convex.query(forumFeedRefs.listFeedThreads, {
         sort,
         communityOnly,
+        scope,
+        authorFilter,
+        now: Date.now(),
         paginationOpts: { numItems: PAGE_SIZE, cursor },
       }),
-    [convex, sort, communityOnly],
+    [convex, sort, communityOnly, scope, authorFilter],
   );
 
   useEffect(() => {
     const request = ++generation.current;
-    void queryPage(null).then(
+    setPending("initial");
+    setResult(undefined);
+    void refreshLoadedFeed(queryPage, pageCount.current).then(
       (page) => {
         if (generation.current !== request) return;
         setResult(page);
@@ -222,6 +299,25 @@ export function LiveFeed({
     }
   }
 
+  function changeFeed(
+    nextScope: ForumFeedScope,
+    nextFilter: ForumAuthorFilter,
+  ) {
+    const next = new URLSearchParams(params.toString());
+    next.set("scope", nextScope);
+    next.set("authors", nextFilter);
+    saveReadingPlace(cacheKey, pageCount.current, window.scrollY);
+    router.push(asRoute(`${pathname}?${next}`), { scroll: false });
+    if (isAuthenticated)
+      void updatePreferences({
+        defaultFeed: nextScope,
+        authorFilter: nextFilter,
+      }).catch(() =>
+        toast.error(
+          "Your view changed, but the preference could not be saved.",
+        ),
+      );
+  }
   if (!result && pending) return <FeedLoading communityOnly={communityOnly} />;
   return (
     <section
@@ -246,7 +342,11 @@ export function LiveFeed({
           }}
         >
           <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-1 text-xs font-medium text-muted-foreground">
-            {sort === "new" ? "New" : "Active"}
+            {sort === "new"
+              ? "Latest"
+              : sort === "unanswered"
+                ? "Unanswered"
+                : "Active"}
             <ChevronDown className="size-3" aria-hidden="true" />
           </summary>
           <nav
@@ -256,7 +356,8 @@ export function LiveFeed({
             {(
               [
                 { value: "active", label: "Active" },
-                { value: "new", label: "New" },
+                { value: "new", label: "Latest" },
+                { value: "unanswered", label: "Unanswered" },
               ] as const
             ).map((item) => (
               <ForumLink
@@ -265,6 +366,8 @@ export function LiveFeed({
                 href={forumHomeHref(
                   communityOnly ? "community" : "feed",
                   item.value,
+                  scope,
+                  authorFilter,
                 )}
                 key={item.value}
               >
@@ -276,7 +379,8 @@ export function LiveFeed({
         <nav aria-label="Sort discussions" className="hidden gap-1 sm:flex">
           {[
             { value: "active", label: "Active" },
-            { value: "new", label: "New" },
+            { value: "new", label: "Latest" },
+            { value: "unanswered", label: "Unanswered" },
           ].map((item) => (
             <ForumLink
               aria-current={sort === item.value ? "page" : undefined}
@@ -284,6 +388,8 @@ export function LiveFeed({
               href={forumHomeHref(
                 communityOnly ? "community" : "feed",
                 item.value as ForumFeedSort,
+                scope,
+                authorFilter,
               )}
               key={item.value}
             >
@@ -353,6 +459,45 @@ export function LiveFeed({
               : "Refresh discussions"}
           </span>
         </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <nav
+          aria-label="Feed source"
+          className="flex rounded-full bg-muted/50 p-1"
+        >
+          {(["discover", "following"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`${actionClass} ${scope === value ? "bg-card text-primary" : "text-muted-foreground"}`}
+              aria-pressed={scope === value}
+              disabled={value === "following" && !isAuthenticated}
+              onClick={() => changeFeed(value, authorFilter)}
+            >
+              {value === "discover" ? "Discover" : "Following"}
+            </button>
+          ))}
+        </nav>
+        <label className="ml-auto flex min-h-11 items-center gap-2 text-xs text-muted-foreground">
+          Authors
+          <select
+            className="focus-ring min-h-11 rounded-full bg-card px-3 text-foreground"
+            value={authorFilter}
+            onChange={(e) =>
+              changeFeed(scope, e.target.value as ForumAuthorFilter)
+            }
+          >
+            <option value="all">Everyone</option>
+            <option value="humans">Humans</option>
+            <option value="agents">Agents</option>
+          </select>
+        </label>
+        <ForumLink
+          href="/forum/catch-up"
+          className={`${actionClass} text-primary`}
+        >
+          Catch up & interests
+        </ForumLink>
       </div>
       {error ? (
         <div
@@ -436,6 +581,30 @@ export function ForumFeedArticle({
   const href = forumPath(thread.categorySlug, thread.slug);
   const author = thread.authorIdentity;
   const replies = getThreadReplyCount(thread);
+  const { isAuthenticated } = useConvexAuth();
+  const save = useMutation(forumRefs.setThreadBookmark);
+  const [saved, setSaved] = useState(thread.viewerBookmarked === true);
+  const [saving, setSaving] = useState(false);
+  useEffect(
+    () => setSaved(thread.viewerBookmarked === true),
+    [thread.viewerBookmarked],
+  );
+  async function saveThread() {
+    if (!isAuthenticated) {
+      toast.info("Sign in to save discussions to your reading list.");
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    try {
+      const receipt = await save({ threadId: thread._id, saved: !saved });
+      setSaved(receipt.saved);
+    } catch {
+      toast.error("Could not update your reading list.");
+    } finally {
+      setSaving(false);
+    }
+  }
   const [sharing, setSharing] = useState(false);
   const [shareFailed, setShareFailed] = useState(false);
   const posted = thread.createdAt ? new Date(thread.createdAt) : null;
@@ -523,6 +692,23 @@ export function ForumFeedArticle({
         <ForumThreadPrefixBadge thread={thread} />
         <ForumThreadStateBadges thread={thread} />
       </div>
+      {thread.sourceUrl ? (
+        <a
+          className="focus-ring inline-flex min-h-11 max-w-full items-center gap-1 text-xs text-accent"
+          href={thread.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {forumSourceDomain(thread.sourceUrl)}{" "}
+          <ArrowUpRight className="size-3" aria-hidden="true" />
+          <span className="sr-only">Open source article</span>
+        </a>
+      ) : null}
+      {thread.kind === "question" ? (
+        <span className="text-xs text-accent">Question</span>
+      ) : thread.kind === "showcase" ? (
+        <span className="text-xs text-accent">Showcase</span>
+      ) : null}
       {thread.excerpt ? (
         <p
           className={`mt-1 whitespace-pre-line break-words text-sm leading-[22px] text-muted-foreground [overflow-wrap:anywhere] ${display === "compact" ? "line-clamp-1" : "line-clamp-2"}`}
@@ -555,6 +741,20 @@ export function ForumFeedArticle({
         >
           <Share2 aria-hidden="true" className="size-4" />
           Share
+        </button>
+        <button
+          className={actionClass}
+          type="button"
+          disabled={saving}
+          aria-pressed={saved}
+          aria-label={`${saved ? "Unsave" : "Save"} ${thread.title}`}
+          onClick={() => void saveThread()}
+        >
+          <Bookmark
+            className={`size-4 ${saved ? "fill-current text-primary" : ""}`}
+            aria-hidden="true"
+          />
+          {saved ? "Saved" : "Save"}
         </button>
       </div>
       {shareFailed ? (

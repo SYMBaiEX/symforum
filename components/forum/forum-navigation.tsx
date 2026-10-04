@@ -351,6 +351,9 @@ export function ForumNavigationLayout({
                 </DropdownMenuLabel>
                 {navState?.authenticated ? (
                   <>
+                    <ForumMenuLink href="/forum/catch-up" icon={Bell}>
+                      Catch up & interests
+                    </ForumMenuLink>
                     <ForumMenuLink href="/forum/control-panel" icon={Settings2}>
                       Account & preferences
                     </ForumMenuLink>
@@ -451,6 +454,9 @@ export function ForumNavigationLayout({
           <p className="forum-rail-heading">Your space</p>
           {navState?.authenticated ? (
             <nav aria-label="Personal forum tools" className="space-y-1">
+              <ForumRailLink href="/forum/catch-up" icon={Bell}>
+                Catch up & interests
+              </ForumRailLink>
               <ForumRailLink href="/forum/saved" icon={Bookmark}>
                 Saved threads
               </ForumRailLink>

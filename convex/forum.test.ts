@@ -2888,7 +2888,7 @@ Analysis: Verify the checkpoint before resuming the job.[/note]`,
       expect.objectContaining({
         _id: zeroActivityUserId,
         username: "zeroactivity",
-        displayName: "zeroactivity",
+        displayName: "Zero Activity",
         rank: "New Member",
         threadCount: 0,
         postCount: 0,

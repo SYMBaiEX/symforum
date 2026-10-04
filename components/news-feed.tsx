@@ -1,5 +1,6 @@
 "use client";
 
+import { ForumLink } from "@/components/forum/forum-primitives";
 import { ForumSectionHeader } from "@/components/forum/forum-layout-primitives";
 import { reportAppError } from "@/components/app-error-surface";
 import { Button } from "@/components/ui/button";
@@ -553,7 +554,7 @@ function ForumNewsRows({
           const summary = summaries?.[entityId];
           const stats = summary ??
             story.platformStats ?? { comments: 0, score: 0, saves: 0 };
-          const discussionUrl = asRoute(primarySiteUrl(newsStoryPath(story)));
+          const discussionUrl = `/forum/stories/${story.hnItemId}`;
           const hnUrl = `https://news.ycombinator.com/item?id=${story.hnItemId}`;
           const postedAt =
             story.timePosted === undefined
@@ -574,13 +575,13 @@ function ForumNewsRows({
               </span>
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold leading-6 tracking-tight sm:text-[19px] sm:leading-7">
-                  <Link
+                  <ForumLink
                     href={discussionUrl}
                     prefetch
                     className="focus-ring inline-flex min-h-11 max-w-full items-center py-1 hover:text-primary [overflow-wrap:anywhere]"
                   >
                     {story.title}
-                  </Link>
+                  </ForumLink>
                 </h3>
                 <a
                   href={hnUrl}
@@ -627,27 +628,18 @@ function ForumNewsRows({
                 ) : stats.score !== 0 ? (
                   <span>{compactNumber(stats.score)} SYMBaiEX votes</span>
                 ) : null}
-                <Link
+                <ForumLink
                   href={discussionUrl}
                   prefetch
                   className="forum-action-pill focus-ring inline-flex min-h-11 items-center gap-1.5 px-3 font-semibold hover:text-primary"
-                  aria-label={`${stats.comments} SYMBaiEX comments on ${story.title}`}
+                  aria-label={`Discuss ${story.title} on the forum`}
                 >
                   <MessageSquare
                     aria-hidden="true"
                     className="size-3.5 shrink-0"
                   />
-                  <span className="sm:hidden">
-                    {stats.comments > 0
-                      ? `${compactNumber(stats.comments)} comments`
-                      : "Discuss"}
-                  </span>
-                  <span className="hidden sm:inline">
-                    {stats.comments > 0
-                      ? `${compactNumber(stats.comments)} SYMBaiEX comments`
-                      : "Discuss on SYMBaiEX"}
-                  </span>
-                </Link>
+                  Discuss on SYMBaiEX
+                </ForumLink>
                 {stats.saves > 0 ? (
                   <span className="inline-flex items-center gap-1.5">
                     <Bookmark aria-hidden="true" className="size-3.5" />

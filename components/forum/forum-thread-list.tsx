@@ -1,4 +1,11 @@
 "use client";
+import { forumExperienceRefs } from "./forum-experience-refs";
+import {
+  FORUM_POST_KINDS,
+  FORUM_CONVERSATION_PROMPTS,
+  type ForumPostKind,
+} from "@/lib/forum-experience";
+import { convexRefs } from "@/lib/convex-refs";
 
 import { ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
 import {
@@ -50,7 +57,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 const ForumCompose = dynamic(
   () =>
@@ -202,9 +209,29 @@ function LiveForumThreadList({
     setPreviousComposeRequest(composeRequest);
     if (searchParams.get("compose") === "1") setComposeOpen(true);
   }
+  const record = useMutation(forumExperienceRefs.event);
+  const [lastRecordedCompose, setLastRecordedCompose] = useState(false);
+  useEffect(() => {
+    if (composeOpen && isAuthenticated && !lastRecordedCompose) {
+      setLastRecordedCompose(true);
+      void record({ event: "composer_open" }).catch(() => {});
+    } else if (!composeOpen && lastRecordedCompose)
+      setLastRecordedCompose(false);
+  }, [composeOpen, isAuthenticated, lastRecordedCompose, record]);
   const [threadPrefixId, setThreadPrefixId] = useState("none");
+  const viewer = useQuery(
+    convexRefs.users.maybeViewer,
+    isAuthenticated ? {} : "skip",
+  );
+  const prompt = FORUM_CONVERSATION_PROMPTS.find(
+    (p) => p.id === searchParams.get("template"),
+  );
+  const [threadKind, setThreadKind] = useState<ForumPostKind>(
+    prompt?.kind ?? "discussion",
+  );
+  const [sourceUrl, setSourceUrl] = useState("");
   const [threadTitle, setThreadTitle] = useState("");
-  const [threadBody, setThreadBody] = useState("");
+  const [threadBody, setThreadBody] = useState(prompt?.body ?? "");
   const [threadAttachments, setThreadAttachments] = useState<
     ForumAttachmentDraft[]
   >([]);
@@ -337,6 +364,8 @@ function LiveForumThreadList({
     try {
       const result = await createThread({
         categorySlug,
+        kind: threadKind,
+        ...(threadKind === "link" ? { sourceUrl: sourceUrl.trim() } : {}),
         prefixId: threadPrefixId === "none" ? null : threadPrefixId,
         title: threadTitle.trim(),
         body: threadBody.trim(),
@@ -348,6 +377,8 @@ function LiveForumThreadList({
       });
       setComposeOpen(false);
       setThreadPrefixId("none");
+      setThreadKind("discussion");
+      setSourceUrl("");
       setThreadTitle("");
       setThreadBody("");
       setThreadAttachments([]);
@@ -357,7 +388,7 @@ function LiveForumThreadList({
       setPollOptions(["", ""]);
       if (result.status === "pending") {
         setBoardActionError(
-          "Thread submitted for approval. It will appear after a moderator approves it.",
+          "Awaiting moderator review. Find and manage your submission in Account & preferences → Pending content.",
         );
         return true;
       }
@@ -800,7 +831,17 @@ function LiveForumThreadList({
             {composeOpen && isAuthenticated && viewerCanCreateThread ? (
               <ForumCompose
                 title={threadTitle}
-                draftKey={`symbaiex:forum:draft:thread:${categorySlug}`}
+                draftKey={
+                  viewer
+                    ? `symbaiex:forum:draft:thread:${viewer._id}:${categorySlug}`
+                    : undefined
+                }
+                draftData={{ kind: threadKind, sourceUrl }}
+                onDraftDataChange={(data) => {
+                  if (FORUM_POST_KINDS.some((kind) => kind === data.kind))
+                    setThreadKind(data.kind as ForumPostKind);
+                  setSourceUrl(data.sourceUrl ?? "");
+                }}
                 onTitleChange={setThreadTitle}
                 titlePlaceholder="Short, specific thread title"
                 body={threadBody}
@@ -822,9 +863,57 @@ function LiveForumThreadList({
                     {threadPreviewOpen ? "Hide preview" : "Preview"}
                   </Button>
                 }
-                note="Thread creation requires a signed-in SYM handle. Mention a member with @handle to send an in-app alert."
+                note="Mention @handle to notify a member. Your draft stays here if posting fails."
                 onSubmit={submitThread}
               >
+                <fieldset>
+                  <legend className="mb-2 text-sm font-medium">
+                    What are you sharing?
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    {FORUM_POST_KINDS.map((kind) => (
+                      <button
+                        type="button"
+                        key={kind}
+                        aria-pressed={!pollEnabled && threadKind === kind}
+                        disabled={pending}
+                        className={`forum-action-pill focus-ring min-h-11 px-3 text-sm ${!pollEnabled && threadKind === kind ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
+                        onClick={() => {
+                          setThreadKind(kind);
+                          setPollEnabled(false);
+                        }}
+                      >
+                        {kind[0].toUpperCase() + kind.slice(1)}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-pressed={pollEnabled}
+                      disabled={pending || !viewerCanCreatePoll}
+                      className={`forum-action-pill focus-ring min-h-11 px-3 text-sm ${pollEnabled ? "text-primary" : "text-muted-foreground"}`}
+                      onClick={() => {
+                        setPollEnabled(true);
+                        setThreadKind("discussion");
+                      }}
+                    >
+                      Poll
+                    </button>
+                  </div>
+                </fieldset>
+                {threadKind === "link" ? (
+                  <label className="block text-sm font-medium">
+                    Source link
+                    <input
+                      type="url"
+                      inputMode="url"
+                      className="focus-ring mt-2 min-h-11 w-full rounded-xl bg-muted/50 px-3 text-base"
+                      placeholder="https://"
+                      value={sourceUrl}
+                      disabled={pending}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                    />
+                  </label>
+                ) : null}
                 <ForumPrefixSelect
                   disabled={pending || authLoading}
                   prefixes={threadPrefixes ?? []}

@@ -6,13 +6,9 @@ import { Button } from "@/components/ui/button";
 import { userFacingError } from "@/lib/auth-errors";
 import type { NewsTimelineRecord } from "@/lib/convex-refs";
 import type { HnStory } from "@/lib/hn";
-import { newsStoryPath } from "@/lib/news-slugs";
-import { primarySiteUrl } from "@/lib/site-urls";
-import { asRoute } from "@/lib/typed-route";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import { ArrowUpRight, Users, Search, X } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useState } from "react";
 import {
   ForumBodyGrid,
@@ -415,12 +411,12 @@ function ForumHomeRail({
           <div className="mt-3 space-y-3">
             {news.slice(0, 3).map((story) => (
               <article key={story.hnItemId}>
-                <Link
+                <ForumLink
                   className="focus-ring flex min-h-11 items-center text-xs font-medium leading-5 hover:text-primary"
-                  href={asRoute(primarySiteUrl(newsStoryPath(story)))}
+                  href={`/forum/stories/${story.hnItemId}`}
                 >
                   {story.title}
-                </Link>
+                </ForumLink>
                 <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
                   {story.host ?? "Hacker News"}
                   {typeof story.score === "number"

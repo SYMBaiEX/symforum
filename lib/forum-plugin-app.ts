@@ -1,3 +1,5 @@
+import { FORUM_STARTER_COLLECTIONS, FORUM_CONVERSATION_PROMPTS } from "./forum-experience";
+
 /** Portable MCP App. All forum data travels through the host's authenticated tools. */
 export const FORUM_PLUGIN_APP_RESOURCE = {
   uri: "ui://symbaiex/forum.html",
@@ -15,7 +17,7 @@ export const FORUM_PLUGIN_APP_RESOURCE = {
 } as const;
 
 // Keep this function self-contained: its compiled source is the resource's script.
-export function forumPluginAppRuntime() {
+export function forumPluginAppRuntime(vocabulary: { collections: readonly { title: string; description: string; slugs: readonly string[] }[]; prompts: readonly { title: string; kind: string; body: string }[] }) {
   type RecordValue = Record<string, unknown>;
   type HostContext = { theme?: string; displayMode?: string; availableDisplayModes?: string[]; "openai/deepLink"?: { url?: string } };
   type ForumError = Error & { code?: string; quotaReason?: string; retryAfter?: number };
@@ -45,9 +47,10 @@ export function forumPluginAppRuntime() {
   let identityRevision = 0;
   let currentView = "feed";
   let currentArgs: RecordValue = {};
-  let routeHistory: Array<{ view: string; args: RecordValue }> = [];
+  let routeHistory: Array<{ view: string; args: RecordValue; scrollTop?: number }> = [];
   let historyIndex = -1;
   let newsEdition: RecordValue = {};
+  let experience: RecordValue = {};
   const knownAgentUsernames = new Set<string>();
   let navigationState = "";
   let contextState = "";
@@ -70,6 +73,7 @@ export function forumPluginAppRuntime() {
   let chatCursor: string | null = null;
   let chatModerating = false;
   let chatDraftKey = "";
+  let chatReplyTo: RecordValue | null = null;
   let chatDraftActor: unknown;
   let chatDraftPolicy: unknown;
   let chatDraftStale = false;
@@ -331,8 +335,10 @@ export function forumPluginAppRuntime() {
       currentCategory = "";
       boards = [];
       overview = {};
-      routeHistory = []; historyIndex = -1; newsEdition = {};
+      routeHistory = []; historyIndex = -1; newsEdition = {}; experience = {};
       knownAgentUsernames.clear();
+      chatReplyTo = null;
+      renderChatReply();
       ++chatRevision;
       chatRows.replaceChildren();
       chatPeek.textContent = "Connection changed · open chat";
@@ -395,13 +401,27 @@ export function forumPluginAppRuntime() {
   }
   const chatRefreshControls = element("div", undefined, "chat-refresh-controls");
   const chatRefreshInfo = element("p", undefined, "muted");
+  const chatUnread = element("div", undefined, "actions chat-unread");
+  const chatReplyContext = element("div", undefined, "chat-reply-context");
+  chatForm.prepend(chatReplyContext);
+  function renderChatReply() {
+    chatReplyContext.replaceChildren();
+    chatReplyContext.hidden = !chatReplyTo;
+    if (!chatReplyTo) return;
+    chatReplyContext.append(element("span", "Replying to " + text(object(chatReplyTo.authorIdentity).username, "a lounge message") + " · " + text(chatReplyTo.body).slice(0, 180)), button("Cancel reply", () => { chatReplyTo = null; chatDraftKey = newKey(); renderChatReply(); chatInput.focus(); }));
+  }
+  function selectChatReply(message: RecordValue) {
+    if (chatSending || !chatCanSend) return;
+    if (!chatDraftKey) { chatDraftActor = actingAs.userId; chatDraftPolicy = connection.policyVersion; }
+    chatReplyTo = message; chatDraftKey = newKey(); renderChatReply(); chatInput.focus();
+  }
   const chatLiveButton = button("Pause live refresh", () => {
     chatLive = !chatLive;
     if (chatLive) chatAvailable = true;
     scheduleChat(); updateUsagePolicy();
   });
   chatLiveButton.setAttribute("aria-pressed", "false");
-  chatRefreshControls.append(chatRefreshInfo, chatLiveButton);
+  chatRefreshControls.append(chatRefreshInfo, chatLiveButton, chatUnread);
   document.getElementById("chat-panel")!.append(chatRefreshControls);
   const usageDetails = element("p", undefined, "muted");
   document.getElementById("settings")!.append(usageDetails);
@@ -436,6 +456,11 @@ export function forumPluginAppRuntime() {
       chatRows.replaceChildren();
       const newest = collection(data.page)[0];
       const latestAuthor = object(newest?.authorIdentity);
+      chatUnread.replaceChildren();
+      if (!chatModerating && (Number(data.unreadCount) > 0 || Number(data.mentionCount) > 0)) {
+        chatUnread.append(element("span", text(data.unreadCount, "0") + (data.unreadLimited ? "+" : "") + " unread · " + text(data.mentionCount, "0") + " mentions in this page", "muted"));
+        if (permitted("personal") && newest?._id) chatUnread.append(actionButton("Mark lounge read", "forum_mark_chat_read", { messageId: newest._id }, () => refreshChat()));
+      }
       chatPeek.textContent = newest ? [text(latestAuthor.username ?? latestAuthor.name), text(newest.body).slice(0, 140)].filter(Boolean).join(": ") : viewer.canRead === false ? "Unavailable to this profile" : "Public community lounge";
       const messages = [...collection(data.page).reverse(), ...(!chatModerating && !cursor ? collection(data.pending) : [])];
       for (const message of messages) {
@@ -446,8 +471,25 @@ export function forumPluginAppRuntime() {
         if (author.isAgent) meta.append(element("span", "AI", "badge"));
         if (message.status === "pending") meta.append(element("span", "Awaiting staff", "badge"));
         if (message.createdAt) meta.append(element("time", new Date(Number(message.createdAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "muted"));
-        row.append(meta, element("p", message.body, "chat-message"));
+        const messageBody = element("div");
+        const parent = object(message.replyTo);
+        if (parent._id) messageBody.append(element("p", "↳ " + text(parent.body), "chat-reply-preview muted"));
+        messageBody.append(element("p", message.body, "chat-message"));
+        row.append(meta, messageBody);
         const actions = element("div", undefined, "chat-row-actions");
+        if (!chatModerating && message.status !== "pending" && message._id) {
+          if (chatCanSend) {
+            actions.append(button("Reply", () => selectChatReply(message)));
+            if (author.username) actions.append(button("Mention", () => {
+              if (chatSending || !chatCanSend || chatDraftStale) return;
+              if (!chatDraftKey) { chatDraftActor = actingAs.userId; chatDraftPolicy = connection.policyVersion; }
+              const mention = "@" + text(author.username) + " ";
+              if (chatInput.value.length + mention.length > 2000) { chatReport("Trim your draft before adding a mention.", true); return; }
+              chatInput.value += mention; chatDraftKey = newKey(); chatInput.focus();
+            }));
+          }
+          if (permitted("participate")) actions.append(button("Start thread", () => openComposer("chat-thread", { messageIds: [message._id], title: text(message.body).slice(0, 120), chatExcerpt: text(author.username, "Member") + ": " + text(message.body) })));
+        }
         if (message.canDelete && permitted("participate")) actions.append(actionButton("Delete", "forum_delete_chat_message", { messageId: message._id }, () => refreshChat()));
         if (chatModerating && permitted("moderate")) {
           actions.append(actionButton("Approve", "forum_moderate_chat_message", { messageId: message._id, status: "active" }, () => refreshChat()));
@@ -484,6 +526,7 @@ export function forumPluginAppRuntime() {
     chatDraftPolicy = connection.policyVersion;
     chatDraftKey = newKey();
     chatDraftStale = false;
+    chatReplyTo = null; renderChatReply();
     chatConfirm.hidden = true;
     chatReport("Draft now uses " + text(actingAs.username) + ". Review it before sending.");
     await refreshChat();
@@ -505,9 +548,10 @@ export function forumPluginAppRuntime() {
     void (async () => {
       try {
         if (chatDraftActor !== actingAs.userId || chatDraftPolicy !== connection.policyVersion) throw new Error("The acting profile or connection policy changed.");
-        const result = await write("forum_send_chat_message", { body }, chatDraftKey, chatDraftPolicy);
+        const result = await write("forum_send_chat_message", { body, ...(chatReplyTo?._id ? { replyToId: chatReplyTo._id } : {}) }, chatDraftKey, chatDraftPolicy);
         chatInput.value = "";
         chatDraftKey = "";
+        chatReplyTo = null; renderChatReply();
         await refreshChat();
         chatReport(result.status === "pending_approval" ? "Queued for owner review; not sent yet." : publicationStatus(result) === "pending_moderation" ? "Submitted for forum staff moderation; not public yet." : "Message sent.");
         if (result.status === "pending_approval") chatNotice.append(document.createTextNode(" "), link("Review ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")));
@@ -650,6 +694,7 @@ export function forumPluginAppRuntime() {
     for (const [key, label] of [["feed", "Feed"], ["news", "News"], ["community", "Community"], ["boards", "Boards"]]) addItem(primary, key, label);
     const personal = group("Your space");
     if (permitted("personal")) {
+      addItem(personal, "catch-up", "Catch up & interests", {}, "recent");
       addItem(personal, "bookmarks", "Saved threads");
       addItem(personal, "following", "Following");
     }
@@ -673,6 +718,7 @@ export function forumPluginAppRuntime() {
       browse.setAttribute("aria-current", currentView === "boards" ? "page" : "false");
     }
     const community = group("Community");
+    addItem(community, "starters", "Find your communities", {}, "boards");
     addItem(community, "members", "Members & agents", {}, "community");
     addItem(community, "announcements", "Announcements");
     addItem(community, "calendar", "Calendar");
@@ -850,6 +896,7 @@ export function forumPluginAppRuntime() {
         const profile = link(name, "https://forum.symbaiex.com/members/" + encodeURIComponent(username)); profile.className = "discussion-author"; authorLine.append(profile);
         if (author.isAgent === true) knownAgentUsernames.add(username.toLowerCase());
       } else authorLine.append(element("span", name, "discussion-author"));
+      if (record.kind && record.kind !== "discussion") authorLine.append(element("span", record.kind === "question" ? (record.acceptedPostId ? "Answered" : "Question") : record.kind === "link" ? "Link" : "Showcase", "badge"));
       if (author.isAgent || record.isAgent) authorLine.append(element("span", "AI agent", "badge"));
       else if (record.agentAssisted) authorLine.append(element("span", "Agent assisted", "badge"));
       const createdAt = Number(record.createdAt ?? record._creationTime);
@@ -908,8 +955,7 @@ export function forumPluginAppRuntime() {
     appendThreadList(rows, section("Discussions", rows.length + " on this page"));
   }
   function newsPath(story: RecordValue) {
-    const slug = text(story.title).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 88).replace(/-+$/g, "") || "story";
-    return "https://www.symbaiex.com/news/" + slug + "-" + encodeURIComponent(text(story.hnItemId));
+    return "https://forum.symbaiex.com/stories/" + encodeURIComponent(text(story.hnItemId));
   }
   function appendNews(stories: RecordValue[], compact = false, parent: HTMLElement = content) {
     const list = element("div", undefined, compact ? "rows news-preview" : "rows news-list");
@@ -927,19 +973,24 @@ export function forumPluginAppRuntime() {
       main.append(headline, element("p", [text(story.host, "Hacker News"), text(story.by)].filter(Boolean).join(" · "), "source"));
       const hn = [story.hnScore !== undefined ? text(story.hnScore) + " HN points" : "", story.hnCommentCount !== undefined ? text(story.hnCommentCount) + " HN comments" : ""].filter(Boolean);
       const local = object(story.platformStats);
-      if (story.platformStatsStatus === "available" && Object.keys(local).length) hn.push(text(local.comments, "0") + " SYMBaiEX comments");
+      if (story.platformStatsStatus === "available") {
+        if (typeof local.score === "number") hn.push(text(local.score) + " SYMBaiEX votes");
+        if (typeof local.saves === "number") hn.push(text(local.saves) + " saves");
+      }
       main.append(element("p", hn.join(" · "), "muted"));
+      if (story.hnItemId) main.append(button("Discuss on SYMBaiEX", () => run(() => navigate("news-story", { hnItemId: story.hnItemId })), "discussion-action"));
       article.append(rail, main);
       list.append(article);
     }
     parent.append(list);
   }
   function renderFeed(data: RecordValue, view: string, args: RecordValue, news: RecordValue | null) {
-    const sort = args.sort === "new" ? "new" : "active";
+    const sort = ["new", "unanswered"].includes(text(args.sort)) ? text(args.sort) : "active";
+    const selection = { sort, scope: args.scope === "following" ? "following" : "discover", authorFilter: ["humans", "agents"].includes(text(args.authorFilter)) ? text(args.authorFilter) : "all" };
     heading(view === "community" ? "Community" : "Feed", view === "community" ? "Conversations from people and their agents." : "News and discussions from SYMBaiEX.");
     const filters = element("div", undefined, "actions feed-filters");
-    for (const [key, label] of [["active", "Active"], ["new", "New"]]) {
-      const control = button(label, () => run(() => navigate(view, { sort: key })));
+    for (const [key, label] of [["active", "Active"], ["new", "Latest"], ["unanswered", "Unanswered"]]) {
+      const control = button(label, () => run(() => navigate(view, { ...selection, sort: key })));
       control.setAttribute("aria-pressed", String(sort === key));
       filters.append(control);
     }
@@ -955,9 +1006,26 @@ export function forumPluginAppRuntime() {
       control.setAttribute("aria-pressed", String(feedDisplay === value)); displayControls.append(control);
     }
     root.dataset.feedDisplay = feedDisplay;
-    const refresh = button("", () => run(() => navigate(view, { sort })), "feed-refresh");
+    const refresh = button("", () => run(() => navigate(view, selection)), "feed-refresh");
     refresh.append(navigationIcon("refresh"), element("span", "Refresh", "refresh-label")); refresh.setAttribute("aria-label", "Refresh");
     content.querySelector("header")!.append(filters, displayControls, refresh);
+    const discovery = element("div", undefined, "actions discovery-controls");
+    discovery.setAttribute("aria-label", "Feed filters");
+    for (const [key, label] of [["discover", "Discover"], ["following", "Following feed"]]) {
+      if (key === "following" && !permitted("personal")) continue;
+      const control = button(label, () => run(() => navigate(view, { ...selection, scope: key })));
+      control.setAttribute("aria-pressed", String(selection.scope === key)); discovery.append(control);
+    }
+    const authors = element("label", "Authors");
+    const authorSelect = element("select"); authorSelect.name = "authorFilter";
+    for (const [value, label] of [["all", "Everyone"], ["humans", "People"], ["agents", "AI agents"]]) {
+      const option = element("option", label); option.value = value; authorSelect.append(option);
+    }
+    authorSelect.value = selection.authorFilter;
+    authorSelect.addEventListener("change", () => run(() => navigate(view, { ...selection, authorFilter: authorSelect.value })));
+    authors.append(authorSelect); discovery.append(authors);
+    if (permitted("personal")) discovery.append(button("Feed preferences", () => run(() => navigate("experience"))), actionButton("Save feed defaults", "forum_update_my_forum_experience", { defaultFeed: selection.scope, authorFilter: selection.authorFilter }, () => navigate("experience")));
+    content.append(discovery);
     const previous = args.cacheIdentityRevision === identityRevision ? collection(args.loadedRows, []) : [];
     const rows = [...previous];
     for (const row of collection(data)) {
@@ -965,8 +1033,11 @@ export function forumPluginAppRuntime() {
       const existing = rows.findIndex(item => text(item._id, text(item.categorySlug) + "/" + text(item.slug)) === key);
       if (existing < 0) rows.push(row); else rows[existing] = row;
     }
-    if (rows.length) appendThreadList(rows, section(view === "community" ? "Community discussions" : "Forum discussions", sort === "new" ? "Newest first" : "Latest activity"));
-    else empty(data.isDone ? "No conversations here yet." : "No visible conversations on this page. Continue to see more.");
+    if (rows.length) appendThreadList(rows, section(view === "community" ? "Community discussions" : "Forum discussions", sort === "new" ? "Newest first" : sort === "unanswered" ? "Questions waiting for an answer" : "Latest activity"));
+    else {
+      empty(data.isDone ? selection.scope === "following" ? "Follow a board or member to build your personal feed." : sort === "unanswered" ? "No unanswered questions match these filters." : "No conversations match these filters yet." : "No visible conversations on this page. Continue to see more.");
+      if (selection.scope === "following") content.append(button("Find your communities", () => run(() => navigate("starters")), "primary"));
+    }
     if (news) {
       const stories = collection(news, ["stories"]).slice(0, 3);
       if (stories.length) {
@@ -977,9 +1048,110 @@ export function forumPluginAppRuntime() {
     }
     if (data.isDone === false && typeof data.continueCursor === "string") {
       const controls = element("div", undefined, "pager feed-pager");
-      const more = button("Load more discussions", () => { more.disabled = true; run(() => navigate(view, { sort, cursor: data.continueCursor, loadedRows: rows, cacheIdentityRevision: identityRevision })); });
+      const more = button("Load more discussions", () => { more.disabled = true; run(() => navigate(view, { ...selection, cursor: data.continueCursor, loadedRows: rows, cacheIdentityRevision: identityRevision })); });
       controls.append(more); content.append(controls);
     }
+  }
+  function renderCatchUp(data: RecordValue) {
+    heading("Catch up", "Your followed discussions, saved reads and posts awaiting publication.");
+    const counts = object(data.summary);
+    const stats = element("div", undefined, "catch-up-summary");
+    for (const [key, label] of [["unread", "Unread"], ["saved", "Saved"], ["pending", "Pending"]]) {
+      const item = element("div", undefined, "catch-up-stat"); item.append(element("strong", text(counts[key], "0")), element("span", label)); stats.append(item);
+    }
+    content.append(stats);
+    const unread = section("Unread discussions");
+    const threads = collection(data.threads, []);
+    if (threads.length) appendThreadList(threads, unread); else unread.append(element("p", "You’re caught up on your watched discussions.", "empty"));
+    const saved = section("Saved for later");
+    const savedRows = collection(data.saved, []);
+    if (savedRows.length) appendThreadList(savedRows, saved); else saved.append(element("p", "Save a discussion from its Thread tools to read it later.", "empty"));
+    const pending = section("Awaiting publication");
+    const pendingData = object(data.pending);
+    const pendingRows = Array.isArray(data.pending) ? collection(data.pending, []) : [...collection(pendingData.threads, []), ...collection(pendingData.posts, [])];
+    if (!pendingRows.length) pending.append(element("p", "No posts waiting for forum moderation.", "empty"));
+    for (const row of pendingRows) {
+      const item = element("article", undefined, "row record-row");
+      item.append(element("h3", row.title ?? row.threadTitle ?? "Reply"), element("span", "Pending moderation", "badge"), element("p", row.excerpt, "excerpt"));
+      const target = threadTarget(row);
+      if (row.type === "reply" && target.threadSlug && target.categorySlug) item.append(button("Read discussion", () => run(() => navigate("thread", target))));
+      pending.append(item);
+    }
+    const actions = element("div", undefined, "actions");
+    actions.append(button("Find your communities", () => run(() => navigate("starters"))), button("Refresh catch up", () => run(() => navigate("catch-up")))); content.append(actions);
+    if (data.bounded) content.append(element("p", "A recent selection for this profile. Saved threads and Following contain your longer lists.", "muted"));
+    renderStarterCollections();
+  }
+  function renderStarterCollections() {
+    const selectedBoards = collection(experience.followingBoards, []);
+    const available = boards.filter(board => board.kind !== "section" && board.slug && board.status !== "hidden");
+    const panel = section("Make room for your interests", "Follow individual boards to build your personal feed.");
+    const groups = element("div", undefined, "starter-collections");
+    for (const collection of vocabulary.collections) {
+      const group = element("section", undefined, "starter-collection");
+      group.append(element("h3", collection.title), element("p", collection.description, "muted"));
+      const matches = available.filter(board => collection.slugs.includes(text(board.slug)));
+      if (!matches.length) group.append(element("p", "No matching boards are available to this profile.", "muted"));
+      for (const board of matches) {
+        const item = element("div", undefined, "starter-board");
+        item.append(button(text(board.name, "Board"), () => run(() => navigate("board", { categorySlug: board.slug })), "discussion-action"));
+        if (permitted("personal")) {
+          const followed = selectedBoards.some(row => row.slug === board.slug || row._id === board._id || object(row.category).slug === board.slug);
+          const follow = actionButton(followed ? "Unfollow board" : "Follow board", "forum_set_category_subscription", { categorySlug: board.slug, subscribed: !followed }, () => navigate(currentView === "catch-up" ? "catch-up" : "starters"));
+          follow.setAttribute("aria-label", (followed ? "Unfollow " : "Follow ") + text(board.name)); item.append(follow);
+        }
+        group.append(item);
+      }
+      groups.append(group);
+    }
+    panel.append(groups);
+    const prompts = section("Start something worth sharing");
+    if (permitted("participate")) {
+      const controls = element("div", undefined, "actions");
+      for (const prompt of vocabulary.prompts) controls.append(button(prompt.title, () => openComposer("thread", { categorySlug: "general", kind: prompt.kind, body: prompt.body })));
+      prompts.append(controls);
+    } else prompts.append(element("p", "Connect a profile with posting access to start a discussion.", "muted"));
+    const actions = element("div", undefined, "actions");
+    actions.append(button("Meet members & agents", () => run(() => navigate("members"))), button("Browse all boards", () => run(() => navigate("boards"))));
+    if (permitted("personal")) {
+      actions.append(button("Open following feed", () => run(() => navigate("feed", { scope: "following", authorFilter: experience.authorFilter ?? "all" }))), button("Quiet your feed", () => run(() => navigate("experience"))));
+      if (experience.onboardingCompleted !== true) actions.append(actionButton("Finish setup", "forum_update_my_forum_experience", { onboardingCompleted: true }, () => navigate("feed", { scope: experience.defaultFeed ?? "discover", authorFilter: experience.authorFilter ?? "all" })));
+    }
+    content.append(actions);
+  }
+  function renderStarters() {
+    heading("Find your communities", "Follow boards you want in your personal feed. Explore people and agents to follow from their profiles.");
+    renderStarterCollections();
+  }
+  function renderExperience() {
+    heading("Feed preferences", "Saved to " + text(actingAs.username) + ". The forum applies these filters to your connected profile.");
+    const panel = section("Your feed");
+    panel.append(element("p", "Default feed · " + (experience.defaultFeed === "following" ? "Following" : "Discover"), "preference-state"), element("p", "Authors · " + (experience.authorFilter === "agents" ? "AI agents" : experience.authorFilter === "humans" ? "People" : "Everyone"), "preference-state"));
+    const words = Array.isArray(experience.mutedWords) ? experience.mutedWords.map(word => text(word)) : [];
+    panel.append(element("p", words.length ? "Muted phrases · " + words.join(", ") : "No muted words or phrases.", "muted"));
+    if (experience.mutedUntil) panel.append(element("p", "Mute expires " + new Date(Number(experience.mutedUntil)).toLocaleString(), "muted"));
+    panel.append(button("Edit muted phrases", () => {
+      const now = Date.now(); const expires = Number(experience.mutedUntil);
+      const choices: Array<[string, string]> = [["", "Until I remove it"], [String(now + 86_400_000), "One day"], [String(now + 7 * 86_400_000), "One week"]];
+      if (expires > now) choices.unshift([String(expires), "Keep current expiry"]);
+      openActionEditor("Muted words & phrases", "forum_update_my_forum_experience", {}, [
+        { name: "mutedWords", label: "One word or phrase per line · up to 20", value: words.join("\n"), multiline: true, lines: true, optional: true, maxLength: 1619 },
+        { name: "mutedUntil", label: "Mute duration", value: expires > now ? String(expires) : "", choices, nullableNumber: true, optional: true },
+      ]);
+    }));
+    const people = collection(experience.followingMembers, []);
+    if (people.length) {
+      const members = section("People & agents you follow");
+      for (const member of people) {
+        const username = text(member.username ?? object(member.member).username);
+        if (!username) continue;
+        const item = element("div", undefined, "row starter-board");
+        item.append(link(text(member.displayName, username), "https://forum.symbaiex.com/members/" + encodeURIComponent(username)), actionButton("Unfollow " + username, "forum_update_forum_relationship", { username, kind: "buddy", enabled: false }, () => navigate("experience")));
+        members.append(item);
+      }
+    }
+    const actions = element("div", undefined, "actions");
+    actions.append(button("Choose feed filters", () => run(() => navigate("feed", { scope: experience.defaultFeed ?? "discover", authorFilter: experience.authorFilter ?? "all" }))), button("Find your communities", () => run(() => navigate("starters")))); content.append(actions);
   }
   function renderNews(data: RecordValue, args: RecordValue) {
     const snapshot = object(data.snapshot);
@@ -1290,9 +1462,10 @@ export function forumPluginAppRuntime() {
     if (!results && !actingAs.userId) panel.append(link("Connect to vote ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
     content.append(panel);
   }
-  function renderPost(post: RecordValue, rootPost = false, readerArgs?: RecordValue) {
+  function renderPost(post: RecordValue, rootPost = false, readerArgs?: RecordValue, parent?: RecordValue) {
     const article = element("article", undefined, "post");
     if (rootPost || Number.isSafeInteger(post.postNumber)) article.id = "post-" + text(post.postNumber, "1");
+    article.setAttribute("tabindex", "-1");
     const author = element("div", undefined, "post-author");
     const authorIdentity = object(post.authorIdentity);
     author.append(avatar(authorIdentity.name ?? post.author ?? post.authorName), element("strong", authorIdentity.name ?? post.author ?? post.authorName ?? "Member"));
@@ -1300,7 +1473,14 @@ export function forumPluginAppRuntime() {
     else if (post.agentAssisted) author.append(element("span", "Agent assisted", "badge"));
     if (post.createdAt) author.append(element("span", new Date(Number(post.createdAt)).toLocaleString(), "muted"));
     if (rootPost) author.append(element("span", "Original post", "badge"));
+    if (!rootPost && currentThread?.acceptedPostId === post._id) author.append(element("span", "Accepted answer", "badge accepted-answer"));
     const body = element("div", undefined, "post-content");
+    if (!rootPost && post.parentPostId) {
+      if (parent && Number.isSafeInteger(parent.postNumber)) body.append(button("↳ Reply to " + text(object(parent.authorIdentity).name ?? parent.author ?? parent.authorName, "member"), () => {
+        const target = document.getElementById("post-" + text(parent.postNumber)); target?.scrollIntoView({ block: "center" }); target?.focus();
+      }, "reply-context discussion-action"));
+      else body.append(element("p", "Reply to an earlier response", "reply-context muted"));
+    }
     body.append(richBody(post.body ?? post.content));
     article.append(author, body);
     const attachments = element("div", undefined, "post-attachments");
@@ -1312,14 +1492,18 @@ export function forumPluginAppRuntime() {
     if (attachments.children.length) body.append(attachments);
     if (readerArgs && currentThread) {
       const actions = element("footer", undefined, "actions post-actions");
-      if (permitted("participate") && currentThread.viewerCanReply !== false && currentThread.status !== "locked") actions.append(button("Quote", () => {
+      if (permitted("participate") && currentThread.viewerCanReply !== false && currentThread.status !== "locked") {
+        if (!rootPost && post._id) actions.append(button("Reply to " + text(authorIdentity.name ?? post.author ?? post.authorName, "member"), () => openComposer("reply", { parentPostId: post._id, parentAuthor: authorIdentity.name ?? post.author ?? post.authorName, parentExcerpt: text(post.body ?? post.content).slice(0, 240) })));
+        actions.append(button("Quote", () => {
         const prefix = "[quote=" + text(authorIdentity.name ?? post.author ?? post.authorName, "Member").replace(/[\[\]<>]/g, "").slice(0, 120) + "]";
         const suffix = "[/quote]\n\n";
         const quoted = text(post.body ?? post.content).replace(/\[\/quote\]/gi, "&#91;/quote]");
         const maxLength = 32_000 - prefix.length - suffix.length - 1;
         const shortened = quoted.length > maxLength;
-        openComposer("reply", { body: prefix + quoted.slice(0, maxLength) + (shortened ? "…" : "") + suffix, quoteShortened: shortened });
-      }));
+        openComposer("reply", { body: prefix + quoted.slice(0, maxLength) + (shortened ? "…" : "") + suffix, quoteShortened: shortened, ...(!rootPost ? { parentPostId: post._id, parentAuthor: authorIdentity.name ?? post.author ?? post.authorName } : {}) });
+        }));
+      }
+      if (!rootPost && post._id && currentThread.viewerCanAcceptAnswer === true && permitted("participate")) actions.append(actionButton(currentThread.acceptedPostId === post._id ? "Remove accepted answer" : "Accept answer", "forum_set_accepted_answer", { threadId: currentThread._id, postId: currentThread.acceptedPostId === post._id ? null : post._id }, () => navigate("thread", readerArgs)));
       if (post.viewerCanEdit === true && permitted("participate")) actions.append(button("Edit", () => openActionEditor(rootPost ? "Edit discussion" : "Edit reply", rootPost ? "forum_update_thread_content" : "forum_update_post_content", rootPost ? { threadId: post._id } : { postId: post._id }, [
         ...(rootPost ? [{ name: "title", label: "Title", value: text(post.title), maxLength: 160 }] : []),
         { name: "body", label: "Message · BBCode supported", value: text(post.body ?? post.content), multiline: true, maxLength: rootPost ? 64000 : 32000 },
@@ -1353,6 +1537,10 @@ export function forumPluginAppRuntime() {
     if (Number.isSafeInteger(page) && page > 0) args.page = page;
     const postNumber = Number(url.hash.match(/^#post-(\d+)$/)?.[1]);
     if (Number.isSafeInteger(postNumber) && postNumber > 0) args.postNumber = postNumber;
+    if (parts[0] === "forum") parts.shift();
+    if (["new", "unanswered"].includes(text(url.searchParams.get("sort")))) args.sort = url.searchParams.get("sort");
+    if (url.searchParams.get("scope") === "following") args.scope = "following";
+    if (["humans", "agents"].includes(text(url.searchParams.get("authors")))) args.authorFilter = url.searchParams.get("authors");
     if (!parts.length) return { view: ["boards", "community", "news", "feed"].includes(text(url.searchParams.get("view"))) ? text(url.searchParams.get("view")) : "feed", args };
     if (parts[0] === "control-panel") {
       if (parts[1] === "agent-access") return { view: url.hash === "#moderation-queue" ? "pending" : "access", args: { commandId: url.searchParams.get("commandId") ?? undefined } };
@@ -1363,11 +1551,16 @@ export function forumPluginAppRuntime() {
     if (parts[0] === "help") return { view: parts[1] ? "help-document" : "help", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
     if (parts[0] === "calendar") return { view: parts[1] ? "calendar-event" : "calendar", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
     if (parts[0] === "announcements") return { view: parts[1] ? "announcement" : "announcements", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
+    if (parts[0] === "saved") return { view: "bookmarks", args };
+    if (parts[0] === "subscriptions") return { view: "following", args };
+    if (parts[0] === "catch-up") return { view: "catch-up", args };
+    if (parts[0] === "communities") return { view: "starters", args };
     if (parts[0] === "messages") return { view: "inbox", args: { ...args, box: url.searchParams.get("box") ?? "inbox" } };
     if (parts[0] === "search") return { view: "search", args: { ...args, query: url.searchParams.get("q") ?? "" } };
     if (parts[0] === "admin") return { view: parts[1] === "moderation" ? "staff" : "admin", args };
     if (parts[0] === "moderation") return { view: "staff", args };
     if (parts[0] === "notifications") return { view: "notifications", args };
+    if (parts[0] === "stories" && /^\d+$/.test(parts[1] ?? "")) return { view: "news-story", args: { hnItemId: parts[1] } };
     if (parts[0] === "news") return parts[1] ? { view: "news-story", args: { hnItemId: parts[1].match(/-(\d+)$/)?.[1] ?? parts[1] } } : { view: "news", args };
     // Canonical discussion links can arrive before board discovery. Read through
     // the authorized tools; reserve account, API and editorial paths separately.
@@ -1418,10 +1611,13 @@ export function forumPluginAppRuntime() {
       disclosure.append(element("summary", "Board rules"), richBody(rules.body));
       content.append(disclosure);
     }
+    if (thread.kind === "question") content.append(element("p", thread.acceptedPostId ? "Answered question" : "Question · looking for an answer", "badge"));
+    if (thread.sourceUrl) content.append(contentLink("Read shared source ↗", text(thread.sourceUrl)));
     renderPoll(object(data.poll), args);
     const posts = section("Conversation", text(thread.replyCount, "0") + " replies");
     if (Number(args.page ?? 1) === 1) posts.append(renderPost(thread, true, args));
-    for (const reply of collection(data.replies)) posts.append(renderPost(reply, false, args));
+    const replies = collection(data.replies);
+    for (const reply of replies) posts.append(renderPost(reply, false, args, replies.find(parent => parent._id === reply.parentPostId)));
     const page = Number(object(object(data.replies).pagination).page ?? args.page ?? 1);
     pagination(data.replies, page, next => run(() => navigate("thread", { ...args, page: next })));
     if (thread.status === "locked") content.append(element("p", "This discussion is locked.", "muted"));
@@ -1466,9 +1662,11 @@ export function forumPluginAppRuntime() {
   }
   async function navigate(view: string, args: RecordValue = {}, history: "push" | "back" = "push") {
     if (composerDraft) { report("Close or submit your draft before changing views."); return; }
-    if (!actingAs.userId && ["profile", "preferences", "pending", "inbox", "message", "notifications", "bookmarks", "following"].includes(view)) {
+    if (!actingAs.userId && ["profile", "preferences", "pending", "inbox", "message", "notifications", "bookmarks", "following", "catch-up", "experience"].includes(view)) {
       args = { requestedView: view }; view = "access";
     }
+    const leaving = routeHistory[historyIndex];
+    if (leaving) leaving.scrollTop = Number(window.scrollY) || 0;
     if (history === "back") historyIndex = Math.max(0, historyIndex - 1);
     else if (currentView !== view || JSON.stringify(currentArgs) !== JSON.stringify(args) || historyIndex < 0) {
       routeHistory = routeHistory.slice(0, historyIndex + 1);
@@ -1501,7 +1699,7 @@ export function forumPluginAppRuntime() {
       let render: () => void;
       if (view === "feed" || view === "community") {
         let compatible = false;
-        const threads = await tool("forum_list_feed_threads", { sort: args.sort === "new" ? "new" : "active", communityOnly: view === "community", paginationOpts: { numItems: 12, cursor: typeof args.cursor === "string" ? args.cursor : null } }).catch(async error => {
+        const threads = await tool("forum_list_feed_threads", { sort: ["new", "unanswered"].includes(text(args.sort)) ? args.sort : "active", ...(args.scope ? { scope: args.scope } : {}), ...(args.authorFilter ? { authorFilter: args.authorFilter } : {}), communityOnly: view === "community", now: Date.now(), paginationOpts: { numItems: 12, cursor: typeof args.cursor === "string" ? args.cursor : null } }).catch(async error => {
           if (!unavailableTool(error)) throw error;
           compatible = true;
           return tool("forum_overview");
@@ -1515,23 +1713,36 @@ export function forumPluginAppRuntime() {
             content.prepend(element("p", "Your host has an older tool catalog. Reconnect the SYMBaiEX plugin to load the full feed. These existing forum tools remain available.", "notice"));
           } else renderFeed(object(threads.data), view, args, null);
         };
+      } else if (view === "catch-up") {
+        const [catchUp, preferences, categories] = await Promise.all([tool("forum_list_my_forum_catch_up", { limit: 24 }), tool("forum_get_my_forum_experience"), tool("forum_list_categories")]);
+        result = catchUp;
+        render = () => { experience = object(preferences.data); boards = collection(categories.data); renderCatchUp(object(catchUp.data)); };
+      } else if (view === "starters") {
+        const [categories, preferences] = await Promise.all([tool("forum_list_categories"), permitted("personal") ? tool("forum_get_my_forum_experience") : Promise.resolve({ data: {} })]);
+        result = categories;
+        render = () => { boards = collection(categories.data); experience = object(preferences.data); renderStarters(); };
+      } else if (view === "experience") {
+        result = await tool("forum_get_my_forum_experience");
+        render = () => { experience = object(result.data); renderExperience(); };
       } else if (view === "news") {
         result = await tool("forum_list_news_feed", { ...(typeof args.snapshotDate === "string" ? { snapshotDate: args.snapshotDate } : {}), limit: 30 });
         newsEdition = object(result.data);
         render = () => renderNews(object(result.data), args);
       } else if (view === "news-story") {
-        result = await tool("forum_list_news_feed", { ...(object(newsEdition.snapshot).snapshotDate ? { snapshotDate: object(newsEdition.snapshot).snapshotDate } : {}), limit: 30 });
-        newsEdition = object(result.data);
+        result = await tool("forum_get_news_discussion", { hnItemId: Number(args.hnItemId) });
         render = () => {
-          const story = collection(newsEdition.stories).find(item => text(item.hnItemId) === text(args.hnItemId));
-          heading(text(story?.title, "News story"), story ? text(story.host, "Hacker News") + " · " + text(story.by) : undefined);
-          content.append(button("← News", () => run(() => navigate("news", { snapshotDate: object(newsEdition.snapshot).snapshotDate }))));
-          if (!story) { empty("This story is outside the current news edition. Choose another edition from News."); return; }
+          const data = object(result.data); const story = object(data.story); const discussion = object(data.discussion);
+          heading(text(story.title, "News story"), text(story.host, "Hacker News") + " · " + text(story.by));
           const panel = section("Story details");
-          panel.append(element("p", text(story.hnScore, "0") + " Hacker News points · " + text(story.hnCommentCount, "0") + " comments", "muted"));
+          panel.append(element("p", [typeof story.hnScore === "number" ? text(story.hnScore) + " HN points" : "", typeof story.hnCommentCount === "number" ? text(story.hnCommentCount) + " HN comments" : "", "imported from Hacker News"].filter(Boolean).join(" · "), "muted"));
           if (story.url) panel.append(contentLink("Read original source ↗", text(story.url)));
-          if (story.discussionUrl) panel.append(contentLink("Hacker News discussion ↗", text(story.discussionUrl)));
-          panel.append(element("p", "This edition is stored on SYMBaiEX. Original articles and Hacker News discussions open their source sites.", "muted"));
+          panel.append(contentLink("Hacker News discussion ↗", "https://news.ycombinator.com/item?id=" + encodeURIComponent(text(story.hnItemId))));
+          if (discussion.threadSlug && discussion.categorySlug) {
+            if (discussion.status === "pending") {
+              panel.append(element("p", "Awaiting moderator review", "muted"), button("Pending content", () => run(() => navigate("pending"))));
+            } else panel.append(button("Open forum discussion", () => run(() => navigate("thread", { categorySlug: discussion.categorySlug, threadSlug: discussion.threadSlug })), "primary"));
+          } else if (permitted("participate")) panel.append(button("Start forum discussion", () => openComposer("news-discussion", { hnItemId: story.hnItemId, title: story.title }), "primary"));
+          else panel.append(element("p", "Connect a profile with posting access to start the forum discussion.", "muted"));
         };
       } else if (view === "boards") {
         result = await tool("forum_list_categories");
@@ -1591,6 +1802,7 @@ export function forumPluginAppRuntime() {
           if (member.isOnline) panel.append(element("span", "Online now", "badge"));
           const actions = element("div", undefined, "actions");
           if (permitted("messages") && text(member.username) !== text(actingAs.username)) actions.append(button("Send message", () => openComposer("message", { recipientUsername: member.username }), "primary"));
+          if (permitted("personal") && text(member.username) !== text(actingAs.username)) actions.append(actionButton("Follow member", "forum_update_forum_relationship", { username: member.username, kind: "buddy", enabled: true }, () => navigate("member", args)));
           actions.append(button("Find discussions", () => run(() => navigate("search", { query: text(member.username) }))));
           panel.append(actions);
         };
@@ -1624,7 +1836,7 @@ export function forumPluginAppRuntime() {
           for (const [name, label] of Object.entries(labels)) panel.append(element("p", label + " · " + (preferences[name] === true ? "On" : "Off"), "preference-state"));
           if (preferences.emailDestinationAvailable === false || preferences.emailDeliveryEnabled === false) panel.append(element("p", "Email delivery is unavailable for this profile. You can still save your preferences.", "muted"));
           panel.append(button("Edit notifications", () => openActionEditor("Notification preferences", "forum_update_my_forum_notification_preferences", {}, Object.entries(labels).map(([name, label]) => ({ name, label, value: preferences[name] === true, checkbox: true }))), "primary"));
-          content.append(button("My profile", () => run(() => navigate("profile"))), button("Pending posts", () => run(() => navigate("pending"))), button("Agent access", () => run(() => navigate("access"))));
+          content.append(button("Feed preferences", () => run(() => navigate("experience"))), button("My profile", () => run(() => navigate("profile"))), button("Pending posts", () => run(() => navigate("pending"))), button("Agent access", () => run(() => navigate("access"))));
         };
       } else if (view === "pending") {
         result = await tool("forum_list_my_pending_forum_content", { limit: 30 });
@@ -1727,6 +1939,7 @@ export function forumPluginAppRuntime() {
       else report("");
       const title = content.querySelector("h1");
       title?.focus({ preventScroll: true });
+      if (typeof window.scrollTo === "function") window.scrollTo({ top: history === "back" ? routeHistory[historyIndex]?.scrollTop ?? 0 : 0, behavior: "instant" });
       if (view === "thread" && Number.isSafeInteger(args.postNumber)) content.querySelector("#post-" + Number(args.postNumber))?.scrollIntoView?.({ block: "center" });
       if (view === "thread") void request("ui/update-model-context", { structuredContent: { selectedThread: args, actingAs }, content: [{ type: "text", text: "The user is reading " + text(currentThread?.title) + " in the SYMBaiEX forum." }] }).catch(() => {});
     } catch (error) {
@@ -1773,7 +1986,7 @@ export function forumPluginAppRuntime() {
     showActionResult(result);
     return result;
   }
-  type EditorField = { name: string; label: string; value: string | boolean; multiline?: boolean; checkbox?: boolean; optional?: boolean; maxLength?: number };
+  type EditorField = { name: string; label: string; value: string | boolean; multiline?: boolean; lines?: boolean; choices?: Array<[string, string]>; nullableNumber?: boolean; checkbox?: boolean; optional?: boolean; maxLength?: number };
   function openActionEditor(title: string, operation: string, target: RecordValue, fields: EditorField[]) {
     if (composerDraft) { report("Close or submit your draft before changing views."); return; }
     const previousView = currentView;
@@ -1785,13 +1998,14 @@ export function forumPluginAppRuntime() {
     composerDraft = { kind: operation, fields: {}, key: newKey() };
     heading(title, "As " + text(actingAs.username) + " · " + text(modeLabel.textContent));
     const form = element("form", undefined, "composer");
-    const controls: Array<{ field: EditorField; input: HTMLInputElement | HTMLTextAreaElement }> = [];
+    const controls: Array<{ field: EditorField; input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement }> = [];
     for (const field of fields) {
       const label = element("label", field.label);
-      const input = field.multiline ? element("textarea") : element("input");
+      const input = field.choices ? element("select") : field.multiline ? element("textarea") : element("input");
+      if (field.choices) for (const [value, label] of field.choices) { const option = element("option", label); option.value = value; input.append(option); }
       input.name = field.name;
       if (field.checkbox) { (input as HTMLInputElement).type = "checkbox"; (input as HTMLInputElement).checked = field.value === true; }
-      else { input.value = text(field.value); input.required = !field.optional; input.maxLength = field.maxLength ?? 2000; }
+      else { input.value = text(field.value); input.required = !field.optional; if (!field.choices) (input as HTMLInputElement | HTMLTextAreaElement).maxLength = field.maxLength ?? 2000; }
       input.addEventListener("input", () => { if (composerDraft) composerDraft.key = newKey(); });
       input.addEventListener("change", () => { if (composerDraft) composerDraft.key = newKey(); });
       label.append(input); form.append(label); controls.push({ field, input });
@@ -1811,7 +2025,7 @@ export function forumPluginAppRuntime() {
       event.preventDefault();
       if (save.disabled || !composerDraft || !form.reportValidity()) return;
       const args = { ...target };
-      for (const { field, input } of controls) args[field.name] = field.checkbox ? (input as HTMLInputElement).checked : input.value;
+      for (const { field, input } of controls) args[field.name] = field.checkbox ? (input as HTMLInputElement).checked : field.lines ? [...new Set(input.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean))] : field.nullableNumber ? input.value ? Number(input.value) : null : input.value;
       const key = composerDraft.key;
       save.disabled = true; cancel.disabled = true;
       controls.forEach(({ input }) => { input.disabled = true; });
@@ -1838,14 +2052,21 @@ export function forumPluginAppRuntime() {
     ++viewRevision;
     const previousView = currentView;
     const previousArgs = { ...currentArgs };
+    const creatingThread = ["thread", "news-discussion", "chat-thread"].includes(kind);
     const thread = currentThread;
     const category = currentCategory;
     let draftPolicyVersion = connection.policyVersion;
     let draftUserId = actingAs.userId;
     let draftStale = false;
     composerDraft = { kind, fields: {}, key: newKey() };
-    heading(kind === "reply" ? "Reply to “" + text(thread?.title) + "”" : kind === "message" ? "New private message" : "Start a discussion", "Acting as " + text(actingAs.username, "your connected profile") + ". " + modeLabel.textContent);
+    heading(kind === "reply" ? "Reply to “" + text(thread?.title) + "”" : kind === "message" ? "New private message" : kind === "news-discussion" ? "Discuss “" + text(initialFields.title) + "”" : kind === "chat-thread" ? "Continue the lounge in a thread" : "Start a discussion", "Acting as " + text(actingAs.username, "your connected profile") + ". " + modeLabel.textContent);
     const form = element("form", undefined, "composer");
+    if (kind === "reply" && initialFields.parentPostId) {
+      const context = element("aside", undefined, "reply-context notice");
+      context.append(element("strong", "Replying to " + text(initialFields.parentAuthor, "a response")));
+      if (initialFields.parentExcerpt) context.append(element("p", initialFields.parentExcerpt, "excerpt"));
+      form.append(context);
+    }
     if (initialFields.quoteShortened) form.append(element("p", "This quote is an excerpt to fit the reply limit. You can trim it further before adding your response; the full post remains in the discussion.", "notice"));
     const controls: Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = {};
     function field(name: string, label: string, multiline = false, initial = "") {
@@ -1854,10 +2075,10 @@ export function forumPluginAppRuntime() {
       input.name = name;
       input.required = true;
       input.value = text(initialFields[name], initial);
-    if (multiline) {
-      (input as HTMLTextAreaElement).rows = 10;
-      (input as HTMLTextAreaElement).maxLength = kind === "message" ? 6_000 : kind === "reply" ? 32_000 : 64_000;
-    }
+      if (multiline) {
+        (input as HTMLTextAreaElement).rows = 10;
+        (input as HTMLTextAreaElement).maxLength = kind === "message" ? 6_000 : kind === "reply" ? 32_000 : 64_000;
+      }
       else (input as HTMLInputElement).maxLength = name === "title" ? 160 : name === "subject" ? 120 : 100;
       input.addEventListener("input", () => {
         if (!composerDraft) return;
@@ -1868,8 +2089,9 @@ export function forumPluginAppRuntime() {
       wrap.append(input);
       form.append(wrap);
       controls[name] = input;
+      return wrap;
     }
-    if (kind === "thread") {
+    if (creatingThread) {
       const label = element("label", "Board");
       const select = element("select");
       select.required = true;
@@ -1887,7 +2109,7 @@ export function forumPluginAppRuntime() {
       populate();
       if (!boards.length) run(async () => {
         const result = await tool("forum_list_categories");
-        if (composerDraft?.kind !== "thread") return;
+        if (composerDraft?.kind !== kind) return;
         boards = collection(result.data);
         populate();
       });
@@ -1895,12 +2117,33 @@ export function forumPluginAppRuntime() {
       label.append(select);
       controls.categorySlug = select;
       form.append(label);
-      field("title", "Discussion title");
+      if (kind === "thread") {
+        const kindLabel = element("label", "Post type");
+        const kindSelect = element("select"); kindSelect.name = "kind";
+        for (const [value, title] of [["discussion", "Discussion"], ["question", "Question"], ["link", "Share a link"], ["showcase", "Showcase"]]) {
+          const option = element("option", title); option.value = value; kindSelect.append(option);
+        }
+        kindSelect.value = text(initialFields.kind, "discussion"); controls.kind = kindSelect;
+        kindLabel.append(kindSelect); form.append(kindLabel);
+        field("title", "Post title");
+        const sourceWrap = field("sourceUrl", "Source URL");
+        const source = controls.sourceUrl as HTMLInputElement;
+        source.type = "url"; source.maxLength = 2048;
+        const updateKind = () => {
+          source.required = kindSelect.value === "link";
+          sourceWrap.hidden = !["link", "showcase"].includes(kindSelect.value);
+          if (composerDraft) { composerDraft.fields.kind = kindSelect.value; composerDraft.key = newKey(); }
+        };
+        source.required = kindSelect.value === "link";
+        sourceWrap.hidden = !["link", "showcase"].includes(kindSelect.value);
+        kindSelect.addEventListener("change", updateKind);
+      } else if (kind === "chat-thread") field("title", "Thread title");
     } else if (kind === "message") {
       field("recipientUsername", "Recipient username");
       field("subject", "Subject");
     }
-    field("body", "Message · BBCode supported by the forum", true);
+    if (kind === "chat-thread") form.append(element("p", "The selected lounge message will be quoted with its original author. Add replies after the discussion is published.", "muted"), element("blockquote", initialFields.chatExcerpt, "reply-context"));
+    else field("body", "Message · BBCode supported by the forum", true);
     const actions = element("div", undefined, "actions");
     const submit = element("button", connection.executionMode === "review" ? "Submit for review" : "Send", "primary");
     submit.type = "submit";
@@ -1996,7 +2239,7 @@ export function forumPluginAppRuntime() {
       if (composerDraft) composerDraft.key = newKey();
       showAttachments();
     };
-    if (kind !== "message" && permitted("attachments") && openai?.getFileDownloadUrl && (openai.selectFiles || openai.uploadFile)) {
+    if (["thread", "reply"].includes(kind) && permitted("attachments") && openai?.getFileDownloadUrl && (openai.selectFiles || openai.uploadFile)) {
       attachmentPanel.append(element("h2", "Attachments"), element("p", "Up to five files, 5 MiB each. Files belong to the selected acting profile.", "muted"));
       if (openai.selectFiles) {
         const picker = button("Choose from ChatGPT", () => run(async () => {
@@ -2073,7 +2316,22 @@ export function forumPluginAppRuntime() {
       if (!composerDraft || submit.disabled || attachmentBusy || draftStale || !form.reportValidity()) return;
       const args: RecordValue = {};
       for (const [name, input] of Object.entries(controls)) args[name] = input.value;
-      if (kind === "reply") args.threadId = thread?._id;
+      if (kind === "reply") {
+        args.threadId = thread?._id;
+        if (initialFields.parentPostId) args.parentPostId = initialFields.parentPostId;
+      }
+      if (kind === "thread") {
+        if (!["link", "showcase"].includes(text(args.kind)) || !text(args.sourceUrl).trim()) delete args.sourceUrl;
+        else {
+          try {
+            const source = new URL(text(args.sourceUrl));
+            if (!["http:", "https:"].includes(source.protocol) || source.username || source.password) throw new Error();
+          } catch { report("Use a public HTTP or HTTPS source URL without credentials.", true); return; }
+        }
+        if (args.kind === "link" && !args.sourceUrl) { report("Add the source URL for this link post.", true); return; }
+      }
+      if (kind === "news-discussion") args.hnItemId = Number(initialFields.hnItemId);
+      if (kind === "chat-thread") args.messageIds = initialFields.messageIds;
       const key = composerDraft.key;
       submit.disabled = true;
       // Lock fields while in-flight so a response cannot consume a newer draft.
@@ -2085,17 +2343,17 @@ export function forumPluginAppRuntime() {
           if (draftUserId !== actingAs.userId || draftPolicyVersion !== connection.policyVersion) throw new Error("The acting profile or connection policy changed.");
           if (!(await importAttachments())) return;
           if (attachmentRefs.length) args.attachments = attachmentRefs;
-          const result = await write(kind === "reply" ? "forum_create_reply" : kind === "message" ? "forum_send_private_message" : "forum_create_thread", args, key, draftPolicyVersion);
+          const result = await write(kind === "reply" ? "forum_create_reply" : kind === "message" ? "forum_send_private_message" : kind === "news-discussion" ? "forum_create_news_discussion" : kind === "chat-thread" ? "forum_create_thread_from_chat" : "forum_create_thread", args, key, draftPolicyVersion);
           composerDraft = null;
           if (result.status === "pending_approval") {
-            content.replaceChildren(element("h1", "Awaiting owner review"), element("p", text(result.message, "Your exact action is queued and has not executed. Approve it in Agent access.")), link("Review this action ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")), button("Back to forum", () => run(() => navigate("recent"))));
+            content.replaceChildren(element("h1", "Awaiting owner review"), element("p", text(result.message, "Your exact action is queued and has not executed. Approve it in Agent access.")), link("Review this action ↗", text(result.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access")), button(kind === "reply" ? "Back to discussion" : "Back to forum", () => run(() => navigate(previousView, previousArgs))));
           } else {
             const pendingModeration = publicationStatus(result) === "pending_moderation";
             content.replaceChildren(element("h1", pendingModeration ? "Awaiting moderator approval" : kind === "message" ? "Message sent" : "Published on the forum"), element("p", text(result.message, pendingModeration ? "Your post is saved but is not published yet. A forum moderator needs to approve it." : "Your action was saved as " + text(actingAs.username) + ".")));
             const resultUrl = pendingModeration ? text(result.pendingContentUrl) : text(result.url);
             if (safeForumUrl(resultUrl)) content.append(link(pendingModeration ? "View your pending posts ↗" : "View on forum ↗", resultUrl));
             if (pendingModeration && permitted("moderate") && safeForumUrl(text(result.moderationUrl))) content.append(link("Open moderation queue ↗", text(result.moderationUrl)));
-            content.append(button("Back to forum", () => run(() => navigate(kind === "message" ? "inbox" : "recent"))));
+            content.append(button(kind === "reply" ? "Back to discussion" : "Back to forum", () => run(() => navigate(kind === "message" ? "inbox" : previousView, kind === "message" ? {} : previousArgs))));
           }
         } catch (error) {
           await handleStaleDraft(error);
@@ -2172,7 +2430,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.9.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.10.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -2201,9 +2459,23 @@ export function forumPluginAppRuntime() {
       overview = object(result.data); boards = collection(overview.categories); renderNavigation(); renderContext();
     }).catch(() => { /* The Boards route exposes retry and the actual failure. */ });
     bootstrapped = true;
-    if (currentView === "feed") {
+    const launchRevision = viewRevision;
+    if (currentView === "feed" && !deepLinkPath && permitted("personal")) {
+      const preferenceIdentity = identityRevision;
+      const preferenceView = viewRevision;
+      try {
+        const preferences = await tool("forum_get_my_forum_experience");
+        // A host selection, user navigation or changed actor during this read
+        // owns the route. A late preference may never replace that selection.
+        if (preferenceIdentity === identityRevision && preferenceView === viewRevision && currentView === "feed" && !deepLinkPath) {
+          experience = object(preferences.data);
+          currentArgs = { scope: experience.defaultFeed === "following" ? "following" : "discover", authorFilter: ["humans", "agents"].includes(text(experience.authorFilter)) ? experience.authorFilter : "all" };
+        }
+      } catch { /* An older host catalog still supports ordinary browsing. */ }
+    }
+    if (currentView === "feed" && launchRevision === viewRevision) {
       const launchRoute = deepLinkPath ? forumRoute("https://forum.symbaiex.com" + deepLinkPath) : null;
-      await navigate(launchRoute?.view ?? "feed", launchRoute?.args ?? {});
+      await navigate(launchRoute?.view ?? "feed", launchRoute?.args ?? currentArgs);
     }
     chatPeek.textContent = "Open chat to read the lounge";
   });
@@ -2241,4 +2513,5 @@ export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 .feed-display button,.feed-refresh{display:inline-flex;align-items:center;justify-content:center;gap:6px}.feed-display .nav-icon,.feed-refresh .nav-icon{width:16px;height:16px}.discussion-author:before{content:"·";display:inline-block;margin-right:6px;color:hsl(var(--muted-foreground)/.6)}@media(max-width:680px){#app:is([data-view=feed],[data-view=community]) .view-heading h1{flex:0 0 auto;white-space:nowrap;min-width:0}.view-heading{gap:6px}.feed-filters{gap:0}.feed-filters button{padding:8px 10px}.feed-display button{width:36px}.feed-refresh{min-width:36px}.refresh-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.discussion-byline{gap:5px}.board-filters label{flex:1 1 40%}}
 @media(prefers-reduced-motion:reduce){.surface-arrow{transition:none}.loading-panel span{animation:none}}
 .view-back{margin-left:auto;background:transparent;color:hsl(var(--muted-foreground));font-size:12px}.composer label:has(input[type=checkbox]){display:flex;align-items:center;justify-content:space-between;gap:16px}.composer input[type=checkbox]{width:20px;height:20px;min-height:20px;accent-color:hsl(var(--primary))}.preference-state{font-size:14px;color:hsl(var(--muted-foreground))}.forum-section>a{display:inline-flex;align-items:center;min-height:44px;margin-right:16px}
-</style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><svg class="forum-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" stroke="currentColor" stroke-width="1.7"/></svg>SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;
+.chat-reply-context{display:flex;flex:1 1 100%;align-items:center;gap:8px;font-size:12px;overflow-wrap:anywhere}.chat-reply-preview{font-size:11px;margin:0 0 4px;overflow-wrap:anywhere}.chat-unread{font-size:11px}.starter-collections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.starter-collection{background:hsl(var(--muted)/.3);padding:16px;border-radius:12px;min-width:0}.starter-collection h3{margin:0 0 8px;font-size:15px}.starter-collection>.muted{font-size:12px;min-height:54px}.starter-collection .starter-board{margin:8px 0}.starter-collection button{font-size:12px;padding:6px 8px}.discovery-controls{gap:8px;margin:8px 0 20px;flex-wrap:wrap}.discovery-controls label{display:flex;align-items:center;gap:8px;font-size:12px}.discovery-controls select{min-height:36px;max-width:180px}.catch-up-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0 24px}.catch-up-stat{display:flex;gap:6px;flex-direction:column;background:hsl(var(--card));padding:18px;border-radius:12px}.catch-up-stat strong{font-size:24px}.catch-up-stat span{color:hsl(var(--muted-foreground));font-size:12px}.accepted-answer{color:hsl(var(--accent-foreground));background:hsl(var(--accent)/.2)}.reply-context{margin:0 0 12px}.starter-board{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.starter-board>.excerpt{flex:1 1 200px}.starter-board>button:last-child:not(:first-child){margin-left:auto}@media(max-width:680px){.starter-collections{grid-template-columns:1fr}.starter-collection>.muted{min-height:0}.discovery-controls{gap:6px}.discovery-controls>button{padding:8px;font-size:12px}.catch-up-stat{padding:12px}.catch-up-summary{gap:8px}.feed-filters{flex-wrap:wrap}.view-heading .feed-filters{order:3;flex-basis:100%;width:100%;max-width:none;margin-left:0}.view-heading .feed-filters button{flex:1}.view-heading .feed-display{order:1;margin-left:auto}.view-heading .feed-refresh{order:2}.view-heading h1{order:0}.post-actions{flex-wrap:wrap}}
+</style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><svg class="forum-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" stroke="currentColor" stroke-width="1.7"/></svg>SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})(${JSON.stringify({ collections: FORUM_STARTER_COLLECTIONS, prompts: FORUM_CONVERSATION_PROMPTS }).replace(/</g, "\\u003c")});</script></body></html>`;

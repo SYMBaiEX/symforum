@@ -71,6 +71,7 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
   const timerDurations = new Map<number, number>();
   let nextTimer = 0;
   let uuid = 0;
+  const scrolls: number[] = [];
   const parent = { postMessage(message: Message) { sent.push(message); } };
   const documentElement = new Node("html");
   const searchMediaListeners = new Set<() => void>();
@@ -86,6 +87,8 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     removeEventListener(_name: string, callback: () => void) { navigationMediaListeners.delete(callback); },
   };
   const window = {
+    scrollY: 0,
+    scrollTo(position: { top: number }) { window.scrollY = position.top; scrolls.push(position.top); },
     ...(initialWidth === undefined ? {} : { matchMedia(query: string) { return query.includes("max-width") ? searchMedia : navigationMedia; } }),
     parent,
     openai,
@@ -121,6 +124,8 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     await flush();
     reply(latest("tools/call"), { structuredContent: { actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, capabilities: ["read", "participate", "personal", "messages", "attachments"], executionMode: "review", policyVersion: 1, usagePolicy: { scope: "forum", monthlyLimit: null, readRequestsPerMinute: 600, writeRequestsPerMinute: 120, ownerScoped: true } } });
     await flush();
+    const experienceCall = sent.find(request => request.params?.name === "forum_get_my_forum_experience");
+    if (experienceCall) { reply(experienceCall, { structuredContent: { data: { defaultFeed: "discover", authorFilter: "all", mutedWords: [], followingBoards: [], followingMembers: [] } } }); await flush(); }
     for (const call of sent.filter(request => request.method === "tools/call" && ["forum_overview", "forum_list_categories", "forum_list_feed_threads", "forum_list_news_feed", "forum_list_chat_messages"].includes(String(request.params?.name)))) {
       reply(call, { structuredContent: { status: "completed", actingAs: { userId: "research-agent", username: "Research agent", isAgent: true }, data: call.params?.name === "forum_list_categories" ? [] : { page: [], pending: [], viewer: { canSend: true }, isDone: true, continueCursor: "" } } });
     }
@@ -140,10 +145,225 @@ function appHarness(openai?: Record<string, unknown>, initialWidth?: number) {
     const choice = nodes.get("post-choices")!.find("General") ?? nodes.get("post-choices")!.querySelector("button");
     choice?.fire("click");
   };
-  return { beginPostDraft, sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
+  return { setScroll(top: number) { window.scrollY = top; }, scrolls, beginPostDraft, sent, nodes, documentElement, listeners, documentListeners, documentEvent(name: string, target: Node | null, key?: string) { documentListeners.get(name)?.({ target, key, preventDefault() {} }); }, timers, timerDurations, message, reply, latest, flush, connect, searchMediaListeners, navigationMediaListeners, setSearchWidth(width: number) { searchMedia.matches = width <= 680; navigationMedia.matches = width >= 1000; for (const callback of searchMediaListeners) callback(); for (const callback of navigationMediaListeners) callback(); }, get activeElement() { return activeElement; } };
 }
 
 describe("forum MCP App resource", () => {
+  test("news discussion stays inside the sidecar and starts an exact reviewed local action", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("News")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { stories: [{ hnItemId: 123, title: "A useful story", host: "example.com" }] } } }); await app.flush();
+    app.nodes.get("content")!.find("Discuss on SYMBaiEX")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_news_discussion", arguments: { hnItemId: 123 } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { story: { hnItemId: 123, title: "A useful story", url: "https://example.com/story" }, discussion: null } } }); await app.flush();
+    app.nodes.get("content")!.find("Start forum discussion")!.fire("click");
+    const categories = app.latest("tools/call");
+    expect(categories.params?.name).toBe("forum_list_categories");
+    app.reply(categories, { structuredContent: { data: [{ name: "General", slug: "general", viewerCanCreateThread: true }] } }); await app.flush();
+    const form = app.nodes.get("content")!.querySelector("form")!; form.byName("categorySlug")!.value = "general";
+    form.byName("body")!.value = "Here is why it matters"; form.byName("body")!.fire("input"); form.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_create_news_discussion");
+    expect(command.params?.arguments).toMatchObject({ hnItemId: 123, categorySlug: "general", body: "Here is why it matters" });
+    expect(command.params?.arguments).not.toHaveProperty("title");
+    expect(validateForumPluginArguments(findForumPluginTool("forum_create_news_discussion")!, command.params?.arguments)).toBeNull();
+    app.reply(command, { structuredContent: { status: "pending_approval", commandId: "news-proposal" } }); await app.flush();
+    expect(app.nodes.get("content")!.textContent).toContain("Awaiting owner review");
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("an existing news discussion opens its exact forum route without creating another", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { "openai/deepLink": { url: "/news/story-123" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { story: { hnItemId: 123, title: "Story" }, discussion: { categorySlug: "general", threadSlug: "story", status: "active" } } } }); await app.flush();
+    app.nodes.get("content")!.find("Open forum discussion")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_thread", arguments: { categorySlug: "general", threadSlug: "story", page: 1, pageSize: 20 } });
+    expect(app.sent.some(call => call.params?.name === "forum_create_news_discussion" || call.method === "ui/open-link")).toBe(false);
+  });
+
+  test("lounge replies and mentions preserve parent attribution and reviewed read markers stay uncommitted", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("chat-latest")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "message", status: "active", body: "Thoughts?", authorIdentity: { username: "suki", isAgent: true }, replyTo: { _id: "older", body: "An earlier thought" } }], viewer: { canRead: true, canSend: true }, unreadCount: 3, mentionCount: 1, unreadLimited: true, isDone: true } } }); await app.flush();
+    const rows = app.nodes.get("chat-messages")!;
+    expect(rows.textContent).toContain("An earlier thought");
+    rows.find("Reply")!.fire("click"); rows.find("Mention")!.fire("click");
+    expect(app.nodes.get("chat-form")!.textContent).toContain("Replying to suki");
+    expect(app.nodes.get("chat-body")!.value).toBe("@suki ");
+    app.nodes.get("chat-body")!.value += "Thanks"; app.nodes.get("chat-body")!.fire("input"); app.nodes.get("chat-form")!.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_send_chat_message"); expect(command.params?.arguments).toMatchObject({ body: "@suki Thanks", replyToId: "message" });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_send_chat_message")!, command.params?.arguments)).toBeNull();
+    app.reply(command, { structuredContent: { status: "pending_approval" } }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "message", status: "active", body: "Thoughts?", authorIdentity: { username: "suki" } }], viewer: { canRead: true, canSend: true }, unreadCount: 3, mentionCount: 1, isDone: true } } }); await app.flush();
+    expect(app.nodes.get("chat-notice")!.textContent).toContain("Queued for owner review; not sent yet");
+    const read = app.nodes.get("chat-panel")!.find("Mark lounge read")!; read.fire("click"); await app.flush();
+    expect(app.latest("tools/call").params?.name).toBe("forum_mark_chat_read"); expect(app.latest("tools/call").params?.arguments).toMatchObject({ messageId: "message" });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "pending_approval" } }); await app.flush();
+    expect(app.nodes.get("chat-panel")!.textContent).toContain("3 unread"); expect(read.textContent).toBe("Awaiting review");
+  });
+
+  test("published lounge messages promote to an attributed thread using only selected message IDs", async () => {
+    const app = appHarness(); await app.connect();
+    app.nodes.get("chat-latest")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "message", status: "active", body: "A useful idea", authorIdentity: { username: "suki" } }], pending: [{ _id: "unpublished", status: "pending", body: "Unpublished idea" }], viewer: { canRead: true, canSend: true }, isDone: true } } }); await app.flush();
+    const rows = app.nodes.get("chat-messages")!; rows.find("Start thread")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: [{ name: "General", slug: "general", viewerCanCreateThread: true }] } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("suki: A useful idea");
+    const form = content.querySelector("form")!; form.byName("categorySlug")!.value = "general"; form.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_create_thread_from_chat");
+    expect(command.params?.arguments).toMatchObject({ categorySlug: "general", title: "A useful idea", messageIds: ["message"] });
+    expect(command.params?.arguments).not.toHaveProperty("body"); expect(command.params?.arguments).not.toHaveProperty("attachments");
+    expect(validateForumPluginArguments(findForumPluginTool("forum_create_thread_from_chat")!, command.params?.arguments)).toBeNull();
+  });
+
+  test("shared conversation starters seed the exact question draft without submitting", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Find your communities")!.fire("click");
+    for (const call of app.sent.filter(call => call.method === "tools/call").slice(-2)) app.reply(call, { structuredContent: { data: call.params?.name === "forum_list_categories" ? [{ _id: "general", name: "General", slug: "general", viewerCanCreateThread: true }] : { followingBoards: [], onboardingCompleted: true } } });
+    await app.flush(); app.nodes.get("content")!.find("Ask for help")!.fire("click");
+    const form = app.nodes.get("content")!.querySelector("form")!;
+    expect(form.byName("kind")!.value).toBe("question"); expect(form.byName("categorySlug")!.value).toBe("general");
+    expect(form.byName("body")!.value).toBe("What I'm trying to do:\n\nWhat I've tried:\n\nWhere I'm stuck:\n");
+    expect(app.sent.some(call => call.params?.name === "forum_create_thread")).toBe(false);
+    app.nodes.get("content")!.find("Close draft")!.fire("click");
+    expect(app.nodes.get("content")!.find("Discard draft")).toBeDefined();
+  });
+
+  test("personal launch reads saved feed defaults without overwriting navigation during the read", async () => {
+    const app = appHarness();
+    app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: {} }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { actingAs: { userId: "owner", username: "Owner" }, data: { capabilities: ["read", "personal"], executionMode: "direct", policyVersion: 1 } } }); await app.flush();
+    const preferences = app.latest("tools/call");
+    expect(preferences.params?.name).toBe("forum_get_my_forum_experience");
+    app.nodes.get("navigation")!.find("Boards")!.fire("click");
+    const boards = app.latest("tools/call");
+    app.reply(boards, { structuredContent: { data: [{ name: "General", slug: "general" }] } }); await app.flush();
+    app.reply(preferences, { structuredContent: { data: { defaultFeed: "following", authorFilter: "humans" } } }); await app.flush();
+    expect(app.nodes.get("app")!.dataset.view).toBe("boards");
+    expect(app.latest("tools/call")).toBe(boards);
+    expect(app.sent.some(call => call.params?.name === "forum_list_feed_threads")).toBe(false);
+  });
+
+  test("personal feed defaults select following and AI agents at launch", async () => {
+    const app = appHarness();
+    app.reply(app.latest("ui/initialize"), { protocolVersion: "2026-01-26", hostContext: {} }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { actingAs: { userId: "owner" }, data: { capabilities: ["read", "personal"], policyVersion: 1 } } }); await app.flush();
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { defaultFeed: "following", authorFilter: "agents" } } }); await app.flush();
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_list_feed_threads", arguments: { sort: "active", scope: "following", authorFilter: "agents", communityOnly: false, now: expect.any(Number), paginationOpts: { numItems: 12, cursor: null } } });
+  });
+
+  test("feed selection survives sort, pagination, refresh and Back while switching filters drops old rows", async () => {
+    const app = appHarness(); await app.connect(false);
+    const content = app.nodes.get("content")!;
+    content.find("Unanswered")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    content.byName("authorFilter")!.value = "humans"; content.byName("authorFilter")!.fire("change");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    content.find("Following feed")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ sort: "unanswered", scope: "following", authorFilter: "humans" });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "one", title: "Followed question", kind: "question", categorySlug: "general", slug: "question" }], isDone: false, continueCursor: "following-cursor" } } }); await app.flush();
+    content.find("Load more discussions")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ sort: "unanswered", scope: "following", authorFilter: "humans", paginationOpts: { cursor: "following-cursor" } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ _id: "two", title: "Another question", kind: "question", categorySlug: "general", slug: "another" }], isDone: true } } }); await app.flush();
+    app.setScroll(640);
+    content.find("Another question")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "two", title: "Another question" }, replies: [] } } }); await app.flush();
+    content.find("← Back")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ scope: "following", authorFilter: "humans", sort: "unanswered", paginationOpts: { cursor: "following-cursor" } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    expect(content.textContent).toContain("Followed question");
+    expect(app.scrolls.at(-1)).toBe(640);
+    content.find("Refresh")!.fire("click");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ scope: "following", authorFilter: "humans", sort: "unanswered", paginationOpts: { cursor: null } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [], isDone: true } } }); await app.flush();
+    content.find("Discover")!.fire("click");
+    expect(content.textContent).not.toContain("Followed question");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ scope: "discover", authorFilter: "humans", sort: "unanswered", paginationOpts: { cursor: null } });
+  });
+
+  test("catch up renders real unread, saved and pending status without offering delegated approval", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Catch up & interests")!.fire("click");
+    const catchUp = app.sent.filter(call => call.params?.name === "forum_list_my_forum_catch_up").at(-1)!;
+    expect(catchUp.params).toEqual({ name: "forum_list_my_forum_catch_up", arguments: { limit: 24 } });
+    for (const call of app.sent.filter(call => call.method === "tools/call").slice(-2)) app.reply(call, { structuredContent: { data: call.params?.name === "forum_list_categories" ? [] : { followingBoards: [] } } });
+    app.reply(catchUp, { structuredContent: { data: { threads: [{ title: "Unread topic", categorySlug: "general", slug: "unread" }], saved: [{ title: "Saved topic", categorySlug: "general", slug: "saved" }], pending: [{ title: "Unpublished topic", type: "thread", excerpt: "Waiting" }], summary: { unread: 1, saved: 1, pending: 1 }, bounded: true } } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("Unread topic"); expect(content.textContent).toContain("Saved topic");
+    expect(content.textContent).toContain("Unpublished topicPending moderation");
+    expect(content.find("Approve")).toBeUndefined(); expect(content.find("Unpublished topic")).toBeUndefined();
+    expect(content.textContent).toContain("recent selection");
+  });
+
+  test("starter board follows use desired states and leave review proposals unexecuted", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Find your communities")!.fire("click");
+    const calls = app.sent.filter(call => call.method === "tools/call").slice(-2);
+    for (const call of calls) app.reply(call, { structuredContent: { data: call.params?.name === "forum_list_categories" ? [{ _id: "general", slug: "general", name: "General", description: "Meet the community" }] : { followingBoards: [], authorFilter: "all", defaultFeed: "discover", onboardingCompleted: false } } });
+    await app.flush();
+    app.nodes.get("content")!.find("Follow board")!.fire("click"); await app.flush();
+    expect(app.latest("tools/call").params?.name).toBe("forum_set_category_subscription");
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ categorySlug: "general", subscribed: true, expectedPolicyVersion: 1 });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "pending_approval", commandId: "follow-proposal" } }); await app.flush();
+    expect(app.nodes.get("content")!.find("Awaiting review")).toBeDefined();
+    expect(app.nodes.get("content")!.find("Unfollow board")).toBeUndefined();
+    expect(app.sent.some(call => /approve/.test(String(call.params?.name)))).toBe(false);
+  });
+
+  test("typed link posts preserve source, reject unsafe URLs and preserve pending publication truth", async () => {
+    const app = appHarness(); await app.connect(false); await app.beginPostDraft();
+    const content = app.nodes.get("content")!; const form = content.querySelector("form")!;
+    form.byName("kind")!.value = "link"; form.byName("kind")!.fire("change");
+    for (const [name, value] of Object.entries({ title: "Useful source", body: "Why this matters", sourceUrl: "javascript:alert(1)" })) { form.byName(name)!.value = value; form.byName(name)!.fire("input"); }
+    const before = app.sent.length; form.fire("submit"); await app.flush();
+    expect(app.sent.length).toBe(before); expect(app.nodes.get("status")!.textContent).toContain("HTTP or HTTPS");
+    form.byName("sourceUrl")!.value = "https://example.com/article"; form.byName("sourceUrl")!.fire("input"); form.fire("submit"); await app.flush();
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ kind: "link", sourceUrl: "https://example.com/article", title: "Useful source", body: "Why this matters" });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "completed", publicationStatus: "pending_moderation", pendingContentUrl: "https://forum.symbaiex.com/control-panel/agent-access#moderation-queue" } }); await app.flush();
+    expect(content.textContent).toContain("Awaiting moderator approval"); expect(content.textContent).not.toContain("Published on the forum");
+  });
+
+  test("contextual replies retain their parent and return to the discussion after a receipt", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "question" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "thread", title: "Question", kind: "question", body: "How?" }, replies: [{ _id: "parent", author: "Suki", body: "Try this", postNumber: 2 }] } } }); await app.flush();
+    const content = app.nodes.get("content")!; content.find("Reply to Suki")!.fire("click");
+    expect(content.textContent).toContain("Replying to SukiTry this");
+    content.byName("body")!.value = "Thank you"; content.byName("body")!.fire("input"); content.querySelector("form")!.fire("submit"); await app.flush();
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ threadId: "thread", parentPostId: "parent", body: "Thank you" });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "completed", publicationStatus: "published" } }); await app.flush();
+    content.find("Back to discussion")!.fire("click");
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_thread", arguments: { categorySlug: "general", threadSlug: "question", page: 1, pageSize: 20 } });
+  });
+
+  test("accepted answers require current reader authority and review does not mark them accepted", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "question" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "thread", title: "Question", kind: "question", viewerCanAcceptAnswer: true }, replies: [{ _id: "answer", author: "Suki", body: "An answer" }] } } }); await app.flush();
+    const content = app.nodes.get("content")!; content.find("Accept answer")!.fire("click"); await app.flush();
+    expect(app.latest("tools/call").params?.arguments).toMatchObject({ threadId: "thread", postId: "answer" });
+    app.reply(app.latest("tools/call"), { structuredContent: { status: "pending_approval" } }); await app.flush();
+    expect(content.textContent).not.toContain("Accepted answer"); expect(content.find("Remove accepted answer")).toBeUndefined();
+    app.message({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { categorySlug: "general", threadSlug: "question" } } });
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { thread: { _id: "thread", title: "Question", kind: "question", acceptedPostId: "answer", viewerCanAcceptAnswer: false }, replies: [{ _id: "answer", author: "Suki", body: "An answer" }] } } }); await app.flush();
+    expect(content.textContent).toContain("Accepted answer"); expect(content.find("Accept answer")).toBeUndefined(); expect(content.find("Remove accepted answer")).toBeUndefined();
+  });
+
+  test("muted phrase editor sends a deduplicated array and retains retry identity", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("content")!.find("Feed preferences")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { defaultFeed: "discover", authorFilter: "all", mutedWords: ["spam"], followingMembers: [] } } }); await app.flush();
+    app.nodes.get("content")!.find("Edit muted phrases")!.fire("click");
+    const form = app.nodes.get("content")!.querySelector("form")!; form.byName("mutedWords")!.value = "spam\nnoise\nnoise\n "; form.byName("mutedWords")!.fire("input"); form.fire("submit"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.arguments).toMatchObject({ mutedWords: ["spam", "noise"], mutedUntil: null });
+    app.reply(command, { isError: true, structuredContent: { error: "Temporary failure" } }); await app.flush(); form.fire("submit"); await app.flush();
+    expect(app.latest("tools/call").params?.arguments).toEqual(command.params?.arguments);
+  });
+
   test("member links stay in the sidecar and Back restores the directory", async () => {
     const app = appHarness(); await app.connect(false);
     app.nodes.get("navigation")!.find("Members & agents")!.fire("click");
@@ -287,8 +507,8 @@ describe("forum MCP App resource", () => {
     ] } }); await app.flush();
     const nav = app.nodes.get("navigation")!;
     expect(overview).toBeDefined();
-    expect(nav.textContent).toContain("Your spaceSaved threadsFollowingInboxAgent access");
-    expect(nav.textContent).toContain("CommunityMembers & agentsAnnouncementsCalendarHelp & rules");
+    expect(nav.textContent).toContain("Your spaceCatch up & interestsSaved threadsFollowingInboxAgent access");
+    expect(nav.textContent).toContain("CommunityFind your communitiesMembers & agentsAnnouncementsCalendarHelp & rules");
     expect(nav.find("GGeneral")).toBeDefined();
     expect(nav.find("SSupport")).toBeUndefined();
     app.nodes.get("content")!.find("Support")!.fire("click");
@@ -973,18 +1193,18 @@ describe("forum MCP App resource", () => {
     expect(app.sent.some(call => call.params?.name === "forum_list_recent_threads")).toBe(false);
     app.nodes.get("navigation")!.find("Community")!.fire("click");
     const first = app.latest("tools/call");
-    expect(first.params).toEqual({ name: "forum_list_feed_threads", arguments: { sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } } });
+    expect(first.params).toEqual({ name: "forum_list_feed_threads", arguments: { sort: "active", communityOnly: true, now: expect.any(Number), paginationOpts: { numItems: 12, cursor: null } } });
     app.reply(first, { structuredContent: { data: { page: [], isDone: false, continueCursor: "native-cursor" } } });
     await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("No visible conversations on this page");
     app.nodes.get("content")!.find("Load more discussions")!.fire("click");
-    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: "native-cursor" } });
+    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", scope: "discover", authorFilter: "all", communityOnly: true, now: expect.any(Number), paginationOpts: { numItems: 12, cursor: "native-cursor" } });
     app.reply(app.latest("tools/call"), { structuredContent: { data: { page: [{ title: "A real conversation", slug: "real", categorySlug: "general", authorIdentity: { name: "Agent reader", isAgent: true }, excerpt: "A clear preview" }], isDone: true, continueCursor: "" } } });
     await app.flush();
     expect(app.nodes.get("content")!.textContent).toContain("A real conversation");
     expect(app.nodes.get("content")!.textContent).toContain("Agent readerAI agent");
     app.nodes.get("content")!.find("Refresh")!.fire("click");
-    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", communityOnly: true, paginationOpts: { numItems: 12, cursor: null } });
+    expect(app.latest("tools/call").params?.arguments).toEqual({ sort: "active", scope: "discover", authorFilter: "all", communityOnly: true, now: expect.any(Number), paginationOpts: { numItems: 12, cursor: null } });
   });
 
   test("renders stored news editions with canonical links and separates HN and local activity", async () => {
@@ -993,17 +1213,17 @@ describe("forum MCP App resource", () => {
     app.nodes.get("navigation")!.find("News")!.fire("click");
     expect(app.latest("tools/call").params).toEqual({ name: "forum_list_news_feed", arguments: { limit: 30 } });
     app.reply(app.latest("tools/call"), { structuredContent: { data: { snapshot: { snapshotDate: "2026-10-02" }, snapshots: [{ snapshotDate: "2026-10-02" }], stories: [
-      { hnItemId: 123, title: "Tools & people", host: "example.com", hnScore: 80, hnCommentCount: 40, platformStats: { comments: 3 }, platformStatsStatus: "available" },
+      { hnItemId: 123, title: "Tools & people", host: "example.com", hnScore: 80, hnCommentCount: 40, platformStats: { comments: 3, score: 2, saves: 1 }, platformStatsStatus: "available" },
       { hnItemId: 124, title: "No local counts yet", hnScore: 8, platformStats: null, platformStatsStatus: "unavailable" },
     ] } } });
     await app.flush();
-    expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 3 SYMBaiEX comments");
+    expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 2 SYMBaiEX votes · 1 saves");
     expect(app.nodes.get("content")!.textContent).not.toContain("0 SYMBaiEX comments");
     expect(app.nodes.get("content")!.querySelector("article")!.children[0].attributes["aria-label"]).toBe("Hacker News rank 1");
     const anchor = app.nodes.get("content")!.querySelector("a")!;
-    expect(anchor.href).toBe("https://www.symbaiex.com/news/tools-and-people-123");
+    expect(anchor.href).toBe("https://forum.symbaiex.com/stories/123");
     anchor.fire("click");
-    expect(app.latest("tools/call").params).toEqual({ name: "forum_list_news_feed", arguments: { snapshotDate: "2026-10-02", limit: 30 } });
+    expect(app.latest("tools/call").params).toEqual({ name: "forum_get_news_discussion", arguments: { hnItemId: 123 } });
     expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
   });
 

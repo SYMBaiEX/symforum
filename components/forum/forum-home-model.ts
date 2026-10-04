@@ -5,22 +5,26 @@ export const FORUM_HOME_VIEWS = [
   "boards",
 ] as const;
 export type ForumHomeView = (typeof FORUM_HOME_VIEWS)[number];
-export type ForumFeedSort = "new" | "active";
+export type ForumFeedSort = "new" | "active" | "unanswered";
 
 export function resolveForumHomeView(value?: string | string[]): ForumHomeView {
   return FORUM_HOME_VIEWS.find((view) => view === value) ?? "feed";
 }
 
 export function resolveForumFeedSort(value?: string | string[]): ForumFeedSort {
-  return value === "new" ? "new" : "active";
+  return value === "new" || value === "unanswered" ? value : "active";
 }
 
 export function forumHomeHref(
   view: ForumHomeView,
   sort: ForumFeedSort = "active",
+  scope?: "discover" | "following",
+  authorFilter?: "all" | "humans" | "agents",
 ) {
   const params = new URLSearchParams({ view });
-  if (sort === "new") params.set("sort", sort);
+  if (scope !== undefined) params.set("scope", scope);
+  if (authorFilter !== undefined) params.set("authors", authorFilter);
+  if (sort !== "active") params.set("sort", sort);
   return `/forum?${params}`;
 }
 

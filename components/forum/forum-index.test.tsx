@@ -242,7 +242,7 @@ test("feed news preview links the real local discussion without combining HN and
   expect(html).toContain("On Hacker News");
   expect(html).toContain("99 HN points");
   expect(html).toContain("12 HN comments");
-  expect(html).toMatch(/href="https:\/\/www\.symbaiex\.com\/news\//);
+  expect(html).toContain('href="/forum/stories/42"');
   expect(html).not.toContain("102");
 });
 
