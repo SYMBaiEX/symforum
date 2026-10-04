@@ -17,7 +17,7 @@ export const FORUM_PLUGIN_APP_RESOURCE = {
 // Keep this function self-contained: its compiled source is the resource's script.
 export function forumPluginAppRuntime() {
   type RecordValue = Record<string, unknown>;
-  type HostContext = { theme?: string; displayMode?: string; availableDisplayModes?: string[] };
+  type HostContext = { theme?: string; displayMode?: string; availableDisplayModes?: string[]; "openai/deepLink"?: { url?: string } };
   type ForumError = Error & { code?: string; quotaReason?: string; retryAfter?: number };
   type Pending = { resolve: (result: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
   type OpenAI = {
@@ -34,6 +34,8 @@ export function forumPluginAppRuntime() {
   const pending = new Map<number, Pending>();
   let requestId = 0;
   let ready = false;
+  let bootstrapped = false;
+  let deepLinkPath = "";
   let fullscreenRequested = false;
   let displayRevision = 0;
   let legacyBridge = false;
@@ -43,6 +45,10 @@ export function forumPluginAppRuntime() {
   let identityRevision = 0;
   let currentView = "feed";
   let currentArgs: RecordValue = {};
+  let routeHistory: Array<{ view: string; args: RecordValue }> = [];
+  let historyIndex = -1;
+  let newsEdition: RecordValue = {};
+  const knownAgentUsernames = new Set<string>();
   let navigationState = "";
   let contextState = "";
   let moreNavigation: HTMLDetailsElement | null = null;
@@ -162,6 +168,12 @@ export function forumPluginAppRuntime() {
     root.dataset.displayMode = hostContext.displayMode ?? "inline";
     expand.hidden = hostContext.displayMode === "fullscreen" || !(hostContext.availableDisplayModes ? hostContext.availableDisplayModes.includes("fullscreen") : openai?.requestDisplayMode);
     expand.textContent = "Expand forum";
+    const path = next["openai/deepLink"]?.url;
+    if (typeof path === "string" && path.startsWith("/") && !path.startsWith("//") && path !== deepLinkPath) {
+      deepLinkPath = path;
+      const route = forumRoute("https://forum.symbaiex.com" + path);
+      if (bootstrapped && route) run(() => navigate(route.view, route.args));
+    }
     // The resource preference is a hint. Request the advertised mode once,
     // without delaying authenticated bootstrap or disturbing subsequent drafts.
     if (ready && hostContext.displayMode === "fullscreen") fullscreenRequested = true;
@@ -319,6 +331,8 @@ export function forumPluginAppRuntime() {
       currentCategory = "";
       boards = [];
       overview = {};
+      routeHistory = []; historyIndex = -1; newsEdition = {};
+      knownAgentUsernames.clear();
       ++chatRevision;
       chatRows.replaceChildren();
       chatPeek.textContent = "Connection changed · open chat";
@@ -443,7 +457,7 @@ export function forumPluginAppRuntime() {
         chatRows.append(row);
       }
       if (!chatRows.children.length) chatRows.append(element("p", viewer.canRead === false ? "Lounge chat is unavailable to this profile." : chatModerating ? "No messages awaiting moderation." : "The lounge is quiet. Say hello to the community.", "muted"));
-      if (data.pendingLimited) chatRows.append(link("More pending chat messages ↗", "https://forum.symbaiex.com/#forum-chat"));
+      if (data.pendingLimited && permitted("moderate")) chatRows.append(button("More pending chat messages", () => { chatCursor = null; chatModerating = true; chatLive = false; updateUsagePolicy(); void refreshChat(null); }));
       if (pinToBottom) chatRows.scrollTop = chatRows.scrollHeight;
       const next = text(data.continueCursor);
       chatOlder.hidden = data.isDone !== false || !next;
@@ -659,9 +673,7 @@ export function forumPluginAppRuntime() {
       browse.setAttribute("aria-current", currentView === "boards" ? "page" : "false");
     }
     const community = group("Community");
-    addItem(community, "members", "Members", {}, "community");
-    const agentsLink = link("", "https://forum.symbaiex.com/agents"); agentsLink.className = "rail-link";
-    agentsLink.append(navigationIcon("agents"), element("span", "Agents")); community.append(agentsLink);
+    addItem(community, "members", "Members & agents", {}, "community");
     addItem(community, "announcements", "Announcements");
     addItem(community, "calendar", "Calendar");
     addItem(community, "help", "Help & rules");
@@ -743,7 +755,7 @@ export function forumPluginAppRuntime() {
     blog.className = "surface-choice";
     blog.setAttribute("aria-label", "Blog");
     blog.append(element("strong", "Blog"), element("span", "Articles, research & news", "surface-description"));
-    const nativeForum = link("Open forum website ↗", "https://forum.symbaiex.com");
+    const nativeForum = link("Open forum website ↗", "https://forum.symbaiex.com", true);
     nativeForum.className = "surface-native-link";
     for (const external of [blog, nativeForum]) external.addEventListener("click", event => {
       if (!ready) { event.preventDefault(); report("Connecting to the host. Try this link again when the forum is ready."); return; }
@@ -767,6 +779,10 @@ export function forumPluginAppRuntime() {
     const titleNode = element("h1", title);
     titleNode.tabIndex = -1;
     header.append(titleNode);
+    if (historyIndex > 0 && !composerDraft) header.append(button("← Back", () => run(async () => {
+      const previous = routeHistory[historyIndex - 1];
+      await navigate(previous.view, previous.args, "back");
+    }), "view-back"));
     if (subtitle) header.append(element("p", subtitle, "muted"));
     content.append(header);
     return titleNode;
@@ -832,6 +848,7 @@ export function forumPluginAppRuntime() {
       const username = text(author.username ?? record.authorUsername ?? record.username);
       if (username) {
         const profile = link(name, "https://forum.symbaiex.com/members/" + encodeURIComponent(username)); profile.className = "discussion-author"; authorLine.append(profile);
+        if (author.isAgent === true) knownAgentUsernames.add(username.toLowerCase());
       } else authorLine.append(element("span", name, "discussion-author"));
       if (author.isAgent || record.isAgent) authorLine.append(element("span", "AI agent", "badge"));
       else if (record.agentAssisted) authorLine.append(element("span", "Agent assisted", "badge"));
@@ -985,7 +1002,6 @@ export function forumPluginAppRuntime() {
     if (stories.length) appendNews(stories, false, section("Top stories", "HN activity · SYMBaiEX discussion"));
     else empty("No indexed stories in this edition yet.");
     if (data.limited) content.append(element("p", "Showing the stories available within this request. Open News on SYMBaiEX for more.", "muted"));
-    content.append(link("Open News on SYMBaiEX ↗", "https://www.symbaiex.com/news"));
   }
   function pagination(value: unknown, page: number, action: (nextPage: number) => void) {
     const data = object(value);
@@ -1132,18 +1148,21 @@ export function forumPluginAppRuntime() {
   function contentLink(label: string, value: string) {
     let href: string;
     try {
-      const url = new URL(value.trim());
+      const url = new URL(value.trim(), "https://forum.symbaiex.com");
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return element("span", label);
       href = url.href;
     } catch { return element("span", label); }
     const node = element("a", label);
+    if (forumRoute(href)) node.textContent = label.replace(/ ↗$/, "");
     node.href = href;
     node.target = "_blank";
     node.rel = "noopener noreferrer";
     node.addEventListener("click", event => {
-      if (!ready) return;
       event.preventDefault();
+      if (!ready) { report("Connecting to the host. Try this link when the forum is ready."); return; }
       run(async () => {
+        const route = forumRoute(href);
+        if (route) { await navigate(route.view, route.args); return; }
         if (openai?.openExternal && legacyBridge) openai.openExternal({ href });
         else await request("ui/open-link", { url: href });
       });
@@ -1273,6 +1292,7 @@ export function forumPluginAppRuntime() {
   }
   function renderPost(post: RecordValue, rootPost = false, readerArgs?: RecordValue) {
     const article = element("article", undefined, "post");
+    if (rootPost || Number.isSafeInteger(post.postNumber)) article.id = "post-" + text(post.postNumber, "1");
     const author = element("div", undefined, "post-author");
     const authorIdentity = object(post.authorIdentity);
     author.append(avatar(authorIdentity.name ?? post.author ?? post.authorName), element("strong", authorIdentity.name ?? post.author ?? post.authorName ?? "Member"));
@@ -1300,9 +1320,15 @@ export function forumPluginAppRuntime() {
         const shortened = quoted.length > maxLength;
         openComposer("reply", { body: prefix + quoted.slice(0, maxLength) + (shortened ? "…" : "") + suffix, quoteShortened: shortened });
       }));
-      const canonical = "https://forum.symbaiex.com/" + encodeURIComponent(text(readerArgs.categorySlug)) + "/" + encodeURIComponent(text(readerArgs.threadSlug));
-      if (post.viewerCanEdit === true && permitted("participate")) actions.append(link("Edit on forum ↗", canonical));
-      if (actingAs.userId && permitted("feedback")) actions.append(link("Report on forum ↗", canonical));
+      if (post.viewerCanEdit === true && permitted("participate")) actions.append(button("Edit", () => openActionEditor(rootPost ? "Edit discussion" : "Edit reply", rootPost ? "forum_update_thread_content" : "forum_update_post_content", rootPost ? { threadId: post._id } : { postId: post._id }, [
+        ...(rootPost ? [{ name: "title", label: "Title", value: text(post.title), maxLength: 160 }] : []),
+        { name: "body", label: "Message · BBCode supported", value: text(post.body ?? post.content), multiline: true, maxLength: rootPost ? 64000 : 32000 },
+        { name: "editReason", label: "Edit reason", value: "", optional: true, maxLength: 500 },
+      ])));
+      if (actingAs.userId && permitted("feedback")) actions.append(button("Report", () => openActionEditor("Report " + (rootPost ? "discussion" : "reply"), "forum_create_report", { entityType: rootPost ? "thread" : "post", threadId: currentThread?._id, ...(!rootPost ? { postId: post._id } : {}) }, [
+        { name: "reason", label: "Reason", value: "", maxLength: 80 },
+        { name: "details", label: "Details", value: "", multiline: true, optional: true, maxLength: 6000 },
+      ])));
       if (actions.children.length) article.append(actions);
     }
     return article;
@@ -1313,15 +1339,52 @@ export function forumPluginAppRuntime() {
       return url.protocol === "https:" && ["forum.symbaiex.com", "www.symbaiex.com", "symbaiex.com"].includes(url.hostname) && !url.username && !url.password;
     } catch { return false; }
   }
-  function link(label: string, url: string) {
-    const node = element("a", label);
+  function forumRoute(value: string): { view: string; args: RecordValue } | null {
+    if (!safeForumUrl(value)) return null;
+    const url = new URL(value);
+    let parts: string[];
+    try { parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent); } catch { return null; }
+    if (url.hostname !== "forum.symbaiex.com") {
+      if (parts[0] !== "news") return null;
+      return parts.length > 1 ? { view: "news-story", args: { hnItemId: parts[1].match(/-(\d+)$/)?.[1] ?? parts[1] } } : { view: "news", args: {} };
+    }
+    const args: RecordValue = {};
+    const page = Number(url.searchParams.get("postPage") ?? url.searchParams.get("page"));
+    if (Number.isSafeInteger(page) && page > 0) args.page = page;
+    const postNumber = Number(url.hash.match(/^#post-(\d+)$/)?.[1]);
+    if (Number.isSafeInteger(postNumber) && postNumber > 0) args.postNumber = postNumber;
+    if (!parts.length) return { view: ["boards", "community", "news", "feed"].includes(text(url.searchParams.get("view"))) ? text(url.searchParams.get("view")) : "feed", args };
+    if (parts[0] === "control-panel") {
+      if (parts[1] === "agent-access") return { view: url.hash === "#moderation-queue" ? "pending" : "access", args: { commandId: url.searchParams.get("commandId") ?? undefined } };
+      return { view: url.hash === "#ucp-profile" ? "profile" : "preferences", args };
+    }
+    if (parts[0] === "members") return { view: parts[1] ? "member" : "members", args: { ...args, ...(parts[1] ? { username: parts[1] } : {}) } };
+    if (parts[0] === "agents") return { view: "members", args };
+    if (parts[0] === "help") return { view: parts[1] ? "help-document" : "help", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
+    if (parts[0] === "calendar") return { view: parts[1] ? "calendar-event" : "calendar", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
+    if (parts[0] === "announcements") return { view: parts[1] ? "announcement" : "announcements", args: { ...args, ...(parts[1] ? { slug: parts[1] } : {}) } };
+    if (parts[0] === "messages") return { view: "inbox", args: { ...args, box: url.searchParams.get("box") ?? "inbox" } };
+    if (parts[0] === "search") return { view: "search", args: { ...args, query: url.searchParams.get("q") ?? "" } };
+    if (parts[0] === "admin") return { view: parts[1] === "moderation" ? "staff" : "admin", args };
+    if (parts[0] === "moderation") return { view: "staff", args };
+    if (parts[0] === "notifications") return { view: "notifications", args };
+    if (parts[0] === "news") return parts[1] ? { view: "news-story", args: { hnItemId: parts[1].match(/-(\d+)$/)?.[1] ?? parts[1] } } : { view: "news", args };
+    // Canonical discussion links can arrive before board discovery. Read through
+    // the authorized tools; reserve account, API and editorial paths separately.
+    if (parts.length <= 2 && parts.every(part => /^[a-z0-9][a-z0-9-]*$/.test(part)) && !["api", "login", "sign-in", "auth", "research", "research-experiments", "blog", "privacy", "terms", "docs"].includes(parts[0])) return { view: parts.length > 1 ? "thread" : "board", args: { ...args, categorySlug: parts[0], ...(parts[1] ? { threadSlug: parts[1] } : {}) } };
+    return null;
+  }
+  function link(label: string, url: string, external = false) {
+    const node = element("a", external ? label : label.replace(/ ↗$/, ""));
     node.href = safeForumUrl(url) ? url : "https://forum.symbaiex.com";
     node.target = "_blank";
     node.rel = "noopener noreferrer";
     node.addEventListener("click", event => {
-      if (!ready) return;
       event.preventDefault();
+      if (!ready) { report("Connecting to the host. Try this link when the forum is ready."); return; }
       run(async () => {
+        const route = !external && forumRoute(node.href);
+        if (route) { await navigate(route.view, route.args); return; }
         if (openai?.openExternal && legacyBridge) openai.openExternal({ href: node.href });
         else await request("ui/open-link", { url: node.href });
       });
@@ -1340,7 +1403,7 @@ export function forumPluginAppRuntime() {
     const tools = element("details", undefined, "thread-tools");
     tools.append(element("summary", "Thread tools"));
     const secondary = element("div", undefined, "actions");
-    secondary.append(link("Open on SYMBaiEX ↗", canonical));
+    secondary.append(link("Open forum website ↗", canonical, true));
     if (permitted("personal")) {
       secondary.append(actionButton(thread.viewerBookmarked ? "Unsave thread" : "Save thread", "forum_set_thread_bookmark", { threadId: thread._id, saved: !thread.viewerBookmarked }, () => navigate("thread", args)));
       secondary.append(actionButton(thread.viewerSubscribed ? "Unsubscribe" : "Subscribe", "forum_set_thread_subscription", { threadId: thread._id, subscribed: !thread.viewerSubscribed }, () => navigate("thread", args)));
@@ -1401,8 +1464,18 @@ export function forumPluginAppRuntime() {
     }
     content.append(list);
   }
-  async function navigate(view: string, args: RecordValue = {}) {
+  async function navigate(view: string, args: RecordValue = {}, history: "push" | "back" = "push") {
     if (composerDraft) { report("Close or submit your draft before changing views."); return; }
+    if (!actingAs.userId && ["profile", "preferences", "pending", "inbox", "message", "notifications", "bookmarks", "following"].includes(view)) {
+      args = { requestedView: view }; view = "access";
+    }
+    if (history === "back") historyIndex = Math.max(0, historyIndex - 1);
+    else if (currentView !== view || JSON.stringify(currentArgs) !== JSON.stringify(args) || historyIndex < 0) {
+      routeHistory = routeHistory.slice(0, historyIndex + 1);
+      routeHistory.push({ view, args: { ...args } });
+      if (routeHistory.length > 40) routeHistory.shift();
+      historyIndex = routeHistory.length - 1;
+    }
     if (Array.isArray(args.loadedRows) && args.cacheIdentityRevision !== identityRevision) {
       // A preserved editor may close after consent or identity changed. Its old
       // route cannot reintroduce restricted rows or a previous actor's cursor.
@@ -1444,7 +1517,22 @@ export function forumPluginAppRuntime() {
         };
       } else if (view === "news") {
         result = await tool("forum_list_news_feed", { ...(typeof args.snapshotDate === "string" ? { snapshotDate: args.snapshotDate } : {}), limit: 30 });
+        newsEdition = object(result.data);
         render = () => renderNews(object(result.data), args);
+      } else if (view === "news-story") {
+        result = await tool("forum_list_news_feed", { ...(object(newsEdition.snapshot).snapshotDate ? { snapshotDate: object(newsEdition.snapshot).snapshotDate } : {}), limit: 30 });
+        newsEdition = object(result.data);
+        render = () => {
+          const story = collection(newsEdition.stories).find(item => text(item.hnItemId) === text(args.hnItemId));
+          heading(text(story?.title, "News story"), story ? text(story.host, "Hacker News") + " · " + text(story.by) : undefined);
+          content.append(button("← News", () => run(() => navigate("news", { snapshotDate: object(newsEdition.snapshot).snapshotDate }))));
+          if (!story) { empty("This story is outside the current news edition. Choose another edition from News."); return; }
+          const panel = section("Story details");
+          panel.append(element("p", text(story.hnScore, "0") + " Hacker News points · " + text(story.hnCommentCount, "0") + " comments", "muted"));
+          if (story.url) panel.append(contentLink("Read original source ↗", text(story.url)));
+          if (story.discussionUrl) panel.append(contentLink("Hacker News discussion ↗", text(story.discussionUrl)));
+          panel.append(element("p", "This edition is stored on SYMBaiEX. Original articles and Hacker News discussions open their source sites.", "muted"));
+        };
       } else if (view === "boards") {
         result = await tool("forum_list_categories");
         boards = collection(result.data);
@@ -1480,7 +1568,7 @@ export function forumPluginAppRuntime() {
           heading(text(message.subject, "Private message"), "Private to the selected acting profile");
           const controls = element("div", undefined, "actions");
           controls.append(button("← " + (box === "trash" ? "Trash" : box === "sent" ? "Sent" : "Inbox"), () => run(() => navigate("inbox", { box, page: args.page ?? 1 }))));
-          controls.append(link("Open mailbox ↗", "https://forum.symbaiex.com/messages"));
+          controls.append(button("Mailbox", () => run(() => navigate("inbox", { box }))));
           if (permitted("messages")) {
             if (box !== "trash" && message.otherUsername) controls.append(button("Reply to message", () => openComposer("message", { recipientUsername: message.otherUsername, subject: (/^Re:/i.test(text(message.subject)) ? text(message.subject) : "Re: " + text(message.subject)).slice(0, 120) }), "primary"));
             if (box === "inbox" && message.unread === true) controls.append(actionButton("Mark as read", "forum_mark_private_message_read", { messageId: args.messageId }, () => navigate("message", args)));
@@ -1488,6 +1576,23 @@ export function forumPluginAppRuntime() {
             else controls.append(actionButton("Move to Trash", "forum_delete_private_message", { messageId: args.messageId, box }, () => navigate("inbox", { box, page: args.page ?? 1 })));
           }
           content.append(controls, element("p", "To " + text(message.recipientUsername, "your connected profile"), "muted"), renderPost({ ...message, author: message.senderUsername ?? message.author }));
+        };
+      } else if (view === "member") {
+        result = await tool("forum_list_members", { query: text(args.username), pageSize: 100, page: 1 });
+        render = () => {
+          const member = collection(result.data).find(row => text(row.username).toLowerCase() === text(args.username).toLowerCase());
+          heading(text(member?.displayName ?? member?.username, "Member"), member ? text(member.customTitle ?? member.rank) : undefined);
+          if (!member) { empty("This member is unavailable in the current directory."); return; }
+          const panel = section("Forum profile");
+          if (member.isAgent === true || knownAgentUsernames.has(text(member.username).toLowerCase())) panel.append(element("span", "AI agent", "badge"));
+          panel.append(avatar(member.username), element("p", text(member.postCount, "0") + " posts · " + text(member.threadCount, "0") + " discussions · " + text(member.reputationScore, "0") + " reputation", "muted"));
+          if (member.location) panel.append(element("p", member.location));
+          if (member.joinedAt) panel.append(element("p", "Joined " + new Date(Number(member.joinedAt)).toLocaleDateString(), "muted"));
+          if (member.isOnline) panel.append(element("span", "Online now", "badge"));
+          const actions = element("div", undefined, "actions");
+          if (permitted("messages") && text(member.username) !== text(actingAs.username)) actions.append(button("Send message", () => openComposer("message", { recipientUsername: member.username }), "primary"));
+          actions.append(button("Find discussions", () => run(() => navigate("search", { query: text(member.username) }))));
+          panel.append(actions);
         };
       } else if (view === "profile") {
         result = await tool("forum_get_my_forum_profile");
@@ -1503,8 +1608,65 @@ export function forumPluginAppRuntime() {
             item.append(element("h3", label), element("p", profile[key], "post-body"));
             profilePanel.append(item);
           }
-          if (!hasDetails) profilePanel.append(element("p", "Add a bio or signature in your forum control panel.", "empty"));
-          content.append(link("Edit forum profile ↗", "https://forum.symbaiex.com/control-panel#ucp-profile"), link("Agent access ↗", "https://forum.symbaiex.com/control-panel/agent-access"));
+          if (!hasDetails) profilePanel.append(element("p", "Add a bio or signature to your profile.", "empty"));
+          if (permitted("personal")) content.append(button("Edit profile", () => openActionEditor("Edit forum profile", "forum_update_my_forum_profile", { showSignatures: profile.showSignatures !== false }, [
+            ...Object.entries({ bio: "About", signature: "Signature", location: "Location", websiteUrl: "Website", avatarUrl: "Avatar URL", customTitle: "Custom title", birthday: "Birthday · YYYY-MM-DD", timeZone: "Time zone" }).map(([name, label]) => ({ name, label, value: text(profile[name]), optional: true, multiline: name === "bio" || name === "signature", maxLength: ({ bio: 800, signature: 900, location: 80, websiteUrl: 240, avatarUrl: 500, customTitle: 40, birthday: 10, timeZone: 64 } as Record<string, number>)[name] })),
+            { name: "showSignatures", label: "Show signatures", value: profile.showSignatures !== false, checkbox: true },
+          ])), button("Notification preferences", () => run(() => navigate("preferences"))));
+        };
+      } else if (view === "preferences") {
+        result = await tool("forum_get_my_forum_notification_preferences");
+        render = () => {
+          const preferences = object(result.data);
+          heading("Account & preferences", "For " + text(actingAs.username, "your connected profile"));
+          const panel = section("Notifications");
+          const labels = { inAppReplies: "Replies in the forum", inAppNewThreads: "New discussions in the forum", inAppMentions: "Mentions in the forum", emailReplies: "Email about replies", emailNewThreads: "Email about new discussions" };
+          for (const [name, label] of Object.entries(labels)) panel.append(element("p", label + " · " + (preferences[name] === true ? "On" : "Off"), "preference-state"));
+          if (preferences.emailDestinationAvailable === false || preferences.emailDeliveryEnabled === false) panel.append(element("p", "Email delivery is unavailable for this profile. You can still save your preferences.", "muted"));
+          panel.append(button("Edit notifications", () => openActionEditor("Notification preferences", "forum_update_my_forum_notification_preferences", {}, Object.entries(labels).map(([name, label]) => ({ name, label, value: preferences[name] === true, checkbox: true }))), "primary"));
+          content.append(button("My profile", () => run(() => navigate("profile"))), button("Pending posts", () => run(() => navigate("pending"))), button("Agent access", () => run(() => navigate("access"))));
+        };
+      } else if (view === "pending") {
+        result = await tool("forum_list_my_pending_forum_content", { limit: 30 });
+        render = () => {
+          heading("Your pending posts", "Saved for " + text(actingAs.username) + " · awaiting forum moderation");
+          const data = object(result.data);
+          const rows = [...collection(data.threads), ...collection(data.posts)];
+          if (!rows.length) { empty("You have no posts awaiting forum moderation."); return; }
+          const list = section("Awaiting publication");
+          for (const row of rows) {
+            const item = element("article", undefined, "row record-row");
+            item.append(element("h2", row.title ?? row.threadTitle ?? "Reply"), element("span", "Pending moderation", "badge"), element("p", row.excerpt, "post-body"));
+            const target = threadTarget(row);
+            if (row.type === "reply" && target.categorySlug && target.threadSlug) item.append(button("Read discussion", () => run(() => navigate("thread", target))));
+            list.append(item);
+          }
+          if (permitted("moderate")) content.append(button("Moderation queue", () => run(() => navigate("staff"))));
+        };
+      } else if (view === "access") {
+        result = await tool("forum_status");
+        render = () => {
+          heading("Agent access", text(actingAs.username, "Public browsing") + " · " + text(modeLabel.textContent));
+          const panel = section("Your forum connection");
+          panel.append(element("p", actingAs.isAgent ? "Acting as your owned AI agent profile." : actingAs.userId ? "Acting as your human profile with agent assistance." : "Connect your SYMBaiEX account through this plugin’s connection settings to participate."));
+          panel.append(element("p", "Enabled permissions: " + (Array.isArray(connection.capabilities) ? connection.capabilities.map(item => text(item)).join(", ") : "Public read access"), "muted"));
+          // Connection policy and proposal approval deliberately require the
+          // signed-in human owner. Delegated MCP credentials cannot approve
+          // their own writes, expand consent, or impersonate the owner session.
+          if (args.commandId || lastActionResult?.status === "pending_approval") panel.append(element("p", "Your action is awaiting owner review and has not executed. Only the signed-in human owner can approve it.", "notice"));
+          panel.append(element("p", "Connection identity, consent, disconnect, and owner approvals are managed securely by the signed-in owner.", "muted"), link("Manage connection & approvals on website ↗", text(lastActionResult?.approvalUrl, "https://forum.symbaiex.com/control-panel/agent-access"), true));
+          if (permitted("personal")) panel.append(button("View pending forum posts", () => run(() => navigate("pending"))));
+          panel.append(button("Refresh connection", () => run(() => navigate("access", args))));
+        };
+      } else if (["help-document", "calendar-event", "announcement"].includes(view)) {
+        result = await tool(view === "help-document" ? "forum_get_help_document" : view === "calendar-event" ? "forum_get_calendar_event" : "forum_get_announcement", { slug: args.slug });
+        render = () => {
+          const data = object(result.data);
+          heading(text(data.title, "Forum information"));
+          if (!Object.keys(data).length) { empty("This item is unavailable."); return; }
+          content.append(richBody(data.body ?? data.description));
+          if (data.startsAt) content.append(element("p", new Date(Number(data.startsAt)).toLocaleString(), "muted"));
+          content.append(button(view === "help-document" ? "All help & rules" : view === "calendar-event" ? "Calendar" : "Announcements", () => run(() => navigate(view === "help-document" ? "help" : view === "calendar-event" ? "calendar" : "announcements"))));
         };
       } else if (["info", "announcements", "help", "calendar"].includes(view)) {
         const [announcements, help, calendar] = await Promise.all([
@@ -1524,8 +1686,7 @@ export function forumPluginAppRuntime() {
               const item = element("article", undefined, "row info-row");
               item.append(element("h3", row.title ?? row.name), richBody(row.body ?? row.description ?? row.excerpt));
               if (row.startsAt) item.append(element("p", new Date(Number(row.startsAt)).toLocaleString() + (row.allDay ? " · All day" : ""), "muted"));
-              if (label === "Help") item.append(link("Read help ↗", "https://forum.symbaiex.com/help" + (row.slug ? "/" + encodeURIComponent(text(row.slug)) : "")));
-              if (label === "Calendar") item.append(link("Open calendar ↗", "https://forum.symbaiex.com/calendar"));
+              if (row.slug) item.append(button(label === "Help" ? "Read help" : label === "Calendar" ? "Event details" : "Read announcement", () => run(() => navigate(label === "Help" ? "help-document" : label === "Calendar" ? "calendar-event" : "announcement", { slug: row.slug }))));
               panel.append(item);
             }
           }
@@ -1535,7 +1696,7 @@ export function forumPluginAppRuntime() {
         render = () => {
           renderBoards(collection(result.data));
           content.querySelector("h1")!.textContent = "Board administration";
-          content.append(link("Open forum administration ↗", "https://forum.symbaiex.com/admin"));
+          content.append(button("Staff dashboard", () => run(() => navigate("staff"))));
         };
       } else {
         const names: Record<string, string> = { recent: "forum_list_recent_threads", today: "forum_list_recent_threads", online: "forum_list_online_members", following: "forum_list_my_thread_subscriptions", bookmarks: "forum_list_my_thread_bookmarks", notifications: "forum_list_my_notifications", inbox: "forum_list_private_messages", members: "forum_list_members", staff: "forum_list_forum_threads" };
@@ -1566,6 +1727,7 @@ export function forumPluginAppRuntime() {
       else report("");
       const title = content.querySelector("h1");
       title?.focus({ preventScroll: true });
+      if (view === "thread" && Number.isSafeInteger(args.postNumber)) content.querySelector("#post-" + Number(args.postNumber))?.scrollIntoView?.({ block: "center" });
       if (view === "thread") void request("ui/update-model-context", { structuredContent: { selectedThread: args, actingAs }, content: [{ type: "text", text: "The user is reading " + text(currentThread?.title) + " in the SYMBaiEX forum." }] }).catch(() => {});
     } catch (error) {
       if (revision !== viewRevision || destroyed) return;
@@ -1576,7 +1738,7 @@ export function forumPluginAppRuntime() {
       const message = errorMessage(error);
       panel.append(element("p", message));
       const recovery = element("div", undefined, "actions");
-      recovery.append(button("Try again", () => run(() => navigate(view, args)), "primary"), link("Open forum website ↗", "https://forum.symbaiex.com"));
+      recovery.append(button("Try again", () => run(() => navigate(view, args)), "primary"), link("Open forum website ↗", "https://forum.symbaiex.com", true));
       panel.append(recovery); content.append(panel);
       report(message, true);
     } finally {
@@ -1610,6 +1772,66 @@ export function forumPluginAppRuntime() {
     }
     showActionResult(result);
     return result;
+  }
+  type EditorField = { name: string; label: string; value: string | boolean; multiline?: boolean; checkbox?: boolean; optional?: boolean; maxLength?: number };
+  function openActionEditor(title: string, operation: string, target: RecordValue, fields: EditorField[]) {
+    if (composerDraft) { report("Close or submit your draft before changing views."); return; }
+    const previousView = currentView;
+    const previousArgs = { ...currentArgs };
+    const actor = actingAs.userId;
+    const policy = connection.policyVersion;
+    const revision = identityRevision;
+    ++viewRevision;
+    composerDraft = { kind: operation, fields: {}, key: newKey() };
+    heading(title, "As " + text(actingAs.username) + " · " + text(modeLabel.textContent));
+    const form = element("form", undefined, "composer");
+    const controls: Array<{ field: EditorField; input: HTMLInputElement | HTMLTextAreaElement }> = [];
+    for (const field of fields) {
+      const label = element("label", field.label);
+      const input = field.multiline ? element("textarea") : element("input");
+      input.name = field.name;
+      if (field.checkbox) { (input as HTMLInputElement).type = "checkbox"; (input as HTMLInputElement).checked = field.value === true; }
+      else { input.value = text(field.value); input.required = !field.optional; input.maxLength = field.maxLength ?? 2000; }
+      input.addEventListener("input", () => { if (composerDraft) composerDraft.key = newKey(); });
+      input.addEventListener("change", () => { if (composerDraft) composerDraft.key = newKey(); });
+      label.append(input); form.append(label); controls.push({ field, input });
+    }
+    const actions = element("div", undefined, "actions");
+    const save = element("button", connection.executionMode === "review" ? "Submit for review" : operation === "forum_create_report" ? "Send report" : "Save changes", "primary");
+    save.type = "submit";
+    let discardRequested = false;
+    const cancel = button("Cancel", () => {
+      const dirty = controls.some(({ field, input }) => field.checkbox ? (input as HTMLInputElement).checked !== field.value : input.value !== text(field.value));
+      if (dirty && !discardRequested) { discardRequested = true; cancel.textContent = "Discard changes"; report("Your changes are kept here until you save or discard them."); return; }
+      composerDraft = null;
+      run(() => navigate(previousView, previousArgs));
+    });
+    actions.append(save, cancel); form.append(actions);
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      if (save.disabled || !composerDraft || !form.reportValidity()) return;
+      const args = { ...target };
+      for (const { field, input } of controls) args[field.name] = field.checkbox ? (input as HTMLInputElement).checked : input.value;
+      const key = composerDraft.key;
+      save.disabled = true; cancel.disabled = true;
+      controls.forEach(({ input }) => { input.disabled = true; });
+      run(async () => {
+        try {
+          if (actor !== actingAs.userId || policy !== connection.policyVersion || revision !== identityRevision) throw new Error("Your acting profile or permissions changed. Your draft is preserved; cancel it and reopen with the current connection.");
+          const receipt = await write(operation, args, key, policy);
+          if (revision !== identityRevision || destroyed) return;
+          composerDraft = null;
+          if (receipt.status === "pending_approval") await navigate("access", { commandId: receipt.commandId });
+          else await navigate(previousView, previousArgs);
+          showActionResult(receipt);
+        } finally {
+          save.disabled = false; cancel.disabled = false;
+          controls.forEach(({ input }) => { input.disabled = false; });
+        }
+      });
+    });
+    content.append(form);
+    controls[0]?.input.focus();
   }
   function openComposer(kind: string, initialFields: RecordValue = {}) {
     if (composerDraft) { report("Your draft is already open."); return; }
@@ -1950,7 +2172,7 @@ export function forumPluginAppRuntime() {
   report("Connecting to your forum tools…");
   run(async () => {
     try {
-      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.8.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
+      const result = object(await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "SYMBaiEX Forum", version: "1.9.0" }, appCapabilities: { availableDisplayModes: ["fullscreen"] } }));
       if (result.protocolVersion !== "2026-01-26") throw new Error("This host does not support the forum UI protocol.");
       ready = true;
       applyContext(object(result.hostContext) as HostContext);
@@ -1978,7 +2200,11 @@ export function forumPluginAppRuntime() {
       if (destroyed || boardIdentity !== identityRevision) return;
       overview = object(result.data); boards = collection(overview.categories); renderNavigation(); renderContext();
     }).catch(() => { /* The Boards route exposes retry and the actual failure. */ });
-    if (currentView === "feed") await navigate("feed");
+    bootstrapped = true;
+    if (currentView === "feed") {
+      const launchRoute = deepLinkPath ? forumRoute("https://forum.symbaiex.com" + deepLinkPath) : null;
+      await navigate(launchRoute?.view ?? "feed", launchRoute?.args ?? {});
+    }
     chatPeek.textContent = "Open chat to read the lounge";
   });
 }
@@ -2014,4 +2240,5 @@ export const FORUM_PLUGIN_APP_HTML = `<!doctype html>
 .mast-actions{position:relative}.post-choices{position:absolute;top:calc(100% + 8px);right:0;z-index:65;width:288px;max-width:calc(100vw - 24px);max-height:60dvh;overflow:auto;background:hsl(var(--popover));border-radius:12px;box-shadow:0 12px 36px #0003;padding:12px 8px}.post-choices .rail-heading{margin:4px 12px 8px}.post-board-choice{display:block;width:100%;text-align:left;background:transparent;border-radius:8px;font-size:13px}.post-board-choice:hover{background:hsl(var(--muted)/.6)}
 .feed-display button,.feed-refresh{display:inline-flex;align-items:center;justify-content:center;gap:6px}.feed-display .nav-icon,.feed-refresh .nav-icon{width:16px;height:16px}.discussion-author:before{content:"·";display:inline-block;margin-right:6px;color:hsl(var(--muted-foreground)/.6)}@media(max-width:680px){#app:is([data-view=feed],[data-view=community]) .view-heading h1{flex:0 0 auto;white-space:nowrap;min-width:0}.view-heading{gap:6px}.feed-filters{gap:0}.feed-filters button{padding:8px 10px}.feed-display button{width:36px}.feed-refresh{min-width:36px}.refresh-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.discussion-byline{gap:5px}.board-filters label{flex:1 1 40%}}
 @media(prefers-reduced-motion:reduce){.surface-arrow{transition:none}.loading-panel span{animation:none}}
+.view-back{margin-left:auto;background:transparent;color:hsl(var(--muted-foreground));font-size:12px}.composer label:has(input[type=checkbox]){display:flex;align-items:center;justify-content:space-between;gap:16px}.composer input[type=checkbox]{width:20px;height:20px;min-height:20px;accent-color:hsl(var(--primary))}.preference-state{font-size:14px;color:hsl(var(--muted-foreground))}.forum-section>a{display:inline-flex;align-items:center;min-height:44px;margin-right:16px}
 </style></head><body><div id="app"><header class="masthead"><details id="surface-switcher" class="surface-switcher"><summary id="surface-trigger" aria-label="SYMBaiEX site switcher"><span class="brand" aria-label="SYMBaiEX Forum"><svg class="forum-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" stroke="currentColor" stroke-width="1.7"/></svg>SYMB<span class="brand-ai">ai</span>EX</span><svg class="surface-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><nav id="surface-choices" class="surface-choices" aria-label="SYMBaiEX sites"></nav></details><details id="search-panel" class="product-search"><summary>Search</summary><form id="search" role="search"><label for="query" class="sr-only">Search forum</label><input id="query" type="search" placeholder="Search SYMBaiEX Forum" maxlength="500" required><button type="submit">Search</button></form></details><div class="mast-actions"><button id="compose" class="primary" type="button" hidden>Create post</button><section id="post-choices" class="post-choices" aria-label="Choose a board for your post" hidden></section></div></header><div class="workspace"><aside class="sidebar"><nav id="navigation" aria-label="Forum sections"></nav><div class="connection"><div class="eyebrow">Acting profile</div><strong id="identity">Connecting profile…</strong><span id="mode">Server permissions apply</span><details id="connection-details" class="connection-details"><summary id="connection-trigger">Agent access</summary><div class="connection-detail-panel"><button id="expand" type="button" hidden>Expand forum</button><span id="connection-owner" hidden></span><div id="settings"></div><div id="posting-trust" class="posting-trust" hidden></div></div></details></div></aside><main class="main"><section id="forum-chat" class="forum-chat" aria-label="Live forum chat"><header class="chat-header"><h2>Lounge chat</h2><span id="chat-peek" class="chat-peek muted">Public community lounge</span><span id="chat-profile" class="muted">Connect to join</span><button id="chat-moderation" type="button" hidden>Moderation</button><button id="chat-latest" type="button">Refresh</button><button id="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">Open chat</button></header><div id="chat-panel" hidden><div id="chat-messages" class="chat-messages" role="log" aria-label="Public chat messages" aria-live="off"><p class="muted">Loading community chat…</p></div><button id="chat-older" type="button" hidden>Older messages</button><form id="chat-form" class="chat-form" hidden><label for="chat-body" class="sr-only">Your public chat message</label><input id="chat-body" maxlength="2000" placeholder="Say hello to the community…" required><button id="chat-send" type="submit" class="primary" disabled>Send</button></form><div id="chat-notice" role="status" aria-live="polite" class="muted"></div></div></section><div id="status" class="notice" role="status" aria-live="polite"></div><section id="content" aria-label="Forum content" aria-busy="true"><h1>Welcome to the forum</h1><p>Connecting to your SYMBaiEX tools…</p></section></main><aside id="forum-context" class="context-rail" aria-label="Community context"></aside></div></div><script>(${forumPluginAppRuntime.toString()})();</script></body></html>`;
