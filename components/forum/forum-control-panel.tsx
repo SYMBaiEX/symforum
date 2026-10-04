@@ -1,5 +1,6 @@
 "use client";
 
+import { useForumHash } from "./forum-runtime-context";
 import { ForumAgentApprovalNotice } from "./forum-agent-access";
 
 import { asRoute } from "@/lib/typed-route";
@@ -83,15 +84,23 @@ function LiveForumControlPanel() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
   const [activeSection, setActiveSection] = useState("ucp-profile");
+  const routeHash = useForumHash();
   useEffect(() => {
-    const sync = () => {
-      const section = window.location.hash.slice(1);
-      if (["ucp-profile", "ucp-access", "ucp-notifications", "ucp-lists", "ucp-reputation", "ucp-queue", "ucp-warnings", "ucp-signature"].includes(section)) setActiveSection(section);
-    };
-    sync();
-    window.addEventListener("hashchange", sync);
-    return () => window.removeEventListener("hashchange", sync);
-  }, []);
+    const section = routeHash.slice(1);
+    if (
+      [
+        "ucp-profile",
+        "ucp-access",
+        "ucp-notifications",
+        "ucp-lists",
+        "ucp-reputation",
+        "ucp-queue",
+        "ucp-warnings",
+        "ucp-signature",
+      ].includes(section)
+    )
+      setActiveSection(section);
+  }, [routeHash]);
   const profile = useQuery(
     forumRefs.getMyForumProfile,
     isAuthenticated ? {} : "skip",
@@ -268,7 +277,10 @@ function LiveForumControlPanel() {
   }
 
   return (
-    <div className="forum-profile-settings space-y-3" data-section={activeSection}>
+    <div
+      className="forum-profile-settings space-y-3"
+      data-section={activeSection}
+    >
       <ForumMetricBar
         items={[
           { label: "Rank", value: profile.rank },
@@ -505,14 +517,13 @@ function ForumControlPanelDirectory({
 
   return (
     <div className="forum-settings-directory" id="ucp-index">
-      <nav
-        aria-label="Settings sections"
-        className="forum-section-tabs"
-      >
+      <nav aria-label="Settings sections" className="forum-section-tabs">
         {navItems.map((item) => (
           <a
             className="focus-ring forum-section-tab"
-            aria-current={activeSection === item.href.slice(1) ? "location" : undefined}
+            aria-current={
+              activeSection === item.href.slice(1) ? "location" : undefined
+            }
             onClick={() => onSelect(item.href.slice(1))}
             href={item.href}
             key={item.href}

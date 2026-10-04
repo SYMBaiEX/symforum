@@ -59,7 +59,7 @@ export function PublicProfilePanel({
       <section
         className={
           forum
-            ? "min-w-0 rounded-sm bg-muted/25 p-4 lg:col-span-4"
+            ? "forum-profile-identity min-w-0 rounded-xl bg-card p-4 lg:col-span-4"
             : "lg:col-span-5"
         }
       >

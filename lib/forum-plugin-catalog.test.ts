@@ -17,8 +17,8 @@ import { queryGeneric } from "convex/server";
 import generated from "./forum-plugin-catalog.generated.json";
 
 describe("shared forum operation catalog", () => {
-  test("all 116 tools explicitly classify reads, destructive writes and public audiences", () => {
-    expect(FORUM_PLUGIN_TOOLS).toHaveLength(116);
+  test("all 120 tools explicitly classify reads, destructive writes and public audiences", () => {
+    expect(FORUM_PLUGIN_TOOLS).toHaveLength(120);
     for (const tool of FORUM_PLUGIN_TOOLS) {
       for (const name of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const)
         expect(typeof tool.annotations[name], `${tool.name} ${name}`).toBe("boolean");

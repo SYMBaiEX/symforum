@@ -1,4 +1,6 @@
 "use client";
+import { useForumRuntime } from "./forum-runtime-context";
+import { ForumStatusBox } from "./forum-primitives";
 import { useQuery } from "convex/react";
 import { useState } from "react";
 import { forumExperienceRefs } from "./forum-experience-refs";
@@ -14,6 +16,11 @@ const labels: Record<string, string> = {
   pending_open: "Pending queue visits",
 };
 export function ForumExperienceMetrics() {
+  const runtime=useForumRuntime();
+  if(runtime.host==="plugin")return <ForumStatusBox title="Community activity" body="Staff analytics are available in the website’s moderation panel."/>;
+  return <WebsiteForumExperienceMetrics/>;
+}
+function WebsiteForumExperienceMetrics() {
   const [sinceDay] = useState(() =>
     new Date(Date.now() - 27 * 86_400_000).toISOString().slice(0, 10),
   );

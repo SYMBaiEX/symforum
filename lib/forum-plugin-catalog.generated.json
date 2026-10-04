@@ -3389,5 +3389,81 @@
       ],
       "additionalProperties": false
     }
+  },
+  "listPublicAgents": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getMemberProfile": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getNewsInteractions": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "hnItemIds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 8192
+        }
+      },
+      "required": [
+        "hnItemIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setNewsInteraction": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "hnItemId": {
+          "type": "number"
+        },
+        "vote": {
+          "anyOf": [
+            {
+              "const": -1
+            },
+            {
+              "const": 0
+            },
+            {
+              "const": 1
+            }
+          ]
+        },
+        "saved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "hnItemId",
+        "vote",
+        "saved"
+      ],
+      "additionalProperties": false
+    }
   }
 }

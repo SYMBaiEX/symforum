@@ -1,6 +1,7 @@
 import type { ForumPluginCapability } from "./forum-plugin-contract";
 
 const PUBLIC_READ = new Set([
+  "listPublicAgents", "getMemberProfile", "getNewsInteractions",
   "listCategories",
   "listCategoryOptions",
   "listThreadPrefixes",
@@ -25,6 +26,7 @@ const PUBLIC_READ = new Set([
   "onlineSummary",
 ]);
 const STAFF = new Set([
+  "adminOverview",
   "listChatPendingMessages",
   "moderateChatMessage",
   "listForumThreads",
@@ -46,7 +48,6 @@ const STAFF = new Set([
   "updateForumPostModeration",
 ]);
 const ADMIN = new Set([
-  "adminOverview",
   "upsertForumCategory",
   "reorderForumCategories",
   "assignCategoryModerator",
@@ -95,6 +96,7 @@ export function forumOperationPublicRead(operation: string) {
 export function forumOperationCapability(
   operation: string,
 ): ForumPluginCapability {
+  if (operation === "setNewsInteraction") return "feedback";
   if (ATTACHMENTS.has(operation)) return "attachments";
   if (ACCOUNTS.has(operation)) return "accounts";
   if (STAFF.has(operation)) return "moderate";

@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthToken } from "@convex-dev/auth/react";
+import { useForumRuntime } from "./forum-runtime-context";
 import {
   BarChart3,
   Bold,
@@ -561,6 +562,7 @@ export function ForumAttachmentDraftPanel({
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const authToken = useAuthToken();
+  const runtime = useForumRuntime();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>(
@@ -611,6 +613,19 @@ export function ForumAttachmentDraftPanel({
 
     setUploading(true);
     try {
+      if (runtime.uploadFiles) {
+        const uploaded = await runtime.uploadFiles(nextFiles);
+        for (let index = 0; index < uploaded.length; index++) {
+          const file = nextFiles[index];
+          if (file && file.type.startsWith("image/")) {
+            const url = URL.createObjectURL(file);
+            previewUrls.current.set(uploaded[index].storageId, url);
+            setImagePreviews(previous => ({...previous, [uploaded[index].storageId]: url}));
+          }
+        }
+        onAttachmentsChange([...attachments, ...uploaded]);
+        return;
+      }
       const uploaded: ForumAttachmentDraft[] = [];
       const uploadEndpoint = forumAttachmentUploadEndpoint();
       if (uploadEndpoint === null) {

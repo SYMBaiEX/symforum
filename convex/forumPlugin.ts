@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { forumOperations } from "./forum";
+import { forumPluginUiOperations } from "./forumPluginUiOperations";
 import { forumAccountOperations } from "./admin";
 import {
   requirePluginOwner,
@@ -56,6 +57,7 @@ type Operation = {
 const operations = {
   ...forumOperations,
   ...forumAccountOperations,
+  ...forumPluginUiOperations,
 } as unknown as Record<string, Operation>;
 const proposalRateLimiter = new RateLimiter(components.rateLimiter, {
   forumPluginOwnerProposals: {
