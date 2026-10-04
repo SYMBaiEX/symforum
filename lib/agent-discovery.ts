@@ -113,24 +113,157 @@ export const MCP_SERVER_CARD = {
   transport: "streamable-http",
   tools: [
     {
+      name: "evidence_status",
+      description: "Read product API availability and capability status.",
+    },
+    {
+      name: "evidence_sources",
+      description: "List current active public evidence sources.",
+    },
+    {
+      name: "evidence_source_registry",
+      description:
+        "Read deterministic adapter provenance, cadence, and ingestion bounds.",
+    },
+    {
       name: "evidence_search",
-      description: "Search current public evidence records.",
+      description: "Search normalized current public evidence documents.",
     },
     {
-      name: "evidence_verify_claim",
-      description: "Verify a stored public claim against citations.",
-    },
-    {
-      name: "evidence_claim_timeline",
-      description: "Read bounded public claim revision history.",
-    },
-    {
-      name: "evidence_create_research",
-      description: "Create a bounded source-cited research job.",
+      name: "evidence_semantic_search",
+      description:
+        "Search the public corpus with feature-gated semantic enhancement and lexical fallback.",
     },
     {
       name: "evidence_universal_search",
-      description: "Search the bounded public editorial and evidence corpus.",
+      description:
+        "Search public evidence, editorial, news, newsletter, and forum records.",
+    },
+    {
+      name: "evidence_document",
+      description: "Read one public evidence document by its ID.",
+    },
+    {
+      name: "evidence_changes",
+      description: "List recent public evidence change events.",
+    },
+    {
+      name: "evidence_verify_claim",
+      description:
+        "Verify one stored public claim against version-bound citations.",
+    },
+    {
+      name: "evidence_search_entities",
+      description: "Search normalized public evidence entities.",
+    },
+    {
+      name: "evidence_version_claims",
+      description: "List public claims cited to one evidence document version.",
+    },
+    {
+      name: "evidence_claim_timeline",
+      description:
+        "Read the bounded public supersession timeline for a claim key.",
+    },
+    {
+      name: "evidence_products",
+      description: "List current evidence API product definitions.",
+    },
+    {
+      name: "evidence_datasets",
+      description:
+        "List public dataset selection contracts and immutable snapshot provenance, coverage, freshness, and citation metrics.",
+    },
+    {
+      name: "evidence_benchmarks",
+      description: "List public benchmark definitions and recent runs.",
+    },
+    {
+      name: "evidence_quota",
+      description: "Read the authenticated agent's current usage quota.",
+    },
+    {
+      name: "evidence_entitlements",
+      description:
+        "Read effective free-beta product access for the authenticated owner.",
+    },
+    {
+      name: "evidence_usage",
+      description: "Read bounded authenticated usage ledger summaries.",
+    },
+    {
+      name: "evidence_create_research",
+      description: "Create one bounded source-cited research job.",
+    },
+    {
+      name: "evidence_get_research",
+      description: "Read one owner-scoped research job status.",
+    },
+    {
+      name: "evidence_get_research_artifact",
+      description:
+        "Resolve one authenticated first-party research artifact stream.",
+    },
+    {
+      name: "evidence_create_export",
+      description: "Create one bounded public JSONL export job.",
+    },
+    {
+      name: "evidence_get_export",
+      description: "Read one owner-scoped export job status.",
+    },
+    {
+      name: "evidence_get_export_artifact",
+      description:
+        "Resolve one authenticated first-party export artifact stream.",
+    },
+    {
+      name: "evidence_get_export_manifest",
+      description:
+        "Resolve the immutable buyer-readable provenance and coverage manifest for an export.",
+    },
+    {
+      name: "evidence_list_webhooks",
+      description: "List owner-scoped webhook subscriptions.",
+    },
+    {
+      name: "evidence_webhook_availability",
+      description:
+        "Read whether webhook creation is currently operator-enabled.",
+    },
+    {
+      name: "evidence_create_webhook",
+      description:
+        "Create an owner-scoped allowlisted signed webhook subscription.",
+    },
+    {
+      name: "evidence_set_webhook_status",
+      description:
+        "Pause, resume, or revoke an owner-scoped webhook subscription.",
+    },
+    {
+      name: "evidence_webhook_health",
+      description:
+        "Read bounded health for one owner-scoped webhook subscription.",
+    },
+    {
+      name: "evidence_webhook_history",
+      description:
+        "List bounded recent deliveries for one webhook subscription.",
+    },
+    {
+      name: "evidence_rotate_webhook_secret",
+      description: "Rotate a webhook signing secret and return it once.",
+    },
+    {
+      name: "evidence_replay_webhook_delivery",
+      description:
+        "Replay one stored webhook event with bounded replay protection.",
+    },
+    {
+      name: "evidence_send_webhook_test",
+      description:
+        "Send one signed test event to an active webhook subscription.",
     },
   ],
   remotes: [
