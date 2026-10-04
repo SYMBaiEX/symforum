@@ -2,7 +2,7 @@
 .forum-app-shell, [data-surface=forum], :root[data-forum-plugin] {
  --background: 240 5% 96%; --foreground: 0 0% 3%; --card: 0 0% 100%; --popover: 0 0% 100%;
  --primary: 319 100% 40%; --primary-foreground: 0 0% 100%; --muted: 240 5% 92%; --muted-foreground: 240 3% 37%;
- --accent: 174 54% 67%; --border: 240 5% 86%; --input: 240 5% 82%; --ring: 174 54% 46%; --radius: .75rem;
+ --accent: 174 54% 30%; --border: 240 5% 86%; --input: 240 5% 82%; --ring: 174 54% 46%; --radius: .75rem;
  --accent-magenta: #fa00a8; --accent-cyan: #81d8d0; --accent-canary: #ffe14d; --row-border: 0 0% 64%;
  --forum-rail-width: 220px; --forum-content-width: 1050px; --forum-thread-width: 860px; --forum-panel-radius: 12px; --forum-brand-size: 20px; --forum-mark-size: 32px;
  font-family: var(--font-geist-sans, "Geist"), ui-sans-serif, system-ui, sans-serif;
@@ -11,13 +11,13 @@
 .dark .forum-app-shell, .dark [data-surface=forum], :root[data-forum-plugin][data-theme=dark] {
  --background: 240 6% 5%; --foreground: 0 0% 98%; --card: 240 5% 9%; --popover: 240 5% 11%;
  --primary: 319.68 100% 49%; --primary-foreground: 0 0% 3%; --muted: 240 4% 15%; --muted-foreground: 240 3% 70%;
- --border: 240 4% 20%; --input: 240 4% 27%; --ring: 174 54% 67%; --row-border: 0 0% 22%;
+ --accent: 174 54% 67%; --border: 240 4% 20%; --input: 240 4% 27%; --ring: 174 54% 67%; --row-border: 0 0% 22%;
 }
 @media (prefers-color-scheme: dark) {
  :root[data-forum-plugin]:not([data-theme=light]) {
   --background: 240 6% 5%; --foreground: 0 0% 98%; --card: 240 5% 9%; --popover: 240 5% 11%;
   --primary: 319.68 100% 49%; --primary-foreground: 0 0% 3%; --muted: 240 4% 15%; --muted-foreground: 240 3% 70%;
-  --border: 240 4% 20%; --input: 240 4% 27%; --ring: 174 54% 67%; --row-border: 0 0% 22%;
+  --accent: 174 54% 67%; --border: 240 4% 20%; --input: 240 4% 27%; --ring: 174 54% 67%; --row-border: 0 0% 22%;
  }
 }
 .site-surface-trigger, #app .brand { font-size: var(--forum-brand-size); }
@@ -219,7 +219,8 @@
  border: 1px solid transparent; font-size: 10px; font-weight: 600; line-height: 14px; white-space: nowrap;
 }
 .forum-app-shell .forum-state-token.bg-primary { color: hsl(var(--primary)); background: hsl(var(--primary)/.1); border-color: hsl(var(--primary)/.15); }
-.forum-app-shell .forum-prefix-badge { background: color-mix(in srgb,currentColor 7%,transparent); border-color: color-mix(in srgb,currentColor 13%,transparent); }
+.forum-app-shell .forum-prefix-badge { color: color-mix(in srgb,var(--forum-prefix-color,hsl(var(--muted-foreground))) 48%,black); background: color-mix(in srgb,var(--forum-prefix-color,hsl(var(--muted-foreground))) 8%,transparent); border-color: color-mix(in srgb,var(--forum-prefix-color,hsl(var(--muted-foreground))) 30%,transparent); }
+.dark .forum-app-shell .forum-prefix-badge { color: var(--forum-prefix-color,hsl(var(--muted-foreground))); }
 @media (max-width: 767px),(pointer: coarse) {
  .forum-app-shell, [data-surface=forum] { --forum-control-height: 44px; }
  :is(.forum-app-shell,[data-surface=forum]) :is([data-ui=button],.forum-action-pill,.forum-control,.forum-section-tab) { min-height: 44px; }

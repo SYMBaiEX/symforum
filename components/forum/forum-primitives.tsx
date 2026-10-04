@@ -20,6 +20,7 @@ import {
   ReactNode,
   useEffect,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -106,7 +107,9 @@ export function ForumStatusBox({
         accent === "magenta" && "border-primary/50 bg-primary/10",
       )}
     >
-      <p className="forum-status-title text-sm font-semibold text-foreground">{title}</p>
+      <p className="forum-status-title text-sm font-semibold text-foreground">
+        {title}
+      </p>
       <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
         {body}
       </p>
@@ -710,7 +713,12 @@ export function ForumUserCpShell({
     <div className="forum-account-space">
       <ForumChrome />
       <header className="forum-account-heading">
-        <ForumLink href="/forum" className="focus-ring text-xs text-muted-foreground hover:text-foreground">← Back to forum</ForumLink>
+        <ForumLink
+          href="/forum"
+          className="focus-ring text-xs text-muted-foreground hover:text-foreground"
+        >
+          ← Back to forum
+        </ForumLink>
         <h1>{title}</h1>
         <p>{description}</p>
       </header>
@@ -919,7 +927,7 @@ export function ForumThreadPrefixBadge({
       )}
       style={
         prefix.color
-          ? { borderColor: prefix.color, color: prefix.color }
+          ? ({ "--forum-prefix-color": prefix.color } as CSSProperties)
           : undefined
       }
     >
