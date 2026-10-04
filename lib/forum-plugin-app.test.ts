@@ -606,7 +606,7 @@ describe("forum MCP App resource", () => {
     menu.open = true; menu.find("Feed preferences")!.focus();
     app.documentEvent("keydown", app.activeElement, "Escape");
     expect(menu.open).toBe(false); expect(app.activeElement).toBe(trigger);
-    menu.open = true; app.documentEvent("click", app.nodes.get("identity")!);
+    menu.open = true; app.documentEvent("pointerdown", app.nodes.get("identity")!);
     expect(menu.open).toBe(false);
   });
 
