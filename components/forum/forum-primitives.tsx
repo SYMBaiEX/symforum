@@ -914,7 +914,7 @@ export function ForumThreadPrefixBadge({
   return (
     <span
       className={cn(
-        "inline-flex min-h-5 shrink-0 items-center px-1.5 text-xs leading-none text-muted-foreground",
+        "forum-prefix-badge inline-flex min-h-5 shrink-0 items-center px-1.5 text-xs leading-none text-muted-foreground",
         className,
       )}
       style={
@@ -964,7 +964,7 @@ function ForumStateToken({
   return (
     <span
       className={cn(
-        "inline-flex min-h-5 items-center px-1.5 text-xs leading-none",
+        "forum-state-token inline-flex min-h-5 items-center px-1.5 text-xs leading-none",
         tone === "muted" && "bg-muted/50 text-muted-foreground",
         tone === "primary" && "bg-primary/10 text-primary",
         tone === "primarySolid" && "bg-primary text-primary-foreground",

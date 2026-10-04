@@ -16,6 +16,12 @@ import {
   History,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { forumSiteUrl } from "@/lib/site-urls";
 import { reportAppError } from "@/components/app-error-surface";
 import {
@@ -57,7 +63,7 @@ const PAGE_SIZE = 12;
 const DISPLAY_STORAGE_KEY = "symbaiex.forum.feed-display";
 type FeedDisplay = "timeline" | "cards" | "compact";
 const actionClass =
-  "forum-action-pill focus-ring inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-2 px-3 text-xs font-semibold disabled:opacity-50";
+  "forum-action-pill focus-ring inline-flex shrink-0 items-center justify-center gap-1.5 px-3 text-xs font-medium disabled:opacity-50";
 
 export function ForumFeedList({
   sort,
@@ -337,26 +343,25 @@ export function LiveFeed({
         <h2 className="sr-only">
           {communityOnly ? "Community conversations" : "Discussions"}
         </h2>
-        <details
-          className="relative sm:hidden"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.currentTarget.open = false;
-              event.currentTarget.querySelector("summary")?.focus();
-            }
-          }}
-        >
-          <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-1 text-xs font-medium text-muted-foreground">
-            {sort === "new"
-              ? "Latest"
-              : sort === "unanswered"
-                ? "Unanswered"
-                : "Active"}
-            <ChevronDown className="size-3" aria-hidden="true" />
-          </summary>
-          <nav
-            aria-label="Sort discussions"
-            className="absolute left-0 top-full z-10 mt-1 min-w-28 rounded-xl bg-popover p-1 shadow-lg"
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Sort discussions"
+              className={`${actionClass} sm:hidden`}
+            >
+              {sort === "new"
+                ? "Latest"
+                : sort === "unanswered"
+                  ? "Unanswered"
+                  : "Active"}
+              <ChevronDown className="size-3" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            sideOffset={6}
+            className="min-w-36"
           >
             {(
               [
@@ -365,22 +370,25 @@ export function LiveFeed({
                 { value: "unanswered", label: "Unanswered" },
               ] as const
             ).map((item) => (
-              <ForumLink
-                className={`${actionClass} w-full justify-start ${sort === item.value ? "text-primary" : ""}`}
-                aria-current={sort === item.value ? "page" : undefined}
-                href={forumHomeHref(
-                  communityOnly ? "community" : "feed",
-                  item.value,
-                  scope,
-                  authorFilter,
-                )}
-                key={item.value}
-              >
-                {item.label}
-              </ForumLink>
+              <DropdownMenuItem asChild key={item.value}>
+                <ForumLink
+                  aria-current={sort === item.value ? "page" : undefined}
+                  className={
+                    sort === item.value ? "font-semibold text-primary" : ""
+                  }
+                  href={forumHomeHref(
+                    communityOnly ? "community" : "feed",
+                    item.value,
+                    scope,
+                    authorFilter,
+                  )}
+                >
+                  {item.label}
+                </ForumLink>
+              </DropdownMenuItem>
             ))}
-          </nav>
-        </details>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <nav aria-label="Sort discussions" className="hidden gap-1 sm:flex">
           {[
             { value: "active", label: "Active" },
@@ -405,7 +413,7 @@ export function LiveFeed({
         <div
           role="group"
           aria-label="Discussion display"
-          className="ml-auto hidden items-center gap-1 sm:flex"
+          className="forum-display-toggle ml-auto hidden items-center gap-1 sm:flex"
         >
           {(
             [
@@ -417,6 +425,7 @@ export function LiveFeed({
             <button
               className={`${actionClass} px-2 ${display === value ? "bg-muted text-foreground" : "bg-transparent text-muted-foreground"}`}
               aria-label={label}
+              title={label}
               aria-pressed={display === value}
               onClick={() => changeDisplay(value)}
               type="button"
@@ -486,10 +495,10 @@ export function LiveFeed({
           <History className="size-4" aria-hidden="true" />
         </ForumLink>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="forum-feed-filters flex flex-wrap items-center gap-2">
         <nav
           aria-label="Feed source"
-          className="flex rounded-full bg-muted/50 p-1"
+          className="forum-segmented-control flex gap-1 p-1"
         >
           {(["discover", "following"] as const).map((value) => (
             <button
@@ -504,10 +513,11 @@ export function LiveFeed({
             </button>
           ))}
         </nav>
-        <label className="ml-auto flex min-h-11 items-center gap-2 text-xs text-muted-foreground">
-          Authors
+        <label className="forum-author-filter ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="hidden min-[400px]:inline">Authors</span>
           <select
-            className="focus-ring min-h-11 rounded-full bg-card px-3 text-foreground"
+            aria-label="Authors"
+            className="forum-select focus-ring bg-card text-foreground"
             value={authorFilter}
             onChange={(e) =>
               changeFeed(scope, e.target.value as ForumAuthorFilter)

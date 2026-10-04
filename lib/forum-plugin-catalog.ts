@@ -10,7 +10,17 @@ import {
   type ForumJsonSchema,
 } from "./forum-plugin-schema";
 
-export const FORUM_PLUGIN_APP_URI = "ui://symbaiex/forum.html";
+export { FORUM_NATIVE_RESOURCE_URI as FORUM_PLUGIN_APP_URI } from "./forum-native-revision.generated";
+import { FORUM_NATIVE_RESOURCE_URI as FORUM_PLUGIN_APP_URI } from "./forum-native-revision.generated";
+
+// Installed clients may still request a previous resource URI. Serve the current shell.
+export function isForumAppResourceUri(uri: unknown): uri is string {
+  return (
+    typeof uri === "string" &&
+    (uri === "ui://symbaiex/forum.html" ||
+      /^ui:\/\/symbaiex\/forum-[a-f0-9]{12}\.html$/.test(uri))
+  );
+}
 /** Same Signal Moth icon as the website and portable plugin package. */
 export const FORUM_PLUGIN_ICON = {
   src: SYMBAIEX_ICON_DATA_URI,
@@ -57,16 +67,34 @@ const PRIVATE_ACCOUNT_OPERATIONS = new Set([
   "listMyForumCatchUp",
   "markChatRead",
   "recordForumExperienceEvent",
-  "status", "getMyForumNavState", "getMyForumNotificationPreferences",
-  "getMyForumProfile", "getPrivateMessage", "listPrivateMessages",
-  "listMyCategorySubscriptions", "listMyForumRelationships",
-  "listMyForumReputationHistory", "listMyForumWarnings", "listMyNotifications",
-  "listMyPendingForumContent", "listMyThreadBookmarks", "listMyThreadSubscriptions",
-  "markAllForumsRead", "markCategoryRead", "markThreadRead", "markNotificationRead",
-  "markPrivateMessageRead", "recordThreadView", "setCategorySubscription",
-  "setThreadBookmark", "setThreadSubscription", "updateForumRelationship",
-  "updateMyForumNotificationPreferences", "deletePrivateMessage",
-  "restorePrivateMessage", "createPrivateMessageReport",
+  "status",
+  "getMyForumNavState",
+  "getMyForumNotificationPreferences",
+  "getMyForumProfile",
+  "getPrivateMessage",
+  "listPrivateMessages",
+  "listMyCategorySubscriptions",
+  "listMyForumRelationships",
+  "listMyForumReputationHistory",
+  "listMyForumWarnings",
+  "listMyNotifications",
+  "listMyPendingForumContent",
+  "listMyThreadBookmarks",
+  "listMyThreadSubscriptions",
+  "markAllForumsRead",
+  "markCategoryRead",
+  "markThreadRead",
+  "markNotificationRead",
+  "markPrivateMessageRead",
+  "recordThreadView",
+  "setCategorySubscription",
+  "setThreadBookmark",
+  "setThreadSubscription",
+  "updateForumRelationship",
+  "updateMyForumNotificationPreferences",
+  "deletePrivateMessage",
+  "restorePrivateMessage",
+  "createPrivateMessageReport",
 ]);
 const keySchema: ForumJsonSchema = {
   type: "string",
@@ -127,10 +155,20 @@ function boundArguments(
   schema: ForumJsonSchema,
 ): ForumJsonSchema {
   const properties = { ...schema.properties };
-  if (["listChatMessages", "listChatPendingMessages"].includes(operation) && properties.paginationOpts) {
-    properties.paginationOpts = { ...properties.paginationOpts, properties: { ...properties.paginationOpts.properties, numItems: { type: "integer", minimum: 1, maximum: 60 } } };
+  if (
+    ["listChatMessages", "listChatPendingMessages"].includes(operation) &&
+    properties.paginationOpts
+  ) {
+    properties.paginationOpts = {
+      ...properties.paginationOpts,
+      properties: {
+        ...properties.paginationOpts.properties,
+        numItems: { type: "integer", minimum: 1, maximum: 60 },
+      },
+    };
   }
-  if (operation === "sendChatMessage" && properties.body) properties.body = { ...properties.body, minLength: 1, maxLength: 2_000 };
+  if (operation === "sendChatMessage" && properties.body)
+    properties.body = { ...properties.body, minLength: 1, maxLength: 2_000 };
   if (operation === "listFeedThreads" && properties.paginationOpts) {
     const pagination = properties.paginationOpts;
     const fields = { ...pagination.properties };
@@ -208,7 +246,11 @@ const domainOperations: ForumPluginOperation[] = Object.entries(generated).map(
       destructive: !readOnly && !ADDITIVE_WRITES.has(operation),
       openWorld: !PRIVATE_ACCOUNT_OPERATIONS.has(operation),
       inputSchema: schema,
-      description: describe(operation) + (readOnly ? " Forum use has no monthly usage limit. Connected reads retain current authorization and generous short-term owner request limits." : ""),
+      description:
+        describe(operation) +
+        (readOnly
+          ? " Forum use has no monthly usage limit. Connected reads retain current authorization and generous short-term owner request limits."
+          : ""),
     };
   },
 );
@@ -281,41 +323,45 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     },
   },
 ];
-export const FORUM_PLUGIN_TOOLS = FORUM_PLUGIN_OPERATIONS.map((tool) => ({
-  name: tool.name,
-  ...(tool.name === "forum_open" ? { title: "SYMBaiEX Forum", icons: [FORUM_PLUGIN_ICON] } : {}),
-  description: tool.description,
-  inputSchema: tool.inputSchema,
-  securitySchemes: [
-    ...(tool.publicRead ? [{ type: "noauth" }] : []),
-    { type: "oauth2", scopes: ["openid", "offline_access"] },
-  ],
-  annotations: {
-    readOnlyHint: tool.readOnly,
-    destructiveHint: tool.destructive,
-    idempotentHint: true,
-    openWorldHint: tool.openWorld,
-  },
-  _meta: {
+export const FORUM_PLUGIN_TOOLS = /* @__PURE__ */ FORUM_PLUGIN_OPERATIONS.map(
+  (tool) => ({
+    name: tool.name,
+    ...(tool.name === "forum_open"
+      ? { title: "SYMBaiEX Forum", icons: [FORUM_PLUGIN_ICON] }
+      : {}),
+    description: tool.description,
+    inputSchema: tool.inputSchema,
     securitySchemes: [
       ...(tool.publicRead ? [{ type: "noauth" }] : []),
       { type: "oauth2", scopes: ["openid", "offline_access"] },
     ],
-    ...(tool.name === "forum_open"
-      ? {
-          ui: { resourceUri: FORUM_PLUGIN_APP_URI },
-          "openai/outputTemplate": FORUM_PLUGIN_APP_URI,
-          "openai/ui": {
-            entrypoints: [{ type: "global" }, { type: "thread" }],
-          },
-        }
-      : {}),
-    ...(tool.name === "forum_status" ? { "openai/profile": true } : {}),
-    ...(tool.name === "forum_upload_attachments"
-      ? { "openai/fileParams": ["files"] }
-      : {}),
-  },
-}));
+    annotations: {
+      readOnlyHint: tool.readOnly,
+      destructiveHint: tool.destructive,
+      idempotentHint: true,
+      openWorldHint: tool.openWorld,
+    },
+    _meta: {
+      securitySchemes: [
+        ...(tool.publicRead ? [{ type: "noauth" }] : []),
+        { type: "oauth2", scopes: ["openid", "offline_access"] },
+      ],
+      ...(tool.name === "forum_open"
+        ? {
+            ui: { resourceUri: FORUM_PLUGIN_APP_URI },
+            "openai/outputTemplate": FORUM_PLUGIN_APP_URI,
+            "openai/ui": {
+              entrypoints: [{ type: "global" }, { type: "thread" }],
+            },
+          }
+        : {}),
+      ...(tool.name === "forum_status" ? { "openai/profile": true } : {}),
+      ...(tool.name === "forum_upload_attachments"
+        ? { "openai/fileParams": ["files"] }
+        : {}),
+    },
+  }),
+);
 export function findForumPluginTool(name: string) {
   return FORUM_PLUGIN_OPERATIONS.find((tool) => tool.name === name);
 }

@@ -1,3 +1,8 @@
+import { createHash } from "node:crypto";
+import {
+  FORUM_PLUGIN_APP_URI,
+  FORUM_PLUGIN_TOOLS,
+} from "./forum-plugin-catalog";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -20,6 +25,19 @@ function pages(path: string): string[] {
   );
 }
 describe("automatic native forum parity", () => {
+  test("advertises a content-addressed UI revision so client caches cannot pin an older renderer", () => {
+    const revision = createHash("sha256")
+      .update(readFileSync("lib/forum-native-app.generated.ts"))
+      .update(readFileSync("lib/forum-shared-css.generated.ts"))
+      .digest("hex")
+      .slice(0, 12);
+    expect(FORUM_PLUGIN_APP_URI).toBe(`ui://symbaiex/forum-${revision}.html`);
+    expect(FORUM_PLUGIN_APP_RESOURCE.uri).toBe(FORUM_PLUGIN_APP_URI);
+    expect(
+      FORUM_PLUGIN_TOOLS.find((tool) => tool.name === "forum_open")?._meta.ui
+        ?.resourceUri,
+    ).toBe(FORUM_PLUGIN_APP_URI);
+  });
   test("every actual forum route is compiled from its original page module", () => {
     expect(FORUM_NATIVE_ROUTES.map((route) => route.source).sort()).toEqual(
       pages("app/forum").sort(),

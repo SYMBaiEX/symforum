@@ -3,6 +3,8 @@
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
+import { useSurfaceScope } from "./surface-scope";
+
 import { cn } from "@/lib/utils";
 
 const TooltipProvider = TooltipPrimitive.Provider;
@@ -17,6 +19,8 @@ const TooltipContent = React.forwardRef<
 >(({ className, sideOffset = 4, ...props }, ref) => (
   <TooltipPrimitive.Portal>
     <TooltipPrimitive.Content
+      data-surface={useSurfaceScope()}
+      data-ui="tooltip"
       ref={ref}
       sideOffset={sideOffset}
       className={cn(

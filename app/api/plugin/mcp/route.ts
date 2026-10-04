@@ -6,7 +6,7 @@ import {
 } from "@/lib/docs-mcp-protocol";
 import {
   FORUM_PLUGIN_TOOLS,
-  FORUM_PLUGIN_APP_URI,
+  isForumAppResourceUri,
   FORUM_PLUGIN_ICON,
   findForumPluginTool,
   validateForumPluginArguments,
@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const SERVER_INFO = {
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
-  version: "2.0.0",
+  version: "2.1.0",
   icons: [FORUM_PLUGIN_ICON],
 };
 const instructions =
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
         instructions,
-        ttlMs: 300_000,
+        ttlMs: 0,
         cacheScope: "public",
       }),
     );
@@ -222,9 +222,7 @@ export async function POST(request: Request) {
       id,
       resultEnvelope(protocol, {
         tools: FORUM_PLUGIN_TOOLS,
-        ...(protocol === "modern"
-          ? { ttlMs: 300_000, cacheScope: "public" }
-          : {}),
+        ...(protocol === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
       }),
     );
   if (body.method === "resources/list")
@@ -234,13 +232,11 @@ export async function POST(request: Request) {
       id,
       resultEnvelope(protocol, {
         resources: [FORUM_PLUGIN_APP_RESOURCE],
-        ...(protocol === "modern"
-          ? { ttlMs: 300_000, cacheScope: "public" }
-          : {}),
+        ...(protocol === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
       }),
     );
   if (body.method === "resources/read") {
-    if (params.uri !== FORUM_PLUGIN_APP_URI)
+    if (!isForumAppResourceUri(params.uri))
       return rpc(request, protocol, id, undefined, {
         code: -32602,
         message: "Unknown forum resource.",
@@ -251,12 +247,14 @@ export async function POST(request: Request) {
       id,
       resultEnvelope(protocol, {
         contents: [
-          { ...FORUM_PLUGIN_APP_RESOURCE, text: FORUM_PLUGIN_APP_HTML },
+          {
+            ...FORUM_PLUGIN_APP_RESOURCE,
+            uri: params.uri,
+            text: FORUM_PLUGIN_APP_HTML,
+          },
         ],
-        // This shell is identical for every caller; personal content loads via tools.
-        ...(protocol === "modern"
-          ? { ttlMs: 300_000, cacheScope: "public" }
-          : {}),
+        // Revalidate on opens, including legacy URIs; personal content loads via tools.
+        ...(protocol === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
       }),
     );
   }
@@ -328,13 +326,13 @@ export async function POST(request: Request) {
       : tool.name === "forum_open" && !authorization
         ? Response.json({ status: "completed", actingAs: null, data: {} })
         : await relayForumPlugin(
-          request,
-          tool.name === "forum_open" ? "status" : tool.operation,
-          input,
-          authorization,
-          key,
-          policyVersion,
-        );
+            request,
+            tool.name === "forum_open" ? "status" : tool.operation,
+            input,
+            authorization,
+            key,
+            policyVersion,
+          );
   if (upstream.status === 401 || upstream.status === 403)
     return forumPluginAuthResponse(
       request,
