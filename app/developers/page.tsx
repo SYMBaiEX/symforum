@@ -4,6 +4,7 @@ import { PublicResourceSearchForm } from "@/components/public-resource-search-fo
 import { DEVELOPER_RESOURCES } from "@/lib/developer-resources";
 import {
   DOCS_MCP_SERVER_CARD,
+  GLAMA_EVIDENCE_LISTING_URL,
   MCP_SERVER_CARD,
   SKILLS_SH_LISTING_URL,
 } from "@/lib/agent-discovery";
@@ -49,6 +50,12 @@ const endpoints = [
     name: "Documentation MCP",
     href: "/api/docs/mcp/server-card",
     detail: "Public read-only documentation search and Markdown resources.",
+  },
+  {
+    name: "Third-party Glama connector page",
+    href: GLAMA_EVIDENCE_LISTING_URL,
+    detail:
+      "Glama's public listing for the SYMBaiEX Evidence MCP; listing details and health are maintained by Glama.",
   },
   {
     name: "A2A agent card",

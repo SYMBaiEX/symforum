@@ -24,6 +24,10 @@ describe("SYMBaiEX developer resources page", () => {
     expect(html).toContain("@symbaiex/agent-cli@0.1.0 manifest");
     expect(html).toContain("https://www.symbaiex.com/api/docs/mcp");
     expect(html).toContain("https://www.symbaiex.com/api/agent/mcp");
+    expect(html).toContain(
+      'href="https://glama.ai/mcp/connectors/com.symbaiex.www/evidence"',
+    );
+    expect(html).toContain("Third-party Glama connector page");
     expect(html).toContain('href="/.well-known/mcp"');
     expect(html).toContain('href="/developers/webmcp"');
     expect(html).toContain(
