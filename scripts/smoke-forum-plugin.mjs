@@ -90,12 +90,13 @@ async function check(name, action) {
     });
   }
 }
-async function fetchJson(path, body, expectedStatus = 200) {
+async function fetchJson(path, body, expectedStatus = 200, extraHeaders = {}) {
   const response = await fetch(new URL(path, origin), {
     method: body === undefined ? "GET" : "POST",
     headers: {
       Accept: "application/json, text/event-stream",
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...extraHeaders,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     redirect: "error",
@@ -111,12 +112,26 @@ async function fetchJson(path, body, expectedStatus = 200) {
   assert(payload !== null, `${path} did not return valid JSON.`);
   return { response, payload };
 }
-async function rpc(method, params, expectedStatus = 200) {
+async function rpc(method, params, expectedStatus = 200, modern = false) {
   const id = ++sequence;
   const { response, payload } = await fetchJson(
     resourcePath,
-    { jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) },
+    {
+      jsonrpc: "2.0", id, method,
+      ...(modern ? { params: {
+        ...params,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      } } : params === undefined ? {} : { params }),
+    },
     expectedStatus,
+    modern ? {
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": method,
+      ...(method === "resources/read" ? { "Mcp-Name": params.uri } : {}),
+    } : {},
   );
   if (expectedStatus === 200) {
     assert(
@@ -301,6 +316,16 @@ await check("native in-ChatGPT forum resource", async () => {
       content.text.includes("ui/initialize"),
     "Native forum HTML or MCP Apps bridge is missing.",
   );
+});
+await check("modern scan discovery and resource cache contract", async () => {
+  for (const method of ["server/discover", "tools/list", "resources/list", "resources/read"]) {
+    const { response, payload } = await rpc(method, method === "resources/read" ? { uri: appUri } : {}, 200, true);
+    const result = payload.result;
+    assert(response.headers.get("MCP-Protocol-Version") === "2026-07-28", `${method} did not negotiate the modern protocol.`);
+    assert(result?.resultType === "complete" && Number.isInteger(result.ttlMs) && result.ttlMs >= 0 && result.cacheScope === "public", `${method} is missing valid public cache metadata required by modern scanners.`);
+    assert(result._meta?.["io.modelcontextprotocol/serverInfo"]?.name === "symbaiex-forum", `${method} is missing per-request server identity.`);
+    if (method === "resources/read") assert(result.contents?.some((entry) => entry.uri === appUri && typeof entry.text === "string"), "Modern forum resource content is missing.");
+  }
 });
 await check("anonymous forum_open", async () => {
   await publicTool("forum_open");
