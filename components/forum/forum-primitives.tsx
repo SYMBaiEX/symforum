@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useConvexAuth, useMutation } from "convex/react";
 import usePresence from "@convex-dev/presence/react";
-import { ChevronDown, MessageSquare, Star } from "lucide-react";
+import { Bookmark, Bot, ChevronDown, Mail, MessageSquare, Star, UserRound, Bell } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -708,64 +708,35 @@ export function ForumUserCpShell({
 }) {
   const pathname = usePathname();
   const normalizedPathname = normalizedForumPathname(pathname);
-  const router = useRouter();
   const items = [
-    { href: "/forum/control-panel", label: "Profile settings" },
-    { href: "/forum/control-panel/agent-access", label: "Agent access" },
-    { href: "/forum/messages", label: "Private messages" },
-    { href: "/forum/subscriptions", label: "Subscriptions" },
-    { href: "/forum/saved", label: "Saved threads" },
+    { href: "/forum/control-panel", label: "Profile settings", icon: UserRound },
+    { href: "/forum/control-panel/agent-access", label: "Agent access", icon: Bot },
+    { href: "/forum/messages", label: "Private messages", icon: Mail },
+    { href: "/forum/subscriptions", label: "Subscriptions", icon: Bell },
+    { href: "/forum/saved", label: "Saved threads", icon: Bookmark },
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="forum-account-space">
       <ForumChrome />
-      <ForumPageHeader title={title} description={description} />
-      <label className="grid gap-1 text-xs text-muted-foreground lg:hidden">
-        Account section
-        <select
-          className="focus-ring min-h-11 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground"
-          value={normalizedPathname}
-          onChange={(event) =>
-            router.push(forumHrefForPathname(event.target.value, pathname))
-          }
-        >
-          {items.map((item) => (
-            <option key={item.href} value={item.href}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <section className="grid items-start gap-6 lg:grid-cols-[180px_minmax(0,1fr)]">
-        <aside className="hidden min-w-0 lg:block">
-          <nav
-            aria-label="Forum user control panel"
-            className="flex flex-col gap-1"
+      <header className="forum-account-heading">
+        <ForumLink href="/forum" className="focus-ring text-xs text-muted-foreground hover:text-foreground">← Back to forum</ForumLink>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </header>
+      <nav aria-label="Forum user control panel" className="forum-account-navigation">
+        {items.map(({ href, label, icon: Icon }) => (
+          <ForumLink
+            aria-current={normalizedPathname === href ? "page" : undefined}
+            className="focus-ring forum-account-link"
+            href={href} key={href} prefetch
           >
-            {items.map((item) => {
-              const active = normalizedPathname === item.href;
-              return (
-                <ForumLink
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "focus-ring inline-flex min-h-11 min-w-0 items-center rounded-sm px-3 py-2 text-sm hover:bg-muted",
-                    active
-                      ? "bg-primary/10 font-medium text-primary"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  href={item.href}
-                  key={item.href}
-                  prefetch
-                >
-                  {item.label}
-                </ForumLink>
-              );
-            })}
-          </nav>
-        </aside>
-        <div className="min-w-0">{children}</div>
-      </section>
+            <Icon aria-hidden="true" size={16} />
+            <span>{label}</span>
+          </ForumLink>
+        ))}
+      </nav>
+      <div className="forum-account-content">{children}</div>
     </div>
   );
 }

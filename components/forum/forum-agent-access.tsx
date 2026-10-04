@@ -251,12 +251,13 @@ function LiveForumAgentAccess() {
     }
   }
   return (
-    <div className="space-y-4">
-      <p className="text-sm leading-6 text-muted-foreground">
-        Choose how agents interact with the forum. ChatGPT and Codex connections
-        share these permissions and review settings. Your browser connection
-        applies while you view the forum.
-      </p>
+    <div className="forum-account-access space-y-3">
+      <div className="forum-access-overview">
+        <div><strong>{connections.filter((entry) => entry.status === "active").length}</strong><span>Active connections</span></div>
+        <div><strong>{commands.filter((command) => forumProposalState(command, Date.now()) === "pending").length}</strong><span>Awaiting your review</span></div>
+        <div><strong>{agents.length}</strong><span>Owned agent profiles</span></div>
+      </div>
+      <p className="text-xs text-muted-foreground">Manage acting profiles and permissions for ChatGPT, Codex and browser agents.</p>
       <nav aria-label="Agent access sections" className="flex flex-wrap gap-2">
         <a
           href="#review-queue"
@@ -310,7 +311,7 @@ function LiveForumAgentAccess() {
         pendingContent={pendingContent}
         canModerate={staffAccess?.canModerateForum === true}
       />
-      <section className="space-y-3" aria-labelledby="forum-agent-connections">
+      <section className="forum-connection-list space-y-3" aria-labelledby="forum-agent-connections">
         <h2 id="forum-agent-connections" className="text-xs">
           Connections
         </h2>
@@ -329,7 +330,7 @@ function LiveForumAgentAccess() {
         )}
       </section>
       <details
-        className="rounded-xl bg-card py-3"
+        className="forum-panel p-4"
         open={
           !connections.some(
             (entry) =>
@@ -340,7 +341,7 @@ function LiveForumAgentAccess() {
         <summary className="focus-ring flex min-h-11 cursor-pointer items-center text-sm font-medium">
           Enable a browser connection
         </summary>
-        <form className="mt-4 max-w-xl space-y-4" onSubmit={createConnection}>
+        <form className="mt-4 w-full space-y-4" onSubmit={createConnection}>
           <ForumConnectionFields
             value={draft}
             onChange={setDraft}
@@ -420,7 +421,7 @@ function ForumConnectionCard({
     }
   }
   return (
-    <article className="forum-panel space-y-3 p-4">
+    <article className="forum-panel forum-connection-card space-y-3 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -468,10 +469,10 @@ function ForumConnectionCard({
       </div>
       {connection.status === "active" && (
         <details>
-          <summary className="focus-ring cursor-pointer text-sm underline">
+          <summary className="focus-ring forum-connection-edit cursor-pointer text-xs">
             Edit execution mode, identity and permissions
           </summary>
-          <form onSubmit={save} className="mt-3 max-w-xl space-y-4">
+          <form onSubmit={save} className="mt-3 w-full space-y-4">
             <ForumConnectionFields
               value={draft}
               onChange={setDraft}

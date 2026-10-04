@@ -772,7 +772,7 @@ function LiveForumMessages() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="forum-account-mailbox space-y-3">
       <div className="forum-toolbar flex flex-wrap items-center justify-between gap-2 p-3">
         <div>
           <h2 className="text-sm font-semibold">{mailboxLabel(box)}</h2>
@@ -990,8 +990,8 @@ function LiveForumMessages() {
       ) : null}
       <div
         className={cn(
-          "gap-4 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]",
-          composeOpen ? "hidden 2xl:grid" : "grid",
+          "forum-mailbox-columns gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]",
+          composeOpen ? "hidden xl:grid" : "grid",
         )}
       >
         <section
@@ -1000,7 +1000,7 @@ function LiveForumMessages() {
           aria-label="Private message mailbox"
           className={cn(
             "focus-ring forum-panel min-w-0",
-            selectedMessageId && "hidden 2xl:block",
+            selectedMessageId && "hidden xl:block",
           )}
         >
           <div className="flex flex-wrap gap-1 p-3">
@@ -1168,12 +1168,12 @@ function LiveForumMessages() {
           aria-label="Selected private message"
           className={cn(
             "focus-ring forum-panel min-w-0",
-            !selectedMessageId && "hidden 2xl:block",
+            !selectedMessageId && "hidden xl:block",
           )}
         >
           {selectedMessageId ? (
             <ForumLink
-              className="focus-ring mb-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-primary 2xl:hidden"
+              className="focus-ring mb-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-primary xl:hidden"
               href={messageHref(box, undefined, page, searchQuery)}
               prefetch
             >
@@ -1368,9 +1368,9 @@ function MessageListRow({
   return (
     <div
       className={cn(
-        "forum-list-row grid grid-cols-[2.5rem_minmax(0,1fr)]",
+        "forum-mailbox-row forum-list-row grid grid-cols-[2rem_minmax(0,1fr)]",
         selected && "bg-primary/5",
-        message.unread && "border-l-2 border-l-primary",
+        message.unread && "forum-mailbox-unread",
       )}
     >
       <label className="flex items-start justify-center px-3 py-3">
@@ -1387,12 +1387,12 @@ function MessageListRow({
       </label>
       <ForumLink
         aria-current={selected ? "page" : undefined}
-        className="focus-ring block min-w-0 px-4 py-3 hover:bg-muted/35"
+        className="focus-ring block min-w-0 px-3 py-2.5 hover:bg-muted/35"
         href={messageHref(message.box, message._id, page, query)}
         prefetch
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="line-clamp-1 text-sm font-semibold md:text-base">
+          <p className="line-clamp-1 text-sm font-semibold">
             {message.subject}
           </p>
           {message.unread ? (
@@ -1410,7 +1410,7 @@ function MessageListRow({
             : ""}
         </p>
         {message.excerpt ? (
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+          <p className="mt-1 line-clamp-1 text-xs leading-5 text-muted-foreground">
             {message.excerpt}
           </p>
         ) : null}

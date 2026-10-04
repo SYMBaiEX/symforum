@@ -25,7 +25,6 @@ import {
   type ForumThreadSummaryRecord,
 } from "@/components/forum/forum-refs";
 import {
-  ForumBreadcrumbs,
   ForumLink,
   ForumLoading,
   ForumStatusBox,
@@ -39,11 +38,6 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const subscriptionCategory: ForumCategoryRecord = {
-  slug: "subscriptions",
-  name: "Subscriptions",
-  description: "Boards and threads you are watching across the forum.",
-};
 
 export function ForumSubscriptions({ enabled }: { enabled: boolean }) {
   if (!enabled) {
@@ -62,6 +56,8 @@ export function ForumSubscriptions({ enabled }: { enabled: boolean }) {
 function LiveForumSubscriptions() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const pathname = usePathname();
+  const [filterQuery, setFilterQuery] = useState("");
+  const [section, setSection] = useState("all");
   const [notificationError, setNotificationError] = useState("");
   const [pendingNotificationId, setPendingNotificationId] = useState<
     string | null
@@ -236,36 +232,21 @@ function LiveForumSubscriptions() {
   }
 
   return (
-    <div className="space-y-3">
-      <ForumBreadcrumbs category={subscriptionCategory} />
+    <div className="forum-account-library space-y-3">
       <ForumSubscriptionActionStatus
         error={subscriptionActionError}
         status={subscriptionStatus}
       />
-      <nav
-        aria-label="Watched activity sections"
-        className="flex flex-wrap gap-2"
-      >
-        <a
-          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
-          href="#watched-notifications"
-        >
-          Notifications
-        </a>
-        <a
-          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
-          href="#watched-boards"
-        >
-          Boards
-        </a>
-        <a
-          className="forum-action-pill focus-ring inline-flex min-h-11 items-center px-3 text-sm"
-          href="#watched-threads"
-        >
-          Threads
-        </a>
+      <nav aria-label="Watched activity sections" className="forum-section-tabs">
+        {[
+          ["all", "Overview", undefined],
+          ["notifications", "Notifications", notifications.unreadCount],
+          ["boards", "Boards", categorySubscriptions.categories.length],
+          ["threads", "Threads", subscriptions.threads.length],
+        ].map(([value, label, count]) => <button key={value} type="button" className="focus-ring forum-section-tab" aria-pressed={section === value} onClick={() => setSection(String(value))}>{label}{count !== undefined ? <span className="forum-count-badge">{count}</span> : null}</button>)}
       </nav>
-      <div className="scroll-mt-24" id="watched-notifications">
+      <label className="forum-library-search"><span>Find a subscription</span><input className="focus-ring" type="search" placeholder="Search watched boards and threads…" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} /></label>
+      <div className="scroll-mt-24" hidden={section !== "all" && section !== "notifications"} id="watched-notifications">
         <ForumNotificationPanel
           error={notificationError}
           limited={notifications.notificationsLimited}
@@ -277,18 +258,18 @@ function LiveForumSubscriptions() {
           unreadCountLimited={notifications.unreadCountLimited}
         />
       </div>
-      <div className="scroll-mt-24" id="watched-boards">
+      <div className="scroll-mt-24" hidden={section !== "all" && section !== "boards"} id="watched-boards">
         <ForumCategorySubscriptionPanel
-          categories={categorySubscriptions.categories}
+          categories={categorySubscriptions.categories.filter((category) => `${getCategoryTitle(category)} ${getCategoryDescription(category)}`.toLowerCase().includes(filterQuery.toLowerCase()))}
           onUnsubscribe={unsubscribeCategory}
           pendingKey={pendingSubscriptionKey}
         />
       </div>
-      <div className="scroll-mt-24" id="watched-threads">
+      <div className="scroll-mt-24" hidden={section !== "all" && section !== "threads"} id="watched-threads">
         <ForumThreadSubscriptionPanel
           onUnsubscribe={unsubscribeThread}
           pendingKey={pendingSubscriptionKey}
-          threads={subscriptions.threads}
+          threads={subscriptions.threads.filter((thread) => `${thread.title} ${thread.categorySlug}`.toLowerCase().includes(filterQuery.toLowerCase()))}
         />
       </div>
     </div>
@@ -416,7 +397,7 @@ function ForumNotificationPanel({
             : "No unread forum notifications."}
         </p>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0">
           {visibleNotifications.map((notification) => (
             <ForumNotificationRow
               key={notification._id}
@@ -461,7 +442,7 @@ function ForumNotificationRow({
           {notification.actor}
         </p>
         <ForumLink
-          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary"
           href={href}
           onClick={() => onMarkRead(notification)}
           prefetch
@@ -472,7 +453,7 @@ function ForumNotificationRow({
       <p className="text-xs text-muted-foreground">
         {formatForumDateTime(notification.createdAt)}
       </p>
-      <div className="flex flex-wrap gap-2 md:justify-end">
+      <div className="forum-library-actions flex flex-wrap gap-1">
         <Button
           asChild
           className="h-7 rounded-xl text-xs"
@@ -527,7 +508,7 @@ function ForumCategorySubscriptionPanel({
           New-topic alerts from boards you follow.
         </p>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-0">
         {categories.map((category) => (
           <ForumCategorySubscriptionRow
             category={category}
@@ -553,37 +534,37 @@ function ForumCategorySubscriptionRow({
   const latestThread = getCategoryLatestThread(category);
 
   return (
-    <div className="forum-list-row grid min-w-0 gap-3 px-4 py-3 rounded-xl hover:bg-muted/45 md:grid-cols-[minmax(0,1fr)_10rem_auto] md:items-center">
+    <div className="forum-library-row forum-list-row grid min-w-0 gap-2 px-4 py-3">
       <div className="min-w-0">
         <p className="text-sm font-semibold">Watched board</p>
         <ForumLink
-          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary"
           href={forumPath(category.slug)}
           prefetch
         >
           {getCategoryTitle(category)}
         </ForumLink>
         {getCategoryDescription(category) ? (
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 line-clamp-2 forum-library-activity text-xs leading-5 text-muted-foreground">
             {getCategoryDescription(category)}
           </p>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-        <div className="bg-background px-3 py-2">
+      <div className="forum-library-counts text-xs text-muted-foreground">
+        <div className="">
           <p>Threads</p>
           <p className="mt-1 text-foreground">
             {getCategoryThreadCount(category)}
           </p>
         </div>
-        <div className="bg-background px-3 py-2">
+        <div className="">
           <p>Posts</p>
           <p className="mt-1 text-foreground">
             {getCategoryPostCount(category)}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 md:justify-end">
+      <div className="forum-library-actions flex flex-wrap gap-1">
         {latestThread ? (
           <Button
             asChild
@@ -650,7 +631,7 @@ function ForumThreadSubscriptionPanel({
           Reply alerts from threads you follow.
         </p>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-0">
         {threads.map((thread) => {
           const threadId = thread._id ?? thread.threadId;
           return (
@@ -688,51 +669,51 @@ function ForumThreadSubscriptionRow({
   const lastPostHref = getThreadLastPostHref(thread, categorySlug);
 
   return (
-    <div className="forum-list-row grid min-w-0 grid-cols-2 gap-3 p-4 sm:grid-cols-3 [&>div:first-child]:col-span-full [&>div:last-child]:col-span-full">
+    <div className="forum-library-row forum-list-row grid min-w-0 gap-2 px-4 py-3">
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">
           Watched thread / {thread.categoryName ?? categorySlug ?? "Forum"}
         </p>
         <ForumLink
-          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary md:text-base"
+          className="focus-ring mt-1 block text-sm font-semibold [overflow-wrap:anywhere] hover:text-primary"
           href={threadHref}
           prefetch
         >
           {thread.title}
         </ForumLink>
         {thread.excerpt ? (
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 line-clamp-2 forum-library-activity text-xs leading-5 text-muted-foreground">
             {thread.excerpt}
           </p>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-        <div className="bg-background px-3 py-2">
+      <div className="forum-library-counts text-xs text-muted-foreground">
+        <div className="">
           <p>Replies</p>
           <p className="mt-1 text-foreground">
             {formatForumCount(getThreadReplyCount(thread))}
           </p>
         </div>
-        <div className="bg-background px-3 py-2">
+        <div className="">
           <p>Views</p>
           <p className="mt-1 text-foreground">
             {formatForumCount(thread.viewCount)}
           </p>
         </div>
       </div>
-      <div className="text-xs leading-5 text-muted-foreground">
+      <div className="forum-library-activity text-xs leading-5 text-muted-foreground">
         <p>Starter</p>
         <p className="truncate text-foreground">{getThreadAuthor(thread)}</p>
         <p>{formatForumDateTime(getThreadStartedAt(thread))}</p>
       </div>
-      <div className="text-xs leading-5 text-muted-foreground">
+      <div className="forum-library-activity text-xs leading-5 text-muted-foreground">
         <p>Last post</p>
         <p className="truncate text-foreground">
           {getThreadLastAuthor(thread)}
         </p>
         <p>{formatForumDateTime(getThreadLastActivityAt(thread))}</p>
       </div>
-      <div className="flex flex-wrap gap-2 md:justify-end">
+      <div className="forum-library-actions flex flex-wrap gap-1">
         <Button
           asChild
           className="h-7 rounded-xl text-xs"

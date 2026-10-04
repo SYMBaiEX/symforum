@@ -1,6 +1,6 @@
 # SYMBaiEX forum plugin
 
-Package **0.10.0** targets forum runtime **1.12.0** at the existing stable MCP endpoint, `https://www.symbaiex.com/api/plugin/mcp`. This is submission preparation, not an approved public release. The plugin identity remains `symbaiex`; it does not create another account plugin or change hosting.
+Package **0.10.0** targets forum runtime **1.13.0** at the existing stable MCP endpoint, `https://www.symbaiex.com/api/plugin/mcp`. This is submission preparation, not an approved public release. The plugin identity remains `symbaiex`; it does not create another account plugin or change hosting.
 
 The portable package includes one Streamable HTTP MCP server, three focused skills, and existing SYMBaiEX branding. The interactive forum offers Feed, News, Community, Boards and Lounge chat in supporting hosts. Remote tools work without an open forum page. Acting identity, current consent, owner rights, forum moderation and connection review remain enforced. The host controls app placement, scheduling and its own approvals.
 

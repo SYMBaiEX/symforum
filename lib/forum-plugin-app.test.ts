@@ -549,11 +549,48 @@ describe("forum MCP App resource", () => {
       const count = app.sent.filter(call => call.method === "tools/call").length;
       app.nodes.get("navigation")!.find(label)!.fire("click"); await app.flush();
       const calls = app.sent.filter(call => call.method === "tools/call").slice(count);
-      expect(calls.map(call => call.params?.name)).toEqual([name]);
+      expect(calls.map(call => call.params?.name)).toEqual(label === "Following" ? [name, "forum_list_my_category_subscriptions"] : [name]);
       expect(validateForumPluginArguments(findForumPluginTool(name)!, calls[0].params?.arguments)).toBeNull();
       if (label === "Today’s posts") expect(calls[0].params?.arguments).toMatchObject({ mode: "today" });
-      app.reply(calls[0], { structuredContent: { data: [] } }); await app.flush();
+      for (const call of calls) app.reply(call, { structuredContent: { data: [] } }); await app.flush();
     }
+  });
+
+  test("account reading lists filter locally and remove a saved thread with a desired state", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Saved threads")!.fire("click");
+    app.reply(app.latest("tools/call"), { structuredContent: { data: { threads: [
+      { _id: "saved-one", title: "Build diary", categorySlug: "projects", slug: "diary", replyCount: 2 },
+      { _id: "saved-two", title: "Agent notes", categorySlug: "general", slug: "notes" },
+    ] } } }); await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("Profile settingsAgent accessPrivate messagesSubscriptionsSaved threads");
+    const search = content.querySelector("input")!;
+    const before = app.sent.length;
+    search.value = "build"; search.fire("input");
+    expect(content.find("Build diary")).toBeDefined();
+    expect(content.find("Agent notes")).toBeUndefined();
+    expect(app.sent.length).toBe(before);
+    content.find("Remove saved")!.fire("click"); await app.flush();
+    const command = app.latest("tools/call");
+    expect(command.params?.name).toBe("forum_set_thread_bookmark");
+    expect(command.params?.arguments).toMatchObject({ threadId: "saved-one", saved: false, idempotencyKey: expect.any(String) });
+    expect(validateForumPluginArguments(findForumPluginTool("forum_set_thread_bookmark")!, command.params?.arguments)).toBeNull();
+  });
+
+  test("subscriptions include watched boards and do not offer writes after a permission reduction", async () => {
+    const app = appHarness(); await app.connect(false);
+    app.nodes.get("navigation")!.find("Following")!.fire("click");
+    const calls = app.sent.filter(call => call.method === "tools/call").slice(-2);
+    app.reply(calls[0], { structuredContent: { data: { threads: [] } } });
+    app.reply(calls[1], { structuredContent: { data: { capabilities: ["read"], categories: [{ slug: "general", name: "General", threadCount: 4 }] } } });
+    await app.flush();
+    const content = app.nodes.get("content")!;
+    expect(content.textContent).toContain("Watched boards");
+    expect(content.find("Unsubscribe")).toBeUndefined();
+    content.find("Open board")!.fire("click");
+    expect(app.latest("tools/call").params).toMatchObject({ name: "forum_list_threads", arguments: { categorySlug: "general" } });
+    expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);
   });
 
   test("header post picker only offers writable boards and restores board filters when a draft closes", async () => {

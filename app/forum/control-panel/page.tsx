@@ -3,7 +3,7 @@ import { ForumUserCpShell } from "@/components/forum/forum-primitives";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Forum User CP",
+  title: "Profile settings",
   description: "Edit SYMBaiEX forum profile settings, titles, and signatures.",
   alternates: {
     canonical: "/control-panel",
@@ -18,7 +18,7 @@ export default function ForumControlPanelPage() {
   return (
     <div className="page-frame page-frame-dense">
       <ForumUserCpShell
-        description="Profile, signature, and watched-thread tools for your forum account."
+        description="Your identity, signature, notifications and community preferences."
         title="Profile settings"
       >
         <ForumControlPanel
