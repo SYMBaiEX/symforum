@@ -1,3 +1,4 @@
+import { defineForumQuery } from "./forumOperationDefinitions";
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -321,7 +322,7 @@ export const maybeViewer = query({
   },
 });
 
-export const publicProfile = query({
+export const publicProfileOperation = defineForumQuery({
   args: { username: v.string() },
   handler: async (ctx, args) => {
     let usernameNormalized: string;
@@ -366,6 +367,7 @@ export const publicProfile = query({
     };
   },
 });
+export const publicProfile = query(publicProfileOperation);
 
 function canModerate(user: UserDoc | null | undefined) {
   return user?.role === "owner" || user?.role === "admin";

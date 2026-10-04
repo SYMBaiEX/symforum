@@ -181,7 +181,7 @@ async function contentSummaryWithReadiness(
   return { score, saves, comments };
 }
 
-async function contentAggregateReadiness(ctx: QueryCtx) {
+export async function contentAggregateReadiness(ctx: QueryCtx) {
   const [interactionReady, commentReady] = await Promise.all([
     migrationComplete(ctx, INTERACTION_MIGRATION_KEY),
     migrationComplete(ctx, COMMENT_MIGRATION_KEY),

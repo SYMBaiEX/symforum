@@ -78,3 +78,67 @@
 .forum-media-viewer > button:last-child { width: 44px; height: 44px; right: 4px; top: 4px; display: grid; place-items: center; }
 @media (prefers-reduced-motion: reduce) { .forum-media-viewer { animation: none!important; } }
 
+
+/* Final forum finish: one typography, control and surface system for every route. */
+.forum-app-shell {
+ --forum-space: 16px;
+ --forum-control-radius: 10px;
+ -webkit-font-smoothing: antialiased;
+}
+.forum-app-shell .forum-surface { padding-bottom: 24px; }
+.forum-app-shell .forum-page-header { margin-bottom: 16px; }
+.forum-app-shell :is(.forum-page-header h1,.forum-account-heading h1) {
+ font-size: clamp(23px,2.2vw,28px); line-height: 1.18; letter-spacing: -.035em; font-weight: 700; text-wrap: balance;
+}
+.forum-app-shell :is(.forum-page-header > div p,.forum-page-header > div > div > div,.forum-account-heading > p) {
+ font-size: 13px; line-height: 1.6; max-width: 72ch;
+}
+.forum-app-shell :is(.forum-body-grid,.forum-workspace,.forum-account-space) { gap: var(--forum-space); }
+.forum-app-shell .forum-panel {
+ background: hsl(var(--card)); border-radius: var(--forum-panel-radius); box-shadow: 0 1px 3px #00000008;
+}
+.forum-app-shell .forum-status-box { padding: 24px 20px; border-radius: var(--forum-panel-radius); background: hsl(var(--muted)/.3); }
+.forum-app-shell .forum-status-box > p:nth-child(2) { max-width: 65ch; line-height: 1.65; }
+.forum-app-shell .forum-status-box > div { margin-top: 14px; }
+.forum-app-shell .forum-section-header { min-height: 44px; padding: 8px 14px; }
+.forum-app-shell .forum-list-row { transition: background-color 140ms ease-out; }
+.forum-app-shell .forum-list-row:nth-child(even) { background: transparent; }
+.forum-app-shell .forum-list-row:hover { background: hsl(var(--muted)/.3); }
+.forum-app-shell :is(.forum-global-search,.forum-toolbar) { transition: box-shadow 150ms ease-out; }
+.forum-app-shell .forum-global-search:focus-within { box-shadow: 0 0 0 2px hsl(var(--ring)/.65); }
+.forum-app-shell .forum-surface :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea) {
+ border-radius: var(--forum-control-radius); border-color: hsl(var(--input)/.7); min-width: 0;
+}
+.forum-app-shell .forum-surface textarea { line-height: 1.65; resize: vertical; }
+.forum-app-shell .forum-surface :is(input,select,textarea):disabled { opacity: .55; cursor: not-allowed; }
+.forum-app-shell :is(button,a,summary):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+.forum-app-shell .forum-page-actions { flex-shrink: 0; }
+.forum-app-shell .forum-account-heading { gap: 6px; margin-bottom: 6px; }
+.forum-app-shell .forum-settings-directory { gap: 6px; padding-bottom: 6px; }
+.forum-app-shell .forum-settings-directory .forum-section-tab { padding: 8px 12px; min-width: 100px; }
+.forum-app-shell .forum-settings-directory .forum-section-tab > span:last-child { font-size: 11px; }
+.forum-app-shell :is(.forum-profile-identity,.forum-member-profile > section) { align-self: start; }
+.forum-app-shell .forum-member-profile { gap: 20px; }
+.forum-app-shell .forum-calendar-day { padding: 10px; }
+.forum-app-shell .forum-calendar-day > p { font-variant-numeric: tabular-nums; }
+.forum-app-shell .forum-mailbox-unread { background: hsl(var(--primary)/.035); }
+.forum-app-shell .forum-post-card .forum-post-body { line-height: 1.7; }
+.forum-app-shell .forum-thread-page .forum-page-header h1 { max-width: 36ch; }
+.forum-app-shell .forum-library-row { padding-block: 14px; }
+.forum-app-shell .forum-footer { opacity: .9; }
+@media (max-width: 639px) {
+ .forum-app-shell { --forum-space: 12px; }
+ .forum-app-shell .forum-surface .page-frame-dense { padding-inline: 12px; }
+ .forum-app-shell .forum-page-header { margin-bottom: 12px; }
+ .forum-app-shell .forum-page-actions { width: 100%; gap: 6px; }
+ .forum-app-shell .forum-status-box { padding: 20px 16px; }
+ .forum-app-shell .forum-settings-directory { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding: 0 0 8px; }
+ .forum-app-shell .forum-settings-directory .forum-section-tab { flex: 0 0 auto; min-width: 96px; }
+ .forum-app-shell .forum-panel :is(input:not([type=checkbox]):not([type=radio]),textarea,select) { font-size: 16px; }
+ .forum-app-shell .forum-page-actions :is(a,button),.forum-app-shell .forum-surface summary { min-height: 44px; }
+ .forum-app-shell .forum-library-row { padding: 12px; }
+ .forum-app-shell .forum-thread-page .forum-post-frame { padding-inline: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+ .forum-app-shell :is(.forum-list-row,.forum-global-search,.forum-toolbar) { transition: none; }
+}

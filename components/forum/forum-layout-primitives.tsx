@@ -36,7 +36,7 @@ export function ForumPageHeader({
           ) : null}
         </div>
         {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          <div className="forum-page-actions flex flex-wrap items-center gap-2">{actions}</div>
         ) : null}
       </div>
     </header>

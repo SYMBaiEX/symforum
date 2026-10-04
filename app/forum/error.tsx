@@ -6,6 +6,7 @@ import {
 } from "@/components/forum/forum-primitives";
 import { Button } from "@/components/ui/button";
 import { ForumPageHeader } from "@/components/forum/forum-layout-primitives";
+import { userFacingError } from "@/lib/auth-errors";
 import { useEffect } from "react";
 
 export default function ForumErrorRoute({
@@ -25,10 +26,13 @@ export default function ForumErrorRoute({
       <ForumPageHeader title="Forum unavailable" />
       <ForumStatusBox
         title="Forum unavailable"
-        body="This board view failed to load. Try again, or return to the forum index."
+        body={userFacingError(
+          error,
+          "This view could not load. Try again, or return to the forum index.",
+        )}
         accent="magenta"
         action={
-          <Button className="min-h-11 rounded-sm" type="button" onClick={reset}>
+          <Button className="min-h-11 rounded-xl" type="button" onClick={reset}>
             Retry
           </Button>
         }

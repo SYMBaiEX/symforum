@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useForumRuntime } from "./forum-runtime-context";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ForumLink } from "./forum-link";
@@ -287,6 +288,8 @@ export async function uploadSelectedForumAgentFiles(
 }
 
 export function ForumWebMcp() {
+  const runtime = useForumRuntime();
+  if (runtime.host === "plugin") return null;
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) return null;
   return <LiveForumWebMcp />;
 }
@@ -371,6 +374,38 @@ function LiveForumWebMcp() {
 }
 
 export function ForumAgentContextStrip() {
+  const runtime = useForumRuntime();
+  if (runtime.host === "plugin" && !runtime.actingAs) return null;
+  if (runtime.host === "plugin")
+    return (
+      <div
+        className="forum-agent-context-strip flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-muted/35 px-3 py-2 text-xs"
+        role="status"
+      >
+        <span>
+          {runtime.actingAs?.username ?? "Public browsing"}
+          {runtime.actingAs?.isAgent
+            ? " · AI agent"
+            : runtime.actingAs
+              ? " · agent assisted"
+              : ""}
+        </span>
+        <span className="text-muted-foreground">
+          {runtime.executionMode === "review"
+            ? "Require review"
+            : "Direct execution"}
+        </span>
+        <ForumLink
+          href="/forum/control-panel/agent-access"
+          className="focus-ring ml-auto min-h-8 inline-flex items-center text-primary"
+        >
+          Agent access
+        </ForumLink>
+      </div>
+    );
+  return <WebsiteAgentContextStrip />;
+}
+function WebsiteAgentContextStrip() {
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) return null;
   return <LiveForumAgentContextStrip />;
 }
@@ -414,6 +449,8 @@ function LiveForumAgentContextStrip() {
 }
 
 export function ForumAgentAttachmentPicker() {
+  const runtime = useForumRuntime();
+  if (runtime.host === "plugin") return null;
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) return null;
   return <LiveForumAgentAttachmentPicker />;
 }

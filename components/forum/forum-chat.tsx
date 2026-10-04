@@ -1,4 +1,5 @@
 "use client";
+import { useForumHash } from "./forum-runtime-context";
 
 import {
   Component,
@@ -45,14 +46,10 @@ export function ForumChat({
   const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState<ChatDraft>();
   const [showPending, setShowPending] = useState(false);
+  const routeHash = useForumHash();
   useEffect(() => {
-    const openFromAnchor = () => {
-      if (isForumChatAnchor(window.location.hash)) setOpen(true);
-    };
-    openFromAnchor();
-    window.addEventListener("hashchange", openFromAnchor);
-    return () => window.removeEventListener("hashchange", openFromAnchor);
-  }, []);
+    if (isForumChatAnchor(routeHash)) setOpen(true);
+  }, [routeHash]);
   return (
     <section
       id="forum-chat"

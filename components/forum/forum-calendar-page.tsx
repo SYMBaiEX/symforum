@@ -145,7 +145,7 @@ function LiveForumCalendarPage({ month }: { month: string }) {
             {calendar.days.map((day) => (
               <div
                 className={cn(
-                  "min-h-24 min-w-0 rounded-xl bg-muted/35 p-2",
+                  "forum-calendar-day min-h-24 min-w-0 rounded-xl bg-muted/35 p-2",
                   !day.inMonth && "bg-muted/20 text-muted-foreground",
                 )}
                 key={day.key}

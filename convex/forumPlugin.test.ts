@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
+import aggregateTest from "@convex-dev/aggregate/test";
 import agentTest from "@convex-dev/agent/test";
 import presenceTest from "@convex-dev/presence/test";
 import { makeFunctionReference } from "convex/server";
@@ -1663,4 +1664,36 @@ describe("forum community experience through delegated tools", () => {
     expect(await owner.mutation(executeRef, event)).toEqual(result);
     await t.run(async ctx => { expect(await ctx.db.query("forumExperienceDailyCounters").collect()).toMatchObject([{ event: "feed_open", count: 1, actorKind: "assisted" }]); });
   });
+});
+
+async function newsFixture(t:ReturnType<typeof setup>) {
+ for(const component of ['interactionScores','interactionSaves','commentCounts'])aggregateTest.register(t,component);
+ await t.run(async ctx=>{await ctx.db.insert('newsSnapshots',{snapshotDate:'2026-10-02',status:'complete',startedAt:1000,completedAt:2000,storyCount:1});await ctx.db.insert('hnStories',{hnItemId:41,snapshotDate:'2026-10-02',rank:1,title:'Shared voting identity',fetchedAt:2000});});
+}
+describe('native forum news tools',()=>{
+ test('delegated news votes share the owner identity while saved state belongs to each actor',async()=>{
+  const t=setup();const first=await fixture(t);const sibling=await fixture(t);await newsFixture(t);
+  await t.run(async ctx=>{await ctx.db.patch('users',first.owner,{emailVerificationTime:Date.now()});await ctx.db.patch('agentIdentities',sibling.credential,{ownerUserId:first.owner});await ctx.db.patch('forumPluginConnections',sibling.connectionId,{ownerUserId:first.owner});});
+  const owner=t.withIdentity({subject:first.owner});
+  const input=call(first,'setNewsInteraction',{hnItemId:41,vote:1,saved:true},'news-save');
+  const result=await owner.mutation(executeRef,input);expect(result.status).toBe('completed');expect(await owner.mutation(executeRef,input)).toEqual(result);
+  await owner.mutation(executeRef,call(sibling,'setNewsInteraction',{hnItemId:41,vote:1,saved:false},'sibling-vote'));
+  const rows=await t.run(ctx=>ctx.db.query('interactions').collect());
+  expect(rows.filter(row=>row.vote===1)).toHaveLength(1);expect(rows.find(row=>row.vote===1)?.userId).toBe(first.owner);
+  expect(rows.find(row=>row.userId===first.agent)?.saved).toBe(true);expect(rows.find(row=>row.userId===sibling.agent)?.saved??false).toBe(false);
+  const state=await owner.mutation(readRef,{connectionId:first.connectionId,operation:'getNewsInteractions',args:{hnItemIds:[41]},idempotencyKey:'news-personal-read'});
+  expect(state.data['41'].viewer).toEqual({vote:1,saved:true});
+ });
+ test('requires verified owner feedback rights and rechecks restrictions',async()=>{
+  const t=setup();const seed=await fixture(t);await newsFixture(t);const owner=t.withIdentity({subject:seed.owner});
+  await expect(owner.mutation(executeRef,call(seed,'setNewsInteraction',{hnItemId:41,vote:1,saved:false},'not-verified'))).rejects.toThrow('verified human');
+  await t.run(ctx=>ctx.db.patch('users',seed.owner,{emailVerificationTime:Date.now(),forumSuspendedUntil:Date.now()+60_000}));
+  await expect(owner.mutation(executeRef,call(seed,'setNewsInteraction',{hnItemId:41,vote:1,saved:false},'restricted-owner'))).rejects.toThrow();
+ });
+ test('review mode queues an immutable news proposal without changing votes',async()=>{
+  const t=setup();const seed=await fixture(t,'agent',true);await newsFixture(t);await t.run(ctx=>ctx.db.patch('users',seed.owner,{emailVerificationTime:Date.now()}));const owner=t.withIdentity({subject:seed.owner});
+  const input=call(seed,'setNewsInteraction',{hnItemId:41,vote:1,saved:true},'review-news');const proposal=await owner.mutation(executeRef,input);
+  expect(proposal.status).toBe('pending_approval');expect(await t.run(ctx=>ctx.db.query('interactions').collect())).toEqual([]);
+  expect(await owner.mutation(executeRef,input)).toEqual(proposal);
+ });
 });

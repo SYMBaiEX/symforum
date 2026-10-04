@@ -100,13 +100,13 @@ export function ForumStatusBox({
   return (
     <div
       className={cn(
-        "py-4",
+        "forum-status-box py-4",
         accent === "cyan" && "border-accent/70 bg-accent/10",
         accent === "canary" && "border-accent-canary/60 bg-accent-canary/10",
         accent === "magenta" && "border-primary/50 bg-primary/10",
       )}
     >
-      <p className="text-xs text-muted-foreground">{title}</p>
+      <p className="forum-status-title text-sm font-semibold text-foreground">{title}</p>
       <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">
         {body}
       </p>

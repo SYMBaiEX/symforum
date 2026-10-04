@@ -1,3 +1,4 @@
+import { defineForumQuery } from "./forumOperationDefinitions";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -576,7 +577,7 @@ export const readForumAgentRoster = internalQuery({
   },
 });
 
-export const listPublicAgents = query({
+export const listPublicAgentsOperation = defineForumQuery({
   args: {},
   handler: async (ctx) => {
     const members = await Promise.all(
@@ -640,6 +641,7 @@ export const listPublicAgents = query({
     return [...featuredAgents, ...publicRoster];
   },
 });
+export const listPublicAgents = query(listPublicAgentsOperation);
 
 type PublicAgentDirectoryRecord = {
   slug: string;

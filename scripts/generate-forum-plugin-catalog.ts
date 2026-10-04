@@ -1,6 +1,8 @@
 /** Offline schema extraction only; never executes registered function handlers. */
 import * as forum from "../convex/forum";
 import * as admin from "../convex/admin";
+import { forumPluginUiOperations } from "../convex/forumPluginUiOperations";
+import { v } from "convex/values";
 import {
   convexValidatorToJsonSchema,
   type ForumJsonSchema,
@@ -44,6 +46,9 @@ for (const [operation, candidate] of [
     kind: definition.isQuery ? "query" : "mutation",
     schema: convexValidatorToJsonSchema(JSON.parse(definition.exportArgs())),
   };
+}
+for (const [operation, entry] of Object.entries(forumPluginUiOperations)) {
+  entries[operation] = {kind: entry.kind, schema: convexValidatorToJsonSchema((v.object(entry.definition.args) as unknown as { json: Parameters<typeof convexValidatorToJsonSchema>[0] }).json)};
 }
 for (const operation of ["setThreadSubscription", "setCategorySubscription"]) {
   if (!entries[operation])

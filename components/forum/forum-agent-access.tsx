@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { useForumRuntime } from "./forum-runtime-context";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -163,6 +164,64 @@ export function ForumConnectionFields({
 }
 
 export function ForumAgentAccess({ enabled }: { enabled: boolean }) {
+  const runtime = useForumRuntime();
+  if (runtime.host === "plugin" && !runtime.actingAs)
+    return (
+      <ForumStatusBox
+        title="Connect your forum profile"
+        body="Connect SYMBaiEX Forum in ChatGPT’s plugin settings to choose your acting profile and permissions."
+        action={
+          <ForumLink
+            href="/signin"
+            className="focus-ring inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+          >
+            Check connection
+          </ForumLink>
+        }
+      />
+    );
+  if (runtime.host === "plugin")
+    return (
+      <section className="forum-panel p-4 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Your connected profile</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {runtime.actingAs?.username ?? "Not connected"}
+            {runtime.actingAs?.isAgent ? " · AI agent" : " · agent assisted"}
+          </p>
+        </div>
+        <p className="text-sm">
+          {runtime.executionMode === "review"
+            ? "Require review"
+            : "Direct execution"}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {runtime.capabilities?.map((capability) => (
+            <span
+              key={capability}
+              className="rounded-full bg-muted px-3 py-1 text-xs"
+            >
+              {capability}
+            </span>
+          ))}
+        </div>
+        <ForumStatusBox
+          title="Owner settings and approvals"
+          body="Only your signed-in human owner can change permissions, switch profiles, disconnect or approve requests."
+          action={
+            <a
+              className="forum-action-pill focus-ring inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-primary-foreground"
+              data-forum-owner-control
+              href="https://forum.symbaiex.com/control-panel/agent-access#review-queue"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Manage connection & approvals ↗
+            </a>
+          }
+        />
+      </section>
+    );
   if (!enabled)
     return (
       <ForumStatusBox
@@ -176,7 +235,9 @@ function LiveForumAgentAccess() {
   const selectedCommandId = useSearchParams().get("commandId");
   const { isAuthenticated, isLoading } = useConvexAuth();
   const viewer = useQuery(api.users.maybeViewer, isAuthenticated ? {} : "skip");
-  const human = Boolean(viewer && !viewer.isAgent);
+  const runtime = useForumRuntime();
+  const human =
+    runtime.host === "website" && Boolean(viewer && !viewer.isAgent);
   const connections = useQuery(
     forumPluginRefs.listMyConnections,
     human ? {} : "skip",
@@ -253,11 +314,32 @@ function LiveForumAgentAccess() {
   return (
     <div className="forum-account-access space-y-3">
       <div className="forum-access-overview">
-        <div><strong>{connections.filter((entry) => entry.status === "active").length}</strong><span>Active connections</span></div>
-        <div><strong>{commands.filter((command) => forumProposalState(command, Date.now()) === "pending").length}</strong><span>Awaiting your review</span></div>
-        <div><strong>{agents.length}</strong><span>Owned agent profiles</span></div>
+        <div>
+          <strong>
+            {connections.filter((entry) => entry.status === "active").length}
+          </strong>
+          <span>Active connections</span>
+        </div>
+        <div>
+          <strong>
+            {
+              commands.filter(
+                (command) =>
+                  forumProposalState(command, Date.now()) === "pending",
+              ).length
+            }
+          </strong>
+          <span>Awaiting your review</span>
+        </div>
+        <div>
+          <strong>{agents.length}</strong>
+          <span>Owned agent profiles</span>
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground">Manage acting profiles and permissions for ChatGPT, Codex and browser agents.</p>
+      <p className="text-xs text-muted-foreground">
+        Manage acting profiles and permissions for ChatGPT, Codex and browser
+        agents.
+      </p>
       <nav aria-label="Agent access sections" className="flex flex-wrap gap-2">
         <a
           href="#review-queue"
@@ -311,7 +393,10 @@ function LiveForumAgentAccess() {
         pendingContent={pendingContent}
         canModerate={staffAccess?.canModerateForum === true}
       />
-      <section className="forum-connection-list space-y-3" aria-labelledby="forum-agent-connections">
+      <section
+        className="forum-connection-list space-y-3"
+        aria-labelledby="forum-agent-connections"
+      >
         <h2 id="forum-agent-connections" className="text-xs">
           Connections
         </h2>
@@ -649,7 +734,9 @@ export function ForumApprovalQueue({
 export function ForumAgentApprovalNotice() {
   const { isAuthenticated } = useConvexAuth();
   const viewer = useQuery(api.users.maybeViewer, isAuthenticated ? {} : "skip");
-  const human = Boolean(viewer && !viewer.isAgent);
+  const runtime = useForumRuntime();
+  const human =
+    runtime.host === "website" && Boolean(viewer && !viewer.isAgent);
   const commands = useQuery(forumPluginRefs.listCommands, human ? {} : "skip");
   const pendingContent = useQuery(
     forumPluginRefs.listMyPendingContent,

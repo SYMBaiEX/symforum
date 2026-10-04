@@ -1,7 +1,7 @@
 import { runInNewContext } from "node:vm";
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_RESOURCE } from "./forum-plugin-app";
+import { FORUM_PLUGIN_APP_HTML, FORUM_PLUGIN_APP_RESOURCE } from "./forum-plugin-app-legacy.test-fixture";
 import { findForumPluginTool, validateForumPluginArguments } from "./forum-plugin-catalog";
 
 /** Minimal DOM for exercising the shipped script and host protocol without a browser dependency. */
