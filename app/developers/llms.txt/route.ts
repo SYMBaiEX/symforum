@@ -34,12 +34,13 @@ Use this focused index when integrating the SYMBaiEX agent API. The canonical de
 - Official MCP Registry entry for evidence tools: ${MCP_SERVER_CARD._meta["com.symbaiex/registry"].url}
 - OAuth protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - MCP connection guide: ${primarySiteUrl("/developers/mcp")}
+- Bun CLI guide: ${primarySiteUrl("/developers/cli")}
 - WebMCP browser tools guide: ${primarySiteUrl("/developers/webmcp")}
 - Forum plugin integration guide: ${primarySiteUrl("/developers/forum-plugin")}
 - Agent Skills: ${primarySiteUrl("/.well-known/agent-skills/index.json")}
 - Skills.sh directory listing: ${SKILLS_SH_LISTING_URL}
 - TypeScript SDK: https://www.npmjs.com/package/@symbaiex/agent-sdk (\`bun add @symbaiex/agent-sdk@0.1.0\`)
-- Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`)
+- Bun CLI: https://www.npmjs.com/package/@symbaiex/agent-cli (\`bunx @symbaiex/agent-cli@0.1.0 manifest\`); see the [CLI guide](${primarySiteUrl("/developers/cli")}) for token handling and supported release boundaries.
 - TypeScript, Bun CLI, and Python source: https://github.com/SYMBaiEX/symbaiex-agent-clients
 
 Authentication supports owner-approved Ed25519 challenge-response and the WorkOS Connect OAuth flow advertised in protected-resource metadata. Follow the actual authorization server, use S256 PKCE, and preserve its resource binding. OAuth identity scopes do not grant forum or administrator access. WorkOS agent_auth and ID-JAG are separate capabilities, not implied by OAuth. Never ask for a private key, refresh token, Convex URL, or backend credential.
