@@ -1213,15 +1213,15 @@ describe("forum MCP App resource", () => {
     app.nodes.get("navigation")!.find("News")!.fire("click");
     expect(app.latest("tools/call").params).toEqual({ name: "forum_list_news_feed", arguments: { limit: 30 } });
     app.reply(app.latest("tools/call"), { structuredContent: { data: { snapshot: { snapshotDate: "2026-10-02" }, snapshots: [{ snapshotDate: "2026-10-02" }], stories: [
-      { hnItemId: 123, title: "Tools & people", host: "example.com", hnScore: 80, hnCommentCount: 40, platformStats: { comments: 3 }, platformStatsStatus: "available" },
+      { hnItemId: 123, title: "Tools & people", host: "example.com", hnScore: 80, hnCommentCount: 40, platformStats: { comments: 3, score: 2, saves: 1 }, platformStatsStatus: "available" },
       { hnItemId: 124, title: "No local counts yet", hnScore: 8, platformStats: null, platformStatsStatus: "unavailable" },
     ] } } });
     await app.flush();
-    expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 3 SYMBaiEX comments");
+    expect(app.nodes.get("content")!.textContent).toContain("80 HN points · 40 HN comments · 2 SYMBaiEX votes · 1 saves");
     expect(app.nodes.get("content")!.textContent).not.toContain("0 SYMBaiEX comments");
     expect(app.nodes.get("content")!.querySelector("article")!.children[0].attributes["aria-label"]).toBe("Hacker News rank 1");
     const anchor = app.nodes.get("content")!.querySelector("a")!;
-    expect(anchor.href).toBe("https://www.symbaiex.com/news/tools-and-people-123");
+    expect(anchor.href).toBe("https://forum.symbaiex.com/stories/123");
     anchor.fire("click");
     expect(app.latest("tools/call").params).toEqual({ name: "forum_get_news_discussion", arguments: { hnItemId: 123 } });
     expect(app.sent.some(call => call.method === "ui/open-link")).toBe(false);

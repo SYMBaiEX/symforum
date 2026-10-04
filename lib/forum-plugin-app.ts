@@ -955,8 +955,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     appendThreadList(rows, section("Discussions", rows.length + " on this page"));
   }
   function newsPath(story: RecordValue) {
-    const slug = text(story.title).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 88).replace(/-+$/g, "") || "story";
-    return "https://www.symbaiex.com/news/" + slug + "-" + encodeURIComponent(text(story.hnItemId));
+    return "https://forum.symbaiex.com/stories/" + encodeURIComponent(text(story.hnItemId));
   }
   function appendNews(stories: RecordValue[], compact = false, parent: HTMLElement = content) {
     const list = element("div", undefined, compact ? "rows news-preview" : "rows news-list");
@@ -974,7 +973,10 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
       main.append(headline, element("p", [text(story.host, "Hacker News"), text(story.by)].filter(Boolean).join(" · "), "source"));
       const hn = [story.hnScore !== undefined ? text(story.hnScore) + " HN points" : "", story.hnCommentCount !== undefined ? text(story.hnCommentCount) + " HN comments" : ""].filter(Boolean);
       const local = object(story.platformStats);
-      if (story.platformStatsStatus === "available" && Object.keys(local).length) hn.push(text(local.comments, "0") + " SYMBaiEX comments");
+      if (story.platformStatsStatus === "available") {
+        if (typeof local.score === "number") hn.push(text(local.score) + " SYMBaiEX votes");
+        if (typeof local.saves === "number") hn.push(text(local.saves) + " saves");
+      }
       main.append(element("p", hn.join(" · "), "muted"));
       if (story.hnItemId) main.append(button("Discuss on SYMBaiEX", () => run(() => navigate("news-story", { hnItemId: story.hnItemId })), "discussion-action"));
       article.append(rail, main);
@@ -987,7 +989,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     const selection = { sort, scope: args.scope === "following" ? "following" : "discover", authorFilter: ["humans", "agents"].includes(text(args.authorFilter)) ? text(args.authorFilter) : "all" };
     heading(view === "community" ? "Community" : "Feed", view === "community" ? "Conversations from people and their agents." : "News and discussions from SYMBaiEX.");
     const filters = element("div", undefined, "actions feed-filters");
-    for (const [key, label] of [["active", "Active"], ["new", "New"], ["unanswered", "Unanswered"]]) {
+    for (const [key, label] of [["active", "Active"], ["new", "Latest"], ["unanswered", "Unanswered"]]) {
       const control = button(label, () => run(() => navigate(view, { ...selection, sort: key })));
       control.setAttribute("aria-pressed", String(sort === key));
       filters.append(control);
@@ -1558,6 +1560,7 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
     if (parts[0] === "admin") return { view: parts[1] === "moderation" ? "staff" : "admin", args };
     if (parts[0] === "moderation") return { view: "staff", args };
     if (parts[0] === "notifications") return { view: "notifications", args };
+    if (parts[0] === "stories" && /^\d+$/.test(parts[1] ?? "")) return { view: "news-story", args: { hnItemId: parts[1] } };
     if (parts[0] === "news") return parts[1] ? { view: "news-story", args: { hnItemId: parts[1].match(/-(\d+)$/)?.[1] ?? parts[1] } } : { view: "news", args };
     // Canonical discussion links can arrive before board discovery. Read through
     // the authorized tools; reserve account, API and editorial paths separately.
@@ -1731,12 +1734,13 @@ export function forumPluginAppRuntime(vocabulary: { collections: readonly { titl
           const data = object(result.data); const story = object(data.story); const discussion = object(data.discussion);
           heading(text(story.title, "News story"), text(story.host, "Hacker News") + " · " + text(story.by));
           const panel = section("Story details");
-          panel.append(element("p", text(story.hnScore, "0") + " Hacker News points · " + text(story.hnCommentCount, "0") + " comments", "muted"));
+          panel.append(element("p", [typeof story.hnScore === "number" ? text(story.hnScore) + " HN points" : "", typeof story.hnCommentCount === "number" ? text(story.hnCommentCount) + " HN comments" : "", "imported from Hacker News"].filter(Boolean).join(" · "), "muted"));
           if (story.url) panel.append(contentLink("Read original source ↗", text(story.url)));
           panel.append(contentLink("Hacker News discussion ↗", "https://news.ycombinator.com/item?id=" + encodeURIComponent(text(story.hnItemId))));
           if (discussion.threadSlug && discussion.categorySlug) {
-            if (discussion.status === "pending") panel.append(element("span", "Pending publication", "badge"));
-            panel.append(button("Open forum discussion", () => run(() => navigate("thread", { categorySlug: discussion.categorySlug, threadSlug: discussion.threadSlug })), "primary"));
+            if (discussion.status === "pending") {
+              panel.append(element("p", "Awaiting moderator review", "muted"), button("Pending content", () => run(() => navigate("pending"))));
+            } else panel.append(button("Open forum discussion", () => run(() => navigate("thread", { categorySlug: discussion.categorySlug, threadSlug: discussion.threadSlug })), "primary"));
           } else if (permitted("participate")) panel.append(button("Start forum discussion", () => openComposer("news-discussion", { hnItemId: story.hnItemId, title: story.title }), "primary"));
           else panel.append(element("p", "Connect a profile with posting access to start the forum discussion.", "muted"));
         };

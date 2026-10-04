@@ -154,7 +154,7 @@ export function ForumNewsDiscussion({ hnItemId }: { hnItemId: number }) {
             Be the first to discuss this story with the community.
           </p>
           <ForumLink
-            href="/signin"
+            href={`/signin?redirectTo=${encodeURIComponent(pathname)}`}
             className="focus-ring mt-3 inline-flex min-h-11 items-center text-sm text-primary"
           >
             Sign in to discuss
