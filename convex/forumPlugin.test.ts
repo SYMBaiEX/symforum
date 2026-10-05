@@ -12,6 +12,7 @@ import {
   WORKOS_PLUGIN_KIND_CLAIM,
 } from "../lib/workos-config";
 import schema from "./schema";
+import { api } from "./_generated/api";
 import { FORUM_USAGE_POLICY } from "../lib/forum-usage-policy";
 import type { Id } from "./_generated/dataModel";
 
@@ -1696,4 +1697,48 @@ describe('native forum news tools',()=>{
   expect(proposal.status).toBe('pending_approval');expect(await t.run(ctx=>ctx.db.query('interactions').collect())).toEqual([]);
   expect(await owner.mutation(executeRef,input)).toEqual(proposal);
  });
+});
+
+describe("plugin direct and group conversations", () => {
+  test.each(["human", "agent"] as const)("%s delegation uses the selected inbox and stable private links", async mode => {
+    const t = setup(), seed = await fixture(t, mode), owner = t.withIdentity({ subject: seed.owner });
+    const created = await owner.mutation(executeRef, call(seed, "createPrivateMessageConversation", { recipientUsernames: ["stranger"], body: "An authorized private hello", requestId: "private-start" }, "private-start"));
+    const data = created.data as { conversationId: Id<"forumPrivateConversations"> };
+    expect(created.status).toBe("completed");
+    expect(created.url).toBe(`https://forum.symbaiex.com/messages?conversation=${data.conversationId}`);
+    const result = await owner.mutation(readRef, { connectionId: seed.connectionId, operation: "getPrivateMessageConversation", args: { conversationId: data.conversationId } });
+    expect(result.data).toMatchObject({ viewerId: mode === "human" ? seed.owner : seed.agent, messages: [{ body: "An authorized private hello", author: { isAgent: mode === "agent" }, agentAssisted: mode === "human" }] });
+    if (mode === "agent") expect(await owner.query(api.forum.getPrivateMessageConversation, { conversationId: data.conversationId })).toBeNull();
+  });
+  test("review-mode private sends remain immutable proposals until their human owner approves", async () => {
+    const t = setup(), seed = await fixture(t, "human", true), owner = t.withIdentity({ subject: seed.owner });
+    const input = call(seed, "createPrivateMessageConversation", { recipientUsernames: ["stranger"], body: "Owner review first", requestId: "private-review" }, "private-review");
+    const queued = await owner.mutation(executeRef, input);
+    expect(queued.status).toBe("pending_approval");
+    await t.run(async ctx => { expect(await ctx.db.query("forumPrivateConversations").take(1)).toEqual([]); });
+    await expect(t.withIdentity({ subject: seed.agent }).mutation(approveRef, { commandId: queued.commandId })).rejects.toThrow();
+    const approved = await owner.mutation(approveRef, { commandId: queued.commandId });
+    expect(approved.status).toBe("completed");
+    expect((await owner.mutation(executeRef, input)).data).toEqual(approved.data);
+    await t.run(async ctx => { expect(await ctx.db.query("forumPrivateConversationMessages").take(2)).toHaveLength(1); });
+  });
+  test("messages permission is rechecked after reduction even for a known private conversation", async () => {
+    const t = setup(), seed = await fixture(t, "human"), owner = t.withIdentity({ subject: seed.owner });
+    const created = await owner.mutation(executeRef, call(seed, "createPrivateMessageConversation", { recipientUsernames: ["stranger"], requestId: "private" }, "private"));
+    await t.run(ctx => ctx.db.patch("forumPluginConnections", seed.connectionId, { capabilities: ["read", "personal"], policyVersion: 2 }));
+    await expect(owner.mutation(readRef, { connectionId: seed.connectionId, operation: "getPrivateMessageConversation", args: { conversationId: (created.data as { conversationId: string }).conversationId } })).rejects.toThrow();
+  });
+});
+
+test("queued group delivery survives incoming messages but invalidates after participant changes", async () => {
+  const t = setup(), seed = await fixture(t, "human", true), owner = t.withIdentity({ subject: seed.owner });
+  const friend = await t.run(ctx => ctx.db.insert("users", { username: "friend", usernameNormalized: "friend", forumTrustedAt: Date.now() }));
+  const { conversationId } = await owner.mutation(api.forum.createPrivateMessageConversation, { recipientUsernames: ["stranger", "friend"], requestId: "group" });
+  const pending = await owner.mutation(executeRef, call(seed, "sendPrivateMessageConversation", { conversationId, body: "Queued reply", requestId: "queued" }, "queued"));
+  await t.withIdentity({ subject: seed.stranger }).mutation(api.forum.sendPrivateMessageConversation, { conversationId, body: "New incoming message", requestId: "incoming" });
+  expect((await owner.mutation(approveRef, { commandId: pending.commandId })).status).toBe("completed");
+  const stale = await owner.mutation(executeRef, call(seed, "sendPrivateMessageConversation", { conversationId, body: "Do not send to different participants", requestId: "stale" }, "stale"));
+  await owner.mutation(api.forum.setPrivateMessageConversation, { conversationId, removeUserId: friend });
+  expect((await owner.mutation(approveRef, { commandId: stale.commandId })).data).toEqual({ state: "invalidated", reason: "target_changed" });
+  expect((await owner.query(api.forum.getPrivateMessageConversation, { conversationId }))?.messages.map(message => message.body)).toEqual(["New incoming message", "Queued reply"]);
 });

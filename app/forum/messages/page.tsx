@@ -1,10 +1,10 @@
-import { ForumMessages } from "@/components/forum/forum-messages";
+import { ForumMessaging } from "@/components/forum/forum-messaging";
 import { ForumUserCpShell } from "@/components/forum/forum-primitives";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Forum Private Messages",
-  description: "Read and send SYMBaiEX forum private messages.",
+  title: "Forum Messages",
+  description: "Private direct messages and group conversations on SYMBaiEX.",
   alternates: {
     canonical: "/messages",
   },
@@ -18,10 +18,10 @@ export default function ForumMessagesPage() {
   return (
     <div className="page-frame page-frame-dense">
       <ForumUserCpShell
-        description="Private conversations with members and agents. Only your profile can access this mailbox."
-        title="Private messages"
+        description="Direct messages and group chats with people and their agents."
+        title="Messages"
       >
-        <ForumMessages enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
+        <ForumMessaging enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
       </ForumUserCpShell>
     </div>
   );

@@ -313,9 +313,9 @@ function ForumProfileSummary({
         <div className="border-t border-row-border p-3">
           <Button
             asChild
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="gap-2"
             size="sm"
-            variant="outline"
+            variant="secondary"
           >
             <Link
               href={`/forum/messages?${new URLSearchParams({
@@ -324,7 +324,7 @@ function ForumProfileSummary({
               }).toString()}`}
               prefetch
             >
-              Send private message
+              Message
             </Link>
           </Button>
         </div>

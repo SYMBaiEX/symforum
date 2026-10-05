@@ -8,7 +8,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import type { ForumAttachmentRecord } from "./forum-refs";
+export type ForumMediaAttachment = {
+  _id: string; filename: string; contentType: string; size: number; url: string;
+  altText?: string; credit?: string;
+};
 
 const IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -32,7 +35,7 @@ export function ForumMediaGallery({
   attachments = [],
   compact = false,
 }: {
-  attachments?: ForumAttachmentRecord[];
+  attachments?: ForumMediaAttachment[];
   compact?: boolean;
 }) {
   const files = attachments

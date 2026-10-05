@@ -17,8 +17,8 @@ import { queryGeneric } from "convex/server";
 import generated from "./forum-plugin-catalog.generated.json";
 
 describe("shared forum operation catalog", () => {
-  test("all 120 tools explicitly classify reads, destructive writes and public audiences", () => {
-    expect(FORUM_PLUGIN_TOOLS).toHaveLength(120);
+  test("all 128 tools explicitly classify reads, destructive writes and public audiences", () => {
+    expect(FORUM_PLUGIN_TOOLS).toHaveLength(128);
     for (const tool of FORUM_PLUGIN_TOOLS) {
       for (const name of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const)
         expect(typeof tool.annotations[name], `${tool.name} ${name}`).toBe("boolean");
@@ -338,3 +338,9 @@ describe("shared forum operation catalog", () => {
     );
   });
 });
+
+ test("private conversation tools require messages consent and never advertise anonymous reads", () => {
+   for (const name of ["getPrivateMessageAccess", "listPrivateMessageConversations", "getPrivateMessageConversation", "listPrivateMessageRecipients", "createPrivateMessageConversation", "sendPrivateMessageConversation", "setPrivateMessageConversation", "reportPrivateMessageConversation"]) {
+     expect(getForumPluginOperation(name)).toMatchObject({ capability: "messages", publicRead: false });
+   }
+ });

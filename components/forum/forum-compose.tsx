@@ -552,11 +552,13 @@ export function ForumAttachmentDraftPanel({
   attachments,
   disabled = false,
   reservedAttachmentSlots = 0,
+  onUploadingChange,
   onAttachmentsChange,
 }: {
   attachments: ForumAttachmentDraft[];
   disabled?: boolean;
   reservedAttachmentSlots?: number;
+  onUploadingChange?: (uploading: boolean) => void;
   onAttachmentsChange: (attachments: ForumAttachmentDraft[]) => void;
 }) {
   const inputId = useId();
@@ -564,6 +566,8 @@ export function ForumAttachmentDraftPanel({
   const authToken = useAuthToken();
   const runtime = useForumRuntime();
   const [uploading, setUploading] = useState(false);
+  useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
+  useEffect(() => () => onUploadingChange?.(false), [onUploadingChange]);
   const [error, setError] = useState("");
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>(
     {},

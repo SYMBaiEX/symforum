@@ -71,6 +71,7 @@ import { STRUCTURED_CANARY_KEY } from "./aiRoutingControlData";
 import { readForumNewsFeed } from "./news";
 import { sha256Base64Url } from "./agentIdentityCrypto";
 import { createForumChatOperations } from "./forumChat";
+import { createForumPrivateConversationOperations } from "./forumPrivateConversations";
 
 const categoryStatusValidator = v.union(
   v.literal("active"),
@@ -3510,6 +3511,7 @@ const getMyForumNavStateOperation = defineForumQuery({
     const privateMessageSummary = isTrustedForumUser(user)
       ? await unreadPrivateMessageSummary(ctx, user._id)
       : { unreadCount: 0, unreadCountLimited: false };
+    const conversationUnread = await privateConversationService.canUse(ctx) ? await privateConversationService.unreadSummary(ctx, user._id) : { unreadCount: 0, unreadCountLimited: false };
     const canModerateForum = await canModerateAnyForumCategory(ctx, user);
 
     return {
@@ -3525,8 +3527,8 @@ const getMyForumNavStateOperation = defineForumQuery({
       reputationScore: profileReputationScore(profile),
       unreadNotifications: notificationSummary.unreadCount,
       unreadNotificationsLimited: notificationSummary.unreadCountLimited,
-      unreadPrivateMessages: privateMessageSummary.unreadCount,
-      unreadPrivateMessagesLimited: privateMessageSummary.unreadCountLimited,
+      unreadPrivateMessages: privateMessageSummary.unreadCount + conversationUnread.unreadCount,
+      unreadPrivateMessagesLimited: privateMessageSummary.unreadCountLimited || conversationUnread.unreadCountLimited,
     };
   },
 });
@@ -4464,9 +4466,9 @@ const authorizeForumAttachmentUploadOperation = defineForumQuery({
       ctx,
       "Sign in to upload forum attachments.",
     );
-    requireTrustedForumUser(
-      user,
-      "Ask the site owner to approve your forum access before uploading attachments.",
+    if (!(await privateConversationService.canUse(ctx))) throw forumError(
+      "FORUM_TRUST_REQUIRED",
+      "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
     );
     await assertForumParticipationAllowed(
       ctx,
@@ -4490,9 +4492,9 @@ const claimStoredForumAttachmentUploadOperation = defineForumMutation({
       ctx,
       "Sign in to claim forum attachments.",
     );
-    requireTrustedForumUser(
-      user,
-      "Ask the site owner to approve your forum access before uploading attachments.",
+    if (!(await privateConversationService.canUse(ctx))) throw forumError(
+      "FORUM_TRUST_REQUIRED",
+      "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
     );
     await assertForumParticipationAllowed(
       ctx,
@@ -23007,6 +23009,25 @@ function forumError(code: string, message: string) {
   return new ConvexError({ code, message });
 }
 
+const privateConversationService = createForumPrivateConversationOperations({
+  requireSignedInUser, isTrustedForumUser, assertForumParticipationAllowed,
+  assertDeliveryAllowed: assertOwnerPrivateMessageDeliveryAllowed,
+  normalizeAttachments: normalizeForumAttachmentInputs,
+  recordReport: (ctx, reporterId, reportId, messageId, authorId) => recordModerationLog(ctx, {
+    actorUserId: reporterId, entityType: "forumReport", entityId: reportId,
+    eventType: "forum_report_created", message: "Forum conversation message reported", reportId,
+    metadata: { reporterId, messageId, targetUserId: authorId, reportEntityType: "privateMessage" },
+  }),
+});
+export const getPrivateMessageAccess = query(privateConversationService.operations.getPrivateMessageAccess.definition);
+export const listPrivateMessageConversations = query(privateConversationService.operations.listPrivateMessageConversations.definition);
+export const getPrivateMessageConversation = query(privateConversationService.operations.getPrivateMessageConversation.definition);
+export const listPrivateMessageRecipients = query(privateConversationService.operations.listPrivateMessageRecipients.definition);
+export const createPrivateMessageConversation = mutation(privateConversationService.operations.createPrivateMessageConversation.definition);
+export const sendPrivateMessageConversation = mutation(privateConversationService.operations.sendPrivateMessageConversation.definition);
+export const setPrivateMessageConversation = mutation(privateConversationService.operations.setPrivateMessageConversation.definition);
+export const reportPrivateMessageConversation = mutation(privateConversationService.operations.reportPrivateMessageConversation.definition);
+
 /** Plain domain definitions shared by first-party handlers and trusted plugin execution. */
 export const forumChatOperations = createForumChatOperations({
   maybeCurrentUser,
@@ -23559,6 +23580,7 @@ export const getForumExperienceMetrics = query({
 });
 
 export const forumOperations = {
+  ...privateConversationService.operations,
   recordForumExperienceEvent: {
     kind: "mutation",
     definition: recordForumExperienceEventOperation,
@@ -23704,7 +23726,7 @@ async function forumProfileOwnerId(ctx: QueryCtx | MutationCtx, userId: Id<"user
   const identity = await ctx.db.query("agentIdentities").withIndex("by_userId", q => q.eq("userId", userId)).unique();
   return identity?.ownerUserId ?? userId;
 }
-async function assertOwnerPrivateMessageRules(ctx: MutationCtx, sender: UserDoc, recipient: UserDoc) {
+async function assertOwnerPrivateMessageDeliveryAllowed(ctx: QueryCtx | MutationCtx, sender: UserDoc, recipient: UserDoc) {
   const [senderOwner, recipientOwner] = await Promise.all([forumProfileOwnerId(ctx, sender._id), forumProfileOwnerId(ctx, recipient._id)]);
   if (senderOwner === recipientOwner) throw forumError("INVALID_RECIPIENT", "Choose another owner's profile.");
   const [senderSiblings,recipientSiblings] = await Promise.all([
@@ -23719,6 +23741,10 @@ async function assertOwnerPrivateMessageRules(ctx: MutationCtx, sender: UserDoc,
     if(ignores.length>FORUM_RELATIONSHIP_LIST_LIMIT)throw forumError("PRIVATE_MESSAGE_IGNORED", "That profile's ignore rules exceed the supported limit.");
     if(ignores.some(row=>senderProfiles.has(row.targetUserId)))throw forumError("PRIVATE_MESSAGE_IGNORED", "That member is not accepting private messages from this owner.");
   }
+}
+async function assertOwnerPrivateMessageRules(ctx: MutationCtx, sender: UserDoc, recipient: UserDoc) {
+  await assertOwnerPrivateMessageDeliveryAllowed(ctx, sender, recipient);
+  const [senderOwner, recipientOwner] = await Promise.all([forumProfileOwnerId(ctx, sender._id), forumProfileOwnerId(ctx, recipient._id)]);
   const quota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerPrivateMessage", { key: senderOwner });
   const recipientQuota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerRecipientPrivateMessage", { key: `${senderOwner}:${recipientOwner}` });
   if (!quota.ok || !recipientQuota.ok) throw forumError("PRIVATE_MESSAGE_RATE_LIMITED", "Give the owner's inbox a minute, then send again.");
