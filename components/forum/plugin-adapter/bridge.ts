@@ -108,10 +108,19 @@ export class ForumHostBridge {
       );
   }
   private onMessage = (event: MessageEvent) => {
-    if (event.source !== this.target.parent) return;
+    // Native webviews inject MessageEvents without a source/origin; browser
+    // frames carry a WindowProxy and must still match our parent or self.
+    const nativeDispatch = event.source === null && event.origin === "";
+    if (event.source !== this.target.parent && event.source !== this.target && !nativeDispatch) return;
     const message = record(event.data);
     if (message.jsonrpc !== "2.0") return;
-    if (typeof message.id === "number" && this.pending.has(message.id)) {
+    // Request IDs are independent in each direction. A host health check may
+    // use the same ID as our pending initialize request; it is not its reply.
+    if (message.method === "ping" && (typeof message.id === "number" || typeof message.id === "string")) {
+      this.target.parent.postMessage({ jsonrpc: "2.0", id: message.id, result: {} }, "*");
+      return;
+    }
+    if (typeof message.method !== "string" && typeof message.id === "number" && this.pending.has(message.id)) {
       const pending = this.pending.get(message.id)!;
       this.pending.delete(message.id);
       clearTimeout(pending.timer);
@@ -176,7 +185,7 @@ export class ForumHostBridge {
           "ui/initialize",
           {
             protocolVersion: "2026-01-26",
-            appInfo: { name: "SYMBaiEX Forum", version: "2.2.1" },
+            appInfo: { name: "SYMBaiEX Forum", version: "2.2.2" },
             appCapabilities: { availableDisplayModes: ["fullscreen"] },
           },
           this.host.callTool ? 2000 : 20_000,

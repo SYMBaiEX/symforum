@@ -24,7 +24,10 @@ export function Image({
   placeholder?: unknown;
   blurDataURL?: string;
 }) {
-  return <img {...props} alt={props.alt ?? ""} />;
+  const src = typeof props.src === "string" && props.src.startsWith("/") && !props.src.startsWith("//")
+    ? new URL(props.src, "https://forum.symbaiex.com").href
+    : props.src;
+  return <img {...props} src={src} alt={props.alt ?? ""} />;
 }
 export default function dynamic<P extends object>(
   loader: () => Promise<ComponentType<P> | { default: ComponentType<P> }>,

@@ -314,9 +314,16 @@ await check("native in-ChatGPT forum resource", async () => {
   assert(
     typeof content?.text === "string" &&
       /<!doctype html>/i.test(content.text) &&
-      content.text.includes("ui/initialize"),
-    "Native forum HTML or MCP Apps bridge is missing.",
+      content.text.includes('id="forum-app-startup"') &&
+      Buffer.byteLength(content.text) < 10_000,
+    "Compact native forum loading document is missing.",
   );
+  const assetUrl = content.text.match(/<script defer src="([^"]+)"/i)?.[1];
+  assert(assetUrl === "https://www.symbaiex.com/api/plugin/assets/current/forum.js", "Forum UI must load through its stable owned asset URL.");
+  const assetResponse = await fetch(assetUrl, { credentials: "omit", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20_000) });
+  assert(assetResponse.ok && assetResponse.headers.get("content-type")?.includes("text/javascript") && assetResponse.headers.get("cache-control") === "no-store", "Current forum UI asset is unavailable or can be pinned by caching.");
+  const script = await assetResponse.text();
+  assert(script.includes("ui/initialize") && script.includes("style.textContent="), "Generated forum bridge or matching styles are missing.");
 });
 await check("modern scan discovery and resource cache contract", async () => {
   for (const method of ["server/discover", "tools/list", "resources/list", "resources/read"]) {

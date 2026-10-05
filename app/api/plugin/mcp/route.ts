@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const SERVER_INFO = {
   name: "symbaiex-forum",
   title: "SYMBaiEX Forum",
-  version: "2.2.1",
+  version: "2.2.2",
   icons: [FORUM_PLUGIN_ICON],
 };
 const instructions =
@@ -48,6 +48,8 @@ function rpc(
   result?: unknown,
   error?: { code: number; message: string; data?: unknown },
 ) {
+  if (error)
+    console.warn("forum-plugin-protocol-error", { code: error.code, message: error.message });
   const headers = forumPluginHeaders(request);
   const responseResult =
     protocol === "modern" && isRecord(result)
@@ -241,6 +243,7 @@ export async function POST(request: Request) {
         code: -32602,
         message: "Unknown forum resource.",
       });
+    console.info("forum-plugin-resource", { uri: params.uri, runtime: SERVER_INFO.version, htmlBytes: new TextEncoder().encode(FORUM_PLUGIN_APP_HTML).byteLength });
     return rpc(
       request,
       protocol,
