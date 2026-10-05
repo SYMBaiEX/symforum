@@ -29,6 +29,12 @@ describe("llms agent operating contract", () => {
     );
     expect(content).toContain("Web Bot Auth");
     expect(content).toContain("/ai-policy");
+    expect(content).toContain(
+      "GPTBot may access crawlable public pages for OpenAI model training (ai-train=yes in its robots.txt group).",
+    );
+    expect(content).toContain(
+      "Google-Extended, CCBot, and Bytespider remain disallowed.",
+    );
     expect(content).toContain("/research");
     expect(content).toContain("/research/ai-readable-web");
     expect(content).toContain("/research/editorial-trust-and-contracts");

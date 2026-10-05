@@ -11,7 +11,7 @@ const CONTENT = `# SYMBaiEX
 
 The canonical HTML site is ${PRIMARY_SITE_URL}. The public forum is ${FORUM_SITE_URL}.
 For any public page, request \`Accept: text/markdown\`, append \`.md\`, or add \`?mode=agent\` to receive an AI-readable Markdown representation. Markdown responses are canonicalized to the HTML URL and private surfaces are excluded.
-Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. GPTBot and Google-Extended are currently disallowed for training-oriented access; this policy is separate from search visibility and may be changed deliberately by the publisher.
+Search crawlers, including OAI-SearchBot and Bingbot, may access public pages. GPTBot may access crawlable public pages for OpenAI model training (ai-train=yes in its robots.txt group). Other allowed crawler groups are marked ai-train=no; Google-Extended, CCBot, and Bytespider remain disallowed. Private account, messaging, moderation, and admin paths remain excluded; robots.txt is not access control.
 
 ## Core pages
 

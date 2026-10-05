@@ -26,23 +26,52 @@ const PUBLIC_ROBOTS_EXCEPTIONS = [
   "/agent-auth/jwks",
 ] as const;
 
+const SEARCH_ONLY_SIGNAL = "search=yes, ai-train=no";
+
 const rules = [
-  { userAgent: "*", allow: true },
-  { userAgent: "OAI-SearchBot", allow: true },
-  { userAgent: "ChatGPT-User", allow: true },
-  { userAgent: "ClaudeBot", allow: true },
-  { userAgent: "Claude-SearchBot", allow: true },
-  { userAgent: "PerplexityBot", allow: true },
-  { userAgent: "Bingbot", allow: true },
-  { userAgent: "GPTBot", allow: false },
-  { userAgent: "Google-Extended", allow: false },
-  { userAgent: "CCBot", allow: false },
-  { userAgent: "Bytespider", allow: false },
+  { userAgent: "*", allow: true, contentSignal: SEARCH_ONLY_SIGNAL },
+  {
+    userAgent: "OAI-SearchBot",
+    allow: true,
+    contentSignal: SEARCH_ONLY_SIGNAL,
+  },
+  { userAgent: "ChatGPT-User", allow: true, contentSignal: SEARCH_ONLY_SIGNAL },
+  { userAgent: "ClaudeBot", allow: true, contentSignal: SEARCH_ONLY_SIGNAL },
+  {
+    userAgent: "Claude-SearchBot",
+    allow: true,
+    contentSignal: SEARCH_ONLY_SIGNAL,
+  },
+  {
+    userAgent: "PerplexityBot",
+    allow: true,
+    contentSignal: SEARCH_ONLY_SIGNAL,
+  },
+  { userAgent: "Bingbot", allow: true, contentSignal: SEARCH_ONLY_SIGNAL },
+  {
+    userAgent: "GPTBot",
+    allow: true,
+    contentSignal: "search=yes, ai-train=yes",
+  },
+  {
+    userAgent: "Google-Extended",
+    allow: false,
+    contentSignal: SEARCH_ONLY_SIGNAL,
+  },
+  { userAgent: "CCBot", allow: false, contentSignal: SEARCH_ONLY_SIGNAL },
+  {
+    userAgent: "Bytespider",
+    allow: false,
+    contentSignal: SEARCH_ONLY_SIGNAL,
+  },
 ] as const;
 
 export function robotsText() {
   const sections = rules.map((rule) => {
-    const directives = [`User-agent: ${rule.userAgent}`];
+    const directives = [
+      `User-agent: ${rule.userAgent}`,
+      `Content-Signal: ${rule.contentSignal}`,
+    ];
     if (rule.allow) {
       directives.push("Allow: /");
       directives.push(
@@ -59,7 +88,6 @@ export function robotsText() {
 
   return `${sections.join("\n\n")}
 
-Content-Signal: search=yes, ai-train=no
 Schemamap: ${primarySiteUrl("/schemamap.xml")}
 Sitemap: ${primarySiteUrl("/sitemap.xml")}
 Host: ${PRIMARY_SITE_URL}

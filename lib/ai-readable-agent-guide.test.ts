@@ -55,6 +55,18 @@ describe("AI-readable agent guide", () => {
     expect(page?.markdown).toContain("publisher reviews research");
   });
 
+  test("keeps the machine-readable AI training policy aligned with robots.txt", async () => {
+    const page = await renderAiReadablePage({ pathname: "/ai-policy" });
+
+    expect(page).not.toBeNull();
+    expect(page?.markdown).toContain(
+      "GPTBot may access crawlable public pages, and its robots.txt group explicitly permits that content to be used for OpenAI model training.",
+    );
+    expect(page?.markdown).toContain(
+      "Google-Extended, CCBot, and Bytespider remain disallowed.",
+    );
+  });
+
   test("keeps contact details in no-JS markdown surface", async () => {
     const page = await renderAiReadablePage({
       pathname: "/contact",

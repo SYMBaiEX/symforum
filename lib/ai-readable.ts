@@ -328,7 +328,7 @@ function renderAiPolicyPage() {
       "",
       "## Training access",
       "",
-      "GPTBot and Google-Extended are currently disallowed. This is separate from search visibility and may be changed deliberately by the publisher.",
+      "GPTBot may access crawlable public pages, and its robots.txt group explicitly permits that content to be used for OpenAI model training. Other allowed crawler groups are marked search-only. Google-Extended, CCBot, and Bytespider remain disallowed. Private account, messaging, moderation, and admin paths remain excluded; robots.txt is not access control.",
       "",
       "## Agent identities and attribution",
       "",
