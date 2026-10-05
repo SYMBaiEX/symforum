@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Script } from "node:vm";
 import {
   FORUM_PLUGIN_APP_URI,
   FORUM_PLUGIN_TOOLS,
@@ -29,6 +30,8 @@ describe("automatic native forum parity", () => {
     const revision = createHash("sha256")
       .update(readFileSync("lib/forum-native-app.generated.ts"))
       .update(readFileSync("lib/forum-shared-css.generated.ts"))
+      .update(readFileSync("lib/forum-plugin-app.ts"))
+      .update(readFileSync("lib/forum-plugin-startup.ts"))
       .digest("hex")
       .slice(0, 12);
     expect(FORUM_PLUGIN_APP_URI).toBe(`ui://symbaiex/forum-${revision}.html`);
@@ -49,6 +52,13 @@ describe("automatic native forum parity", () => {
     for (const route of FORUM_NATIVE_ROUTES)
       expect(imports).toContain(route.source.replace(".tsx", ""));
     expect(FORUM_NATIVE_ROUTES).toHaveLength(26);
+  });
+  test("can share a document with host lexical bindings without a startup redeclaration error", () => {
+    // A classic script's global var collides with a prior host const even if
+    // application code has not executed yet. Test the actual emitted bundle.
+    const name = FORUM_NATIVE_APP_JS.match(/\bvar ([\w$]+)=/)?.[1];
+    expect(name).toBeTruthy();
+    expect(() => new Script(`const ${name} = { hostBootstrap: true };\n${FORUM_NATIVE_APP_JS}`)).not.toThrow();
   });
   test("ships the native component bundle, canonical CSS and font without a second renderer", () => {
     expect(FORUM_PLUGIN_APP_HTML).toContain(FORUM_NATIVE_APP_JS);
