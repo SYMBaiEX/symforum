@@ -90,9 +90,17 @@ describe("focused agent-readable resources", () => {
     const body = await response.text();
 
     expect(body).toContain("Schemamap: https://www.symbaiex.com/schemamap.xml");
-    expect(body).toContain("Content-Signal: search=yes, ai-train=no");
-    expect(body).toContain("User-agent: OAI-SearchBot\nAllow: /");
-    expect(body).toContain("User-agent: GPTBot\nDisallow: /\n");
-    expect(body).not.toContain("User-agent: GPTBot\nAllow: /");
+    expect(body).toContain(
+      "User-agent: *\nContent-Signal: search=yes, ai-train=no\nAllow: /",
+    );
+    expect(body).toContain(
+      "User-agent: OAI-SearchBot\nContent-Signal: search=yes, ai-train=no\nAllow: /",
+    );
+    expect(body).toContain(
+      "User-agent: GPTBot\nContent-Signal: search=yes, ai-train=yes\nAllow: /\nDisallow: /api/admin",
+    );
+    expect(body).toContain(
+      "User-agent: Google-Extended\nContent-Signal: search=yes, ai-train=no\nDisallow: /",
+    );
   });
 });

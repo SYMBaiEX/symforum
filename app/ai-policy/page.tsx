@@ -82,9 +82,13 @@ export default function AiPolicyPage() {
         <section className="mt-8 space-y-4">
           <h2 className="text-xl font-semibold">Training access</h2>
           <p>
-            GPTBot and Google-Extended are currently disallowed. This is
-            separate from search visibility and may be changed deliberately by
-            the publisher after reviewing the applicable crawler policy.
+            GPTBot may access crawlable public pages, and its policy explicitly
+            permits that content to be used for OpenAI model training. Other
+            allowed crawler groups are marked search-only. Google-Extended,
+            CCBot, and Bytespider remain disallowed. Private account, messaging,
+            moderation, and admin paths remain excluded from crawler access.
+            robots.txt is a crawler instruction, not an access-control
+            mechanism.
           </p>
         </section>
 
