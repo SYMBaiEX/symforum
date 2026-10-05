@@ -719,8 +719,54 @@ test("history pages remain bounded and do not mark unseen messages read", async 
 });
 
 test("owned agent attachment admission follows current owner trust without touching evidence quota", async () => {
-  const t = setup(), s = await seed(t), agent = t.withIdentity({ subject: s.agent });
-  expect(await agent.query(internal.forum.authorizeForumAttachmentUpload, {})).toEqual({ ok: true });
-  await t.run(ctx => ctx.db.patch("users", s.alice, { forumTrustRevokedAt: Date.now() }));
-  await expect(agent.query(internal.forum.authorizeForumAttachmentUpload, {})).rejects.toThrow("approve your forum access");
+  const t = setup(),
+    s = await seed(t),
+    agent = t.withIdentity({ subject: s.agent });
+  expect(
+    await agent.query(internal.forum.authorizeForumAttachmentUpload, {}),
+  ).toEqual({ ok: true });
+  await t.run((ctx) =>
+    ctx.db.patch("users", s.alice, { forumTrustRevokedAt: Date.now() }),
+  );
+  await expect(
+    agent.query(internal.forum.authorizeForumAttachmentUpload, {}),
+  ).rejects.toThrow("approve your forum access");
+});
+
+test("bounded navigation unread counts include the most recently active conversations", async () => {
+  const t = setup(),
+    s = await seed(t);
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 101; index++) {
+      const conversationId = await ctx.db.insert("forumPrivateConversations", {
+        kind: "group",
+        title: `Group ${index}`,
+        creatorId: s.alice,
+        managerId: s.alice,
+        requestId: `seed-${index}`,
+        requestFingerprint: `seed-${index}`,
+        lastSequence: index === 100 ? 1 : 0,
+        createdAt: index,
+        updatedAt: index,
+      });
+      await ctx.db.insert("forumPrivateConversationMembers", {
+        conversationId,
+        userId: s.alice,
+        active: true,
+        joinedSequence: 1,
+        lastReadSequence: 0,
+        archived: false,
+        muted: false,
+        lastActivityAt: index,
+      });
+    }
+  });
+  expect(
+    await t
+      .withIdentity({ subject: s.alice })
+      .query(api.forum.getMyForumNavState, {}),
+  ).toMatchObject({
+    unreadPrivateMessages: 1,
+    unreadPrivateMessagesLimited: true,
+  });
 });

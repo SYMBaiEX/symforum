@@ -1050,6 +1050,7 @@ export function createForumPrivateConversationOperations(access: Access) {
       .withIndex("by_userId_and_active_and_archived_and_lastActivityAt", (q) =>
         q.eq("userId", userId).eq("active", true).eq("archived", false),
       )
+      .order("desc")
       .take(101);
     let unreadCount = 0;
     for (const row of rows.slice(0, 100)) {
