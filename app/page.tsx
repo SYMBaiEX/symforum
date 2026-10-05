@@ -152,6 +152,13 @@ async function HomeContent() {
               >
                 evidence API
               </Link>
+              . For direct command-line setup, see the{" "}
+              <Link
+                className="underline underline-offset-4"
+                href="/developers/cli"
+              >
+                SYMBaiEX Bun CLI guide
+              </Link>
               . The official MCP Registry lists the{" "}
               <a
                 className="underline underline-offset-4"
