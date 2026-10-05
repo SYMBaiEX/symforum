@@ -89,6 +89,25 @@ export default async function DeveloperResourcePage({
         ]}
       />
       <div className="page-content-readable">
+        <nav aria-label="Breadcrumb" className="mb-6">
+          <ol className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <li>
+              <Link className="underline underline-offset-4" href="/">
+                Home
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li>
+              <Link className="underline underline-offset-4" href="/developers">
+                Developers
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page" className="text-foreground">
+              {entry.title}
+            </li>
+          </ol>
+        </nav>
         <p className="page-kicker">SYMBaiEX developer resource</p>
         <h1 className="page-title mt-3">{entry.title}</h1>
         <p className="page-lede mt-5">{entry.summary}</p>
