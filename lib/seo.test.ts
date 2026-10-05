@@ -99,13 +99,21 @@ describe("serializeJsonLd", () => {
 
   test("can include visible homepage SDK and CLI products in the site graph", () => {
     const graph = siteStructuredData({ includeHomeProducts: true })["@graph"];
+    const schemaNodes = developerSoftwareStructuredData();
+    const products = graph.filter((entry) => entry["@type"] === "Product");
     const applications = graph.filter(
-      (entry) =>
-        Array.isArray(entry["@type"]) &&
-        entry["@type"].includes("SoftwareApplication"),
+      (entry) => entry["@type"] === "SoftwareApplication",
     );
 
-    expect(applications).toEqual(developerSoftwareStructuredData());
+    expect(products).toEqual(
+      schemaNodes.filter((entry) => entry["@type"] === "Product"),
+    );
+    expect(applications).toEqual(
+      schemaNodes.filter((entry) => entry["@type"] === "SoftwareApplication"),
+    );
+    expect(products.map((entry) => entry["@id"])).toEqual(
+      applications.map((entry) => entry["@id"]),
+    );
     expect(applications.map((entry) => entry.name)).toEqual([
       "@symbaiex/agent-sdk",
       "@symbaiex/agent-cli",
@@ -114,9 +122,20 @@ describe("serializeJsonLd", () => {
 
   test("scopes installable client metadata to the developer surface", () => {
     const applications = developerSoftwareStructuredData();
-    expect(applications).toEqual([
+    const products = applications.filter(
+      (entry) => entry["@type"] === "Product",
+    );
+    const softwareApplications = applications.filter(
+      (entry) => entry["@type"] === "SoftwareApplication",
+    );
+
+    expect(products.map((entry) => entry.name)).toEqual([
+      "@symbaiex/agent-sdk",
+      "@symbaiex/agent-cli",
+    ]);
+    expect(softwareApplications).toEqual([
       expect.objectContaining({
-        "@type": ["Product", "SoftwareApplication"],
+        "@type": "SoftwareApplication",
         name: "@symbaiex/agent-sdk",
         applicationCategory: "DeveloperApplication",
         softwareVersion: "0.1.0",
@@ -124,7 +143,7 @@ describe("serializeJsonLd", () => {
         codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
       }),
       expect.objectContaining({
-        "@type": ["Product", "SoftwareApplication"],
+        "@type": "SoftwareApplication",
         name: "@symbaiex/agent-cli",
         applicationCategory: "DeveloperApplication",
         softwareVersion: "0.1.0",
@@ -132,6 +151,12 @@ describe("serializeJsonLd", () => {
         codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
       }),
     ]);
+    expect(products.map((entry) => entry["@id"])).toEqual(
+      softwareApplications.map((entry) => entry["@id"]),
+    );
+    expect(
+      applications.every((entry) => typeof entry["@type"] === "string"),
+    ).toBe(true);
     expect(JSON.stringify(applications)).not.toMatch(
       /AggregateRating|Review|Offer/,
     );

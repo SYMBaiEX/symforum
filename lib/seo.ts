@@ -189,11 +189,8 @@ export function siteStructuredData({
 }
 
 export function developerSoftwareStructuredData() {
-  // Keep Product first for consumers that only inspect one @type; both types remain
-  // declared.
-  return [
+  const products = [
     {
-      "@type": ["Product", "SoftwareApplication"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-sdk`,
       name: "@symbaiex/agent-sdk",
       description:
@@ -208,7 +205,6 @@ export function developerSoftwareStructuredData() {
       publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
     },
     {
-      "@type": ["Product", "SoftwareApplication"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-cli`,
       name: "@symbaiex/agent-cli",
       description:
@@ -223,6 +219,13 @@ export function developerSoftwareStructuredData() {
       publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
     },
   ];
+
+  // Keep each type explicit for readers that do not support @type arrays.
+  // Matching @id values let JSON-LD processors merge each pair into one entity.
+  return products.flatMap((product) => [
+    { "@type": "Product", ...product },
+    { "@type": "SoftwareApplication", ...product },
+  ]);
 }
 
 export function breadcrumbStructuredData(
