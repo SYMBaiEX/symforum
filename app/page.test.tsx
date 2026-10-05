@@ -21,6 +21,8 @@ describe("SYMBaiEX homepage discoverability", () => {
     const html = await new Response(stream).text();
 
     expect(html).toContain('href="/developers"');
+    expect(html).toContain('href="/developers/cli"');
+    expect(html).toContain("SYMBaiEX Bun CLI guide");
     expect(html).toContain('href="/developers/mcp"');
     expect(html).toContain(
       'href="https://www.symbaiex.com/api/docs/mcp/server-card"',
