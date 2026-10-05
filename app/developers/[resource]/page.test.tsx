@@ -28,9 +28,17 @@ describe("developer integration guides", () => {
       const html = await new Response(stream).text();
       const entry: DeveloperResource =
         DEVELOPER_RESOURCES[resource as keyof typeof DEVELOPER_RESOURCES];
+      const visibleBreadcrumb = html.match(
+        /<nav\b(?=[^>]*aria-label="Breadcrumb")[^>]*>[\s\S]*?<\/nav>/,
+      )?.[0];
       expect(html).toContain(entry.title);
       expect(html).toContain("Integration guidance");
       expect(html).toContain("BreadcrumbList");
+      expect(visibleBreadcrumb).toBeDefined();
+      expect(visibleBreadcrumb).toContain('href="/"');
+      expect(visibleBreadcrumb).toContain('href="/developers"');
+      expect(visibleBreadcrumb).toContain('aria-current="page"');
+      expect(visibleBreadcrumb).toContain(entry.title);
       expect(html).toContain("TechArticle");
       expect(html).not.toMatch(/AggregateRating|reviewRating/);
       const doc = publicDocumentation().find((d) =>
