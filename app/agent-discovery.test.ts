@@ -17,7 +17,11 @@ import { GET as getSecurityTxt } from "@/app/.well-known/security.txt/route";
 import { GET as getAgentsMarkdown } from "@/app/agents.md/route";
 import { GET as getSkillsMarkdown } from "@/app/skills.sh/route";
 import { POST as postAgentMcp } from "@/app/api/agent/mcp/route";
-import { MCP_SERVER_CARD, PUBLIC_AGENT_SKILLS } from "@/lib/agent-discovery";
+import {
+  buildAgentsMarkdown,
+  MCP_SERVER_CARD,
+  PUBLIC_AGENT_SKILLS,
+} from "@/lib/agent-discovery";
 
 describe("agent discovery surfaces", () => {
   test("publishes a cross-protocol AI catalog", async () => {
@@ -282,6 +286,28 @@ describe("agent discovery surfaces", () => {
     expect(security).toContain("Contact: mailto:austin@symbaiex.com");
     expect(security).toContain(
       "Canonical: https://www.symbaiex.com/.well-known/security.txt",
+    );
+  });
+
+  test("links first-party OAuth metadata only when service_auth is enabled", () => {
+    const enabledAgents = buildAgentsMarkdown({
+      AGENT_SERVICE_AUTH_ENABLED: "true",
+    });
+    const disabledAgents = buildAgentsMarkdown({
+      AGENT_SERVICE_AUTH_ENABLED: "false",
+    });
+
+    expect(enabledAgents).toContain(
+      "OAuth 2.0 Authorization Server Metadata for the separate owner-approved service_auth issuer: https://www.symbaiex.com/.well-known/oauth-authorization-server/agent-auth",
+    );
+    expect(enabledAgents).toContain(
+      "issuer: https://www.symbaiex.com/agent-auth",
+    );
+    expect(enabledAgents).toContain(
+      "not WorkOS Connect or authorization-code login",
+    );
+    expect(disabledAgents).not.toContain(
+      "https://www.symbaiex.com/.well-known/oauth-authorization-server/agent-auth",
     );
   });
 });
