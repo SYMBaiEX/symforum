@@ -280,7 +280,7 @@ function App() {
         }}
       >
         <div
-          data-native-forum-runtime="2.2.1"
+          data-native-forum-runtime="2.2.2"
           data-connection-revision={revision}
         >
           <ForumSiteShell

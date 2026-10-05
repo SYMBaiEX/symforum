@@ -5,6 +5,10 @@ import { compareForumRoutePatterns } from "../lib/forum-native-routing.ts";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 const root = resolve(import.meta.dirname, "..");
+const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const requiredBun = manifest.packageManager.replace(/^bun@/, "");
+if (Bun.version !== requiredBun)
+  throw new Error(`Native forum generation requires Bun ${requiredBun}; received ${Bun.version}. Use the repository's pinned build runtime.`);
 const directory = resolve(root, "components/forum/plugin-adapter");
 const pages = [];
 async function collect(path) {

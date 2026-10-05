@@ -15,6 +15,9 @@ import {
 import {
   FORUM_PLUGIN_APP_HTML,
   FORUM_PLUGIN_APP_RESOURCE,
+  FORUM_PLUGIN_APP_CSS,
+  FORUM_PLUGIN_ASSET_ORIGIN,
+  FORUM_PLUGIN_APP_SCRIPT,
 } from "./forum-plugin-app";
 function pages(path: string): string[] {
   return readdirSync(path, { withFileTypes: true }).flatMap((item) =>
@@ -60,11 +63,18 @@ describe("automatic native forum parity", () => {
     expect(name).toBeTruthy();
     expect(() => new Script(`const ${name} = { hostBootstrap: true };\n${FORUM_NATIVE_APP_JS}`)).not.toThrow();
   });
-  test("ships the native component bundle, canonical CSS and font without a second renderer", () => {
-    expect(FORUM_PLUGIN_APP_HTML).toContain(FORUM_NATIVE_APP_JS);
-    expect(FORUM_PLUGIN_APP_HTML).toContain(FORUM_NATIVE_APP_CSS);
+  test("keeps MCP HTML small and links the exact native UI assets on an already allowed origin", () => {
+    expect(Buffer.byteLength(FORUM_PLUGIN_APP_HTML)).toBeLessThan(10_000);
+    expect(FORUM_PLUGIN_APP_HTML).not.toContain(FORUM_NATIVE_APP_JS);
+    expect(FORUM_PLUGIN_APP_HTML).toContain(`src="${FORUM_PLUGIN_ASSET_ORIGIN}/api/plugin/assets/current/forum.js"`);
+    expect(FORUM_PLUGIN_APP_HTML).not.toContain(FORUM_PLUGIN_APP_RESOURCE.uri.split("forum-")[1]);
+    expect(FORUM_PLUGIN_APP_SCRIPT).toContain(FORUM_NATIVE_APP_JS);
+    expect(FORUM_PLUGIN_APP_SCRIPT).toContain(JSON.stringify(FORUM_PLUGIN_APP_CSS));
+    expect(() => new Script(FORUM_PLUGIN_APP_SCRIPT)).not.toThrow();
+    expect(FORUM_PLUGIN_APP_RESOURCE._meta.ui.csp.resourceDomains).toContain(FORUM_PLUGIN_ASSET_ORIGIN);
+    expect(FORUM_PLUGIN_APP_CSS).toContain(FORUM_NATIVE_APP_CSS);
     expect(FORUM_NATIVE_APP_CSS).toContain("KaTeX_Main");
-    expect(FORUM_PLUGIN_APP_HTML).toContain("font/woff2;base64");
+    expect(FORUM_PLUGIN_APP_CSS).toContain("font/woff2;base64");
     expect(FORUM_PLUGIN_APP_HTML).toContain('charset="utf-8"');
     expect(FORUM_PLUGIN_APP_HTML).not.toContain("<iframe");
     expect(() => new Function(FORUM_NATIVE_APP_JS)).not.toThrow();

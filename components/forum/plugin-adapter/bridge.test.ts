@@ -25,6 +25,37 @@ const status = {
   },
 };
 describe("native forum host boundary", () => {
+  test("accepts native webview replies with no source/origin while rejecting foreign delivery", async () => {
+    const { target, bridge, parent, win } = hostFixture();
+    for (const source of [null, win]) {
+      const pending = bridge.request("ui/initialize");
+      const id = parent.postMessage.mock.calls.at(-1)![0].id;
+      target.dispatchEvent(Object.assign(new Event("message"), { data: { jsonrpc: "2.0", id, result: "foreign" }, source: null, origin: "https://foreign.example" }));
+      target.dispatchEvent(Object.assign(new Event("message"), { data: { jsonrpc: "2.0", id, result: "native" }, source, origin: "" }));
+      await expect(pending).resolves.toBe("native");
+    }
+    bridge.destroy();
+  });
+  test("answers host health checks without consuming a colliding app request ID", async () => {
+    const { bridge, parent, deliver } = hostFixture();
+    const pending = bridge.request("ui/initialize");
+    const request = parent.postMessage.mock.calls[0][0];
+    deliver({ jsonrpc: "2.0", method: "ping", id: request.id });
+    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id: request.id, result: {} }, "*");
+    deliver({ jsonrpc: "2.0", id: request.id, result: { hostContext: { theme: "dark" } } });
+    await expect(pending).resolves.toEqual({ hostContext: { theme: "dark" } });
+    deliver({ jsonrpc: "2.0", method: "ping", id: "host-health" });
+    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id: "host-health", result: {} }, "*");
+    bridge.destroy();
+  });
+  test("acknowledges teardown even when its ID matches an outstanding app request", async () => {
+    const { bridge, parent, deliver } = hostFixture();
+    const pending = bridge.request("tools/call");
+    const id = parent.postMessage.mock.calls[0][0].id;
+    deliver({ jsonrpc: "2.0", method: "ui/resource-teardown", id });
+    expect(parent.postMessage).toHaveBeenLastCalledWith({ jsonrpc: "2.0", id, result: {} }, "*");
+    await expect(pending).rejects.toThrow("Forum closed");
+  });
   test("ignores responses from other frames and cleans up outstanding requests", async () => {
     const { bridge, parent, deliver } = hostFixture();
     const response = bridge.request("tools/call", { name: "forum_overview" });
