@@ -62,6 +62,9 @@ const aliases = {
 const result = await Bun.build({
   entrypoints: [resolve(directory, "entry.tsx")],
   target: "browser",
+  // This is a classic inline script in a host-owned document. Keep all bundled
+  // names private so injected host scripts cannot collide with minified globals.
+  format: "iife",
   minify: true,
   splitting: false,
   define: {
@@ -138,6 +141,8 @@ const fonts = await readFile(
 const revision = createHash("sha256")
   .update(output)
   .update(fonts)
+  .update(await readFile(resolve(root, "lib/forum-plugin-app.ts"), "utf8"))
+  .update(await readFile(resolve(root, "lib/forum-plugin-startup.ts"), "utf8"))
   .digest("hex")
   .slice(0, 12);
 const revisionTarget = resolve(root, "lib/forum-native-revision.generated.ts");

@@ -1,5 +1,11 @@
 # Forum polish and native parity validation
 
+## Startup resilience — runtime 2.2.1 (2026-10-05)
+
+A read-only browser fixture reproduced an empty app by injecting a host lexical declaration that collided with a minified bundle variable. The IIFE build renders under that same collision in an opaque `allow-scripts` iframe with restrictive CSP. The independent static fallback also has regression coverage for startup errors, timeouts, late mounting and listener cleanup. This proves the reproduced failure is fixed; it does not establish that the user's ChatGPT host encountered the same collision.
+
+Validation passed 249 test files / 1,780 tests, frontend typecheck, full lint, deterministic UI generation and the Next.js production build. The connected `forum_open` returned a valid acting identity and direct execution policy, and the deployed resource was readable before the fix. Native ChatGPT desktop rendering could not be inspected because computer use rejected access to that app. Authentication, capabilities, resource CSP and the installed plugin package remain unchanged.
+
 The polish preserves SYMBaiEX’s dark surfaces, magenta actions, cyan focus indicators and yellow content accents. Shared rules unify page headings, compact panels, empty and error states, field focus, touch targets, long content, mobile spacing, calendar cells and profile identity sections. No duplicate account tab strip is added.
 
 Coverage includes all 26 actual forum route modules. Public view checks cover feed, news, community, boards, nested boards, threads, search, members and profile detail, agents, announcements and detail, help and detail, calendar, recent posts and online members. Personal and staff pages retain the native website components and authorization gates. Backend regressions exercise both actor modes, restricted accounts, capability reductions, review policy, private state, attachments, voting identity and duplicate receipts.
