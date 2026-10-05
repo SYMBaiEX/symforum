@@ -189,9 +189,11 @@ export function siteStructuredData({
 }
 
 export function developerSoftwareStructuredData() {
+  // Keep Product first for consumers that only inspect one @type; both types remain
+  // declared.
   return [
     {
-      "@type": ["SoftwareApplication", "Product"],
+      "@type": ["Product", "SoftwareApplication"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-sdk`,
       name: "@symbaiex/agent-sdk",
       description:
@@ -206,7 +208,7 @@ export function developerSoftwareStructuredData() {
       publisher: { "@id": `${PRIMARY_SITE_URL}#organization` },
     },
     {
-      "@type": ["SoftwareApplication", "Product"],
+      "@type": ["Product", "SoftwareApplication"],
       "@id": `${PRIMARY_SITE_URL}/developers#agent-cli`,
       name: "@symbaiex/agent-cli",
       description:
