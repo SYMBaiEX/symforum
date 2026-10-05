@@ -4,6 +4,11 @@ import {
   AGENT_PROTECTED_RESOURCE_METADATA_URL,
   AGENT_REQUIRED_SCOPE,
 } from "@/lib/agent-auth-metadata";
+import {
+  SERVICE_AUTH_ISSUER,
+  SERVICE_AUTH_METADATA,
+  serviceAuthEnabled,
+} from "@/lib/agent-service-auth-config";
 import { PRIMARY_SITE_URL, primarySiteUrl } from "@/lib/site-urls";
 import evidenceRegistry from "@/registry/evidence.server.json";
 import docsRegistry from "@/registry/docs.server.json";
@@ -534,7 +539,14 @@ export const API_CATALOG = {
   ],
 } as const;
 
-export const AGENTS_MARKDOWN = `# SYMBaiEX agent resources
+export function buildAgentsMarkdown(
+  environment: Parameters<typeof serviceAuthEnabled>[0] = process.env,
+) {
+  const serviceAuthAuthorizationMetadata = serviceAuthEnabled(environment)
+    ? `- OAuth 2.0 Authorization Server Metadata for the separate owner-approved service_auth issuer: ${SERVICE_AUTH_METADATA} (issuer: ${SERVICE_AUTH_ISSUER}; machine-only claim/JWT-bearer grants, not WorkOS Connect or authorization-code login; use only when advertised by protected-resource metadata)\n`
+    : "";
+
+  return `# SYMBaiEX agent resources
 
 SYMBaiEX publishes source-grounded software, AI-systems, forum, and evidence resources for people and user-directed agents.
 
@@ -563,11 +575,14 @@ Do not use SYMBaiEX as a general web search engine, identity provider, payment s
 - Public client source and agent rules: https://github.com/SYMBaiEX/symbaiex-agent-clients
 - Protected-resource metadata: ${primarySiteUrl("/.well-known/oauth-protected-resource")}
 - First-party service_auth metadata: ${primarySiteUrl("/.well-known/symbaiex-agent-authentication")} (use only when advertised by the protected-resource metadata)
-- Authentication guide: ${primarySiteUrl("/auth.md")} (WorkOS OAuth uses S256 PKCE; the machine service_auth flow is separate)
+${serviceAuthAuthorizationMetadata}- Authentication guide: ${primarySiteUrl("/auth.md")} (WorkOS OAuth uses S256 PKCE; the machine service_auth flow is separate)
 - AI Catalog: ${primarySiteUrl("/.well-known/ai-catalog.json")}
 - ARD resource discovery: ${primarySiteUrl("/.well-known/ard.json")}
 - Privacy: ${primarySiteUrl("/privacy")}
 `;
+}
+
+export const AGENTS_MARKDOWN = buildAgentsMarkdown();
 
 export const SKILLS_MARKDOWN = `# SYMBaiEX skills
 
