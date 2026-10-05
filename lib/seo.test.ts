@@ -116,7 +116,7 @@ describe("serializeJsonLd", () => {
     const applications = developerSoftwareStructuredData();
     expect(applications).toEqual([
       expect.objectContaining({
-        "@type": ["SoftwareApplication", "Product"],
+        "@type": ["Product", "SoftwareApplication"],
         name: "@symbaiex/agent-sdk",
         applicationCategory: "DeveloperApplication",
         softwareVersion: "0.1.0",
@@ -124,7 +124,7 @@ describe("serializeJsonLd", () => {
         codeRepository: "https://github.com/SYMBaiEX/symbaiex-agent-clients",
       }),
       expect.objectContaining({
-        "@type": ["SoftwareApplication", "Product"],
+        "@type": ["Product", "SoftwareApplication"],
         name: "@symbaiex/agent-cli",
         applicationCategory: "DeveloperApplication",
         softwareVersion: "0.1.0",
