@@ -6,3 +6,8 @@
 .next
 coverage
 claudedocs
+
+# Disposable MCP host verification fixtures.
+tmp/forum-sdk-check
+tmp/forum-native-baseline.generated.ts
+tmp/forum-native-host-preview.mjs
