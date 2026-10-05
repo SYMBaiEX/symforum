@@ -2,6 +2,8 @@
 
 ## Native host delivery — runtime 2.2.2 (2026-10-05)
 
+Testing the exact Vercel candidate asset exposed an additional production-only startup crash (`ReferenceError: $ is not defined`). Vercel used Bun 1.3.14 while the repository and CI pin 1.4.2; the resulting IIFE differed from the verified local asset. Installation and builds now use an explicit pinned Bun invocation, following [Vercel's version-pinning guidance](https://vercel.com/kb/guide/how-to-pin-a-specific-bun-version-for-vercel-builds). Native generation rejects a mismatched runtime before writing outputs. The failing candidate was not promoted.
+
 The previous parent-only message filter rejected source-less native webview events. The bridge now accepts empty-origin native dispatch, answers host health checks, and distinguishes incoming requests from responses even when their IDs collide. It still rejects foreign-frame delivery. An SDK 2.0.3 `AppBridge` browser fixture with native event injection and a view gated on initialization stayed completely black with the previous production bundle and rendered with this patch. This fixture uses public production data and disables writes; it is not a recording of the user's ChatGPT session.
 
 The MCP HTML document is now 2,186 bytes instead of approximately 1.9 MB. A stable, uncached owned script carries the exact generated components, CSS and embedded fonts together. Cached loading documents therefore load current UI generations on reopening. Asset tests verify anonymous delivery, correct MIME and cache headers, and uncached rejection of unrelated names or mismatched revisions. No new CSP domain or forum authority is added. Relative Next image sources resolve explicitly to the forum because sandbox CSP can reject a document base URL.
