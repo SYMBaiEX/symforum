@@ -307,6 +307,9 @@ function ForumMemberTable() {
                         : ""}
                     </p>
                   </div>
+                  <ForumLink href={`/forum/messages?compose=1&recipient=${encodeURIComponent(member.username)}`} className="focus-ring forum-action-chip shrink-0 text-xs" aria-label={`Message ${member.displayName}`}>
+                    Message
+                  </ForumLink>
                 </div>
               </article>
             ))}

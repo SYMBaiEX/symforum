@@ -52,6 +52,57 @@
       "additionalProperties": false
     }
   },
+  "createPrivateMessageConversation": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "recipientUsernames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8192
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "requestId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "recipientUsernames",
+        "requestId"
+      ],
+      "additionalProperties": false
+    }
+  },
   "createPrivateMessageReport": {
     "kind": "mutation",
     "schema": {
@@ -567,6 +618,35 @@
       },
       "required": [
         "messageId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "getPrivateMessageAccess": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "getPrivateMessageConversation": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "beforeSequence": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "conversationId"
       ],
       "additionalProperties": false
     }
@@ -1501,6 +1581,38 @@
       "additionalProperties": false
     }
   },
+  "listPrivateMessageConversations": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "query": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "listPrivateMessageRecipients": {
+    "kind": "query",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
   "listPrivateMessages": {
     "kind": "query",
     "schema": {
@@ -2107,6 +2219,30 @@
       "additionalProperties": false
     }
   },
+  "reportPrivateMessageConversation": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reason": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
   "restorePrivateMessage": {
     "kind": "mutation",
     "schema": {
@@ -2249,6 +2385,53 @@
       "additionalProperties": false
     }
   },
+  "sendPrivateMessageConversation": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "body": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "storageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storageId",
+              "filename"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8192
+        },
+        "requestId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversationId",
+        "body",
+        "requestId"
+      ],
+      "additionalProperties": false
+    }
+  },
   "setAcceptedAnswer": {
     "kind": "mutation",
     "schema": {
@@ -2344,6 +2527,50 @@
         "targetType",
         "threadId",
         "score"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "setPrivateMessageConversation": {
+    "kind": "mutation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "muted": {
+          "type": "boolean"
+        },
+        "readThroughSequence": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "addRecipientUsernames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8192
+        },
+        "removeUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "leave": {
+          "const": true
+        }
+      },
+      "required": [
+        "conversationId"
       ],
       "additionalProperties": false
     }

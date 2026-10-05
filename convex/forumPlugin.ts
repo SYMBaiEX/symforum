@@ -323,6 +323,8 @@ async function targetVersions(
     "forumWarnings",
     "forumReports",
     "forumPrivateMessages",
+    "forumPrivateConversations",
+    "forumPrivateConversationMessages",
     "forumAnnouncements",
     "forumHelpDocuments",
     "forumCalendarEvents",
@@ -352,7 +354,18 @@ async function targetVersions(
       } else {
         const id = ctx.db.normalizeId(table, value);
         if (id) {
-          targets[`${table}:${value}`] = await ctx.db.get(table, id);
+          if (table === "forumPrivateConversations") {
+            const conversationId = ctx.db.normalizeId("forumPrivateConversations", value);
+            if (!conversationId) return;
+            const conversation = await ctx.db.get("forumPrivateConversations", conversationId);
+            // Membership changes affect delivery; unrelated incoming messages and read markers do not.
+            targets[`${table}:${value}`] = conversation ? { kind: conversation.kind, title: conversation.title ?? null, managerId: conversation.managerId } : null;
+            const memberships = await ctx.db.query("forumPrivateConversationMembers").withIndex("by_conversationId_and_userId", q => q.eq("conversationId", conversationId)).take(65);
+            targets[`conversationMembers:${value}`] = memberships.map(member => ({ userId: member.userId, active: member.active, joinedSequence: member.joinedSequence }));
+          } else {
+            const targetId = ctx.db.normalizeId(table, value);
+            if (targetId) targets[`${table}:${value}`] = await ctx.db.get(table, targetId);
+          }
           return;
         }
       }
@@ -407,6 +420,16 @@ async function targetVersions(
             )
             .unique();
     targets[key] = doc;
+  }
+  for (const key of ["recipientUsernames", "addRecipientUsernames"]) {
+    if (!Array.isArray(args[key])) continue;
+    const handles = args[key] as unknown[];
+    if (handles.length > 11) throw new ConvexError("Choose at most 11 recipients.");
+    for (const handle of handles) {
+      if (typeof handle !== "string") continue;
+      const normalized = handle.replace(/^@/, "").trim().toLowerCase();
+      targets[`recipient:${normalized}`] = await ctx.db.query("users").withIndex("by_usernameNormalized", q => q.eq("usernameNormalized", normalized)).unique();
+    }
   }
   const digests: Record<string, string> = {};
   for (const [key, value] of Object.entries(targets))
@@ -631,6 +654,10 @@ async function runCommand(
           url += `#post-${postNumber}`;
       }
     }
+  }
+  if (["createPrivateMessageConversation", "sendPrivateMessageConversation", "setPrivateMessageConversation"].includes(operationName)) {
+    const conversationId = record?.conversationId ?? input.conversationId;
+    if (typeof conversationId === "string") url = `https://forum.symbaiex.com/messages?conversation=${encodeURIComponent(conversationId)}`;
   }
   const result: ForumPluginResult = {
     status: "completed",

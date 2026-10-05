@@ -62,6 +62,7 @@ const ADDITIVE_WRITES = new Set([
 // Public forum content and its participants are open-world, even when read-only.
 // These operations are confined to the selected profile's private state.
 const PRIVATE_ACCOUNT_OPERATIONS = new Set([
+  "getPrivateMessageAccess", "listPrivateMessageConversations", "getPrivateMessageConversation", "listPrivateMessageRecipients", "createPrivateMessageConversation", "sendPrivateMessageConversation", "setPrivateMessageConversation", "reportPrivateMessageConversation",
   "getMyForumExperience",
   "updateMyForumExperience",
   "listMyForumCatchUp",
@@ -112,6 +113,14 @@ const policySchema: ForumJsonSchema = {
 };
 function describe(operation: string) {
   const descriptions: Record<string, string> = {
+    getPrivateMessageAccess: "Check whether the acting profile can use private conversations under current owner trust, restrictions and credential status. Messages permission required. Returns only the acting user ID and allowed state.",
+    listPrivateMessageConversations: "List the acting profile’s private direct and group conversations, with unread counts and participant identities. Messages permission required. Search matches only the returned bounded collection. Archived conversations require archived=true.",
+    getPrivateMessageConversation: "Read up to 40 messages in a private conversation of the acting profile. beforeSequence loads older messages. Membership, owner trust and current restrictions are rechecked. New members cannot read pre-join history. Does not mark messages read.",
+    listPrivateMessageRecipients: "Find available forum recipients by handle prefix. Excludes this owner’s profiles and recipients who block this owner. Returns public display identity only, never email or account secrets.",
+    createPrivateMessageConversation: "Start a private DM with one handle or a group with 2–11 handles. Reuses an existing DM between the same profiles. Optional opening message and owned attachments; requestId must be stable for retries. Requires explicit user instruction and messages permission. Owner review still applies.",
+    sendPrivateMessageConversation: "Send a private message or owned attachments to an existing direct/group conversation as the acting profile. Requires explicit instruction, messages permission, current policyVersion and idempotencyKey. Keep requestId unchanged for retries. Blocks and owner restrictions apply to every recipient; never send while polling.",
+    setPrivateMessageConversation: "Set the acting profile’s archive, mute or read state. A group organizer can set its title or add/remove members; added members cannot read previous history. leave=true leaves a group and revokes future access. Set only the requested fields. Requires messages permission and current authorization; this never changes connection policy.",
+    reportPrivateMessageConversation: "Report one visible incoming conversation message for forum staff review. Shares only that message snapshot with authorized moderators, not the group history. Membership and joined history are checked; duplicate open reports reuse the existing report.",
     getMyForumExperience:
       "Read the acting profile's feed defaults, author filter, muted phrases with optional expiry, setup state, followed boards and followed members. Personal access required; makes no changes.",
     updateMyForumExperience:
@@ -192,6 +201,19 @@ function boundArguments(
       maxItems: 20,
       items: { type: "string", minLength: 1, maxLength: 80 },
     };
+  if (/PrivateMessage/.test(operation) && /Conversation|Recipients/.test(operation)) {
+    if (properties.requestId) properties.requestId = { ...properties.requestId, minLength: 1, maxLength: 100 };
+    if (properties.body) properties.body = { ...properties.body, maxLength: 20_000 };
+    if (properties.title) properties.title = { ...properties.title, maxLength: 100 };
+    for (const name of ["recipientUsernames", "addRecipientUsernames"])
+      if (properties[name]) properties[name] = { ...properties[name], minItems: 1, maxItems: 11 };
+    if (properties.limit) properties.limit = { type: "integer", minimum: 1, maximum: 100 };
+    if (properties.beforeSequence) properties.beforeSequence = { type: "integer", minimum: 1 };
+    if (properties.readThroughSequence) properties.readThroughSequence = { type: "integer", minimum: 0 };
+    if (properties.query) properties.query = { ...properties.query, maxLength: operation === "listPrivateMessageRecipients" ? 60 : 100 };
+    if (properties.reason) properties.reason = { ...properties.reason, minLength: 3, maxLength: 300 };
+    if (properties.details) properties.details = { ...properties.details, maxLength: 2_000 };
+  }
   // Mirror domain limits rather than silently truncating content before publication.
   for (const name of ["attachments", "newAttachments"])
     if (properties[name])
@@ -295,7 +317,7 @@ export const FORUM_PLUGIN_OPERATIONS: ForumPluginOperation[] = [
     destructive: false,
     openWorld: true,
     description:
-      "Upload up to five ChatGPT-provided attachments, each at most 5 MiB, to the connected forum profile. Returns owned attachment references for a thread or reply. Temporary download URLs are never persisted.",
+      "Upload up to five ChatGPT-provided attachments, each at most 5 MiB, to the connected forum profile. Returns owned attachment references for a thread, reply or private conversation. Temporary download URLs are never persisted.",
     inputSchema: {
       type: "object",
       properties: {

@@ -24,7 +24,7 @@ import {
   subscribeRoute,
   internalForumHref,
 } from "./router";
-import { invalidateQueries } from "./data";
+import { invalidateQueries, refreshPrivateConversations } from "./data";
 
 class PageBoundary extends Component<
   { children: ReactNode },
@@ -204,6 +204,9 @@ function App() {
           .then(invalidateQueries)
           .catch(() => {});
     }, 30_000);
+    const chatPolling = setInterval(() => {
+      if (document.visibilityState === "visible" && getRoute().split(/[?#]/)[0] === "/forum/messages") refreshPrivateConversations();
+    }, 5_000);
     const resized = new ResizeObserver(() =>
       forumHost.notify("ui/notifications/size-changed", {
         width: document.documentElement.clientWidth,
@@ -213,6 +216,7 @@ function App() {
     resized.observe(document.body);
     return () => {
       clearInterval(polling);
+      clearInterval(chatPolling);
       stop();
       document.removeEventListener("visibilitychange", listener);
       resized.disconnect();

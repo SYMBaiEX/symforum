@@ -427,6 +427,12 @@ export function invalidateQueries() {
     else cache.delete(keyFor(entry.name, entry.args));
   }
 }
+/** Only mounted messaging reads are refreshed; background chats never poll or post. */
+export function refreshPrivateConversations() {
+  for (const entry of cache.values()) {
+    if (entry.listeners.size && ["forum:listPrivateMessageConversations", "forum:getPrivateMessageConversation"].includes(entry.name)) load(entry);
+  }
+}
 window.addEventListener("forum:host-refresh", invalidateQueries);
 window.addEventListener("forum:host-identity", () => {
   cache.clear();
