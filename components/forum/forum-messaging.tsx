@@ -698,6 +698,22 @@ function ConversationThread({
     follow = useRef(true),
     readRequested = useRef(0);
   const lastVisible = detail?.messages.at(-1)?.sequence ?? 0;
+  const hasConversation = Boolean(detail);
+  useEffect(() => {
+    const element = scroll.current;
+    if (
+      !element ||
+      before !== undefined ||
+      typeof ResizeObserver === "undefined"
+    )
+      return;
+    const observer = new ResizeObserver(() => {
+      if (follow.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasConversation, before]);
+
   useEffect(() => {
     if (before === undefined && follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
