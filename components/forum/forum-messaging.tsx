@@ -18,6 +18,7 @@ import {
   Mail,
   MessageCircle,
   Plus,
+  Paperclip,
   Search,
   Send,
   Settings2,
@@ -222,8 +223,8 @@ function ConversationInbox({ viewerId }: { viewerId: string }) {
       >
         <div className="forum-messenger-list-heading">
           <div>
-            <h2>Inbox</h2>
-            <p>People, agents & groups</p>
+            <h1>Messages</h1>
+            <p>Direct & group conversations</p>
           </div>
           <Button
             size="icon"
@@ -284,7 +285,7 @@ function ConversationInbox({ viewerId }: { viewerId: string }) {
                   <ForumAvatar
                     name={other?.name ?? conversation.title}
                     src={other?.image ?? undefined}
-                    className="size-10 rounded-full border-0"
+                    className="size-9 rounded-full border-0"
                   />
                   {conversation.kind === "group" && (
                     <span className="forum-group-marker">
@@ -294,16 +295,26 @@ function ConversationInbox({ viewerId }: { viewerId: string }) {
                 </span>
                 <span className="forum-conversation-copy">
                   <span className="forum-conversation-title">
-                    {conversation.title || initialsName(conversation, viewerId)}
+                    <span className="forum-conversation-name">
+                      {conversation.title ||
+                        initialsName(conversation, viewerId)}
+                    </span>
+                    <time
+                      className="forum-conversation-time"
+                      dateTime={new Date(conversation.updatedAt).toISOString()}
+                      title={time(conversation.updatedAt)}
+                    >
+                      {new Intl.DateTimeFormat(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      }).format(conversation.updatedAt)}
+                    </time>
                     {conversation.muted && (
                       <BellOff className="size-3 shrink-0" aria-label="Muted" />
                     )}
                   </span>
                   <span className="forum-conversation-preview">
                     {conversation.preview}
-                  </span>
-                  <span className="forum-conversation-time">
-                    {time(conversation.updatedAt)}
                   </span>
                 </span>
                 {conversation.unreadCount > 0 && (
@@ -687,6 +698,22 @@ function ConversationThread({
     follow = useRef(true),
     readRequested = useRef(0);
   const lastVisible = detail?.messages.at(-1)?.sequence ?? 0;
+  const hasConversation = Boolean(detail);
+  useEffect(() => {
+    const element = scroll.current;
+    if (
+      !element ||
+      before !== undefined ||
+      typeof ResizeObserver === "undefined"
+    )
+      return;
+    const observer = new ResizeObserver(() => {
+      if (follow.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasConversation, before]);
+
   useEffect(() => {
     if (before === undefined && follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
@@ -992,7 +1019,7 @@ function ConversationThread({
                 ? "Message the group…"
                 : `Message ${others[0]?.name ?? "this conversation"}…`
             }
-            rows={2}
+            rows={1}
             maxLength={20000}
             value={draft.body}
             disabled={pending}
@@ -1037,6 +1064,7 @@ function ConversationThread({
             disabled={uploading}
             onClick={() => setAttachmentsOpen(!attachmentsOpen)}
           >
+            <Paperclip className="size-3.5" aria-hidden="true" />
             {attachmentsOpen ? "Hide attachments" : "Attach files"}
             {draft.attachments.length ? ` (${draft.attachments.length})` : ""}
           </button>
@@ -1345,8 +1373,15 @@ function ReportMessageDialog({
     setPending(true);
     setError("");
     try {
-      const result = await report({ messageId: message._id, reason: reason.trim() });
-      toast.success(result.created ? "Report sent to forum moderators" : "This message has already been reported");
+      const result = await report({
+        messageId: message._id,
+        reason: reason.trim(),
+      });
+      toast.success(
+        result.created
+          ? "Report sent to forum moderators"
+          : "This message has already been reported",
+      );
       setReason("");
       onClose();
     } catch (failure) {
