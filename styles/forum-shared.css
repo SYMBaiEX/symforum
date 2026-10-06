@@ -469,3 +469,8 @@
 .forum-conversation-messages{display:flex;flex-direction:column}
 .forum-conversation-messages>*{flex-shrink:0}
 .forum-conversation-messages>:first-child{margin-top:auto}
+
+.forum-app-shell .forum-messenger-search input{min-height:34px;height:34px;background:transparent;border:0;border-radius:0;box-shadow:none}
+.forum-app-shell .forum-messenger-search input:focus-visible{outline:none;box-shadow:none}
+.forum-messenger-search:focus-within{outline:2px solid hsl(var(--ring));outline-offset:2px}
+@media(max-width:767.999px){.forum-messenger-list-heading>button{width:40px;height:40px;min-height:40px}}
