@@ -105,13 +105,12 @@
 .forum-app-shell .forum-list-row:nth-child(even) { background: transparent; }
 .forum-app-shell .forum-list-row:hover { background: hsl(var(--muted)/.3); }
 .forum-app-shell :is(.forum-global-search,.forum-toolbar) { transition: box-shadow 150ms ease-out; }
-.forum-app-shell .forum-global-search:focus-within { box-shadow: 0 0 0 2px hsl(var(--ring)/.65); }
+.forum-app-shell .forum-global-search:focus-within { outline: none; box-shadow: inset 0 0 0 1px hsl(var(--muted-foreground)/.5); }
 .forum-app-shell .forum-surface :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea) {
  border-radius: var(--forum-control-radius); border-color: hsl(var(--input)/.7); min-width: 0;
 }
 .forum-app-shell .forum-surface textarea { line-height: 1.65; resize: vertical; }
 .forum-app-shell .forum-surface :is(input,select,textarea):disabled { opacity: .55; cursor: not-allowed; }
-.forum-app-shell :is(button,a,summary):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
 .forum-app-shell .forum-page-actions { flex-shrink: 0; }
 .forum-app-shell .forum-account-heading { gap: 6px; margin-bottom: 6px; }
 .forum-app-shell .forum-settings-directory { gap: 6px; padding-bottom: 6px; }
@@ -179,7 +178,7 @@
 :is(.forum-app-shell,[data-surface=forum]) :is(button,[data-ui=button],summary):disabled,
 :is(.forum-app-shell,[data-surface=forum]) [aria-disabled=true] { opacity: .45; cursor: not-allowed; box-shadow: none; }
 :is(.forum-app-shell,[data-surface=forum]) :is(button,a,summary,input,select,textarea):focus-visible {
- outline: 2px solid hsl(var(--ring)); outline-offset: 2px; box-shadow: 0 0 0 4px hsl(var(--ring)/.1);
+ outline: 1px solid hsl(var(--muted-foreground)/.7); outline-offset: 2px; box-shadow: none;
 }
 .forum-app-shell :is(.forum-segmented-control,.forum-display-toggle) { border-radius: 11px; padding: 3px; background: hsl(var(--muted)/.3); }
 .forum-app-shell .forum-display-toggle .forum-action-pill { width: 34px; padding: 0; }
@@ -191,6 +190,10 @@
 :is(.forum-app-shell,[data-surface=forum]) :is(select,[data-ui=select-trigger],input:where(:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden])),textarea) {
  border: 1px solid var(--forum-control-border); border-radius: var(--forum-control-radius); background: hsl(var(--muted)/.2);
  color: hsl(var(--foreground)); font-size: var(--forum-control-font); line-height: 20px; min-height: 36px; padding: 7px 11px; box-sizing: border-box;
+}
+/* A single border change marks focused fields; suppress layered component rings. */
+:is(.forum-app-shell .forum-surface,[data-surface=forum]) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea,select,[data-ui=select-trigger]):focus {
+ outline: none; box-shadow: none; border-color: hsl(var(--muted-foreground)/.5);
 }
 :is(.forum-app-shell,[data-surface=forum]) select {
  appearance: none; padding-right: 30px; cursor: pointer;
@@ -249,7 +252,7 @@
 .forum-app-shell .forum-search-field { border: 1px solid var(--forum-control-border); border-radius: var(--forum-control-radius); }
 .forum-app-shell .forum-search-field input { border: 0; border-radius: 0; background: transparent; padding-inline: 0; }
 .forum-app-shell .forum-search-field input:focus-visible { outline: none; box-shadow: none; }
-.forum-app-shell .forum-search-field:focus-within { box-shadow: 0 0 0 2px hsl(var(--ring)/.65); }
+.forum-app-shell .forum-search-field:focus-within { border-color: hsl(var(--muted-foreground)/.5); box-shadow: none; }
 [data-surface=forum][data-ui=tooltip] { border: 1px solid hsl(var(--border)/.65); border-radius: 8px; padding: 6px 9px; background: hsl(var(--popover)); color: hsl(var(--foreground)); font-size: 12px; line-height: 18px; box-shadow: 0 4px 12px #00000024; }
 
 /* Spatial system: a compact navigation rail, readable conversations and a board directory. */
@@ -458,7 +461,6 @@
 .forum-conversation-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .forum-conversation-time{flex-shrink:0;margin-left:auto;font-weight:400}
 .forum-messenger-list-heading>button{width:32px;height:32px;min-height:32px;border-radius:8px}
-.forum-messenger-search input{outline-offset:2px}
 @media(max-width:767.999px){
  .forum-app-shell:has(.forum-messenger) .forum-main{height:calc(100dvh - 64px - env(safe-area-inset-bottom))}
  .forum-app-shell .forum-main>.forum-surface>.page-frame:has(.forum-messenger){padding:8px}
@@ -472,5 +474,5 @@
 
 .forum-app-shell .forum-messenger-search input{min-height:34px;height:34px;background:transparent;border:0;border-radius:0;box-shadow:none}
 .forum-app-shell .forum-messenger-search input:focus-visible{outline:none;box-shadow:none}
-.forum-messenger-search:focus-within{outline:2px solid hsl(var(--ring));outline-offset:2px}
+.forum-app-shell .forum-messenger-search:focus-within{outline:none;box-shadow:inset 0 0 0 1px hsl(var(--muted-foreground)/.5)}
 @media(max-width:767.999px){.forum-messenger-list-heading>button{width:40px;height:40px;min-height:40px}}
