@@ -1262,6 +1262,134 @@ describe("forum notification preferences", () => {
     expect(second.createdBoardRulesIds).toHaveLength(0);
   });
 
+  test("publishes a compact plain discovery with one source-backed claim and no attachment", async () => {
+    const t = setup();
+    const infrastructure = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    const claim = await t.mutation(internal.sukiForumAgentData.claimRun, {
+      attempt: 0,
+      runDate: "2026-07-28",
+      slot: 0,
+    });
+    const sourceKey = "compact-primary-source";
+    const sourceUrl = "https://example.com/compact-source";
+    const claimText =
+      "Readers can compare the stated behavior with the primary source.";
+    const body = `${claimText} Keep the documented scope in view before applying the result to another environment.\n\n[url=${sourceUrl}]Original source[/url]`;
+    const title =
+      "A compact discovery worth checking against its original source";
+    const sources = [{ sourceKey, sourceUrl }];
+    const claimCitations = testForumClaimCitations(sourceKey, sourceUrl, [
+      claimText,
+    ]);
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: claim.runKey,
+      title,
+      body,
+      sources,
+      claimCitations,
+    });
+    const published = await t.mutation(internal.forum.publishSukiForumThread, {
+      agentSlug: "suki",
+      runKey: claim.runKey,
+      categorySlug: "general",
+      prefixSlug: "discussion",
+      title,
+      body,
+      sources,
+      claimCitations,
+      candidateCount: 1,
+      contentFormat: "discovery",
+    });
+    expect("held" in published).toBe(false);
+    const publishedThreadId = published.threadId;
+    if (publishedThreadId === undefined)
+      throw new Error("Expected a published discovery");
+    const stored = await t.run((ctx) =>
+      ctx.db.get("forumThreads", publishedThreadId),
+    );
+    expect(stored).toMatchObject({
+      status: "active",
+      authorId: infrastructure.agentUserId,
+    });
+    expect(stored?.body).toContain("AI-assisted research draft authored by Suki");
+    expect(stored?.body).not.toMatch(
+      /\[(?:img|chart|table|decision|sourcecards)/i,
+    );
+    const citations = await t.run((ctx) =>
+      ctx.db
+        .query("forumAgentClaimCitations")
+        .withIndex("by_threadId_and_claimIndex", (q) =>
+          q.eq("threadId", publishedThreadId),
+        )
+        .take(2),
+    );
+    expect(citations).toHaveLength(1);
+    expect(citations[0]).toMatchObject({ claimText, supportStatus: "supported" });
+  });
+
+  test("rejects an empty authored heading before an attribution footer can hide it and rolls back publication", async () => {
+    const t = setup();
+    const infrastructure = await t.mutation(
+      internal.forum.ensureSukiForumInfrastructure,
+      {},
+    );
+    const claim = await t.mutation(internal.sukiForumAgentData.claimRun, {
+      attempt: 0,
+      runDate: "2026-07-28",
+      slot: 0,
+    });
+    const sourceKey = "incomplete-primary-source";
+    const sourceUrl = "https://example.com/incomplete-source";
+    const claimText =
+      "Readers can compare the stated behavior with the primary source.";
+    const body = `${claimText}\n\n[h2]Missing next steps[/h2]`;
+    const title = "This incomplete discovery must remain a private draft";
+    const sources = [{ sourceKey, sourceUrl }];
+    const claimCitations = testForumClaimCitations(sourceKey, sourceUrl, [
+      claimText,
+    ]);
+    await recordPublishablePrivateDraft(t, {
+      agentSlug: "suki",
+      runKey: claim.runKey,
+      title,
+      body,
+      sources,
+      claimCitations,
+    });
+    await expect(
+      t.mutation(internal.forum.publishSukiForumThread, {
+        agentSlug: "suki",
+        runKey: claim.runKey,
+        categorySlug: "general",
+        title,
+        body,
+        sources,
+        claimCitations,
+        candidateCount: 1,
+        contentFormat: "discovery",
+      }),
+    ).rejects.toThrow(/empty section.*Missing next steps/i);
+    const state = await t.run(async (ctx) => ({
+      threads: await ctx.db
+        .query("forumThreads")
+        .withIndex("by_authorId_and_createdAt", (q) =>
+          q.eq("authorId", infrastructure.agentUserId),
+        )
+        .take(1),
+      citations: await ctx.db.query("forumAgentClaimCitations").take(1),
+      run: await ctx.db
+        .query("forumAgentRuns")
+        .withIndex("by_runKey", (q) => q.eq("runKey", claim.runKey))
+        .unique(),
+    }));
+    expect(state.threads).toHaveLength(0);
+    expect(state.citations).toHaveLength(0);
+    expect(state.run?.status).toBe("running");
+  });
   test("Suki infrastructure is idempotent and publishes attributed forum topics", async () => {
     const t = setup();
 
@@ -1553,7 +1681,7 @@ describe("forum notification preferences", () => {
         slot: 1,
       },
     );
-    const heldBody = "[chart=Tiny]Signal|1[/chart]";
+    const heldBody = "[chart=Tiny]Evidence|1|Unverified source\nReview|2|Low confidence[/chart]";
     const heldSources = [
       { sourceKey: "example-blocked", sourceUrl: "not-a-url" },
     ];
@@ -9412,3 +9540,38 @@ async function insertPoll(
   }
   return pollId;
 }
+
+
+describe("member-first forum reply queue", () => {
+  test("claims a newer unanswered human ask ahead of an older AI opening", async () => {
+    const t = setup();
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const seed = await t.run(async ctx => {
+      const category = await ctx.db.query("forumCategories").withIndex("by_slug", q => q.eq("slug", "ai-prompts")).unique();
+      const agent = await ctx.db.query("forumAgents").withIndex("by_slug", q => q.eq("slug", "suki")).unique();
+      if (!category || !agent) throw new Error("Missing reply infrastructure");
+      const now = Date.now() - 5 * 60 * 1_000;
+      const authorId = await ctx.db.insert("users", { name: "Member builder", username: "member-builder", usernameNormalized: "member-builder", forumTrustedAt: now });
+      const aiAuthorId = await ctx.db.insert("users", { name: "Source AI", username: "source-ai", usernameNormalized: "source-ai", isAgent: true, agentSlug: "source-ai", forumTrustedAt: now });
+      await ctx.db.insert("aiOperationalStates", { key: "forum-agent-structured-canary", healthy: true, checkedAt: Date.now(), pauseUntil: 0, updatedAt: Date.now() });
+      const makeQueued = async (isAgent: boolean, offset: number) => {
+        const threadId = await insertThread(ctx, { categoryId: category._id, categorySlug: category.slug,
+          slug: isAgent ? `older-ai-opening-${offset}` : "member-project-help", title: isAgent ? "An AI interpretation" : "My project is stuck",
+          body: isAgent ? "The evaluation method may need a clearer repeatability boundary before its scores can be compared." : `My project has a repeatable error. How can I isolate which request causes it? ${"The request context stays consistent between attempts. ".repeat(90)}[url=https://huggingface.co/blog/source-method]Source method[/url]`,
+          authorId: isAgent ? aiAuthorId : authorId, now: now + offset });
+        await ctx.db.patch("forumThreads", threadId, { replyCount: 0 });
+        const runId = await ctx.db.insert("forumAgentReplyRuns", { runKey: `forum-reply:thread:${threadId}`, agentSlug: "suki", runDate: "2026-10-07", sourceKind: "thread", threadId, categoryId: category._id,
+          authorId: isAgent ? aiAuthorId : authorId, sourceAuthorIsAgent: isAgent, attempt: -1, status: "queued", model: agent.model, startedAt: now + offset, updatedAt: now + offset });
+        return { threadId, runId };
+      };
+      const ai = await makeQueued(true, 0);
+      for (let index = 1; index <= 12; index += 1) await makeQueued(true, index * 1_000);
+      return { ai, human: await makeQueued(false, 30_000) };
+    });
+    const claimed = await t.mutation(internal.forum.claimSukiForumReplyCandidate, { agentSlug: "suki", attempt: 0, runDate: "2026-10-07", runId: seed.human.runId, prioritizeQueue: true });
+    expect(claimed).toMatchObject({ claimed: true, runId: seed.human.runId, candidate: { authorIsAgent: false, threadId: seed.human.threadId, sourceEvidenceUrls: ["https://huggingface.co/blog/source-method"] } });
+    if (!claimed.claimed) throw new Error("Expected member candidate");
+    expect(claimed.candidate.sourceBody).not.toContain("https://huggingface.co/blog/source-method");
+    expect((await t.run(ctx => ctx.db.get("forumAgentReplyRuns", seed.ai.runId)))?.status).toBe("queued");
+  });
+});

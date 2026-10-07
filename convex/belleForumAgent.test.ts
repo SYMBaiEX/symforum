@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES,
   buildDigestBody,
+  boundBelleDigestToRetrievedEvidence,
   belleDigestRetryArguments,
   canReuseDailyDigestStories,
   clipGeneratedProse,
@@ -198,7 +199,8 @@ describe("Belle Hacker News digest", () => {
       stories: [story],
     });
 
-    expect(body).toContain("[chart=Today's Hacker News signal map]");
+    expect(body).not.toContain("[chart=");
+    expect(body).not.toContain("Belle's read");
     expect(body).toContain(
       "[url=https://www.symbaiex.com/news/42]Read on SYMBaiEX News[/url]",
     );
@@ -248,15 +250,76 @@ describe("Belle Hacker News digest", () => {
       stories,
     });
 
-    expect(body.length).toBeGreaterThan(11_900);
+    expect(body.length).toBeLessThan(11_900);
+    expect(body).toContain("[spoiler=More from today's desk]");
     expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
     expect(body).toContain("BELLE-CLOSING-SENTINEL");
     expect(body).toContain(
       "[url=https://www.symbaiex.com/news/12]Read on SYMBaiEX News[/url]",
     );
-    expect(body).toContain(
-      "What story here feels most consequential a month from now",
+    expect(body).not.toContain("What story here feels most consequential");
+  });
+
+  test("unretrieved articles stay labeled links and cannot retain inferred claims", () => {
+    const failed: ArticleSnapshot = {
+      id: "hn-42",
+      sourceKey: "hn-42",
+      sourceName: "HN",
+      sourceFeedUrl: "https://news.ycombinator.com",
+      title: "A linked headline",
+      url: "https://example.com/article",
+      summary: "Feed metadata",
+      boardSlugs: ["news-hacker-news"],
+      articleTitle: "A linked headline",
+      articleDescription: "Feed metadata",
+      articleText: "Feed metadata",
+      imageCredit: "HN",
+      sourceFetchSucceeded: false,
+    };
+    const bound = boundBelleDigestToRetrievedEvidence(
+      {
+        headline: "A linked headline",
+        opening: "Here are linked headlines.",
+        closing: "",
+        briefs: [
+          {
+            hnItemId: 42,
+            summary: "The source guarantees a faster model.",
+            analysis: "The new system saves money.",
+          },
+        ],
+        claims: [
+          {
+            claim: "The source guarantees a faster model.",
+            sourceCandidateId: "hn-42",
+            confidence: "high",
+            kind: "fact",
+          },
+        ],
+      },
+      [failed],
     );
+    expect(bound.claims).toEqual([]);
+    expect(bound.briefs[0]?.analysis).toBe("");
+    expect(bound.briefs[0]?.summary).toContain("unverified headline");
+    const body = buildDigestBody({
+      date: "2026-10-07",
+      opening: bound.opening,
+      closing: "",
+      requestedBriefs: bound.briefs,
+      stories: [
+        {
+          hnItemId: 42,
+          rank: 1,
+          title: failed.title,
+          url: failed.url,
+          sourceUnavailable: true,
+        },
+      ],
+    });
+    expect(body).toContain("Headline only");
+    expect(body).toContain("https://example.com/article");
+    expect(body).not.toMatch(/guarantees|saves money/);
   });
 
   test("clips generated prose at sentence boundaries and rejects dangling copy", () => {
@@ -280,5 +343,20 @@ describe("Belle Hacker News digest", () => {
     expect(() => normalizeGeneratedHeadline("A trailing headline:")).toThrow(
       /malformed or dangling/,
     );
+  });
+
+  test("never clips a decimal, version, or honorific into a fake sentence", () => {
+    for (const body of [
+      "Release 2.7 supports a narrowly scoped API with documented prerequisites.",
+      "The measured cost was 2.7 dollars in this bounded fixture.",
+      "Dr. Rivera published a narrowly scoped update with prerequisites.",
+    ]) {
+      expect(() => clipGeneratedProse(body, 12, "summary")).toThrow(
+        /cannot be clipped safely/,
+      );
+      expect(
+        clipGeneratedProse(`A complete sentence. ${body}`, 33, "summary"),
+      ).toBe("A complete sentence.");
+    }
   });
 });

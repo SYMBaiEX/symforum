@@ -68,7 +68,7 @@ function validateClaimHashes(
 ) {
   if (
     claimHashes.length > MAX_CLAIMS ||
-    (requirePublishable && claimHashes.length < 2)
+    (requirePublishable && claimHashes.length < 1)
   ) {
     throw new Error("Private research claim ledger is outside its bound");
   }

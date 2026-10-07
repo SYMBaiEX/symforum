@@ -38,7 +38,8 @@
     "ui:sync": "bun scripts/sync-forum-ui.mjs && bun scripts/build-native-forum-app.mjs",
     "ui:check": "bun scripts/sync-forum-ui.mjs --check && bun scripts/build-native-forum-app.mjs --check",
     "ui:watch": "bun scripts/watch-forum-ui.mjs",
-    "dev:next": "next dev"
+    "dev:next": "next dev",
+    "eval:forum:content": "bun scripts/eval-forum-content.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.53",

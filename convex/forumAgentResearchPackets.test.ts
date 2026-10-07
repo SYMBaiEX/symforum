@@ -33,6 +33,7 @@ const claimHashes = [
 async function seedPrivateDraft(
   t: ReturnType<typeof setup>,
   state: "publishable" | "held",
+  hashes = claimHashes,
 ) {
   await t.mutation(internal.forumAgentResearchPackets.beginResearchPacket, {
     runKey,
@@ -55,7 +56,7 @@ async function seedPrivateDraft(
     revision: 0,
     title,
     body,
-    claimHashes,
+    claimHashes: hashes,
     qualityScore: state === "publishable" ? 91 : 52,
   });
   return await t.mutation(
@@ -66,7 +67,7 @@ async function seedPrivateDraft(
       revision: 0,
       title,
       body,
-      claimHashes,
+      claimHashes: hashes,
       qualityScore: state === "publishable" ? 91 : 52,
       publishable: state === "publishable",
       reason:
@@ -78,6 +79,17 @@ async function seedPrivateDraft(
 }
 
 describe("private forum research packets", () => {
+  test("accepts one sourced discovery claim but rejects an empty publishable ledger", async () => {
+    const t = setup();
+    await expect(
+      seedPrivateDraft(t, "publishable", claimHashes.slice(0, 1)),
+    ).resolves.toBeDefined();
+    const empty = setup();
+    await expect(seedPrivateDraft(empty, "publishable", [])).rejects.toThrow(
+      "claim ledger",
+    );
+  });
+
   test("persists every bounded private stage and a hash-bound publishable draft", async () => {
     const t = setup();
     const proof = await seedPrivateDraft(t, "publishable");
