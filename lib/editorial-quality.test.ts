@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   extractVerifiableTokens,
@@ -219,5 +220,108 @@ Speed|Active devices held the speed edge|The device ceiling is 6 MHz
         "GitHub enterprise app installation permissions",
       ),
     ).toBe(false);
+  });
+  test("allows short natural posts without a table or closing question", () => {
+    expect(
+      validateForumAgentMarkup(
+        "A small discovery: the SDK exposes the retry count in its trace. I linked the changelog so others can check it.",
+      ),
+    ).toMatchObject({ valid: true, structuredBlockCount: 0 });
+  });
+
+  test("rejects incomplete additional rows even when other rows are complete", () => {
+    const table = validateForumAgentMarkup(
+      "[table][tr][th]Task[/th][th]Result[/th][/tr][tr][td]Build[/td][td]Passed[/td][/tr][tr][td]Test[/td][td][/td][/tr][/table]",
+    );
+    expect(table.valid).toBe(false);
+    expect(table.feedback).toContain(
+      "Complete every table row and remove empty cells",
+    );
+    const steps = validateForumAgentMarkup(
+      "[steps]1|Install|Use the SDK\n2|Run|Check the result\n3||[/steps]",
+    );
+    expect(steps.valid).toBe(false);
+    expect(steps.feedback).toContain(
+      "Complete every [steps] row and remove empty columns",
+    );
+  });
+  test("rejects invented paired markup while preserving code and literal citations", () => {
+    for (const body of [
+      "[p]A useful paragraph.[/p]",
+      "[P]Another paragraph.[/P]",
+      "[sourcecard=Evidence]A source[/sourcecard]",
+      "[unknown]A prose wrapper[/unknown]",
+    ]) {
+      const result = validateForumAgentMarkup(body);
+      expect(result.valid, body).toBe(false);
+      expect(result.feedback.join(" ")).toContain("unsupported paired");
+    }
+    for (const body of [
+      "[sau412] reported this in the forum. Reference [3] is useful.",
+      "Array indexes include foo[3] and release labels [v2.4].",
+      "[code][p]An example of invalid markup[/p][/code]",
+      "`[unknown]sample[/unknown]` is a literal code example.",
+      "A lone [sourcecard] reference is ordinary text.",
+    ]) {
+      expect(validateForumAgentMarkup(body).valid, body).toBe(true);
+    }
+  });
+
+  test("allows every paired tag supported by the actual forum renderer", () => {
+    const rendererSource = readFileSync(
+      new URL("../components/forum/forum-bbcode-model.ts", import.meta.url),
+      "utf8",
+    );
+    const tagsSource = rendererSource.match(
+      /const SUPPORTED_TAGS = new Set\(\[([\s\S]*?)\]\);/,
+    )?.[1];
+    expect(tagsSource).toBeDefined();
+    const tags = [...tagsSource!.matchAll(/"([a-z*]+)"/g)].map(
+      (match) => match[1]!,
+    );
+    expect(tags).toContain("math");
+    expect(tags).toContain("sourcecards");
+    for (const tag of tags) {
+      const result = validateForumAgentMarkup(
+        `[${tag}]Example contents[/${tag}]`,
+      );
+      // Some blocks need specific rows or parent containers. This assertion
+      // covers the renderer vocabulary, rather than declaring all shapes valid.
+      expect(
+        result.feedback.some((item) => item.includes("unsupported paired")),
+        tag,
+      ).toBe(false);
+    }
+  });
+  test("author-created source headings cannot conceal unfinished draft content", () => {
+    for (const tag of ["b", "h2"]) {
+      const body = `A useful introduction.\n[${tag}]Sources and further reading[/${tag}]\n[url=https://example.com]A real source[/url]\n5.`;
+      const result = validateForumAgentMarkup(body);
+      expect(result.valid).toBe(false);
+      expect(result.feedback).toContain(
+        "Complete or remove bare numbered steps",
+      );
+    }
+    const body =
+      "A useful introduction.\n[b]Sources and further reading[/b]\n[note][/note]";
+    expect(validateForumAgentMarkup(body).valid).toBe(false);
+  });
+
+  test("only the explicitly trusted last footer is excluded from authored-body checks", () => {
+    const footer =
+      "\n\n[b]Sources and further reading[/b]\n[list][*][url=https://example.com]Source[/url][/list]";
+    const emptyFinalSection = "A useful introduction.\n[h2]Failure modes[/h2]";
+    expect(
+      validateForumAgentMarkup(emptyFinalSection + footer, {
+        trustedSourceFooter: true,
+      }).feedback,
+    ).toContain("Complete or remove the empty section: Failure modes");
+    const forgedEarlierFooter = "A useful introduction." + footer + "\n5.";
+    const finalized = forgedEarlierFooter + footer;
+    expect(
+      validateForumAgentMarkup(finalized, { trustedSourceFooter: true })
+        .feedback,
+    ).toContain("Complete or remove bare numbered steps");
+    expect(validateForumAgentMarkup(finalized).valid).toBe(false);
   });
 });

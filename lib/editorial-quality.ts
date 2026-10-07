@@ -62,6 +62,23 @@ const BALANCED_FORUM_TAGS = [
   "warning",
 ] as const;
 
+// Keep this allowlist aligned with components/forum/forum-bbcode-model.ts.
+// Unsupported paired tags are likely attempted markup; a lone [citation] or
+// array index remains ordinary text. Empty [li] markers are handled by the
+// existing mechanical repair, but populated [li] pairs are not renderer tags.
+const SUPPORTED_FORUM_PUBLICATION_TAGS = new Set<string>([
+  ...BALANCED_FORUM_TAGS,
+  "*",
+  "br",
+  "center",
+  "hr",
+  "img",
+  "kbd",
+  "mark",
+  "math",
+  "step",
+]);
+
 const STRUCTURED_FORUM_BLOCKS = {
   chart: { columns: 3, rows: 2 },
   decision: { columns: 3, rows: 2 },
@@ -207,12 +224,33 @@ export function unsupportedVerifiableTokens(statement: string, source: string) {
   );
 }
 
-export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
+export type ForumPublicationValidationOptions = {
+  /** Only set for an attribution footer just appended by the trusted finalizer. */
+  trustedSourceFooter?: boolean;
+};
+
+export function validateForumAgentMarkup(
+  body: string,
+  options: ForumPublicationValidationOptions = {},
+): ForumMarkupValidation {
   const feedback: string[] = [];
-  const withoutCodeContents = body.replace(
-    /\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi,
-    "[code][/code]",
-  );
+  const withoutCodeContents = maskForumCode(body);
+  const unsupportedPairs = new Set<string>();
+  for (const opening of withoutCodeContents.matchAll(
+    /\[([a-z][a-z0-9_-]*)(?:=[^\]]*)?\]/gi,
+  )) {
+    const tag = opening[1]!.toLowerCase();
+    if (SUPPORTED_FORUM_PUBLICATION_TAGS.has(tag)) continue;
+    const afterOpening = withoutCodeContents.slice(
+      (opening.index ?? 0) + opening[0].length,
+    );
+    if (new RegExp(`\\[\\/${tag}\\]`, "i").test(afterOpening))
+      unsupportedPairs.add(tag);
+  }
+  for (const tag of unsupportedPairs)
+    feedback.push(
+      `Replace unsupported paired [${tag}] markup with supported BBCode or plain prose`,
+    );
 
   if (/^\s{0,3}#{1,6}\s+\S/m.test(withoutCodeContents)) {
     feedback.push("Use BBCode headings instead of Markdown headings");
@@ -290,6 +328,9 @@ export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
       );
     });
     structuredRowCount += validRows.length;
+    if (validRows.length !== rows.length) {
+      feedback.push("Complete every table row and remove empty cells");
+    }
     const hasHeader = rows.some((row) =>
       /\[th\][\s\S]*?\[\/th\]/i.test(row[1] ?? ""),
     );
@@ -323,6 +364,9 @@ export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
         );
       });
       structuredRowCount += validRows.length;
+      if (validRows.length !== rows.length) {
+        feedback.push(`Complete every [${tag}] row and remove empty columns`);
+      }
       if (validRows.length < requirements.rows) {
         feedback.push(
           `[${tag}] needs at least ${requirements.rows} complete ${
@@ -333,9 +377,7 @@ export function validateForumAgentMarkup(body: string): ForumMarkupValidation {
     }
   }
 
-  if (structuredBlockCount === 0) {
-    feedback.push("Include one complete structured evidence block");
-  }
+  feedback.push(...validateForumContentCompleteness(body, options).feedback);
 
   return {
     feedback: [...new Set(feedback)],
@@ -463,4 +505,224 @@ function normalizeEvidenceText(value: string) {
     .replaceAll(",", "")
     .replace(/-/g, " ")
     .replace(/\s+/g, " ");
+}
+
+export type ForumContentIssue = {
+  code:
+    | "empty_section"
+    | "empty_callout"
+    | "bare_step"
+    | "declared_count_mismatch"
+    | "missing_promised_content"
+    | "unfinished_transition"
+    | "unresolved_pointer"
+    | "source_topic_mismatch"
+    | "board_topic_mismatch";
+  message: string;
+};
+
+/** Shape checks only. A complete body is not necessarily accurate or useful. */
+export function validateForumContentCompleteness(
+  body: string,
+  options: ForumPublicationValidationOptions & { title?: string } = {},
+) {
+  const issues: ForumContentIssue[] = [];
+  const maskedBody = maskForumCode(body);
+  // Initial model drafts are untrusted: a heading cannot grant permission to
+  // omit the text after it. Only the finalizer's caller may identify a trusted
+  // appended footer. Use the last marker so an earlier forged marker cannot
+  // conceal defects in the authored body before the actual appended footer.
+  const footers = options.trustedSourceFooter
+    ? [
+        ...maskedBody.matchAll(
+          /\n[ \t]*\[b\]Sources and further reading\[\/b\]/gi,
+        ),
+      ]
+    : [];
+  const footerStart = footers.at(-1)?.index;
+  const withoutCode =
+    footerStart === undefined ? maskedBody : maskedBody.slice(0, footerStart);
+  const plain = plainCompletenessText(withoutCode);
+  const add = (code: ForumContentIssue["code"], message: string) => {
+    if (
+      !issues.some((issue) => issue.code === code && issue.message === message)
+    ) {
+      issues.push({ code, message });
+    }
+  };
+
+  const headings = [
+    ...withoutCode.matchAll(/\[h([23])\]([\s\S]*?)\[\/h\1\]/gi),
+  ];
+  for (let index = 0; index < headings.length; index += 1) {
+    const heading = headings[index]!;
+    const end = (heading.index ?? 0) + heading[0].length;
+    // A child heading may organize a parent section without intervening prose.
+    const next = headings[index + 1];
+    const contents = withoutCode.slice(end, next?.index ?? withoutCode.length);
+    if (!hasCompletenessContent(heading[2] ?? "")) {
+      add("empty_section", "Remove empty heading labels");
+    } else if (
+      !hasCompletenessContent(contents) &&
+      !(heading[1] === "2" && next?.[1] === "3")
+    ) {
+      add(
+        "empty_section",
+        `Complete or remove the empty section: ${plainCompletenessText(heading[2] ?? "")}`,
+      );
+    }
+  }
+
+  for (const block of withoutCode.matchAll(
+    /\[(note|warning|quote|spoiler)(?:=[^\]]*)?\]([\s\S]*?)\[\/\1\]/gi,
+  )) {
+    if (!hasCompletenessContent(block[2] ?? "")) {
+      add(
+        "empty_callout",
+        `Complete or remove the empty [${block[1]?.toLowerCase()}] block`,
+      );
+    }
+  }
+
+  if (/^\s*(?:\d{1,2}[.)]|step\s+\d{1,2}[:.)-]?)\s*$/im.test(withoutCode)) {
+    add("bare_step", "Complete or remove bare numbered steps");
+  }
+
+  // Only count a visible adjacent enumeration, not any occurrence of a number
+  // in prose, a citation, a version, or a code sample.
+  const countWords: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+  };
+  const declaration =
+    /\b(?:the\s+following\s+|these\s+|(?:check|verify|test|follow|consider|need|requires?|include|includes)\s+(?:the\s+)?)(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s+(?:[a-z-]+\s+){0,3}(steps?|checks?|properties|requirements?|prerequisites?|items?|options?|points?|goals?|conditions?)\b[^\n.!?]*:?\s*\n/gi;
+  for (const match of withoutCode.matchAll(declaration)) {
+    const expected =
+      countWords[match[1]?.toLowerCase() ?? ""] ?? Number(match[1]);
+    const rest = withoutCode.slice((match.index ?? 0) + match[0].length);
+    const itemCount = adjacentEnumerationCount(rest);
+    if (itemCount > 0 && itemCount !== expected) {
+      add(
+        "declared_count_mismatch",
+        `Declared ${expected} ${match[2]} but the adjacent list contains ${itemCount}`,
+      );
+    }
+  }
+
+  if (
+    /\b(?:comparison\s+)?table\s+(?:below|follows)|\b(?:the\s+)?following\s+(?:comparison\s+)?table|\b(?:my|our|this)\s+(?:comparison\s+)?table\s+(?:shows|lists)|\bhere\s+is\s+(?:a|the)\s+(?:comparison\s+)?table/i.test(
+      plain,
+    ) &&
+    !/\[(?:table|decision|chart|riskmap)(?:=|\])/i.test(withoutCode)
+  ) {
+    add(
+      "missing_promised_content",
+      "Provide the promised table or remove the reference to it",
+    );
+  }
+  if (
+    /\b(?:the\s+)?(?:code|snippet|command|script)\s+(?:below|follows)|\b(?:run|use|paste)\s+(?:the\s+)?following\s+(?:code|snippet|command|script)\b/i.test(
+      plain,
+    ) &&
+    !/\[code(?:=|\])|```|`[^`\n]+`/i.test(body)
+  ) {
+    add(
+      "missing_promised_content",
+      "Provide the promised code or command, or remove the reference to it",
+    );
+  }
+  if (
+    /(?:\b(?:such as|including|as follows|for example|the following|because|therefore|which means|so that)|\b(?:fallback|prerequisites?|requirements?|steps?|options?)\s*:)\s*[.:—-]?\s*$/i.test(
+      plain,
+    )
+  ) {
+    add(
+      "unfinished_transition",
+      "Finish the trailing transition or remove the unfinished promise",
+    );
+  }
+  if (
+    /^(?:these|those)\s+(?:two|three|four|five|\d+)\s+(?:goals|options|requirements|conditions)\b/i.test(
+      plain,
+    ) &&
+    !/\b(?:goals|options|requirements|conditions)\b/i.test(options.title ?? "")
+  ) {
+    add(
+      "unresolved_pointer",
+      "Introduce the goals or requirements before referring to them",
+    );
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    feedback: issues.map((issue) => issue.message),
+  };
+}
+
+function maskForumCode(body: string) {
+  return body.replace(
+    /\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]|```[\s\S]*?```|`[^`\n]+`/gi,
+    "[code]code sample[/code]",
+  );
+}
+function hasCompletenessContent(value: string) {
+  return (
+    plainCompletenessText(value).length > 0 ||
+    /\[img(?:=[^\]]*)?\][\s\S]+?\[\/img\]/i.test(value)
+  );
+}
+function plainCompletenessText(value: string) {
+  return value
+    .replace(
+      /\[\/?(?:b|i|u|s|url|img|video|youtube|size|color|align|center|left|right|h2|h3|code|note|warning|quote|spoiler|list|li|\*|table|thead|tbody|tfoot|tr|th|td|chart|decision|riskmap|sourcecards|steps|timeline)(?:=[^\]]*)?\]/gi,
+      " ",
+    )
+    .replace(/[\t ]+/g, " ")
+    .trim();
+}
+
+function adjacentEnumerationCount(value: string) {
+  const rest = value.trimStart();
+  if (/^\[list(?:=[^\]]*)?\]/i.test(rest)) {
+    let depth = 0;
+    let items = 0;
+    for (const token of rest.matchAll(
+      /\[list(?:=[^\]]*)?\]|\[\/list\]|\[(?:\*|li)\]/gi,
+    )) {
+      if (/^\[list/i.test(token[0])) depth += 1;
+      else if (/^\[\/list/i.test(token[0])) {
+        depth -= 1;
+        if (depth === 0) break;
+      } else if (depth === 1) items += 1;
+    }
+    return items;
+  }
+  const markers = /^([\t ]*)(?:\d{1,2}[.)]|[-•])\s+\S/;
+  const lines = rest.split("\n");
+  const first = lines[0]?.match(markers);
+  if (!first) return 0;
+  let items = 0;
+  let previousBlank = false;
+  for (const line of lines) {
+    if (!line.trim()) {
+      previousBlank = true;
+      continue;
+    }
+    const marker = line.match(markers);
+    if (marker && marker[1]?.length === first[1]?.length) items += 1;
+    else if (previousBlank && !/^\s+/.test(line)) break;
+    previousBlank = false;
+  }
+  return items;
 }

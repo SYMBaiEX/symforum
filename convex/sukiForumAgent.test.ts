@@ -11,6 +11,8 @@ import {
   findRecentLexicalOverlap,
   fetchArticleSnapshots,
   forumDraftRevisionImproves,
+  forumDraftPrompt,
+  forumDraftPassesGate,
   forumRevisionEvidenceExcerpt,
   ForumEditorialQualityError,
   forumWriterMaxOutputTokens,
@@ -24,6 +26,10 @@ import {
 } from "./sukiForumAgent";
 import { ResearchQualityGateError } from "./researchQuality";
 import { validateForumAgentMarkup } from "../lib/editorial-quality";
+import {
+  FORUM_EDITORIAL_CONTRACT,
+  FORUM_EDITORIAL_REVIEW_CONTRACT,
+} from "../lib/forum-posting-prompts";
 
 describe("Suki forum research helpers", () => {
   test("reads the research-feed cache in one batch and fetches no fresh feeds", async () => {
@@ -636,9 +642,19 @@ Where would your team pilot this first?`,
     expect(result.blockingIssues).not.toContain(
       "The post must end with exactly one focused question",
     );
-    expect(repairForumDraftForReview(draft, snapshots).body).not.toContain(
+    expect(repairForumDraftForReview(draft, snapshots).body).toContain(
       "Version 9.9 adds checkpoint recovery to sync jobs.",
     );
+    const repairedResult = evaluateForumDraft({
+      draft: repairForumDraftForReview(draft, snapshots),
+      selection: { ...discoverySelection(), contentFormat: "field-note" },
+      snapshots,
+      recentThreadTitles: [],
+    });
+    expect(repairedResult.blockingIssues.join(" ")).toContain(
+      "Version 9.9 adds checkpoint recovery to sync jobs",
+    );
+    expect(forumDraftPassesGate(repairedResult)).toBe(false);
   });
 
   test("holds malformed evidence blocks below the publishing threshold", () => {
@@ -750,7 +766,7 @@ ${discussionQuestion}`;
     );
   });
 
-  test("repairs lower-capability model table cells, closing question, and supported claim ledger gaps", () => {
+  test("mechanically closes table cells without inserting questions, deleting prose, or fabricating a ledger", () => {
     const snapshots = [
       {
         articleDescription:
@@ -802,30 +818,23 @@ Choose a bounded recovery decision under ambiguous saved state.
     expect(repaired.body).toContain(
       "[tr][td]Checkpoint[/td][td]Resume interrupted synchronization jobs[/td][/tr]",
     );
-    expect(repaired.body).toMatch(
-      /Where would checkpoint recovery remove operational pain\?$/,
-    );
     expect(repaired.body).not.toContain(
+      "Where would checkpoint recovery remove operational pain",
+    );
+    expect(repaired.body).toContain(
       "Real typing speed is the part most hobby modems get wrong.",
     );
     expect(repaired.discussionQuestion).toBe(
-      "Where would checkpoint recovery remove operational pain?",
+      "Where would checkpoint recovery remove operational pain",
     );
-    expect(repaired.claims).toContainEqual(
-      expect.objectContaining({
-        claim:
-          "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
-        sourceCandidateId: "source-a",
-        kind: "fact",
-      }),
-    );
+    expect(repaired.claims).toEqual([]);
     expect(repaired.originalValue).toEqual([
-      "Verify the checkpoint before resuming interrupted work.",
-      "Choose a bounded recovery decision under ambiguous saved state.",
+      "A concrete checkpoint verification practice should happen immediately before every team restarts the entire interrupted workflow",
+      "Choose a deliberately bounded operational decision whenever the persisted recovery state remains unclear to the team",
     ]);
   });
 
-  test("removes extra questions and replaces an incomplete evidence block deterministically", () => {
+  test("preserves question context and malformed blocks for a full rewrite instead of synthesizing Signal rows", () => {
     const snapshots = [
       {
         articleDescription:
@@ -885,32 +894,39 @@ What would you verify first?`,
       snapshots,
     );
 
-    expect(repaired.body).not.toContain("Should every team enable it");
-    expect(repaired.body).not.toContain("[decision=Adoption]");
-    expect(repaired.body).toContain("[table]");
-    expect(repaired.body).toContain("[tr][th]Evidence[/th]");
+    expect(repaired.body).toContain("Should every team enable it immediately?");
+    expect(repaired.body).toContain(
+      "[decision=Adoption]\nPilot|Adopt\n[/decision]",
+    );
+    expect(repaired.body).not.toContain("[table]");
+    expect(repaired.body).not.toContain("Signal 1");
     expect(repaired.body).toMatch(/What would you verify first\?$/);
-    expect(repaired.body.match(/\?/g)).toHaveLength(1);
-    expect(validateForumAgentMarkup(repaired.body).valid).toBe(true);
+    expect(repaired.body.match(/\?/g)).toHaveLength(2);
+    expect(validateForumAgentMarkup(repaired.body).valid).toBe(false);
+    expect(
+      validateForumAgentMarkup(repaired.body).feedback.join(" "),
+    ).toContain("[decision] needs at least 2 complete rows");
   });
 
   test("gives each editorial format a concrete argument architecture", () => {
     expect(contentFormatGuidance("comparison")).toContain(
-      "Declare decision criteria first",
+      "same evidenced criteria",
     );
-    expect(contentFormatGuidance("guide")).toContain("verification step");
-    expect(contentFormatGuidance("guide")).toContain(
-      "hard acceptance range 650-1300 plain words",
-    );
-    expect(contentFormatGuidance("guide")).toContain(
-      "Draft toward 725-1300 words",
-    );
+    expect(contentFormatGuidance("guide")).toContain("verification");
+    expect(contentFormatGuidance("guide")).toContain("180-900 plain words");
+    expect(contentFormatGuidance("brief")).toContain("80-350 plain words");
+    expect(contentFormatGuidance("discovery")).toContain("20-120 plain words");
     expect(contentFormatGuidance("deep-dive")).toContain("counterpoint");
-    expect(structuredBlockContract("guide")).toContain("[steps=Action plan]");
-    expect(structuredBlockContract("comparison")).toContain(
-      "[decision=Decision frame]",
+    expect(contentFormatGuidance("guide")).toContain("Do not pad");
+    expect(structuredBlockContract("guide").toLowerCase()).toContain(
+      "optional",
     );
-    expect(structuredBlockContract("brief")).toContain("[table]");
+    expect(structuredBlockContract("comparison").toLowerCase()).toContain(
+      "optional",
+    );
+    expect(structuredBlockContract("brief").toLowerCase()).toContain(
+      "optional",
+    );
     expect(forumWriterMaxOutputTokens("draft", false)).toBe(7_200);
     expect(forumWriterMaxOutputTokens("revision", false)).toBe(8_250);
     expect(forumWriterMaxOutputTokens("revision", true)).toBe(4_200);
@@ -950,4 +966,232 @@ What would you verify first?`,
     });
     expect(ranked[0]?.id).toBe("fit");
   });
+  test("publishes a compact supported discovery without forced structure or questions", () => {
+    const snapshots = [checkpointSnapshot()];
+    const body =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs. Before adoption, compare a stopped job with the resumed job and inspect its saved checkpoint.";
+    const draft = {
+      title: "Checkpoint recovery is worth a stopped-job test",
+      body,
+      poll: null,
+      imageCandidateId: null,
+      claims: [
+        {
+          claim:
+            "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+          sourceCandidateId: "source-a",
+          confidence: "high" as const,
+          kind: "fact" as const,
+        },
+      ],
+      originalValue: [
+        "Before adoption, compare a stopped job with the resumed job and inspect its saved checkpoint.",
+      ],
+      discussionQuestion: "",
+    };
+    const result = evaluateForumDraft({
+      draft,
+      selection: discoverySelection(),
+      snapshots,
+      recentThreadTitles: [],
+    });
+    expect(result.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(result)).toBe(true);
+    const finalBody = finalizeForumBody(body, snapshots, {
+      discussionQuestion: "",
+      subjectTitle: draft.title,
+    });
+    expect(finalBody).toContain(body);
+    expect(finalBody).toContain("Sources and further reading");
+    expect(finalBody).not.toContain("Over to the board");
+    expect(
+      validateForumAgentMarkup(finalBody, { trustedSourceFooter: true }).valid,
+    ).toBe(true);
+  });
+
+  test("source and related-thread footers cannot conceal incomplete authored content", () => {
+    const snapshots = [checkpointSnapshot()];
+    for (const body of [
+      "Install the supported SDK.\n5.",
+      "[h2]Action plan[/h2]\n[h2]Failure modes[/h2]",
+      "Inspect the checkpoint.\n[note][/note]",
+      "Inspect the checkpoint. The fallback:",
+      "The comparison table below shows which path to use.",
+    ]) {
+      const finalized = finalizeForumBody(body, snapshots, {
+        subjectTitle: "Checkpoint recovery SDK",
+        relatedThreads: [
+          {
+            categorySlug: "ai-frameworks",
+            slug: "checkpoint-sdk",
+            title: "Checkpoint recovery SDK setup",
+          },
+        ],
+      });
+      expect(finalized).toContain("Sources and further reading");
+      expect(finalized).toContain("sourcecards=Related threads");
+      expect(
+        validateForumAgentMarkup(finalized, { trustedSourceFooter: true })
+          .valid,
+        body,
+      ).toBe(false);
+    }
+  });
+
+  test("rejects the audited PR metric/music mismatch even if the numerical ledger is empty", () => {
+    const body =
+      "Before trusting the PR metric, compare the review timing across two changes. Treat this as an investigation, rather than a feature announcement. The recording interview provides no software release details.";
+    const result = evaluateForumDraft({
+      draft: {
+        title:
+          "PR Review Timing: Baseline the New Stage Metric Before You Trust It",
+        body,
+        poll: null,
+        imageCandidateId: null,
+        claims: [],
+        originalValue: [
+          "Treat this as an investigation, rather than a feature announcement.",
+        ],
+        discussionQuestion: "",
+      },
+      selection: discoverySelection(),
+      snapshots: [
+        {
+          ...checkpointSnapshot(),
+          articleTitle: "Recording the Rolling Stones album",
+          articleDescription: "A music producer interview",
+          articleText:
+            "The band recorded vocals, guitar and mixing sessions with the producer.",
+          title: "Recording the Rolling Stones album",
+        },
+      ],
+      recentThreadTitles: [],
+    });
+    expect(result.blockingIssues).toContain(
+      "The cited sources discuss a different subject from the proposed post; choose relevant evidence or rewrite the topic",
+    );
+    expect(forumDraftPassesGate(result)).toBe(false);
+  });
+
+  test("accepts supported music-software crossovers instead of rejecting the board by stereotype", () => {
+    const body =
+      "Resolume music software adds local model inference for live visuals. Before a show, compare the staging output with your current setup and save the original preset.";
+    const claim =
+      "Resolume music software adds local model inference for live visuals.";
+    const result = evaluateForumDraft({
+      draft: {
+        title: "Resolume music software adds local vision models",
+        body,
+        poll: null,
+        imageCandidateId: null,
+        claims: [
+          {
+            claim,
+            sourceCandidateId: "source-a",
+            confidence: "high",
+            kind: "fact",
+          },
+        ],
+        originalValue: [
+          "Before a show, compare the staging output with your current setup and save the original preset.",
+        ],
+        discussionQuestion: "",
+      },
+      selection: { ...discoverySelection(), categorySlug: "music-production" },
+      snapshots: [
+        {
+          ...checkpointSnapshot(),
+          articleTitle: "Resolume music software release",
+          articleDescription: claim,
+          articleText: claim,
+          title: "Resolume music software release",
+          boardSlugs: ["music-production"],
+        },
+      ],
+      recentThreadTitles: [],
+      board: { slug: "music-production", name: "Music Production" },
+    });
+    expect(result.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(result)).toBe(true);
+  });
+
+  test("live initial and revision prompts include the same editorial contract used in evals", () => {
+    const draft = {
+      title: "Checkpoint recovery discovery",
+      body: "A bounded discovery for the next stopped-job test.",
+      poll: null,
+      imageCandidateId: null,
+      claims: [],
+      originalValue: ["A bounded discovery for the next stopped-job test."],
+      discussionQuestion: "",
+    };
+    const args: Parameters<typeof forumDraftPrompt>[0] = {
+      category: {
+        slug: "ai-frameworks",
+        name: "AI Frameworks",
+        description: "Tools and implementations",
+      },
+      selection: discoverySelection(),
+      snapshots: [checkpointSnapshot()],
+      config: {
+        dailySlots: 1,
+        name: "Test",
+        promptVersion: "test",
+        slug: "test",
+        topicInstructions: "Select supported changes.",
+        writerInstructions: "Write concise discoveries.",
+        deskDescription: "Practical tooling",
+      },
+    };
+    for (const prompt of [
+      forumDraftPrompt(args),
+      forumDraftPrompt({
+        ...args,
+        previousDraft: draft,
+        revisionFeedback: ["Complete the missing fifth step"],
+      }),
+    ]) {
+      expect(prompt).toContain(FORUM_EDITORIAL_CONTRACT);
+      expect(prompt).toContain("20-120 plain words");
+      expect(prompt).not.toContain(FORUM_EDITORIAL_REVIEW_CONTRACT);
+      expect(prompt).not.toContain("function forumEditorialReviewPrompt");
+      expect(prompt).not.toContain(
+        "Every post must include one evidence-backed structured block",
+      );
+      expect(prompt).not.toContain("exactly one question");
+    }
+  });
 });
+
+function checkpointSnapshot(): Parameters<
+  typeof evaluateForumDraft
+>[0]["snapshots"][number] {
+  return {
+    articleDescription: "Version 2.4 adds checkpoint recovery.",
+    articleText:
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+    articleTitle: "Checkpoint recovery release",
+    boardSlugs: ["ai-frameworks"],
+    id: "source-a",
+    imageCredit: "Example",
+    sourceFeedUrl: "https://example.com/feed.xml",
+    sourceKey: "source-a",
+    sourceName: "Example",
+    summary: "Checkpoint recovery",
+    title: "Checkpoint recovery release",
+    url: "https://example.com/checkpoint",
+  };
+}
+function discoverySelection(): Parameters<
+  typeof evaluateForumDraft
+>[0]["selection"] {
+  return {
+    angle: "Test checkpoint recovery before adopting the SDK",
+    candidateIds: ["source-a"],
+    categorySlug: "ai-frameworks",
+    postType: "news-analysis",
+    prefixSlug: "news",
+    includePoll: false,
+    contentFormat: "discovery",
+  };
+}

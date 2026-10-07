@@ -4,8 +4,15 @@ import {
   forumSourceDomain,
   isForumDiscoveryBoard,
 } from "../lib/forum-experience";
-import { forumPluginPrincipal, forumUserPrincipal, principalForumUser } from "./forumPluginContext";
-import { defineForumQuery, defineForumMutation } from './forumOperationDefinitions';
+import {
+  forumPluginPrincipal,
+  forumUserPrincipal,
+  principalForumUser,
+} from "./forumPluginContext";
+import {
+  defineForumQuery,
+  defineForumMutation,
+} from "./forumOperationDefinitions";
 import { getFirstPartyAuthUserId as getAuthUserId } from "./authz";
 import { createThread as createAgentThread } from "@convex-dev/agent";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
@@ -15,9 +22,17 @@ import {
   assertAgentPublicationHygiene,
   cleanLegacyAgentProcessLabels,
 } from "../lib/agent-publication-quality";
-import { FORUM_AGENT_REPLY_PROMPT_VERSION } from "../lib/forum-reply-policy";
+import {
+  FORUM_AGENT_REPLY_PROMPT_VERSION,
+  forumReplyCandidatePriority,
+  forumReplySourceUrls,
+} from "../lib/forum-reply-policy";
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { extractForumMentionUsernames } from "../lib/forum-mentions";
+import {
+  validateForumAgentMarkup,
+  validateForumContentCompleteness,
+} from "../lib/editorial-quality";
 import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -909,6 +924,8 @@ type SukiReplyCandidate = {
   threadTitle: string;
   threadBody: string;
   sourceBody: string;
+  sourceEvidenceUrls: string[];
+  responseCount: number;
   recentPosts: Array<{
     authorName: string;
     body: string;
@@ -2291,7 +2308,8 @@ const listFeedThreadsOperation = defineForumQuery({
       const author = users.get(thread.authorId);
       const slug =
         categories.get(thread.categoryId)?.slug ?? thread.categorySlug;
-      if (args.scope !== "following" && !isForumDiscoveryBoard(slug)) return false;
+      if (args.scope !== "following" && !isForumDiscoveryBoard(slug))
+        return false;
       if (args.communityOnly && isEditorialFeedThread(thread, author, slug))
         return false;
       if (filter === "humans" && author?.isAgent === true) return false;
@@ -2404,7 +2422,11 @@ const listFeedThreadsOperation = defineForumQuery({
             // attachment URLs through a discovery preview.
             attachments: await hydrateForumAttachments(
               ctx,
-              await loadActiveForumAttachmentsForPost(ctx, thread._id, undefined),
+              await loadActiveForumAttachmentsForPost(
+                ctx,
+                thread._id,
+                undefined,
+              ),
             ),
             kind: thread.kind ?? "discussion",
             agentAssisted: thread.agentAssisted === true,
@@ -3240,7 +3262,9 @@ const listMyThreadSubscriptionsOperation = defineForumQuery({
     };
   },
 });
-export const listMyThreadSubscriptions = query(listMyThreadSubscriptionsOperation);
+export const listMyThreadSubscriptions = query(
+  listMyThreadSubscriptionsOperation,
+);
 
 const listMyThreadBookmarksOperation = defineForumQuery({
   args: {
@@ -3407,7 +3431,9 @@ const listMyCategorySubscriptionsOperation = defineForumQuery({
     };
   },
 });
-export const listMyCategorySubscriptions = query(listMyCategorySubscriptionsOperation);
+export const listMyCategorySubscriptions = query(
+  listMyCategorySubscriptionsOperation,
+);
 
 const listMyNotificationsOperation = defineForumQuery({
   args: {
@@ -3511,7 +3537,9 @@ const getMyForumNavStateOperation = defineForumQuery({
     const privateMessageSummary = isTrustedForumUser(user)
       ? await unreadPrivateMessageSummary(ctx, user._id)
       : { unreadCount: 0, unreadCountLimited: false };
-    const conversationUnread = await privateConversationService.canUse(ctx) ? await privateConversationService.unreadSummary(ctx, user._id) : { unreadCount: 0, unreadCountLimited: false };
+    const conversationUnread = (await privateConversationService.canUse(ctx))
+      ? await privateConversationService.unreadSummary(ctx, user._id)
+      : { unreadCount: 0, unreadCountLimited: false };
     const canModerateForum = await canModerateAnyForumCategory(ctx, user);
 
     return {
@@ -3527,8 +3555,11 @@ const getMyForumNavStateOperation = defineForumQuery({
       reputationScore: profileReputationScore(profile),
       unreadNotifications: notificationSummary.unreadCount,
       unreadNotificationsLimited: notificationSummary.unreadCountLimited,
-      unreadPrivateMessages: privateMessageSummary.unreadCount + conversationUnread.unreadCount,
-      unreadPrivateMessagesLimited: privateMessageSummary.unreadCountLimited || conversationUnread.unreadCountLimited,
+      unreadPrivateMessages:
+        privateMessageSummary.unreadCount + conversationUnread.unreadCount,
+      unreadPrivateMessagesLimited:
+        privateMessageSummary.unreadCountLimited ||
+        conversationUnread.unreadCountLimited,
     };
   },
 });
@@ -4287,7 +4318,9 @@ const getMyForumNotificationPreferencesOperation = defineForumQuery({
     return myForumNotificationPreferencesRecord(user, preferences);
   },
 });
-export const getMyForumNotificationPreferences = query(getMyForumNotificationPreferencesOperation);
+export const getMyForumNotificationPreferences = query(
+  getMyForumNotificationPreferencesOperation,
+);
 
 const listMyForumReputationHistoryOperation = defineForumQuery({
   args: {
@@ -4322,7 +4355,9 @@ const listMyForumReputationHistoryOperation = defineForumQuery({
     return await loadVisibleMyForumReputationHistory(ctx, query, user, limit);
   },
 });
-export const listMyForumReputationHistory = query(listMyForumReputationHistoryOperation);
+export const listMyForumReputationHistory = query(
+  listMyForumReputationHistoryOperation,
+);
 
 const listMyForumWarningsOperation = defineForumQuery({
   args: {
@@ -4390,7 +4425,9 @@ const listMyPendingForumContentOperation = defineForumQuery({
     );
   },
 });
-export const listMyPendingForumContent = query(listMyPendingForumContentOperation);
+export const listMyPendingForumContent = query(
+  listMyPendingForumContentOperation,
+);
 
 const listMyForumRelationshipsOperation = defineForumQuery({
   args: {
@@ -4457,7 +4494,9 @@ const listMyForumRelationshipsOperation = defineForumQuery({
     };
   },
 });
-export const listMyForumRelationships = query(listMyForumRelationshipsOperation);
+export const listMyForumRelationships = query(
+  listMyForumRelationshipsOperation,
+);
 
 const authorizeForumAttachmentUploadOperation = defineForumQuery({
   args: {},
@@ -4466,10 +4505,11 @@ const authorizeForumAttachmentUploadOperation = defineForumQuery({
       ctx,
       "Sign in to upload forum attachments.",
     );
-    if (!(await privateConversationService.canUse(ctx))) throw forumError(
-      "FORUM_TRUST_REQUIRED",
-      "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
-    );
+    if (!(await privateConversationService.canUse(ctx)))
+      throw forumError(
+        "FORUM_TRUST_REQUIRED",
+        "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
+      );
     await assertForumParticipationAllowed(
       ctx,
       user,
@@ -4479,7 +4519,9 @@ const authorizeForumAttachmentUploadOperation = defineForumQuery({
     return { ok: true };
   },
 });
-export const authorizeForumAttachmentUpload = internalQuery(authorizeForumAttachmentUploadOperation);
+export const authorizeForumAttachmentUpload = internalQuery(
+  authorizeForumAttachmentUploadOperation,
+);
 
 const claimStoredForumAttachmentUploadOperation = defineForumMutation({
   args: {
@@ -4492,10 +4534,11 @@ const claimStoredForumAttachmentUploadOperation = defineForumMutation({
       ctx,
       "Sign in to claim forum attachments.",
     );
-    if (!(await privateConversationService.canUse(ctx))) throw forumError(
-      "FORUM_TRUST_REQUIRED",
-      "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
-    );
+    if (!(await privateConversationService.canUse(ctx)))
+      throw forumError(
+        "FORUM_TRUST_REQUIRED",
+        "Ask the site owner to approve your forum access before uploading attachments. Agent profiles also need an active owner connection.",
+      );
     await assertForumParticipationAllowed(
       ctx,
       user,
@@ -4551,7 +4594,9 @@ const claimStoredForumAttachmentUploadOperation = defineForumMutation({
     return normalized;
   },
 });
-export const claimStoredForumAttachmentUpload = internalMutation(claimStoredForumAttachmentUploadOperation);
+export const claimStoredForumAttachmentUpload = internalMutation(
+  claimStoredForumAttachmentUploadOperation,
+);
 
 export const cleanupForumAttachmentStorage = internalMutation({
   args: {
@@ -4713,7 +4758,8 @@ const createThreadOperation = defineForumMutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    if (!forumPluginPrincipal(ctx)) await consumeNativeForumWriteRateIfNeeded(ctx, user);
+    if (!forumPluginPrincipal(ctx))
+      await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const threadId = await ctx.db.insert("forumThreads", {
       categoryId: category._id,
       categorySlug: category.slug,
@@ -5008,7 +5054,9 @@ const updateMyForumNotificationPreferencesOperation = defineForumMutation({
     return myForumNotificationPreferencesRecord(user, updated);
   },
 });
-export const updateMyForumNotificationPreferences = mutation(updateMyForumNotificationPreferencesOperation);
+export const updateMyForumNotificationPreferences = mutation(
+  updateMyForumNotificationPreferencesOperation,
+);
 
 const updateForumRelationshipOperation = defineForumMutation({
   args: {
@@ -5109,7 +5157,9 @@ const updateForumRelationshipOperation = defineForumMutation({
     };
   },
 });
-export const updateForumRelationship = mutation(updateForumRelationshipOperation);
+export const updateForumRelationship = mutation(
+  updateForumRelationshipOperation,
+);
 
 const createReplyOperation = defineForumMutation({
   args: {
@@ -5213,7 +5263,8 @@ const createReplyOperation = defineForumMutation({
     if (initialStatus === "pending") {
       await enforcePendingForumSubmissionLimits(ctx, user);
     }
-    if (!forumPluginPrincipal(ctx)) await consumeNativeForumWriteRateIfNeeded(ctx, user);
+    if (!forumPluginPrincipal(ctx))
+      await consumeNativeForumWriteRateIfNeeded(ctx, user);
     const postId = await ctx.db.insert("forumPosts", {
       threadId: thread._id,
       categoryId: category._id,
@@ -5782,7 +5833,8 @@ const setThreadSubscriptionOperation = defineForumMutation({
 
     const existing = await loadThreadSubscription(ctx, user._id, thread._id);
     const now = Date.now();
-    if (existing === null && !args.subscribed) return { subscribed: false, subscriptionId: null };
+    if (existing === null && !args.subscribed)
+      return { subscribed: false, subscriptionId: null };
     if (existing === null) {
       const subscriptionId = await ctx.db.insert("forumThreadSubscriptions", {
         userId: user._id,
@@ -5851,7 +5903,9 @@ const toggleThreadSubscriptionOperation = defineForumMutation({
     };
   },
 });
-export const toggleThreadSubscription = mutation(toggleThreadSubscriptionOperation);
+export const toggleThreadSubscription = mutation(
+  toggleThreadSubscriptionOperation,
+);
 
 const setThreadBookmarkOperation = defineForumMutation({
   args: {
@@ -5916,7 +5970,8 @@ const setCategorySubscriptionOperation = defineForumMutation({
       category._id,
     );
     const now = Date.now();
-    if (existing === null && !args.subscribed) return { subscribed: false, subscriptionId: null };
+    if (existing === null && !args.subscribed)
+      return { subscribed: false, subscriptionId: null };
     if (existing === null) {
       const subscriptionId = await ctx.db.insert("forumCategorySubscriptions", {
         userId: user._id,
@@ -5939,7 +5994,9 @@ const setCategorySubscriptionOperation = defineForumMutation({
     };
   },
 });
-export const setCategorySubscription = mutation(setCategorySubscriptionOperation);
+export const setCategorySubscription = mutation(
+  setCategorySubscriptionOperation,
+);
 const toggleCategorySubscriptionOperation = defineForumMutation({
   args: {
     categorySlug: v.string(),
@@ -5978,7 +6035,9 @@ const toggleCategorySubscriptionOperation = defineForumMutation({
     };
   },
 });
-export const toggleCategorySubscription = mutation(toggleCategorySubscriptionOperation);
+export const toggleCategorySubscription = mutation(
+  toggleCategorySubscriptionOperation,
+);
 
 const votePollOperation = defineForumMutation({
   args: {
@@ -5992,7 +6051,11 @@ const votePollOperation = defineForumMutation({
     );
     const principal = forumPluginPrincipal(ctx);
     if (principal) {
-      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      await assertForumParticipationAllowed(
+        ctx,
+        user,
+        "vote or rate forum content",
+      );
       user = principalForumUser(principal, true);
     }
     requireHumanForumVoter(user);
@@ -6239,7 +6302,11 @@ const setForumReputationOperation = defineForumMutation({
     let user = await requireSignedInUser(ctx, "Sign in to rate forum posts.");
     const principal = forumPluginPrincipal(ctx);
     if (principal) {
-      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      await assertForumParticipationAllowed(
+        ctx,
+        user,
+        "vote or rate forum content",
+      );
       user = principalForumUser(principal, true);
     }
     requireHumanForumVoter(user);
@@ -6284,7 +6351,10 @@ const setForumReputationOperation = defineForumMutation({
       );
     }
 
-    if (targetAuthorId === user._id || await isOwnerSiblingForumProfile(ctx, targetAuthorId)) {
+    if (
+      targetAuthorId === user._id ||
+      (await isOwnerSiblingForumProfile(ctx, targetAuthorId))
+    ) {
       throw forumError(
         "INVALID_REPUTATION_TARGET",
         "You cannot rate your own post.",
@@ -6365,7 +6435,11 @@ const rateThreadOperation = defineForumMutation({
     let user = await requireSignedInUser(ctx, "Sign in to rate this thread.");
     const principal = forumPluginPrincipal(ctx);
     if (principal) {
-      await assertForumParticipationAllowed(ctx, user, "vote or rate forum content");
+      await assertForumParticipationAllowed(
+        ctx,
+        user,
+        "vote or rate forum content",
+      );
       user = principalForumUser(principal, true);
     }
     requireHumanForumVoter(user);
@@ -6384,7 +6458,10 @@ const rateThreadOperation = defineForumMutation({
       thread.categoryId,
       user,
     );
-    if (thread.authorId === user._id || await isOwnerSiblingForumProfile(ctx, thread.authorId)) {
+    if (
+      thread.authorId === user._id ||
+      (await isOwnerSiblingForumProfile(ctx, thread.authorId))
+    ) {
       throw forumError(
         "INVALID_THREAD_RATING_TARGET",
         "You cannot rate your own thread.",
@@ -7219,7 +7296,9 @@ const createPrivateMessageReportOperation = defineForumMutation({
     return { reportId, created: true };
   },
 });
-export const createPrivateMessageReport = mutation(createPrivateMessageReportOperation);
+export const createPrivateMessageReport = mutation(
+  createPrivateMessageReportOperation,
+);
 
 const listCategoriesAdminOperation = defineForumQuery({
   args: {
@@ -7281,7 +7360,9 @@ const listCategoryModeratorsAdminOperation = defineForumQuery({
     return await hydrateCategoryModeratorRecords(ctx, assignments);
   },
 });
-export const listCategoryModeratorsAdmin = query(listCategoryModeratorsAdminOperation);
+export const listCategoryModeratorsAdmin = query(
+  listCategoryModeratorsAdminOperation,
+);
 
 const assignCategoryModeratorOperation = defineForumMutation({
   args: {
@@ -7375,7 +7456,9 @@ const assignCategoryModeratorOperation = defineForumMutation({
     };
   },
 });
-export const assignCategoryModerator = mutation(assignCategoryModeratorOperation);
+export const assignCategoryModerator = mutation(
+  assignCategoryModeratorOperation,
+);
 
 const removeCategoryModeratorOperation = defineForumMutation({
   args: {
@@ -7427,7 +7510,9 @@ const removeCategoryModeratorOperation = defineForumMutation({
     };
   },
 });
-export const removeCategoryModerator = mutation(removeCategoryModeratorOperation);
+export const removeCategoryModerator = mutation(
+  removeCategoryModeratorOperation,
+);
 
 const listThreadPrefixesAdminOperation = defineForumQuery({
   args: {
@@ -8106,7 +8191,9 @@ const listForumModerationEventsOperation = defineForumQuery({
     return await hydrateForumModerationEvents(ctx, events);
   },
 });
-export const listForumModerationEvents = query(listForumModerationEventsOperation);
+export const listForumModerationEvents = query(
+  listForumModerationEventsOperation,
+);
 
 const listForumWarningsOperation = defineForumQuery({
   args: {
@@ -8431,7 +8518,9 @@ const updateForumWarningStatusOperation = defineForumMutation({
     };
   },
 });
-export const updateForumWarningStatus = mutation(updateForumWarningStatusOperation);
+export const updateForumWarningStatus = mutation(
+  updateForumWarningStatusOperation,
+);
 
 const updateForumReportStatusOperation = defineForumMutation({
   args: {
@@ -8521,7 +8610,9 @@ const updateForumReportStatusOperation = defineForumMutation({
     };
   },
 });
-export const updateForumReportStatus = mutation(updateForumReportStatusOperation);
+export const updateForumReportStatus = mutation(
+  updateForumReportStatusOperation,
+);
 
 const updateForumPollStatusOperation = defineForumMutation({
   args: {
@@ -8946,7 +9037,9 @@ const upsertThreadPrefixAdminOperation = defineForumMutation({
     };
   },
 });
-export const upsertThreadPrefixAdmin = mutation(upsertThreadPrefixAdminOperation);
+export const upsertThreadPrefixAdmin = mutation(
+  upsertThreadPrefixAdminOperation,
+);
 
 const upsertAnnouncementAdminOperation = defineForumMutation({
   args: {
@@ -9101,7 +9194,9 @@ const upsertAnnouncementAdminOperation = defineForumMutation({
     );
   },
 });
-export const upsertAnnouncementAdmin = mutation(upsertAnnouncementAdminOperation);
+export const upsertAnnouncementAdmin = mutation(
+  upsertAnnouncementAdminOperation,
+);
 
 const upsertHelpDocumentAdminOperation = defineForumMutation({
   args: {
@@ -9231,7 +9326,9 @@ const upsertHelpDocumentAdminOperation = defineForumMutation({
     return adminForumHelpDocumentRecord(updated, undefined, displayName(actor));
   },
 });
-export const upsertHelpDocumentAdmin = mutation(upsertHelpDocumentAdminOperation);
+export const upsertHelpDocumentAdmin = mutation(
+  upsertHelpDocumentAdminOperation,
+);
 
 const upsertCalendarEventAdminOperation = defineForumMutation({
   args: {
@@ -9386,7 +9483,9 @@ const upsertCalendarEventAdminOperation = defineForumMutation({
     );
   },
 });
-export const upsertCalendarEventAdmin = mutation(upsertCalendarEventAdminOperation);
+export const upsertCalendarEventAdmin = mutation(
+  upsertCalendarEventAdminOperation,
+);
 
 const upsertBoardRulesAdminOperation = defineForumMutation({
   args: {
@@ -10650,6 +10749,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
     attempt: v.number(),
     runDate: v.string(),
     runId: v.optional(v.id("forumAgentReplyRuns")),
+    prioritizeQueue: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const agentSlug = args.agentSlug ?? "suki";
@@ -10719,7 +10819,10 @@ export const claimSukiForumReplyCandidate = internalMutation({
     }
 
     const now = Date.now();
-    if (args.runId !== undefined) {
+    if (
+      args.runId !== undefined &&
+      (args.prioritizeQueue !== true || args.attempt > 0)
+    ) {
       const run = await ctx.db.get("forumAgentReplyRuns", args.runId);
       if (
         run === null ||
@@ -10814,7 +10917,28 @@ export const claimSukiForumReplyCandidate = internalMutation({
       )
       .order("asc")
       .take(12);
+    // A newly scheduled member ask must not disappear behind a backlog of
+    // older AI sources outside this bounded window. Include its exact queued
+    // event without turning a retry into an unrelated conversation.
+    if (
+      args.prioritizeQueue === true &&
+      args.attempt === 0 &&
+      args.runId !== undefined &&
+      !queuedRuns.some((run) => run._id === args.runId)
+    ) {
+      const eventRun = await ctx.db.get("forumAgentReplyRuns", args.runId);
+      if (
+        eventRun?.agentSlug === agentSlug &&
+        eventRun.status === "queued" &&
+        eventRun.runDate === args.runDate
+      )
+        queuedRuns.push(eventRun);
+    }
 
+    const rankedCandidates: Array<{
+      run: Doc<"forumAgentReplyRuns">;
+      candidate: SukiReplyCandidate;
+    }> = [];
     for (const queuedRun of queuedRuns) {
       if (now - queuedRun.startedAt < SUKI_REPLY_MIN_AGE_MS) continue;
       if (now - queuedRun.startedAt > SUKI_REPLY_MAX_AGE_MS) {
@@ -10862,6 +10986,15 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         continue;
       }
+      rankedCandidates.push({ run: queuedRun, candidate });
+    }
+    rankedCandidates.sort(
+      (a, b) =>
+        forumReplyCandidatePriority(b.candidate) -
+          forumReplyCandidatePriority(a.candidate) ||
+        a.run.updatedAt - b.run.updatedAt,
+    );
+    for (const { run: queuedRun, candidate } of rankedCandidates) {
       if (await isForumReplyCanaryBlocked(ctx, now)) {
         return recordUnclaimedForumReplyCandidate(
           ctx,
@@ -11284,6 +11417,11 @@ async function loadSukiReplyCandidate(
     threadTitle: thread.title,
     threadBody: compactForumText(thread.body, 4_000),
     sourceBody: compactForumText(sourceBody, 3_000),
+    // Sources often live in the appended footer, beyond prompt body limits.
+    sourceEvidenceUrls: forumReplySourceUrls(
+      `${sourceBody}\n${thread.body}`,
+    ).slice(0, 12),
+    responseCount: thread.replyCount,
     recentPosts: contextualPosts.map((post, index) => ({
       authorName: displayName(contextualAuthors[index]),
       body: compactForumText(post.body, 1_500),
@@ -11651,9 +11789,9 @@ function prepareForumAgentClaimCitations(args: {
   citations: ForumAgentClaimCitationInput[];
   sources: Array<{ sourceKey: string; sourceUrl: string }>;
 }) {
-  if (args.citations.length < 2 || args.citations.length > 12) {
+  if (args.citations.length < 1 || args.citations.length > 12) {
     throw new Error(
-      "Forum agent publications require 2-12 validated claim citations",
+      "Forum agent publications require 1-12 validated claim citations",
     );
   }
   const sourceUrlsByKey = new Map<string, string>();
@@ -11830,9 +11968,26 @@ export const publishSukiForumThread = internalMutation({
 
     assertAgentPublicationHygiene([args.title, args.body]);
     const title = normalizeTitle(args.title);
+    const authoredBody = normalizeThreadBody(args.body);
     const body = normalizeThreadBody(
-      `${args.body.trim()}\n\n[i]AI-assisted research draft authored by ${agentName}; source links and editorial review signals are recorded with this publication.[/i]`,
+      `${authoredBody}\n\n[i]AI-assisted research draft authored by ${agentName}; source links and editorial review signals are recorded with this publication.[/i]`,
     );
+    // A trusted attribution footer must never fill an empty final section or
+    // hide an unfinished authored passage. Check both authored and stored copy.
+    for (const publicationBody of [authoredBody, body]) {
+      const markup = validateForumAgentMarkup(publicationBody, {
+        trustedSourceFooter: true,
+      });
+      const completeness = validateForumContentCompleteness(publicationBody, {
+        title,
+        trustedSourceFooter: true,
+      });
+      if (!markup.valid || !completeness.valid) {
+        throw new Error(
+          `${agentName}'s final forum topic is incomplete: ${[...new Set([...markup.feedback, ...completeness.feedback])].join("; ")}`,
+        );
+      }
+    }
     const poll = normalizePollInput(args.poll);
     const sources = args.sources.slice(0, 12);
     if (sources.length === 0) {
@@ -11850,16 +12005,6 @@ export const publishSukiForumThread = internalMutation({
       citations: args.claimCitations,
       sources,
     });
-    if (
-      args.attachment === undefined &&
-      !/\[(?:chart|table|timeline|decision|riskmap|steps|sourcecards)(?:=|\])/i.test(
-        body,
-      )
-    ) {
-      throw new Error(
-        `${agentName}'s forum topic must include an image, chart, or comparison table`,
-      );
-    }
     const sourceReuseCutoff = Date.now() - FORUM_AGENT_SOURCE_REUSE_COOLDOWN_MS;
     const previousSourceUses = new Map<string, ForumAgentSourceUseDoc | null>();
     for (const source of sources) {
@@ -14372,7 +14517,9 @@ const updateForumThreadModerationOperation = defineForumMutation({
     };
   },
 });
-export const updateForumThreadModeration = mutation(updateForumThreadModerationOperation);
+export const updateForumThreadModeration = mutation(
+  updateForumThreadModerationOperation,
+);
 
 const updateForumPostModerationOperation = defineForumMutation({
   args: {
@@ -14528,7 +14675,9 @@ const updateForumPostModerationOperation = defineForumMutation({
     };
   },
 });
-export const updateForumPostModeration = mutation(updateForumPostModerationOperation);
+export const updateForumPostModeration = mutation(
+  updateForumPostModerationOperation,
+);
 
 async function maybeCurrentUser(ctx: QueryCtx | MutationCtx) {
   const principal = forumPluginPrincipal(ctx);
@@ -14644,9 +14793,18 @@ async function assertForumParticipationAllowed(
     await assertForumParticipationAllowed(ctx, principal.owner, action);
   }
   if (principal && principal.actor.isAgent) {
-    const agentWarnings = await activeWarningSummaryForUser(ctx, principal.actor._id, Date.now());
-    if (agentWarnings.activeWarningPoints >= WARNING_PARTICIPATION_BLOCK_POINTS) {
-      throw forumError("FORUM_WARNING_BLOCKED", "The acting agent is restricted by active forum warnings.");
+    const agentWarnings = await activeWarningSummaryForUser(
+      ctx,
+      principal.actor._id,
+      Date.now(),
+    );
+    if (
+      agentWarnings.activeWarningPoints >= WARNING_PARTICIPATION_BLOCK_POINTS
+    ) {
+      throw forumError(
+        "FORUM_WARNING_BLOCKED",
+        "The acting agent is restricted by active forum warnings.",
+      );
     }
   }
   const accountRestriction = forumAccountRestriction(user, Date.now());
@@ -14696,7 +14854,12 @@ async function requireVisibleCategory(
   if (
     category === null ||
     !isBoardCategory(category) ||
-    !(await canViewCategoryWithAncestors(ctx, user, category, denyModeratorOverride))
+    !(await canViewCategoryWithAncestors(
+      ctx,
+      user,
+      category,
+      denyModeratorOverride,
+    ))
   ) {
     throw forumError("CATEGORY_NOT_FOUND", "That board is not available.");
   }
@@ -14791,8 +14954,13 @@ function forumStaffRole(user: UserDoc | null | undefined) {
 
 function canModerate(user: UserDoc | null | undefined): boolean {
   const principal = forumUserPrincipal(user);
-  if (principal) return (principal.capabilities.includes("moderate") || principal.capabilities.includes("administer")) &&
-    forumAccountRestriction(principal.actor, Date.now()) === null && canModerate(principal.owner);
+  if (principal)
+    return (
+      (principal.capabilities.includes("moderate") ||
+        principal.capabilities.includes("administer")) &&
+      forumAccountRestriction(principal.actor, Date.now()) === null &&
+      canModerate(principal.owner)
+    );
   if (hasLegacyForumAdminRole(user)) {
     return true;
   }
@@ -14808,7 +14976,11 @@ async function canModerateAnyForumCategory(
 ) {
   const principal = forumUserPrincipal(user);
   if (principal) {
-    if (!principal.capabilities.includes("moderate") || !isActiveForumAccount(principal.actor)) return false;
+    if (
+      !principal.capabilities.includes("moderate") ||
+      !isActiveForumAccount(principal.actor)
+    )
+      return false;
     user = principal.owner;
   }
   if (canModerate(user)) {
@@ -14831,7 +15003,11 @@ async function canModerateCategory(
 ) {
   const principal = forumUserPrincipal(user);
   if (principal) {
-    if (!principal.capabilities.includes("moderate") || !isActiveForumAccount(principal.actor)) return false;
+    if (
+      !principal.capabilities.includes("moderate") ||
+      !isActiveForumAccount(principal.actor)
+    )
+      return false;
     user = principal.owner;
   }
   if (canModerate(user)) {
@@ -14877,8 +15053,12 @@ function includesCategoryId(
 
 function canAdminForum(user: UserDoc | null | undefined): boolean {
   const principal = forumUserPrincipal(user);
-  if (principal) return principal.capabilities.includes("administer") &&
-    forumAccountRestriction(principal.actor, Date.now()) === null && canAdminForum(principal.owner);
+  if (principal)
+    return (
+      principal.capabilities.includes("administer") &&
+      forumAccountRestriction(principal.actor, Date.now()) === null &&
+      canAdminForum(principal.owner)
+    );
   if (hasLegacyForumAdminRole(user)) {
     return true;
   }
@@ -14921,7 +15101,11 @@ function isActiveForumAccount(user: UserDoc | null | undefined) {
 
 function isTrustedForumUser(user: UserDoc | null | undefined): boolean {
   const principal = forumUserPrincipal(user);
-  if (principal) return isActiveForumAccount(principal.actor) && isTrustedForumUser(principal.owner);
+  if (principal)
+    return (
+      isActiveForumAccount(principal.actor) &&
+      isTrustedForumUser(principal.owner)
+    );
   if (canModerate(user)) {
     return true;
   }
@@ -15049,11 +15233,8 @@ async function canViewCategoryWithAncestors(
     return false;
   }
 
-  const targetModeratorOverride = !denyModeratorOverride && await canModerateCategory(
-    ctx,
-    user,
-    category,
-  );
+  const targetModeratorOverride =
+    !denyModeratorOverride && (await canModerateCategory(ctx, user, category));
   if (!canViewCategory(user, category, targetModeratorOverride)) {
     return false;
   }
@@ -18630,7 +18811,8 @@ async function loadForumReputation(
   targetKey: string,
 ) {
   const principal = forumPluginPrincipal(ctx);
-  if (principal && fromUserId === principal.actor._id) fromUserId = principal.owner._id;
+  if (principal && fromUserId === principal.actor._id)
+    fromUserId = principal.owner._id;
   return await ctx.db
     .query("forumReputations")
     .withIndex("by_fromUserId_and_targetKey", (q) =>
@@ -18645,7 +18827,8 @@ async function loadForumReputationsByTargetKey(
   targetKeys: string[],
 ) {
   const principal = forumPluginPrincipal(ctx);
-  if (principal && fromUserId === principal.actor._id) fromUserId = principal.owner._id;
+  if (principal && fromUserId === principal.actor._id)
+    fromUserId = principal.owner._id;
   const rows = await Promise.all(
     [...new Set(targetKeys)].map(
       async (targetKey) =>
@@ -23010,23 +23193,57 @@ function forumError(code: string, message: string) {
 }
 
 const privateConversationService = createForumPrivateConversationOperations({
-  requireSignedInUser, isTrustedForumUser, assertForumParticipationAllowed,
+  requireSignedInUser,
+  isTrustedForumUser,
+  assertForumParticipationAllowed,
   assertDeliveryAllowed: assertOwnerPrivateMessageDeliveryAllowed,
   normalizeAttachments: normalizeForumAttachmentInputs,
-  recordReport: (ctx, reporterId, reportId, messageId, authorId) => recordModerationLog(ctx, {
-    actorUserId: reporterId, entityType: "forumReport", entityId: reportId,
-    eventType: "forum_report_created", message: "Forum conversation message reported", reportId,
-    metadata: { reporterId, messageId, targetUserId: authorId, reportEntityType: "privateMessage" },
-  }),
+  recordReport: (ctx, reporterId, reportId, messageId, authorId) =>
+    recordModerationLog(ctx, {
+      actorUserId: reporterId,
+      entityType: "forumReport",
+      entityId: reportId,
+      eventType: "forum_report_created",
+      message: "Forum conversation message reported",
+      reportId,
+      metadata: {
+        reporterId,
+        messageId,
+        targetUserId: authorId,
+        reportEntityType: "privateMessage",
+      },
+    }),
 });
-export const getPrivateMessageAccess = query(privateConversationService.operations.getPrivateMessageAccess.definition);
-export const listPrivateMessageConversations = query(privateConversationService.operations.listPrivateMessageConversations.definition);
-export const getPrivateMessageConversation = query(privateConversationService.operations.getPrivateMessageConversation.definition);
-export const listPrivateMessageRecipients = query(privateConversationService.operations.listPrivateMessageRecipients.definition);
-export const createPrivateMessageConversation = mutation(privateConversationService.operations.createPrivateMessageConversation.definition);
-export const sendPrivateMessageConversation = mutation(privateConversationService.operations.sendPrivateMessageConversation.definition);
-export const setPrivateMessageConversation = mutation(privateConversationService.operations.setPrivateMessageConversation.definition);
-export const reportPrivateMessageConversation = mutation(privateConversationService.operations.reportPrivateMessageConversation.definition);
+export const getPrivateMessageAccess = query(
+  privateConversationService.operations.getPrivateMessageAccess.definition,
+);
+export const listPrivateMessageConversations = query(
+  privateConversationService.operations.listPrivateMessageConversations
+    .definition,
+);
+export const getPrivateMessageConversation = query(
+  privateConversationService.operations.getPrivateMessageConversation
+    .definition,
+);
+export const listPrivateMessageRecipients = query(
+  privateConversationService.operations.listPrivateMessageRecipients.definition,
+);
+export const createPrivateMessageConversation = mutation(
+  privateConversationService.operations.createPrivateMessageConversation
+    .definition,
+);
+export const sendPrivateMessageConversation = mutation(
+  privateConversationService.operations.sendPrivateMessageConversation
+    .definition,
+);
+export const setPrivateMessageConversation = mutation(
+  privateConversationService.operations.setPrivateMessageConversation
+    .definition,
+);
+export const reportPrivateMessageConversation = mutation(
+  privateConversationService.operations.reportPrivateMessageConversation
+    .definition,
+);
 
 /** Plain domain definitions shared by first-party handlers and trusted plugin execution. */
 export const forumChatOperations = createForumChatOperations({
@@ -23610,142 +23827,399 @@ export const forumOperations = {
     kind: "mutation",
     definition: setAcceptedAnswerOperation,
   },
-...forumChatOperations,
-setCategorySubscription: { kind: "mutation", definition: setCategorySubscriptionOperation },
-setThreadSubscription: { kind: "mutation", definition: setThreadSubscriptionOperation },
-authorizeForumAttachmentUpload: { kind: "query", definition: authorizeForumAttachmentUploadOperation },
-claimStoredForumAttachmentUpload: { kind: "mutation", definition: claimStoredForumAttachmentUploadOperation },
-listCategories: { kind: 'query', definition: listCategoriesOperation },
-listCategoryOptions: { kind: 'query', definition: listCategoryOptionsOperation },
-listThreadPrefixes: { kind: 'query', definition: listThreadPrefixesOperation },
-listAnnouncements: { kind: 'query', definition: listAnnouncementsOperation },
-getAnnouncement: { kind: 'query', definition: getAnnouncementOperation },
-listHelpDocuments: { kind: 'query', definition: listHelpDocumentsOperation },
-getHelpDocument: { kind: 'query', definition: getHelpDocumentOperation },
-listCalendarEvents: { kind: 'query', definition: listCalendarEventsOperation },
-getCalendarEvent: { kind: 'query', definition: getCalendarEventOperation },
-overview: { kind: 'query', definition: overviewOperation },
-listThreads: { kind: 'query', definition: listThreadsOperation },
-listResearchFeedThreads: { kind: 'query', definition: listResearchFeedThreadsOperation },
-listRecentThreads: { kind: 'query', definition: listRecentThreadsOperation },
-listFeedThreads: { kind: 'query', definition: listFeedThreadsOperation },
-listNewsFeed: { kind: 'query', definition: listNewsFeedOperation },
-getThread: { kind: 'query', definition: getThreadOperation },
-search: { kind: 'query', definition: searchOperation },
-listMyThreadSubscriptions: { kind: 'query', definition: listMyThreadSubscriptionsOperation },
-listMyThreadBookmarks: { kind: 'query', definition: listMyThreadBookmarksOperation },
-listMyCategorySubscriptions: { kind: 'query', definition: listMyCategorySubscriptionsOperation },
-listMyNotifications: { kind: 'query', definition: listMyNotificationsOperation },
-getMyForumNavState: { kind: 'query', definition: getMyForumNavStateOperation },
-recordPresence: { kind: 'mutation', definition: recordPresenceOperation },
-markNotificationRead: { kind: 'mutation', definition: markNotificationReadOperation },
-listPrivateMessages: { kind: 'query', definition: listPrivateMessagesOperation },
-getPrivateMessage: { kind: 'query', definition: getPrivateMessageOperation },
-sendPrivateMessage: { kind: 'mutation', definition: sendPrivateMessageOperation },
-markPrivateMessageRead: { kind: 'mutation', definition: markPrivateMessageReadOperation },
-deletePrivateMessage: { kind: 'mutation', definition: deletePrivateMessageOperation },
-restorePrivateMessage: { kind: 'mutation', definition: restorePrivateMessageOperation },
-listMembers: { kind: 'query', definition: listMembersOperation },
-listOnlineMembers: { kind: 'query', definition: listOnlineMembersOperation },
-onlineSummary: { kind: 'query', definition: onlineSummaryOperation },
-getMyForumProfile: { kind: 'query', definition: getMyForumProfileOperation },
-getMyForumNotificationPreferences: { kind: 'query', definition: getMyForumNotificationPreferencesOperation },
-listMyForumReputationHistory: { kind: 'query', definition: listMyForumReputationHistoryOperation },
-listMyForumWarnings: { kind: 'query', definition: listMyForumWarningsOperation },
-listMyPendingForumContent: { kind: 'query', definition: listMyPendingForumContentOperation },
-listMyForumRelationships: { kind: 'query', definition: listMyForumRelationshipsOperation },
-createThread: { kind: 'mutation', definition: createThreadOperation },
-updateMyForumProfile: { kind: 'mutation', definition: updateMyForumProfileOperation },
-updateMyForumNotificationPreferences: { kind: 'mutation', definition: updateMyForumNotificationPreferencesOperation },
-updateForumRelationship: { kind: 'mutation', definition: updateForumRelationshipOperation },
-createReply: { kind: 'mutation', definition: createReplyOperation },
-recordThreadView: { kind: 'mutation', definition: recordThreadViewOperation },
-markThreadRead: { kind: 'mutation', definition: markThreadReadOperation },
-markCategoryRead: { kind: 'mutation', definition: markCategoryReadOperation },
-markAllForumsRead: { kind: 'mutation', definition: markAllForumsReadOperation },
-setThreadBookmark: { kind: 'mutation', definition: setThreadBookmarkOperation },
-votePoll: { kind: 'mutation', definition: votePollOperation },
-updatePollContent: { kind: 'mutation', definition: updatePollContentOperation },
-setForumReputation: { kind: 'mutation', definition: setForumReputationOperation },
-rateThread: { kind: 'mutation', definition: rateThreadOperation },
-updateThreadContent: { kind: 'mutation', definition: updateThreadContentOperation },
-updatePostContent: { kind: 'mutation', definition: updatePostContentOperation },
-deleteThread: { kind: 'mutation', definition: deleteThreadOperation },
-deletePost: { kind: 'mutation', definition: deletePostOperation },
-createReport: { kind: 'mutation', definition: createReportOperation },
-createPrivateMessageReport: { kind: 'mutation', definition: createPrivateMessageReportOperation },
-listCategoriesAdmin: { kind: 'query', definition: listCategoriesAdminOperation },
-listCategoryModeratorsAdmin: { kind: 'query', definition: listCategoryModeratorsAdminOperation },
-assignCategoryModerator: { kind: 'mutation', definition: assignCategoryModeratorOperation },
-removeCategoryModerator: { kind: 'mutation', definition: removeCategoryModeratorOperation },
-listThreadPrefixesAdmin: { kind: 'query', definition: listThreadPrefixesAdminOperation },
-listAnnouncementsAdmin: { kind: 'query', definition: listAnnouncementsAdminOperation },
-listHelpDocumentsAdmin: { kind: 'query', definition: listHelpDocumentsAdminOperation },
-listCalendarEventsAdmin: { kind: 'query', definition: listCalendarEventsAdminOperation },
-listBoardRulesAdmin: { kind: 'query', definition: listBoardRulesAdminOperation },
-adminOverview: { kind: 'query', definition: adminOverviewOperation },
-listForumReports: { kind: 'query', definition: listForumReportsOperation },
-listForumModerationEvents: { kind: 'query', definition: listForumModerationEventsOperation },
-listForumWarnings: { kind: 'query', definition: listForumWarningsOperation },
-issueForumWarning: { kind: 'mutation', definition: issueForumWarningOperation },
-updateForumWarningStatus: { kind: 'mutation', definition: updateForumWarningStatusOperation },
-updateForumReportStatus: { kind: 'mutation', definition: updateForumReportStatusOperation },
-updateForumPollStatus: { kind: 'mutation', definition: updateForumPollStatusOperation },
-upsertForumCategory: { kind: 'mutation', definition: upsertForumCategoryOperation },
-upsertThreadPrefixAdmin: { kind: 'mutation', definition: upsertThreadPrefixAdminOperation },
-upsertAnnouncementAdmin: { kind: 'mutation', definition: upsertAnnouncementAdminOperation },
-upsertHelpDocumentAdmin: { kind: 'mutation', definition: upsertHelpDocumentAdminOperation },
-upsertCalendarEventAdmin: { kind: 'mutation', definition: upsertCalendarEventAdminOperation },
-upsertBoardRulesAdmin: { kind: 'mutation', definition: upsertBoardRulesAdminOperation },
-reorderForumCategories: { kind: 'mutation', definition: reorderForumCategoriesOperation },
-listForumThreads: { kind: 'query', definition: listForumThreadsOperation },
-listForumPosts: { kind: 'query', definition: listForumPostsOperation },
-getForumThread: { kind: 'query', definition: getForumThreadOperation },
-listForumContentEdits: { kind: 'query', definition: listForumContentEditsOperation },
-moveForumThread: { kind: 'mutation', definition: moveForumThreadOperation },
-moveForumPosts: { kind: 'mutation', definition: moveForumPostsOperation },
-splitForumPosts: { kind: 'mutation', definition: splitForumPostsOperation },
-mergeForumThread: { kind: 'mutation', definition: mergeForumThreadOperation },
-updateForumThreadModeration: { kind: 'mutation', definition: updateForumThreadModerationOperation },
-updateForumPostModeration: { kind: 'mutation', definition: updateForumPostModerationOperation }
+  ...forumChatOperations,
+  setCategorySubscription: {
+    kind: "mutation",
+    definition: setCategorySubscriptionOperation,
+  },
+  setThreadSubscription: {
+    kind: "mutation",
+    definition: setThreadSubscriptionOperation,
+  },
+  authorizeForumAttachmentUpload: {
+    kind: "query",
+    definition: authorizeForumAttachmentUploadOperation,
+  },
+  claimStoredForumAttachmentUpload: {
+    kind: "mutation",
+    definition: claimStoredForumAttachmentUploadOperation,
+  },
+  listCategories: { kind: "query", definition: listCategoriesOperation },
+  listCategoryOptions: {
+    kind: "query",
+    definition: listCategoryOptionsOperation,
+  },
+  listThreadPrefixes: {
+    kind: "query",
+    definition: listThreadPrefixesOperation,
+  },
+  listAnnouncements: { kind: "query", definition: listAnnouncementsOperation },
+  getAnnouncement: { kind: "query", definition: getAnnouncementOperation },
+  listHelpDocuments: { kind: "query", definition: listHelpDocumentsOperation },
+  getHelpDocument: { kind: "query", definition: getHelpDocumentOperation },
+  listCalendarEvents: {
+    kind: "query",
+    definition: listCalendarEventsOperation,
+  },
+  getCalendarEvent: { kind: "query", definition: getCalendarEventOperation },
+  overview: { kind: "query", definition: overviewOperation },
+  listThreads: { kind: "query", definition: listThreadsOperation },
+  listResearchFeedThreads: {
+    kind: "query",
+    definition: listResearchFeedThreadsOperation,
+  },
+  listRecentThreads: { kind: "query", definition: listRecentThreadsOperation },
+  listFeedThreads: { kind: "query", definition: listFeedThreadsOperation },
+  listNewsFeed: { kind: "query", definition: listNewsFeedOperation },
+  getThread: { kind: "query", definition: getThreadOperation },
+  search: { kind: "query", definition: searchOperation },
+  listMyThreadSubscriptions: {
+    kind: "query",
+    definition: listMyThreadSubscriptionsOperation,
+  },
+  listMyThreadBookmarks: {
+    kind: "query",
+    definition: listMyThreadBookmarksOperation,
+  },
+  listMyCategorySubscriptions: {
+    kind: "query",
+    definition: listMyCategorySubscriptionsOperation,
+  },
+  listMyNotifications: {
+    kind: "query",
+    definition: listMyNotificationsOperation,
+  },
+  getMyForumNavState: {
+    kind: "query",
+    definition: getMyForumNavStateOperation,
+  },
+  recordPresence: { kind: "mutation", definition: recordPresenceOperation },
+  markNotificationRead: {
+    kind: "mutation",
+    definition: markNotificationReadOperation,
+  },
+  listPrivateMessages: {
+    kind: "query",
+    definition: listPrivateMessagesOperation,
+  },
+  getPrivateMessage: { kind: "query", definition: getPrivateMessageOperation },
+  sendPrivateMessage: {
+    kind: "mutation",
+    definition: sendPrivateMessageOperation,
+  },
+  markPrivateMessageRead: {
+    kind: "mutation",
+    definition: markPrivateMessageReadOperation,
+  },
+  deletePrivateMessage: {
+    kind: "mutation",
+    definition: deletePrivateMessageOperation,
+  },
+  restorePrivateMessage: {
+    kind: "mutation",
+    definition: restorePrivateMessageOperation,
+  },
+  listMembers: { kind: "query", definition: listMembersOperation },
+  listOnlineMembers: { kind: "query", definition: listOnlineMembersOperation },
+  onlineSummary: { kind: "query", definition: onlineSummaryOperation },
+  getMyForumProfile: { kind: "query", definition: getMyForumProfileOperation },
+  getMyForumNotificationPreferences: {
+    kind: "query",
+    definition: getMyForumNotificationPreferencesOperation,
+  },
+  listMyForumReputationHistory: {
+    kind: "query",
+    definition: listMyForumReputationHistoryOperation,
+  },
+  listMyForumWarnings: {
+    kind: "query",
+    definition: listMyForumWarningsOperation,
+  },
+  listMyPendingForumContent: {
+    kind: "query",
+    definition: listMyPendingForumContentOperation,
+  },
+  listMyForumRelationships: {
+    kind: "query",
+    definition: listMyForumRelationshipsOperation,
+  },
+  createThread: { kind: "mutation", definition: createThreadOperation },
+  updateMyForumProfile: {
+    kind: "mutation",
+    definition: updateMyForumProfileOperation,
+  },
+  updateMyForumNotificationPreferences: {
+    kind: "mutation",
+    definition: updateMyForumNotificationPreferencesOperation,
+  },
+  updateForumRelationship: {
+    kind: "mutation",
+    definition: updateForumRelationshipOperation,
+  },
+  createReply: { kind: "mutation", definition: createReplyOperation },
+  recordThreadView: { kind: "mutation", definition: recordThreadViewOperation },
+  markThreadRead: { kind: "mutation", definition: markThreadReadOperation },
+  markCategoryRead: { kind: "mutation", definition: markCategoryReadOperation },
+  markAllForumsRead: {
+    kind: "mutation",
+    definition: markAllForumsReadOperation,
+  },
+  setThreadBookmark: {
+    kind: "mutation",
+    definition: setThreadBookmarkOperation,
+  },
+  votePoll: { kind: "mutation", definition: votePollOperation },
+  updatePollContent: {
+    kind: "mutation",
+    definition: updatePollContentOperation,
+  },
+  setForumReputation: {
+    kind: "mutation",
+    definition: setForumReputationOperation,
+  },
+  rateThread: { kind: "mutation", definition: rateThreadOperation },
+  updateThreadContent: {
+    kind: "mutation",
+    definition: updateThreadContentOperation,
+  },
+  updatePostContent: {
+    kind: "mutation",
+    definition: updatePostContentOperation,
+  },
+  deleteThread: { kind: "mutation", definition: deleteThreadOperation },
+  deletePost: { kind: "mutation", definition: deletePostOperation },
+  createReport: { kind: "mutation", definition: createReportOperation },
+  createPrivateMessageReport: {
+    kind: "mutation",
+    definition: createPrivateMessageReportOperation,
+  },
+  listCategoriesAdmin: {
+    kind: "query",
+    definition: listCategoriesAdminOperation,
+  },
+  listCategoryModeratorsAdmin: {
+    kind: "query",
+    definition: listCategoryModeratorsAdminOperation,
+  },
+  assignCategoryModerator: {
+    kind: "mutation",
+    definition: assignCategoryModeratorOperation,
+  },
+  removeCategoryModerator: {
+    kind: "mutation",
+    definition: removeCategoryModeratorOperation,
+  },
+  listThreadPrefixesAdmin: {
+    kind: "query",
+    definition: listThreadPrefixesAdminOperation,
+  },
+  listAnnouncementsAdmin: {
+    kind: "query",
+    definition: listAnnouncementsAdminOperation,
+  },
+  listHelpDocumentsAdmin: {
+    kind: "query",
+    definition: listHelpDocumentsAdminOperation,
+  },
+  listCalendarEventsAdmin: {
+    kind: "query",
+    definition: listCalendarEventsAdminOperation,
+  },
+  listBoardRulesAdmin: {
+    kind: "query",
+    definition: listBoardRulesAdminOperation,
+  },
+  adminOverview: { kind: "query", definition: adminOverviewOperation },
+  listForumReports: { kind: "query", definition: listForumReportsOperation },
+  listForumModerationEvents: {
+    kind: "query",
+    definition: listForumModerationEventsOperation,
+  },
+  listForumWarnings: { kind: "query", definition: listForumWarningsOperation },
+  issueForumWarning: {
+    kind: "mutation",
+    definition: issueForumWarningOperation,
+  },
+  updateForumWarningStatus: {
+    kind: "mutation",
+    definition: updateForumWarningStatusOperation,
+  },
+  updateForumReportStatus: {
+    kind: "mutation",
+    definition: updateForumReportStatusOperation,
+  },
+  updateForumPollStatus: {
+    kind: "mutation",
+    definition: updateForumPollStatusOperation,
+  },
+  upsertForumCategory: {
+    kind: "mutation",
+    definition: upsertForumCategoryOperation,
+  },
+  upsertThreadPrefixAdmin: {
+    kind: "mutation",
+    definition: upsertThreadPrefixAdminOperation,
+  },
+  upsertAnnouncementAdmin: {
+    kind: "mutation",
+    definition: upsertAnnouncementAdminOperation,
+  },
+  upsertHelpDocumentAdmin: {
+    kind: "mutation",
+    definition: upsertHelpDocumentAdminOperation,
+  },
+  upsertCalendarEventAdmin: {
+    kind: "mutation",
+    definition: upsertCalendarEventAdminOperation,
+  },
+  upsertBoardRulesAdmin: {
+    kind: "mutation",
+    definition: upsertBoardRulesAdminOperation,
+  },
+  reorderForumCategories: {
+    kind: "mutation",
+    definition: reorderForumCategoriesOperation,
+  },
+  listForumThreads: { kind: "query", definition: listForumThreadsOperation },
+  listForumPosts: { kind: "query", definition: listForumPostsOperation },
+  getForumThread: { kind: "query", definition: getForumThreadOperation },
+  listForumContentEdits: {
+    kind: "query",
+    definition: listForumContentEditsOperation,
+  },
+  moveForumThread: { kind: "mutation", definition: moveForumThreadOperation },
+  moveForumPosts: { kind: "mutation", definition: moveForumPostsOperation },
+  splitForumPosts: { kind: "mutation", definition: splitForumPostsOperation },
+  mergeForumThread: { kind: "mutation", definition: mergeForumThreadOperation },
+  updateForumThreadModeration: {
+    kind: "mutation",
+    definition: updateForumThreadModerationOperation,
+  },
+  updateForumPostModeration: {
+    kind: "mutation",
+    definition: updateForumPostModerationOperation,
+  },
 } as const;
 
-async function isOwnerSiblingForumProfile(ctx: MutationCtx, authorId: Id<"users">) {
+async function isOwnerSiblingForumProfile(
+  ctx: MutationCtx,
+  authorId: Id<"users">,
+) {
   const principal = forumPluginPrincipal(ctx);
   if (!principal) return false;
   if (authorId === principal.owner._id) return true;
-  const identity = await ctx.db.query("agentIdentities").withIndex("by_userId", q => q.eq("userId", authorId)).unique();
+  const identity = await ctx.db
+    .query("agentIdentities")
+    .withIndex("by_userId", (q) => q.eq("userId", authorId))
+    .unique();
   return identity?.ownerUserId === principal.owner._id;
 }
 
-const delegatedPrivateMessageRateLimiter = new RateLimiter(components.rateLimiter, {
-  ownerPrivateMessage: { kind: "token bucket", rate: 1, period: PRIVATE_MESSAGE_RATE_LIMIT_MS, capacity: 1 },
-  ownerRecipientPrivateMessage: { kind: "token bucket", rate: 1, period: PRIVATE_MESSAGE_RECIPIENT_RATE_LIMIT_MS, capacity: 1 },
-});
-async function forumProfileOwnerId(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
-  const identity = await ctx.db.query("agentIdentities").withIndex("by_userId", q => q.eq("userId", userId)).unique();
+const delegatedPrivateMessageRateLimiter = new RateLimiter(
+  components.rateLimiter,
+  {
+    ownerPrivateMessage: {
+      kind: "token bucket",
+      rate: 1,
+      period: PRIVATE_MESSAGE_RATE_LIMIT_MS,
+      capacity: 1,
+    },
+    ownerRecipientPrivateMessage: {
+      kind: "token bucket",
+      rate: 1,
+      period: PRIVATE_MESSAGE_RECIPIENT_RATE_LIMIT_MS,
+      capacity: 1,
+    },
+  },
+);
+async function forumProfileOwnerId(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+) {
+  const identity = await ctx.db
+    .query("agentIdentities")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
   return identity?.ownerUserId ?? userId;
 }
-async function assertOwnerPrivateMessageDeliveryAllowed(ctx: QueryCtx | MutationCtx, sender: UserDoc, recipient: UserDoc) {
-  const [senderOwner, recipientOwner] = await Promise.all([forumProfileOwnerId(ctx, sender._id), forumProfileOwnerId(ctx, recipient._id)]);
-  if (senderOwner === recipientOwner) throw forumError("INVALID_RECIPIENT", "Choose another owner's profile.");
-  const [senderSiblings,recipientSiblings] = await Promise.all([
-    ctx.db.query("agentIdentities").withIndex("by_ownerUserId", q => q.eq("ownerUserId", senderOwner)).take(101),
-    ctx.db.query("agentIdentities").withIndex("by_ownerUserId", q => q.eq("ownerUserId", recipientOwner)).take(101),
+async function assertOwnerPrivateMessageDeliveryAllowed(
+  ctx: QueryCtx | MutationCtx,
+  sender: UserDoc,
+  recipient: UserDoc,
+) {
+  const [senderOwner, recipientOwner] = await Promise.all([
+    forumProfileOwnerId(ctx, sender._id),
+    forumProfileOwnerId(ctx, recipient._id),
   ]);
-  if(senderSiblings.length>100||recipientSiblings.length>100)throw forumError("PRIVATE_MESSAGE_OWNER_PROFILE_LIMIT", "Reduce the owner's profile count before using private messages.");
-  const senderProfiles = new Set([senderOwner,sender._id,...senderSiblings.map(row=>row.userId)]);
-  const recipientProfiles = new Set([recipientOwner,recipient._id,...recipientSiblings.map(row=>row.userId)]);
-  for(const profileId of recipientProfiles) {
-    const ignores=await ctx.db.query("forumUserRelationships").withIndex("by_userId_and_kind_and_createdAt",q=>q.eq("userId",profileId).eq("kind","ignore")).take(FORUM_RELATIONSHIP_LIST_LIMIT+1);
-    if(ignores.length>FORUM_RELATIONSHIP_LIST_LIMIT)throw forumError("PRIVATE_MESSAGE_IGNORED", "That profile's ignore rules exceed the supported limit.");
-    if(ignores.some(row=>senderProfiles.has(row.targetUserId)))throw forumError("PRIVATE_MESSAGE_IGNORED", "That member is not accepting private messages from this owner.");
+  if (senderOwner === recipientOwner)
+    throw forumError("INVALID_RECIPIENT", "Choose another owner's profile.");
+  const [senderSiblings, recipientSiblings] = await Promise.all([
+    ctx.db
+      .query("agentIdentities")
+      .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", senderOwner))
+      .take(101),
+    ctx.db
+      .query("agentIdentities")
+      .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", recipientOwner))
+      .take(101),
+  ]);
+  if (senderSiblings.length > 100 || recipientSiblings.length > 100)
+    throw forumError(
+      "PRIVATE_MESSAGE_OWNER_PROFILE_LIMIT",
+      "Reduce the owner's profile count before using private messages.",
+    );
+  const senderProfiles = new Set([
+    senderOwner,
+    sender._id,
+    ...senderSiblings.map((row) => row.userId),
+  ]);
+  const recipientProfiles = new Set([
+    recipientOwner,
+    recipient._id,
+    ...recipientSiblings.map((row) => row.userId),
+  ]);
+  for (const profileId of recipientProfiles) {
+    const ignores = await ctx.db
+      .query("forumUserRelationships")
+      .withIndex("by_userId_and_kind_and_createdAt", (q) =>
+        q.eq("userId", profileId).eq("kind", "ignore"),
+      )
+      .take(FORUM_RELATIONSHIP_LIST_LIMIT + 1);
+    if (ignores.length > FORUM_RELATIONSHIP_LIST_LIMIT)
+      throw forumError(
+        "PRIVATE_MESSAGE_IGNORED",
+        "That profile's ignore rules exceed the supported limit.",
+      );
+    if (ignores.some((row) => senderProfiles.has(row.targetUserId)))
+      throw forumError(
+        "PRIVATE_MESSAGE_IGNORED",
+        "That member is not accepting private messages from this owner.",
+      );
   }
 }
-async function assertOwnerPrivateMessageRules(ctx: MutationCtx, sender: UserDoc, recipient: UserDoc) {
+async function assertOwnerPrivateMessageRules(
+  ctx: MutationCtx,
+  sender: UserDoc,
+  recipient: UserDoc,
+) {
   await assertOwnerPrivateMessageDeliveryAllowed(ctx, sender, recipient);
-  const [senderOwner, recipientOwner] = await Promise.all([forumProfileOwnerId(ctx, sender._id), forumProfileOwnerId(ctx, recipient._id)]);
-  const quota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerPrivateMessage", { key: senderOwner });
-  const recipientQuota = await delegatedPrivateMessageRateLimiter.limit(ctx, "ownerRecipientPrivateMessage", { key: `${senderOwner}:${recipientOwner}` });
-  if (!quota.ok || !recipientQuota.ok) throw forumError("PRIVATE_MESSAGE_RATE_LIMITED", "Give the owner's inbox a minute, then send again.");
+  const [senderOwner, recipientOwner] = await Promise.all([
+    forumProfileOwnerId(ctx, sender._id),
+    forumProfileOwnerId(ctx, recipient._id),
+  ]);
+  const quota = await delegatedPrivateMessageRateLimiter.limit(
+    ctx,
+    "ownerPrivateMessage",
+    { key: senderOwner },
+  );
+  const recipientQuota = await delegatedPrivateMessageRateLimiter.limit(
+    ctx,
+    "ownerRecipientPrivateMessage",
+    { key: `${senderOwner}:${recipientOwner}` },
+  );
+  if (!quota.ok || !recipientQuota.ok)
+    throw forumError(
+      "PRIVATE_MESSAGE_RATE_LIMITED",
+      "Give the owner's inbox a minute, then send again.",
+    );
 }

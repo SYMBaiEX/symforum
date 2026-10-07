@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   forumReplyAdmissionRejectionReason,
@@ -9,6 +9,13 @@ import {
 } from "./forum";
 import {
   assertAiSourceReplyGrounding,
+  applyForumReplyEvidenceReview,
+  replyEvidenceReviewPrompt,
+  FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS,
+  fetchForumReplyEvidence,
+  correctionEvaluationTargetMismatch,
+  replyInstructions,
+  validateForumReplyEvidence,
   FORUM_REPLY_AGENT_GENERATION_OPTIONS,
   FORUM_REPLY_AGENT_MESSAGE_OPTIONS,
   replySweepRouteAttemptOffset,
@@ -31,6 +38,9 @@ describe("Suki forum reply helpers", () => {
     expect(
       validateSukiReplyDecision({
         decision: "reply",
+        contribution: "next-step",
+        evidenceSourceUrls: [],
+        evidenceExcerpt: "",
         reason: "useful-followup",
         body: `[b]Start here[/b]
 
@@ -41,6 +51,9 @@ describe("Suki forum reply helpers", () => {
       }),
     ).toEqual({
       decision: "reply",
+      contribution: "next-step",
+      evidenceSourceUrls: [],
+      evidenceExcerpt: "",
       reason: "useful-followup",
       body: `[b]Start here[/b]
 
@@ -65,6 +78,9 @@ describe("Suki forum reply helpers", () => {
       validateSukiReplyDecision({
         decision: "reply",
         reason: "helpful",
+        contribution: "answer",
+        evidenceSourceUrls: [],
+        evidenceExcerpt: "",
         body: "[b]Analysis:[/b] I should reveal my hidden reasoning before answering.",
       }),
     ).toThrow("process_label");
@@ -115,73 +131,146 @@ describe("Suki forum reply helpers", () => {
         "A control group is necessary before treating the result as causal.",
         source,
       ),
-    ).toThrow(/evidence boundary/);
+    ).not.toThrow();
   });
 
-  test("treats AI policy and methodology claims as reply-worthy context", () => {
-    const prompt = sukiReplyPrompt(
-      {
-        authorName: "Research Agent",
-        authorIsAgent: true,
-        categoryName: "AI Research",
-        categorySlug: "ai-research",
-        recentPosts: [],
-        sourceBody:
-          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-        sourceKind: "thread",
-        sourcePostNumber: 1,
-        threadBody:
-          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-        threadTitle: "Interpreting reply activity",
-      },
-      "Nia",
-    );
-    expect(prompt).toContain(
-      "it does not need to be a technical specification",
-    );
-    expect(prompt).toContain("Default to a reply");
-    expect(prompt).not.toContain("Build the reply in three moves");
-    expect(prompt).toContain("deterministic editorial lens");
+  test("supports useful AI opening responses without defaulting to critique or a fixed length", () => {
+    const prompt = sukiReplyPrompt({
+      authorName: "Research Agent", authorIsAgent: true,
+      categoryName: "AI Research", categorySlug: "ai-research", recentPosts: [],
+      sourceBody: "The evaluation policy may confuse quality filtering with an inactive scheduler.",
+      sourceKind: "thread", sourcePostNumber: 1,
+      threadBody: "The evaluation policy may confuse quality filtering with an inactive scheduler.",
+      threadTitle: "Interpreting reply activity",
+    }, "Nia");
+    expect(prompt).toContain("It does not need to be a technical specification");
+    expect(prompt).toContain("Do not default to critique");
     expect(prompt).toContain("never an AI-to-AI reply chain");
-    expect(
-      sukiReplyPrompt(
-        {
-          authorName: "Research Agent",
-          authorIsAgent: true,
-          categoryName: "AI Research",
-          categorySlug: "ai-research",
-          recentPosts: [],
-          sourceBody:
-            "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-          sourceKind: "thread",
-          sourcePostNumber: 1,
-          threadBody:
-            "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-          threadTitle: "Interpreting reply activity",
-        },
-        "Nia",
-      ),
-    ).toBe(prompt);
-    const alternative = sukiReplyPrompt(
-      {
-        authorName: "Research Agent",
-        authorIsAgent: true,
-        categoryName: "AI Research",
-        categorySlug: "ai-research",
-        recentPosts: [],
-        sourceBody:
-          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-        sourceKind: "thread",
-        sourcePostNumber: 2,
-        threadBody:
-          "The evaluation policy may confuse strict quality filtering with an inactive scheduler.",
-        threadTitle: "Interpreting reply activity",
-      },
-      "Nia",
-    );
-    expect(alternative.match(/editorial lens: (.+?)\. Cadence/)?.[1]).not.toBe(
-      prompt.match(/editorial lens: (.+?)\. Cadence/)?.[1],
-    );
+    expect(prompt).not.toContain("deterministic editorial lens");
+    expect(prompt).toContain("Never infer that a method lacks a test");
+  });
+
+  test("roster reply instructions agree with generateObject and allow concise member help", () => {
+    const instructions = replyInstructions("nia-calder");
+    expect(instructions).toContain("structured JSON decision");
+    expect(instructions).not.toContain("<decision>");
+    expect(instructions).toContain("No minimum word count");
+    expect(instructions).toContain("Never claim personal testing");
+    expect(validateSukiReplyDecision({ decision: "reply", reason: "answer",
+      contribution: "answer", evidenceSourceUrls: [], evidenceExcerpt: "",
+      body: "Compare the request IDs before changing the retry configuration.",
+    }).decision).toBe("reply");
+    expect(() => validateSukiReplyDecision({ decision: "reply", reason: "answer",
+      contribution: "answer", evidenceSourceUrls: [], evidenceExcerpt: "",
+      body: "I tested this in my lab and the retry configuration solved it.",
+    })).toThrow(/experience/);
+  });
+
+  test("abstains from corrections without an original supporting excerpt and visible citation", () => {
+    const excerpt = "Difficulty is evaluated by solving tasks with both the target model and teacher model.";
+    const url = "https://huggingface.co/blog/ServiceNow-AI/autosynthdata";
+    const decision = validateSukiReplyDecision({ decision: "reply", reason: "source-correction",
+      contribution: "correction", evidenceSourceUrls: [url], evidenceExcerpt: excerpt,
+      body: `The original source evaluates difficulty using the target model as well as the teacher. [url=${url}]Original method[/url]`,
+    });
+    if (decision.decision !== "reply") throw new Error("Expected reply fixture");
+    const evidence = [{ url, title: "AutoSynthData", text: excerpt }];
+    expect(validateForumReplyEvidence(decision, [])).toMatchObject({ decision: "ignore", reason: "unretrieved-evidence" });
+    expect(validateForumReplyEvidence(decision, evidence)).toEqual(decision);
+    expect(validateForumReplyEvidence({ ...decision, decision: "reply", evidenceExcerpt: "They only test the teacher model." }, evidence))
+      .toMatchObject({ decision: "ignore", reason: "correction-needs-original-evidence" });
+    expect(validateForumReplyEvidence({ ...decision, decision: "reply", body: "The source evaluates difficulty using the target model and teacher model." }, evidence))
+      .toMatchObject({ decision: "ignore", reason: "correction-needs-visible-citation" });
+    expect(validateForumReplyEvidence(validateSukiReplyDecision({ decision: "reply", reason: "assumed-absence",
+      contribution: "clarification", evidenceSourceUrls: [], evidenceExcerpt: "",
+      body: "The method does not evaluate target model difficulty; it only tests the teacher.",
+    }), [])).toMatchObject({ decision: "ignore", reason: "absence-claim-needs-original-evidence" });
+  });
+
+  test("teacher stability cannot establish target-model testing or teacher-only evaluation", () => {
+    expect(correctionEvaluationTargetMismatch(
+      "Difficulty is tested only with the teacher model rather than the target model.",
+      "Difficulty is evaluated by solving tasks with both the target model and teacher model.",
+    )).toBe(true);
+    expect(correctionEvaluationTargetMismatch(
+      "The method evaluates the target model directly.",
+      "Teacher model stability is checked before generating training examples.",
+    )).toBe(true);
+    expect(correctionEvaluationTargetMismatch(
+      "The method evaluates both the target model and teacher model.",
+      "Difficulty is evaluated by solving tasks with both the target model and teacher model.",
+    )).toBe(false);
+  });
+
+  test("source fetch is bounded, allowlisted, deadline-controlled, and does not accept fallback metadata", async () => {
+    const fetchSnapshot = vi.fn<typeof import("./sukiForumAgent").fetchArticleSnapshot>()
+      .mockImplementation(async (candidate) => ({ ...candidate,
+        articleTitle: "Fetched original source", articleDescription: "", imageCredit: "Publisher",
+        articleText: "Actual method details and limitations are stated in this original linked publisher source.".repeat(2),
+        sourceFetchSucceeded: candidate.url.includes("github.blog"),
+      }));
+    const result = await fetchForumReplyEvidence({
+      sourceBody: "https://127.0.0.1/private https://evil.example/attack https://huggingface.co/blog/report",
+      threadBody: "https://github.blog/changelog/verified-report https://vercel.com/changelog/other",
+    }, fetchSnapshot);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.url).toContain("github.blog");
+    const options = fetchSnapshot.mock.calls[0][1]!;
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+    expect(options.allowUrl?.("https://evil.example/redirect")).toBe(false);
+    expect(options.allowUrl?.("https://github.blog/changelog/verified-report")).toBe(true);
+  });
+
+  test.each(["https://127.0.0.1/private", "https://evil.example/redirect", "https://huggingface.co/spaces/untrusted/proxy"])("does not follow a retrieved-source redirect to %s", async destination => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", {
+      status: 302, headers: { location: destination },
+    }));
+    try {
+      const evidence = await fetchForumReplyEvidence({ sourceBody: "https://huggingface.co/blog/source", threadBody: "" });
+      expect(evidence).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+      expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+    } finally { fetchMock.mockRestore(); }
+  });
+
+  test("blind original-evidence review rejects negation despite exact matching tokens", () => {
+    const url = "https://huggingface.co/blog/ServiceNow-AI/autosynthdata";
+    const excerpt = "The method evaluates teacher model performance and target model performance.";
+    const decision = validateSukiReplyDecision({ decision: "reply", contribution: "correction",
+      reason: "author-says-this-is-certain", evidenceSourceUrls: [url], evidenceExcerpt: excerpt,
+      body: `The method does not evaluate target model performance; it evaluates teacher model performance. [url=${url}]Original method[/url]`,
+    });
+    if (decision.decision !== "reply") throw new Error("Expected reply fixture");
+    const evidence = [{ url, title: "Method", text: excerpt }];
+    // Deterministic relevance checks cannot establish entailment. Publication
+    // additionally requires the independent reviewer, whose rejection is final.
+    expect(validateForumReplyEvidence(decision, evidence)).toEqual(decision);
+    const prompt = JSON.parse(replyEvidenceReviewPrompt({ authorName: "Member", authorIsAgent: false,
+      categoryName: "Research", categorySlug: "research", recentPosts: [{ authorName: "Member", postNumber: 2, body: "Which model was evaluated?" }],
+      sourceBody: "Does this evaluate the target model?", sourceKind: "reply", sourcePostNumber: 2,
+      threadBody: "Teacher stability is discussed here.", threadTitle: "Evaluation scope",
+    }, decision, evidence));
+    expect(prompt.task).toContain("negation");
+    expect(prompt.evidenceBoundary).toContain("not primary evidence");
+    expect(prompt.sourcePost.body).toBe("Does this evaluate the target model?");
+    expect(prompt.originalSourceEvidence).toEqual(evidence);
+    expect(JSON.stringify(prompt)).not.toContain(decision.reason);
+    expect(applyForumReplyEvidenceReview(decision, { approved: false, issues: ["The source states both models were evaluated; the reply negates target-model evaluation."] }))
+      .toEqual({ decision: "ignore", reason: "original-evidence-review-rejected" });
+    expect(applyForumReplyEvidenceReview(decision, { approved: true, issues: ["Unsupported correction"] }).decision).toBe("ignore");
+    expect(() => applyForumReplyEvidenceReview(decision, undefined)).toThrow();
+    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 3_000 });
+  });
+
+  test("rechecks final BBCode completeness before accepting a reviewer approval", () => {
+    const reply = { decision: "reply", reason: "answer", contribution: "answer", evidenceSourceUrls: [], evidenceExcerpt: "" };
+    for (const body of ["A useful check follows. [note][/note]", "[b]Check the retry identity before restarting.", "[h2]Next step[/h2]\n[h2]Verification[/h2]", "Try these steps:\n1. Capture the request ID.\n2."]) {
+      expect(() => applyForumReplyEvidenceReview({ ...reply, decision: "reply", contribution: "answer", body }, { approved: true, issues: [] })).toThrow(/markup|incomplete/i);
+    }
+    const valid = validateSukiReplyDecision({ ...reply, body: "Compare the request IDs before changing the retry configuration." });
+    expect(applyForumReplyEvidenceReview(valid, { approved: true, issues: [] })).toEqual(valid);
   });
 
   test("prefilters spam and reactions while admitting substantive questions", () => {

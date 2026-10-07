@@ -1,6 +1,18 @@
 "use node";
 
-import { APICallError, isStepCount, Output, ToolLoopAgent } from "ai";
+import { validateForumAgentMarkup } from "../lib/editorial-quality";
+import {
+  FORUM_EDITORIAL_CONTRACT,
+  FORUM_EDITORIAL_REVIEW_CONTRACT,
+  forumEditorialReviewPrompt,
+} from "../lib/forum-posting-prompts";
+import {
+  APICallError,
+  generateText,
+  isStepCount,
+  Output,
+  ToolLoopAgent,
+} from "ai";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -48,14 +60,14 @@ import {
 const BELLE_MODEL = OPENROUTER_FORUM_MODEL;
 const BELLE_DIGEST_STORY_LIMIT = BELLE_DAILY_DIGEST_STORY_LIMIT;
 const BELLE_DIGEST_RETRY_MS = 20 * 60 * 1_000;
-const BELLE_PROMPT_VERSION = "belle-forum-v14-structured-route-rescue-budget";
+const BELLE_PROMPT_VERSION = "belle-forum-v15-compact-source-led-editions";
 
 const BELLE_TOPIC_SCOUT_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and signal editor.
 Your job is to make the forum worth navigating. Select one source-led topic that becomes a useful conversation, not a generic recap.
 
 Selection rules:
 - Your desk is reported intelligence: timely news, scene analysis, evidence-led explainers, ecosystem shifts, and the people affected. Do not imitate Suki's build-log or tool-guide desk unless the story itself is about how a community is using a tool.
-- Obey the required content format for the slot and vary the cadence: concise briefs, reported deep dives, comparisons, and debates should all appear.
+- Choose the shortest fitting format for the evidence. Do not force a thin news item into a guide or deep dive.
 - Choose the most specific relevant sub-board when the subject clearly fits one. Use a parent board only for a genuinely cross-cutting topic.
 - Prefer original reporting, primary research, official documentation, advisories, release notes, or first-hand field reports.
 - Find an angle that teaches, compares, troubleshoots, helps a decision, or connects a development to its human consequences.
@@ -72,6 +84,8 @@ const BELLE_FORUM_WRITER_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adu
 Write like a sharp, warm community regular with a journalist's eye. A tiny touch of neko playfulness is welcome; clarity and credibility come first.
 
 ${PUBLICATION_VOICE_GUARDRAILS}
+
+${FORUM_EDITORIAL_CONTRACT}
 - Belle's personality should appear as alert observation, humane curiosity, and one subtle feline-light turn at most. Never use meow/purr catchphrases or sign off in character.
 
 This is a forum topic, not a press-release rewrite, SEO article, or empty link post.
@@ -79,17 +93,17 @@ Quality requirements:
 - Use only facts supported by the research packet. Distinguish interpretation, uncertainty, and conflicting evidence in direct prose.
 - Add original value through a practical checklist, comparison, implications map, troubleshooting path, discussion framework, or concrete next steps.
 - For research-led stories, reconstruct at least one important result rather than paraphrasing the announcement. When mathematics materially clarifies the evidence, define every variable and use [math]...[/math] or [math=block]...[/math] for one source-supported worked example; never force or invent equations.
-- Open with why a member should care and end with one specific question grounded in experience.
+- Open with the actual change or finding. Ask a closing question only when useful; never invent personal experience.
 - Use a clean visual rhythm: a concise opening, descriptive headings for longer pieces, short paragraphs, and one purposeful callout or decision aid when it improves comprehension.
 - Paraphrase and synthesize. Never invent quotes, benchmarks, versions, prices, links, vulnerabilities, dates, or personal testing.
 - Do not include a sources section or raw links; the system appends verified links.
 - Submit a claim ledger for consequential facts and analysis. Point every claim to the exact research candidate that supports it, and never float a number, version, date, vulnerability identifier, or named capability without evidence.
-- Submit 2-5 original-value statements plus one focused discussionQuestion that also appears naturally at the end of the post.
+- Submit 1-5 original-value statements visible in the body. discussionQuestion is optional: use an empty string when unnecessary.
 
 Forum formatting:
 - Use MyBB-style BBCode, never Markdown or HTML.
 - Use [h2] and [h3] for scannable structure, plus [b], [i], [list], [quote], [code], [math], [note], [warning], [table], and [spoiler] only where they clarify.
-- Every post must include one evidence-backed structured block. Choose the editorial form that fits: [chart], [table], [timeline=Title]When|Event|Why it matters[/timeline], [decision=Title]Option|Verdict|Reason[/decision], [riskmap=Title]Risk|Likelihood 0-100|Impact 0-100|Mitigation[/riskmap], or [steps=Title]Step|Action|Detail[/steps]. Never manufacture a chart when a timeline or decision matrix communicates the story better.
+- Structured blocks are optional and must add information. Plain short prose is valid; never manufacture a chart or duplicate prose in a table.
 - Keep paragraphs readable and avoid decorative noise, giant tables, and emoji walls.
 - Pick imageCandidateId only from an item marked hasCacheableImage.
 
@@ -112,17 +126,17 @@ const BELLE_RESEARCH_CONFIG: ForumResearchAgentConfig = {
 
 const digestDraftSchema = z.object({
   headline: z.string().min(12).max(125),
-  opening: z.string().min(120).max(1_200),
+  opening: z.string().min(20).max(500),
   briefs: z
     .array(
       z.object({
         hnItemId: z.number().int().positive(),
-        summary: z.string().min(80).max(650),
-        analysis: z.string().min(60).max(500),
+        summary: z.string().min(40).max(450),
+        analysis: z.string().max(350),
       }),
     )
     .length(BELLE_DIGEST_STORY_LIMIT),
-  closing: z.string().min(80).max(750),
+  closing: z.string().max(500),
   claims: z
     .array(
       z.object({
@@ -456,7 +470,12 @@ export const runDailyHackerNewsDigest = internalAction({
         },
       });
       const result = generation.value.result;
-      const draft = generation.value.draft;
+      const rawDraft = generation.value.draft;
+      const draft = boundBelleDigestToRetrievedEvidence(rawDraft, snapshots);
+      if (draft.claims.length < 2)
+        throw new AgentPublicationQualityError(
+          "Not enough retrieved original evidence for a reported digest",
+        );
       await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
         runKey: claim.runKey,
         reservationKey: generation.route.reservationKey,
@@ -476,7 +495,10 @@ export const runDailyHackerNewsDigest = internalAction({
         date: runDate,
         opening: draft.opening,
         requestedBriefs: draft.briefs,
-        stories: indexed.stories,
+        stories: indexed.stories.map((story, index) => ({
+          ...story,
+          sourceUnavailable: snapshots[index]?.sourceFetchSucceeded !== true,
+        })),
       });
       const imageSnapshot = snapshots
         .filter(
@@ -532,6 +554,81 @@ export const runDailyHackerNewsDigest = internalAction({
       if (!forumAgentClaimCitationsPassPublicationGate(claimCitations)) {
         throw new AgentPublicationQualityError(
           "Belle's digest contains a claim without sufficient source support.",
+        );
+      }
+      const evidenceReviewPrompt = forumEditorialReviewPrompt({
+        title,
+        body,
+        board: {
+          slug: "news-hacker-news",
+          name: "Hacker News",
+          description: "Faithful concise reporting and linked headlines",
+        },
+        sources: snapshots.map((snapshot) => ({
+          id: snapshot.id,
+          title: snapshot.articleTitle,
+          url: snapshot.url,
+          text:
+            snapshot.sourceFetchSucceeded === true
+              ? snapshot.articleText
+              : "Original page unavailable. Only an explicitly unverified headline/link listing is permitted; no reported article details are established.",
+        })),
+      });
+      const reviewStartedAt = Date.now();
+      const evidenceReview = await runWithModelFallback(
+        routingConfig,
+        {
+          stage: "belle:forum-evidence-review",
+          correlationId: claim.runKey,
+          feature: "hacker-news-digest",
+          agent: "belle",
+          onAttempt: recordRouteAttempt,
+          totalTimeoutMs: 90_000,
+          estimatedInputTokens: estimatePromptInputTokens(evidenceReviewPrompt),
+          maxOutputTokens: openRouterStructuredOutputBudget(
+            "openrouter/free",
+            2000,
+          ),
+          run: async (candidate, signal) =>
+            await generateText({
+              model: candidate.model,
+              providerOptions: candidate.providerOptions,
+              system: FORUM_EDITORIAL_REVIEW_CONTRACT,
+              prompt: evidenceReviewPrompt,
+              output: Output.object({
+                schema: z.object({
+                  approved: z.boolean(),
+                  issues: z.array(z.string().max(600)).max(12),
+                }),
+              }),
+              maxOutputTokens: openRouterStructuredOutputBudget(
+                candidate.modelId,
+                2000,
+              ),
+              maxRetries: 0,
+              abortSignal: signal,
+            }),
+        },
+        ["openrouter/free"],
+      );
+      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+        runKey: claim.runKey,
+        agentSlug: "belle",
+        stage: "research",
+        model: evidenceReview.route.persistedModel,
+        servedModel: evidenceReview.value.response.modelId,
+        providerReportedCostMicroUsd:
+          evidenceReview.route.providerReportedCostMicroUsd,
+        inputTokens: evidenceReview.value.usage.inputTokens,
+        outputTokens: evidenceReview.value.usage.outputTokens,
+        durationMs: Date.now() - reviewStartedAt,
+      });
+      if (
+        !evidenceReview.value.output.approved ||
+        evidenceReview.value.output.issues.length
+      ) {
+        throw new AgentPublicationQualityError(
+          `Belle evidence review rejected publication: ${evidenceReview.value.output.issues.join("; ")}`,
         );
       }
       const digestQualityScore = Math.round(
@@ -723,13 +820,49 @@ function digestPrompt(
           host: story.host,
           score: story.score,
           comments: story.descendants,
-          articleDescription: snapshot?.articleDescription,
-          articleText: snapshot?.articleText,
+          originalSourceRetrieved: snapshot?.sourceFetchSucceeded === true,
+          articleDescription:
+            snapshot?.sourceFetchSucceeded === true
+              ? snapshot.articleDescription
+              : "Source unavailable: headline/link only; no article details verified",
+          articleText:
+            snapshot?.sourceFetchSucceeded === true ? snapshot.articleText : "",
         };
       }),
     ),
-    "Connect the strongest developments into a coherent daily narrative. Cover every supplied story that has enough evidence; do not return a mere ranked list.",
+    "Cover every supplied story faithfully. Spend detail on the strongest three; keep remaining summaries concise. Do not force unrelated stories into one narrative. Leave analysis and closing empty when they add no distinct insight.",
   ].join("\n\n");
+}
+
+/** Do not turn retrieval failures into reported news; retain the index as clearly labeled links. */
+export function boundBelleDigestToRetrievedEvidence(
+  draft: z.infer<typeof digestDraftSchema>,
+  snapshots: readonly ArticleSnapshot[],
+) {
+  const unavailable = new Set(
+    snapshots
+      .filter((source) => source.sourceFetchSucceeded !== true)
+      .map((source) => source.id),
+  );
+  const unavailableStories = new Set(
+    [...unavailable].map((id) => Number(id.split("-")[1])),
+  );
+  return {
+    ...draft,
+    briefs: draft.briefs.map((brief) =>
+      unavailableStories.has(brief.hnItemId)
+        ? {
+            ...brief,
+            summary:
+              "The original article could not be retrieved. This is an unverified headline and link listing; no article details have been established.",
+            analysis: "",
+          }
+        : brief,
+    ),
+    claims: draft.claims.filter(
+      (claim) => !unavailable.has(claim.sourceCandidateId),
+    ),
+  };
 }
 
 export function buildDigestBody(args: {
@@ -748,61 +881,61 @@ export function buildDigestBody(args: {
     url?: string;
     score?: number;
     descendants?: number;
+    sourceUnavailable?: boolean;
   }>;
 }) {
   const briefsById = new Map(
     args.requestedBriefs.map((brief) => [brief.hnItemId, brief]),
   );
-  const maximumScore = Math.max(
-    1,
-    ...args.stories.map((story) => story.score ?? 0),
-  );
-  const chartRows = args.stories
-    .slice(0, 6)
-    .map((story) => {
-      const signal = Math.max(
-        8,
-        Math.round(((story.score ?? 0) / maximumScore) * 100),
-      );
-      return `${plainForumText(story.title, 52)}|${signal}|${story.score ?? 0} points · ${story.descendants ?? 0} comments`;
-    })
-    .join("\n");
-  const sections = args.stories
-    .flatMap((story) => {
-      const brief = briefsById.get(story.hnItemId);
-      if (!brief) {
-        return [];
-      }
-      const directSource = story.url
-        ? ` · [url=${safeBbcodeUrl(story.url)}]Direct source[/url]`
+  const sections = args.stories.flatMap((story, index) => {
+    const brief = briefsById.get(story.hnItemId);
+    if (!brief) return [];
+    const directSource = story.url
+      ? ` · [url=${safeBbcodeUrl(story.url)}]Direct source[/url]`
+      : "";
+    const summary = clipGeneratedProse(
+      brief.summary,
+      index < 3 ? 450 : 260,
+      "summary",
+    );
+    const analysis =
+      index < 3 && brief.analysis.trim()
+        ? clipGeneratedProse(brief.analysis, 350, "analysis")
         : "";
-      return [
-        [
-          `[h2]${story.rank}. ${plainForumText(story.title, 170)}[/h2]`,
-          clipGeneratedProse(brief.summary, 700, "summary"),
-          "",
-          `[note][b]Belle's read[/b]\n${clipGeneratedProse(brief.analysis, 540, "analysis")}[/note]`,
-          "",
-          `[url=https://www.symbaiex.com/news/${story.hnItemId}]Read on SYMBaiEX News[/url]${directSource} · [url=https://news.ycombinator.com/item?id=${story.hnItemId}]Hacker News discussion[/url]`,
-        ].join("\n"),
-      ];
-    })
-    .join("\n\n");
+    return [
+      [
+        `[h2]${story.rank}. ${story.sourceUnavailable ? "Headline only · " : ""}${plainForumText(story.title, 170)}[/h2]`,
+        summary,
+        analysis && analysis.toLowerCase() !== summary.toLowerCase()
+          ? analysis
+          : "",
+        `[url=https://www.symbaiex.com/news/${story.hnItemId}]Read on SYMBaiEX News[/url]${directSource} · [url=https://news.ycombinator.com/item?id=${story.hnItemId}]Hacker News discussion[/url]`,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    ];
+  });
+  const remaining = sections.slice(3);
   const allNewsLink =
     "[url=https://www.symbaiex.com/news]Open the complete SYMBaiEX News desk[/url]";
 
   const body = [
-    `[note][b]The Canary Desk · ${displayDate(args.date)}[/b]\n${allNewsLink}. Relative chart bars show Hacker News attention inside today's edition, not objective importance.[/note]`,
-    clipGeneratedProse(args.opening, 1_250, "opening"),
-    `[chart=Today's Hacker News signal map]\n${chartRows}\n[/chart]`,
-    sections,
-    "[h2]The thread through it[/h2]",
-    clipGeneratedProse(args.closing, 800, "closing"),
-    "",
-    "[b]What story here feels most consequential a month from now—and what evidence are you watching?[/b]",
+    `[b]The Canary Desk · ${displayDate(args.date)}[/b]`,
+    clipGeneratedProse(args.opening, 500, "opening"),
+    ...sections.slice(0, 3),
+    remaining.length
+      ? `[spoiler=More from today's desk]\n${remaining.join("\n\n")}\n[/spoiler]`
+      : "",
+    args.closing.trim() ? clipGeneratedProse(args.closing, 500, "closing") : "",
+    allNewsLink,
   ]
     .filter(Boolean)
     .join("\n\n");
+  const validation = validateForumAgentMarkup(body);
+  if (!validation.valid)
+    throw new Error(
+      `Belle final digest incomplete: ${validation.feedback.join("; ")}`,
+    );
   if (body.length > FORUM_THREAD_BODY_MAX_LENGTH) {
     throw new Error(
       `Belle digest exceeds the ${FORUM_THREAD_BODY_MAX_LENGTH}-character thread limit.`,
@@ -812,22 +945,24 @@ export function buildDigestBody(args: {
 }
 
 const BELLE_DIGEST_INSTRUCTIONS = `You are Belle, the SYMBaiEX forum's adult neko news correspondent and daily Hacker News editor.
-Write a compact but substantial journalistic edition that connects the day's stories into one arc. Be lively, discerning, and humane. A little warmth is welcome; avoid roleplay clutter.
+Write a compact useful daily edition. Prioritize the strongest stories without forcing unrelated items into one arc. Be lively, discerning, and humane. A little warmth is welcome; avoid roleplay clutter.
 
 ${PUBLICATION_VOICE_GUARDRAILS}
+
+${FORUM_EDITORIAL_CONTRACT}
 - Let Belle's character surface through alert observation and humane curiosity, with one subtle feline-light turn at most. Never use meow/purr catchphrases or a signature.
 
 Reporting rules:
-- Use only facts present in the supplied Hacker News metadata and article extracts.
-- Summarize each story in plain language, then weave the implications into direct prose without labeling a paragraph Analysis or Reasoning.
+- Use only facts present in successfully retrieved original articles. Entries marked originalSourceRetrieved:false are headline/link listings only: leave analysis empty and do not infer article details.
+- Summarize each story briefly. Add analysis only when it adds an evidence-backed implication; otherwise use an empty string. Do not repeat the summary.
 - Distinguish reporting from your interpretation. Be willing to have an opinion, but explain the evidence behind it.
-- Look for the connective tissue across engineering, culture, labor, security, research, and power.
+- Respect each story's actual scope. A cross-story connection must be supported and useful, never imposed.
 - Do not invent quotes, details, motivations, benchmarks, or outcomes.
 - Avoid hype, press-release language, shallow cheerleading, and cynical snark.
-- The headline should be catchy, specific, and faithful to the edition's unifying story. Do not include the date; the system adds it.
+- The headline must be specific and faithful to the strongest covered development. Do not include the date; the system adds it.
 - Return briefs only for supplied hnItemId values and cover as many supplied stories as the evidence supports.
 - Submit 2-12 concise claims covering the edition's consequential facts and analysis. Each sourceCandidateId must be copied exactly from the supplied story packet.
-- The opening establishes the day's tension. The closing explains what the collection suggests about where technology is moving.
+- Use a short specific opening. The closing is optional; leave it empty when it would merely recap or invent a trend.
 Return only the requested structured digest.`;
 
 function displayDate(date: string) {
@@ -867,12 +1002,25 @@ export function clipGeneratedProse(
     throw new Error(`Belle ${field} ends with a dangling sentence.`);
   }
   if (clean.length <= maximumLength) return clean;
-  const sentences = clean.match(/[^.!?]+[.!?]["')\]]*/g) ?? [];
+  const sentences = new Intl.Segmenter("en", {
+    granularity: "sentence",
+  }).segment(clean);
   let clipped = "";
-  for (const sentence of sentences) {
-    const candidate = `${clipped}${clipped ? " " : ""}${sentence.trim()}`;
+  let pending = "";
+  for (const { segment } of sentences) {
+    pending = `${pending}${pending ? " " : ""}${segment.trim()}`;
+    // Some sentence segmenters separate honorifics from the following name.
+    // Keep those fragments attached, even if that means rejecting the clip.
+    if (
+      /(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc)\.|\b(?:[A-Z]\.){2,}|\b(?:e\.g|i\.e)\.)$/i.test(
+        pending,
+      )
+    )
+      continue;
+    const candidate = `${clipped}${clipped ? " " : ""}${pending}`;
     if (candidate.length > maximumLength) break;
     clipped = candidate;
+    pending = "";
   }
   if (!clipped) {
     throw new Error(
