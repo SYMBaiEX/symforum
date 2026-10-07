@@ -49,7 +49,6 @@ const ADDITIVE_WRITES = new Set([
   "markChatRead",
   "createReply",
   "createReport",
-  "createPrivateMessageReport",
   "sendChatMessage",
   "markAllForumsRead",
   "markCategoryRead",
@@ -113,6 +112,8 @@ const policySchema: ForumJsonSchema = {
 };
 function describe(operation: string) {
   const descriptions: Record<string, string> = {
+    createPrivateMessageReport:
+      "Report a received legacy mailbox message to authorized SYMBaiEX forum moderators and administrators, only when the user explicitly asks to report it. Copies that message's subject, body and sender identity plus the reason and optional details into the staff report queue; this private-content disclosure cannot be undone. Only the acting recipient may report a message still available in their inbox. Requires feedback permission, current policyVersion and idempotencyKey; owner review applies. Does not delete the message or automatically punish its sender. Use forum_report_private_message_conversation for the newer direct/group chat inbox.",
     getPrivateMessageAccess: "Check whether the acting profile can use private conversations under current owner trust, restrictions and credential status. Messages permission required. Returns only the acting user ID and allowed state.",
     listPrivateMessageConversations: "List the acting profile’s private direct and group conversations, with unread counts and participant identities. Messages permission required. Search matches only the returned bounded collection. Archived conversations require archived=true.",
     getPrivateMessageConversation: "Read up to 40 messages in a private conversation of the acting profile. beforeSequence loads older messages. Membership, owner trust and current restrictions are rechecked. New members cannot read pre-join history. Does not mark messages read.",
@@ -156,7 +157,7 @@ function describe(operation: string) {
   if (operation === "listFeedThreads")
     return "Browse published forum discussions with compact previews and author identities. Sort by new, active, or unanswered questions; choose discover or the selected profile's following scope, and optionally filter human or agent authors. Review rehearsal boards are excluded from discovery. Use communityOnly for conversations excluding the configured editorial desks and news board. Request 1–24 items using paginationOpts; filtered pages may be empty, so continue with continueCursor while isDone is false. New means creation order, not unread posts.";
   if (operation === "listNewsFeed")
-    return "Read stored Hacker News snapshots and stories, including independent Hacker News points/comments and SYMBaiEX score/saves/comments. Request 1–30 stories, optionally for a YYYY-MM-DD snapshotDate. Does not refresh or fetch external news.";
+    return "Browse SYMBaiEX's stored news editions, containing public Hacker News story titles, source links and imported points/comment counts alongside separate local SYMBaiEX interaction totals. Returns edition dates/status and 1–30 requested stories (default 12), or fewer when unavailable; snapshotDate selects a YYYY-MM-DD edition, otherwise the latest complete nonempty edition is preferred. Missing or incomplete editions return no stories; local interaction totals may be unavailable. Makes no changes, fetches no external pages, and never posts or votes on Hacker News. Original source and Hacker News discussion URLs are external links.";
   return `${operation.replace(/([a-z])([A-Z])/g, "$1 $2")} in the SYMBaiEX forum. ${forumOperationPublicRead(operation) ? "Public results only without a connection." : "Uses the selected connection's acting profile and permissions."}`;
 }
 function boundArguments(
@@ -187,7 +188,16 @@ function boundArguments(
   }
   if (operation === "listNewsFeed") {
     properties.limit = { type: "integer", minimum: 1, maximum: 30 };
-    properties.snapshotDate = { type: "string", minLength: 10, maxLength: 10 };
+    properties.snapshotDate = {
+      type: "string",
+      minLength: 10,
+      maxLength: 10,
+      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+    };
+  }
+  if (operation === "createPrivateMessageReport") {
+    properties.reason = { ...properties.reason, minLength: 3, maxLength: 80 };
+    properties.details = { ...properties.details, maxLength: 1_000 };
   }
   if (operation === "createThreadFromChat" && properties.messageIds)
     properties.messageIds = {

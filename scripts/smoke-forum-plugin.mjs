@@ -300,6 +300,55 @@ await check("complete typed forum tool catalog", async () => {
   );
   return { toolCount: tools.length };
 });
+await check("private report disclosure and write safeguards", async () => {
+  const tool = requireTool("forum_create_private_message_report");
+  assert(
+    tool.annotations.readOnlyHint === false &&
+      tool.annotations.destructiveHint === true &&
+      tool.annotations.openWorldHint === false &&
+      tool.annotations.idempotentHint === true,
+    "Private report must declare an irreversible disclosure within the bounded staff workspace.",
+  );
+  assert(
+    tool.description.includes("subject, body and sender identity") &&
+      tool.description.includes("cannot be undone"),
+    "Private report disclosure is not explicit.",
+  );
+  assert(
+    !tool.securitySchemes.some((scheme) => scheme.type === "noauth"),
+    "Private reports must require OAuth.",
+  );
+  const fields = tool.inputSchema.properties;
+  assert(
+    fields.reason.minLength === 3 &&
+      fields.reason.maxLength === 80 &&
+      fields.details.maxLength === 1_000,
+    "Legacy report bounds differ from the backend.",
+  );
+});
+await check("stored news read-only contract and date validation", async () => {
+  const tool = requireTool("forum_list_news_feed");
+  assert(
+    tool.annotations.readOnlyHint === true &&
+      tool.annotations.destructiveHint === false &&
+      tool.annotations.openWorldHint === true,
+    "Public stored news annotations are incorrect.",
+  );
+  assert(
+    tool.inputSchema.properties.snapshotDate.pattern ===
+      "^\\d{4}-\\d{2}-\\d{2}$",
+    "Stored news date format is not advertised.",
+  );
+  const { payload } = await rpc(
+    "tools/call",
+    { name: tool.name, arguments: { snapshotDate: "2026/10/02" } },
+    400,
+  );
+  assert(
+    payload.error?.message?.includes("invalid format"),
+    "Malformed news dates must fail before backend dispatch.",
+  );
+});
 await check("native in-ChatGPT forum resource", async () => {
   const { payload: listed } = await rpc("resources/list");
   const descriptor = listed.result?.resources?.find(

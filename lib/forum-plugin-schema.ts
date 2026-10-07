@@ -9,6 +9,7 @@ export type ForumJsonSchema = {
   items?: ForumJsonSchema;
   minLength?: number;
   maxLength?: number;
+  pattern?: string;
   minimum?: number;
   maximum?: number;
   minItems?: number;
@@ -158,6 +159,12 @@ export function validateForumJsonSchema(
       (schema.maxLength !== undefined && value.length > schema.maxLength))
   )
     return `${path} has an invalid length.`;
+  if (
+    typeof value === "string" &&
+    schema.pattern !== undefined &&
+    !new RegExp(schema.pattern).test(value)
+  )
+    return `${path} has an invalid format.`;
   if (
     typeof value === "number" &&
     (!Number.isFinite(value) ||
