@@ -30,6 +30,7 @@ import {
 import { fetchArticleSnapshot } from "./sukiForumAgent";
 import { lexicalEvidenceCoverage, validateForumAgentMarkup } from "../lib/editorial-quality";
 import { FORUM_EDITORIAL_CONTRACT, FORUM_EDITORIAL_REVIEW_CONTRACT } from "../lib/forum-posting-prompts";
+import { assessForumReadability } from "../lib/forum-content-quality";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = FORUM_AGENT_REPLY_PROMPT_VERSION;
@@ -380,6 +381,8 @@ export function validateSukiReplyDecision(value: unknown): SukiReplyDecision {
   assertAgentPublicationHygiene(body);
   const markup = validateForumAgentMarkup(body);
   if (!markup.valid) throw new Error(`Reply markup is incomplete: ${markup.feedback.join("; ")}`);
+  const readability = assessForumReadability(body);
+  if (!readability.valid) throw new AgentPublicationQualityError(`Reply prose is too dense: ${readability.feedback.join("; ")}`);
   if (/\b(?:i (?:tested|tried|observed|measured|ran)|in my experience|we found|my (?:lab|team|experiment))\b/i.test(body)) {
     throw new Error("Reply simulated unsupported personal experience");
   }

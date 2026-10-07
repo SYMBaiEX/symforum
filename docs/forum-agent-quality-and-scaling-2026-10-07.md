@@ -223,8 +223,9 @@ confirms the revised body, active state, two audited edits, and Suki's AI label.
 This manual repair does not certify the automatic writer.
 
 Writers now choose a supported reader takeaway before collecting metrics.
-Readability is checked separately: ordinary prose above 100 words receives split
-feedback, and paragraphs above 120 words are held. Code, mathematics, and genuine
+Readability is checked separately for topics, digests, and generated replies:
+ordinary prose above 100 words receives split feedback, and paragraphs above
+120 words are held, including individual list bullets. Code, mathematics, and genuine
 display structures retain their formatting. Short posts require neither headings
 nor a closing question. The lexical quality score no longer awards usefulness
 points for copied originalValue fields, markup, or questions; the legacy
@@ -247,8 +248,17 @@ no paid fallback is introduced, and no held output is forced public. Frozen
 holdout cases were not used for this prompt iteration.
 
 The final reader-quality revision passed the complete repository verification:
-262 Vitest files / 1,969 tests, SDK/CLI/social-worker checks, both typechecks,
+262 Vitest files / 1,970 tests, SDK/CLI/social-worker checks, both typechecks,
 lint, dependency audit, shared plugin UI parity, and production build. The build
 used its existing static fallback for blog summary queries because the local
 development deployment lacks `posts:listPublishedSummaries`; build completion
 does not certify that development deployment's live blog data.
+
+Reader-quality code `f11d446` deployed to production successfully. Two bounded
+production checks generated no new publication: Suki slot two stopped at an
+upstream HTTP 400 before drafting, and Belle exhausted its 11,000-token draft
+budget (`finish=length`, 9,277 text characters) without valid schema output.
+Neither was a forum posting-quota rejection. Larger completion budgets improve
+room but cannot guarantee valid output from every model behind `openrouter/free`.
+The held/failure states remain visible; no extra retry sweep or paid route was
+introduced to conceal these results.
