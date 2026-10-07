@@ -1,6 +1,6 @@
 "use node";
 
-import { RAG, type Status as RagStatus } from "@convex-dev/rag";
+import { RAG } from "@convex-dev/rag";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { randomUUID } from "node:crypto";
 import { v } from "convex/values";
@@ -15,6 +15,7 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { EMBEDDING_HEALTH_KEY } from "./aiRoutingControlData";
+import { memoryIndexFunctions } from "./forumAgentMemoryData";
 
 const EMBEDDING_MODEL = OPENROUTER_EMBEDDING_MODEL;
 const EMBEDDING_TIMEOUT_MS = 12_000;
@@ -48,10 +49,9 @@ type CurrentMemoryThread = {
 };
 
 type IndexThreadResult =
-  | { status: "skipped" }
-  | { status: "skipped"; reason: "budget" }
+  | { status: "skipped"; reason?: string }
   | { status: "failed"; retryScheduled: boolean }
-  | { status: RagStatus; created: boolean };
+  | { status: "ready"; created: boolean };
 
 type EmbeddingReservation =
   | { accepted: true; reservationKey: string }
@@ -278,84 +278,98 @@ async function indexThread(
   threadId: Id<"forumThreads">,
   attempt = 0,
 ): Promise<IndexThreadResult> {
-  const source: (CurrentMemoryThread & { createdAt: number }) | null =
-    await ctx.runQuery(internal.forumAgentEditorialData.readThreadForMemory, {
-      threadId,
-    });
-  if (source === null) return { status: "skipped" as const };
-  const agentSlug = source.agentSlug === "human" ? "suki" : source.agentSlug;
-  const startedAt = Date.now();
-  const { rag, embeddingModel } = platform(requireApiKey());
-  const text = [source.title, source.body].join("\n\n");
-  const reservation = await reserveEmbeddingCall(ctx, text);
-  if (!reservation.accepted)
-    return { status: "skipped" as const, reason: "budget" as const };
-  const execution = await runMeteredEmbedding({
-    embed: async () => {
-      const embedded = await embedRagText(
-        embeddingModel,
-        text,
-        AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
-      );
-      return { value: embedded.chunks, inputTokens: embedded.inputTokens };
-    },
-    settleUsage: (inputTokens) =>
-      settleMemoryEmbeddingUsage(ctx, {
-        runKey: `index:${source.threadId}`,
-        reservationKey: reservation.reservationKey,
-        agentSlug,
-        categorySlug: source.categorySlug,
-        inputTokens,
-        startedAt,
-      }),
-    useEmbedding: (chunks) =>
-      rag.add(ctx, {
-        namespace: MEMORY_NAMESPACE,
-        key: `forum-thread:${source.threadId}`,
-        title: source.title,
-        chunks,
-        metadata: {
-          threadId: source.threadId,
+  const token = randomUUID();
+  const claim = await ctx.runMutation(memoryIndexFunctions.claim, {
+    threadId,
+    model: EMBEDDING_MODEL,
+    token,
+    attempt,
+  });
+  if (!claim.claimed)
+    return { status: "skipped" as const, reason: claim.reason };
+  const source = claim.source;
+  let leaseNeedsRelease = true;
+  try {
+    const agentSlug = source.agentSlug === "human" ? "suki" : source.agentSlug;
+    const startedAt = Date.now();
+    const { embeddingModel } = platform(requireApiKey());
+    const text = [source.title, source.body].join("\n\n");
+    const reservation = await reserveEmbeddingCall(ctx, text);
+    if (!reservation.accepted)
+      return { status: "skipped" as const, reason: "budget" as const };
+    const execution = await runMeteredEmbedding({
+      embed: async () => {
+        const embedded = await embedRagText(
+          embeddingModel,
+          text,
+          AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+        );
+        return { value: embedded.chunks, inputTokens: embedded.inputTokens };
+      },
+      settleUsage: (inputTokens) =>
+        settleMemoryEmbeddingUsage(ctx, {
+          runKey: `index:${source.threadId}`,
+          reservationKey: reservation.reservationKey,
+          agentSlug,
           categorySlug: source.categorySlug,
-          agentSlug: source.agentSlug,
-          createdAt: source.createdAt,
-        },
-        filterValues: [
-          { name: "category", value: source.categorySlug },
-          { name: "authorKind", value: source.agentSlug },
-          {
-            name: "categoryAndAuthor",
-            value: {
-              category: source.categorySlug,
-              authorKind: source.agentSlug,
-            },
-          },
-        ],
-        importance: source.agentSlug === "human" ? 1.15 : 1,
-      }),
-  });
-  if (!execution.ok) {
-    if (execution.stage !== "downstream")
-      await markEmbeddingCallFailed(ctx, reservation.reservationKey);
-    await recordEmbeddingFailure(ctx, execution.error);
-    if (attempt < EMBEDDING_RETRY_DELAYS_MS.length) {
-      await ctx.scheduler.runAfter(
-        EMBEDDING_RETRY_DELAYS_MS[attempt],
-        internal.forumAgentMemory.indexForumThread,
-        { threadId, attempt: attempt + 1 },
-      );
+          inputTokens,
+          startedAt,
+        }),
+      useEmbedding: (chunks) =>
+        ctx.runMutation(memoryIndexFunctions.commit, {
+          threadId,
+          token,
+          contentHash: claim.contentHash,
+          chunks,
+        }),
+    });
+    if (!execution.ok) {
+      if (execution.stage !== "downstream")
+        await markEmbeddingCallFailed(ctx, reservation.reservationKey);
+      await recordEmbeddingFailure(ctx, execution.error);
+      if (attempt < EMBEDDING_RETRY_DELAYS_MS.length) {
+        await ctx.scheduler.runAfter(
+          EMBEDDING_RETRY_DELAYS_MS[attempt],
+          internal.forumAgentMemory.indexForumThread,
+          { threadId, attempt: attempt + 1 },
+        );
+      }
+      return {
+        status: "failed" as const,
+        retryScheduled: attempt < EMBEDDING_RETRY_DELAYS_MS.length,
+      };
     }
-    return {
-      status: "failed" as const,
-      retryScheduled: attempt < EMBEDDING_RETRY_DELAYS_MS.length,
-    };
+    const result = execution.value;
+    // Ready and source-invalidating commits already clear this lease atomically.
+    if (
+      result.committed ||
+      result.reason === "changed" ||
+      result.reason === "hidden"
+    )
+      leaseNeedsRelease = false;
+    if (!result.committed) {
+      // A completed provider call can outlive its lease. Retry only within the
+      // existing bound; a newer claimant or completed receipt cheaply dedups it.
+      if (
+        result.reason === "lost-lease" &&
+        attempt < EMBEDDING_RETRY_DELAYS_MS.length
+      )
+        await ctx.scheduler.runAfter(
+          EMBEDDING_RETRY_DELAYS_MS[attempt],
+          internal.forumAgentMemory.indexForumThread,
+          { threadId, attempt: attempt + 1 },
+        );
+      return { status: "skipped" as const, reason: result.reason };
+    }
+    await recordEmbeddingOperationalState(ctx, {
+      healthy: true,
+      detail: `Indexed forum thread ${source.threadId}; ready.`,
+    });
+    return { status: "ready", created: result.created };
+  } finally {
+    if (leaseNeedsRelease)
+      await ctx.runMutation(memoryIndexFunctions.release, { threadId, token });
   }
-  const result = execution.value;
-  await recordEmbeddingOperationalState(ctx, {
-    healthy: true,
-    detail: `Indexed forum thread ${source.threadId}; ${result.status}.`,
-  });
-  return { status: result.status, created: result.created };
 }
 
 export const indexForumThread = internalAction({
@@ -363,6 +377,11 @@ export const indexForumThread = internalAction({
     threadId: v.id("forumThreads"),
     attempt: v.optional(v.number()),
   },
+  returns: v.union(
+    v.object({ status: v.literal("skipped"), reason: v.optional(v.string()) }),
+    v.object({ status: v.literal("failed"), retryScheduled: v.boolean() }),
+    v.object({ status: v.literal("ready"), created: v.boolean() }),
+  ),
   handler: async (ctx, args) =>
     await indexThread(ctx, args.threadId, args.attempt ?? 0),
 });

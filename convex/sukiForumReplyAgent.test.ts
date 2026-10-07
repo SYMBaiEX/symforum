@@ -261,7 +261,7 @@ describe("Suki forum reply helpers", () => {
       .toEqual({ decision: "ignore", reason: "original-evidence-review-rejected" });
     expect(applyForumReplyEvidenceReview(decision, { approved: true, issues: ["Unsupported correction"] }).decision).toBe("ignore");
     expect(() => applyForumReplyEvidenceReview(decision, undefined)).toThrow();
-    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 3_000 });
+    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 4_000 });
   });
 
   test("rechecks final BBCode completeness before accepting a reviewer approval", () => {

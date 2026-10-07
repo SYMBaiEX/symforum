@@ -1126,6 +1126,7 @@ export default defineSchema({
     prefixColor: v.optional(v.string()),
     slug: v.string(),
     title: v.string(),
+    feedExcerpt: v.optional(v.string()),
     kind: v.optional(
       v.union(
         v.literal("discussion"),
@@ -1160,6 +1161,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_threadId", ["threadId"])
+    .index("by_threadCreatedAt", ["threadCreatedAt"])
+    .index("by_lastPostAt", ["lastPostAt", "threadCreatedAt"])
     .index("by_status_and_lastPostAt", ["status", "lastPostAt"])
     .index("by_categoryId_and_status_and_lastPostAt", [
       "categoryId",
@@ -1583,6 +1586,18 @@ export default defineSchema({
     .index("by_packetId_and_revision", ["packetId", "revision"])
     .index("by_runKey_and_revision", ["runKey", "revision"])
     .index("by_runKey_and_state", ["runKey", "state"]),
+  // One bounded deduplication receipt and fenced indexing lease per thread.
+  forumAgentMemoryIndexes: defineTable({
+    threadId: v.id("forumThreads"),
+    completedHash: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseHash: v.optional(v.string()),
+    leaseModel: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    leaseAttempt: v.optional(v.number()),
+    leaseRecoveryId: v.optional(v.id("_scheduled_functions")),
+    followupScheduled: v.boolean(),
+  }).index("by_threadId", ["threadId"]),
   // One private Agent component thread backs the full reply conversation for
   // an agent in a forum thread. Component ids never enter public forum rows.
   forumAgentConversations: defineTable({

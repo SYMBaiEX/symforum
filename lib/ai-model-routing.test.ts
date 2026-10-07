@@ -99,8 +99,9 @@ describe("OpenRouter-only model routing", () => {
       openRouterStructuredOutputBudget(OPENROUTER_PAID_FALLBACK_MODEL, 3_000),
     ).toBe(6_000);
     expect(openRouterStructuredOutputBudget("openrouter/free", 3_000)).toBe(
-      4_500,
+      6_000,
     );
+    expect(openRouterStructuredOutputBudget("another/model", 3_000)).toBe(4_500);
   });
 
   test("creates only canonical OpenRouter candidates", async () => {

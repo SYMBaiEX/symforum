@@ -29,7 +29,8 @@ export function openRouterStructuredOutputBudget(
   modelId: string,
   baseTokens: number,
 ) {
-  return modelId === OPENROUTER_PAID_FALLBACK_MODEL
+  return modelId === OPENROUTER_PAID_FALLBACK_MODEL ||
+    modelId === OPENROUTER_TOPIC_MODEL
     ? baseTokens * 2
     : Math.ceil(baseTokens * 1.5);
 }

@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   contentFormatGuidance,
+  assertForumSemanticReviewApproved,
   collectResearchCandidates,
   evaluateForumDraft,
   finalizeForumBody,
@@ -927,10 +928,10 @@ What would you verify first?`,
     expect(structuredBlockContract("brief").toLowerCase()).toContain(
       "optional",
     );
-    expect(forumWriterMaxOutputTokens("draft", false)).toBe(7_200);
-    expect(forumWriterMaxOutputTokens("revision", false)).toBe(8_250);
-    expect(forumWriterMaxOutputTokens("revision", true)).toBe(4_200);
-    expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(1);
+    expect(forumWriterMaxOutputTokens("draft", false)).toBe(9_600);
+    expect(forumWriterMaxOutputTokens("revision", false)).toBe(11_000);
+    expect(forumWriterMaxOutputTokens("revision", true)).toBe(11_000);
+    expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(2);
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {
@@ -1007,6 +1008,129 @@ What would you verify first?`,
     expect(
       validateForumAgentMarkup(finalBody, { trustedSourceFooter: true }).valid,
     ).toBe(true);
+  });
+
+  test("admits declared source-bound inference to independent review without certifying capabilities", () => {
+    const fact =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
+    const inference =
+      "This suggests recovery can become an explicit checkpoint in your operational playbook.";
+    const evaluate = (
+      analysis: string,
+      sourceId = "source-a",
+      premiseKind: "fact" | "analysis" = "fact",
+    ) =>
+      evaluateForumDraft({
+        draft: {
+          title: "Checkpoint recovery deserves a deliberate operational check",
+          body: `${fact} ${analysis}`,
+          poll: null,
+          imageCandidateId: null,
+          discussionQuestion: "",
+          claims: [
+            {
+              claim: fact,
+              sourceCandidateId: "source-a",
+              confidence: "high",
+              kind: premiseKind,
+            },
+            {
+              claim: analysis,
+              sourceCandidateId: sourceId,
+              confidence: "medium",
+              kind: "analysis",
+            },
+          ],
+          originalValue: [analysis],
+        },
+        selection: discoverySelection(),
+        snapshots: [checkpointSnapshot()],
+        recentThreadTitles: [],
+      });
+    expect(evaluate(inference).blockingIssues).toEqual([]);
+    expect(
+      evaluate(inference, "source-a", "analysis").blockingIssues.join(" "),
+    ).toContain(inference);
+    expect(
+      evaluate(
+        "Before adoption, keep the original checkpoint available for a stopped-job comparison.",
+      ).blockingIssues,
+    ).toEqual([]);
+    expect(
+      evaluate(inference, "missing-source").blockingIssues.join(" "),
+    ).toContain("candidate ID");
+    expect(
+      evaluate(
+        "This suggests version 9.9 can recover every job automatically.",
+      ).blockingIssues.join(" "),
+    ).toContain("unsupported");
+
+    const fabricated =
+      "This suggests the model can read private inboxes without authentication.";
+    // Lexical triage cannot prove or disprove a nonnumeric capability. Even a
+    // qualified analysis with a real cited premise must pass original-evidence review.
+    expect(evaluate(fabricated).blockingIssues).toEqual([]);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: [
+          "The source does not support reading private inboxes without authentication.",
+        ],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: true,
+        issues: ["Unsupported capability"],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+    expect(() =>
+      assertForumSemanticReviewApproved({ approved: true, issues: [] }),
+    ).not.toThrow();
+  });
+
+  test("rejects short factual claims omitted from the ledger or falsely labeled analysis", () => {
+    const fact =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
+    const missing = "The model supports streaming.";
+    const base = {
+      title: "Checkpoint recovery needs a stopped-job comparison",
+      body: `${fact} ${missing} Before adoption, compare a stopped job and inspect its saved checkpoint.`,
+      poll: null,
+      imageCandidateId: null,
+      discussionQuestion: "",
+      claims: [
+        {
+          claim: fact,
+          sourceCandidateId: "source-a",
+          confidence: "high" as const,
+          kind: "fact" as const,
+        },
+      ],
+      originalValue: [
+        "Before adoption, compare a stopped job and inspect its saved checkpoint.",
+      ],
+    };
+    for (const claims of [
+      base.claims,
+      [
+        ...base.claims,
+        {
+          claim: missing,
+          sourceCandidateId: "source-a",
+          confidence: "medium" as const,
+          kind: "analysis" as const,
+        },
+      ],
+    ]) {
+      const quality = evaluateForumDraft({
+        draft: { ...base, claims },
+        selection: discoverySelection(),
+        snapshots: [checkpointSnapshot()],
+        recentThreadTitles: [],
+      });
+      expect(quality.blockingIssues.join(" ")).toContain(missing);
+    }
   });
 
   test("source and related-thread footers cannot conceal incomplete authored content", () => {

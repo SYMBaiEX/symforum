@@ -202,7 +202,7 @@ async function runReplySweepForAgent(
       attemptOffset: replySweepRouteAttemptOffset(attempt),
       totalTimeoutMs: 120_000,
       estimatedInputTokens: estimatePromptInputTokens(prompt),
-      maxOutputTokens: 1_400,
+      maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
       run: async (candidate, signal) => {
         const replyAgent = new Agent(components.agent, {
           name: agentName,
@@ -223,7 +223,7 @@ async function runReplySweepForAgent(
           {
             prompt,
             schema: sukiReplyDecisionSchema,
-            maxOutputTokens: 1_400,
+            maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
             ...modelGenerationSettings(candidate.provider, "reply"),
             providerOptions: candidate.providerOptions,
             abortSignal: signal,
@@ -242,7 +242,7 @@ async function runReplySweepForAgent(
         }
         return { result, decision };
       },
-    });
+    }, ["openrouter/free"]);
     const { result } = generation.value;
     let { decision } = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {

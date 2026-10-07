@@ -4,11 +4,11 @@ import { convexTest } from "convex-test";
 import agentTest from "@convex-dev/agent/test";
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import presenceTest from "@convex-dev/presence/test";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 import { FORUM_AGENT_REPLY_PROMPT_VERSION } from "../lib/forum-reply-policy";
-import { api, internal } from "./_generated/api";
+import { api, internal, components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   buildForumNotificationEmail,
@@ -28,6 +28,8 @@ import {
 import { forumAgentResearchPayloadHash } from "./forumAgentResearchPackets";
 import schema from "./schema";
 import { forumOperations } from "./forum";
+
+afterEach(() => vi.useRealTimers());
 
 const modules = {
   ...import.meta.glob("./**/*.ts"),
@@ -1315,7 +1317,9 @@ describe("forum notification preferences", () => {
       status: "active",
       authorId: infrastructure.agentUserId,
     });
-    expect(stored?.body).toContain("AI-assisted research draft authored by Suki");
+    expect(stored?.body).toContain(
+      "AI-assisted research draft authored by Suki",
+    );
     expect(stored?.body).not.toMatch(
       /\[(?:img|chart|table|decision|sourcecards)/i,
     );
@@ -1328,7 +1332,10 @@ describe("forum notification preferences", () => {
         .take(2),
     );
     expect(citations).toHaveLength(1);
-    expect(citations[0]).toMatchObject({ claimText, supportStatus: "supported" });
+    expect(citations[0]).toMatchObject({
+      claimText,
+      supportStatus: "supported",
+    });
   });
 
   test("rejects an empty authored heading before an attribution footer can hide it and rolls back publication", async () => {
@@ -1681,7 +1688,8 @@ describe("forum notification preferences", () => {
         slot: 1,
       },
     );
-    const heldBody = "[chart=Tiny]Evidence|1|Unverified source\nReview|2|Low confidence[/chart]";
+    const heldBody =
+      "[chart=Tiny]Evidence|1|Unverified source\nReview|2|Low confidence[/chart]";
     const heldSources = [
       { sourceKey: "example-blocked", sourceUrl: "not-a-url" },
     ];
@@ -1819,7 +1827,551 @@ describe("forum notification preferences", () => {
     });
   });
 
+  test("reply scheduling creates conversation state lazily only after admission is claimed", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const created = await t
+      .withIdentity({ subject: seed.otherTrustedUserId })
+      .mutation(api.forum.createThread, {
+        categorySlug: "public-square",
+        title: "Where should this reproducible debug attempt go next?",
+        body: "I have a reproducible failing input. Which logging boundary should I inspect before changing the retry configuration?",
+      });
+    const queued = await t.run(async (ctx) => {
+      const run = await ctx.db
+        .query("forumAgentReplyRuns")
+        .withIndex("by_runKey", (q) =>
+          q.eq("runKey", `forum-reply:thread:${created.threadId}`),
+        )
+        .unique();
+      expect(run?.status).toBe("queued");
+      expect(run?.conversationId).toBeUndefined();
+      expect(await ctx.db.query("forumAgentConversations").take(1)).toEqual([]);
+      const scheduled = await ctx.db.system
+        .query("_scheduled_functions")
+        .collect();
+      expect(
+        scheduled.filter(
+          (row) => row.name === "sukiForumReplyAgent:runReplySweep",
+        ),
+      ).toHaveLength(1);
+      if (!run) throw new Error("Expected queued reply");
+      const now = Date.now();
+      await ctx.db.patch("forumAgentReplyRuns", run._id, {
+        startedAt: now - 180_000,
+        updatedAt: now - 180_000,
+      });
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: now,
+        pauseUntil: 0,
+        updatedAt: now,
+      });
+      return run;
+    });
+    expect(
+      (
+        await t.query(components.agent.threads.listThreadsByUserId, {
+          paginationOpts: { cursor: null, numItems: 10 },
+        })
+      ).page,
+    ).toHaveLength(0);
+    const claim = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      { attempt: 0, runDate: queued.runDate, runId: queued._id },
+    );
+    expect(claim.claimed).toBe(true);
+    expect(
+      (
+        await t.query(components.agent.threads.listThreadsByUserId, {
+          paginationOpts: { cursor: null, numItems: 10 },
+        })
+      ).page,
+    ).toHaveLength(1);
+  });
+
+  test.each(["successful", "running", "pending", "disabled"] as const)(
+    "reply admission skips all conversation and scheduled provider work at %s capacity",
+    async (kind) => {
+      const t = setup();
+      const seed = await seedForum(t);
+      await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+      await t.run(async (ctx) => {
+        const agent = await ctx.db
+          .query("forumAgents")
+          .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+          .unique();
+        if (!agent) throw new Error("Expected Suki");
+        if (kind === "disabled") {
+          await ctx.db.patch("forumAgents", agent._id, { enabled: false });
+          return;
+        }
+        const now = Date.now();
+        const runDate = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Chicago",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(now));
+        for (let i = 0; i < 12; i++)
+          await ctx.db.insert("forumAgentReplyRuns", {
+            runKey: `capacity:${kind}:${i}`,
+            agentSlug: "suki",
+            runDate,
+            sourceKind: "thread",
+            threadId: seed.publicThreadId,
+            categoryId: seed.publicCategoryId,
+            authorId: seed.trustedUserId,
+            sourceAuthorIsAgent: false,
+            attempt: kind === "pending" ? -1 : 0,
+            status:
+              kind === "successful"
+                ? "replied"
+                : kind === "running"
+                  ? "running"
+                  : "queued",
+            model: OPENROUTER_FORUM_MODEL,
+            startedAt: now,
+            updatedAt: now,
+          });
+      });
+      const created = await t
+        .withIdentity({ subject: seed.otherTrustedUserId })
+        .mutation(api.forum.createThread, {
+          categorySlug: "public-square",
+          title: `A bounded admission example for ${kind}`,
+          body: "My reproducible test is failing at the request boundary. What should I inspect before changing the configuration?",
+        });
+      await t.run(async (ctx) => {
+        expect(
+          await ctx.db
+            .query("forumAgentReplyRuns")
+            .withIndex("by_runKey", (q) =>
+              q.eq("runKey", `forum-reply:thread:${created.threadId}`),
+            )
+            .unique(),
+        ).toBeNull();
+        expect(await ctx.db.query("forumAgentConversations").take(1)).toEqual(
+          [],
+        );
+        const scheduled = await ctx.db.system
+          .query("_scheduled_functions")
+          .collect();
+        expect(
+          scheduled.filter((row) =>
+            row.name.startsWith("sukiForumReplyAgent:"),
+          ),
+        ).toEqual([]);
+      });
+      expect(
+        (
+          await t.query(components.agent.threads.listThreadsByUserId, {
+            paginationOpts: { cursor: null, numItems: 10 },
+          })
+        ).page,
+      ).toHaveLength(0);
+    },
+  );
+
+  test("a full stale roster queue coalesces one recovery wake-up without admitting more work", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    await t.run(async (ctx) => {
+      const suki = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+        .unique();
+      if (!suki) throw new Error("Expected Suki");
+      const { _id, _creationTime, ...agent } = suki;
+      await ctx.db.patch("forumAgents", _id, { enabled: false });
+      await ctx.db.insert("forumAgents", {
+        ...agent,
+        slug: "mara-venn",
+        name: "Mara Venn",
+      });
+      for (let i = 0; i < 2; i++)
+        await ctx.db.insert("forumAgentReplyRuns", {
+          runKey: `stale-roster:${i}`,
+          agentSlug: "mara-venn",
+          runDate: "2026-10-07",
+          sourceKind: "thread",
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          sourceAuthorIsAgent: false,
+          attempt: -1,
+          status: "queued",
+          model: OPENROUTER_FORUM_MODEL,
+          startedAt: Date.now() - 1_200_000,
+          updatedAt: Date.now() - 1_200_000,
+        });
+    });
+    for (const userId of [seed.otherTrustedUserId, seed.ownerId])
+      await t
+        .withIdentity({ subject: userId })
+        .mutation(api.forum.createThread, {
+          categorySlug: "public-square",
+          title: "What should we inspect in this reproducible case?",
+          body: "The request fails reproducibly at the serialization boundary. Which logging input should I inspect before changing configuration?",
+        });
+    await t.run(async (ctx) => {
+      const runs = await ctx.db
+        .query("forumAgentReplyRuns")
+        .withIndex("by_agentSlug_and_status_and_updatedAt", (q) =>
+          q.eq("agentSlug", "mara-venn").eq("status", "queued"),
+        )
+        .take(3);
+      expect(runs).toHaveLength(2);
+      expect(runs.every((run) => run.conversationId === undefined)).toBe(true);
+      expect(await ctx.db.query("forumAgentConversations").take(1)).toEqual([]);
+      const scheduled = await ctx.db.system
+        .query("_scheduled_functions")
+        .collect();
+      expect(
+        scheduled.filter(
+          (row) => row.name === "sukiForumReplyAgent:runRosterReplySweep",
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  test("reply claims reserve the last slot and a stale retry reuses its legacy conversation", async () => {
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const runDate = "2026-10-07";
+    const runs = await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: now,
+        pauseUntil: 0,
+        updatedAt: now,
+      });
+      for (let i = 0; i < 11; i++)
+        await ctx.db.insert("forumAgentReplyRuns", {
+          runKey: `full-slot:${i}`,
+          agentSlug: "suki",
+          runDate,
+          sourceKind: "thread",
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          status: "replied",
+          attempt: 0,
+          model: OPENROUTER_FORUM_MODEL,
+          startedAt: now - 180_000,
+          updatedAt: now - 180_000,
+        });
+      const insert = (suffix: string) =>
+        ctx.db.insert("forumAgentReplyRuns", {
+          runKey: `last-slot:${suffix}`,
+          agentSlug: "suki",
+          runDate,
+          sourceKind: "thread",
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          status: "queued",
+          attempt: -1,
+          model: OPENROUTER_FORUM_MODEL,
+          startedAt: now - 180_000,
+          updatedAt: now - 180_000,
+        });
+      return [await insert("first"), await insert("second")];
+    });
+    const first = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      { attempt: 0, runDate, runId: runs[0] },
+    );
+    if (!first.claimed) throw new Error(`Expected final slot: ${first.reason}`);
+    expect(
+      await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+        attempt: 0,
+        runDate,
+        runId: runs[1],
+      }),
+    ).toMatchObject({ claimed: false, reason: "daily-limit" });
+    await t.run(async (ctx) => {
+      await ctx.db.patch("forumAgentReplyRuns", first.runId, {
+        updatedAt: Date.now() - 20 * 60_000,
+      });
+      expect(
+        await ctx.db.query("forumAgentConversations").take(2),
+      ).toHaveLength(1);
+    });
+    const retry = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      { attempt: 1, runDate, runId: first.runId },
+    );
+    expect(retry).toMatchObject({
+      claimed: true,
+      conversationId: first.conversationId,
+    });
+    expect(
+      (
+        await t.query(components.agent.threads.listThreadsByUserId, {
+          paginationOpts: { cursor: null, numItems: 10 },
+        })
+      ).page,
+    ).toHaveLength(1);
+  });
+
+  test.each([false, true])(
+    "old queued replies cannot bypass today's running capacity (priority=%s)",
+    async (prioritizeQueue) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-08T05:03:00Z"));
+      const t = setup();
+      const seed = await seedForum(t);
+      await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+      const oldRunId = await t.run(async (ctx) => {
+        const fields = {
+          agentSlug: "suki",
+          sourceKind: "thread" as const,
+          threadId: seed.publicThreadId,
+          categoryId: seed.publicCategoryId,
+          authorId: seed.trustedUserId,
+          model: OPENROUTER_FORUM_MODEL,
+          startedAt: Date.now() - 360_000,
+          updatedAt: Date.now() - 360_000,
+        };
+        for (let i = 0; i < 12; i++)
+          await ctx.db.insert("forumAgentReplyRuns", {
+            ...fields,
+            runKey: `today:${i}`,
+            runDate: "2026-10-08",
+            status: i === 11 ? "running" : "replied",
+            attempt: 0,
+          });
+        return await ctx.db.insert("forumAgentReplyRuns", {
+          ...fields,
+          runKey: "midnight:old",
+          runDate: "2026-10-07",
+          status: "queued",
+          attempt: -1,
+        });
+      });
+      expect(
+        await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+          attempt: 0,
+          runDate: "2026-10-07",
+          runId: oldRunId,
+          prioritizeQueue,
+        }),
+      ).toMatchObject({ claimed: false, reason: "daily-limit" });
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("forumAgentReplyRuns", oldRunId)).toMatchObject(
+          {
+            runKey: "midnight:old",
+            runDate: "2026-10-08",
+            status: "ignored",
+            reason: "daily-limit",
+          },
+        );
+        expect(await ctx.db.query("forumAgentConversations").take(1)).toEqual(
+          [],
+        );
+      });
+      expect(
+        (
+          await t.query(components.agent.threads.listThreadsByUserId, {
+            paginationOpts: { cursor: null, numItems: 10 },
+          })
+        ).page,
+      ).toEqual([]);
+    },
+  );
+  test("old queued targets and stale retries consume the authoritative new day without changing their run key", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-08T05:03:00Z"));
+    const t = setup();
+    const seed = await seedForum(t);
+    await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+    const runs = await t.run(async (ctx) => {
+      const fields = {
+        agentSlug: "suki",
+        sourceKind: "thread" as const,
+        threadId: seed.publicThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: seed.trustedUserId,
+        model: OPENROUTER_FORUM_MODEL,
+        startedAt: Date.now() - 360_000,
+        updatedAt: Date.now() - 360_000,
+      };
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: Date.now(),
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
+      for (let i = 0; i < 11; i++)
+        await ctx.db.insert("forumAgentReplyRuns", {
+          ...fields,
+          runKey: `today:${i}`,
+          runDate: "2026-10-08",
+          status: "replied",
+          attempt: 0,
+        });
+      return await Promise.all(
+        ["first", "second"].map((suffix) =>
+          ctx.db.insert("forumAgentReplyRuns", {
+            ...fields,
+            runKey: `midnight:${suffix}`,
+            runDate: "2026-10-07",
+            status: "queued",
+            attempt: -1,
+          }),
+        ),
+      );
+    });
+    const first = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        attempt: 0,
+        runDate: "2026-10-07",
+        runId: runs[0],
+        prioritizeQueue: true,
+      },
+    );
+    if (!first.claimed)
+      throw new Error(`Expected midnight claim: ${first.reason}`);
+    expect(
+      await t.run((ctx) => ctx.db.get("forumAgentReplyRuns", first.runId)),
+    ).toMatchObject({
+      runKey: "midnight:first",
+      runDate: "2026-10-08",
+      status: "running",
+    });
+    expect(
+      await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+        attempt: 0,
+        runDate: "2026-10-07",
+        runId: runs[1],
+        prioritizeQueue: true,
+      }),
+    ).toMatchObject({ claimed: false, reason: "daily-limit" });
+    await t.run((ctx) =>
+      ctx.db.patch("forumAgentReplyRuns", first.runId, {
+        updatedAt: Date.now() - 1_200_000,
+      }),
+    );
+    expect(
+      await t.mutation(internal.forum.claimSukiForumReplyCandidate, {
+        attempt: 1,
+        runDate: "2026-10-07",
+        runId: first.runId,
+      }),
+    ).toMatchObject({ claimed: true, conversationId: first.conversationId });
+    expect(
+      await t.mutation(internal.forum.publishSukiForumReply, {
+        runId: first.runId,
+        reason: "bounded-midnight-reply",
+        body: "Capture the complete request input before serialization, then compare the first failing boundary against the passing example before changing any configuration.",
+      }),
+    ).toMatchObject({ status: "replied" });
+    expect(
+      await t.run((ctx) => ctx.db.get("forumAgentReplyRuns", first.runId)),
+    ).toMatchObject({
+      runKey: "midnight:first",
+      runDate: "2026-10-08",
+      status: "replied",
+    });
+  });
+  test.each([false, true])(
+    "reply publication crossing midnight rechecks today's capacity (full=%s)",
+    async (full) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-08T04:59:00Z"));
+      const t = setup();
+      const seed = await seedForum(t);
+      await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
+      const fields = {
+        agentSlug: "suki",
+        sourceKind: "thread" as const,
+        threadId: seed.publicThreadId,
+        categoryId: seed.publicCategoryId,
+        authorId: seed.trustedUserId,
+        model: OPENROUTER_FORUM_MODEL,
+        startedAt: Date.now() - 180_000,
+        updatedAt: Date.now() - 180_000,
+      };
+      const runId = await t.run(async (ctx) => {
+        await ctx.db.insert("aiOperationalStates", {
+          key: "forum-agent-structured-canary",
+          healthy: true,
+          checkedAt: Date.now(),
+          pauseUntil: 0,
+          updatedAt: Date.now(),
+        });
+        return await ctx.db.insert("forumAgentReplyRuns", {
+          ...fields,
+          runKey: "midnight:inflight",
+          runDate: "2026-10-07",
+          status: "queued",
+          attempt: -1,
+        });
+      });
+      const claim = await t.mutation(
+        internal.forum.claimSukiForumReplyCandidate,
+        { attempt: 0, runDate: "2026-10-07", runId },
+      );
+      if (!claim.claimed)
+        throw new Error(`Expected pre-midnight claim: ${claim.reason}`);
+      vi.setSystemTime(new Date("2026-10-08T05:01:00Z"));
+      const before = await t.run(async (ctx) => {
+        for (let i = 0; i < (full ? 12 : 11); i++)
+          await ctx.db.insert("forumAgentReplyRuns", {
+            ...fields,
+            runKey: `new-day:${i}`,
+            runDate: "2026-10-08",
+            status: i === 11 ? "running" : "replied",
+            attempt: 0,
+          });
+        return await ctx.db
+          .query("forumPosts")
+          .withIndex("by_threadId_and_status_and_postNumber", (q) =>
+            q.eq("threadId", seed.publicThreadId).eq("status", "active"),
+          )
+          .take(20);
+      });
+      expect(
+        await t.mutation(internal.forum.publishSukiForumReply, {
+          runId,
+          reason: "midnight-publication",
+          body: "Compare the complete failing input against one passing request before serialization. That localizes the first changing boundary without assuming a model or worker configuration problem.",
+        }),
+      ).toMatchObject(
+        full
+          ? { status: "ignored", reason: "daily-limit" }
+          : { status: "replied" },
+      );
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get("forumAgentReplyRuns", runId)).toMatchObject({
+          runKey: "midnight:inflight",
+          runDate: "2026-10-08",
+          status: full ? "ignored" : "replied",
+        });
+        expect(
+          await ctx.db
+            .query("forumPosts")
+            .withIndex("by_threadId_and_status_and_postNumber", (q) =>
+              q.eq("threadId", seed.publicThreadId).eq("status", "active"),
+            )
+            .take(20),
+        ).toHaveLength(before.length + (full ? 0 : 1));
+      });
+    },
+  );
+
   test("Suki claims substantive human posts once and publishes a normal forum reply", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-28T18:00:00Z"));
     const t = setup();
     const infrastructure = await t.mutation(
       internal.forum.ensureSukiForumInfrastructure,
@@ -2175,6 +2727,8 @@ describe("forum notification preferences", () => {
   });
 
   test("bounds AI research replies while leaving human reply admission intact", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-30T18:00:00Z"));
     const t = setup();
     const seed = await seedForum(t);
     const suki = await t.mutation(
@@ -9541,37 +10095,103 @@ async function insertPoll(
   return pollId;
 }
 
-
 describe("member-first forum reply queue", () => {
   test("claims a newer unanswered human ask ahead of an older AI opening", async () => {
     const t = setup();
     await t.mutation(internal.forum.ensureSukiForumInfrastructure, {});
-    const seed = await t.run(async ctx => {
-      const category = await ctx.db.query("forumCategories").withIndex("by_slug", q => q.eq("slug", "ai-prompts")).unique();
-      const agent = await ctx.db.query("forumAgents").withIndex("by_slug", q => q.eq("slug", "suki")).unique();
+    const seed = await t.run(async (ctx) => {
+      const category = await ctx.db
+        .query("forumCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", "ai-prompts"))
+        .unique();
+      const agent = await ctx.db
+        .query("forumAgents")
+        .withIndex("by_slug", (q) => q.eq("slug", "suki"))
+        .unique();
       if (!category || !agent) throw new Error("Missing reply infrastructure");
       const now = Date.now() - 5 * 60 * 1_000;
-      const authorId = await ctx.db.insert("users", { name: "Member builder", username: "member-builder", usernameNormalized: "member-builder", forumTrustedAt: now });
-      const aiAuthorId = await ctx.db.insert("users", { name: "Source AI", username: "source-ai", usernameNormalized: "source-ai", isAgent: true, agentSlug: "source-ai", forumTrustedAt: now });
-      await ctx.db.insert("aiOperationalStates", { key: "forum-agent-structured-canary", healthy: true, checkedAt: Date.now(), pauseUntil: 0, updatedAt: Date.now() });
+      const authorId = await ctx.db.insert("users", {
+        name: "Member builder",
+        username: "member-builder",
+        usernameNormalized: "member-builder",
+        forumTrustedAt: now,
+      });
+      const aiAuthorId = await ctx.db.insert("users", {
+        name: "Source AI",
+        username: "source-ai",
+        usernameNormalized: "source-ai",
+        isAgent: true,
+        agentSlug: "source-ai",
+        forumTrustedAt: now,
+      });
+      await ctx.db.insert("aiOperationalStates", {
+        key: "forum-agent-structured-canary",
+        healthy: true,
+        checkedAt: Date.now(),
+        pauseUntil: 0,
+        updatedAt: Date.now(),
+      });
       const makeQueued = async (isAgent: boolean, offset: number) => {
-        const threadId = await insertThread(ctx, { categoryId: category._id, categorySlug: category.slug,
-          slug: isAgent ? `older-ai-opening-${offset}` : "member-project-help", title: isAgent ? "An AI interpretation" : "My project is stuck",
-          body: isAgent ? "The evaluation method may need a clearer repeatability boundary before its scores can be compared." : `My project has a repeatable error. How can I isolate which request causes it? ${"The request context stays consistent between attempts. ".repeat(90)}[url=https://huggingface.co/blog/source-method]Source method[/url]`,
-          authorId: isAgent ? aiAuthorId : authorId, now: now + offset });
+        const threadId = await insertThread(ctx, {
+          categoryId: category._id,
+          categorySlug: category.slug,
+          slug: isAgent ? `older-ai-opening-${offset}` : "member-project-help",
+          title: isAgent ? "An AI interpretation" : "My project is stuck",
+          body: isAgent
+            ? "The evaluation method may need a clearer repeatability boundary before its scores can be compared."
+            : `My project has a repeatable error. How can I isolate which request causes it? ${"The request context stays consistent between attempts. ".repeat(90)}[url=https://huggingface.co/blog/source-method]Source method[/url]`,
+          authorId: isAgent ? aiAuthorId : authorId,
+          now: now + offset,
+        });
         await ctx.db.patch("forumThreads", threadId, { replyCount: 0 });
-        const runId = await ctx.db.insert("forumAgentReplyRuns", { runKey: `forum-reply:thread:${threadId}`, agentSlug: "suki", runDate: "2026-10-07", sourceKind: "thread", threadId, categoryId: category._id,
-          authorId: isAgent ? aiAuthorId : authorId, sourceAuthorIsAgent: isAgent, attempt: -1, status: "queued", model: agent.model, startedAt: now + offset, updatedAt: now + offset });
+        const runId = await ctx.db.insert("forumAgentReplyRuns", {
+          runKey: `forum-reply:thread:${threadId}`,
+          agentSlug: "suki",
+          runDate: "2026-10-07",
+          sourceKind: "thread",
+          threadId,
+          categoryId: category._id,
+          authorId: isAgent ? aiAuthorId : authorId,
+          sourceAuthorIsAgent: isAgent,
+          attempt: -1,
+          status: "queued",
+          model: agent.model,
+          startedAt: now + offset,
+          updatedAt: now + offset,
+        });
         return { threadId, runId };
       };
       const ai = await makeQueued(true, 0);
-      for (let index = 1; index <= 12; index += 1) await makeQueued(true, index * 1_000);
+      for (let index = 1; index <= 12; index += 1)
+        await makeQueued(true, index * 1_000);
       return { ai, human: await makeQueued(false, 30_000) };
     });
-    const claimed = await t.mutation(internal.forum.claimSukiForumReplyCandidate, { agentSlug: "suki", attempt: 0, runDate: "2026-10-07", runId: seed.human.runId, prioritizeQueue: true });
-    expect(claimed).toMatchObject({ claimed: true, runId: seed.human.runId, candidate: { authorIsAgent: false, threadId: seed.human.threadId, sourceEvidenceUrls: ["https://huggingface.co/blog/source-method"] } });
+    const claimed = await t.mutation(
+      internal.forum.claimSukiForumReplyCandidate,
+      {
+        agentSlug: "suki",
+        attempt: 0,
+        runDate: "2026-10-07",
+        runId: seed.human.runId,
+        prioritizeQueue: true,
+      },
+    );
+    expect(claimed).toMatchObject({
+      claimed: true,
+      runId: seed.human.runId,
+      candidate: {
+        authorIsAgent: false,
+        threadId: seed.human.threadId,
+        sourceEvidenceUrls: ["https://huggingface.co/blog/source-method"],
+      },
+    });
     if (!claimed.claimed) throw new Error("Expected member candidate");
-    expect(claimed.candidate.sourceBody).not.toContain("https://huggingface.co/blog/source-method");
-    expect((await t.run(ctx => ctx.db.get("forumAgentReplyRuns", seed.ai.runId)))?.status).toBe("queued");
+    expect(claimed.candidate.sourceBody).not.toContain(
+      "https://huggingface.co/blog/source-method",
+    );
+    expect(
+      (await t.run((ctx) => ctx.db.get("forumAgentReplyRuns", seed.ai.runId)))
+        ?.status,
+    ).toBe("queued");
   });
 });

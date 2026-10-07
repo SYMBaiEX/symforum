@@ -1,5 +1,11 @@
 "use node";
 
+import { reviseForumDraft } from "../lib/forum-editorial-revision";
+import {
+  ForumGenerationBudgetError,
+  forumGenerationDeadline,
+  forumGenerationStageTimeout,
+} from "../lib/forum-generation-budget";
 import { validateForumAgentMarkup } from "../lib/editorial-quality";
 import {
   FORUM_EDITORIAL_CONTRACT,
@@ -147,7 +153,7 @@ const digestDraftSchema = z.object({
       }),
     )
     .min(2)
-    .max(12),
+    .max(48),
 });
 
 type BelleDigestResult =
@@ -328,6 +334,7 @@ export const runDailyHackerNewsDigest = internalAction({
     ),
   },
   handler: async (ctx, args): Promise<BelleDigestResult> => {
+    const deadline = forumGenerationDeadline();
     const attempt = args.attempt ?? 0;
     await ctx.runMutation(internal.forum.ensureBelleForumInfrastructure, {});
     let indexed: IndexedHackerNewsSnapshot;
@@ -431,75 +438,274 @@ export const runDailyHackerNewsDigest = internalAction({
         convexModelRoutingConfig(ctx, { correlationId: claim.runKey }),
         fetchArticleSnapshots(candidates, args.reusableArticleSnapshots),
       ]);
-      const generationStartedAt = Date.now();
+      if (
+        !snapshots.some((snapshot) => snapshot.sourceFetchSucceeded === true)
+      ) {
+        await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+          runKey: claim.runKey,
+          reason:
+            "No original article was retrieved; do not generate a reported digest.",
+        });
+        return { status: "skipped", reason: "source-unavailable" };
+      }
       const prompt = digestPrompt(runDate, indexed.stories, snapshots);
-      const generation = await runWithModelFallback(routingConfig, {
-        stage: "belle:hacker-news-digest",
-        correlationId: claim.runKey,
-        feature: "hacker-news-digest",
-        agent: "belle",
-        onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 300_000,
-        estimatedInputTokens: estimatePromptInputTokens(prompt),
-        maxOutputTokens: (candidate) =>
-          openRouterStructuredOutputBudget(candidate.modelId, 5_500),
-        run: async (candidate, signal) => {
-          const writer = new ToolLoopAgent({
-            id: `belle-hacker-news-desk-${candidate.provider}`,
-            model: candidate.model,
-            output: Output.object({ schema: digestDraftSchema }),
-            // The digest is a single structured response, not a tool loop.
-            stopWhen: isStepCount(1),
-            providerOptions: candidate.providerOptions,
-            ...modelGenerationSettings(candidate.provider, "digest"),
-            maxOutputTokens: openRouterStructuredOutputBudget(
-              candidate.modelId,
-              5_500,
+      const generateDraft = async (
+        revision: number,
+        feedback?: string,
+        previous?: z.infer<typeof digestDraftSchema>,
+      ) => {
+        const generationStartedAt = Date.now();
+        const currentPrompt =
+          revision === 0
+            ? prompt
+            : [
+                prompt,
+                "Return a complete replacement digest, not a patch. Correct the blocking editorial feedback below. Preserve the supplied story IDs and exact source IDs; do not invent facts or discard evidence checks. Finish every sentence. Analysis must be explicitly marked as interpretation in the published prose. Include claims for consequential facts actually present in the final copy.",
+                `Editorial feedback: ${feedback}`,
+                `Previous draft (untrusted candidate): ${JSON.stringify(previous)}`,
+              ].join("\n\n");
+        const generation = await runWithModelFallback(
+          routingConfig,
+          {
+            stage:
+              revision === 0
+                ? "belle:hacker-news-digest"
+                : "belle:hacker-news-digest-revision",
+            correlationId: claim.runKey,
+            feature: "hacker-news-digest",
+            agent: "belle",
+            onAttempt: recordRouteAttempt,
+            totalTimeoutMs: forumGenerationStageTimeout(
+              deadline - 90_000,
+              revision === 0 ? 270_000 : 180_000,
             ),
-            instructions: modelInstructions(
-              candidate.provider,
-              "digest",
-              BELLE_DIGEST_INSTRUCTIONS,
-            ),
+            estimatedInputTokens: estimatePromptInputTokens(currentPrompt),
+            maxOutputTokens: (candidate) =>
+              openRouterStructuredOutputBudget(candidate.modelId, 5_500),
+            run: async (candidate, signal) => {
+              const writer = new ToolLoopAgent({
+                id: `belle-hacker-news-desk-${candidate.provider}`,
+                model: candidate.model,
+                output: Output.object({ schema: digestDraftSchema }),
+                stopWhen: isStepCount(1),
+                providerOptions: candidate.providerOptions,
+                ...modelGenerationSettings(candidate.provider, "digest"),
+                maxOutputTokens: openRouterStructuredOutputBudget(
+                  candidate.modelId,
+                  5_500,
+                ),
+                instructions: modelInstructions(
+                  candidate.provider,
+                  "digest",
+                  BELLE_DIGEST_INSTRUCTIONS,
+                ),
+              });
+              const result = await writer.generate({
+                prompt: currentPrompt,
+                abortSignal: signal,
+              });
+              return { result, draft: digestDraftSchema.parse(result.output) };
+            },
+          },
+          ["openrouter/free"],
+        );
+        const result = generation.value.result;
+        await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+          runKey: claim.runKey,
+          reservationKey: generation.route.reservationKey,
+          reservationModel: generation.route.reservationModel,
+          agentSlug: "belle",
+          stage: revision === 0 ? "draft" : "revision",
+          model: generation.route.persistedModel,
+          servedModel: result.response.modelId,
+          providerReportedCostMicroUsd:
+            generation.route.providerReportedCostMicroUsd,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          durationMs: Date.now() - generationStartedAt,
+        });
+        return {
+          draft: boundBelleDigestToRetrievedEvidence(
+            generation.value.draft,
+            snapshots,
+          ),
+          result,
+        };
+      };
+      const initial = await generateDraft(0);
+      const edited = await reviseForumDraft({
+        initial,
+        maxRevisions: 2,
+        revise: async (previous, feedback, revision) =>
+          await generateDraft(revision, feedback, previous.draft),
+        validate: async ({ draft, result }) => {
+          if (draft.claims.length < 2)
+            throw new AgentPublicationQualityError(
+              "Not enough retrieved original evidence for a reported digest",
+            );
+          validateBelleDigestClaimSources(draft, snapshots);
+          const body = buildDigestBody({
+            closing: draft.closing,
+            date: runDate,
+            opening: draft.opening,
+            requestedBriefs: draft.briefs,
+            stories: indexed.stories.map((story, index) => ({
+              ...story,
+              sourceUnavailable:
+                snapshots[index]?.sourceFetchSucceeded !== true,
+            })),
           });
-          const result = await writer.generate({
-            prompt,
-            abortSignal: signal,
+          const title = `${displayDate(runDate)} — ${normalizeGeneratedHeadline(
+            draft.headline,
+          )}`;
+          assertAgentPublicationHygiene([title, body]);
+          const grounding = evaluateBelleDigestGrounding({
+            expectedStoryIds: indexed.stories.map((story) => story.hnItemId),
+            briefs: draft.briefs,
+            sources: snapshots.map((snapshot, index) => {
+              const story = indexed.stories[index]!;
+              return {
+                hnItemId: story.hnItemId,
+                sourceText: [
+                  snapshot.articleTitle,
+                  snapshot.articleDescription,
+                  snapshot.articleText,
+                  `Hacker News rank ${story.rank}, ${story.score ?? 0} points, ${story.descendants ?? 0} comments.`,
+                ].join(" "),
+              };
+            }),
+            editorialText: [
+              { field: "headline", text: draft.headline },
+              { field: "opening", text: draft.opening },
+              { field: "closing", text: draft.closing },
+            ],
           });
-          return { result, draft: digestDraftSchema.parse(result.output) };
+          if (!grounding.passed) {
+            const reason = JSON.stringify(grounding.issues).slice(0, 2500);
+            throw new AgentPublicationQualityError(
+              `Belle's digest failed deterministic source checks: ${reason}.`,
+            );
+          }
+          const provenanceSnapshots = snapshots.map((snapshot, index) => ({
+            ...snapshot,
+            sourceKey: `belle-hn-${indexed.stories[index]!.hnItemId}-${runDate}`,
+            url:
+              indexed.stories[index]!.url ??
+              `https://news.ycombinator.com/item?id=${indexed.stories[index]!.hnItemId}`,
+          }));
+          const claimCitations = buildForumAgentClaimCitations({
+            claims: draft.claims,
+            snapshots: provenanceSnapshots,
+            body,
+          });
+          if (!forumAgentClaimCitationsPassPublicationGate(claimCitations)) {
+            throw new AgentPublicationQualityError(
+              `Belle's digest contains claims without sufficient source support: ${JSON.stringify(claimCitations.filter((citation) => citation.supportStatus === "unsupported" || (citation.supportStatus === "partial" && citation.kind !== "analysis")).map((citation) => ({ claim: citation.claimText, source: citation.sourceCandidateId, status: citation.supportStatus }))).slice(0, 2500)}`,
+            );
+          }
+          const evidenceReviewPrompt = forumEditorialReviewPrompt({
+            title,
+            body,
+            board: {
+              slug: "news-hacker-news",
+              name: "Hacker News",
+              description: "Faithful concise reporting and linked headlines",
+            },
+            sources: snapshots.map((snapshot, index) => ({
+              id: snapshot.id,
+              title: snapshot.articleTitle,
+              url: snapshot.url,
+              text: [
+                `Listing metadata only (not evidence for article details): edition ${runDate}; Hacker News item ${indexed.stories[index]!.hnItemId}; rank ${indexed.stories[index]!.rank}; title ${indexed.stories[index]!.title}.`,
+                snapshot.sourceFetchSucceeded === true
+                  ? `Retrieved original article:\n${snapshot.articleText}`
+                  : "Original page unavailable. Only an explicitly unverified headline/link listing is permitted; no reported article details are established.",
+              ].join("\n\n"),
+            })),
+          });
+          const reviewStartedAt = Date.now();
+          const evidenceReview = await runWithModelFallback(
+            routingConfig,
+            {
+              stage: "belle:forum-evidence-review",
+              correlationId: claim.runKey,
+              feature: "hacker-news-digest",
+              agent: "belle",
+              onAttempt: recordRouteAttempt,
+              totalTimeoutMs: forumGenerationStageTimeout(deadline, 90_000),
+              estimatedInputTokens:
+                estimatePromptInputTokens(evidenceReviewPrompt),
+              maxOutputTokens: openRouterStructuredOutputBudget(
+                "openrouter/free",
+                2000,
+              ),
+              run: async (candidate, signal) =>
+                await generateText({
+                  model: candidate.model,
+                  providerOptions: candidate.providerOptions,
+                  system: FORUM_EDITORIAL_REVIEW_CONTRACT,
+                  prompt: evidenceReviewPrompt,
+                  output: Output.object({
+                    schema: z.object({
+                      approved: z.boolean(),
+                      issues: z.array(z.string().max(600)).max(12),
+                    }),
+                  }),
+                  maxOutputTokens: openRouterStructuredOutputBudget(
+                    candidate.modelId,
+                    2000,
+                  ),
+                  maxRetries: 0,
+                  abortSignal: signal,
+                }),
+            },
+            ["openrouter/free"],
+          );
+          await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
+            runKey: claim.runKey,
+            agentSlug: "belle",
+            stage: "research",
+            model: evidenceReview.route.persistedModel,
+            servedModel: evidenceReview.value.response.modelId,
+            providerReportedCostMicroUsd:
+              evidenceReview.route.providerReportedCostMicroUsd,
+            inputTokens: evidenceReview.value.usage.inputTokens,
+            outputTokens: evidenceReview.value.usage.outputTokens,
+            durationMs: Date.now() - reviewStartedAt,
+          });
+          if (
+            !evidenceReview.value.output.approved ||
+            evidenceReview.value.output.issues.length
+          ) {
+            throw new AgentPublicationQualityError(
+              `Belle evidence review rejected publication: ${evidenceReview.value.output.issues.join("; ")}`,
+            );
+          }
+          const digestQualityScore = Math.round(
+            claimCitations.reduce(
+              (total, citation) => total + citation.supportScore,
+              0,
+            ) / claimCitations.length,
+          );
+          return {
+            draft,
+            result,
+            body,
+            title,
+            claimCitations,
+            digestQualityScore,
+            provenanceSnapshots,
+          };
         },
       });
-      const result = generation.value.result;
-      const rawDraft = generation.value.draft;
-      const draft = boundBelleDigestToRetrievedEvidence(rawDraft, snapshots);
-      if (draft.claims.length < 2)
-        throw new AgentPublicationQualityError(
-          "Not enough retrieved original evidence for a reported digest",
-        );
-      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
-        runKey: claim.runKey,
-        reservationKey: generation.route.reservationKey,
-        reservationModel: generation.route.reservationModel,
-        agentSlug: "belle",
-        stage: "draft",
-        model: generation.route.persistedModel,
-        servedModel: result.response.modelId,
-        providerReportedCostMicroUsd:
-          generation.route.providerReportedCostMicroUsd,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        durationMs: Date.now() - generationStartedAt,
-      });
-      const body = buildDigestBody({
-        closing: draft.closing,
-        date: runDate,
-        opening: draft.opening,
-        requestedBriefs: draft.briefs,
-        stories: indexed.stories.map((story, index) => ({
-          ...story,
-          sourceUnavailable: snapshots[index]?.sourceFetchSucceeded !== true,
-        })),
-      });
+      const {
+        body,
+        title,
+        claimCitations,
+        digestQualityScore,
+        provenanceSnapshots,
+        result,
+      } = edited.value;
       const imageSnapshot = snapshots
         .filter(
           (snapshot: ArticleSnapshot) => imageRelevanceScore(snapshot) >= 55,
@@ -508,135 +714,6 @@ export const runDailyHackerNewsDigest = internalAction({
           (left: ArticleSnapshot, right: ArticleSnapshot) =>
             imageRelevanceScore(right) - imageRelevanceScore(left),
         )[0];
-      const title = `${displayDate(runDate)} — ${normalizeGeneratedHeadline(
-        draft.headline,
-      )}`;
-      assertAgentPublicationHygiene([title, body]);
-      const grounding = evaluateBelleDigestGrounding({
-        expectedStoryIds: indexed.stories.map((story) => story.hnItemId),
-        briefs: draft.briefs,
-        sources: snapshots.map((snapshot, index) => {
-          const story = indexed.stories[index]!;
-          return {
-            hnItemId: story.hnItemId,
-            sourceText: [
-              snapshot.articleTitle,
-              snapshot.articleDescription,
-              snapshot.articleText,
-              `Hacker News rank ${story.rank}, ${story.score ?? 0} points, ${story.descendants ?? 0} comments.`,
-            ].join(" "),
-          };
-        }),
-        editorialText: [
-          { field: "headline", text: draft.headline },
-          { field: "opening", text: draft.opening },
-          { field: "closing", text: draft.closing },
-        ],
-      });
-      if (!grounding.passed) {
-        const reason = grounding.issues.map((issue) => issue.code).join(", ");
-        throw new AgentPublicationQualityError(
-          `Belle's digest failed deterministic source checks: ${reason}.`,
-        );
-      }
-      const provenanceSnapshots = snapshots.map((snapshot, index) => ({
-        ...snapshot,
-        sourceKey: `belle-hn-${indexed.stories[index]!.hnItemId}-${runDate}`,
-        url:
-          indexed.stories[index]!.url ??
-          `https://news.ycombinator.com/item?id=${indexed.stories[index]!.hnItemId}`,
-      }));
-      const claimCitations = buildForumAgentClaimCitations({
-        claims: draft.claims,
-        snapshots: provenanceSnapshots,
-        body,
-      });
-      if (!forumAgentClaimCitationsPassPublicationGate(claimCitations)) {
-        throw new AgentPublicationQualityError(
-          "Belle's digest contains a claim without sufficient source support.",
-        );
-      }
-      const evidenceReviewPrompt = forumEditorialReviewPrompt({
-        title,
-        body,
-        board: {
-          slug: "news-hacker-news",
-          name: "Hacker News",
-          description: "Faithful concise reporting and linked headlines",
-        },
-        sources: snapshots.map((snapshot) => ({
-          id: snapshot.id,
-          title: snapshot.articleTitle,
-          url: snapshot.url,
-          text:
-            snapshot.sourceFetchSucceeded === true
-              ? snapshot.articleText
-              : "Original page unavailable. Only an explicitly unverified headline/link listing is permitted; no reported article details are established.",
-        })),
-      });
-      const reviewStartedAt = Date.now();
-      const evidenceReview = await runWithModelFallback(
-        routingConfig,
-        {
-          stage: "belle:forum-evidence-review",
-          correlationId: claim.runKey,
-          feature: "hacker-news-digest",
-          agent: "belle",
-          onAttempt: recordRouteAttempt,
-          totalTimeoutMs: 90_000,
-          estimatedInputTokens: estimatePromptInputTokens(evidenceReviewPrompt),
-          maxOutputTokens: openRouterStructuredOutputBudget(
-            "openrouter/free",
-            2000,
-          ),
-          run: async (candidate, signal) =>
-            await generateText({
-              model: candidate.model,
-              providerOptions: candidate.providerOptions,
-              system: FORUM_EDITORIAL_REVIEW_CONTRACT,
-              prompt: evidenceReviewPrompt,
-              output: Output.object({
-                schema: z.object({
-                  approved: z.boolean(),
-                  issues: z.array(z.string().max(600)).max(12),
-                }),
-              }),
-              maxOutputTokens: openRouterStructuredOutputBudget(
-                candidate.modelId,
-                2000,
-              ),
-              maxRetries: 0,
-              abortSignal: signal,
-            }),
-        },
-        ["openrouter/free"],
-      );
-      await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
-        runKey: claim.runKey,
-        agentSlug: "belle",
-        stage: "research",
-        model: evidenceReview.route.persistedModel,
-        servedModel: evidenceReview.value.response.modelId,
-        providerReportedCostMicroUsd:
-          evidenceReview.route.providerReportedCostMicroUsd,
-        inputTokens: evidenceReview.value.usage.inputTokens,
-        outputTokens: evidenceReview.value.usage.outputTokens,
-        durationMs: Date.now() - reviewStartedAt,
-      });
-      if (
-        !evidenceReview.value.output.approved ||
-        evidenceReview.value.output.issues.length
-      ) {
-        throw new AgentPublicationQualityError(
-          `Belle evidence review rejected publication: ${evidenceReview.value.output.issues.join("; ")}`,
-        );
-      }
-      const digestQualityScore = Math.round(
-        claimCitations.reduce(
-          (total, citation) => total + citation.supportScore,
-          0,
-        ) / claimCitations.length,
-      );
       const cachedImage =
         imageSnapshot === undefined
           ? undefined
@@ -666,7 +743,7 @@ export const runDailyHackerNewsDigest = internalAction({
         {
           runKey: claim.runKey,
           agentSlug: "belle",
-          revision: 0,
+          revision: edited.revision,
           title,
           body,
           claimHashes: claimCitations.map((citation) => citation.claimHash),
@@ -678,7 +755,7 @@ export const runDailyHackerNewsDigest = internalAction({
         {
           runKey: claim.runKey,
           agentSlug: "belle",
-          revision: 0,
+          revision: edited.revision,
           title,
           body,
           claimHashes: claimCitations.map((citation) => citation.claimHash),
@@ -740,6 +817,16 @@ export const runDailyHackerNewsDigest = internalAction({
       };
     } catch (error) {
       const message = belleErrorMessage(error);
+      if (
+        error instanceof AgentPublicationQualityError ||
+        error instanceof ForumGenerationBudgetError
+      ) {
+        await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
+          runKey: claim.runKey,
+          reason: belleErrorMessage(error, "operator"),
+        });
+        return { status: "skipped", reason: "editorial-hold" };
+      }
       await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
         runKey: claim.runKey,
         errorMessage: belleErrorMessage(error, "operator"),
@@ -835,6 +922,34 @@ function digestPrompt(
 }
 
 /** Do not turn retrieval failures into reported news; retain the index as clearly labeled links. */
+export function validateBelleDigestClaimSources(
+  draft: Pick<z.infer<typeof digestDraftSchema>, "claims" | "briefs">,
+  snapshots: readonly ArticleSnapshot[],
+) {
+  const ids = new Set(snapshots.map((snapshot) => snapshot.id));
+  const invalid = draft.claims.filter(
+    (claim) => !ids.has(claim.sourceCandidateId),
+  );
+  if (invalid.length)
+    throw new AgentPublicationQualityError(
+      `Copy exact sourceCandidateId values from the source packet. Invalid IDs: ${invalid.map((claim) => claim.sourceCandidateId).join(", ")}`,
+    );
+  const included = new Set(draft.briefs.map((brief) => brief.hnItemId));
+  const missing = snapshots.filter(
+    (snapshot) =>
+      snapshot.sourceFetchSucceeded === true &&
+      included.has(Number(snapshot.id.split("-")[1])) &&
+      !draft.claims.some(
+        (claim) =>
+          claim.kind === "fact" && claim.sourceCandidateId === snapshot.id,
+      ),
+  );
+  if (missing.length)
+    throw new AgentPublicationQualityError(
+      `Include a sourced factual claim for each reported brief, using these exact IDs: ${missing.map((snapshot) => snapshot.id).join(", ")}. Whole-copy evidence review still checks every reported detail.`,
+    );
+}
+
 export function boundBelleDigestToRetrievedEvidence(
   draft: z.infer<typeof digestDraftSchema>,
   snapshots: readonly ArticleSnapshot[],
@@ -932,11 +1047,11 @@ export function buildDigestBody(args: {
     .join("\n\n");
   const validation = validateForumAgentMarkup(body);
   if (!validation.valid)
-    throw new Error(
+    throw new AgentPublicationQualityError(
       `Belle final digest incomplete: ${validation.feedback.join("; ")}`,
     );
   if (body.length > FORUM_THREAD_BODY_MAX_LENGTH) {
-    throw new Error(
+    throw new AgentPublicationQualityError(
       `Belle digest exceeds the ${FORUM_THREAD_BODY_MAX_LENGTH}-character thread limit.`,
     );
   }
@@ -960,7 +1075,7 @@ Reporting rules:
 - Avoid hype, press-release language, shallow cheerleading, and cynical snark.
 - The headline must be specific and faithful to the strongest covered development. Do not include the date; the system adds it.
 - Return briefs only for supplied hnItemId values and cover as many supplied stories as the evidence supports.
-- Submit 2-12 concise claims covering the edition's consequential facts and analysis. Each sourceCandidateId must be copied exactly from the supplied story packet.
+- Submit 2-48 concise claims covering the edition's consequential facts and analysis. Each sourceCandidateId must be copied exactly from the supplied story packet.
 - Use a short specific opening. The closing is optional; leave it empty when it would merely recap or invent a trend.
 Return only the requested structured digest.`;
 
@@ -998,7 +1113,9 @@ export function clipGeneratedProse(
 ) {
   const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
   if (!/[.!?]["')\]]*$/.test(clean)) {
-    throw new Error(`Belle ${field} ends with a dangling sentence.`);
+    throw new AgentPublicationQualityError(
+      `Belle ${field} ends with a dangling sentence.`,
+    );
   }
   if (clean.length <= maximumLength) return clean;
   const sentences = new Intl.Segmenter("en", {
@@ -1022,7 +1139,7 @@ export function clipGeneratedProse(
     pending = "";
   }
   if (!clipped) {
-    throw new Error(
+    throw new AgentPublicationQualityError(
       `Belle ${field} cannot be clipped safely within ${maximumLength} characters.`,
     );
   }
@@ -1032,10 +1149,12 @@ export function clipGeneratedProse(
 export function normalizeGeneratedHeadline(value: string) {
   const clean = plainForumText(value, Number.MAX_SAFE_INTEGER);
   if (!clean || /(?:…|\.\.\.|[,;:\-–—])$/.test(clean)) {
-    throw new Error("Belle headline is malformed or dangling.");
+    throw new AgentPublicationQualityError(
+      "Belle headline is malformed or dangling.",
+    );
   }
   if (clean.length > 125) {
-    throw new Error(
+    throw new AgentPublicationQualityError(
       "Belle headline cannot be clipped safely within 125 characters.",
     );
   }

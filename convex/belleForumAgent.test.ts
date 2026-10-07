@@ -11,6 +11,7 @@ import {
   canReuseDailyDigestStories,
   clipGeneratedProse,
   normalizeGeneratedHeadline,
+  validateBelleDigestClaimSources,
 } from "./belleForumAgent";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import type { ReusableDailyDigestStory } from "./newsDigestTypes";
@@ -18,6 +19,45 @@ import type { ArticleSnapshot } from "./sukiForumAgent";
 import { AgentPublicationQualityError } from "../lib/agent-publication-quality";
 
 describe("Belle Hacker News digest", () => {
+  test("requires exact source IDs and factual coverage for every retrieved brief", () => {
+    const snapshots = [1, 2].map(
+      (id) =>
+        ({ id: `hn-${id}-0`, sourceFetchSucceeded: true }) as ArticleSnapshot,
+    );
+    const briefs = [1, 2].map((hnItemId) => ({
+      hnItemId,
+      summary: "The source describes a recovery checkpoint.",
+      analysis: "",
+    }));
+    const claim = {
+      claim: "The source describes a recovery checkpoint.",
+      sourceCandidateId: "hn-1-0",
+      confidence: "high" as const,
+      kind: "fact" as const,
+    };
+    expect(() =>
+      validateBelleDigestClaimSources(
+        { briefs, claims: [{ ...claim, sourceCandidateId: "invented" }] },
+        snapshots,
+      ),
+    ).toThrow(AgentPublicationQualityError);
+    expect(() =>
+      validateBelleDigestClaimSources({ briefs, claims: [claim] }, snapshots),
+    ).toThrow("hn-2-0");
+    expect(() =>
+      validateBelleDigestClaimSources(
+        { briefs, claims: [claim, { ...claim, sourceCandidateId: "hn-2-0" }] },
+        snapshots,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateBelleDigestClaimSources({ briefs, claims: [claim] }, [
+        snapshots[0]!,
+        { ...snapshots[1]!, sourceFetchSucceeded: false },
+      ]),
+    ).not.toThrow();
+  });
+
   test("retains bounded quality rejection details only in operator diagnostics", () => {
     const error = new AgentPublicationQualityError(
       "Belle's digest failed deterministic source checks: unsupported_numeric_claim.",
@@ -28,7 +68,9 @@ describe("Belle Hacker News digest", () => {
     expect(belleErrorMessage(error, "operator")).toBe(error.message);
     expect(
       belleErrorMessage(
-        new AgentPublicationQualityError("[b]Unsupported claim.[/b] ".repeat(50)),
+        new AgentPublicationQualityError(
+          "[b]Unsupported claim.[/b] ".repeat(50),
+        ),
         "operator",
       ),
     ).toHaveLength(500);

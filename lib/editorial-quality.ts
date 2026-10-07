@@ -275,24 +275,6 @@ export function validateForumAgentMarkup(
     feedback.push("Remove empty list items");
   }
 
-  const danglingEnumeration = plainForumText(withoutCodeContents).match(
-    /\b(?:the|this)\s+(first|second|third)\s+(?:is|was|means?|covers?)\b/i,
-  );
-  if (danglingEnumeration) {
-    const ordinal = danglingEnumeration[1]?.toLowerCase();
-    const hasNext =
-      ordinal === "first"
-        ? /\b(?:the|this)\s+second\b/i.test(plainForumText(withoutCodeContents))
-        : ordinal === "second"
-          ? /\b(?:the|this)\s+third\b/i.test(
-              plainForumText(withoutCodeContents),
-            )
-          : true;
-    if (!hasNext) {
-      feedback.push("Complete or rewrite dangling numbered points");
-    }
-  }
-
   for (const tag of BALANCED_FORUM_TAGS) {
     const openingCount = countMatches(
       withoutCodeContents,
@@ -387,6 +369,14 @@ export function validateForumAgentMarkup(
   };
 }
 
+/** A writing classification, never proof that a conclusion or capability is true. */
+export function forumStatementIsQualifiedInference(statement: string) {
+  const text = plainForumText(statement).trim();
+  return /^(?:this (?:suggests|may suggest|could suggest)|my interpretation (?:is|would be)|a (?:reasonable|possible) (?:implication|interpretation) (?:is|would be)|(?:for|before|when)\b[^.!?]{0,100},\s*(?:consider|compare|check|inspect|test|keep|try)|(?:consider|compare|check|inspect|test|keep|try)\b)/i.test(
+    text,
+  );
+}
+
 export function forumBodyFactualStatements(body: string) {
   const separatedRows = body
     .replace(/\[code(?:=[^\]]*)?\][\s\S]*?\[\/code\]/gi, " ")
@@ -415,7 +405,7 @@ export function forumBodyFactualStatements(body: string) {
         .map((statement) => plainForumText(statement))
         .filter(
           (statement) =>
-            statement.split(/\s+/).length >= 7 &&
+            statement.split(/\s+/).length >= 3 &&
             !statement.endsWith("?") &&
             (extractVerifiableTokens(statement).length > 0 ||
               /\b(?:adds?|allows?|available|can|deprecat(?:e|es|ed)|has|have|includes?|introduc(?:e|es|ed)|is|are|means?|offers?|requires?|ships?|supports?|will)\b/i.test(
@@ -605,7 +595,7 @@ export function validateForumContentCompleteness(
     twelve: 12,
   };
   const declaration =
-    /\b(?:the\s+following\s+|these\s+|(?:check|verify|test|follow|consider|need|requires?|include|includes)\s+(?:the\s+)?)(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s+(?:[a-z-]+\s+){0,3}(steps?|checks?|properties|requirements?|prerequisites?|items?|options?|points?|goals?|conditions?)\b[^\n.!?]*:?\s*\n/gi;
+    /\b(?:the\s+following\s+|these\s+|(?:check|verify|test|follow|consider|need|requires?|include|includes)\s+(?:the\s+)?|^)(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s+(?:[a-z-]+\s+){0,3}(steps?|checks?|properties|requirements?|prerequisites?|items?|options?|points?|goals?|conditions?)\b[^\n.!?]*:?\s*\n/gim;
   for (const match of withoutCode.matchAll(declaration)) {
     const expected =
       countWords[match[1]?.toLowerCase() ?? ""] ?? Number(match[1]);

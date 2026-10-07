@@ -5,6 +5,7 @@ import {
   extractVerifiableTokens,
   forumBodyFactualStatements,
   forumBodyQuestions,
+  forumStatementIsQualifiedInference,
   forumQuestionSimilarity,
   isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
@@ -98,14 +99,39 @@ Regulated team|Pilot|Review the audit trail first
 [*]
 [/list]
 
-The first is modal focus.
+Three points:\n1. Modal focus.\n2. Keyboard access.
 
 [table][tr][th]A[/th][th]B[/th][/tr][tr][td]1[/td][td]2[/td][/tr][/table]`);
     expect(broken.valid).toBe(false);
     expect(broken.feedback).toContain("Remove empty list items");
-    expect(broken.feedback).toContain(
-      "Complete or rewrite dangling numbered points",
+    expect(broken.feedback.join(" ")).toContain("3 points");
+  });
+
+  test("keeps short factual claims visible without treating natural ordinal prose as a list", () => {
+    expect(forumBodyFactualStatements("The model supports streaming.")).toEqual(
+      ["The model supports streaming."],
     );
+    expect(
+      validateForumAgentMarkup(
+        "The first is a prerequisite for the deployment. A token must be present before connecting.",
+      ).valid,
+    ).toBe(true);
+    expect(
+      validateForumAgentMarkup("Install the supported SDK.\n5.").valid,
+    ).toBe(false);
+    expect(
+      validateForumAgentMarkup(
+        "Three steps:\n1. Download the SDK.\n2. Start the server.",
+      ).valid,
+    ).toBe(false);
+    expect(
+      forumStatementIsQualifiedInference(
+        "This suggests recovery can become an explicit checkpoint in your operational playbook.",
+      ),
+    ).toBe(true);
+    expect(
+      forumStatementIsQualifiedInference("The model supports streaming."),
+    ).toBe(false);
   });
 
   test("repairs omitted table-cell closing tags without changing complete cells", () => {

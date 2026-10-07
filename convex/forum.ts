@@ -1,3 +1,8 @@
+import {
+  compactFeedExcerpt,
+  forumThreadEditorialDigestValues,
+  FORUM_FEED_DIGEST_BACKFILL_KEY,
+} from "./forumThreadDigest";
 import { countForumExperience } from "./forumExperienceMetrics";
 import {
   diversifyForumPage,
@@ -2267,13 +2272,82 @@ const listFeedThreadsOperation = defineForumQuery({
     // Paginate raw rows once, then authorize. Avoid query filters that scan an
     // unbounded number of hidden/full-body rows to fill a visible page. Empty
     // pages retain their cursor and callers can continue while !isDone.
-    const result = await (
-      args.sort === "new"
-        ? ctx.db.query("forumThreads")
-        : ctx.db.query("forumThreads").withIndex("by_lastPostAt")
-    )
-      .order("desc")
-      .paginate(args.paginationOpts);
+    // Bind opaque cursors to their source so a rollout never switches tables
+    // halfway through a session. Existing raw canonical cursors still work.
+    let source: "canonical" | "digest" | undefined;
+    let cursor = args.paginationOpts.cursor;
+    if (cursor !== null && cursor.startsWith("forum-feed-v1:")) {
+      try {
+        const parsed: unknown = JSON.parse(
+          cursor.slice("forum-feed-v1:".length),
+        );
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          !("source" in parsed) ||
+          !("cursor" in parsed) ||
+          (parsed.source !== "canonical" && parsed.source !== "digest") ||
+          typeof parsed.cursor !== "string"
+        )
+          throw new Error("Invalid cursor");
+        source = parsed.source;
+        cursor = parsed.cursor;
+      } catch {
+        throw forumError(
+          "INVALID_FEED_PAGE",
+          "Refresh the feed to restart pagination.",
+        );
+      }
+    } else if (cursor !== null) source = "canonical";
+    if (source === undefined) {
+      const state = await ctx.db
+        .query("forumAgentMaintenanceState")
+        .withIndex("by_key", (q) => q.eq("key", FORUM_FEED_DIGEST_BACKFILL_KEY))
+        .unique();
+      source = (state?.completedAt ?? 0) > 0 ? "digest" : "canonical";
+    }
+    const opts = { ...args.paginationOpts, cursor, maximumBytesRead: 256_000 };
+    const raw =
+      source === "digest"
+        ? await ctx.db
+            .query("forumThreadEditorialDigests")
+            .withIndex(
+              args.sort === "new" ? "by_threadCreatedAt" : "by_lastPostAt",
+            )
+            .order("desc")
+            .paginate(opts)
+        : await (
+            args.sort === "new"
+              ? ctx.db.query("forumThreads")
+              : ctx.db.query("forumThreads").withIndex("by_lastPostAt")
+          )
+            .order("desc")
+            .paginate(opts);
+    const rows: (ForumThreadListSource & { body: string })[] = [];
+    for (const row of raw.page) {
+      if ("threadId" in row) {
+        // Rolling-deploy fallback for a repaired/deleted projection row.
+        if (row.feedExcerpt === undefined) {
+          const thread = await ctx.db.get("forumThreads", row.threadId);
+          if (thread)
+            rows.push({ ...thread, body: compactFeedExcerpt(thread.body) });
+        } else
+          rows.push({
+            ...forumThreadListSourceFromDigest(row),
+            body: row.feedExcerpt,
+          });
+      } else rows.push({ ...row, body: compactFeedExcerpt(row.body) });
+    }
+    const result = {
+      ...raw,
+      page: rows,
+      continueCursor: `forum-feed-v1:${JSON.stringify({ source, cursor: raw.continueCursor })}`,
+      ...(raw.splitCursor
+        ? {
+            splitCursor: `forum-feed-v1:${JSON.stringify({ source, cursor: raw.splitCursor })}`,
+          }
+        : {}),
+    };
     const visible = await filterThreadsForPublicCategory(
       ctx,
       result.page.filter((thread) => isVisibleThreadStatus(thread.status)),
@@ -2297,7 +2371,12 @@ const listFeedThreadsOperation = defineForumQuery({
       ),
     );
     const following = viewer
-      ? await loadForumFollowing(ctx, viewer._id, visible)
+      ? await loadForumFollowing(
+          ctx,
+          viewer._id,
+          visible,
+          args.scope === "following",
+        )
       : null;
     const filter = args.authorFilter ?? experience?.authorFilter ?? "all";
     const mutedWords =
@@ -2329,8 +2408,7 @@ const listFeedThreadsOperation = defineForumQuery({
           thread.kind !== "question")
       )
         return false;
-      const text =
-        `${thread.title} ${compactFeedExcerpt(thread.body)}`.toLowerCase();
+      const text = `${thread.title} ${thread.body}`.toLowerCase();
       return !mutedWords.some((word) => text.includes(word));
     });
     // Only discovery pages diversify; chronological and followed views retain exact order.
@@ -2417,7 +2495,7 @@ const listFeedThreadsOperation = defineForumQuery({
               categories.get(thread.categoryId)?.name ?? thread.categorySlug,
             categorySlug:
               categories.get(thread.categoryId)?.slug ?? thread.categorySlug,
-            excerpt: compactFeedExcerpt(thread.body),
+            excerpt: thread.body,
             // Hydrate only visible, selected roots; never expose reply or hidden
             // attachment URLs through a discovery preview.
             attachments: await hydrateForumAttachments(
@@ -2521,7 +2599,7 @@ export const feedAuthorizationFingerprint = query({
 });
 
 function isEditorialFeedThread(
-  thread: ForumThreadDoc,
+  thread: Pick<ForumThreadDoc, "categorySlug">,
   author: UserDoc | null | undefined,
   categorySlug = thread.categorySlug,
 ) {
@@ -2530,34 +2608,6 @@ function isEditorialFeedThread(
     (author?.isAgent === true &&
       FORUM_EDITORIAL_AGENT_SLUGS.has(author.agentSlug ?? ""))
   );
-}
-
-function compactFeedExcerpt(body: string) {
-  const text = body
-    .slice(0, 4_096)
-    .replace(/\[img\][\s\S]*?\[\/img\]/gi, " ")
-    .replace(/\[(?:\/?)[a-z0-9*]+(?:=[^\]]*)?\]/gi, " ")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(
-      /&#(?:x([a-f0-9]+)|(\d+));/gi,
-      (_, hex: string | undefined, decimal: string | undefined) => {
-        const code = parseInt(hex ?? decimal ?? "0", hex ? 16 : 10);
-        return code > 0 &&
-          code <= 0x10ffff &&
-          !(code >= 0xd800 && code <= 0xdfff)
-          ? String.fromCodePoint(code)
-          : " ";
-      },
-    )
-    .replace(
-      /&(amp|lt|gt|quot|apos|nbsp);/gi,
-      (_, entity: string) =>
-        ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " })[
-          entity.toLowerCase()
-        ] ?? " ",
-    );
-  return excerpt(text, 280);
 }
 
 const listNewsFeedOperation = defineForumQuery({
@@ -10057,40 +10107,6 @@ export const ensureNyxForumInfrastructure = internalMutation({
   },
 });
 
-function forumThreadEditorialDigestValues(thread: ForumThreadDoc) {
-  return {
-    threadId: thread._id,
-    threadCreatedAt: thread._creationTime,
-    categoryId: thread.categoryId,
-    categorySlug: thread.categorySlug,
-    prefixId: thread.prefixId,
-    prefixSlug: thread.prefixSlug,
-    prefixLabel: thread.prefixLabel,
-    prefixColor: thread.prefixColor,
-    slug: thread.slug,
-    title: thread.title,
-    kind: thread.kind,
-    sourceUrl: thread.sourceUrl,
-    agentAssisted: thread.agentAssisted,
-    acceptedPostId: thread.acceptedPostId,
-    authorId: thread.authorId,
-    status: thread.status,
-    pinned: thread.pinned,
-    replyCount: thread.replyCount,
-    ratingCount: thread.ratingCount,
-    ratingTotal: thread.ratingTotal,
-    lastAssignedPostNumber: thread.lastAssignedPostNumber,
-    viewCount: thread.viewCount,
-    lastPostId: thread.lastPostId,
-    lastPostAt: thread.lastPostAt,
-    lastPostUserId: thread.lastPostUserId,
-    moderationActivityAt: thread.moderationActivityAt,
-    moderationRootActivityAt: thread.moderationRootActivityAt,
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-  };
-}
-
 function forumThreadListSourceFromDigest(
   digest: ForumThreadEditorialDigestDoc,
 ): ForumThreadListSource {
@@ -10743,6 +10759,41 @@ async function isForumReplyCanaryBlocked(ctx: MutationCtx, now: number) {
   );
 }
 
+function forumAgentDailyReplyLimit(agentSlug: string) {
+  return agentSlug === "belle"
+    ? BELLE_REPLY_DAILY_LIMIT
+    : agentSlug === "suki"
+      ? SUKI_REPLY_DAILY_LIMIT
+      : 2;
+}
+
+/** Successful and in-flight claims share capacity in the same transaction. */
+async function forumAgentReplyCapacity(
+  ctx: MutationCtx,
+  agentSlug: string,
+  runDate: string,
+  excludeRunId?: Id<"forumAgentReplyRuns">,
+) {
+  const limit = forumAgentDailyReplyLimit(agentSlug);
+  const [replied, running] = await Promise.all(
+    (["replied", "running"] as const).map((status) =>
+      ctx.db
+        .query("forumAgentReplyRuns")
+        .withIndex("by_agentSlug_and_runDate_and_status", (q) =>
+          q
+            .eq("agentSlug", agentSlug)
+            .eq("runDate", runDate)
+            .eq("status", status),
+        )
+        .take(limit + 1),
+    ),
+  );
+  const occupied = [...replied, ...running].filter(
+    (run) => run._id !== excludeRunId,
+  );
+  return { replied, occupied, remaining: Math.max(0, limit - occupied.length) };
+}
+
 export const claimSukiForumReplyCandidate = internalMutation({
   args: {
     agentSlug: v.optional(v.string()),
@@ -10763,6 +10814,10 @@ export const claimSukiForumReplyCandidate = internalMutation({
       throw new Error(`Invalid ${agentName} reply run request`);
     }
 
+    // Scheduled events/retries can carry yesterday's date across midnight.
+    // Capacity is charged to the server's current Chicago execution day.
+    const now = Date.now();
+    const runDate = forumAgentDateForTimestamp(now);
     const agent = await ctx.db
       .query("forumAgents")
       .withIndex("by_slug", (q) => q.eq("slug", agentSlug))
@@ -10770,7 +10825,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
     if (agent === null || !agent.enabled) {
       return recordUnclaimedForumReplyCandidate(
         ctx,
-        { agentSlug, runDate: args.runDate, runId: args.runId },
+        { agentSlug, runDate, runId: args.runId },
         "disabled",
       );
     }
@@ -10783,28 +10838,23 @@ export const claimSukiForumReplyCandidate = internalMutation({
       throw new Error(`${agentName}'s forum identity is invalid`);
     }
 
-    const dailyReplies = await ctx.db
-      .query("forumAgentReplyRuns")
-      .withIndex("by_agentSlug_and_runDate_and_status", (q) =>
-        q
-          .eq("agentSlug", agentSlug)
-          .eq("runDate", args.runDate)
-          .eq("status", "replied"),
-      )
-      .take(BELLE_REPLY_DAILY_LIMIT + 1);
-    const dailyLimitReached =
-      dailyReplies.length >=
-      (agentSlug === "belle"
-        ? BELLE_REPLY_DAILY_LIMIT
-        : agentSlug === "suki"
-          ? SUKI_REPLY_DAILY_LIMIT
-          : 2);
+    const capacity = await forumAgentReplyCapacity(
+      ctx,
+      agentSlug,
+      runDate,
+      args.runId,
+    );
+    const dailyLimitReached = capacity.remaining === 0;
     if (dailyLimitReached) {
       if (args.runId !== undefined) {
         const queuedRun = await ctx.db.get("forumAgentReplyRuns", args.runId);
-        if (queuedRun?.status === "queued") {
+        if (
+          queuedRun?.agentSlug === agentSlug &&
+          queuedRun.status === "queued"
+        ) {
           await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
             status: "ignored",
+            runDate,
             reason: "daily-limit",
             completedAt: Date.now(),
             updatedAt: Date.now(),
@@ -10813,12 +10863,11 @@ export const claimSukiForumReplyCandidate = internalMutation({
       }
       return recordUnclaimedForumReplyCandidate(
         ctx,
-        { agentSlug, runDate: args.runDate, runId: args.runId },
+        { agentSlug, runDate, runId: args.runId },
         "daily-limit",
       );
     }
 
-    const now = Date.now();
     if (
       args.runId !== undefined &&
       (args.prioritizeQueue !== true || args.attempt > 0)
@@ -10827,14 +10876,13 @@ export const claimSukiForumReplyCandidate = internalMutation({
       if (
         run === null ||
         run.agentSlug !== agentSlug ||
-        run.runDate !== args.runDate ||
         run.status === "replied" ||
         run.status === "ignored" ||
         args.attempt <= run.attempt
       ) {
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate, runId: args.runId },
+          { agentSlug, runDate, runId: args.runId },
           "retry-unavailable",
         );
       }
@@ -10844,7 +10892,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       ) {
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate, runId: args.runId },
+          { agentSlug, runDate, runId: args.runId },
           "already-running",
         );
       }
@@ -10858,14 +10906,15 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate, runId: args.runId },
+          { agentSlug, runDate, runId: args.runId },
           "source-unavailable",
         );
       }
       if (
         candidate.authorIsAgent &&
-        dailyReplies.filter((dailyRun) => dailyRun.sourceAuthorIsAgent === true)
-          .length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
+        capacity.occupied.filter(
+          (dailyRun) => dailyRun.sourceAuthorIsAgent === true,
+        ).length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
       ) {
         await ctx.db.patch("forumAgentReplyRuns", run._id, {
           status: "ignored",
@@ -10875,14 +10924,14 @@ export const claimSukiForumReplyCandidate = internalMutation({
         });
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate, runId: args.runId },
+          { agentSlug, runDate, runId: args.runId },
           "daily-limit",
         );
       }
       if (await isForumReplyCanaryBlocked(ctx, now)) {
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate, runId: args.runId },
+          { agentSlug, runDate, runId: args.runId },
           "canary-blocked",
         );
       }
@@ -10893,6 +10942,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       });
       await ctx.db.patch("forumAgentReplyRuns", run._id, {
         attempt: args.attempt,
+        runDate,
         status: "running",
         reason: undefined,
         sourceAuthorIsAgent: candidate.authorIsAgent,
@@ -10927,11 +10977,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       !queuedRuns.some((run) => run._id === args.runId)
     ) {
       const eventRun = await ctx.db.get("forumAgentReplyRuns", args.runId);
-      if (
-        eventRun?.agentSlug === agentSlug &&
-        eventRun.status === "queued" &&
-        eventRun.runDate === args.runDate
-      )
+      if (eventRun?.agentSlug === agentSlug && eventRun.status === "queued")
         queuedRuns.push(eventRun);
     }
 
@@ -10966,8 +11012,9 @@ export const claimSukiForumReplyCandidate = internalMutation({
       }
       if (
         candidate.authorIsAgent &&
-        dailyReplies.filter((dailyRun) => dailyRun.sourceAuthorIsAgent === true)
-          .length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
+        capacity.occupied.filter(
+          (dailyRun) => dailyRun.sourceAuthorIsAgent === true,
+        ).length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
       ) {
         await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
           status: "ignored",
@@ -10998,7 +11045,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       if (await isForumReplyCanaryBlocked(ctx, now)) {
         return recordUnclaimedForumReplyCandidate(
           ctx,
-          { agentSlug, runDate: args.runDate },
+          { agentSlug, runDate },
           "canary-blocked",
         );
       }
@@ -11009,6 +11056,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
       });
       await ctx.db.patch("forumAgentReplyRuns", queuedRun._id, {
         attempt: args.attempt,
+        runDate,
         status: "running",
         model: agent.model,
         sourceAuthorIsAgent: candidate.authorIsAgent,
@@ -11028,7 +11076,7 @@ export const claimSukiForumReplyCandidate = internalMutation({
 
     return recordUnclaimedForumReplyCandidate(
       ctx,
-      { agentSlug, runDate: args.runDate },
+      { agentSlug, runDate },
       "no-candidate",
     );
   },
@@ -11065,7 +11113,7 @@ export const markSukiForumReplyIgnored = internalMutation({
     }
     await recordForumReplySweepEvent(ctx, {
       agentSlug,
-      runDate: args.runDate,
+      runDate: run?.runDate ?? forumAgentDateForTimestamp(now),
       outcome: "ignored",
       runId: args.runId,
       sourceKind: args.sourceKind,
@@ -11104,7 +11152,7 @@ export const markSukiForumReplyFailed = internalMutation({
     }
     await recordForumReplySweepEvent(ctx, {
       agentSlug,
-      runDate: args.runDate,
+      runDate: run?.runDate ?? forumAgentDateForTimestamp(now),
       outcome: "route-failed",
       runId: args.runId,
       sourceKind: args.sourceKind,
@@ -11214,6 +11262,47 @@ export const publishSukiForumReply = internalMutation({
       return { status: "ignored" as const, reason: "thread-unavailable" };
     }
 
+    const executionDay = forumAgentDateForTimestamp(now);
+    if (run.runDate !== executionDay) {
+      // A valid running claim can itself cross midnight during generation.
+      // Reserve today's remaining capacity before creating any public reply.
+      const capacity = await forumAgentReplyCapacity(
+        ctx,
+        agentSlug,
+        executionDay,
+        run._id,
+      );
+      const reason =
+        capacity.remaining === 0
+          ? "daily-limit"
+          : candidate.authorIsAgent &&
+              capacity.occupied.filter(
+                (item) => item.sourceAuthorIsAgent === true,
+              ).length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
+            ? "agent-source-daily-limit"
+            : undefined;
+      if (reason) {
+        await ctx.db.patch("forumAgentReplyRuns", run._id, {
+          runDate: executionDay,
+          status: "ignored",
+          reason,
+          completedAt: now,
+          updatedAt: now,
+        });
+        await recordForumReplySweepEvent(ctx, {
+          agentSlug,
+          runDate: executionDay,
+          outcome: "daily-limit",
+          runId: run._id,
+          sourceKind: run.sourceKind,
+          threadId: run.threadId,
+          detail: reason,
+          now,
+        });
+        return { status: "ignored" as const, reason };
+      }
+    }
+
     assertAgentPublicationHygiene(args.body);
     const body = normalizeReplyBody(args.body);
     const postNumber = await nextPostNumberForThread(ctx, thread);
@@ -11264,6 +11353,7 @@ export const publishSukiForumReply = internalMutation({
     });
     await ctx.db.patch("forumAgentReplyRuns", run._id, {
       status: "replied",
+      runDate: executionDay,
       reason: compactForumText(args.reason, 160),
       replyPostId: postId,
       inputTokens: args.inputTokens,
@@ -11273,7 +11363,7 @@ export const publishSukiForumReply = internalMutation({
     });
     await recordForumReplySweepEvent(ctx, {
       agentSlug,
-      runDate: run.runDate,
+      runDate: executionDay,
       outcome: "replied",
       runId: run._id,
       sourceKind: run.sourceKind,
@@ -11602,15 +11692,53 @@ async function scheduleForumAgentReview(
     .withIndex("by_runKey", (q) => q.eq("runKey", runKey))
     .unique();
   if (existing !== null) return existing._id;
-  const conversationId = await ensureForumAgentConversation(ctx, {
-    forumThreadId: args.threadId,
-    agentSlug,
-    now: args.now,
-  });
+  const runDate = forumAgentDateForTimestamp(args.now);
+  const capacity = await forumAgentReplyCapacity(ctx, agentSlug, runDate);
+  if (capacity.remaining === 0) return null;
+  const pending = await ctx.db
+    .query("forumAgentReplyRuns")
+    .withIndex("by_agentSlug_and_status_and_updatedAt", (q) =>
+      q.eq("agentSlug", agentSlug).eq("status", "queued"),
+    )
+    .order("desc")
+    .take(forumAgentDailyReplyLimit(agentSlug));
+  if (pending.length >= capacity.remaining) {
+    // Roster agents have no hourly recovery cron. Coalesce a wake-up for an
+    // old full queue instead of admitting another provider job per new post.
+    const latestPending = pending[0];
+    if (
+      agentSlug !== "suki" &&
+      agentSlug !== "belle" &&
+      latestPending !== undefined &&
+      args.now - latestPending.updatedAt >= SUKI_REPLY_STALE_RUN_MS
+    ) {
+      await ctx.db.patch("forumAgentReplyRuns", latestPending._id, {
+        updatedAt: args.now,
+      });
+      await ctx.scheduler.runAfter(
+        SUKI_REPLY_MIN_AGE_MS,
+        internal.sukiForumReplyAgent.runRosterReplySweep,
+        {
+          agentSlug,
+          attempt: 0,
+          runDate: latestPending.runDate,
+          runId: latestPending._id,
+        },
+      );
+    }
+    return null;
+  }
+  if (
+    admission.author.isAgent &&
+    [...capacity.occupied, ...pending].filter(
+      (run) => run.sourceAuthorIsAgent === true,
+    ).length >= FORUM_REPLY_AI_SOURCE_DAILY_LIMIT
+  )
+    return null;
   const runId = await ctx.db.insert("forumAgentReplyRuns", {
     runKey,
     agentSlug,
-    runDate: forumAgentDateForTimestamp(args.now),
+    runDate,
     sourceKind: args.sourceKind,
     sourcePostId: args.sourcePostId,
     threadId: args.threadId,
@@ -11622,7 +11750,6 @@ async function scheduleForumAgentReview(
     model: selectedAgent.model,
     promptVersion: FORUM_AGENT_REPLY_PROMPT_VERSION,
     admittedAt: args.now,
-    conversationId,
     reason: "event-queued",
     startedAt: args.now,
     updatedAt: args.now,
@@ -11637,7 +11764,7 @@ async function scheduleForumAgentReview(
     {
       ...(agentSlug === "suki" || agentSlug === "belle" ? {} : { agentSlug }),
       attempt: 0,
-      runDate: forumAgentDateForTimestamp(args.now),
+      runDate,
       runId,
     },
   );
@@ -23308,7 +23435,8 @@ async function loadForumExperience(
 async function loadForumFollowing(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
-  threads: ForumThreadDoc[],
+  threads: ForumThreadListSource[],
+  includeFollowing: boolean,
 ) {
   // Membership checks are bounded by this feed page, not the member's entire
   // subscription history. Large followed lists never prevent ordinary browsing.
@@ -23317,18 +23445,19 @@ async function loadForumFollowing(
   const members = new Set<Id<"users">>();
   const ignored = new Set<Id<"users">>();
   await Promise.all([
-    ...[...new Set(threads.map((t) => t.categoryId))].map(
-      async (categoryId) => {
-        const row = await ctx.db
-          .query("forumCategorySubscriptions")
-          .withIndex("by_userId_and_categoryId", (q) =>
-            q.eq("userId", userId).eq("categoryId", categoryId),
-          )
-          .unique();
-        if (row?.status === "active") boards.add(categoryId);
-      },
-    ),
-    ...threads.map(async (thread) => {
+    ...(includeFollowing
+      ? [...new Set(threads.map((t) => t.categoryId))]
+      : []
+    ).map(async (categoryId) => {
+      const row = await ctx.db
+        .query("forumCategorySubscriptions")
+        .withIndex("by_userId_and_categoryId", (q) =>
+          q.eq("userId", userId).eq("categoryId", categoryId),
+        )
+        .unique();
+      if (row?.status === "active") boards.add(categoryId);
+    }),
+    ...(includeFollowing ? threads : []).map(async (thread) => {
       const row = await ctx.db
         .query("forumThreadSubscriptions")
         .withIndex("by_userId_and_threadId", (q) =>
@@ -23339,8 +23468,8 @@ async function loadForumFollowing(
     }),
     ...[...new Set(threads.map((t) => t.authorId))].map(
       async (targetUserId) => {
-        const [buddy, ignore] = await Promise.all(
-          ["buddy", "ignore"].map((kind) =>
+        const relationships = await Promise.all(
+          (includeFollowing ? ["buddy", "ignore"] : ["ignore"]).map((kind) =>
             ctx.db
               .query("forumUserRelationships")
               .withIndex("by_userId_and_targetUserId_and_kind", (q) =>
@@ -23352,8 +23481,8 @@ async function loadForumFollowing(
               .unique(),
           ),
         );
-        if (buddy) members.add(targetUserId);
-        if (ignore) ignored.add(targetUserId);
+        if (includeFollowing && relationships[0]) members.add(targetUserId);
+        if (relationships[includeFollowing ? 1 : 0]) ignored.add(targetUserId);
       },
     ),
   ]);

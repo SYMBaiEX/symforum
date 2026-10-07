@@ -11,6 +11,11 @@ import {
   OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
+import {
+  forumGenerationDeadline,
+  forumGenerationStageTimeout,
+  ForumGenerationBudgetError,
+} from "../lib/forum-generation-budget";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   runWithModelFallback,
@@ -23,6 +28,7 @@ import {
 import {
   forumBodyFactualStatements,
   forumBodyQuestions,
+  forumStatementIsQualifiedInference,
   forumQuestionSimilarity,
   isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
@@ -74,9 +80,10 @@ const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
 const PROMPT_VERSION = "suki-forum-v21-evidence-sized-editorial";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
-// One focused correction pass is the measured sweet spot. A second full-model
-// rewrite more than doubled token usage while rarely rescuing a rejected post.
-export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 1;
+// Two bounded corrections can repair distinct issues; the shared action deadline
+// reserves time for the mandatory independent review and commit.
+export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
+const FORUM_SEMANTIC_REVIEW_RESERVE_MS = 90_000;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 
@@ -347,6 +354,7 @@ export async function runForumResearchSlot(
   },
   config: ForumResearchAgentConfig,
 ): Promise<ForumResearchRunResult> {
+  const generationDeadline = forumGenerationDeadline();
   const attempt = args.attempt ?? 0;
   const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
   if (config.slug === "suki") {
@@ -381,8 +389,8 @@ export async function runForumResearchSlot(
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
-    // All editorial generations use OpenRouter. The routing control disables
-    // the paid fallback when its daily budget is exhausted.
+    // Editorial generation explicitly selects openrouter/free; routing controls
+    // still enforce provider health and the account's request budget.
     const effectiveRoutingConfig = routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
@@ -500,7 +508,10 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 150_000,
+        totalTimeoutMs: forumGenerationStageTimeout(
+          generationDeadline - FORUM_SEMANTIC_REVIEW_RESERVE_MS,
+          150_000,
+        ),
         estimatedInputTokens: estimatePromptInputTokens(topicPrompt),
         maxOutputTokens: (candidate: RoutedModel) =>
           openRouterStructuredOutputBudget(candidate.modelId, 3_000),
@@ -528,6 +539,7 @@ export async function runForumResearchSlot(
           return { result, selection: result.output };
         },
       },
+      ["openrouter/free"],
     );
     const selectionResult = selectionGeneration.value.result;
     const selection = {
@@ -712,7 +724,10 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: stage === "revision" ? 210_000 : 270_000,
+        totalTimeoutMs: forumGenerationStageTimeout(
+          generationDeadline - FORUM_SEMANTIC_REVIEW_RESERVE_MS,
+          stage === "revision" ? 210_000 : 270_000,
+        ),
         estimatedInputTokens: estimatePromptInputTokens(prompt),
         maxOutputTokens: (candidate: RoutedModel) =>
           forumWriterMaxOutputTokens(
@@ -750,7 +765,9 @@ export async function runForumResearchSlot(
           return { result, draft: result.output };
         },
       };
-      return await runWithModelFallback(effectiveRoutingConfig, routeArgs);
+      return await runWithModelFallback(effectiveRoutingConfig, routeArgs, [
+        "openrouter/free",
+      ]);
     };
     const draftStartedAt = Date.now();
     const draftGeneration = await generateForumDraft(
@@ -816,7 +833,6 @@ export async function runForumResearchSlot(
     ) {
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
-      const revisionTier = forumRevisionTier(quality);
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -824,12 +840,14 @@ export async function runForumResearchSlot(
           selection: effectiveSelection,
           snapshots,
           config,
-          revisionFeedback: quality.feedback,
+          revisionFeedback: [
+            ...new Set([...quality.blockingIssues, ...quality.feedback]),
+          ],
           previousDraft: draft,
           followUp: followUpThreadId !== undefined,
         }),
         {
-          lightRevision: revisionTier === "nano",
+          lightRevision: false,
         },
       );
       const revision = revisionGeneration.value.result;
@@ -938,7 +956,7 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 90_000,
+        totalTimeoutMs: forumGenerationStageTimeout(generationDeadline, 90_000),
         estimatedInputTokens: estimatePromptInputTokens(reviewPrompt),
         maxOutputTokens: openRouterStructuredOutputBudget(
           "openrouter/free",
@@ -979,14 +997,7 @@ export async function runForumResearchSlot(
       outputTokens: semanticReview.value.usage.outputTokens,
       durationMs: Date.now() - reviewStartedAt,
     });
-    if (
-      !semanticReview.value.output.approved ||
-      semanticReview.value.output.issues.length > 0
-    ) {
-      throw new ForumEditorialQualityError(
-        `Original-evidence review rejected publication: ${semanticReview.value.output.issues.join("; ")}`,
-      );
-    }
+    assertForumSemanticReviewApproved(semanticReview.value.output);
     revisionInputTokens = addOptionalNumbers(
       revisionInputTokens,
       semanticReview.value.usage.inputTokens,
@@ -1160,7 +1171,8 @@ export async function runForumResearchSlot(
   } catch (error) {
     const privateDraftHeld =
       isResearchQualityGateError(error) ||
-      error instanceof ForumEditorialQualityError;
+      error instanceof ForumEditorialQualityError ||
+      error instanceof ForumGenerationBudgetError;
     await ctx.runMutation(
       internal.forumAgentResearchPackets.markResearchPacketTerminated,
       {
@@ -1184,7 +1196,10 @@ export async function runForumResearchSlot(
       });
       return { status: "skipped" as const, reason: "quality-review" };
     }
-    if (error instanceof ForumEditorialQualityError) {
+    if (
+      error instanceof ForumEditorialQualityError ||
+      error instanceof ForumGenerationBudgetError
+    ) {
       const reason = publicErrorMessage(error, config.name);
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
@@ -2196,10 +2211,26 @@ function forumBodyStatementHasSupportedClaim(
     const snapshot = snapshotsById.get(claim.sourceCandidateId);
     if (snapshot === undefined) return false;
     const sourceText = forumSnapshotText(snapshot);
-    return (
-      lexicalEvidenceCoverage(statement, sourceText) >= 0.45 &&
-      unsupportedVerifiableTokens(statement, sourceText).length === 0
-    );
+    if (unsupportedVerifiableTokens(statement, sourceText).length > 0)
+      return false;
+    if (
+      claim.kind === "analysis" &&
+      forumStatementIsQualifiedInference(statement)
+    ) {
+      // This only admits the inference to semantic review. The label cannot
+      // certify a capability; an independently supported premise is required.
+      return (
+        unsupportedVerifiableTokens(claim.claim, sourceText).length === 0 &&
+        claims.some(
+          (premise) =>
+            premise.kind === "fact" &&
+            premise.sourceCandidateId === claim.sourceCandidateId &&
+            lexicalEvidenceCoverage(premise.claim, sourceText) >= 0.45 &&
+            unsupportedVerifiableTokens(premise.claim, sourceText).length === 0,
+        )
+      );
+    }
+    return lexicalEvidenceCoverage(statement, sourceText) >= 0.45;
   });
 }
 
@@ -2217,6 +2248,18 @@ export function repairForumDraftForReview(
 
 export class ForumEditorialQualityError extends Error {
   override name = "ForumEditorialQualityError";
+}
+
+/** Deterministic triage never substitutes for independent original-evidence review. */
+export function assertForumSemanticReviewApproved(review: {
+  approved: boolean;
+  issues: readonly string[];
+}) {
+  if (!review.approved || review.issues.length > 0) {
+    throw new ForumEditorialQualityError(
+      `Original-evidence review rejected publication: ${review.issues.join("; ")}`,
+    );
+  }
 }
 
 type EvaluatedForumDraft = {
@@ -2605,14 +2648,10 @@ export function structuredBlockContract(
 
 export function forumWriterMaxOutputTokens(
   stage: "draft" | "revision",
-  lightRevision: boolean,
+  _lightRevision: boolean,
   modelId?: string,
 ) {
-  const baseTokens = lightRevision
-    ? 2_800
-    : stage === "revision"
-      ? 5_500
-      : 4_800;
+  const baseTokens = stage === "revision" ? 5_500 : 4_800;
   return openRouterStructuredOutputBudget(
     modelId ?? OPENROUTER_FORUM_MODEL,
     baseTokens,
