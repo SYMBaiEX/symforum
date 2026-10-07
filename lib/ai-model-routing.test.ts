@@ -1,4 +1,4 @@
-import { APICallError, Output, ToolLoopAgent } from "ai";
+import { APICallError, generateText, Output, ToolLoopAgent } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { LanguageModel } from "ai";
@@ -119,7 +119,10 @@ describe("OpenRouter-only model routing", () => {
   test("sends structured object generation as strict JSON Schema", async () => {
     const requestBodies: Record<string, unknown>[] = [];
     const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe(
+          "https://openrouter.ai/api/v1/chat/completions",
+        );
         requestBodies.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>,
         );
@@ -164,6 +167,11 @@ describe("OpenRouter-only model routing", () => {
       expect(result.output).toEqual({ status: "ok" });
       expect(requestBodies).toHaveLength(1);
       expect(requestBodies[0].tool_choice).toBeUndefined();
+      expect(requestBodies[0].model).toBe("openrouter/free");
+      expect(requestBodies[0].provider).toEqual({ require_parameters: true });
+      expect(requestBodies[0].reasoning).toEqual({ enabled: false });
+      expect(requestBodies[0].reasoning_effort).toBeUndefined();
+      expect(requestBodies[0].plugins).toEqual([{ id: "response-healing" }]);
       expect(requestBodies[0].response_format).toMatchObject({
         type: "json_schema",
         json_schema: {
@@ -551,4 +559,317 @@ describe("OpenRouter-only model routing", () => {
     );
     expect(source).not.toMatch(/createAnthropic|createGoogleGenerativeAI/);
   });
+});
+
+describe("OpenRouter transport safeguards", () => {
+  async function withResponse(
+    content: string | null,
+    run: (bodies: Record<string, unknown>[]) => Promise<void>,
+    finishReason = "stop",
+  ) {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            id: "synthetic-test",
+            object: "chat.completion",
+            created: 1_760_000_000,
+            model: "vendor/served:free",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content },
+                finish_reason: finishReason,
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 1500,
+              total_tokens: 1510,
+              completion_tokens_details: { reasoning_tokens: 1499 },
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    try {
+      await run(bodies);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  test.each([
+    { native: { effort: "minimal" }, expected: { effort: "minimal" } },
+    {
+      native: { max_tokens: 256, exclude: true },
+      expected: { max_tokens: 256, exclude: true },
+    },
+    { native: { enabled: false }, expected: { enabled: false } },
+    { native: { exclude: true }, expected: { enabled: false, exclude: true } },
+  ])(
+    "preserves native reasoning controls: $native",
+    async ({ native, expected }) => {
+      await withResponse('{"status":"ok"}', async (bodies) => {
+        const [route] = await routedModelCandidates(
+          { openRouterApiKey: "test" },
+          ["openrouter/free"],
+        );
+        const result = await generateText({
+          model: route.model,
+          prompt: "Synthetic probe",
+          output: Output.object({
+            schema: z.object({ status: z.literal("ok") }),
+          }),
+          reasoning: "low",
+          maxRetries: 0,
+          providerOptions: {
+            openrouter: {
+              reasoning: native,
+              provider: { order: ["Nvidia"] },
+              plugins: [{ id: "web" }, { id: "response-healing" }],
+            },
+          },
+        });
+        expect(result.output).toEqual({ status: "ok" });
+        expect(bodies[0].reasoning).toEqual(expected);
+        expect(bodies[0].reasoning_effort).toBeUndefined();
+        expect(bodies[0].provider).toEqual({
+          order: ["Nvidia"],
+          require_parameters: true,
+        });
+        expect(bodies[0].plugins).toEqual([
+          { id: "web" },
+          { id: "response-healing" },
+        ]);
+      });
+    },
+  );
+
+  test("translates paid reasoning settings without disabling thinking", async () => {
+    await withResponse('{"status":"ok"}', async (bodies) => {
+      const [route] = await routedModelCandidates(
+        { openRouterApiKey: "test" },
+        [OPENROUTER_PAID_FALLBACK_MODEL],
+      );
+      const result = await generateText({
+        model: route.model,
+        prompt: "Synthetic probe",
+        reasoning: "low",
+        output: Output.object({
+          schema: z.object({ status: z.literal("ok") }),
+        }),
+        maxRetries: 0,
+      });
+      expect(result.output.status).toBe("ok");
+      expect(bodies[0].reasoning).toEqual({ effort: "low" });
+    });
+  });
+
+  test("leaves ordinary text calls free of schema healing", async () => {
+    await withResponse("Synthetic response", async (bodies) => {
+      const [route] = await routedModelCandidates(
+        { openRouterApiKey: "test" },
+        ["openrouter/free"],
+      );
+      const result = await generateText({
+        model: route.model,
+        prompt: "Synthetic probe",
+        reasoning: "low",
+        maxRetries: 0,
+      });
+      expect(result.text).toBe("Synthetic response");
+      expect(bodies[0].plugins).toBeUndefined();
+      expect(bodies[0].provider).toBeUndefined();
+      expect(bodies[0].reasoning).toEqual({ effort: "low" });
+    });
+  });
+
+  test.each([
+    {
+      content: null,
+      finish: "length",
+      message:
+        "empty structured output (finish=length, outputTokens=1500, reasoningTokens=1499)",
+    },
+    {
+      content: '{"status":',
+      finish: "length",
+      message: "could not parse the response",
+    },
+    {
+      content: '{"status":"wrong"}',
+      finish: "stop",
+      message: "did not match schema",
+    },
+  ])(
+    "rejects $content and reports $finish without leaking generated content",
+    async ({ content, finish, message }) => {
+      await withResponse(
+        content,
+        async () => {
+          const [route] = await routedModelCandidates(
+            { openRouterApiKey: "test" },
+            ["openrouter/free"],
+          );
+          const onAttempt = vi.fn();
+          await expect(
+            runRoutedCandidates([route], {
+              stage: "synthetic",
+              totalTimeoutMs: 10_000,
+              onAttempt,
+              run: async (candidate) => {
+                const result = await generateText({
+                  model: candidate.model,
+                  prompt: "Synthetic probe",
+                  output: Output.object({
+                    schema: z.object({ status: z.literal("ok") }),
+                  }),
+                  maxRetries: 0,
+                });
+                return result.output;
+              },
+            }),
+          ).rejects.toThrow(message);
+          const event = onAttempt.mock.calls[0][0];
+          expect(event.outcome).toBe("failed");
+          expect(event.errorMessage).toContain(`finish=${finish}`);
+          expect(event.errorMessage).toContain("reasoningTokens=1499");
+          expect(event.errorMessage).not.toContain('"wrong"');
+        },
+        finish,
+      );
+    },
+  );
+});
+
+describe("mandatory-reasoning free endpoints", () => {
+  test.each([
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 2,
+      success: true,
+    },
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: true,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: true,
+      requests: 2,
+      success: false,
+    },
+    {
+      status: 401,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+    {
+      status: 400,
+      message: "Invalid schema.",
+      explicit: false,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+  ])(
+    "bounded retry: $status, explicit=$explicit, repeated=$repeated",
+    async (scenario) => {
+      const bodies: Record<string, unknown>[] = [];
+      const signals: (AbortSignal | null | undefined)[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+          bodies.push(JSON.parse(String(init?.body)));
+          signals.push(init?.signal);
+          if (bodies.length === 1 || scenario.repeated) {
+            return new Response(
+              JSON.stringify({
+                error: { message: scenario.message, code: scenario.status },
+              }),
+              {
+                status: scenario.status,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              id: "retry-test",
+              created: 1_760_000_000,
+              model: "vendor/reasoning-model:free",
+              choices: [
+                {
+                  index: 0,
+                  message: { role: "assistant", content: '{"status":"ok"}' },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 100,
+                total_tokens: 110,
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
+        }),
+      );
+      try {
+        const [route] = await routedModelCandidates(
+          { openRouterApiKey: "test" },
+          ["openrouter/free"],
+        );
+        const result = generateText({
+          model: route.model,
+          prompt: "Synthetic request",
+          maxOutputTokens: 6000,
+          maxRetries: 0,
+          abortSignal: AbortSignal.timeout(10_000),
+          output: Output.object({
+            schema: z.object({ status: z.literal("ok") }),
+          }),
+          providerOptions: scenario.explicit
+            ? { openrouter: { reasoning: { enabled: false } } }
+            : undefined,
+        });
+        if (scenario.success)
+          expect((await result).output).toEqual({ status: "ok" });
+        else await expect(result).rejects.toThrow(scenario.message);
+        expect(bodies).toHaveLength(scenario.requests);
+        expect(bodies.every((body) => body.model === "openrouter/free")).toBe(
+          true,
+        );
+        expect(bodies[0].reasoning).toEqual({ enabled: false });
+        if (bodies.length === 2) {
+          expect(bodies[1].reasoning).toEqual({ effort: "low" });
+          expect(bodies[1].max_tokens).toBe(6000);
+          expect(signals[1]).toBe(signals[0]);
+        }
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 });

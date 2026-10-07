@@ -20,6 +20,7 @@ import {
   type RoutedModel,
 } from "../lib/ai-model-routing";
 import { modelGenerationSettings } from "../lib/openrouter-model-profile";
+import { openRouterStructuredOutputBudget } from "../lib/ai-models";
 import { internal } from "./_generated/api";
 import { env, internalAction, type ActionCtx } from "./_generated/server";
 import { routeTelemetry } from "./aiTelemetryHelpers";
@@ -95,13 +96,15 @@ export async function convexModelRoutingConfig(
 export const probe = internalAction({
   args: {
     provider: v.optional(v.literal("openrouter")),
+    freeOnly: v.optional(v.boolean()),
   },
   returns: v.object({
     provider: v.union(v.literal("openrouter")),
     model: v.string(),
     response: v.string(),
   }),
-  handler: async (ctx, args) => await runStructuredProbe(ctx, args.provider),
+  handler: async (ctx, args) =>
+    await runStructuredProbe(ctx, args.provider, args.freeOnly),
 });
 
 export const runStructuredCanary = internalAction({
@@ -140,7 +143,11 @@ export const runStructuredCanary = internalAction({
   },
 });
 
-async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
+export async function runStructuredProbe(
+  ctx: ActionCtx,
+  provider?: "openrouter",
+  freeOnly = false,
+) {
   const correlationId = `model-canary:${Date.now()}`;
   const generationStartedAt = Date.now();
   const config = await convexModelRoutingConfig(ctx, { correlationId });
@@ -149,11 +156,11 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
     "forum agent before it may publish. Return one structured object using " +
     "topic 'Structured routing health check', title " +
     "'Structured routing health check passed', source URL " +
-    "'https://symbaiex.com/agents.md', the exact required message, and " +
+    `'https://symbaiex.com/agents.md', message '${CANARY_MESSAGE}', and ` +
     "an 80-200 character draft explaining that this synthetic payload " +
     "checks schema-valid tool submission without publishing. Do not write prose.";
   const routeArgs = {
-    stage: `operator:model-route-probe:${provider ?? "auto"}`,
+    stage: `operator:model-route-probe:${freeOnly ? "free" : (provider ?? "auto")}`,
     correlationId,
     feature: "model-route-canary",
     onAttempt: routeTelemetry(ctx, {
@@ -163,13 +170,17 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
     }),
     totalTimeoutMs: 180_000,
     estimatedInputTokens: estimatePromptInputTokens(canaryPrompt),
-    maxOutputTokens: 1_500,
+    maxOutputTokens: (candidate: RoutedModel) =>
+      openRouterStructuredOutputBudget(candidate.modelId, 4_000),
     run: async (candidate: RoutedModel, signal: AbortSignal) => {
       const result = await generateText({
         model: candidate.model,
         prompt: canaryPrompt,
         output: Output.object({ schema: canaryOutputSchema }),
-        maxOutputTokens: 1_500,
+        maxOutputTokens: openRouterStructuredOutputBudget(
+          candidate.modelId,
+          4_000,
+        ),
         maxRetries: 0,
         temperature: 0,
         reasoning: modelGenerationSettings("openrouter", "topic-selection")
@@ -199,7 +210,7 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
     },
   };
   const generation =
-    provider === undefined
+    provider === undefined && !freeOnly
       ? await runWithModelFallback<{
           response: string;
           modelId: string;
@@ -208,8 +219,14 @@ async function runStructuredProbe(ctx: ActionCtx, provider?: "openrouter") {
           usage: { raw?: unknown };
         }>(config, routeArgs)
       : await runRoutedCandidates(
-          (await routedModelCandidates(config)).filter(
-            (candidate) => candidate.provider === provider,
+          (
+            await routedModelCandidates(
+              config,
+              freeOnly ? ["openrouter/free"] : undefined,
+            )
+          ).filter(
+            (candidate) =>
+              provider === undefined || candidate.provider === provider,
           ),
           {
             ...routeArgs,

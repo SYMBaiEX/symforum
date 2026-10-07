@@ -1,5 +1,11 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { APICallError, type generateText, type LanguageModel } from "ai";
+import {
+  APICallError,
+  NoObjectGeneratedError,
+  wrapLanguageModel,
+  type generateText,
+  type LanguageModel,
+} from "ai";
 import {
   estimatedModelCostMicroUsd,
   isOpenRouterFreeModel,
@@ -73,6 +79,52 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_SITE_URL = "https://forum.symbaiex.com";
 const OPENROUTER_APP_NAME = "SYMBiEX Forum Agents";
 
+/** Apply OpenRouter's contract at the transport boundary, including agent calls. */
+function openRouterRequestBody(body: Record<string, unknown>) {
+  const request = { ...body };
+  const format = request.response_format as { type?: string } | undefined;
+  const structured = format?.type === "json_schema";
+  const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
+  if (structured || hasTools) {
+    request.provider = {
+      ...(request.provider as Record<string, unknown> | undefined),
+      // Endpoint support varies even among providers serving the same model.
+      // Never silently discard the requested schema or tool parameters.
+      require_parameters: true,
+    };
+  }
+  if (structured && request.stream !== true) {
+    const plugins = Array.isArray(request.plugins) ? request.plugins : [];
+    request.plugins = plugins.some(
+      (plugin) => plugin?.id === "response-healing",
+    )
+      ? plugins
+      : [...plugins, { id: "response-healing" }];
+  }
+  // The compatible SDK emits the legacy reasoning_effort field. OpenRouter's
+  // native reasoning object controls the budget across its different providers.
+  // Free routing can select a thinking model that ignores a low effort hint.
+  // Default its structured calls to no separate reasoning output; preserve
+  // explicit native reasoning settings supplied by a caller.
+  const effort = request.reasoning_effort ?? (structured ? "low" : undefined);
+  const reasoning = request.reasoning as Record<string, unknown> | undefined;
+  if (
+    effort !== undefined &&
+    reasoning?.effort === undefined &&
+    reasoning?.max_tokens === undefined &&
+    reasoning?.enabled === undefined
+  ) {
+    request.reasoning = {
+      ...(structured && request.model === "openrouter/free"
+        ? { enabled: false }
+        : { effort }),
+      ...reasoning,
+    };
+  }
+  delete request.reasoning_effort;
+  return request;
+}
+
 export type ModelRouteAttempt = {
   correlationId: string;
   feature: string;
@@ -122,16 +174,79 @@ function openRouterModel(
     baseURL: OPENROUTER_BASE_URL,
     includeUsage: true,
     supportsStructuredOutputs: true,
+    transformRequestBody: openRouterRequestBody,
     headers: {
       "HTTP-Referer": OPENROUTER_SITE_URL,
       "X-OpenRouter-Title": OPENROUTER_APP_NAME,
     },
   });
+  const model = openRouter(modelId);
   return {
     provider: "openrouter",
     modelId,
     persistedModel: modelId,
-    model: openRouter(modelId),
+    model: wrapLanguageModel({
+      model,
+      middleware: {
+        specificationVersion: "v4",
+        wrapGenerate: async ({ doGenerate, params }) => {
+          let result;
+          try {
+            result = await doGenerate();
+          } catch (error) {
+            const native = params.providerOptions?.openrouter?.reasoning;
+            const nativeOptions =
+              typeof native === "object" &&
+              native !== null &&
+              !Array.isArray(native)
+                ? native
+                : {};
+            const explicitControl = ["enabled", "effort", "max_tokens"].some(
+              (key) => Object.hasOwn(nativeOptions, key),
+            );
+            if (
+              modelId !== "openrouter/free" ||
+              params.responseFormat?.type !== "json" ||
+              explicitControl ||
+              !APICallError.isInstance(error) ||
+              error.statusCode !== 400 ||
+              !/reasoning is mandatory.*cannot be disabled/i.test(error.message)
+            ) {
+              throw error;
+            }
+            // The free router can pick a mandatory-thinking endpoint. Retry
+            // once on the same free model, within the same abort deadline,
+            // rather than interpreting this parameter rejection as an outage.
+            result = await model.doGenerate({
+              ...params,
+              providerOptions: {
+                ...params.providerOptions,
+                openrouter: {
+                  ...params.providerOptions?.openrouter,
+                  reasoning: { ...nativeOptions, effort: "low" },
+                },
+              },
+            });
+          }
+          if (
+            params.responseFormat?.type === "json" &&
+            !result.content.some(
+              (part) =>
+                (part.type === "text" && part.text.trim().length > 0) ||
+                part.type === "tool-call",
+            )
+          ) {
+            throw new Error(
+              `OpenRouter returned empty structured output ` +
+                `(finish=${result.finishReason.unified}, ` +
+                `outputTokens=${result.usage.outputTokens.total ?? 0}, ` +
+                `reasoningTokens=${result.usage.outputTokens.reasoning ?? 0})`,
+            );
+          }
+          return result;
+        },
+      },
+    }),
   };
 }
 
@@ -185,6 +300,16 @@ export async function routedModelCandidates(
 
 function safeError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  if (NoObjectGeneratedError.isInstance(error)) {
+    // Record enough to distinguish malformed JSON from exhausted output,
+    // without logging prompts, generated private content, or reasoning text.
+    const diagnostic =
+      `finish=${error.finishReason ?? "unknown"}, ` +
+      `outputTokens=${error.usage?.outputTokens ?? 0}, ` +
+      `reasoningTokens=${error.usage?.outputTokenDetails.reasoningTokens ?? 0}, ` +
+      `textChars=${error.text?.length ?? 0}`;
+    return `${message.replace(/\s+/g, " ").slice(0, 120)} (${diagnostic})`;
+  }
   return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
