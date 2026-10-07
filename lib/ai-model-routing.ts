@@ -180,16 +180,54 @@ function openRouterModel(
       "X-OpenRouter-Title": OPENROUTER_APP_NAME,
     },
   });
+  const model = openRouter(modelId);
   return {
     provider: "openrouter",
     modelId,
     persistedModel: modelId,
     model: wrapLanguageModel({
-      model: openRouter(modelId),
+      model,
       middleware: {
         specificationVersion: "v4",
         wrapGenerate: async ({ doGenerate, params }) => {
-          const result = await doGenerate();
+          let result;
+          try {
+            result = await doGenerate();
+          } catch (error) {
+            const native = params.providerOptions?.openrouter?.reasoning;
+            const nativeOptions =
+              typeof native === "object" &&
+              native !== null &&
+              !Array.isArray(native)
+                ? native
+                : {};
+            const explicitControl = ["enabled", "effort", "max_tokens"].some(
+              (key) => Object.hasOwn(nativeOptions, key),
+            );
+            if (
+              modelId !== "openrouter/free" ||
+              params.responseFormat?.type !== "json" ||
+              explicitControl ||
+              !APICallError.isInstance(error) ||
+              error.statusCode !== 400 ||
+              !/reasoning is mandatory.*cannot be disabled/i.test(error.message)
+            ) {
+              throw error;
+            }
+            // The free router can pick a mandatory-thinking endpoint. Retry
+            // once on the same free model, within the same abort deadline,
+            // rather than interpreting this parameter rejection as an outage.
+            result = await model.doGenerate({
+              ...params,
+              providerOptions: {
+                ...params.providerOptions,
+                openrouter: {
+                  ...params.providerOptions?.openrouter,
+                  reasoning: { ...nativeOptions, effort: "low" },
+                },
+              },
+            });
+          }
           if (
             params.responseFormat?.type === "json" &&
             !result.content.some(

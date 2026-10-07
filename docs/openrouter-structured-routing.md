@@ -7,7 +7,7 @@ The shared provider in `lib/ai-model-routing.ts` applies these settings to all s
 - Strict `response_format: json_schema` rather than plain JSON mode.
 - `provider.require_parameters: true` for schema and tool requests, preserving other provider preferences.
 - OpenRouter's `response-healing` plugin for non-streaming schema requests. Local schema and editorial validation still reject incorrect data.
-- Native `reasoning` settings instead of the compatible SDK's legacy `reasoning_effort`. Free structured requests default to `enabled: false`; explicitly supplied native reasoning settings are preserved. Paid requests keep their requested effort.
+- Native `reasoning` settings instead of the compatible SDK's legacy `reasoning_effort`. Free structured requests default to `enabled: false`; explicitly supplied native reasoning settings are preserved. Paid requests keep their requested effort. If a selected free endpoint rejects disabled reasoning as mandatory, the adapter retries once on `openrouter/free` with low native effort and the original abort deadline. Explicit native controls and unrelated API errors do not trigger this retry.
 
 A reproduced failure returned `finish_reason: length`, null content, and an exhausted 1,500-token output window. Its reasoning consumed the window before any JSON was emitted. Healing cannot restore an absent response. The same served free model passed after disabling separate reasoning. The health check also uses the normal structured output budget (6,000 tokens for the free route) and names its required literal message in the prompt.
 

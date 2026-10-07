@@ -746,3 +746,130 @@ describe("OpenRouter transport safeguards", () => {
     },
   );
 });
+
+describe("mandatory-reasoning free endpoints", () => {
+  test.each([
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 2,
+      success: true,
+    },
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: true,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+    {
+      status: 400,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: true,
+      requests: 2,
+      success: false,
+    },
+    {
+      status: 401,
+      message:
+        "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+    {
+      status: 400,
+      message: "Invalid schema.",
+      explicit: false,
+      repeated: false,
+      requests: 1,
+      success: false,
+    },
+  ])(
+    "bounded retry: $status, explicit=$explicit, repeated=$repeated",
+    async (scenario) => {
+      const bodies: Record<string, unknown>[] = [];
+      const signals: (AbortSignal | null | undefined)[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+          bodies.push(JSON.parse(String(init?.body)));
+          signals.push(init?.signal);
+          if (bodies.length === 1 || scenario.repeated) {
+            return new Response(
+              JSON.stringify({
+                error: { message: scenario.message, code: scenario.status },
+              }),
+              {
+                status: scenario.status,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              id: "retry-test",
+              created: 1_760_000_000,
+              model: "vendor/reasoning-model:free",
+              choices: [
+                {
+                  index: 0,
+                  message: { role: "assistant", content: '{"status":"ok"}' },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 100,
+                total_tokens: 110,
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
+        }),
+      );
+      try {
+        const [route] = await routedModelCandidates(
+          { openRouterApiKey: "test" },
+          ["openrouter/free"],
+        );
+        const result = generateText({
+          model: route.model,
+          prompt: "Synthetic request",
+          maxOutputTokens: 6000,
+          maxRetries: 0,
+          abortSignal: AbortSignal.timeout(10_000),
+          output: Output.object({
+            schema: z.object({ status: z.literal("ok") }),
+          }),
+          providerOptions: scenario.explicit
+            ? { openrouter: { reasoning: { enabled: false } } }
+            : undefined,
+        });
+        if (scenario.success)
+          expect((await result).output).toEqual({ status: "ok" });
+        else await expect(result).rejects.toThrow(scenario.message);
+        expect(bodies).toHaveLength(scenario.requests);
+        expect(bodies.every((body) => body.model === "openrouter/free")).toBe(
+          true,
+        );
+        expect(bodies[0].reasoning).toEqual({ enabled: false });
+        if (bodies.length === 2) {
+          expect(bodies[1].reasoning).toEqual({ effort: "low" });
+          expect(bodies[1].max_tokens).toBe(6000);
+          expect(signals[1]).toBe(signals[0]);
+        }
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+});
