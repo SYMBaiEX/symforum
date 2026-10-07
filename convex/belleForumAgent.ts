@@ -742,7 +742,7 @@ export const runDailyHackerNewsDigest = internalAction({
       const message = belleErrorMessage(error);
       await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
         runKey: claim.runKey,
-        errorMessage: message,
+        errorMessage: belleErrorMessage(error, "operator"),
       });
       if (attempt < 2 && isRetryableBelleError(error)) {
         await ctx.scheduler.runAfter(
@@ -1054,8 +1054,12 @@ function safeBbcodeUrl(value: string) {
   }
 }
 
-function belleErrorMessage(error: unknown) {
+export function belleErrorMessage(
+  error: unknown,
+  audience: "public" | "operator" = "public",
+) {
   if (error instanceof AgentPublicationQualityError) {
+    if (audience === "operator") return plainForumText(error.message, 500);
     return "Belle's draft did not meet public-copy quality rules.";
   }
   if (APICallError.isInstance(error)) {

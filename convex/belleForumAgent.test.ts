@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES,
+  belleErrorMessage,
   buildDigestBody,
   boundBelleDigestToRetrievedEvidence,
   belleDigestRetryArguments,
@@ -14,8 +15,28 @@ import {
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import type { ReusableDailyDigestStory } from "./newsDigestTypes";
 import type { ArticleSnapshot } from "./sukiForumAgent";
+import { AgentPublicationQualityError } from "../lib/agent-publication-quality";
 
 describe("Belle Hacker News digest", () => {
+  test("retains bounded quality rejection details only in operator diagnostics", () => {
+    const error = new AgentPublicationQualityError(
+      "Belle's digest failed deterministic source checks: unsupported_numeric_claim.",
+    );
+    expect(belleErrorMessage(error)).toBe(
+      "Belle's draft did not meet public-copy quality rules.",
+    );
+    expect(belleErrorMessage(error, "operator")).toBe(error.message);
+    expect(
+      belleErrorMessage(
+        new AgentPublicationQualityError("[b]Unsupported claim.[/b] ".repeat(50)),
+        "operator",
+      ),
+    ).toHaveLength(500);
+    expect(belleErrorMessage(new Error("Transport failed."), "operator")).toBe(
+      belleErrorMessage(new Error("Transport failed.")),
+    );
+  });
+
   test("reuses successful bounded article snapshots across a retry", () => {
     const story: ReusableDailyDigestStory = {
       hnItemId: 42,
