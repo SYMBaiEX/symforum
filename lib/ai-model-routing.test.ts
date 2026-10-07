@@ -99,6 +99,9 @@ describe("OpenRouter-only model routing", () => {
       openRouterStructuredOutputBudget(OPENROUTER_PAID_FALLBACK_MODEL, 3_000),
     ).toBe(6_000);
     expect(openRouterStructuredOutputBudget("openrouter/free", 3_000)).toBe(
+      6_000,
+    );
+    expect(openRouterStructuredOutputBudget("another/model", 3_000)).toBe(
       4_500,
     );
   });
@@ -440,6 +443,12 @@ describe("OpenRouter-only model routing", () => {
         url: "https://openrouter.ai/api/v1/chat/completions",
         requestBodyValues: {},
         statusCode,
+        responseBody: JSON.stringify({
+          error: {
+            code: statusCode,
+            metadata: { raw: "private-provider-payload" },
+          },
+        }),
       });
       const run = vi.fn(async () => {
         throw error;
@@ -468,6 +477,15 @@ describe("OpenRouter-only model routing", () => {
           outcome: "failed",
           model: "openrouter/free",
         }),
+      );
+      expect(onAttempt.mock.calls[0]?.[0].errorMessage).toContain(
+        `http=${statusCode}`,
+      );
+      expect(onAttempt.mock.calls[0]?.[0].errorMessage).toContain(
+        `code=${statusCode}`,
+      );
+      expect(onAttempt.mock.calls[0]?.[0].errorMessage).not.toContain(
+        "private-provider-payload",
       );
     },
   );
@@ -751,6 +769,25 @@ describe("mandatory-reasoning free endpoints", () => {
   test.each([
     {
       status: 400,
+      message: "Provider returned error",
+      raw: "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 2,
+      success: true,
+    },
+    {
+      status: 200,
+      code: 400,
+      message: "Provider returned error",
+      raw: "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      explicit: false,
+      repeated: false,
+      requests: 2,
+      success: true,
+    },
+    {
+      status: 400,
       message:
         "Reasoning is mandatory for this endpoint and cannot be disabled.",
       explicit: false,
@@ -806,7 +843,13 @@ describe("mandatory-reasoning free endpoints", () => {
           if (bodies.length === 1 || scenario.repeated) {
             return new Response(
               JSON.stringify({
-                error: { message: scenario.message, code: scenario.status },
+                error: {
+                  message: scenario.message,
+                  code: "code" in scenario ? scenario.code : scenario.status,
+                  ...("raw" in scenario
+                    ? { metadata: { raw: scenario.raw } }
+                    : {}),
+                },
               }),
               {
                 status: scenario.status,

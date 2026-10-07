@@ -1,3 +1,7 @@
+import {
+  forumThreadEditorialDigestValues,
+  FORUM_FEED_DIGEST_BACKFILL_KEY,
+} from "./forumThreadDigest";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -8,38 +12,8 @@ import {
 } from "./_generated/server";
 import { FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY } from "./forumSearchProjectionConstants";
 
-function digestValues(thread: Doc<"forumThreads">) {
-  return {
-    threadId: thread._id,
-    threadCreatedAt: thread._creationTime,
-    categoryId: thread.categoryId,
-    categorySlug: thread.categorySlug,
-    prefixId: thread.prefixId,
-    prefixSlug: thread.prefixSlug,
-    prefixLabel: thread.prefixLabel,
-    prefixColor: thread.prefixColor,
-    slug: thread.slug,
-    title: thread.title,
-    authorId: thread.authorId,
-    status: thread.status,
-    pinned: thread.pinned,
-    replyCount: thread.replyCount,
-    ratingCount: thread.ratingCount,
-    ratingTotal: thread.ratingTotal,
-    lastAssignedPostNumber: thread.lastAssignedPostNumber,
-    viewCount: thread.viewCount,
-    lastPostId: thread.lastPostId,
-    lastPostAt: thread.lastPostAt,
-    lastPostUserId: thread.lastPostUserId,
-    moderationActivityAt: thread.moderationActivityAt,
-    moderationRootActivityAt: thread.moderationRootActivityAt,
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-  };
-}
-
 async function upsertDigest(ctx: MutationCtx, thread: Doc<"forumThreads">) {
-  const values = digestValues(thread);
+  const values = forumThreadEditorialDigestValues(thread);
   const existing = await ctx.db
     .query("forumThreadEditorialDigests")
     .withIndex("by_threadId", (q) => q.eq("threadId", thread._id))
@@ -52,15 +26,20 @@ async function upsertDigest(ctx: MutationCtx, thread: Doc<"forumThreads">) {
 }
 
 export const run = internalMutation({
-  args: { cursor: v.optional(v.string()) },
+  args: {
+    cursor: v.optional(v.string()),
+    feed: v.optional(v.boolean()),
+    dryRun: v.optional(v.boolean()),
+  },
   handler: async (ctx, args): Promise<{ processed: number; done: boolean }> => {
+    const key = args.feed
+      ? FORUM_FEED_DIGEST_BACKFILL_KEY
+      : FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY;
     let completionState: Doc<"forumAgentMaintenanceState"> | null | undefined;
     if (args.cursor === undefined) {
       completionState = await ctx.db
         .query("forumAgentMaintenanceState")
-        .withIndex("by_key", (q) =>
-          q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
-        )
+        .withIndex("by_key", (q) => q.eq("key", key))
         .unique();
       if (completionState !== null && completionState.completedAt > 0)
         return { processed: 0, done: true };
@@ -69,11 +48,17 @@ export const run = internalMutation({
     const page = await ctx.db
       .query("forumThreads")
       .order("desc")
-      .paginate({ cursor: args.cursor ?? null, numItems: 80 });
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: 80,
+        maximumBytesRead: 256_000,
+      });
+    if (args.dryRun) return { processed: page.page.length, done: page.isDone };
     for (const thread of page.page) await upsertDigest(ctx, thread);
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, internal.forumThreadDigestBackfill.run, {
         cursor: page.continueCursor,
+        feed: args.feed,
       });
       return { processed: page.page.length, done: false };
     }
@@ -82,14 +67,12 @@ export const run = internalMutation({
         ? completionState
         : await ctx.db
             .query("forumAgentMaintenanceState")
-            .withIndex("by_key", (q) =>
-              q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
-            )
+            .withIndex("by_key", (q) => q.eq("key", key))
             .unique();
     const now = Date.now();
     if (existing === null) {
       await ctx.db.insert("forumAgentMaintenanceState", {
-        key: FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY,
+        key,
         completedAt: now,
         updatedAt: now,
       });
@@ -105,17 +88,18 @@ export const run = internalMutation({
 
 /** Read-only operator check for the background digest backfill. */
 export const status = internalQuery({
-  args: {},
+  args: { feed: v.optional(v.boolean()) },
   returns: v.object({
     complete: v.boolean(),
     completedAt: v.union(v.number(), v.null()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
+    const key = args.feed
+      ? FORUM_FEED_DIGEST_BACKFILL_KEY
+      : FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY;
     const state = await ctx.db
       .query("forumAgentMaintenanceState")
-      .withIndex("by_key", (q) =>
-        q.eq("key", FORUM_THREAD_EDITORIAL_DIGEST_BACKFILL_KEY),
-      )
+      .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
     const completedAt = state?.completedAt ?? null;
     return {

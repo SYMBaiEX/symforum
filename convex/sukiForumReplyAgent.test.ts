@@ -24,6 +24,16 @@ import {
 } from "./sukiForumReplyAgent";
 
 describe("Suki forum reply helpers", () => {
+  test("holds dense reply prose even when a reviewer approves it", () => {
+    const reply = { decision: "reply" as const, reason: "answer", contribution: "answer" as const, evidenceSourceUrls: [], evidenceExcerpt: "" };
+    const sentence = "Compare request identities and capture the resulting error before changing configuration.";
+    const dense = Array.from({ length: 12 }, () => sentence).join(" ");
+    expect(() => applyForumReplyEvidenceReview({ ...reply, body: dense }, { approved: true, issues: [] })).toThrow(/too dense/i);
+    expect(() => validateSukiReplyDecision({ ...reply, body: `[list][*]${dense}[/list]` })).toThrow(/too dense/i);
+    const grouped = Array.from({ length: 4 }, () => Array.from({ length: 3 }, () => sentence).join(" ")).join("\n\n");
+    expect(validateSukiReplyDecision({ ...reply, body: grouped }).decision).toBe("reply");
+  });
+
   test("assigns distinct route ordinals to scheduled retries", () => {
     expect(replySweepRouteAttemptOffset(0)).toBe(0);
     expect(replySweepRouteAttemptOffset(1)).toBe(2);
@@ -261,7 +271,7 @@ describe("Suki forum reply helpers", () => {
       .toEqual({ decision: "ignore", reason: "original-evidence-review-rejected" });
     expect(applyForumReplyEvidenceReview(decision, { approved: true, issues: ["Unsupported correction"] }).decision).toBe("ignore");
     expect(() => applyForumReplyEvidenceReview(decision, undefined)).toThrow();
-    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 3_000 });
+    expect(FORUM_REPLY_EVIDENCE_REVIEW_OPTIONS).toMatchObject({ models: ["openrouter/free"], totalTimeoutMs: 90_000, maxRetries: 0, maxOutputTokens: 4_000 });
   });
 
   test("rechecks final BBCode completeness before accepting a reviewer approval", () => {

@@ -1,10 +1,15 @@
 // @vitest-environment node
 
 import { describe, expect, test, vi } from "vitest";
+import { getFunctionName } from "convex/server";
+import * as modelRouting from "../lib/ai-model-routing";
+import * as convexRouting from "./modelRouting";
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
   contentFormatGuidance,
+  assertForumSemanticReviewApproved,
   collectResearchCandidates,
   evaluateForumDraft,
   finalizeForumBody,
@@ -12,6 +17,8 @@ import {
   fetchArticleSnapshots,
   forumDraftRevisionImproves,
   forumDraftPrompt,
+  forumDraftSchemaForSources,
+  forumTopicSelectionSchema,
   forumDraftPassesGate,
   forumRevisionEvidenceExcerpt,
   ForumEditorialQualityError,
@@ -22,6 +29,8 @@ import {
   parseFeedXml,
   rankResearchCandidatesForTopic,
   repairForumDraftForReview,
+  runForumResearchSlot,
+  selectForumResearchCandidates,
   structuredBlockContract,
 } from "./sukiForumAgent";
 import { ResearchQualityGateError } from "./researchQuality";
@@ -32,6 +41,172 @@ import {
 } from "../lib/forum-posting-prompts";
 
 describe("Suki forum research helpers", () => {
+  test("topic output schema accepts only candidates actually provided", () => {
+    const schema = forumTopicSelectionSchema(["source-a", "source-b"]);
+    expect(schema.parse(discoverySelection()).candidateIds).toEqual([
+      "source-a",
+    ]);
+    expect(
+      schema.safeParse({
+        ...discoverySelection(),
+        candidateIds: ["invented-source"],
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({ ...discoverySelection(), candidateIds: [] }).success,
+    ).toBe(false);
+    expect(() => forumTopicSelectionSchema([])).toThrow(
+      ForumEditorialQualityError,
+    );
+  });
+
+  test("writer and rewrite schema binds evidence IDs and allows a complete long-body ledger", () => {
+    const schema = forumDraftSchemaForSources(["source-a", "source-b"]);
+    const claims = Array.from({ length: 48 }, (_, index) => ({
+      claim: `Source-supported body statement ${index + 1}.`,
+      sourceCandidateId: index % 2 ? "source-a" : "source-b",
+      confidence: "high" as const,
+      kind: "fact" as const,
+    }));
+    const draft = {
+      title: "A complete source-specific ledger",
+      body: claims.map(({ claim }) => claim).join("\n\n"),
+      poll: null,
+      imageCandidateId: null,
+      claims,
+      originalValue: [claims[0].claim],
+      discussionQuestion: "",
+    };
+    expect(
+      schema.parse({ ...draft, claims: claims.slice(0, 13) }).claims,
+    ).toHaveLength(13);
+    expect(schema.parse(draft).claims).toHaveLength(48);
+    expect(
+      schema.safeParse({ ...draft, claims: [...claims, claims[0]] }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...draft,
+        claims: [{ ...claims[0], sourceCandidateId: "fabricated-snapshot" }],
+      }).success,
+    ).toBe(false);
+    expect(() => forumDraftSchemaForSources([])).toThrow(
+      ForumEditorialQualityError,
+    );
+  });
+
+  test("a nonempty unavailable source selection becomes an editorial skip without provider retry", async () => {
+    const candidate = {
+      ...checkpointSnapshot(),
+      publishedAt: Date.now(),
+    };
+    const runMutation = vi.fn(
+      async (reference: Parameters<typeof getFunctionName>[0]) => {
+        if (getFunctionName(reference) === "sukiForumAgentData:claimRun")
+          return { claimed: true, runKey: "test:unavailable-source" };
+        return null;
+      },
+    );
+    const runQuery = vi.fn(
+      async (
+        reference: Parameters<typeof getFunctionName>[0],
+        args: { cacheKeys?: string[] },
+      ) => {
+        switch (getFunctionName(reference)) {
+          case "forum:readForumAgentContext":
+            return {
+              agent: { enabled: true, model: OPENROUTER_FORUM_MODEL },
+              categories: [
+                {
+                  slug: "ai-frameworks",
+                  name: "AI Frameworks",
+                  description: "Practical tooling",
+                },
+              ],
+              recentBoardSlugs: [],
+              recentThreadTitles: [],
+              recentThreads: [],
+              editorialSignals: [],
+            };
+          case "forumAgentEditorialData:readEditorialStrategies":
+            return [];
+          case "sukiForumAgentData:readResearchCaches":
+            return args.cacheKeys?.map((cacheKey) => ({
+              cacheKey,
+              payloadJson: JSON.stringify([candidate]),
+            }));
+          case "forum:selectAvailableForumAgentSourceKeys":
+            return [candidate.sourceKey];
+          default:
+            throw new Error(`Unexpected query: ${getFunctionName(reference)}`);
+        }
+      },
+    );
+    const runAfter = vi.fn();
+    const route = vi
+      .spyOn(modelRouting, "runWithModelFallback")
+      .mockResolvedValue({
+        value: {
+          selection: {
+            ...discoverySelection(),
+            candidateIds: ["not-in-packet"],
+          },
+          result: { usage: {}, response: { modelId: OPENROUTER_FORUM_MODEL } },
+        },
+        route: { persistedModel: OPENROUTER_FORUM_MODEL },
+      } as unknown as Awaited<
+        ReturnType<typeof modelRouting.runWithModelFallback>
+      >);
+    const configMock = vi
+      .spyOn(convexRouting, "convexModelRoutingConfig")
+      .mockResolvedValue({ openRouterApiKey: "fixture-no-network" });
+    const fetchMock = vi.fn(() => {
+      throw new Error("No provider/source request expected");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      expect(() => selectForumResearchCandidates([], [candidate])).toThrow(
+        ForumEditorialQualityError,
+      );
+      expect(
+        await runForumResearchSlot(
+          {
+            runMutation,
+            runQuery,
+            scheduler: { runAfter },
+          } as unknown as Parameters<typeof runForumResearchSlot>[0],
+          { slot: 0, runDate: "2026-10-07" },
+          {
+            slug: "test",
+            name: "Test",
+            dailySlots: 1,
+            promptVersion: "test",
+            deskDescription: "Practical tooling",
+            topicInstructions: "Choose supported tooling",
+            writerInstructions: "Use source evidence",
+          },
+        ),
+      ).toEqual({ status: "skipped", reason: "editorial-quality" });
+      const mutationNames = runMutation.mock.calls.map(([reference]) =>
+        getFunctionName(reference),
+      );
+      expect(mutationNames).toContain("sukiForumAgentData:markRunSkipped");
+      expect(mutationNames).not.toContain("sukiForumAgentData:markRunFailed");
+      expect(runAfter).not.toHaveBeenCalled();
+      expect(route).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        isRetryableError(
+          new ForumEditorialQualityError("Unavailable source IDs"),
+        ),
+      ).toBe(false);
+    } finally {
+      route.mockRestore();
+      configMock.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("reads the research-feed cache in one batch and fetches no fresh feeds", async () => {
     const cachedCandidate = (cacheKey: string) => ({
       id: cacheKey,
@@ -471,7 +646,10 @@ ${"A useful field note. ".repeat(800)}`,
     expect(body).toContain(
       "[url=https://example.com/research]Primary research[/url] — Example Research",
     );
-    expect(body.endsWith("[/list]")).toBe(true);
+    expect(body.endsWith(" — Example Research")).toBe(true);
+    expect(body).not.toContain("[list]");
+    expect(body).not.toContain("AI-assisted research draft");
+    expect(body).not.toContain("editorial review signals");
   });
 
   test("does not duplicate a paraphrased closing question and excludes weak related links", () => {
@@ -927,10 +1105,10 @@ What would you verify first?`,
     expect(structuredBlockContract("brief").toLowerCase()).toContain(
       "optional",
     );
-    expect(forumWriterMaxOutputTokens("draft", false)).toBe(7_200);
-    expect(forumWriterMaxOutputTokens("revision", false)).toBe(8_250);
-    expect(forumWriterMaxOutputTokens("revision", true)).toBe(4_200);
-    expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(1);
+    expect(forumWriterMaxOutputTokens("draft", false)).toBe(9_600);
+    expect(forumWriterMaxOutputTokens("revision", false)).toBe(11_000);
+    expect(forumWriterMaxOutputTokens("revision", true)).toBe(11_000);
+    expect(MAX_FORUM_EDITORIAL_REVISION_PASSES).toBe(2);
   });
 
   test("shortlists topic evidence by desk fit and source diversity", () => {
@@ -997,6 +1175,8 @@ What would you verify first?`,
     });
     expect(result.blockingIssues).toEqual([]);
     expect(forumDraftPassesGate(result)).toBe(true);
+    // The quotation is field-consistent, not proof of a useful contribution.
+    expect(result.utilityScore).toBe(0);
     const finalBody = finalizeForumBody(body, snapshots, {
       discussionQuestion: "",
       subjectTitle: draft.title,
@@ -1007,6 +1187,208 @@ What would you verify first?`,
     expect(
       validateForumAgentMarkup(finalBody, { trustedSourceFooter: true }).valid,
     ).toBe(true);
+  });
+
+  test("holds a fully sourced prose wall for rewriting while preserving readable paragraph alternatives", () => {
+    const sentences = Array.from(
+      { length: 8 },
+      (_, index) =>
+        `The benchmark reports ${70 + index}% accuracy for configuration ${index + 1} using the same held-out prompts and unchanged evaluation method.`,
+    );
+    const snapshot = {
+      ...checkpointSnapshot(),
+      articleTitle: "Benchmark accuracy across evaluated configurations",
+      articleDescription:
+        "Each configuration uses the same held-out prompts and evaluation method.",
+      articleText: sentences.join(" "),
+    };
+    const draft = {
+      title: "Read benchmark results against the evaluation workload",
+      body: sentences.join(" "),
+      poll: null,
+      imageCandidateId: null,
+      claims: sentences.map((claim) => ({
+        claim,
+        sourceCandidateId: "source-a",
+        confidence: "high" as const,
+        kind: "fact" as const,
+      })),
+      originalValue: [sentences[0]],
+      discussionQuestion: "",
+    };
+    const evaluate = (body: string) =>
+      evaluateForumDraft({
+        draft: { ...draft, body },
+        selection: { ...discoverySelection(), contentFormat: "brief" },
+        snapshots: [snapshot],
+        recentThreadTitles: [],
+      });
+    const dense = evaluate(draft.body);
+    expect(dense.groundingScore).toBe(100);
+    expect(dense.blockingIssues.join(" ")).toContain(
+      "Split it at a natural change of thought",
+    );
+    expect(dense.qualityScore).toBeLessThan(78);
+    expect(forumDraftPassesGate(dense)).toBe(false);
+    const readable = evaluate(
+      `${sentences.slice(0, 4).join(" ")}\n\n${sentences.slice(4).join(" ")}`,
+    );
+    expect(readable.blockingIssues).toEqual([]);
+    expect(forumDraftPassesGate(readable)).toBe(true);
+    expect(readable.utilityScore).toBe(0);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: [
+          "The statistics are supported, but the post offers no distinct useful contribution.",
+        ],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+  });
+
+  test("appends a genuine optional question as plain prose and keeps compact verified attribution", () => {
+    const question = "Which stopped-job boundary would you compare first?";
+    const body = finalizeForumBody(
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.",
+      [checkpointSnapshot()],
+      { discussionQuestion: question },
+    );
+    expect(body).toContain(
+      `\n\n${question}\n\n[b]Sources and further reading[/b]`,
+    );
+    expect(body).toContain(
+      "[url=https://example.com/checkpoint]Checkpoint recovery release[/url] — Example",
+    );
+    expect(body).not.toContain("Over to the board");
+    expect(body).not.toContain("[list]");
+    expect(body).not.toContain("AI-assisted research draft");
+    expect(body).not.toContain("editorial review signals");
+    expect(
+      validateForumAgentMarkup(body, { trustedSourceFooter: true }).valid,
+    ).toBe(true);
+  });
+
+  test("admits declared source-bound inference to independent review without certifying capabilities", () => {
+    const fact =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
+    const inference =
+      "This suggests recovery can become an explicit checkpoint in your operational playbook.";
+    const evaluate = (
+      analysis: string,
+      sourceId = "source-a",
+      premiseKind: "fact" | "analysis" = "fact",
+    ) =>
+      evaluateForumDraft({
+        draft: {
+          title: "Checkpoint recovery deserves a deliberate operational check",
+          body: `${fact} ${analysis}`,
+          poll: null,
+          imageCandidateId: null,
+          discussionQuestion: "",
+          claims: [
+            {
+              claim: fact,
+              sourceCandidateId: "source-a",
+              confidence: "high",
+              kind: premiseKind,
+            },
+            {
+              claim: analysis,
+              sourceCandidateId: sourceId,
+              confidence: "medium",
+              kind: "analysis",
+            },
+          ],
+          originalValue: [analysis],
+        },
+        selection: discoverySelection(),
+        snapshots: [checkpointSnapshot()],
+        recentThreadTitles: [],
+      });
+    expect(evaluate(inference).blockingIssues).toEqual([]);
+    expect(
+      evaluate(inference, "source-a", "analysis").blockingIssues.join(" "),
+    ).toContain(inference);
+    expect(
+      evaluate(
+        "Before adoption, keep the original checkpoint available for a stopped-job comparison.",
+      ).blockingIssues,
+    ).toEqual([]);
+    expect(
+      evaluate(inference, "missing-source").blockingIssues.join(" "),
+    ).toContain("candidate ID");
+    expect(
+      evaluate(
+        "This suggests version 9.9 can recover every job automatically.",
+      ).blockingIssues.join(" "),
+    ).toContain("unsupported");
+
+    const fabricated =
+      "This suggests the model can read private inboxes without authentication.";
+    // Lexical triage cannot prove or disprove a nonnumeric capability. Even a
+    // qualified analysis with a real cited premise must pass original-evidence review.
+    expect(evaluate(fabricated).blockingIssues).toEqual([]);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: false,
+        issues: [
+          "The source does not support reading private inboxes without authentication.",
+        ],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+    expect(() =>
+      assertForumSemanticReviewApproved({
+        approved: true,
+        issues: ["Unsupported capability"],
+      }),
+    ).toThrow(ForumEditorialQualityError);
+    expect(() =>
+      assertForumSemanticReviewApproved({ approved: true, issues: [] }),
+    ).not.toThrow();
+  });
+
+  test("rejects short factual claims omitted from the ledger or falsely labeled analysis", () => {
+    const fact =
+      "Version 2.4 adds checkpoint recovery to interrupted synchronization jobs.";
+    const missing = "The model supports streaming.";
+    const base = {
+      title: "Checkpoint recovery needs a stopped-job comparison",
+      body: `${fact} ${missing} Before adoption, compare a stopped job and inspect its saved checkpoint.`,
+      poll: null,
+      imageCandidateId: null,
+      discussionQuestion: "",
+      claims: [
+        {
+          claim: fact,
+          sourceCandidateId: "source-a",
+          confidence: "high" as const,
+          kind: "fact" as const,
+        },
+      ],
+      originalValue: [
+        "Before adoption, compare a stopped job and inspect its saved checkpoint.",
+      ],
+    };
+    for (const claims of [
+      base.claims,
+      [
+        ...base.claims,
+        {
+          claim: missing,
+          sourceCandidateId: "source-a",
+          confidence: "medium" as const,
+          kind: "analysis" as const,
+        },
+      ],
+    ]) {
+      const quality = evaluateForumDraft({
+        draft: { ...base, claims },
+        selection: discoverySelection(),
+        snapshots: [checkpointSnapshot()],
+        recentThreadTitles: [],
+      });
+      expect(quality.blockingIssues.join(" ")).toContain(missing);
+    }
   });
 
   test("source and related-thread footers cannot conceal incomplete authored content", () => {
@@ -1153,6 +1535,11 @@ What would you verify first?`,
     ]) {
       expect(prompt).toContain(FORUM_EDITORIAL_CONTRACT);
       expect(prompt).toContain("20-120 plain words");
+      expect(prompt).toContain("claim ledger permits 1-48 entries");
+      expect(prompt).toContain(
+        "complete body sentences verbatim into originalValue",
+      );
+      expect(prompt).toContain("copy that exact last sentence verbatim");
       expect(prompt).not.toContain(FORUM_EDITORIAL_REVIEW_CONTRACT);
       expect(prompt).not.toContain("function forumEditorialReviewPrompt");
       expect(prompt).not.toContain(

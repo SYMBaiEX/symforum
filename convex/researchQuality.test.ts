@@ -117,9 +117,12 @@ async function insertThread(
 }
 
 describe("research quality gates", () => {
-  test("fails closed for undisclosed, uncited agent drafts and preserves a bounded review queue", async () => {
+  test("fails closed for undisclosed unregistered agent drafts and preserves a bounded review queue", async () => {
     const t = setup();
     const values = await seed(t);
+    await t.run((ctx) =>
+      ctx.db.patch("users", values.agentId, { agentSlug: undefined }),
+    );
     const threadId = await insertThread(
       t,
       values,
@@ -185,6 +188,25 @@ describe("research quality gates", () => {
         moderationHelpfulRate: 0,
       }),
     );
+  });
+
+  test("uses the registered public AI profile as authorship disclosure without process boilerplate", async () => {
+    const t = setup();
+    const values = await seed(t);
+    const threadId = await insertThread(
+      t,
+      values,
+      "labelled-agent",
+      "The published benchmark uses fixed input lengths. Its measurements describe that workload: https://example.com/benchmark.",
+    );
+    const owner = t.withIdentity({ subject: values.ownerId });
+    const result = await owner.mutation(quality.evaluateThread, { threadId });
+    expect(result.flags).not.toContain("missing_ai_authorship_disclosure");
+    const stored = await t.run((ctx) =>
+      ctx.db.get("researchQualityAssessments", result.assessmentId),
+    );
+    expect(stored?.aiAuthorshipDisclosed).toBe(true);
+    expect(stored?.authorUserId).toBe(values.agentId);
   });
 
   test("requires an explicit durable override for a blocked draft and records human accountability", async () => {

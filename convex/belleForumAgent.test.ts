@@ -1,16 +1,20 @@
 // @vitest-environment node
 
 import { describe, expect, test } from "vitest";
+import { z } from "zod";
 
 import {
   BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES,
   belleErrorMessage,
+  belleDigestOutputSchema,
   buildDigestBody,
   boundBelleDigestToRetrievedEvidence,
   belleDigestRetryArguments,
   canReuseDailyDigestStories,
   clipGeneratedProse,
   normalizeGeneratedHeadline,
+  flattenBelleDigestOutput,
+  validateBelleDigestClaimSources,
 } from "./belleForumAgent";
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import type { ReusableDailyDigestStory } from "./newsDigestTypes";
@@ -18,6 +22,321 @@ import type { ArticleSnapshot } from "./sukiForumAgent";
 import { AgentPublicationQualityError } from "../lib/agent-publication-quality";
 
 describe("Belle Hacker News digest", () => {
+  test("model prose schema rejects unfinished copy and markup while allowing optional empty fields", () => {
+    const schema = belleDigestOutputSchema([
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+    ]);
+    const output = groupedDigestFixture();
+    expect(schema.safeParse(output).success).toBe(true);
+    const unfinished = "The article explains recovery but leaves the next step";
+    for (const field of ["opening", "closing"] as const) {
+      expect(schema.safeParse({ ...output, [field]: unfinished }).success).toBe(
+        false,
+      );
+    }
+    for (const field of ["summary", "analysis"] as const) {
+      expect(
+        schema.safeParse({
+          ...output,
+          briefs: output.briefs.map((brief, index) =>
+            index === 0 ? { ...brief, [field]: unfinished } : brief,
+          ),
+        }).success,
+      ).toBe(false);
+    }
+    for (const markup of [
+      "[b]The source describes checkpoint recovery.[/b]",
+      "<b>The source describes checkpoint recovery.</b>",
+    ]) {
+      expect(schema.safeParse({ ...output, opening: markup }).success).toBe(
+        false,
+      );
+      expect(() => clipGeneratedProse(markup, 500, "opening")).toThrow(
+        AgentPublicationQualityError,
+      );
+    }
+    expect(schema.safeParse({ ...output, opening: "" }).success).toBe(false);
+    expect(
+      schema.safeParse({
+        ...output,
+        briefs: output.briefs.map((brief, index) =>
+          index === 0 ? { ...brief, summary: "" } : brief,
+        ),
+      }).success,
+    ).toBe(false);
+    expect(clipGeneratedProse("", 350, "analysis")).toBe("");
+    expect(clipGeneratedProse("", 500, "closing")).toBe("");
+    const jsonSchema = z.toJSONSchema(schema);
+    expect(jsonSchema.properties?.opening).toHaveProperty("pattern");
+    expect(jsonSchema.properties?.closing).toHaveProperty("pattern");
+  });
+
+  test("schema and renderer preserve complete sentences ending in Unicode closing quotes", () => {
+    const schema = belleDigestOutputSchema([
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+    ]);
+    for (const prose of [
+      "The release notes say: “Checkpoint recovery is now available.”",
+      "The release notes say: ‘Checkpoint recovery is now available.’",
+    ]) {
+      const output = {
+        ...groupedDigestFixture(),
+        opening: prose,
+        closing: prose,
+        briefs: groupedDigestFixture().briefs.map((brief) => ({
+          ...brief,
+          summary: prose,
+          analysis: prose,
+        })),
+      };
+      expect(schema.safeParse(output).success).toBe(true);
+      for (const field of [
+        "opening",
+        "summary",
+        "analysis",
+        "closing",
+      ] as const) {
+        expect(clipGeneratedProse(prose, 500, field)).toBe(prose);
+        expect(() => clipGeneratedProse(prose, 25, field)).toThrow(
+          /cannot be clipped safely/,
+        );
+      }
+      const rendered = buildDigestBody({
+        date: "2026-10-07",
+        opening: prose,
+        closing: prose,
+        requestedBriefs: [output.briefs[0]],
+        stories: [
+          { hnItemId: 1, rank: 1, title: "Checkpoint recovery release" },
+        ],
+      });
+      expect(rendered).toContain(prose);
+      expect(rendered).not.toContain("…");
+    }
+  });
+
+  test("model JSON schema requires a factual group for every retrieved source", () => {
+    const sources = [
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+      { id: "hn-3-2", sourceFetchSucceeded: false },
+    ];
+    const schema = belleDigestOutputSchema(sources);
+    const output = groupedDigestFixture();
+    expect(schema.safeParse(output).success).toBe(true);
+    const jsonSchema = z.toJSONSchema(schema);
+    expect(jsonSchema.properties?.claimsBySource).toMatchObject({
+      type: "object",
+      required: ["hn-1-0", "hn-2-1"],
+      additionalProperties: false,
+    });
+    expect(
+      schema.safeParse({
+        ...output,
+        claimsBySource: { "hn-1-0": output.claimsBySource["hn-1-0"] },
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...output,
+        claimsBySource: { ...output.claimsBySource, "hn-2-1": [] },
+      }).success,
+    ).toBe(false);
+    for (const invalidId of ["fabricated", "hn-3-2"]) {
+      expect(
+        schema.safeParse({
+          ...output,
+          claimsBySource: {
+            ...output.claimsBySource,
+            [invalidId]: output.claimsBySource["hn-1-0"],
+          },
+        }).success,
+      ).toBe(false);
+      expect(
+        schema.safeParse({
+          ...output,
+          analysisClaims: [
+            {
+              ...output.claimsBySource["hn-1-0"][0],
+              kind: "analysis",
+              sourceCandidateId: invalidId,
+            },
+          ],
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      schema.safeParse({
+        ...output,
+        claimsBySource: {
+          ...output.claimsBySource,
+          "hn-2-1": [
+            { ...output.claimsBySource["hn-2-1"][0], kind: "analysis" },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+    expect(schema.safeParse({ ...output, claims: [] }).success).toBe(false);
+    expect(() =>
+      belleDigestOutputSchema([
+        { id: "unavailable", sourceFetchSucceeded: false },
+      ]),
+    ).toThrow(AgentPublicationQualityError);
+  });
+
+  test("flattening injects exact factual source IDs and preserves all authored prose for evidence review", () => {
+    const sources = [
+      { id: "hn-1-0", sourceFetchSucceeded: true },
+      { id: "hn-2-1", sourceFetchSucceeded: true },
+    ];
+    const output = {
+      ...groupedDigestFixture(),
+      analysisClaims: [
+        {
+          claim:
+            "This suggests testing one stopped job before changing configuration.",
+          sourceCandidateId: "hn-1-0",
+          confidence: "medium" as const,
+          kind: "analysis" as const,
+        },
+      ],
+    };
+    const flattened = flattenBelleDigestOutput(output, sources);
+    expect(flattened.headline).toBe(output.headline);
+    expect(flattened.opening).toBe(output.opening);
+    expect(flattened.briefs).toEqual(output.briefs);
+    expect(flattened.closing).toBe(output.closing);
+    expect(flattened.claims).toEqual([
+      { ...output.claimsBySource["hn-1-0"][0], sourceCandidateId: "hn-1-0" },
+      { ...output.claimsBySource["hn-2-1"][0], sourceCandidateId: "hn-2-1" },
+      ...output.analysisClaims,
+    ]);
+    expect(flattened).not.toHaveProperty("claimsBySource");
+    expect(flattened).not.toHaveProperty("analysisClaims");
+    // A redundant fabricated ID cannot override the group's source identity.
+    expect(() =>
+      flattenBelleDigestOutput(
+        {
+          ...output,
+          claimsBySource: {
+            ...output.claimsBySource,
+            "hn-1-0": [
+              {
+                ...output.claimsBySource["hn-1-0"][0],
+                sourceCandidateId: "fabricated",
+              },
+            ],
+          },
+        },
+        sources,
+      ),
+    ).toThrow();
+  });
+
+  test("grouped evidence stays bounded to three facts per source and twelve analysis claims", () => {
+    const sources = Array.from({ length: 12 }, (_, index) => ({
+      id: `hn-${index + 1}-${index}`,
+      sourceFetchSucceeded: true,
+    }));
+    const fact = groupedDigestFixture().claimsBySource["hn-1-0"][0];
+    const output = {
+      ...groupedDigestFixture(),
+      claimsBySource: Object.fromEntries(
+        sources.map(({ id }) => [id, [fact, fact, fact]]),
+      ),
+      analysisClaims: sources.map(({ id }) => ({
+        ...fact,
+        kind: "analysis" as const,
+        sourceCandidateId: id,
+      })),
+    };
+    expect(flattenBelleDigestOutput(output, sources).claims).toHaveLength(48);
+    const schema = belleDigestOutputSchema(sources);
+    expect(
+      schema.safeParse({
+        ...output,
+        claimsBySource: {
+          ...output.claimsBySource,
+          "hn-1-0": [fact, fact, fact, fact],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...output,
+        analysisClaims: [...output.analysisClaims, output.analysisClaims[0]],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("a single retrieved source structurally requires the existing two-fact minimum", () => {
+    const sources = [{ id: "hn-1-0", sourceFetchSucceeded: true }];
+    const fixture = groupedDigestFixture();
+    const output = {
+      ...fixture,
+      claimsBySource: { "hn-1-0": fixture.claimsBySource["hn-1-0"] },
+    };
+    const schema = belleDigestOutputSchema(sources);
+    expect(schema.safeParse(output).success).toBe(false);
+    const secondFact = {
+      ...fixture.claimsBySource["hn-1-0"][0],
+      claim:
+        "The article explains how stopped work resumes from the checkpoint.",
+    };
+    expect(
+      flattenBelleDigestOutput(
+        {
+          ...output,
+          claimsBySource: {
+            "hn-1-0": [...output.claimsBySource["hn-1-0"], secondFact],
+          },
+        },
+        sources,
+      ).claims,
+    ).toHaveLength(2);
+  });
+
+  test("requires exact source IDs and factual coverage for every retrieved brief", () => {
+    const snapshots = [1, 2].map(
+      (id) =>
+        ({ id: `hn-${id}-0`, sourceFetchSucceeded: true }) as ArticleSnapshot,
+    );
+    const briefs = [1, 2].map((hnItemId) => ({
+      hnItemId,
+      summary: "The source describes a recovery checkpoint.",
+      analysis: "",
+    }));
+    const claim = {
+      claim: "The source describes a recovery checkpoint.",
+      sourceCandidateId: "hn-1-0",
+      confidence: "high" as const,
+      kind: "fact" as const,
+    };
+    expect(() =>
+      validateBelleDigestClaimSources(
+        { briefs, claims: [{ ...claim, sourceCandidateId: "invented" }] },
+        snapshots,
+      ),
+    ).toThrow(AgentPublicationQualityError);
+    expect(() =>
+      validateBelleDigestClaimSources({ briefs, claims: [claim] }, snapshots),
+    ).toThrow("hn-2-0");
+    expect(() =>
+      validateBelleDigestClaimSources(
+        { briefs, claims: [claim, { ...claim, sourceCandidateId: "hn-2-0" }] },
+        snapshots,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateBelleDigestClaimSources({ briefs, claims: [claim] }, [
+        snapshots[0]!,
+        { ...snapshots[1]!, sourceFetchSucceeded: false },
+      ]),
+    ).not.toThrow();
+  });
+
   test("retains bounded quality rejection details only in operator diagnostics", () => {
     const error = new AgentPublicationQualityError(
       "Belle's digest failed deterministic source checks: unsupported_numeric_claim.",
@@ -28,7 +347,9 @@ describe("Belle Hacker News digest", () => {
     expect(belleErrorMessage(error, "operator")).toBe(error.message);
     expect(
       belleErrorMessage(
-        new AgentPublicationQualityError("[b]Unsupported claim.[/b] ".repeat(50)),
+        new AgentPublicationQualityError(
+          "[b]Unsupported claim.[/b] ".repeat(50),
+        ),
         "operator",
       ),
     ).toHaveLength(500);
@@ -408,3 +729,23 @@ describe("Belle Hacker News digest", () => {
     }
   });
 });
+
+function groupedDigestFixture() {
+  const fact = {
+    claim: "The retrieved article describes a recovery checkpoint.",
+    confidence: "high" as const,
+    kind: "fact" as const,
+  };
+  return {
+    headline: "Checkpoint recovery and a bounded daily news desk",
+    opening: "The source reports a recovery checkpoint for interrupted work.",
+    briefs: Array.from({ length: 12 }, (_, index) => ({
+      hnItemId: index + 1,
+      summary: "The retrieved article describes a recovery checkpoint.",
+      analysis: "",
+    })),
+    closing: "",
+    claimsBySource: { "hn-1-0": [fact], "hn-2-1": [fact] },
+    analysisClaims: [],
+  };
+}

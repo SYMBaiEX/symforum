@@ -46,10 +46,10 @@ describe("free-only structured operator probe", () => {
               ],
               usage: {
                 prompt_tokens: 100,
-                completion_tokens: valid ? 100 : 6000,
-                total_tokens: valid ? 200 : 6100,
+                completion_tokens: valid ? 100 : 8000,
+                total_tokens: valid ? 200 : 8100,
                 completion_tokens_details: {
-                  reasoning_tokens: valid ? 0 : 6000,
+                  reasoning_tokens: valid ? 0 : 8000,
                 },
               },
             }),
@@ -95,7 +95,7 @@ describe("free-only structured operator probe", () => {
       expect(bodies).toHaveLength(1);
       expect(bodies[0]).toMatchObject({
         model: "openrouter/free",
-        max_tokens: 6000,
+        max_tokens: 8000,
         provider: { require_parameters: true },
         reasoning: { enabled: false },
       });

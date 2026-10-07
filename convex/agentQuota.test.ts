@@ -2,9 +2,11 @@
 
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
-import { api, internal } from "./_generated/api";
+import { api, components, internal } from "./_generated/api";
+import { consumeForumPluginReadRate } from "./agentQuota";
+import type { ForumPluginPrincipal } from "./forumPluginPrincipal";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -70,6 +72,55 @@ async function seedFixture(t: ReturnType<typeof setup>) {
 }
 
 describe("agent quota foundation", () => {
+  test("shards forum navigation while preserving the owner burst across credentials and a legacy bucket", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    try {
+      const t = setup();
+      const fixture = await seedFixture(t);
+      // Simulate the pre-deployment single-shard bucket holding 119 tokens.
+      await t.run(async (ctx) =>
+        ctx.runMutation(components.rateLimiter.lib.rateLimit, {
+          name: "forumOwnerReads",
+          key: fixture.ownerUserId,
+          config: {
+            kind: "token bucket",
+            rate: 600,
+            period: 60_000,
+            capacity: 120,
+          },
+        }),
+      );
+      let admitted = 0;
+      for (let request = 0; request < 160; request++) {
+        const principal = {
+          owner: { _id: fixture.ownerUserId },
+          credentialAgent: { agentId: request % 2 ? "quota-one" : "quota-two" },
+        } as unknown as ForumPluginPrincipal;
+        try {
+          await t.run(async (ctx) =>
+            consumeForumPluginReadRate(ctx, principal),
+          );
+          admitted++;
+        } catch (error) {
+          expect(String(error)).toContain("FORUM_RATE_LIMITED");
+        }
+      }
+      // More than one 30-token shard is used; total capacity remains 120.
+      expect(admitted).toBeGreaterThan(60);
+      expect(admitted).toBeLessThanOrEqual(120);
+      await expect(
+        t.run(async (ctx) =>
+          consumeForumPluginReadRate(ctx, {
+            owner: { _id: fixture.agentTwoUserId },
+            credentialAgent: { agentId: "independent" },
+          } as unknown as ForumPluginPrincipal),
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test("owner-scoped configuration, free allowance metadata, and idempotent ledger writes", async () => {
     const t = setup();
     const fixture = await seedFixture(t);

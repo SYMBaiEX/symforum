@@ -11,6 +11,11 @@ import {
   OPENROUTER_FORUM_MODEL,
   openRouterStructuredOutputBudget,
 } from "../lib/ai-models";
+import {
+  forumGenerationDeadline,
+  forumGenerationStageTimeout,
+  ForumGenerationBudgetError,
+} from "../lib/forum-generation-budget";
 import { estimatePromptInputTokens } from "../lib/ai-model-costs";
 import {
   runWithModelFallback,
@@ -23,6 +28,7 @@ import {
 import {
   forumBodyFactualStatements,
   forumBodyQuestions,
+  forumStatementIsQualifiedInference,
   forumQuestionSimilarity,
   isMeaningfullyRelatedForumThread,
   lexicalEvidenceCoverage,
@@ -34,6 +40,7 @@ import {
 } from "../lib/editorial-quality";
 import {
   assessForumContentFit,
+  assessForumReadability,
   assessForumStructuredValue,
   validateForumContentCompleteness,
 } from "../lib/forum-content-quality";
@@ -72,11 +79,12 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_RESEARCH_CANDIDATES = 42;
 const TOPIC_MODEL_CANDIDATE_LIMIT = 16;
 const RETRY_DELAYS_MS = [15 * 60 * 1_000, 45 * 60 * 1_000] as const;
-const PROMPT_VERSION = "suki-forum-v21-evidence-sized-editorial";
+const PROMPT_VERSION = "suki-forum-v22-reader-value";
 const FORUM_AGENT_QUALITY_THRESHOLD = 78;
-// One focused correction pass is the measured sweet spot. A second full-model
-// rewrite more than doubled token usage while rarely rescuing a rejected post.
-export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 1;
+// Two bounded corrections can repair distinct issues; the shared action deadline
+// reserves time for the mandatory independent review and commit.
+export const MAX_FORUM_EDITORIAL_REVISION_PASSES = 2;
+const FORUM_SEMANTIC_REVIEW_RESERVE_MS = 90_000;
 const USER_AGENT =
   "SukiForumScout/1.0 (+https://forum.symbaiex.com; source research and attribution)";
 
@@ -236,10 +244,59 @@ export const forumDraftSchema = z.object({
       }),
     )
     .min(1)
-    .max(12),
+    .max(48),
   originalValue: z.array(z.string().min(8).max(240)).min(1).max(5),
   discussionQuestion: z.string().max(300),
 });
+
+function providedSourceIds(ids: readonly string[]): [string, ...string[]] {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || unique.some((id) => !id.trim())) {
+    throw new ForumEditorialQualityError(
+      "No usable research source IDs were provided.",
+    );
+  }
+  return unique as [string, ...string[]];
+}
+
+/** Constrain model output to the exact candidates in this topic packet. */
+export function forumTopicSelectionSchema(candidateIds: readonly string[]) {
+  return topicSelectionSchema.extend({
+    candidateIds: z
+      .array(z.enum(providedSourceIds(candidateIds)))
+      .min(1)
+      .max(3),
+  });
+}
+
+/** Both the original writer and every rewrite use the retrieved snapshot IDs. */
+export function forumDraftSchemaForSources(sourceIds: readonly string[]) {
+  return forumDraftSchema.extend({
+    claims: z
+      .array(
+        forumDraftSchema.shape.claims.element.extend({
+          sourceCandidateId: z.enum(providedSourceIds(sourceIds)),
+        }),
+      )
+      .min(1)
+      .max(48),
+  });
+}
+
+export function selectForumResearchCandidates(
+  candidateIds: readonly string[],
+  candidates: readonly ResearchCandidate[],
+): ResearchCandidate[] {
+  const byId = new Map(
+    candidates.map((candidate) => [candidate.id, candidate]),
+  );
+  if (candidateIds.length === 0 || candidateIds.some((id) => !byId.has(id))) {
+    throw new ForumEditorialQualityError(
+      "Selected research source IDs are unavailable in the topic packet.",
+    );
+  }
+  return [...new Set(candidateIds)].map((id) => byId.get(id)!);
+}
 
 export type ResearchCandidate = {
   id: string;
@@ -347,6 +404,7 @@ export async function runForumResearchSlot(
   },
   config: ForumResearchAgentConfig,
 ): Promise<ForumResearchRunResult> {
+  const generationDeadline = forumGenerationDeadline();
   const attempt = args.attempt ?? 0;
   const runDate = args.runDate ?? forumDateForTimestamp(Date.now());
   if (config.slug === "suki") {
@@ -381,8 +439,8 @@ export async function runForumResearchSlot(
     const routingConfig = await convexModelRoutingConfig(ctx, {
       correlationId: claim.runKey,
     });
-    // All editorial generations use OpenRouter. The routing control disables
-    // the paid fallback when its daily budget is exhausted.
+    // Editorial generation explicitly selects openrouter/free; routing controls
+    // still enforce provider health and the account's request budget.
     const effectiveRoutingConfig = routingConfig;
     const recordRouteAttempt = routeTelemetry(ctx, {
       correlationId: claim.runKey,
@@ -492,6 +550,9 @@ export async function runForumResearchSlot(
       dailySlots: config.dailySlots,
     });
     const topicStartedAt = Date.now();
+    const selectionSchema = forumTopicSelectionSchema(
+      shortlistedCandidates.map((candidate) => candidate.id),
+    );
     const selectionGeneration = await runWithModelFallback(
       effectiveRoutingConfig,
       {
@@ -500,7 +561,10 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 150_000,
+        totalTimeoutMs: forumGenerationStageTimeout(
+          generationDeadline - FORUM_SEMANTIC_REVIEW_RESERVE_MS,
+          150_000,
+        ),
         estimatedInputTokens: estimatePromptInputTokens(topicPrompt),
         maxOutputTokens: (candidate: RoutedModel) =>
           openRouterStructuredOutputBudget(candidate.modelId, 3_000),
@@ -508,7 +572,7 @@ export async function runForumResearchSlot(
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
             model: candidate.model,
-            output: Output.object({ schema: topicSelectionSchema }),
+            output: Output.object({ schema: selectionSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(candidate.provider, "topic-selection"),
             maxOutputTokens: openRouterStructuredOutputBudget(
@@ -528,6 +592,7 @@ export async function runForumResearchSlot(
           return { result, selection: result.output };
         },
       },
+      ["openrouter/free"],
     );
     const selectionResult = selectionGeneration.value.result;
     const selection = {
@@ -547,16 +612,10 @@ export async function runForumResearchSlot(
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
     });
-    const selectedCandidates = selection.candidateIds
-      .map((id) =>
-        shortlistedCandidates.find((candidate) => candidate.id === id),
-      )
-      .filter(
-        (candidate): candidate is ResearchCandidate => candidate !== undefined,
-      );
-    if (selectedCandidates.length === 0) {
-      throw new Error(`${config.name} selected no valid research candidates`);
-    }
+    const selectedCandidates = selectForumResearchCandidates(
+      selection.candidateIds,
+      shortlistedCandidates,
+    );
     const selectedCategorySlug =
       config.forcedCategorySlug ?? selection.categorySlug;
     const category =
@@ -699,6 +758,9 @@ export async function runForumResearchSlot(
         })),
       },
     );
+    const draftSchema = forumDraftSchemaForSources(
+      snapshots.map((snapshot) => snapshot.id),
+    );
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
@@ -712,7 +774,10 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: stage === "revision" ? 210_000 : 270_000,
+        totalTimeoutMs: forumGenerationStageTimeout(
+          generationDeadline - FORUM_SEMANTIC_REVIEW_RESERVE_MS,
+          stage === "revision" ? 210_000 : 270_000,
+        ),
         estimatedInputTokens: estimatePromptInputTokens(prompt),
         maxOutputTokens: (candidate: RoutedModel) =>
           forumWriterMaxOutputTokens(
@@ -724,7 +789,7 @@ export async function runForumResearchSlot(
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
             model: candidate.model,
-            output: Output.object({ schema: forumDraftSchema }),
+            output: Output.object({ schema: draftSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(
               candidate.provider,
@@ -750,7 +815,9 @@ export async function runForumResearchSlot(
           return { result, draft: result.output };
         },
       };
-      return await runWithModelFallback(effectiveRoutingConfig, routeArgs);
+      return await runWithModelFallback(effectiveRoutingConfig, routeArgs, [
+        "openrouter/free",
+      ]);
     };
     const draftStartedAt = Date.now();
     const draftGeneration = await generateForumDraft(
@@ -816,7 +883,6 @@ export async function runForumResearchSlot(
     ) {
       const revisionStartedAt = Date.now();
       const qualityBefore = quality.qualityScore;
-      const revisionTier = forumRevisionTier(quality);
       const revisionGeneration = await generateForumDraft(
         "revision",
         forumDraftPrompt({
@@ -824,12 +890,14 @@ export async function runForumResearchSlot(
           selection: effectiveSelection,
           snapshots,
           config,
-          revisionFeedback: quality.feedback,
+          revisionFeedback: [
+            ...new Set([...quality.blockingIssues, ...quality.feedback]),
+          ],
           previousDraft: draft,
           followUp: followUpThreadId !== undefined,
         }),
         {
-          lightRevision: revisionTier === "nano",
+          lightRevision: false,
         },
       );
       const revision = revisionGeneration.value.result;
@@ -922,6 +990,7 @@ export async function runForumResearchSlot(
     const reviewPrompt = forumEditorialReviewPrompt({
       title: draft.title,
       body: draft.body,
+      contentFormat: selection.contentFormat,
       board: category,
       sources: snapshots.map((source) => ({
         id: source.id,
@@ -938,7 +1007,7 @@ export async function runForumResearchSlot(
         feature: routeFeature,
         agent: config.slug,
         onAttempt: recordRouteAttempt,
-        totalTimeoutMs: 90_000,
+        totalTimeoutMs: forumGenerationStageTimeout(generationDeadline, 90_000),
         estimatedInputTokens: estimatePromptInputTokens(reviewPrompt),
         maxOutputTokens: openRouterStructuredOutputBudget(
           "openrouter/free",
@@ -979,14 +1048,7 @@ export async function runForumResearchSlot(
       outputTokens: semanticReview.value.usage.outputTokens,
       durationMs: Date.now() - reviewStartedAt,
     });
-    if (
-      !semanticReview.value.output.approved ||
-      semanticReview.value.output.issues.length > 0
-    ) {
-      throw new ForumEditorialQualityError(
-        `Original-evidence review rejected publication: ${semanticReview.value.output.issues.join("; ")}`,
-      );
-    }
+    assertForumSemanticReviewApproved(semanticReview.value.output);
     revisionInputTokens = addOptionalNumbers(
       revisionInputTokens,
       semanticReview.value.usage.inputTokens,
@@ -1160,7 +1222,8 @@ export async function runForumResearchSlot(
   } catch (error) {
     const privateDraftHeld =
       isResearchQualityGateError(error) ||
-      error instanceof ForumEditorialQualityError;
+      error instanceof ForumEditorialQualityError ||
+      error instanceof ForumGenerationBudgetError;
     await ctx.runMutation(
       internal.forumAgentResearchPackets.markResearchPacketTerminated,
       {
@@ -1184,7 +1247,10 @@ export async function runForumResearchSlot(
       });
       return { status: "skipped" as const, reason: "quality-review" };
     }
-    if (error instanceof ForumEditorialQualityError) {
+    if (
+      error instanceof ForumEditorialQualityError ||
+      error instanceof ForumGenerationBudgetError
+    ) {
       const reason = publicErrorMessage(error, config.name);
       await ctx.runMutation(internal.sukiForumAgentData.markRunSkipped, {
         runKey: claim.runKey,
@@ -1833,6 +1899,8 @@ export function forumDraftPrompt(args: {
   previousDraft?: z.infer<typeof forumDraftSchema>;
   followUp?: boolean;
 }) {
+  const structuredFieldInstructions =
+    "Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The claim ledger permits 1-48 entries; include every factual body claim and label source-bound interpretation as analysis. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).";
   if (args.revisionFeedback !== undefined && args.previousDraft !== undefined) {
     const claimsBySource = new Map<string, string[]>();
     for (const claim of args.previousDraft.claims) {
@@ -1844,6 +1912,7 @@ export function forumDraftPrompt(args: {
       "Revise the supplied forum draft. Return one complete replacement matching the structured output schema.",
       "Fix every deterministic gate failure. Preserve supported facts and source IDs; delete any unsupported number or claim rather than improvising evidence.",
       FORUM_EDITORIAL_CONTRACT,
+      structuredFieldInstructions,
       "Selected board and angle:",
       JSON.stringify({ category: args.category, selection: args.selection }),
       `Hard length target: ${contentFormatGuidance(args.selection.contentFormat)} Count approximate plain words after editing and keep a buffer above the minimum.`,
@@ -1876,6 +1945,7 @@ export function forumDraftPrompt(args: {
     `Editorial desk: ${args.config.deskDescription}`,
     `Target length and shape: ${contentFormatGuidance(args.selection.contentFormat)}`,
     FORUM_EDITORIAL_CONTRACT,
+    structuredFieldInstructions,
     "Editorial discipline: make one source-specific argument. Do not repeat the thesis in the opening, section headings, structured block, and conclusion. Prefer concrete nouns and verbs from the evidence over reusable frames such as operational ownership, a new era, shifting landscape, or the real story.",
     "Presentation: use BBCode only where helpful. Leave discussionQuestion empty unless a genuine useful question belongs at the end. Include a ledger for all factual body claims and 1-5 original-value statements visible in the body. Plain short prose is valid.",
     "Measurement discipline: distinguish totals from changes, gross from net, estimates from observations, and editorial scores from measured results. Every number or version in a factual claim must appear in that claim's cited source.",
@@ -2135,10 +2205,10 @@ export function finalizeForumBody(
     .slice(0, 6)
     .map(
       (snapshot) =>
-        `[*][url=${escapeBbcodeUrl(snapshot.url)}]${escapeBbcodeText(snapshot.articleTitle)}[/url] — ${escapeBbcodeText(snapshot.sourceName)}`,
+        `[url=${escapeBbcodeUrl(snapshot.url)}]${escapeBbcodeText(snapshot.articleTitle)}[/url] — ${escapeBbcodeText(snapshot.sourceName)}`,
     )
     .join("\n");
-  const sourceBlock = `[b]Sources and further reading[/b]\n[list]\n${sourceItems}\n[/list]`;
+  const sourceBlock = `[b]Sources and further reading[/b]\n${sourceItems}`;
   const existingQuestions = forumBodyQuestions(withoutUnverifiedLinks);
   const question =
     options?.discussionQuestion &&
@@ -2149,7 +2219,7 @@ export function finalizeForumBody(
           options.discussionQuestion ?? "",
         ) >= 0.55,
     )
-      ? `\n\n[h3]Over to the board[/h3]\n${escapeBbcodeText(options.discussionQuestion)}`
+      ? `\n\n${escapeBbcodeText(options.discussionQuestion)}`
       : "";
   const related = (options?.relatedThreads ?? [])
     .filter((thread) =>
@@ -2196,10 +2266,26 @@ function forumBodyStatementHasSupportedClaim(
     const snapshot = snapshotsById.get(claim.sourceCandidateId);
     if (snapshot === undefined) return false;
     const sourceText = forumSnapshotText(snapshot);
-    return (
-      lexicalEvidenceCoverage(statement, sourceText) >= 0.45 &&
-      unsupportedVerifiableTokens(statement, sourceText).length === 0
-    );
+    if (unsupportedVerifiableTokens(statement, sourceText).length > 0)
+      return false;
+    if (
+      claim.kind === "analysis" &&
+      forumStatementIsQualifiedInference(statement)
+    ) {
+      // This only admits the inference to semantic review. The label cannot
+      // certify a capability; an independently supported premise is required.
+      return (
+        unsupportedVerifiableTokens(claim.claim, sourceText).length === 0 &&
+        claims.some(
+          (premise) =>
+            premise.kind === "fact" &&
+            premise.sourceCandidateId === claim.sourceCandidateId &&
+            lexicalEvidenceCoverage(premise.claim, sourceText) >= 0.45 &&
+            unsupportedVerifiableTokens(premise.claim, sourceText).length === 0,
+        )
+      );
+    }
+    return lexicalEvidenceCoverage(statement, sourceText) >= 0.45;
   });
 }
 
@@ -2217,6 +2303,18 @@ export function repairForumDraftForReview(
 
 export class ForumEditorialQualityError extends Error {
   override name = "ForumEditorialQualityError";
+}
+
+/** Deterministic triage never substitutes for independent original-evidence review. */
+export function assertForumSemanticReviewApproved(review: {
+  approved: boolean;
+  issues: readonly string[];
+}) {
+  if (!review.approved || review.issues.length > 0) {
+    throw new ForumEditorialQualityError(
+      `Original-evidence review rejected publication: ${review.issues.join("; ")}`,
+    );
+  }
 }
 
 type EvaluatedForumDraft = {
@@ -2463,15 +2561,17 @@ export function evaluateForumDraft(args: {
     blockingIssues.push(issue);
   }
 
-  const originalValueCoverage =
+  // Field consistency only: matching a body quotation does not establish a
+  // useful contribution. Mandatory independent semantic review judges that.
+  const originalValueFieldCoverage =
     args.draft.originalValue.filter(
       (value) =>
         lexicalEvidenceCoverage(value, plainForumDraftText(args.draft.body)) >=
         0.65,
     ).length / args.draft.originalValue.length;
-  if (originalValueCoverage < 0.6) {
+  if (originalValueFieldCoverage < 0.6) {
     const issue =
-      "Make the submitted original-value statements concrete and visible in the body";
+      "Copy the submitted originalValue entries from the body; matching these fields does not establish a useful contribution";
     feedback.push(issue);
     blockingIssues.push(issue);
   }
@@ -2479,15 +2579,9 @@ export function evaluateForumDraft(args: {
   feedback.push(...markupValidation.feedback);
   if (!markupValidation.valid)
     blockingIssues.push(...markupValidation.feedback);
-  const utilityScore = Math.round(
-    Math.min(
-      100,
-      bodyClaimCoverage * 30 +
-        originalValueCoverage * 30 +
-        (questionValid ? 25 : 5) +
-        (structure.blockCount === 0 || structure.addsInformation ? 15 : 0),
-    ),
-  );
+  // Legacy numeric diagnostic, 0 means unmeasured at this lexical stage.
+  // Do not award usefulness points for quotations, optional questions, or markup.
+  const utilityScore = 0;
   const words = plainWordCount(args.draft.body);
   const [minimumWords, maximumWords] = contentFormatWordRange(
     args.selection.contentFormat,
@@ -2499,7 +2593,7 @@ export function evaluateForumDraft(args: {
     );
     blockingIssues.push(feedback.at(-1)!);
   }
-  const presentation = evaluateForumPresentation(args.draft.body, words);
+  const presentation = evaluateForumPresentation(args.draft.body);
   feedback.push(...presentation.feedback);
   if (presentation.blocking) blockingIssues.push(...presentation.feedback);
   const hygiene = evaluateAgentPublicationHygiene([
@@ -2516,11 +2610,11 @@ export function evaluateForumDraft(args: {
   const formatScore =
     (correctLength ? 55 : 20) + (markupValidation.valid ? 45 : 0);
   let qualityScore = Math.round(
-    groundingScore * 0.35 +
+    (groundingScore * 0.35 +
       noveltyScore * 0.15 +
-      utilityScore * 0.25 +
       formatScore * 0.1 +
-      presentationScore * 0.15,
+      presentationScore * 0.15) /
+      0.75,
   );
   if (!markupValidation.valid) {
     qualityScore = Math.min(qualityScore, FORUM_AGENT_QUALITY_THRESHOLD - 1);
@@ -2531,7 +2625,8 @@ export function evaluateForumDraft(args: {
   if (
     bodyClaimCoverage < 1 ||
     unsupportedBodyTokens.length > 0 ||
-    originalValueCoverage < 0.6 ||
+    originalValueFieldCoverage < 0.6 ||
+    presentation.blocking ||
     !questionValid ||
     !correctLength
   ) {
@@ -2548,25 +2643,21 @@ export function evaluateForumDraft(args: {
   };
 }
 
-function evaluateForumPresentation(body: string, words: number) {
-  const paragraphs = body
-    .split(/\n\s*\n/)
-    .map(plainWordCount)
-    .filter(Boolean);
-  const longestParagraph = Math.max(0, ...paragraphs);
-  const headings = (body.match(/\[h[23]\]/gi) ?? []).length;
-  const feedback: string[] = [];
-  if (words >= 700 && headings < 2)
-    feedback.push("Break longer posts into descriptive sections");
-  if (longestParagraph > 160)
-    feedback.push("Split dense paragraphs for mobile readability");
+function evaluateForumPresentation(body: string) {
+  const readability = assessForumReadability(body);
   const score = Math.max(
     0,
     100 -
-      (longestParagraph > 160 ? 35 : 0) -
-      (words >= 700 && headings < 2 ? 25 : 0),
+      readability.issues.reduce(
+        (penalty, issue) => penalty + (issue.blocking ? 35 : 10),
+        0,
+      ),
   );
-  return { score, feedback, blocking: longestParagraph > 250 };
+  return {
+    score,
+    feedback: readability.feedback,
+    blocking: !readability.valid,
+  };
 }
 
 function plainForumDraftText(value: string) {
@@ -2605,14 +2696,10 @@ export function structuredBlockContract(
 
 export function forumWriterMaxOutputTokens(
   stage: "draft" | "revision",
-  lightRevision: boolean,
+  _lightRevision: boolean,
   modelId?: string,
 ) {
-  const baseTokens = lightRevision
-    ? 2_800
-    : stage === "revision"
-      ? 5_500
-      : 4_800;
+  const baseTokens = stage === "revision" ? 5_500 : 4_800;
   return openRouterStructuredOutputBudget(
     modelId ?? OPENROUTER_FORUM_MODEL,
     baseTokens,

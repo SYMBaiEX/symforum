@@ -1,5 +1,5 @@
 export const FORUM_AGENT_REPLY_PROMPT_VERSION =
-  "forum-replies-v13-member-first-verified-evidence";
+  "forum-replies-v14-reader-value-readable-prose";
 
 /** Deliberately small publisher allowlist; forum URLs never become arbitrary fetch targets. */
 export function isTrustedForumReplyEvidenceUrl(value: string): boolean {

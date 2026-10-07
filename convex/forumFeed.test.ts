@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
+import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import aggregateTest from "@convex-dev/aggregate/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { forumOperations } from "./forum";
@@ -14,6 +15,7 @@ const modules = {
 };
 const setup = () => {
   const t = convexTest(schema, modules);
+  registerRateLimiter(t);
   aggregateTest.register(t, "interactionScores");
   aggregateTest.register(t, "interactionSaves");
   aggregateTest.register(t, "commentCounts");
@@ -104,30 +106,188 @@ async function fixture(t: Backend) {
 const page = { numItems: 12, cursor: null };
 
 describe("global forum feed", () => {
+  test("migrates previews without body reads, preserves old cursors, and automatically updates edited/deleted threads", async () => {
+    const t = setup();
+    const seed = await fixture(t);
+    const ids = await t.run(async (ctx) => {
+      const one = await thread(ctx, seed.category, seed.author, 1, {
+        body: "Preview one. " + "界".repeat(63_900),
+      });
+      const two = await thread(ctx, seed.category, seed.author, 2, {
+        lastPostAt: 1,
+        body: "Escaped &lt;script&gt; is literal text.",
+      });
+      const parent = await board(ctx, "private-parent", {
+        viewAccess: "trusted",
+      });
+      const child = await board(ctx, "public-child", {
+        parentCategoryId: parent,
+      });
+      const hidden = await thread(ctx, child, seed.author, 3, {
+        body: "DO NOT EXPOSE PRIVATE BODY",
+      });
+      return { one, two, hidden };
+    });
+    const first = await t.query(api.forum.listFeedThreads, {
+      sort: "new",
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    const activeBefore = await t.query(api.forum.listFeedThreads, {
+      paginationOpts: page,
+    });
+    await t.mutation(internal.forumThreadDigestBackfill.run, {
+      feed: true,
+      dryRun: true,
+    });
+    expect(
+      await t.query(internal.forumThreadDigestBackfill.status, { feed: true }),
+    ).toMatchObject({ complete: false });
+    expect(
+      await t.run((ctx) =>
+        ctx.db.query("forumThreadEditorialDigests").collect(),
+      ),
+    ).toEqual([]);
+    vi.useFakeTimers();
+    try {
+      await t.mutation(internal.forumThreadDigestBackfill.run, { feed: true });
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(
+      await t.query(internal.forumThreadDigestBackfill.status, { feed: true }),
+    ).toMatchObject({ complete: true });
+    const activeAfter = await t.query(api.forum.listFeedThreads, {
+      paginationOpts: page,
+    });
+    expect(activeAfter.page.map((row) => row._id)).toEqual(
+      activeBefore.page.map((row) => row._id),
+    );
+    const measured = await t.run(async (ctx) => {
+      const canonical = new Set(Object.values(ids));
+      const db = new Proxy(ctx.db, {
+        get(target, property, receiver) {
+          if (property === "get")
+            return (...args: unknown[]) => {
+              if (args.some((arg) => canonical.has(arg as Id<"forumThreads">)))
+                throw new Error("Feed read a full body");
+              return Reflect.apply(target.get, target, args);
+            };
+          if (property === "query")
+            return (table: Parameters<typeof ctx.db.query>[0]) => {
+              if (table === "forumThreads")
+                throw new Error("Feed scanned full bodies");
+              return target.query(table);
+            };
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      return forumOperations.listFeedThreads.definition.handler(
+        { ...ctx, db } as unknown as QueryCtx,
+        { sort: "new", paginationOpts: page },
+      );
+    });
+    expect(measured.page.map((row) => row._id)).toEqual([ids.two, ids.one]);
+    expect(measured.page[1].excerpt).toHaveLength(280);
+    expect(measured.page[0].excerpt).toBe("Escaped <script> is literal text.");
+    expect(JSON.stringify(measured)).not.toContain("PRIVATE BODY");
+    expect(measured.continueCursor).toContain('"source":"digest"');
+    const legacy = await t.query(api.forum.listFeedThreads, {
+      sort: "new",
+      paginationOpts: { numItems: 1, cursor: first.continueCursor },
+    });
+    expect(legacy.page.map((row) => row._id)).toEqual([ids.two]);
+    expect(legacy.continueCursor).toContain('"source":"canonical"');
+    const signed = t.withIdentity({ subject: seed.author });
+    await signed.mutation(api.forum.updateThreadContent, {
+      threadId: ids.one,
+      title: "An edited title",
+      body: "An edited preview without the old body.",
+    });
+    const updated = await t.query(api.forum.listFeedThreads, {
+      paginationOpts: page,
+    });
+    expect(updated.page.find((row) => row._id === ids.one)).toMatchObject({
+      title: "An edited title",
+      excerpt: "An edited preview without the old body.",
+    });
+    await signed.mutation(api.forum.deleteThread, { threadId: ids.one });
+    expect(
+      (
+        await t.query(api.forum.listFeedThreads, { paginationOpts: page })
+      ).page.map((row) => row._id),
+    ).toEqual([ids.two]);
+  });
+
   test("feed previews hydrate only active root attachments on currently visible discussions", async () => {
-    const t = setup(); const seed = await fixture(t);
-    const ids = await t.run(async ctx => {
+    const t = setup();
+    const seed = await fixture(t);
+    const ids = await t.run(async (ctx) => {
       const visible = await thread(ctx, seed.category, seed.author, 1);
-      const hidden = await thread(ctx, seed.category, seed.author, 2, { status: "hidden" });
-      const privateBoard = await board(ctx, "private", { viewAccess: "trusted" });
+      const hidden = await thread(ctx, seed.category, seed.author, 2, {
+        status: "hidden",
+      });
+      const privateBoard = await board(ctx, "private", {
+        viewAccess: "trusted",
+      });
       const restricted = await thread(ctx, privateBoard, seed.author, 3);
-      const reply = await ctx.db.insert("forumPosts", { threadId: visible, categoryId: seed.category, authorId: seed.author, body: "Reply", status: "active", postNumber: 2, createdAt: 1, updatedAt: 1 });
+      const reply = await ctx.db.insert("forumPosts", {
+        threadId: visible,
+        categoryId: seed.category,
+        authorId: seed.author,
+        body: "Reply",
+        status: "active",
+        postNumber: 2,
+        createdAt: 1,
+        updatedAt: 1,
+      });
       const storageId = await ctx.storage.store(new Blob(["image"]));
-      const insert = (threadId: Id<"forumThreads">, filename: string, extra = {}) => ctx.db.insert("forumAttachments", { threadId, categoryId: seed.category, authorId: seed.author, storageId, filename, contentType: "image/png", size: 5, status: "active", createdAt: 1, updatedAt: 1, ...extra });
+      const insert = (
+        threadId: Id<"forumThreads">,
+        filename: string,
+        extra = {},
+      ) =>
+        ctx.db.insert("forumAttachments", {
+          threadId,
+          categoryId: seed.category,
+          authorId: seed.author,
+          storageId,
+          filename,
+          contentType: "image/png",
+          size: 5,
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+          ...extra,
+        });
       const root = await insert(visible, "visible.png");
       await insert(visible, "deleted.png", { status: "deleted" });
       await insert(visible, "reply.png", { postId: reply });
-      await insert(hidden, "hidden.png"); await insert(restricted, "restricted.png");
-      const missing = await ctx.storage.store(new Blob(["deleted storage"])); await ctx.storage.delete(missing);
+      await insert(hidden, "hidden.png");
+      await insert(restricted, "restricted.png");
+      const missing = await ctx.storage.store(new Blob(["deleted storage"]));
+      await ctx.storage.delete(missing);
       await insert(visible, "missing.png", { storageId: missing });
       return { root, visible };
     });
-    const result = await t.query(api.forum.listFeedThreads, { paginationOpts: page });
-    expect(result.page.map(row => row._id)).toEqual([ids.visible]);
-    expect(result.page[0].attachments.map(file => file._id)).toEqual([ids.root]);
-    expect(result.page[0].attachments[0]).toMatchObject({ filename: "visible.png", contentType: "image/png", url: expect.stringMatching(/^https:/) });
-    await t.run(ctx => ctx.db.patch("forumThreads", ids.visible, { status: "hidden" }));
-    expect((await t.query(api.forum.listFeedThreads, { paginationOpts: page })).page).toEqual([]);
+    const result = await t.query(api.forum.listFeedThreads, {
+      paginationOpts: page,
+    });
+    expect(result.page.map((row) => row._id)).toEqual([ids.visible]);
+    expect(result.page[0].attachments.map((file) => file._id)).toEqual([
+      ids.root,
+    ]);
+    expect(result.page[0].attachments[0]).toMatchObject({
+      filename: "visible.png",
+      contentType: "image/png",
+      url: expect.stringMatching(/^https:/),
+    });
+    await t.run((ctx) =>
+      ctx.db.patch("forumThreads", ids.visible, { status: "hidden" }),
+    );
+    expect(
+      (await t.query(api.forum.listFeedThreads, { paginationOpts: page })).page,
+    ).toEqual([]);
   });
 
   test("native fingerprint isolates viewer identity, trust, role, restrictions and visible board permissions without reading content", async () => {
@@ -527,9 +687,11 @@ describe("global forum feed", () => {
       return { calls, threadReads, threadBytesRead, result };
     });
     expect(measured.calls).toBe(1);
-    expect(measured.threadReads).toBe(24);
-    expect(measured.threadBytesRead).toBeLessThan(12_000_000);
-    expect(measured.result.page).toHaveLength(24);
+    expect(measured.threadReads).toBeGreaterThan(0);
+    expect(measured.threadReads).toBeLessThanOrEqual(2);
+    expect(measured.threadBytesRead).toBeLessThan(800_000);
+    expect(measured.result.page.length).toBe(measured.threadReads);
+    expect(measured.result.isDone).toBe(false);
     expect(JSON.stringify(measured.result).length).toBeLessThan(40_000);
   });
 });

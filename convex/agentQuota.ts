@@ -54,12 +54,16 @@ const quotaRateLimiter = new RateLimiter(components.rateLimiter, {
     rate: FORUM_REQUEST_RATES.read.ownerPerMinute,
     period: MINUTE,
     capacity: FORUM_REQUEST_RATES.read.ownerBurst,
+    // Connected navigation fans out concurrently; preserve the aggregate
+    // ceiling without serializing every page read on one owner bucket.
+    shards: 4,
   },
   forumCredentialReads: {
     kind: "token bucket",
     rate: FORUM_REQUEST_RATES.read.credentialPerMinute,
     period: MINUTE,
     capacity: FORUM_REQUEST_RATES.read.credentialBurst,
+    shards: 4,
   },
   forumOwnerWrites: {
     kind: "token bucket",

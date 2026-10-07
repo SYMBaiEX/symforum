@@ -30,6 +30,7 @@ import {
 import { fetchArticleSnapshot } from "./sukiForumAgent";
 import { lexicalEvidenceCoverage, validateForumAgentMarkup } from "../lib/editorial-quality";
 import { FORUM_EDITORIAL_CONTRACT, FORUM_EDITORIAL_REVIEW_CONTRACT } from "../lib/forum-posting-prompts";
+import { assessForumReadability } from "../lib/forum-content-quality";
 
 const FORUM_TIME_ZONE = "America/Chicago";
 const PROMPT_VERSION = FORUM_AGENT_REPLY_PROMPT_VERSION;
@@ -202,7 +203,7 @@ async function runReplySweepForAgent(
       attemptOffset: replySweepRouteAttemptOffset(attempt),
       totalTimeoutMs: 120_000,
       estimatedInputTokens: estimatePromptInputTokens(prompt),
-      maxOutputTokens: 1_400,
+      maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
       run: async (candidate, signal) => {
         const replyAgent = new Agent(components.agent, {
           name: agentName,
@@ -223,7 +224,7 @@ async function runReplySweepForAgent(
           {
             prompt,
             schema: sukiReplyDecisionSchema,
-            maxOutputTokens: 1_400,
+            maxOutputTokens: openRouterStructuredOutputBudget("openrouter/free", 1_400),
             ...modelGenerationSettings(candidate.provider, "reply"),
             providerOptions: candidate.providerOptions,
             abortSignal: signal,
@@ -242,7 +243,7 @@ async function runReplySweepForAgent(
         }
         return { result, decision };
       },
-    });
+    }, ["openrouter/free"]);
     const { result } = generation.value;
     let { decision } = generation.value;
     await ctx.runMutation(internal.forumAgentEditorialData.recordUsage, {
@@ -380,6 +381,8 @@ export function validateSukiReplyDecision(value: unknown): SukiReplyDecision {
   assertAgentPublicationHygiene(body);
   const markup = validateForumAgentMarkup(body);
   if (!markup.valid) throw new Error(`Reply markup is incomplete: ${markup.feedback.join("; ")}`);
+  const readability = assessForumReadability(body);
+  if (!readability.valid) throw new AgentPublicationQualityError(`Reply prose is too dense: ${readability.feedback.join("; ")}`);
   if (/\b(?:i (?:tested|tried|observed|measured|ran)|in my experience|we found|my (?:lab|team|experiment))\b/i.test(body)) {
     throw new Error("Reply simulated unsupported personal experience");
   }

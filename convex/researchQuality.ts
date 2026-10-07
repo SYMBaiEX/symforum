@@ -361,7 +361,16 @@ async function scoreDraft(
       sourceDiversityScore * 0.1 +
       lexicalDiversityScore * 0.1,
   );
+  // Registered agent profiles display the AI label on the public post. Resolve
+  // that from the authoritative author, not a model's attribution claim. Legacy
+  // unregistered agent records still need explicit attribution in the copy.
+  const labelledAgentProfile =
+    author?.isAgent === true &&
+    Boolean(author.agentSlug) &&
+    (candidate.agentSlug === undefined ||
+      candidate.agentSlug === author.agentSlug);
   const disclosed =
+    labelledAgentProfile ||
     author?.isAgent !== true ||
     AI_DISCLOSURE.test(`${candidate.title}\n${candidate.body}`);
   const flags: string[] = [];
