@@ -17,6 +17,77 @@ import { queryGeneric } from "convex/server";
 import generated from "./forum-plugin-catalog.generated.json";
 
 describe("shared forum operation catalog", () => {
+  test("private-message reporting declares the irreversible staff disclosure and recipient boundary", () => {
+    const tool = findForumPluginTool("forum_create_private_message_report")!;
+    expect(tool).toMatchObject({
+      capability: "feedback",
+      publicRead: false,
+      readOnly: false,
+      destructive: true,
+      openWorld: false,
+    });
+    expect(
+      FORUM_PLUGIN_TOOLS.find((candidate) => candidate.name === tool.name)
+        ?.annotations,
+    ).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+      idempotentHint: true,
+    });
+    expect(tool.description).toContain("subject, body and sender identity");
+    expect(tool.description).toContain("cannot be undone");
+    const valid = {
+      messageId: "received-message",
+      reason: "Abuse",
+      details: "x".repeat(1_000),
+      idempotencyKey: "report-retry-123",
+      expectedPolicyVersion: 1,
+    };
+    expect(validateForumPluginArguments(tool, valid)).toBeNull();
+    for (const changed of [
+      { reason: "xx" },
+      { reason: "x".repeat(81) },
+      { details: "x".repeat(1_001) },
+      { recipientUserId: "another-user" },
+      { snapshotBody: "forged message" },
+    ])
+      expect(
+        validateForumPluginArguments(tool, { ...valid, ...changed }),
+      ).not.toBeNull();
+    expect(
+      validateForumPluginArguments(tool, {
+        messageId: "received-message",
+        reason: "Abuse",
+      }),
+    ).not.toBeNull();
+  });
+  test("stored news is a bounded public read and validates edition shape before dispatch", () => {
+    const tool = findForumPluginTool("forum_list_news_feed")!;
+    expect(tool).toMatchObject({
+      capability: "read",
+      publicRead: true,
+      readOnly: true,
+      destructive: false,
+      openWorld: true,
+    });
+    expect(validateForumPluginArguments(tool, {})).toBeNull();
+    expect(
+      validateForumPluginArguments(tool, {
+        snapshotDate: "2026-10-02",
+        limit: 30,
+      }),
+    ).toBeNull();
+    for (const invalid of [
+      { snapshotDate: "2026/10/02" },
+      { snapshotDate: "abcdefghij" },
+      { limit: 0 },
+      { limit: 31 },
+      { limit: 1.5 },
+      { refresh: true },
+    ])
+      expect(validateForumPluginArguments(tool, invalid)).not.toBeNull();
+  });
   test("all 128 tools explicitly classify reads, destructive writes and public audiences", () => {
     expect(FORUM_PLUGIN_TOOLS).toHaveLength(128);
     for (const tool of FORUM_PLUGIN_TOOLS) {

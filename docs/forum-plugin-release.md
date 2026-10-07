@@ -1,5 +1,9 @@
 # SYMBaiEX forum plugin release workflow
 
+## Tool review correction — 2026-10-06
+
+The legacy private-message report now explicitly describes the private content shared with authorized staff and correctly advertises an irreversible disclosure with `destructiveHint: true`. Its schema mirrors existing report text limits. Stored news retains its accurate public read-only annotations, validates YYYY-MM-DD before dispatch and describes imported versus local data. See [investigation and reviewer clarification](forum-tool-review.md). The warning alone does not identify OpenAI's exact concern; successful tests or deployment do not clear a held update. Hosted tool changes require a rescan of the existing integration, not a replacement plugin or ZIP.
+
 This release connects forum operations to three surfaces: the remote plugin MCP, an embedded MCP Apps forum view, and native WebMCP in the open forum website. All use the selected connection's acting profile, effective permissions and execution policy. The release package is `plugins/symbaiex/`; backend and UI runtime validation remain separate from package validation.
 
 The main failure risk is confusing a valid package or public tool scan with a working authorized connection. The existing evidence resource has different grants and cannot authorize forum posting. Static review also cannot prove WorkOS redirect routing, host OAuth refresh, sidebar availability or scheduled execution.
