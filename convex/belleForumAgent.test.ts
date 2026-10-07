@@ -260,6 +260,33 @@ describe("Belle Hacker News digest", () => {
     expect(body).not.toContain("What story here feels most consequential");
   });
 
+  test("preserves schema-valid long sentences in collapsed digest stories", () => {
+    const summary =
+      "The project documents how operators can recover interrupted synchronization jobs using existing checkpoint records while preserving the original ordering guarantees and making the recovery boundary visible to teams that need to inspect the evidence before deciding whether the change fits their deployment.";
+    expect(summary.length).toBeGreaterThan(260);
+    expect(summary.length).toBeLessThanOrEqual(450);
+    const stories = Array.from({ length: 12 }, (_, index) => ({
+      hnItemId: index + 1,
+      rank: index + 1,
+      title: `Systems update ${index + 1}`,
+    }));
+    const body = buildDigestBody({
+      date: "2026-10-07",
+      opening: "Today's desk covers twelve systems updates.",
+      closing: "",
+      stories,
+      requestedBriefs: stories.map((story) => ({
+        hnItemId: story.hnItemId,
+        summary,
+        analysis: "",
+      })),
+    });
+    expect(body.split(summary)).toHaveLength(13);
+    expect(body).toContain("[spoiler=More from today's desk]");
+    expect(body).toContain("news/12");
+    expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
+  });
+
   test("unretrieved articles stay labeled links and cannot retain inferred claims", () => {
     const failed: ArticleSnapshot = {
       id: "hn-42",

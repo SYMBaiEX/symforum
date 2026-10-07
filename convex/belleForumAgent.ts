@@ -893,11 +893,10 @@ export function buildDigestBody(args: {
     const directSource = story.url
       ? ` · [url=${safeBbcodeUrl(story.url)}]Direct source[/url]`
       : "";
-    const summary = clipGeneratedProse(
-      brief.summary,
-      index < 3 ? 450 : 260,
-      "summary",
-    );
+    // The writer schema permits 450 characters for every summary. Later
+    // stories are already collapsed; a tighter renderer limit can reject a
+    // valid complete sentence and fail the entire digest.
+    const summary = clipGeneratedProse(brief.summary, 450, "summary");
     const analysis =
       index < 3 && brief.analysis.trim()
         ? clipGeneratedProse(brief.analysis, 350, "analysis")
