@@ -214,7 +214,8 @@ export function ForumNavigationLayout({
           </button>
           <SiteSurfaceSwitcher
             activeSurface="forum"
-            blogHref={primarySiteHref}
+            currentPathname={pathname}
+            homeHref={primarySiteHref}
             forumHref={forumHrefForPathname("/forum", pathname)}
             showForumMark
             className="forum-brand mr-auto text-lg sm:mr-2"

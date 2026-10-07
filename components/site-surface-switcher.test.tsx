@@ -48,7 +48,8 @@ test("the whole wordmark and arrow form one named menu trigger without navigatin
   const html = renderToStaticMarkup(
     <SiteSurfaceSwitcher
       activeSurface="forum"
-      blogHref="https://www.symbaiex.com/"
+      currentPathname="/forum"
+      homeHref="https://www.symbaiex.com/"
       forumHref="/"
     />,
   );

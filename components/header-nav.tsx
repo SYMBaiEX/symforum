@@ -44,8 +44,6 @@ const navItems = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
-  { href: "/news", label: "News" },
-  { href: "/newsletter", label: "Newsletter" },
   { href: "/agent", label: "Agents" },
   { href: "/forum", label: "Forum" },
   { href: "/portfolio", label: "Portfolio" },
