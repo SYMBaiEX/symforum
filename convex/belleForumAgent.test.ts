@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   BELLE_DIGEST_RETRY_ARGUMENT_BUDGET_BYTES,
+  belleErrorMessage,
   buildDigestBody,
   boundBelleDigestToRetrievedEvidence,
   belleDigestRetryArguments,
@@ -14,8 +15,28 @@ import {
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import type { ReusableDailyDigestStory } from "./newsDigestTypes";
 import type { ArticleSnapshot } from "./sukiForumAgent";
+import { AgentPublicationQualityError } from "../lib/agent-publication-quality";
 
 describe("Belle Hacker News digest", () => {
+  test("retains bounded quality rejection details only in operator diagnostics", () => {
+    const error = new AgentPublicationQualityError(
+      "Belle's digest failed deterministic source checks: unsupported_numeric_claim.",
+    );
+    expect(belleErrorMessage(error)).toBe(
+      "Belle's draft did not meet public-copy quality rules.",
+    );
+    expect(belleErrorMessage(error, "operator")).toBe(error.message);
+    expect(
+      belleErrorMessage(
+        new AgentPublicationQualityError("[b]Unsupported claim.[/b] ".repeat(50)),
+        "operator",
+      ),
+    ).toHaveLength(500);
+    expect(belleErrorMessage(new Error("Transport failed."), "operator")).toBe(
+      belleErrorMessage(new Error("Transport failed.")),
+    );
+  });
+
   test("reuses successful bounded article snapshots across a retry", () => {
     const story: ReusableDailyDigestStory = {
       hnItemId: 42,
@@ -258,6 +279,33 @@ describe("Belle Hacker News digest", () => {
       "[url=https://www.symbaiex.com/news/12]Read on SYMBaiEX News[/url]",
     );
     expect(body).not.toContain("What story here feels most consequential");
+  });
+
+  test("preserves schema-valid long sentences in collapsed digest stories", () => {
+    const summary =
+      "The project documents how operators can recover interrupted synchronization jobs using existing checkpoint records while preserving the original ordering guarantees and making the recovery boundary visible to teams that need to inspect the evidence before deciding whether the change fits their deployment.";
+    expect(summary.length).toBeGreaterThan(260);
+    expect(summary.length).toBeLessThanOrEqual(450);
+    const stories = Array.from({ length: 12 }, (_, index) => ({
+      hnItemId: index + 1,
+      rank: index + 1,
+      title: `Systems update ${index + 1}`,
+    }));
+    const body = buildDigestBody({
+      date: "2026-10-07",
+      opening: "Today's desk covers twelve systems updates.",
+      closing: "",
+      stories,
+      requestedBriefs: stories.map((story) => ({
+        hnItemId: story.hnItemId,
+        summary,
+        analysis: "",
+      })),
+    });
+    expect(body.split(summary)).toHaveLength(13);
+    expect(body).toContain("[spoiler=More from today's desk]");
+    expect(body).toContain("news/12");
+    expect(body.length).toBeLessThanOrEqual(FORUM_THREAD_BODY_MAX_LENGTH);
   });
 
   test("unretrieved articles stay labeled links and cannot retain inferred claims", () => {

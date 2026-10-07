@@ -742,7 +742,7 @@ export const runDailyHackerNewsDigest = internalAction({
       const message = belleErrorMessage(error);
       await ctx.runMutation(internal.sukiForumAgentData.markRunFailed, {
         runKey: claim.runKey,
-        errorMessage: message,
+        errorMessage: belleErrorMessage(error, "operator"),
       });
       if (attempt < 2 && isRetryableBelleError(error)) {
         await ctx.scheduler.runAfter(
@@ -893,11 +893,10 @@ export function buildDigestBody(args: {
     const directSource = story.url
       ? ` · [url=${safeBbcodeUrl(story.url)}]Direct source[/url]`
       : "";
-    const summary = clipGeneratedProse(
-      brief.summary,
-      index < 3 ? 450 : 260,
-      "summary",
-    );
+    // The writer schema permits 450 characters for every summary. Later
+    // stories are already collapsed; a tighter renderer limit can reject a
+    // valid complete sentence and fail the entire digest.
+    const summary = clipGeneratedProse(brief.summary, 450, "summary");
     const analysis =
       index < 3 && brief.analysis.trim()
         ? clipGeneratedProse(brief.analysis, 350, "analysis")
@@ -1055,8 +1054,12 @@ function safeBbcodeUrl(value: string) {
   }
 }
 
-function belleErrorMessage(error: unknown) {
+export function belleErrorMessage(
+  error: unknown,
+  audience: "public" | "operator" = "public",
+) {
   if (error instanceof AgentPublicationQualityError) {
+    if (audience === "operator") return plainForumText(error.message, 500);
     return "Belle's draft did not meet public-copy quality rules.";
   }
   if (APICallError.isInstance(error)) {
