@@ -156,6 +156,79 @@ const digestDraftSchema = z.object({
     .max(48),
 });
 
+type DigestEvidenceSource = Pick<
+  ArticleSnapshot,
+  "id" | "sourceFetchSucceeded"
+>;
+
+/** Required fixed keys prevent a retrieved story's factual ledger being omitted. */
+export function belleDigestOutputSchema(
+  snapshots: readonly DigestEvidenceSource[],
+) {
+  const sourceIds = snapshots
+    .filter((source) => source.sourceFetchSucceeded === true)
+    .map((source) => source.id);
+  if (
+    sourceIds.length === 0 ||
+    sourceIds.length > BELLE_DIGEST_STORY_LIMIT ||
+    new Set(sourceIds).size !== sourceIds.length ||
+    sourceIds.some((id) => !id.trim())
+  ) {
+    throw new AgentPublicationQualityError(
+      "Belle's retrieved source IDs are unavailable or invalid.",
+    );
+  }
+  const fact = digestDraftSchema.shape.claims.element
+    .omit({ sourceCandidateId: true })
+    .extend({ kind: z.literal("fact") })
+    .strict();
+  const claimsBySource = z.strictObject(
+    Object.fromEntries(
+      sourceIds.map((id) => [
+        id,
+        z
+          .array(fact)
+          .min(sourceIds.length === 1 ? 2 : 1)
+          .max(3),
+      ]),
+    ),
+  );
+  return digestDraftSchema
+    .omit({ claims: true })
+    .extend({
+      claimsBySource,
+      analysisClaims: z
+        .array(
+          digestDraftSchema.shape.claims.element
+            .extend({
+              sourceCandidateId: z.enum(sourceIds as [string, ...string[]]),
+              kind: z.literal("analysis"),
+            })
+            .strict(),
+        )
+        .max(12),
+    })
+    .strict();
+}
+
+/** Preserve authored prose; only inject factual source IDs from validated keys. */
+export function flattenBelleDigestOutput(
+  output: unknown,
+  snapshots: readonly DigestEvidenceSource[],
+): z.infer<typeof digestDraftSchema> {
+  const { claimsBySource, analysisClaims, ...draft } =
+    belleDigestOutputSchema(snapshots).parse(output);
+  return digestDraftSchema.parse({
+    ...draft,
+    claims: [
+      ...Object.entries(claimsBySource).flatMap(([sourceCandidateId, claims]) =>
+        claims.map((claim) => ({ ...claim, sourceCandidateId })),
+      ),
+      ...analysisClaims,
+    ],
+  });
+}
+
 type BelleDigestResult =
   | {
       status: "published";
@@ -449,6 +522,7 @@ export const runDailyHackerNewsDigest = internalAction({
         return { status: "skipped", reason: "source-unavailable" };
       }
       const prompt = digestPrompt(runDate, indexed.stories, snapshots);
+      const outputSchema = belleDigestOutputSchema(snapshots);
       const generateDraft = async (
         revision: number,
         feedback?: string,
@@ -461,6 +535,7 @@ export const runDailyHackerNewsDigest = internalAction({
             : [
                 prompt,
                 "Return a complete replacement digest, not a patch. Correct the blocking editorial feedback below. Preserve the supplied story IDs and exact source IDs; do not invent facts or discard evidence checks. Finish every sentence. Analysis must be explicitly marked as interpretation in the published prose. Include claims for consequential facts actually present in the final copy.",
+                "The previous draft uses an internal flat claims ledger. Regroup it into the required claimsBySource fact groups and analysisClaims output fields; do not return the old claims field.",
                 `Editorial feedback: ${feedback}`,
                 `Previous draft (untrusted candidate): ${JSON.stringify(previous)}`,
               ].join("\n\n");
@@ -486,7 +561,7 @@ export const runDailyHackerNewsDigest = internalAction({
               const writer = new ToolLoopAgent({
                 id: `belle-hacker-news-desk-${candidate.provider}`,
                 model: candidate.model,
-                output: Output.object({ schema: digestDraftSchema }),
+                output: Output.object({ schema: outputSchema }),
                 stopWhen: isStepCount(1),
                 providerOptions: candidate.providerOptions,
                 ...modelGenerationSettings(candidate.provider, "digest"),
@@ -504,7 +579,10 @@ export const runDailyHackerNewsDigest = internalAction({
                 prompt: currentPrompt,
                 abortSignal: signal,
               });
-              return { result, draft: digestDraftSchema.parse(result.output) };
+              return {
+                result,
+                draft: flattenBelleDigestOutput(result.output, snapshots),
+              };
             },
           },
           ["openrouter/free"],
@@ -1075,7 +1153,8 @@ Reporting rules:
 - Avoid hype, press-release language, shallow cheerleading, and cynical snark.
 - The headline must be specific and faithful to the strongest covered development. Do not include the date; the system adds it.
 - Return briefs only for supplied hnItemId values and cover as many supplied stories as the evidence supports.
-- Submit 2-48 concise claims covering the edition's consequential facts and analysis. Each sourceCandidateId must be copied exactly from the supplied story packet.
+- Submit claimsBySource with every required retrieved-source ID key, each containing 1-3 fact records for useful claims actually present in that story's published brief. When only one source was retrieved, its group requires 2-3 supported facts. These records use kind:"fact"; the key supplies their source identity. Never add keys for unavailable sources, omit a retrieved source, or replace facts with analysis.
+- Put additional source-bound interpretation in analysisClaims (0-12 records), using kind:"analysis" and sourceCandidateId copied exactly from a retrieved source. Include at least two claims in total across both fields. Cover every consequential factual body statement; all claims and the complete prose still undergo independent original-evidence review.
 - Use a short specific opening. The closing is optional; leave it empty when it would merely recap or invent a trend.
 Return only the requested structured digest.`;
 

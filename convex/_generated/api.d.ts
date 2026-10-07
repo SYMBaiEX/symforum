@@ -69,6 +69,7 @@ import type * as forumAgentEditorialPolicy from "../forumAgentEditorialPolicy.js
 import type * as forumAgentMaintenance from "../forumAgentMaintenance.js";
 import type * as forumAgentMaintenanceData from "../forumAgentMaintenanceData.js";
 import type * as forumAgentMemory from "../forumAgentMemory.js";
+import type * as forumAgentMemoryData from "../forumAgentMemoryData.js";
 import type * as forumAgentMemoryQueue from "../forumAgentMemoryQueue.js";
 import type * as forumAgentResearchPackets from "../forumAgentResearchPackets.js";
 import type * as forumAgentRoster from "../forumAgentRoster.js";
@@ -96,6 +97,7 @@ import type * as forumPrivateConversations from "../forumPrivateConversations.js
 import type * as forumReadQuotaRefund from "../forumReadQuotaRefund.js";
 import type * as forumSearchProjection from "../forumSearchProjection.js";
 import type * as forumSearchProjectionConstants from "../forumSearchProjectionConstants.js";
+import type * as forumThreadDigest from "../forumThreadDigest.js";
 import type * as forumThreadDigestBackfill from "../forumThreadDigestBackfill.js";
 import type * as githubPortfolio from "../githubPortfolio.js";
 import type * as http from "../http.js";
@@ -206,6 +208,7 @@ declare const fullApi: ApiFromModules<{
   forumAgentMaintenance: typeof forumAgentMaintenance;
   forumAgentMaintenanceData: typeof forumAgentMaintenanceData;
   forumAgentMemory: typeof forumAgentMemory;
+  forumAgentMemoryData: typeof forumAgentMemoryData;
   forumAgentMemoryQueue: typeof forumAgentMemoryQueue;
   forumAgentResearchPackets: typeof forumAgentResearchPackets;
   forumAgentRoster: typeof forumAgentRoster;
@@ -233,6 +236,7 @@ declare const fullApi: ApiFromModules<{
   forumReadQuotaRefund: typeof forumReadQuotaRefund;
   forumSearchProjection: typeof forumSearchProjection;
   forumSearchProjectionConstants: typeof forumSearchProjectionConstants;
+  forumThreadDigest: typeof forumThreadDigest;
   forumThreadDigestBackfill: typeof forumThreadDigestBackfill;
   githubPortfolio: typeof githubPortfolio;
   http: typeof http;

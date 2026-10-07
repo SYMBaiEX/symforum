@@ -1,6 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, test, vi } from "vitest";
+import { getFunctionName } from "convex/server";
+import * as modelRouting from "../lib/ai-model-routing";
+import * as convexRouting from "./modelRouting";
+import { OPENROUTER_FORUM_MODEL } from "../lib/ai-models";
 
 import { FORUM_THREAD_BODY_MAX_LENGTH } from "./forumLimits";
 import {
@@ -13,6 +17,8 @@ import {
   fetchArticleSnapshots,
   forumDraftRevisionImproves,
   forumDraftPrompt,
+  forumDraftSchemaForSources,
+  forumTopicSelectionSchema,
   forumDraftPassesGate,
   forumRevisionEvidenceExcerpt,
   ForumEditorialQualityError,
@@ -23,6 +29,8 @@ import {
   parseFeedXml,
   rankResearchCandidatesForTopic,
   repairForumDraftForReview,
+  runForumResearchSlot,
+  selectForumResearchCandidates,
   structuredBlockContract,
 } from "./sukiForumAgent";
 import { ResearchQualityGateError } from "./researchQuality";
@@ -33,6 +41,172 @@ import {
 } from "../lib/forum-posting-prompts";
 
 describe("Suki forum research helpers", () => {
+  test("topic output schema accepts only candidates actually provided", () => {
+    const schema = forumTopicSelectionSchema(["source-a", "source-b"]);
+    expect(schema.parse(discoverySelection()).candidateIds).toEqual([
+      "source-a",
+    ]);
+    expect(
+      schema.safeParse({
+        ...discoverySelection(),
+        candidateIds: ["invented-source"],
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({ ...discoverySelection(), candidateIds: [] }).success,
+    ).toBe(false);
+    expect(() => forumTopicSelectionSchema([])).toThrow(
+      ForumEditorialQualityError,
+    );
+  });
+
+  test("writer and rewrite schema binds evidence IDs and allows a complete long-body ledger", () => {
+    const schema = forumDraftSchemaForSources(["source-a", "source-b"]);
+    const claims = Array.from({ length: 48 }, (_, index) => ({
+      claim: `Source-supported body statement ${index + 1}.`,
+      sourceCandidateId: index % 2 ? "source-a" : "source-b",
+      confidence: "high" as const,
+      kind: "fact" as const,
+    }));
+    const draft = {
+      title: "A complete source-specific ledger",
+      body: claims.map(({ claim }) => claim).join("\n\n"),
+      poll: null,
+      imageCandidateId: null,
+      claims,
+      originalValue: [claims[0].claim],
+      discussionQuestion: "",
+    };
+    expect(
+      schema.parse({ ...draft, claims: claims.slice(0, 13) }).claims,
+    ).toHaveLength(13);
+    expect(schema.parse(draft).claims).toHaveLength(48);
+    expect(
+      schema.safeParse({ ...draft, claims: [...claims, claims[0]] }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...draft,
+        claims: [{ ...claims[0], sourceCandidateId: "fabricated-snapshot" }],
+      }).success,
+    ).toBe(false);
+    expect(() => forumDraftSchemaForSources([])).toThrow(
+      ForumEditorialQualityError,
+    );
+  });
+
+  test("a nonempty unavailable source selection becomes an editorial skip without provider retry", async () => {
+    const candidate = {
+      ...checkpointSnapshot(),
+      publishedAt: Date.now(),
+    };
+    const runMutation = vi.fn(
+      async (reference: Parameters<typeof getFunctionName>[0]) => {
+        if (getFunctionName(reference) === "sukiForumAgentData:claimRun")
+          return { claimed: true, runKey: "test:unavailable-source" };
+        return null;
+      },
+    );
+    const runQuery = vi.fn(
+      async (
+        reference: Parameters<typeof getFunctionName>[0],
+        args: { cacheKeys?: string[] },
+      ) => {
+        switch (getFunctionName(reference)) {
+          case "forum:readForumAgentContext":
+            return {
+              agent: { enabled: true, model: OPENROUTER_FORUM_MODEL },
+              categories: [
+                {
+                  slug: "ai-frameworks",
+                  name: "AI Frameworks",
+                  description: "Practical tooling",
+                },
+              ],
+              recentBoardSlugs: [],
+              recentThreadTitles: [],
+              recentThreads: [],
+              editorialSignals: [],
+            };
+          case "forumAgentEditorialData:readEditorialStrategies":
+            return [];
+          case "sukiForumAgentData:readResearchCaches":
+            return args.cacheKeys?.map((cacheKey) => ({
+              cacheKey,
+              payloadJson: JSON.stringify([candidate]),
+            }));
+          case "forum:selectAvailableForumAgentSourceKeys":
+            return [candidate.sourceKey];
+          default:
+            throw new Error(`Unexpected query: ${getFunctionName(reference)}`);
+        }
+      },
+    );
+    const runAfter = vi.fn();
+    const route = vi
+      .spyOn(modelRouting, "runWithModelFallback")
+      .mockResolvedValue({
+        value: {
+          selection: {
+            ...discoverySelection(),
+            candidateIds: ["not-in-packet"],
+          },
+          result: { usage: {}, response: { modelId: OPENROUTER_FORUM_MODEL } },
+        },
+        route: { persistedModel: OPENROUTER_FORUM_MODEL },
+      } as unknown as Awaited<
+        ReturnType<typeof modelRouting.runWithModelFallback>
+      >);
+    const configMock = vi
+      .spyOn(convexRouting, "convexModelRoutingConfig")
+      .mockResolvedValue({ openRouterApiKey: "fixture-no-network" });
+    const fetchMock = vi.fn(() => {
+      throw new Error("No provider/source request expected");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      expect(() => selectForumResearchCandidates([], [candidate])).toThrow(
+        ForumEditorialQualityError,
+      );
+      expect(
+        await runForumResearchSlot(
+          {
+            runMutation,
+            runQuery,
+            scheduler: { runAfter },
+          } as unknown as Parameters<typeof runForumResearchSlot>[0],
+          { slot: 0, runDate: "2026-10-07" },
+          {
+            slug: "test",
+            name: "Test",
+            dailySlots: 1,
+            promptVersion: "test",
+            deskDescription: "Practical tooling",
+            topicInstructions: "Choose supported tooling",
+            writerInstructions: "Use source evidence",
+          },
+        ),
+      ).toEqual({ status: "skipped", reason: "editorial-quality" });
+      const mutationNames = runMutation.mock.calls.map(([reference]) =>
+        getFunctionName(reference),
+      );
+      expect(mutationNames).toContain("sukiForumAgentData:markRunSkipped");
+      expect(mutationNames).not.toContain("sukiForumAgentData:markRunFailed");
+      expect(runAfter).not.toHaveBeenCalled();
+      expect(route).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        isRetryableError(
+          new ForumEditorialQualityError("Unavailable source IDs"),
+        ),
+      ).toBe(false);
+    } finally {
+      route.mockRestore();
+      configMock.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("reads the research-feed cache in one batch and fetches no fresh feeds", async () => {
     const cachedCandidate = (cacheKey: string) => ({
       id: cacheKey,
@@ -1277,6 +1451,11 @@ What would you verify first?`,
     ]) {
       expect(prompt).toContain(FORUM_EDITORIAL_CONTRACT);
       expect(prompt).toContain("20-120 plain words");
+      expect(prompt).toContain("claim ledger permits 1-48 entries");
+      expect(prompt).toContain(
+        "complete body sentences verbatim into originalValue",
+      );
+      expect(prompt).toContain("copy that exact last sentence verbatim");
       expect(prompt).not.toContain(FORUM_EDITORIAL_REVIEW_CONTRACT);
       expect(prompt).not.toContain("function forumEditorialReviewPrompt");
       expect(prompt).not.toContain(

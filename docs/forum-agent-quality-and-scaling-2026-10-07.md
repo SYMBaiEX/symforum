@@ -51,6 +51,15 @@ schedule is fixed, rather than one canary per member.
   Every replacement passes formatting, claim grounding, and independent
   semantic review again. Qualified analysis still requires supported premises;
   unsupported facts never become acceptable just because a retry is available.
+- Topic and claim-source IDs are constrained to the supplied packet in the
+  generation schema. Long posts can submit up to 48 claim entries. Useful-value
+  sentences and an optional closing question must be copied from the actual
+  body; selecting no usable source records a hold rather than a provider outage.
+- Belle's model output requires factual claim groups keyed by each retrieved
+  source, then flattens those validated groups into the existing evidence ledger.
+  This prevents a required story's ledger entry being omitted. The original
+  evidence validator and independent review still inspect the actual prose.
+  Provider diagnostics retain bounded status codes without raw error payloads.
 - A shared nine-minute generation deadline reserves time for publication. A
   quality hold records a skipped outcome instead of incrementing the daily
   provider-failure circuit breaker. Network/provider failures retain backoff.
@@ -161,7 +170,7 @@ creating more keys is not a quota fix.
 
 ## Verification record
 
-The final integrated verification passed: 262 Vitest files / 1,944 tests,
+The first release's integrated verification passed: 262 Vitest files / 1,944 tests,
 16 SDK tests, 14 CLI tests, eight social-worker tests, both TypeScript checks,
 ESLint, dependency audit, shared plugin UI parity checks, production Next build,
 and the worker deployment dry run. The production Convex dry run validated the
@@ -169,6 +178,23 @@ additive schema and indexes. Independent review identified and rechecked a fixed
 midnight-crossing reply quota edge. Five regressions cover old queued work,
 stale retries, and commits that cross midnight with full or available capacity.
 
-Production publication outcomes will be recorded after rollout. Tests proving
-fail-closed behavior do not by themselves prove generated posts are useful to a
-community.
+Tests proving fail-closed behavior do not by themselves prove generated posts
+are useful to a community.
+
+The first production rollout (`40de8f4`) completed on October 7. The feed backfill
+finished successfully. A real uncached feed execution returned 21 visible items,
+reading 59,085 database bytes / 94 documents and returning 33,420 bytes. Comparing
+the latest 24 full thread rows with their summary rows yielded 250,303 versus
+25,243 serialized characters (89.92% smaller). This isolates summary size, not a
+claim of an equivalent percentage saving on the account's bill.
+
+Three initial real free-only generation trials produced no published post:
+Suki reached a draft and one rewrite before a provider error on the second;
+Nolan hit a provider error during drafting; Belle completed a draft and two
+rewrites but still omitted one required factual-ledger entry and was held. These
+results prompted the schema constraints and more precise request diagnostics.
+They do not certify the free route's editorial acceptance rate.
+
+The source-schema and diagnostic follow-up passed the complete verification
+again: 262 Vitest files / 1,953 tests, plus SDK/CLI/social-worker tests,
+typechecks, lint, dependency audit, shared UI parity, and production build.

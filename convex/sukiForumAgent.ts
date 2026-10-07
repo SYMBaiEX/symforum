@@ -243,10 +243,59 @@ export const forumDraftSchema = z.object({
       }),
     )
     .min(1)
-    .max(12),
+    .max(48),
   originalValue: z.array(z.string().min(8).max(240)).min(1).max(5),
   discussionQuestion: z.string().max(300),
 });
+
+function providedSourceIds(ids: readonly string[]): [string, ...string[]] {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || unique.some((id) => !id.trim())) {
+    throw new ForumEditorialQualityError(
+      "No usable research source IDs were provided.",
+    );
+  }
+  return unique as [string, ...string[]];
+}
+
+/** Constrain model output to the exact candidates in this topic packet. */
+export function forumTopicSelectionSchema(candidateIds: readonly string[]) {
+  return topicSelectionSchema.extend({
+    candidateIds: z
+      .array(z.enum(providedSourceIds(candidateIds)))
+      .min(1)
+      .max(3),
+  });
+}
+
+/** Both the original writer and every rewrite use the retrieved snapshot IDs. */
+export function forumDraftSchemaForSources(sourceIds: readonly string[]) {
+  return forumDraftSchema.extend({
+    claims: z
+      .array(
+        forumDraftSchema.shape.claims.element.extend({
+          sourceCandidateId: z.enum(providedSourceIds(sourceIds)),
+        }),
+      )
+      .min(1)
+      .max(48),
+  });
+}
+
+export function selectForumResearchCandidates(
+  candidateIds: readonly string[],
+  candidates: readonly ResearchCandidate[],
+): ResearchCandidate[] {
+  const byId = new Map(
+    candidates.map((candidate) => [candidate.id, candidate]),
+  );
+  if (candidateIds.length === 0 || candidateIds.some((id) => !byId.has(id))) {
+    throw new ForumEditorialQualityError(
+      "Selected research source IDs are unavailable in the topic packet.",
+    );
+  }
+  return [...new Set(candidateIds)].map((id) => byId.get(id)!);
+}
 
 export type ResearchCandidate = {
   id: string;
@@ -500,6 +549,9 @@ export async function runForumResearchSlot(
       dailySlots: config.dailySlots,
     });
     const topicStartedAt = Date.now();
+    const selectionSchema = forumTopicSelectionSchema(
+      shortlistedCandidates.map((candidate) => candidate.id),
+    );
     const selectionGeneration = await runWithModelFallback(
       effectiveRoutingConfig,
       {
@@ -519,7 +571,7 @@ export async function runForumResearchSlot(
           const topicScout = new ToolLoopAgent({
             id: `${config.slug}-topic-scout-${candidate.provider}`,
             model: candidate.model,
-            output: Output.object({ schema: topicSelectionSchema }),
+            output: Output.object({ schema: selectionSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(candidate.provider, "topic-selection"),
             maxOutputTokens: openRouterStructuredOutputBudget(
@@ -559,16 +611,10 @@ export async function runForumResearchSlot(
       outputTokens: selectionResult.usage.outputTokens,
       durationMs: Date.now() - topicStartedAt,
     });
-    const selectedCandidates = selection.candidateIds
-      .map((id) =>
-        shortlistedCandidates.find((candidate) => candidate.id === id),
-      )
-      .filter(
-        (candidate): candidate is ResearchCandidate => candidate !== undefined,
-      );
-    if (selectedCandidates.length === 0) {
-      throw new Error(`${config.name} selected no valid research candidates`);
-    }
+    const selectedCandidates = selectForumResearchCandidates(
+      selection.candidateIds,
+      shortlistedCandidates,
+    );
     const selectedCategorySlug =
       config.forcedCategorySlug ?? selection.categorySlug;
     const category =
@@ -711,6 +757,9 @@ export async function runForumResearchSlot(
         })),
       },
     );
+    const draftSchema = forumDraftSchemaForSources(
+      snapshots.map((snapshot) => snapshot.id),
+    );
     const generateForumDraft = async (
       stage: "draft" | "revision",
       prompt: string,
@@ -739,7 +788,7 @@ export async function runForumResearchSlot(
           const forumWriter = new ToolLoopAgent({
             id: `${config.slug}-forum-writer-${stage}-${candidate.provider}`,
             model: candidate.model,
-            output: Output.object({ schema: forumDraftSchema }),
+            output: Output.object({ schema: draftSchema }),
             providerOptions: candidate.providerOptions,
             ...modelGenerationSettings(
               candidate.provider,
@@ -1848,6 +1897,8 @@ export function forumDraftPrompt(args: {
   previousDraft?: z.infer<typeof forumDraftSchema>;
   followUp?: boolean;
 }) {
+  const structuredFieldInstructions =
+    "Structured fields: use only the supplied snapshot IDs in sourceCandidateId. The claim ledger permits 1-48 entries; include every factual body claim and label source-bound interpretation as analysis. Copy 1-5 useful complete body sentences verbatim into originalValue (maximum 240 characters each), rather than paraphrasing or describing the post. Leave discussionQuestion empty unless the body ends with a genuinely useful discussion question; otherwise copy that exact last sentence verbatim (maximum 300 characters).";
   if (args.revisionFeedback !== undefined && args.previousDraft !== undefined) {
     const claimsBySource = new Map<string, string[]>();
     for (const claim of args.previousDraft.claims) {
@@ -1859,6 +1910,7 @@ export function forumDraftPrompt(args: {
       "Revise the supplied forum draft. Return one complete replacement matching the structured output schema.",
       "Fix every deterministic gate failure. Preserve supported facts and source IDs; delete any unsupported number or claim rather than improvising evidence.",
       FORUM_EDITORIAL_CONTRACT,
+      structuredFieldInstructions,
       "Selected board and angle:",
       JSON.stringify({ category: args.category, selection: args.selection }),
       `Hard length target: ${contentFormatGuidance(args.selection.contentFormat)} Count approximate plain words after editing and keep a buffer above the minimum.`,
@@ -1891,6 +1943,7 @@ export function forumDraftPrompt(args: {
     `Editorial desk: ${args.config.deskDescription}`,
     `Target length and shape: ${contentFormatGuidance(args.selection.contentFormat)}`,
     FORUM_EDITORIAL_CONTRACT,
+    structuredFieldInstructions,
     "Editorial discipline: make one source-specific argument. Do not repeat the thesis in the opening, section headings, structured block, and conclusion. Prefer concrete nouns and verbs from the evidence over reusable frames such as operational ownership, a new era, shifting landscape, or the real story.",
     "Presentation: use BBCode only where helpful. Leave discussionQuestion empty unless a genuine useful question belongs at the end. Include a ledger for all factual body claims and 1-5 original-value statements visible in the body. Plain short prose is valid.",
     "Measurement discipline: distinguish totals from changes, gross from net, estimates from observations, and editorial scores from measured results. Every number or version in a factual claim must appear in that claim's cited source.",

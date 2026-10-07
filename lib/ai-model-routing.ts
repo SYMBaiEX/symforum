@@ -79,6 +79,37 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_SITE_URL = "https://forum.symbaiex.com";
 const OPENROUTER_APP_NAME = "SYMBiEX Forum Agents";
 
+function providerErrorCode(error: APICallError): number | undefined {
+  if (!error.responseBody || error.responseBody.length > 16_384) return;
+  try {
+    const code: unknown = JSON.parse(error.responseBody)?.error?.code;
+    if (
+      typeof code === "number" &&
+      Number.isInteger(code) &&
+      code >= 400 &&
+      code < 600
+    )
+      return code;
+  } catch {
+    // Diagnostics must not fail the generation path.
+  }
+}
+
+function isMandatoryThinkingRejection(error: APICallError) {
+  const pattern = /reasoning is mandatory.*cannot be disabled/i;
+  if (pattern.test(error.message)) return true;
+  // OpenRouter can wrap the upstream rejection in a generic top-level message.
+  // Inspect only its bounded error metadata, never log the raw provider body.
+  if (!error.responseBody || error.responseBody.length > 16_384) return false;
+  try {
+    const body = JSON.parse(error.responseBody);
+    const raw: unknown = body?.error?.metadata?.raw;
+    return typeof raw === "string" && pattern.test(raw);
+  } catch {
+    return false;
+  }
+}
+
 /** Apply OpenRouter's contract at the transport boundary, including agent calls. */
 function openRouterRequestBody(body: Record<string, unknown>) {
   const request = { ...body };
@@ -209,8 +240,11 @@ function openRouterModel(
               params.responseFormat?.type !== "json" ||
               explicitControl ||
               !APICallError.isInstance(error) ||
-              error.statusCode !== 400 ||
-              !/reasoning is mandatory.*cannot be disabled/i.test(error.message)
+              !(
+                error.statusCode === 400 ||
+                (error.statusCode === 200 && providerErrorCode(error) === 400)
+              ) ||
+              !isMandatoryThinkingRejection(error)
             ) {
               throw error;
             }
@@ -309,6 +343,13 @@ function safeError(error: unknown) {
       `reasoningTokens=${error.usage?.outputTokenDetails.reasoningTokens ?? 0}, ` +
       `textChars=${error.text?.length ?? 0}`;
     return `${message.replace(/\s+/g, " ").slice(0, 120)} (${diagnostic})`;
+  }
+  if (APICallError.isInstance(error)) {
+    const category = isMandatoryThinkingRejection(error)
+      ? ", upstream=reasoning-required"
+      : "";
+    const code = providerErrorCode(error);
+    return `${message.replace(/\s+/g, " ").slice(0, 180)} (http=${error.statusCode ?? "unknown"}${code === undefined ? "" : `, code=${code}`}${category})`;
   }
   return message.replace(/\s+/g, " ").slice(0, 240);
 }
